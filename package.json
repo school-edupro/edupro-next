@@ -1,0 +1,34 @@
+{
+  "name": "edupro-next",
+  "private": true,
+  "version": "0.1.0",
+  "description": "EduPro Next: multi-school, multi-year School ERP (Next.js, NestJS, PostgreSQL)",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @edupro/db migrate",
+    "db:test": "pnpm --filter @edupro/db test",
+    "api:openapi": "pnpm --filter @edupro/api openapi:export",
+    "client:generate": "pnpm --filter @edupro/api-client generate",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml,css}\""
+  },
+  "devDependencies": {
+    "@edupro/config": "workspace:*",
+    "prettier": "^3.3.3",
+    "turbo": "^2.1.3",
+    "typescript": "^5.6.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "fastify": "5.11.3"
+    }
+  }
+}

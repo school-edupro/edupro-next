@@ -1,0 +1,74 @@
+# EduPro Next
+
+Multi-school, multi-year School ERP by Mobilise App Lab. Rebuild of the legacy PHP school ERP on:
+
+- **Front end**: React 18 with Next.js 15 (App Router), TypeScript, Mobilise Design System (`packages/ui`)
+- **Backend**: Node.js 22, NestJS 11 (Fastify adapter), OpenAPI
+- **Database**: PostgreSQL 16 with row-level security, partitioning and PL/pgSQL procedures
+- **Jobs**: BullMQ on Redis (`apps/workers`)
+
+This repository is deliberately **separate from the legacy PHP tree**. Nothing here imports from or deploys with the old code. Legacy analysis lives in the old tree as `MERN_MIGRATION_BLUEPRINT.md`, `SCHOOL_ERP_PROJECT_PLAN.md` and `SCHOOL_ERP_SPRINT_PLAN.md`; the design decisions taken from them are recorded here as ADRs under `docs/adr/`.
+
+## Repository layout
+
+```
+apps/
+  api/        NestJS domain API (tenancy, access, audit, reference module)
+  workers/    BullMQ processors (notifications, exports, RFID, reconciliation)
+  admin/      Next.js admin application (thin BFF for session and tenant context)
+  parent/     Next.js parent application (PWA), starts Sprint 5
+  teacher/    Next.js teacher application (PWA), starts Sprint 5
+  public/     Next.js public application (admission forms), starts Sprint 8
+packages/
+  db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool
+  ui/         Mobilise Design System tokens and React components
+  api-client/ Generated TypeScript client from the API's OpenAPI document
+  config/     Shared TypeScript, ESLint and Prettier configuration
+docs/
+  adr/        Architecture decision records
+  design/     Sprint 0 foundation design, reference module guide, permission catalogue
+```
+
+## Prerequisites
+
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | 22 LTS | `.nvmrc` pins it; use nvm or fnm |
+| pnpm | 9 | `corepack enable && corepack prepare pnpm@9 --activate` |
+| Docker | 24 or later | runs PostgreSQL 16, Redis 7 and Mailpit locally |
+| PostgreSQL client | 16 | optional, for `psql` against the local database |
+
+Without Docker (for example a laptop without administrator rights), PostgreSQL and Redis can run in user space instead: see `scripts/local-stack.sh` and the first-build notes in `docs/sprint-0-checklist.md`. The scaffold was first built and run that way on 2026-09-26.
+
+## First run
+
+```bash
+corepack enable && corepack prepare pnpm@9 --activate
+pnpm install
+cp .env.example .env
+docker compose up -d                       # or: scripts/local-stack.sh start
+pnpm --filter @edupro/db local:setup       # only for the user-space stack (creates the database and roles)
+pnpm db:migrate          # applies packages/db/migrations in order
+pnpm db:test             # cross-tenant RLS tests must pass before anything else
+pnpm --filter @edupro/db seed:dev          # two schools and a dev admin (developer sign-in: dev-admin)
+pnpm dev                 # api on :4000 (docs at /api/docs), admin on :3000, workers attached
+```
+
+Developer sign-in on the login page appears only when `AUTH_DEV_BYPASS=1` and the app runs in development mode (`pnpm dev`). A production build (`next start`) never shows it.
+
+## Non-negotiable rules
+
+1. Every tenant table carries `school_id` and has row-level security enabled and forced. The API never queries without a tenant context.
+2. Every API handler declares a permission with `@RequirePermission()` or is explicitly `@Public()`. CI fails otherwise.
+3. Money and marks are written only through PL/pgSQL procedures inside one transaction.
+4. UI uses design-system tokens only. Raw hex colours, raw pixel values and other fonts fail lint.
+5. No secrets in the repository. `.env` is ignored; production reads Azure Key Vault.
+6. No per-school code branches. Variation is configuration, templates or workflow definitions.
+
+## Documents to read first
+
+1. `docs/adr/` in numeric order
+2. `docs/design/00-foundation-design.md`
+3. `docs/design/01-reference-module.md`
+4. `docs/design/02-rbac-permission-catalogue.md`
+5. `docs/sprint-0-checklist.md`

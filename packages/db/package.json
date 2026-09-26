@@ -1,0 +1,46 @@
+{
+  "name": "@edupro/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PostgreSQL migrations, RLS policies, PL/pgSQL procedures, tenant-aware pool and Prisma schema",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./prisma": {
+      "types": "./dist/prisma.d.ts",
+      "default": "./dist/prisma.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test",
+    "migrate": "tsx src/migrate.ts",
+    "local:setup": "tsx src/local-setup.ts",
+    "seed:dev": "tsx src/seed-dev.ts",
+    "test": "vitest run",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@edupro/config": "workspace:*",
+    "@types/node": "^22.7.4",
+    "@types/pg": "^8.11.10",
+    "eslint": "^9.12.0",
+    "prisma": "^5.20.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  }
+}

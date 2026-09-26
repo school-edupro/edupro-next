@@ -1,0 +1,75 @@
+/* Mobilise Design System — Color tokens
+   Anchors sampled from the official wordmark:
+   navy #00265D (letterforms), cyan #00A0C6 (globe "o") */
+:root {
+  /* Base — brand */
+  --mob-navy-900: #001A44;
+  --mob-navy-800: #00265D; /* logo navy */
+  --mob-navy-700: #0A3A7D;
+  --mob-navy-600: #14509E;
+  --mob-navy-100: #DCE7F5;
+  --mob-navy-50: #EEF4FB;
+
+  --mob-cyan-700: #007A9B;
+  --mob-cyan-600: #00A0C6; /* logo cyan */
+  --mob-cyan-500: #17B4D8;
+  --mob-cyan-100: #D3F0F8;
+  --mob-cyan-50: #EAF8FC;
+
+  /* Base — neutrals (cool, navy-tinted) */
+  --mob-gray-900: #131C2B;
+  --mob-gray-700: #3B4757;
+  --mob-gray-500: #647080;
+  --mob-gray-400: #8B96A5;
+  --mob-gray-300: #C3CBD6;
+  --mob-gray-200: #DFE4EB;
+  --mob-gray-100: #EEF1F5;
+  --mob-gray-50: #F7F9FB;
+  --mob-white: #FFFFFF;
+
+  /* Base — semantic hues */
+  --mob-green-600: #1E8E5A;
+  --mob-green-50: #E7F6EE;
+  --mob-amber-600: #B9770E;
+  --mob-amber-50: #FDF3E1;
+  --mob-red-600: #C43D3D;
+  --mob-red-50: #FBEAEA;
+
+  /* Semantic aliases — text */
+  --text-heading: var(--mob-navy-800);
+  --text-body: var(--mob-gray-700);
+  --text-muted: var(--mob-gray-500);
+  --text-inverse: var(--mob-white);
+  --text-link: var(--mob-cyan-700);
+  --text-link-hover: var(--mob-navy-800);
+
+  /* Semantic aliases — surfaces */
+  --surface-page: var(--mob-white);
+  --surface-subtle: var(--mob-gray-50);
+  --surface-card: var(--mob-white);
+  --surface-band: var(--mob-navy-50);
+  --surface-dark: var(--mob-navy-800);
+  --surface-dark-deep: var(--mob-navy-900);
+
+  /* Semantic aliases — interactive */
+  --action-primary: var(--mob-navy-800);
+  --action-primary-hover: var(--mob-navy-700);
+  --action-accent: var(--mob-cyan-600);
+  --action-accent-hover: var(--mob-cyan-700);
+  --focus-ring: rgba(0, 160, 198, 0.35);
+
+  /* Semantic aliases — lines */
+  --border-default: var(--mob-gray-200);
+  --border-strong: var(--mob-gray-300);
+  --border-accent: var(--mob-cyan-600);
+
+  /* Semantic aliases — status */
+  --status-success: var(--mob-green-600);
+  --status-success-bg: var(--mob-green-50);
+  --status-warning: var(--mob-amber-600);
+  --status-warning-bg: var(--mob-amber-50);
+  --status-danger: var(--mob-red-600);
+  --status-danger-bg: var(--mob-red-50);
+  --status-info: var(--mob-cyan-700);
+  --status-info-bg: var(--mob-cyan-50);
+}

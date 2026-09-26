@@ -1,0 +1,37 @@
+/* Mobilise Design System — Typography tokens
+   NOTE: No font files were provided. Poppins (headings) and
+   Source Sans 3 (body) are Google Fonts stand-ins matching the
+   site's geometric-heading / humanist-body corporate style.
+   Swap via fonts.css when official files arrive. */
+:root {
+  --font-heading: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Scale */
+  --fs-display: 44px;   /* hero headlines */
+  --fs-h1: 34px;
+  --fs-h2: 26px;
+  --fs-h3: 20px;
+  --fs-h4: 17px;
+  --fs-body-lg: 18px;
+  --fs-body: 16px;
+  --fs-small: 14px;
+  --fs-caption: 12.5px;
+  --fs-overline: 13px;  /* uppercase kicker, e.g. "SOFTWARE SOLUTIONS" */
+
+  /* Weights */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Line heights */
+  --lh-tight: 1.2;
+  --lh-heading: 1.3;
+  --lh-body: 1.6;
+
+  /* Letter spacing */
+  --ls-overline: 0.12em; /* uppercase kickers */
+  --ls-heading: -0.01em;
+}

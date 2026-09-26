@@ -1,0 +1,6 @@
+/* Mobilise Design System — Webfonts
+   SUBSTITUTION: official font files were not provided.
+   Loading Google Fonts stand-ins: Poppins (headings),
+   Source Sans 3 (body). Replace with @font-face rules
+   pointing at real binaries when available. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');

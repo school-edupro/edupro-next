@@ -1,0 +1,33 @@
+/* Mobilise Design System — Spacing, radii, shadows, motion */
+:root {
+  /* Spacing (8px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --sp-9: 96px;
+
+  /* Layout */
+  --container-max: 1200px;
+  --section-pad-y: var(--sp-9);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Shadows — soft, cool, low-contrast */
+  --shadow-card: 0 2px 8px rgba(0, 38, 93, 0.08);
+  --shadow-card-hover: 0 8px 24px rgba(0, 38, 93, 0.14);
+  --shadow-overlay: 0 16px 48px rgba(0, 26, 68, 0.22);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 150ms;
+  --dur-med: 250ms;
+}

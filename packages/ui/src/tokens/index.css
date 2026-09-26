@@ -1,0 +1,7 @@
+/* Mobilise Design System tokens, copied verbatim from the supplied package (ADR-008 point 3).
+   Import once per application from the root layout. Do not add raw values here; extend in ../app.css. */
+@import './fonts.css';
+@import './colors.css';
+@import './typography.css';
+@import './spacing.css';
+@import './base.css';

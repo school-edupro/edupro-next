@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+.turbo/
+
+# environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# generated
+packages/api-client/src/generated/
+apps/api/openapi.json
+
+# os and editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+logs/
+*.log

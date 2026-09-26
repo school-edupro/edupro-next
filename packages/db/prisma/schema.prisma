@@ -1,0 +1,348 @@
+// Prisma schema for typed CRUD in the API (ADR-001). The database is migrated by plain SQL in ../migrations;
+// this schema mirrors those tables and is validated against the database in CI with `prisma db pull --print`.
+// Prisma never applies migrations here. Tenant context is set per transaction; see ../src/prisma.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum YearStatus {
+  planned
+  active
+  locked
+  closed
+
+  @@map("year_status")
+}
+
+enum RowStatus {
+  active
+  inactive
+
+  @@map("row_status")
+}
+
+enum RoleKind {
+  global
+  module
+
+  @@map("role_kind")
+}
+
+enum PersonType {
+  employee
+  guardian
+  student
+  external
+
+  @@map("person_type")
+}
+
+enum ScopeType {
+  class_section
+  subject
+  department
+  route
+  campus
+
+  @@map("scope_type")
+}
+
+enum LedgerType {
+  school
+  hostel
+  misc
+  admission
+
+  @@map("ledger_type")
+}
+
+model SchoolGroup {
+  id        BigInt    @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  status    RowStatus @default(active)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  schools   School[]
+
+  @@map("school_groups")
+}
+
+model School {
+  id             BigInt         @id @default(autoincrement())
+  groupId        BigInt?        @map("group_id")
+  code           String         @unique
+  name           String
+  shortName      String?        @map("short_name")
+  affiliationNo  String?        @map("affiliation_no")
+  board          String         @default("CBSE")
+  timezone       String         @default("Asia/Kolkata")
+  locale         String         @default("en-IN")
+  address        Json           @default("{}")
+  contact        Json           @default("{}")
+  branding       Json           @default("{}")
+  status         RowStatus      @default(active)
+  legacyRef      String?        @map("legacy_ref")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @default(now()) @map("updated_at")
+  deletedAt      DateTime?      @map("deleted_at")
+  group          SchoolGroup?   @relation(fields: [groupId], references: [id])
+  campuses       Campus[]
+  academicYears  AcademicYear[]
+  financialYears FinancialYear[]
+  settings       SchoolSetting[]
+  memberships    UserSchoolMembership[]
+  classes        Class[]
+  classSections  ClassSection[]
+
+  @@map("schools")
+}
+
+model Campus {
+  id        BigInt    @id @default(autoincrement())
+  schoolId  BigInt    @map("school_id")
+  code      String
+  name      String
+  address   Json      @default("{}")
+  geo       Json?
+  status    RowStatus @default(active)
+  legacyRef String?   @map("legacy_ref")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  school    School    @relation(fields: [schoolId], references: [id])
+
+  @@unique([schoolId, code])
+  @@map("campuses")
+}
+
+model AcademicYear {
+  id        BigInt     @id @default(autoincrement())
+  schoolId  BigInt     @map("school_id")
+  code      String
+  name      String
+  startDate DateTime   @map("start_date") @db.Date
+  endDate   DateTime   @map("end_date") @db.Date
+  status    YearStatus @default(planned)
+  locks     Json       @default("{}")
+  legacyRef String?    @map("legacy_ref")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @default(now()) @map("updated_at")
+  school    School     @relation(fields: [schoolId], references: [id])
+  sections  ClassSection[]
+
+  @@unique([schoolId, code])
+  @@map("academic_years")
+}
+
+model FinancialYear {
+  id        BigInt     @id @default(autoincrement())
+  schoolId  BigInt     @map("school_id")
+  code      String
+  name      String
+  startDate DateTime   @map("start_date") @db.Date
+  endDate   DateTime   @map("end_date") @db.Date
+  status    YearStatus @default(planned)
+  locks     Json       @default("{}")
+  legacyRef String?    @map("legacy_ref")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @default(now()) @map("updated_at")
+  school    School     @relation(fields: [schoolId], references: [id])
+
+  @@unique([schoolId, code])
+  @@map("financial_years")
+}
+
+model SchoolSetting {
+  id        BigInt    @id @default(autoincrement())
+  schoolId  BigInt    @map("school_id")
+  key       String
+  value     Json
+  validFrom DateTime  @default(now()) @map("valid_from") @db.Date
+  validTo   DateTime? @map("valid_to") @db.Date
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  school    School    @relation(fields: [schoolId], references: [id])
+
+  @@index([schoolId, key, validFrom(sort: Desc)])
+  @@map("school_settings")
+}
+
+model User {
+  id              BigInt    @id @default(autoincrement())
+  oneauthSub      String    @unique @map("oneauth_sub")
+  email           String?
+  mobile          String?
+  displayName     String    @map("display_name")
+  preferredLocale String    @default("en") @map("preferred_locale")
+  status          RowStatus @default(active)
+  lastLoginAt     DateTime? @map("last_login_at")
+  legacyRef       String?   @map("legacy_ref")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  memberships     UserSchoolMembership[]
+  userRoles       UserRole[]
+
+  @@map("users")
+}
+
+model UserSchoolMembership {
+  id          BigInt     @id @default(autoincrement())
+  schoolId    BigInt     @map("school_id")
+  userId      BigInt     @map("user_id")
+  personType  PersonType @map("person_type")
+  personRefId BigInt?    @map("person_ref_id")
+  status      RowStatus  @default(active)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @default(now()) @map("updated_at")
+  deletedAt   DateTime?  @map("deleted_at")
+  school      School     @relation(fields: [schoolId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
+
+  @@unique([schoolId, userId, personType])
+  @@map("user_school_memberships")
+}
+
+model Permission {
+  code        String   @id
+  module      String
+  description String   @default("")
+  requiresMfa    Boolean  @default(false) @map("requires_mfa")
+  orphaned       Boolean  @default(false)
+  declaredInCode Boolean  @default(false) @map("declared_in_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id          BigInt    @id @default(autoincrement())
+  schoolId    BigInt?   @map("school_id")
+  code        String
+  name        String
+  kind        RoleKind
+  isSystem    Boolean   @default(false) @map("is_system")
+  description String    @default("")
+  status      RowStatus @default(active)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  permissions RolePermission[]
+  userRoles   UserRole[]
+
+  @@unique([schoolId, code])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId         BigInt     @map("role_id")
+  permissionCode String     @map("permission_code")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  role           Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission     Permission @relation(fields: [permissionCode], references: [code])
+
+  @@id([roleId, permissionCode])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id        BigInt    @id @default(autoincrement())
+  schoolId  BigInt    @map("school_id")
+  userId    BigInt    @map("user_id")
+  roleId    BigInt    @map("role_id")
+  campusId  BigInt?   @map("campus_id")
+  validFrom DateTime  @default(now()) @map("valid_from") @db.Date
+  validTo   DateTime? @map("valid_to") @db.Date
+  grantedBy BigInt?   @map("granted_by")
+  reason    String?
+  revokedAt DateTime? @map("revoked_at")
+  revokedBy BigInt?   @map("revoked_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id])
+  role      Role      @relation(fields: [roleId], references: [id])
+  scopes    UserRoleScope[]
+
+  @@index([schoolId, userId])
+  @@map("user_roles")
+}
+
+model UserRoleScope {
+  id         BigInt    @id @default(autoincrement())
+  schoolId   BigInt    @map("school_id")
+  userRoleId BigInt    @map("user_role_id")
+  scopeType  ScopeType @map("scope_type")
+  scopeId    BigInt    @map("scope_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  userRole   UserRole  @relation(fields: [userRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([userRoleId, scopeType, scopeId])
+  @@map("user_role_scopes")
+}
+
+model ReceiptSequence {
+  id              BigInt     @id @default(autoincrement())
+  schoolId        BigInt     @map("school_id")
+  ledgerType      LedgerType @map("ledger_type")
+  financialYearId BigInt     @map("financial_year_id")
+  prefix          String
+  nextNo          BigInt     @default(1) @map("next_no")
+  width           Int        @default(6) @db.SmallInt
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @default(now()) @map("updated_at")
+
+  @@unique([schoolId, ledgerType, financialYearId])
+  @@map("receipt_sequences")
+}
+
+model Class {
+  id           BigInt    @id @default(autoincrement())
+  schoolId     BigInt    @map("school_id")
+  code         String
+  name         String
+  displayOrder Int       @default(0) @map("display_order")
+  status       RowStatus @default(active)
+  legacyRef    String?   @map("legacy_ref")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  createdBy    BigInt?   @map("created_by")
+  updatedAt    DateTime  @default(now()) @map("updated_at")
+  updatedBy    BigInt?   @map("updated_by")
+  deletedAt    DateTime? @map("deleted_at")
+  school       School    @relation(fields: [schoolId], references: [id])
+  sections     ClassSection[]
+
+  @@map("classes")
+}
+
+model ClassSection {
+  id             BigInt       @id @default(autoincrement())
+  schoolId       BigInt       @map("school_id")
+  academicYearId BigInt       @map("academic_year_id")
+  classId        BigInt       @map("class_id")
+  campusId       BigInt?      @map("campus_id")
+  name           String
+  capacity       Int?
+  status         RowStatus    @default(active)
+  legacyRef      String?      @map("legacy_ref")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  createdBy      BigInt?      @map("created_by")
+  updatedAt      DateTime     @default(now()) @map("updated_at")
+  updatedBy      BigInt?      @map("updated_by")
+  deletedAt      DateTime?    @map("deleted_at")
+  school         School       @relation(fields: [schoolId], references: [id])
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  class          Class        @relation(fields: [classId], references: [id])
+
+  @@index([schoolId, academicYearId])
+  @@map("class_sections")
+}

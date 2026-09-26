@@ -1,0 +1,52 @@
+import { env } from './env';
+import { readContext, readSession } from './session';
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly problem: { type: string; title?: string; detail?: string; [k: string]: unknown },
+  ) {
+    super(problem.detail ?? problem.title ?? problem.type);
+    this.name = 'ApiError';
+  }
+}
+
+/**
+ * Server-side call to the NestJS API with the user's token and the working school and year (ADR-007).
+ * Client components never call this; they go through /api/proxy (Sprint 2), which uses the same helper.
+ */
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const session = await readSession();
+  if (!session) throw new ApiError(401, { type: 'unauthenticated' });
+  const ctx = await readContext();
+
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${session.accessToken}`);
+  headers.set('Accept', 'application/json');
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
+  const schoolId = ctx.schoolId ?? session.schoolId;
+  const yearId = ctx.academicYearId ?? session.academicYearId;
+  if (schoolId) headers.set('X-School-Id', schoolId);
+  if (yearId) headers.set('X-Academic-Year-Id', yearId);
+  headers.set('X-Request-Id', crypto.randomUUID());
+
+  const res = await fetch(`${env.apiBaseUrl}/api/v1${path}`, { ...init, headers, cache: 'no-store' });
+  if (res.status === 204) return undefined as T;
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new ApiError(res.status, { type: String(body.type ?? 'request-error'), ...body });
+  }
+  return body as T;
+}
+
+export interface Me {
+  user: { id: string; displayName: string; mfa: boolean };
+  memberships: Array<{ schoolId: string; schoolCode: string; schoolName: string; personType: string }>;
+  school: { id: string } | null;
+  academicYear: { id: string } | null;
+  permissions: string[];
+}
+
+export function getMe(): Promise<Me> {
+  return apiFetch<Me>('/me');
+}
