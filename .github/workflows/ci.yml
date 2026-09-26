@@ -76,6 +76,8 @@ jobs:
         run: pnpm --filter @edupro/api test:permissions
       - name: Design token lint
         run: pnpm --filter @edupro/ui lint
+      - name: Storybook build (components and accessibility addon)
+        run: pnpm --filter @edupro/ui build-storybook
       - name: Dependency audit
         run: pnpm audit --audit-level=high
       - name: Build

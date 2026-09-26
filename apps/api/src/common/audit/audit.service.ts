@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { maskSensitive } from '@edupro/db';
 import { DbService } from '../db/db.service';
 import type { AuditSnapshot, RequestContext } from '../http/request-context';
 
@@ -14,9 +15,12 @@ export class AuditService {
     const tenant = ctx.tenant;
     if (!tenant) return; // nothing tenant-scoped to record; identity events go to login_events
 
-    const before = snapshot.before === undefined ? null : JSON.stringify(snapshot.before);
-    const after = snapshot.after === undefined ? null : JSON.stringify(snapshot.after);
-    const diff = diffRecords(snapshot.before, snapshot.after);
+    // Sensitive fields are masked in audit images (logging standard section 3); personal fields stay.
+    const maskedBefore = snapshot.before === undefined ? undefined : maskSensitive(snapshot.before, snapshot.entityType);
+    const maskedAfter = snapshot.after === undefined ? undefined : maskSensitive(snapshot.after, snapshot.entityType);
+    const before = maskedBefore === undefined ? null : JSON.stringify(maskedBefore);
+    const after = maskedAfter === undefined ? null : JSON.stringify(maskedAfter);
+    const diff = diffRecords(maskedBefore, maskedAfter);
 
     await this.db.tenant(tenant, async (c) => {
       await c.query(

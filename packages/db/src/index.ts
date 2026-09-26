@@ -188,3 +188,4 @@ export class Db {
 }
 
 export type { PoolClient } from 'pg';
+export { maskSensitive, isSensitiveKey, GLOBAL_SENSITIVE_KEYS, ENTITY_SENSITIVE_KEYS } from './audit-masks';

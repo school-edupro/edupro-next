@@ -1,0 +1,40 @@
+ID,Sprint,Epic,Summary,Permissions,Acceptance criteria,Points
+S2-01,Sprint 2,WP4 Identity and access,Role administration API: list create edit disable school roles; copy from template,access.role.manage,templates read-only; school roles unique per school; audit rows; e2e allow and deny,5
+S2-02,Sprint 2,WP4 Identity and access,Assignment API: grant revoke list role assignments with validity dates and campus,access.assignment.manage (MFA),SoD check at grant time rejects conflicting pairs with sod-conflict; cache invalidated; audit,8
+S2-03,Sprint 2,WP4 Identity and access,Scope management API: attach class section subject department route campus scopes,access.assignment.manage,scopes validated against entities; reference module honours class section scope in e2e,5
+S2-04,Sprint 2,WP4 Identity and access,Delegation API: delegate own role for a period; revoke; list,access.delegation.create; access.delegation.manage,effective permissions include delegated role within window only; audit shows original approver,5
+S2-05,Sprint 2,WP4 Identity and access,Membership and invitation API: invite user by One Auth subject or mobile; deactivate,access.membership.manage (MFA),user provisioned; login works after invitation; deactivated user gets 403 user-not-provisioned,5
+S2-06,Sprint 2,WP3 Platform,School settings API with typed keys and validity windows; app.setting() used by procedures,platform.settings.view; platform.settings.edit,unknown keys rejected; history kept; late-fee mode readable from SQL,3
+S2-07,Sprint 2,WP3 Platform,Years API: create academic and financial years; set active; lock and reopen stages,platform.year.manage; platform.year.lock (MFA); platform.year.reopen (MFA),one active year per school enforced; lock blocks section creation (e2e),5
+S2-08,Sprint 2,WP3 Platform,File service: signed upload and download URLs; antivirus hook; classification; ownership,platform.files.upload,disallowed type rejected; file row scoped by school; download URL expires,8
+S2-09,Sprint 2,WP6 Front end,Admin screens: roles and permissions editor; assignments with scopes; delegation; memberships,as APIs,built from @edupro/ui; strings externalised; story per screen,8
+S2-10,Sprint 2,WP6 Front end,Admin screens: years and settings,as APIs,year switcher shows locked stages; settings editor validates by key,5
+S2-11,Sprint 2,WP3 Platform,Redis-backed permission cache with cross-process invalidation,none,revoke reflected in another process within 1 s,3
+S2-12,Sprint 2,WP27 Security,Lint rule forbidding template-literal SQL with interpolation,none,rule fails on a fixture file,2
+S2-13,Sprint 2,WP26 Data,scripts/schema-diff.sh producing the per-school diff report,none,report matches template; under 2 minutes on a full dump,3
+S3-01,Sprint 3,WP3 Platform,Transactional outbox and BullMQ publisher; workers consume with tenant context,none,job published only after commit; retries with backoff; dead letter visible,8
+S3-02,Sprint 3,WP11 Communication,Notification service: DLT templates; SMS WhatsApp email push adapters; delivery log,comms.template.manage; comms.message.send,provider failure recorded; retry; no PII in logs,13
+S3-03,Sprint 3,WP3 Platform,Export service: PDF (Playwright) and Excel (exceljs) jobs; status endpoint; signed download,reports.export.create,3000 rows under 30 s; file deleted after expiry,8
+S3-04,Sprint 3,WP3 Platform,Audit write through the outbox; audit query API with filters,platform.audit.view; platform.audit.export (MFA),audit rows survive crash after commit; export audited,5
+S3-05,Sprint 3,WP6 Front end,Design system v1: TanStack data table with sort filter column chooser saved views; form layout; dense mode,none,stories with interaction tests; axe clean,8
+S3-06,Sprint 3,WP6 Front end,Storybook interaction tests and visual regression in CI; Playwright smoke for admin,none,CI fails on visual diff over threshold,5
+S3-07,Sprint 3,WP6 Front end,Admin screens: audit log viewer; export centre; notification templates,as APIs,,5
+S3-08,Sprint 3,WP26 Data,ETL tenancy and identity domain scripts against the pilot dump,none,user and membership counts match; provisioning list for One Auth,8
+S3-09,Sprint 3,WP27 Security,DAST baseline (OWASP ZAP) on staging nightly,none,zero high alerts,3
+S4-01,Sprint 4,WP6 Front end,next-intl with English and Hindi; Devanagari type check; language switcher,none,all admin strings externalised; Hindi renders on key screens,5
+S4-02,Sprint 4,WP5 People,Students guardians siblings enrolments API and admin screens,people.student.*; people.guardian.*,admission number unique per school; enrolment per year; audit; teacher scopes,13
+S4-03,Sprint 4,WP5 People,Employees and postings API and screens,people.employee.*,employee code unique per school; posting per year with reporting line,8
+S4-04,Sprint 4,WP5 People,Documents and photos via file service; ID card PDF template,people.student.edit; people.employee.edit,photo in 360 view; ID card export,5
+S4-05,Sprint 4,WP14 Compatibility,Compatibility API skeleton: auth handshake for current apps; GetMenuDetail and GetSchoolConfig shapes,none,current app builds log in against staging,8
+S4-06,Sprint 4,WP26 Data,ETL people domain scripts with reconciliation,none,counts per class and year match within explained deltas,13
+S4-07,Sprint 4,WP3 Platform,PostgreSQL full-text search for people,none,search under 200 ms,3
+S5-01,Sprint 5,WP4 Identity and access,MFA step-up: acr_values re-authentication in BFF; auth_time freshness enforced,none,privileged action after 15 minutes prompts re-authentication,5
+S5-02,Sprint 5,WP4 Identity and access,Impersonation with reason time box UI banner and audit,access.session.impersonate (MFA),every action carries both identities,8
+S5-03,Sprint 5,WP4 Identity and access,Break-glass access with reason and post-review report,access.assignment.manage,expires in 4 hours; report to security lead,3
+S5-04,Sprint 5,WP3 Platform,Observability: traces metrics dashboards alerts on security events,none,trace per request across BFF and API; alert on 10 denials per minute,5
+S5-05,Sprint 5,WP3 Platform,Deploy workflows; infrastructure as code; Key Vault; schema-version check at startup,none,staging deploys from main; API refuses on schema mismatch,8
+S5-06,Sprint 5,WP3 Platform,Backups restore drill DR runbook; staging anonymisation job,none,restore within RTO; no real contact data in staging,5
+S5-07,Sprint 5,WP14 Compatibility,Compatibility API read endpoints for both apps,none,contract tests against recorded legacy responses,8
+S5-08,Sprint 5,WP6 Front end,Parent and teacher app shells with login and home; PWA manifests,none,installable; login round-trip,5
+S5-09,Sprint 5,WP28 Quality,Performance baseline (k6) on staging,none,p95 within targets at 200 concurrent users,3
+S5-10,Sprint 5,WP27 Security,Internal security review of the foundation; M1 gate report,none,no open high findings,3

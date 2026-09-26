@@ -11,16 +11,14 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from './app.module';
 import { corsOrigins, loadEnv } from './config/env';
+import { loggerOptions } from './config/logging';
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const logger = new Logger('bootstrap');
 
   const adapter = new FastifyAdapter({
-    logger: {
-      level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-      redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
-    },
+    logger: loggerOptions(env.NODE_ENV),
     genReqId: (req: IncomingMessage) => (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
     trustProxy: true,
     bodyLimit: 1_048_576, // 1 MB; files go to object storage through signed URLs

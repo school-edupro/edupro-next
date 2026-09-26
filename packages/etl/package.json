@@ -1,0 +1,27 @@
+{
+  "name": "@edupro/etl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Legacy MySQL to PostgreSQL migration: transforms, identity map, pipeline runner, reconciliation",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@edupro/db": "workspace:*",
+    "mysql2": "^3.11.3",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@edupro/config": "workspace:*",
+    "@types/node": "^22.7.4",
+    "@types/pg": "^8.11.10",
+    "eslint": "^9.12.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  }
+}

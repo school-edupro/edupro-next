@@ -1,0 +1,66 @@
+# Backlog: Sprints 2 to 5 (Foundation, adjusted for what Sprint 0 delivered)
+
+Epics map to work packages in the project plan. Each story lists the permissions it introduces and its acceptance criteria. The same stories are in `sprints-2-to-5.csv` for the tracker. Sizes are relative points.
+
+## Sprint 2: access administration, files, settings
+
+| ID | Epic | Story | Permissions | Acceptance criteria | Size |
+|---|---|---|---|---|---|
+| S2-01 | WP4 Identity and access | Role administration API: list, create, edit, disable school roles; copy from template | `access.role.manage` | templates read-only; school roles unique per school; audit rows; e2e allow and deny | 5 |
+| S2-02 | WP4 | Assignment API: grant, revoke, list role assignments with validity dates and campus | `access.assignment.manage` (MFA) | SoD check at grant time rejects conflicting pairs with `sod-conflict`; cache invalidated; audit | 8 |
+| S2-03 | WP4 | Scope management API: attach class section, subject, department, route, campus scopes to an assignment | `access.assignment.manage` | scopes validated against existing entities; reference module honours class section scope in e2e | 5 |
+| S2-04 | WP4 | Delegation API: delegate own role for a period; revoke; list | `access.delegation.create`, `access.delegation.manage` | effective permissions include delegated role within the window only; audit shows original approver | 5 |
+| S2-05 | WP4 | Membership and invitation API: invite a user to a school by One Auth subject or mobile; deactivate | `access.membership.manage` (MFA) | user row provisioned; login works after invitation; deactivated user gets 403 `user-not-provisioned` | 5 |
+| S2-06 | WP3 Platform | School settings API with typed keys and validity windows; `app.setting()` used by procedures | `platform.settings.view`, `platform.settings.edit` | unknown keys rejected; history kept; late-fee mode readable from SQL | 3 |
+| S2-07 | WP3 | Years API: create academic and financial years, set active, lock and reopen stages | `platform.year.manage`, `platform.year.lock` (MFA), `platform.year.reopen` (MFA) | exactly one active year per school enforced; lock blocks section creation (e2e) | 5 |
+| S2-08 | WP3 | File service: signed upload and download URLs, antivirus scan hook, classification, ownership | `platform.files.upload` | upload of a disallowed type rejected; file row scoped by school; download URL expires | 8 |
+| S2-09 | WP6 Front end | Admin screens: roles and permissions editor, assignments with scopes, delegation, memberships | as above | built from `@edupro/ui`; strings externalised; visual story per screen | 8 |
+| S2-10 | WP6 | Admin screens: years and settings | as above | year switcher shows locked stages; settings editor validates by key | 5 |
+| S2-11 | WP3 | Redis-backed permission cache with invalidation across processes | none | revoke reflected in another process within 1 s (e2e with two app instances) | 3 |
+| S2-12 | WP27 Security | Lint rule forbidding template-literal SQL with interpolation; secrets scan already in CI | none | rule fails on a fixture file | 2 |
+| S2-13 | WP26 Data | `scripts/schema-diff.sh` producing the per-school diff report from two dumps | none | report matches the template; runs in under 2 minutes on a full dump | 3 |
+
+## Sprint 3: jobs, notifications, exports, design system v1
+
+| ID | Epic | Story | Permissions | Acceptance criteria | Size |
+|---|---|---|---|---|---|
+| S3-01 | WP3 | Transactional outbox and BullMQ publisher; workers consume with tenant context | none | job published only after commit; failed jobs retried with backoff; dead letter visible | 8 |
+| S3-02 | WP11 Communication | Notification service: templates with DLT ids, adapters for SMS, WhatsApp, email, push behind one interface; delivery log | `comms.template.manage`, `comms.message.send` | provider failure recorded; retry; no PII in logs | 13 |
+| S3-03 | WP3 | Export service: PDF (Playwright) and Excel (exceljs) jobs with status endpoint and signed download | `reports.export.create` | export of 3,000 rows completes under 30 s; file deleted after expiry | 8 |
+| S3-04 | WP3 | Audit write through the outbox; audit query API with filters | `platform.audit.view`, `platform.audit.export` (MFA) | audit rows survive a crash after commit; export audited | 5 |
+| S3-05 | WP6 | Design system v1: TanStack-based data table (sort, filter, column chooser, saved views), form layout, dense mode | none | stories with interaction tests; axe clean | 8 |
+| S3-06 | WP6 | Storybook interaction tests and visual regression in CI; Playwright smoke for admin | none | CI fails on visual diff over threshold | 5 |
+| S3-07 | WP6 | Admin screens: audit log viewer, export centre, notification templates | as above | | 5 |
+| S3-08 | WP26 | ETL: tenancy and identity domain scripts (years, settings, users, memberships) against the pilot dump | none | reconciliation: user and membership counts match; provisioning list produced for One Auth | 8 |
+| S3-09 | WP27 | DAST baseline (OWASP ZAP) on staging in nightly CI | none | zero high alerts | 3 |
+
+## Sprint 4: i18n, people masters, compatibility skeleton
+
+| ID | Epic | Story | Permissions | Acceptance criteria | Size |
+|---|---|---|---|---|---|
+| S4-01 | WP6 | `next-intl` wiring with English and Hindi; type scale checked with Devanagari; language switcher | none | all admin strings externalised; Hindi renders without overflow on key screens | 5 |
+| S4-02 | WP5 People | Students, guardians, siblings, enrolments API and admin screens (list, 360 view, edit) | `people.student.*`, `people.guardian.*` | admission number unique per school; enrolment per year; audit; scopes for class teachers | 13 |
+| S4-03 | WP5 | Employees and postings API and screens | `people.employee.*` | employee code unique per school; posting per year with reporting line | 8 |
+| S4-04 | WP5 | Documents and photos through the file service; ID card PDF template | `people.student.edit`, `people.employee.edit` | photo shown in 360 view; ID card export | 5 |
+| S4-05 | WP14 Compatibility | Compatibility API skeleton: auth handshake for the current student and teacher apps; `GetMenuDetail`, `GetSchoolConfig` shapes | none | current app builds log in against staging | 8 |
+| S4-06 | WP26 | ETL: people domain scripts (students, guardians, enrolments, employees, postings) with reconciliation | none | counts per class and year match the legacy within explained deltas | 13 |
+| S4-07 | WP3 | Search service (PostgreSQL full text) for people | none | search by name, admission number, mobile under 200 ms | 3 |
+
+## Sprint 5: MFA, impersonation, observability, production readiness
+
+| ID | Epic | Story | Permissions | Acceptance criteria | Size |
+|---|---|---|---|---|---|
+| S5-01 | WP4 | MFA step-up flow: `acr_values` re-authentication in the BFF; `auth_time` freshness enforced | none | privileged action after 15 minutes prompts re-authentication | 5 |
+| S5-02 | WP4 | Impersonation: start and end with reason, time box, banner in UI, audit with `impersonated_by` | `access.session.impersonate` (MFA) | every action during impersonation carries both identities | 8 |
+| S5-03 | WP4 | Break-glass access with mandatory reason and post-review report | `access.assignment.manage` | expires in 4 hours; report emailed to the security lead | 3 |
+| S5-04 | WP3 | Observability: OpenTelemetry traces, metrics, dashboards, alerts on security events | none | trace per request across BFF and API; alert fires on 10 permission denials per minute | 5 |
+| S5-05 | WP3 | Deploy workflows, infrastructure as code, Key Vault wiring, schema-version check at startup | none | staging deploys from `main`; API refuses to start on schema mismatch | 8 |
+| S5-06 | WP3 | Backups, restore drill, DR runbook; staging anonymisation job | none | restore completes within RTO; anonymised staging has no real contact data | 5 |
+| S5-07 | WP14 | Compatibility API read endpoints for both apps: homework, classwork, notices, attendance, timetable, holidays, directory | none | contract tests against recorded legacy responses | 8 |
+| S5-08 | WP6 | Parent and teacher app shells with login and home; PWA manifests | none | installable on Android and iOS; login round-trip | 5 |
+| S5-09 | WP28 Quality | Performance baseline (k6) on staging for `/me`, classes list, people search | none | p95 within targets at 200 concurrent users | 3 |
+| S5-10 | WP27 | Internal security review of the foundation and fixes; M1 gate report | none | no open high findings | 3 |
+
+## Milestone M1 (end of Sprint 5)
+
+Employees log in through One Auth to the admin app with permission-driven menus; roles, scopes and delegations administered in the UI; pilot masters and people migrated and reconciled; compatibility API reads live in staging; observability and deploys in place.

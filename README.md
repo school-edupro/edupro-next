@@ -20,13 +20,20 @@ apps/
   teacher/    Next.js teacher application (PWA), starts Sprint 5
   public/     Next.js public application (admission forms), starts Sprint 8
 packages/
-  db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool
-  ui/         Mobilise Design System tokens and React components
+  db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool, audit masks
+  etl/        Legacy MySQL to PostgreSQL migration: transforms, identity map, pipeline runner
+  ui/         Mobilise Design System tokens, React components, Storybook
   api-client/ Generated TypeScript client from the API's OpenAPI document
   config/     Shared TypeScript, ESLint and Prettier configuration
 docs/
   adr/        Architecture decision records
-  design/     Sprint 0 foundation design, reference module guide, permission catalogue
+  design/     Foundation design, reference module guide, permission catalogue, threat model, environment plan
+  standards/  Logging and personal data standard
+  data/       Type mapping catalogue, DPDP data inventory, ETL framework, schema diff template
+  quality/    Test strategy
+  playbooks/  Fees, exams, people and admissions rule drafts with open questions
+  backlog/    Sprint 2 to 5 stories (markdown and CSV)
+  sprints/    Sprint records
 ```
 
 ## Prerequisites

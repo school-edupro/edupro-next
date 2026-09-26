@@ -30,3 +30,6 @@ apps/api/openapi.json
 # logs
 logs/
 *.log
+
+# storybook
+storybook-static/
