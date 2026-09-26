@@ -22,7 +22,7 @@ import { PageHeader, Button, DataTable, Badge, toneForStatus } from '@edupro/ui'
 
 ## Rules
 
-1. Tokens only. If a value is missing, add a token in `app.css` under `:root` with a name, never a raw value in a component.
+1. Tokens only. If a value is missing, add a token in `app.css` under `:root` with a name, never a raw value in a component. The only such additions so far are the four `--status-*-text` shades, added because the 600-level status colours fall below WCAG AA contrast on their 50-level tints at caption size (found by the Storybook accessibility addon in Sprint 1); they are candidates for official 700-level tokens.
 2. One dark navy surface per screen: the sidebar. Content stays on white and pale blue bands.
 3. Cards use a border or a shadow, never both.
 4. Buttons are rounded rectangles (6 px). Pills are reserved.

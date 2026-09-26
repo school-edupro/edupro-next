@@ -6,6 +6,16 @@
   --shell-sidebar-width: 264px;
   --shell-sidebar-collapsed: 72px;
   --shell-header-height: 64px;
+
+  /* Status text on the 50-level tints. The design system's 600-level status colours reach only about
+     3.4 to 4.4 : 1 on their tints, below the 4.5 : 1 WCAG AA ratio at caption size (found by the
+     Storybook accessibility addon). These darker shades sit at 5.5 : 1 or better and are the only
+     colour values the application layer adds; flag them to the design-system owners as candidates for
+     official 700-level status tokens. */
+  --status-success-text: #146b43;
+  --status-warning-text: #7a4e08;
+  --status-danger-text: #9b2c2c;
+  --status-info-text: #005c75;
 }
 
 *,
@@ -284,19 +294,19 @@
 }
 .ep-badge--success {
   background: var(--status-success-bg);
-  color: var(--status-success);
+  color: var(--status-success-text);
 }
 .ep-badge--warning {
   background: var(--status-warning-bg);
-  color: var(--status-warning);
+  color: var(--status-warning-text);
 }
 .ep-badge--danger {
   background: var(--status-danger-bg);
-  color: var(--status-danger);
+  color: var(--status-danger-text);
 }
 .ep-badge--info {
   background: var(--status-info-bg);
-  color: var(--status-info);
+  color: var(--status-info-text);
 }
 
 /* ---- Form ----------------------------------------------------------------------- */
@@ -414,19 +424,19 @@
 }
 .ep-alert--info {
   background: var(--status-info-bg);
-  color: var(--status-info);
+  color: var(--status-info-text);
 }
 .ep-alert--success {
   background: var(--status-success-bg);
-  color: var(--status-success);
+  color: var(--status-success-text);
 }
 .ep-alert--warning {
   background: var(--status-warning-bg);
-  color: var(--status-warning);
+  color: var(--status-warning-text);
 }
 .ep-alert--danger {
   background: var(--status-danger-bg);
-  color: var(--status-danger);
+  color: var(--status-danger-text);
 }
 
 /* ---- KPI tile ------------------------------------------------------------------- */

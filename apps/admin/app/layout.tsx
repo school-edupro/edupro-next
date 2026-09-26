@@ -9,8 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // suppressHydrationWarning: browser extensions add attributes to <html> before React hydrates, which
+  // otherwise raises a hydration mismatch in development. Only this element is affected.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );
