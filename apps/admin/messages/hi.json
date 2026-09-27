@@ -52,7 +52,20 @@
     "inbox": "मेरा इनबॉक्स",
     "instances": "अनुरोध",
     "definitions": "वर्कफ़्लो",
-    "payments": "भुगतान"
+    "payments": "भुगतान",
+    "compose": "संदेश लिखें",
+    "requests": "संदेश अनुरोध",
+    "groups": "समूह",
+    "consents": "सहमति",
+    "engagement": "अभिभावक संपर्क",
+    "queries": "प्रश्न और शिकायतें",
+    "feedback": "प्रतिक्रिया",
+    "changeRequests": "प्रोफ़ाइल परिवर्तन अनुरोध",
+    "transport": "परिवहन",
+    "routes": "रूट",
+    "rfidDashboard": "RFID डैशबोर्ड",
+    "busAttendance": "बस उपस्थिति",
+    "punches": "स्टाफ़ पंच"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
@@ -414,6 +427,61 @@
       "kicker": "उपस्थिति",
       "title": "RFID रीडर",
       "description": "गेट रीडर, उनकी कुंजियाँ और टैप लॉग।"
+    },
+    "comms_compose": {
+      "kicker": "संचार",
+      "title": "संदेश लिखें",
+      "description": "टेम्पलेट और श्रोता चुनें, प्राप्तकर्ता देखें, फिर अनुमोदन के लिए भेजें।"
+    },
+    "comms_requests": {
+      "kicker": "संचार",
+      "title": "संदेश अनुरोध",
+      "description": "अनुरोध, उनकी अनुमोदन स्थिति और डिलीवरी गिनती।"
+    },
+    "comms_groups": {
+      "kicker": "संचार",
+      "title": "समूह",
+      "description": "सदस्यों के नामित समूह जिन्हें संदेश भेजा जा सकता है (PTA, बस अभिभावक, समितियाँ)।"
+    },
+    "comms_consents": {
+      "kicker": "संचार",
+      "title": "सहमति रिकॉर्ड",
+      "description": "प्रति व्यक्ति DPDP उद्देश्य: क्या दिया या वापस लिया, कब और किसने।"
+    },
+    "engagement_queries": {
+      "kicker": "अभिभावक संपर्क",
+      "title": "प्रश्न, शिकायतें और अवकाश",
+      "description": "अभिभावक ऐप से उठाए गए; कक्षा शिक्षक अपने सेक्शन देखते हैं।"
+    },
+    "engagement_feedback": {
+      "kicker": "अभिभावक संपर्क",
+      "title": "प्रतिक्रिया",
+      "description": "परिवारों की रेटिंग और टिप्पणियाँ, क्षेत्रवार औसत।"
+    },
+    "engagement_change_requests": {
+      "kicker": "अभिभावक संपर्क",
+      "title": "प्रोफ़ाइल परिवर्तन अनुरोध",
+      "description": "परिवारों द्वारा माँगे गए परिवर्तन; स्वीकृति ऑडिट के साथ लागू करती है।"
+    },
+    "transport_routes": {
+      "kicker": "परिवहन",
+      "title": "रूट",
+      "description": "बस रूट, वाहन, चालक और इस वर्ष सवार विद्यार्थी।"
+    },
+    "attendance_rfid_dashboard": {
+      "kicker": "उपस्थिति",
+      "title": "RFID डैशबोर्ड",
+      "description": "रीडर स्थिति, गेट और बस गिनती, और टैग वाले विद्यार्थी जो नहीं आए।"
+    },
+    "attendance_bus": {
+      "kicker": "उपस्थिति",
+      "title": "बस उपस्थिति",
+      "description": "रूट के अनुसार बस में चढ़ने-उतरने के टैप और अभिभावक सूचनाएँ।"
+    },
+    "attendance_punches": {
+      "kicker": "उपस्थिति",
+      "title": "स्टाफ़ पंच",
+      "description": "बायोमेट्रिक डिवाइस से प्रति कर्मचारी पहला प्रवेश, अंतिम निकास और घंटे।"
     }
   },
   "stepUp": {
@@ -1106,6 +1174,223 @@
     "sessionOf": "{date} को {section} का रजिस्टर",
     "helpCodes": "P उपस्थित · A अनुपस्थित · L विलंब · SR अल्प अवकाश · H आधा दिन · OD ड्यूटी · SB रुकना",
     "alerts": "अनुपस्थित विद्यार्थियों के अभिभावकों को एक बार WhatsApp सूचना जाती है।",
-    "ingest": "रीडर x-device-key हेडर के साथ POST /api/v1/attendance/rfid/events पर भेजते हैं।"
+    "ingest": "रीडर x-device-key हेडर के साथ POST /api/v1/attendance/rfid/events पर भेजते हैं।",
+    "kinds": {
+      "gate": "गेट रीडर",
+      "bus": "बस रीडर",
+      "biometric": "बायोमेट्रिक (स्टाफ़)"
+    },
+    "route": "रूट",
+    "health": "स्थिति",
+    "healths": {
+      "online": "ऑनलाइन",
+      "idle": "निष्क्रिय",
+      "silent": "मौन",
+      "inactive": "बंद"
+    },
+    "gateIn": "प्रवेश",
+    "gateOut": "निकास",
+    "rejected": "अस्वीकृत टैप",
+    "boarded": "चढ़े",
+    "alighted": "उतरे",
+    "punches": "पंच",
+    "tagged": "टैग वाले",
+    "inToday": "आज आए",
+    "notIn": "नहीं आए",
+    "notInList": "टैग वाले विद्यार्थी जो अभी नहीं आए",
+    "busEvents": "बस टैप",
+    "position": "स्थान",
+    "alerted": "सूचना भेजी",
+    "routeTotals": "रूटवार",
+    "firstIn": "पहला प्रवेश",
+    "lastOut": "अंतिम निकास",
+    "hours": "घंटे",
+    "employee": "कर्मचारी",
+    "punchLog": "पंच लॉग",
+    "biometricId": "बायोमेट्रिक आईडी",
+    "presentStaff": "उपस्थित स्टाफ़",
+    "absentStaff": "पंच नहीं",
+    "noPunches": "इस तारीख़ को कोई पंच नहीं",
+    "noBus": "इस तारीख़ को कोई बस टैप नहीं",
+    "sections": "सेक्शन"
+  },
+  "comms": {
+    "title": "शीर्षक",
+    "category": "श्रेणी",
+    "categories": {
+      "general": "सामान्य (सहमति लागू)",
+      "service": "सेवा (फ़ीस, उपस्थिति, सुरक्षा)"
+    },
+    "template": "टेम्पलेट",
+    "body": "संदेश",
+    "bodyHelp": "टेम्पलेट में {{body}} के रूप में जुड़ता है; प्राप्तकर्ता का नाम, विद्यार्थी, कक्षा और विद्यालय स्वतः भरते हैं।",
+    "audience": "श्रोता",
+    "audiences": {
+      "everyone": "सभी (अभिभावक और स्टाफ़)",
+      "students": "सभी अभिभावक",
+      "employees": "सभी स्टाफ़",
+      "class": "कक्षाएँ",
+      "class_section": "सेक्शन",
+      "route": "बस रूट",
+      "group": "समूह",
+      "individuals": "चुने सदस्य"
+    },
+    "targets": "लक्ष्य",
+    "scheduledAt": "भेजने का समय (वैकल्पिक)",
+    "preview": "प्राप्तकर्ता देखें",
+    "submit": "अनुमोदन के लिए भेजें",
+    "recipients": "प्राप्तकर्ता",
+    "skipped": "छोड़े गए",
+    "skippedReasons": {
+      "no_address": "मोबाइल/ईमेल नहीं",
+      "consent_withdrawn": "सहमति वापस",
+      "duplicate": "एक ही पता दो बार"
+    },
+    "sample": "नमूना",
+    "status": "स्थिति",
+    "statuses": {
+      "draft": "ड्राफ़्ट",
+      "pending_approval": "अनुमोदन प्रतीक्षित",
+      "approved": "स्वीकृत",
+      "rejected": "अस्वीकृत",
+      "sending": "भेजा जा रहा",
+      "sent": "भेजा",
+      "cancelled": "रद्द"
+    },
+    "requestedBy": "अनुरोधकर्ता",
+    "requestedAt": "अनुरोध तिथि",
+    "decidedBy": "निर्णयकर्ता",
+    "decision": "निर्णय टिप्पणी",
+    "delivery": "डिलीवरी",
+    "deliveryStates": {
+      "queued": "कतार में",
+      "sending": "भेजा जा रहा",
+      "sent": "भेजा",
+      "delivered": "पहुँचा",
+      "failed": "विफल",
+      "cancelled": "रद्द"
+    },
+    "cancel": "अनुरोध रद्द करें",
+    "noRequests": "अभी कोई संदेश अनुरोध नहीं",
+    "recipient": "प्राप्तकर्ता",
+    "student": "विद्यार्थी",
+    "address": "पता",
+    "reason": "क्यों छोड़ा",
+    "openInbox": "प्रधानाचार्य के इनबॉक्स में अनुमोदन प्रतीक्षित",
+    "group": "समूह",
+    "groupCode": "कोड",
+    "groupName": "नाम",
+    "members": "सदस्य",
+    "addGroup": "समूह बनाएँ",
+    "addMembers": "सदस्य जोड़ें",
+    "remove": "हटाएँ",
+    "noGroups": "अभी कोई समूह नहीं",
+    "member": "सदस्य",
+    "findMember": "सदस्य",
+    "consentFor": "सहमति:",
+    "purpose": "उद्देश्य",
+    "granted": "दी गई",
+    "withdrawn": "वापस",
+    "notRecorded": "दर्ज नहीं",
+    "record": "सहमति दर्ज करें",
+    "recordHelp": "काउंटर पर हस्ताक्षरित फ़ॉर्म के लिए। व्यक्ति इसे अभिभावक ऐप में कभी भी बदल सकता है।",
+    "history": "इतिहास",
+    "source": "स्रोत",
+    "note": "टिप्पणी",
+    "recordedBy": "दर्ज किया",
+    "recordedAt": "तिथि",
+    "chooseMember": "सहमति रिकॉर्ड देखने के लिए सदस्य चुनें।",
+    "channel": "चैनल"
+  },
+  "engagement": {
+    "number": "क्रमांक",
+    "kind": "प्रकार",
+    "kinds": {
+      "query": "प्रश्न",
+      "complaint": "शिकायत",
+      "leave": "अवकाश अनुरोध"
+    },
+    "category": "श्रेणी",
+    "student": "विद्यार्थी",
+    "raisedBy": "उठाया",
+    "subject": "विषय",
+    "status": "स्थिति",
+    "statuses": {
+      "open": "खुला",
+      "in_progress": "प्रगति में",
+      "answered": "उत्तर दिया",
+      "closed": "बंद"
+    },
+    "assignedTo": "जिम्मेदार",
+    "opened": "खोला",
+    "leaveDates": "अवकाश तिथियाँ",
+    "decision": "निर्णय",
+    "decisions": {
+      "approved": "स्वीकृत",
+      "rejected": "अस्वीकृत"
+    },
+    "rating": "रेटिंग",
+    "thread": "वार्तालाप",
+    "internal": "आंतरिक टिप्पणी (परिवार से छुपी)",
+    "reply": "उत्तर",
+    "replyHelp": "उत्तर देने से प्रश्न उत्तरित हो जाता है और परिवार को WhatsApp पर सूचना जाती है।",
+    "send": "उत्तर भेजें",
+    "close": "बंद करें",
+    "closeHelp": "अवकाश अनुरोध बंद करने के लिए निर्णय आवश्यक है।",
+    "note": "समापन टिप्पणी",
+    "assign": "सौंपें",
+    "assignTo": "किसे सौंपें",
+    "unassigned": "असाइन नहीं",
+    "noQueries": "कोई प्रश्न नहीं",
+    "me": "मैं",
+    "feedbackCategory": "क्षेत्र",
+    "categories": {
+      "teaching": "शिक्षण",
+      "transport": "परिवहन",
+      "fees": "फ़ीस",
+      "facilities": "सुविधाएँ",
+      "communication": "संचार",
+      "app": "अभिभावक ऐप"
+    },
+    "average": "औसत",
+    "count": "प्रतिक्रियाएँ",
+    "comment": "टिप्पणी",
+    "author": "से",
+    "noFeedback": "अभी कोई प्रतिक्रिया नहीं",
+    "entity": "रिकॉर्ड",
+    "entities": {
+      "student": "विद्यार्थी",
+      "guardian": "अभिभावक"
+    },
+    "field": "फ़ील्ड",
+    "from": "से",
+    "to": "तक",
+    "reason": "कारण",
+    "approve": "स्वीकृत करें और लागू करें",
+    "reject": "अस्वीकार करें",
+    "decisionNote": "परिवार के लिए टिप्पणी",
+    "noChanges": "कोई परिवर्तन अनुरोध नहीं",
+    "decidedBy": "निर्णयकर्ता"
+  },
+  "transport": {
+    "code": "कोड",
+    "name": "रूट",
+    "vehicle": "वाहन",
+    "driver": "चालक",
+    "driverMobile": "चालक मोबाइल",
+    "students": "विद्यार्थी",
+    "addRoute": "रूट जोड़ें",
+    "noRoutes": "अभी कोई रूट नहीं",
+    "riders": "इस रूट के विद्यार्थी",
+    "stop": "स्टॉप",
+    "pickup": "पिकअप",
+    "drop": "ड्रॉप",
+    "guardianMobile": "अभिभावक मोबाइल",
+    "assign": "विद्यार्थी जोड़ें",
+    "assignHelp": "सेक्शन चुनें, विद्यार्थी चुनें और स्टॉप व समय दें; एक विद्यार्थी वर्ष में एक रूट पर चलता है।",
+    "section": "सेक्शन",
+    "remove": "हटाएँ",
+    "noRiders": "अभी कोई विद्यार्थी नहीं",
+    "status": "स्थिति"
   }
 }

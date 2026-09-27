@@ -54,7 +54,9 @@ describe('permission coverage', () => {
     // The compatibility handshake exchanges the legacy central-auth token; it is signed, not anonymous (S4-05).
     // The public admissions surface (S8-01) authenticates applicants with OTP-issued tokens inside ApplicantGuard.
     // Gateway notifications verify a PayU signature; device ingestion verifies a per-device key (S9).
+    // Delivery receipts carry a shared webhook token; punch devices use the device key (S10).
     expect(publicRoutes.sort()).toEqual([
+      'CommsDeliveryController.webhook (comms/delivery)',
       'CompatController.handshake (compat/v1)',
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
@@ -74,6 +76,7 @@ describe('permission coverage', () => {
       'PublicAdmissionsController.submitApplication (public/admissions)',
       'PublicAdmissionsController.updateApplication (public/admissions)',
       'PublicAdmissionsController.verifyOtp (public/admissions)',
+      'PunchController.ingest (attendance/punch)',
       'RfidController.ingest (attendance/rfid)',
     ]);
     if (unprotected.length > 0) {

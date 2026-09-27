@@ -4,3 +4,4 @@ export * from './provisioning';
 export * from './people';
 export * from './fees';
 export * from './attendance';
+export * from './engagement';

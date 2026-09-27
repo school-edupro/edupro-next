@@ -52,7 +52,20 @@
     "inbox": "My inbox",
     "instances": "Requests",
     "definitions": "Workflows",
-    "payments": "Payments"
+    "payments": "Payments",
+    "compose": "Compose",
+    "requests": "Message requests",
+    "groups": "Groups",
+    "consents": "Consent",
+    "engagement": "Parent engagement",
+    "queries": "Queries and complaints",
+    "feedback": "Feedback",
+    "changeRequests": "Profile change requests",
+    "transport": "Transport",
+    "routes": "Routes",
+    "rfidDashboard": "RFID dashboard",
+    "busAttendance": "Bus attendance",
+    "punches": "Staff punches"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -414,6 +427,61 @@
       "kicker": "Attendance",
       "title": "RFID readers",
       "description": "Gate readers, their keys and the tap log."
+    },
+    "comms_compose": {
+      "kicker": "Communication",
+      "title": "Compose a message",
+      "description": "Pick the template and the audience, preview who receives it, then send it for approval."
+    },
+    "comms_requests": {
+      "kicker": "Communication",
+      "title": "Message requests",
+      "description": "Requests with their approval status and delivery counts."
+    },
+    "comms_groups": {
+      "kicker": "Communication",
+      "title": "Groups",
+      "description": "Named sets of members a message can target (PTA, bus parents, committees)."
+    },
+    "comms_consents": {
+      "kicker": "Communication",
+      "title": "Consent records",
+      "description": "DPDP purposes per person: what was granted or withdrawn, when, and by whom."
+    },
+    "engagement_queries": {
+      "kicker": "Parent engagement",
+      "title": "Queries, complaints and leave",
+      "description": "Raised by families from the parent app; class teachers see their sections."
+    },
+    "engagement_feedback": {
+      "kicker": "Parent engagement",
+      "title": "Feedback",
+      "description": "Ratings and comments from families, averaged per area."
+    },
+    "engagement_change_requests": {
+      "kicker": "Parent engagement",
+      "title": "Profile change requests",
+      "description": "Changes families asked for; approval applies them with an audit row."
+    },
+    "transport_routes": {
+      "kicker": "Transport",
+      "title": "Routes",
+      "description": "Bus routes with vehicles, drivers and the students riding them this year."
+    },
+    "attendance_rfid_dashboard": {
+      "kicker": "Attendance",
+      "title": "RFID dashboard",
+      "description": "Reader health, gate and bus counts, and tagged students who have not come in."
+    },
+    "attendance_bus": {
+      "kicker": "Attendance",
+      "title": "Bus attendance",
+      "description": "Boarding and alighting taps per route with guardian alerts."
+    },
+    "attendance_punches": {
+      "kicker": "Attendance",
+      "title": "Staff punches",
+      "description": "First in, last out and hours per employee from the biometric devices."
     }
   },
   "stepUp": {
@@ -1106,6 +1174,223 @@
     "sessionOf": "Register of {section} on {date}",
     "helpCodes": "P present · A absent · L late · SR short leave · H half day · OD on duty · SB stay back",
     "alerts": "Guardians of absent students receive a WhatsApp alert once.",
-    "ingest": "Readers post to POST /api/v1/attendance/rfid/events with header x-device-key."
+    "ingest": "Readers post to POST /api/v1/attendance/rfid/events with header x-device-key.",
+    "kinds": {
+      "gate": "Gate reader",
+      "bus": "Bus reader",
+      "biometric": "Biometric (staff)"
+    },
+    "route": "Route",
+    "health": "Health",
+    "healths": {
+      "online": "online",
+      "idle": "idle",
+      "silent": "silent",
+      "inactive": "inactive"
+    },
+    "gateIn": "In",
+    "gateOut": "Out",
+    "rejected": "Rejected taps",
+    "boarded": "Boarded",
+    "alighted": "Alighted",
+    "punches": "Punches",
+    "tagged": "Tagged",
+    "inToday": "In today",
+    "notIn": "Not in",
+    "notInList": "Tagged students not in yet",
+    "busEvents": "Bus taps",
+    "position": "Position",
+    "alerted": "Alert sent",
+    "routeTotals": "Per route",
+    "firstIn": "First in",
+    "lastOut": "Last out",
+    "hours": "Hours",
+    "employee": "Employee",
+    "punchLog": "Punch log",
+    "biometricId": "Biometric id",
+    "presentStaff": "Staff present",
+    "absentStaff": "Not punched",
+    "noPunches": "No punches on this date",
+    "noBus": "No bus taps on this date",
+    "sections": "Sections"
+  },
+  "comms": {
+    "title": "Title",
+    "category": "Category",
+    "categories": {
+      "general": "General (consent applies)",
+      "service": "Service (fees, attendance, safety)"
+    },
+    "template": "Template",
+    "body": "Message",
+    "bodyHelp": "Merged into the template as {{body}}; the recipient name, student, class and school fill in automatically.",
+    "audience": "Audience",
+    "audiences": {
+      "everyone": "Everyone (guardians and staff)",
+      "students": "All guardians",
+      "employees": "All staff",
+      "class": "Classes",
+      "class_section": "Sections",
+      "route": "Bus routes",
+      "group": "Groups",
+      "individuals": "Individual members"
+    },
+    "targets": "Targets",
+    "scheduledAt": "Send at (optional)",
+    "preview": "Preview recipients",
+    "submit": "Send for approval",
+    "recipients": "Recipients",
+    "skipped": "Skipped",
+    "skippedReasons": {
+      "no_address": "no mobile or email on file",
+      "consent_withdrawn": "consent withdrawn",
+      "duplicate": "same address twice"
+    },
+    "sample": "Sample",
+    "status": "Status",
+    "statuses": {
+      "draft": "draft",
+      "pending_approval": "awaiting approval",
+      "approved": "approved",
+      "rejected": "rejected",
+      "sending": "sending",
+      "sent": "sent",
+      "cancelled": "cancelled"
+    },
+    "requestedBy": "Requested by",
+    "requestedAt": "Requested",
+    "decidedBy": "Decided by",
+    "decision": "Decision note",
+    "delivery": "Delivery",
+    "deliveryStates": {
+      "queued": "queued",
+      "sending": "sending",
+      "sent": "sent",
+      "delivered": "delivered",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    },
+    "cancel": "Cancel request",
+    "noRequests": "No message requests yet",
+    "recipient": "Recipient",
+    "student": "Student",
+    "address": "Address",
+    "reason": "Why skipped",
+    "openInbox": "Awaiting approval in the principal’s inbox",
+    "group": "Group",
+    "groupCode": "Code",
+    "groupName": "Name",
+    "members": "Members",
+    "addGroup": "Create group",
+    "addMembers": "Add members",
+    "remove": "Remove",
+    "noGroups": "No groups yet",
+    "member": "Member",
+    "findMember": "Member",
+    "consentFor": "Consent of",
+    "purpose": "Purpose",
+    "granted": "granted",
+    "withdrawn": "withdrawn",
+    "notRecorded": "not recorded",
+    "record": "Record consent",
+    "recordHelp": "For a signed form at the counter. The person can change it any time in the parent app.",
+    "history": "History",
+    "source": "Source",
+    "note": "Note",
+    "recordedBy": "Recorded by",
+    "recordedAt": "On",
+    "chooseMember": "Choose a member to see their consent record.",
+    "channel": "Channel"
+  },
+  "engagement": {
+    "number": "Number",
+    "kind": "Kind",
+    "kinds": {
+      "query": "Query",
+      "complaint": "Complaint",
+      "leave": "Leave request"
+    },
+    "category": "Category",
+    "student": "Student",
+    "raisedBy": "Raised by",
+    "subject": "Subject",
+    "status": "Status",
+    "statuses": {
+      "open": "open",
+      "in_progress": "in progress",
+      "answered": "answered",
+      "closed": "closed"
+    },
+    "assignedTo": "Assigned to",
+    "opened": "Opened",
+    "leaveDates": "Leave dates",
+    "decision": "Decision",
+    "decisions": {
+      "approved": "approved",
+      "rejected": "rejected"
+    },
+    "rating": "Rating",
+    "thread": "Conversation",
+    "internal": "Internal note (hidden from the family)",
+    "reply": "Reply",
+    "replyHelp": "A reply marks the query answered and notifies the family on WhatsApp.",
+    "send": "Send reply",
+    "close": "Close",
+    "closeHelp": "Closing a leave request needs a decision.",
+    "note": "Closing note",
+    "assign": "Assign",
+    "assignTo": "Assign to",
+    "unassigned": "Unassigned",
+    "noQueries": "No queries",
+    "me": "me",
+    "feedbackCategory": "Area",
+    "categories": {
+      "teaching": "Teaching",
+      "transport": "Transport",
+      "fees": "Fees",
+      "facilities": "Facilities",
+      "communication": "Communication",
+      "app": "Parent app"
+    },
+    "average": "Average",
+    "count": "Responses",
+    "comment": "Comment",
+    "author": "From",
+    "noFeedback": "No feedback yet",
+    "entity": "Record",
+    "entities": {
+      "student": "Student",
+      "guardian": "Guardian"
+    },
+    "field": "Field",
+    "from": "From",
+    "to": "To",
+    "reason": "Reason",
+    "approve": "Approve and apply",
+    "reject": "Reject",
+    "decisionNote": "Note to the family",
+    "noChanges": "No change requests",
+    "decidedBy": "Decided by"
+  },
+  "transport": {
+    "code": "Code",
+    "name": "Route",
+    "vehicle": "Vehicle",
+    "driver": "Driver",
+    "driverMobile": "Driver mobile",
+    "students": "Students",
+    "addRoute": "Add route",
+    "noRoutes": "No routes yet",
+    "riders": "Students on this route",
+    "stop": "Stop",
+    "pickup": "Pickup",
+    "drop": "Drop",
+    "guardianMobile": "Guardian mobile",
+    "assign": "Add students",
+    "assignHelp": "Pick a section, choose students and give the stop and times; a student rides one route per year.",
+    "section": "Section",
+    "remove": "Remove",
+    "noRiders": "No students assigned yet",
+    "status": "Status"
   }
 }

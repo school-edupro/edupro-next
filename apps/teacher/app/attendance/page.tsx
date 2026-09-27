@@ -242,6 +242,7 @@ export default async function AttendancePage({
                       <input
                         className="ep-input"
                         name={`remarks-${r.studentId}`}
+                        aria-label={`Remarks · ${r.name}`}
                         defaultValue={r.remarks ?? ''}
                         maxLength={200}
                         disabled={session.locked}

@@ -29,6 +29,12 @@ export default async function HomePage() {
       '/attendance',
     ],
     ['Daily work', 'Post homework and classwork', can('academics.daily_work.post'), '/daily-work'],
+    [
+      'Queries',
+      'Family queries and leave requests for your sections',
+      can('engagement.query.respond'),
+      '/queries',
+    ],
     ['Students', 'Your sections and student profiles', can('people.student.view')],
     ['Marks', 'Exam marks and remarks', false],
     ['Notices', 'Notices and circulars for staff', can('academics.notice.view'), '/notices'],

@@ -57,6 +57,13 @@ const NAV: Array<{
         permission: 'attendance.session.view',
       },
       { href: '/attendance/rfid', label: 'rfid', permission: 'attendance.rfid.manage' },
+      {
+        href: '/attendance/rfid/dashboard',
+        label: 'rfidDashboard',
+        permission: 'attendance.rfid.manage',
+      },
+      { href: '/attendance/bus', label: 'busAttendance', permission: 'attendance.bus.view' },
+      { href: '/attendance/punches', label: 'punches', permission: 'attendance.punch.view' },
     ],
   },
   {
@@ -104,9 +111,29 @@ const NAV: Array<{
   {
     section: 'communication',
     items: [
+      { href: '/comms/compose', label: 'compose', permission: 'comms.request.create' },
+      { href: '/comms/requests', label: 'requests', permission: 'comms.request.view' },
+      { href: '/comms/groups', label: 'groups', permission: 'comms.group.view' },
+      { href: '/comms/consents', label: 'consents', permission: 'comms.consent.view' },
       { href: '/comms/templates', label: 'templates', permission: 'comms.template.view' },
       { href: '/comms/messages', label: 'deliveryLog', permission: 'comms.message.view' },
     ],
+  },
+  {
+    section: 'engagement',
+    items: [
+      { href: '/engagement/queries', label: 'queries', permission: 'engagement.query.view' },
+      { href: '/engagement/feedback', label: 'feedback', permission: 'engagement.feedback.view' },
+      {
+        href: '/engagement/change-requests',
+        label: 'changeRequests',
+        permission: 'engagement.change_request.view',
+      },
+    ],
+  },
+  {
+    section: 'transport',
+    items: [{ href: '/transport/routes', label: 'routes', permission: 'transport.route.view' }],
   },
   {
     section: 'reports',

@@ -1480,6 +1480,8 @@ export async function createRfidDevice(fd: FormData) {
         code: str(fd, 'code').toUpperCase(),
         name: str(fd, 'name'),
         direction: opt(fd, 'direction'),
+        kind: str(fd, 'kind') || 'gate',
+        routeId: opt(fd, 'routeId'),
       }),
     });
     key = r.apiKey;
@@ -1490,4 +1492,187 @@ export async function createRfidDevice(fd: FormData) {
   }
   revalidatePath('/attendance/rfid');
   redirect(`/attendance/rfid?ok=1&key=${encodeURIComponent(key)}`);
+}
+
+// ---- Sprint 10: communication, engagement, transport, devices ------------------------------------------
+function requestBody(fd: FormData) {
+  const audience = str(fd, 'audience') || 'class_section';
+  const targetType =
+    audience === 'class'
+      ? 'class'
+      : audience === 'class_section'
+        ? 'class_section'
+        : audience === 'route'
+          ? 'route'
+          : audience === 'group'
+            ? 'group'
+            : 'user';
+  const targets = fd
+    .getAll('targetId')
+    .map(String)
+    .filter(Boolean)
+    .map((id) => ({ type: targetType, id }));
+  return {
+    title: str(fd, 'title'),
+    category: str(fd, 'category') || 'general',
+    templateId: str(fd, 'templateId'),
+    body: str(fd, 'body'),
+    audience,
+    targets: ['everyone', 'students', 'employees'].includes(audience) ? [] : targets,
+    scheduledAt: opt(fd, 'scheduledAt')
+      ? new Date(str(fd, 'scheduledAt')).toISOString()
+      : undefined,
+  };
+}
+
+/** Compose → preview: re-renders the compose page with the draft in the query string and the recipient count. */
+export async function previewRequest(fd: FormData) {
+  const body = requestBody(fd);
+  const params = new URLSearchParams();
+  params.set('title', body.title);
+  params.set('category', body.category);
+  params.set('templateId', body.templateId);
+  params.set('body', body.body);
+  params.set('audience', body.audience);
+  for (const t of body.targets) params.append('targetId', t.id);
+  if (fd.get('scheduledAt')) params.set('scheduledAt', str(fd, 'scheduledAt'));
+  params.set('preview', '1');
+  redirect(`/comms/compose?${params.toString()}`);
+}
+
+export async function submitRequest(fd: FormData) {
+  return run('/comms/requests', () =>
+    apiFetch('/comms/requests', { method: 'POST', body: JSON.stringify(requestBody(fd)) }),
+  );
+}
+
+export async function cancelRequest(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/comms/requests/${id}`, () =>
+    apiFetch(`/comms/requests/${id}/cancel`, { method: 'POST' }),
+  );
+}
+
+export async function createGroup(fd: FormData) {
+  return run('/comms/groups', () =>
+    apiFetch('/comms/groups', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toLowerCase(),
+        name: str(fd, 'name'),
+        description: opt(fd, 'description'),
+        userIds: fd.getAll('userIds').map(String).filter(Boolean),
+      }),
+    }),
+  );
+}
+
+export async function updateGroupMembers(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/comms/groups?group=${id}`, () =>
+    apiFetch(`/comms/groups/${id}/members`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        add: fd.getAll('add').map(String).filter(Boolean),
+        remove: fd.getAll('remove').map(String).filter(Boolean),
+      }),
+    }),
+  );
+}
+
+export async function recordConsent(fd: FormData) {
+  const userId = str(fd, 'userId');
+  return run(`/comms/consents?userId=${userId}`, () =>
+    apiFetch('/comms/consents', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId,
+        purposeCode: str(fd, 'purposeCode'),
+        status: str(fd, 'status'),
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function respondToQuery(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/engagement/queries/${id}`, () =>
+    apiFetch(`/engagement/queries/${id}/responses`, {
+      method: 'POST',
+      body: JSON.stringify({ body: str(fd, 'body'), isInternal: fd.get('isInternal') === 'on' }),
+    }),
+  );
+}
+
+export async function closeQuery(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/engagement/queries/${id}`, () =>
+    apiFetch(`/engagement/queries/${id}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ decision: opt(fd, 'decision'), note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function assignQuery(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/engagement/queries/${id}`, () =>
+    apiFetch(`/engagement/queries/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ userId: opt(fd, 'userId') ?? null }),
+    }),
+  );
+}
+
+export async function decideChangeRequest(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/engagement/change-requests', () =>
+    apiFetch(`/engagement/change-requests/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ approve: str(fd, 'approve') === 'true', note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function createRoute(fd: FormData) {
+  return run('/transport/routes', () =>
+    apiFetch('/transport/routes', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code'),
+        name: str(fd, 'name'),
+        vehicleNo: opt(fd, 'vehicleNo'),
+        driverName: opt(fd, 'driverName'),
+        driverMobile: opt(fd, 'driverMobile'),
+      }),
+    }),
+  );
+}
+
+export async function assignRouteStudents(fd: FormData) {
+  const id = str(fd, 'id');
+  const assignments = fd
+    .getAll('studentId')
+    .map(String)
+    .filter(Boolean)
+    .map((studentId) => ({
+      studentId,
+      stopName: opt(fd, 'stopName'),
+      pickupTime: opt(fd, 'pickupTime'),
+      dropTime: opt(fd, 'dropTime'),
+    }));
+  return run(`/transport/routes/${id}`, () =>
+    apiFetch(`/transport/routes/${id}/students`, {
+      method: 'PUT',
+      body: JSON.stringify({ assignments }),
+    }),
+  );
+}
+
+export async function unassignRouteStudent(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/transport/routes/${id}`, () =>
+    apiFetch(`/transport/routes/${id}/students/${str(fd, 'studentId')}`, { method: 'DELETE' }),
+  );
 }

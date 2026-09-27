@@ -75,3 +75,85 @@ export const ListMessagesQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListMessagesQueryDto extends createZodDto(ListMessagesQuerySchema) {}
+
+// ---- Sprint 10: message requests, groups, consent, delivery receipts -------------------------------
+export const AudienceKindSchema = z.enum([
+  'everyone',
+  'students',
+  'employees',
+  'class',
+  'class_section',
+  'route',
+  'group',
+  'individuals',
+]);
+export const RequestTargetSchema = z.object({
+  type: z.enum(['class', 'class_section', 'route', 'group', 'user']),
+  id: IdSchema,
+});
+export const CreateRequestSchema = z
+  .object({
+    title: z.string().trim().min(2).max(160),
+    category: z.enum(['service', 'general']).default('general'),
+    templateId: IdSchema,
+    body: z.string().trim().min(1).max(4000),
+    variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
+    audience: AudienceKindSchema,
+    targets: z.array(RequestTargetSchema).max(500).default([]),
+    scheduledAt: z.string().datetime().optional(),
+  })
+  .refine(
+    (v) => ['everyone', 'students', 'employees'].includes(v.audience) || v.targets.length > 0,
+    { message: 'targets are required for this audience', path: ['targets'] },
+  );
+export class CreateRequestDto extends createZodDto(CreateRequestSchema) {}
+export const ListRequestsQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'pending_approval', 'approved', 'rejected', 'sending', 'sent', 'cancelled'])
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class ListRequestsQueryDto extends createZodDto(ListRequestsQuerySchema) {}
+
+export const CreateGroupSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9_-]{2,40}$/, 'lowercase letters, digits, _ or -'),
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(500).optional(),
+  userIds: z.array(IdSchema).max(2000).default([]),
+});
+export class CreateGroupDto extends createZodDto(CreateGroupSchema) {}
+export const GroupMembersSchema = z.object({
+  add: z.array(IdSchema).max(2000).default([]),
+  remove: z.array(IdSchema).max(2000).default([]),
+});
+export class GroupMembersDto extends createZodDto(GroupMembersSchema) {}
+
+export const ConsentStatusSchema = z.enum(['granted', 'withdrawn']);
+export const RecordConsentSchema = z.object({
+  userId: IdSchema,
+  studentId: IdSchema.optional(),
+  purposeCode: z.string().trim().min(2).max(60),
+  status: ConsentStatusSchema,
+  note: z.string().trim().max(300).optional(),
+});
+export class RecordConsentDto extends createZodDto(RecordConsentSchema) {}
+export const SelfConsentSchema = z.object({
+  purposeCode: z.string().trim().min(2).max(60),
+  status: ConsentStatusSchema,
+});
+export class SelfConsentDto extends createZodDto(SelfConsentSchema) {}
+export const ConsentQuerySchema = z.object({ userId: IdSchema.optional() });
+export class ConsentQueryDto extends createZodDto(ConsentQuerySchema) {}
+
+export const DeliveryReceiptSchema = z.object({
+  provider: z.string().trim().min(1).max(40),
+  messageId: z.string().trim().min(1).max(120),
+  status: z.enum(['delivered', 'failed']),
+  reason: z.string().trim().max(300).optional(),
+  receiptId: z.string().trim().max(120).optional(),
+});
+export class DeliveryReceiptDto extends createZodDto(DeliveryReceiptSchema) {}

@@ -21,6 +21,8 @@ import { FeesModule } from './modules/fees/fees.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
+import { EngagementModule } from './modules/engagement/engagement.module';
+import { TransportModule } from './modules/transport/transport.module';
 import { TemplatesModule } from './modules/platform/templates/templates.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommsModule } from './modules/comms/comms.module';
@@ -62,6 +64,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     AdmissionsModule,
     FeesModule,
     AttendanceModule,
+    TransportModule,
+    EngagementModule,
     PeopleModule,
     CompatModule,
   ],

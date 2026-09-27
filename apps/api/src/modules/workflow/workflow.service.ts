@@ -233,6 +233,19 @@ export class WorkflowService {
           },
         ],
       },
+      {
+        code: 'message_approval',
+        name: 'Message approval',
+        entityType: 'message_request',
+        levels: [
+          {
+            level: 1,
+            name: 'Principal approval',
+            resolver: { kind: 'role', roleCode: 'school_admin' },
+            slaHours: 24,
+          },
+        ],
+      },
     ];
     await this.db.tenant(requireTenant(ctx), async (c) => {
       for (const d of defaults)

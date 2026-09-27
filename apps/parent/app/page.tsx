@@ -19,6 +19,10 @@ export default async function HomePage() {
     ['Notices', 'School notices and circulars', '/notices'],
     ['Calendar', 'Holidays and the almanac', '/calendar'],
     ['Attendance', 'Daily attendance of your children', '/attendance'],
+    ['Timetable', 'The week’s periods and teachers', '/timetable'],
+    ['Queries', 'Ask, complain or apply for leave', '/queries'],
+    ['School bus', 'Boarding and alighting alerts', '/transport'],
+    ['Profile', 'Your details, consents and change requests', '/profile'],
     ['Fees', 'Dues, receipts and online payment'],
     ['Results', 'Report cards and progress'],
   ];

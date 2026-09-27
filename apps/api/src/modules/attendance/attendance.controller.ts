@@ -5,7 +5,10 @@ import { Public } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   ATTENDANCE,
+  BusQueryDto,
   CreateDeviceDto,
+  DayQueryDto,
+  PunchIngestDto,
   LockDto,
   MarkSessionDto,
   MineQueryDto,
@@ -16,6 +19,8 @@ import {
   SummaryQueryDto,
 } from './attendance.dto';
 import { AttendanceService } from './attendance.service';
+import { BusService } from './bus.service';
+import { PunchService } from './punch.service';
 import { RfidService } from './rfid.service';
 
 @ApiTags('attendance')
@@ -102,10 +107,67 @@ export class RfidController {
     return this.rfid.createDevice(ctx, body);
   }
 
+  @Get('dashboard')
+  @ApiOperation({
+    summary: 'Reader health, in/out counts, tagged students not yet in, bus counts for a date',
+  })
+  @RequirePermission(ATTENDANCE.rfid)
+  dashboard(@ReqCtx() ctx: RequestContext, @Query() q: DayQueryDto) {
+    return this.rfid.dashboard(ctx, q);
+  }
+
   @Get('log')
   @ApiBearerAuth()
   @RequirePermission(ATTENDANCE.rfid)
   async log(@ReqCtx() ctx: RequestContext, @Query() q: RfidEventsQueryDto) {
     return { data: await this.rfid.events(ctx, q) };
+  }
+}
+
+@ApiTags('attendance')
+@ApiBearerAuth()
+@Controller('attendance/bus')
+export class BusController {
+  constructor(private readonly bus: BusService) {}
+
+  @Get('mine')
+  @ApiOperation({ summary: 'Bus boarding and alighting of my children over the last week' })
+  @RequirePermission(ATTENDANCE.busView)
+  mine(@ReqCtx() ctx: RequestContext, @Query() q: BusQueryDto) {
+    return this.bus.mine(ctx, q);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Bus taps of a date, by route' })
+  @RequirePermission(ATTENDANCE.busView)
+  list(@ReqCtx() ctx: RequestContext, @Query() q: BusQueryDto) {
+    return this.bus.list(ctx, q);
+  }
+}
+
+@ApiTags('attendance')
+@Controller('attendance/punch')
+export class PunchController {
+  constructor(private readonly punch: PunchService) {}
+
+  @Post('events')
+  @Public()
+  @ApiOperation({ summary: 'Biometric device punches (device key in x-device-key)' })
+  ingest(@Body() dto: PunchIngestDto, @Headers('x-device-key') key?: string) {
+    return this.punch.ingest(dto, key);
+  }
+
+  @Get('summary')
+  @ApiBearerAuth()
+  @RequirePermission(ATTENDANCE.punchView)
+  summary(@ReqCtx() ctx: RequestContext, @Query() q: DayQueryDto) {
+    return this.punch.summary(ctx, q);
+  }
+
+  @Get('log')
+  @ApiBearerAuth()
+  @RequirePermission(ATTENDANCE.punchView)
+  log(@ReqCtx() ctx: RequestContext, @Query() q: DayQueryDto) {
+    return this.punch.log(ctx, q);
   }
 }

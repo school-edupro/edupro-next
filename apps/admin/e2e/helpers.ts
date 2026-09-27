@@ -6,7 +6,9 @@ export async function signInAsDeveloper(
   sub = process.env.E2E_DEV_SUB ?? 'dev-admin',
 ): Promise<void> {
   await page.goto('/login');
-  await page.getByLabel('Developer subject').fill(sub);
+  const picker = page.getByLabel('Sign in as');
+  if (await picker.count()) await picker.selectOption(sub);
+  else await page.getByLabel('Developer subject').fill(sub);
   await page.getByRole('button', { name: 'Sign in as developer' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'));
 }

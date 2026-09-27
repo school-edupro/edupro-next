@@ -139,8 +139,13 @@ export class MessagesService {
   }
 
   async send(ctx: RequestContext, dto: SendMessageDto): Promise<MessageRow> {
+    return this.db.tenant(requireTenant(ctx), (c) => this.sendWith(c, ctx, dto));
+  }
+
+  /** The same as `send`, inside a caller's transaction (bulk dispatch of an approved request, S10). */
+  async sendWith(c: PoolClient, ctx: RequestContext, dto: SendMessageDto): Promise<MessageRow> {
     const tenant = requireTenant(ctx);
-    return this.db.tenant(tenant, async (c) => {
+    {
       const template = await this.resolveTemplate(tenant, dto, c);
       const channel = template.channel;
       const { userId, address, name } = await this.resolveRecipient(c, dto, channel);
@@ -194,7 +199,7 @@ export class MessagesService {
         },
       });
       return row;
-    });
+    }
   }
 
   async cancel(ctx: RequestContext, id: string): Promise<MessageRow> {

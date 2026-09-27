@@ -32,7 +32,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   if (rows.length === 0) {
     return (
-      <div className="ep-table-wrap">
+      <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={caption}>
         <div className="ep-empty">
           <div className="ep-empty__title">{emptyTitle}</div>
           {emptyHint}
@@ -41,7 +41,7 @@ export function DataTable<T>({
     );
   }
   return (
-    <div className="ep-table-wrap">
+    <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={caption}>
       <table className="ep-table" data-density={density}>
         {caption ? (
           <caption style={{ position: 'absolute', left: '-9999px' }}>{caption}</caption>

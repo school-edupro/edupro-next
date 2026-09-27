@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"admin e2e: pnpm --filter @edupro/admin e2e (Playwright smoke against a running stack)\"",
     "e2e": "playwright test --project smoke",
-    "e2e:visual": "playwright test --project visual"
+    "e2e:visual": "playwright test --project visual",
+    "e2e:a11y": "playwright test --project a11y"
   },
   "dependencies": {
     "@edupro/ui": "workspace:*",
@@ -23,6 +24,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@edupro/config": "workspace:*",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.7.4",

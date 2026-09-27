@@ -2298,6 +2298,7 @@ async function main(): Promise<void> {
               const inAt = `(${'$4'}::date + make_interval(mins => ${inMinutes})) AT TIME ZONE 'Asia/Kolkata'`;
               const outAt = `(${'$4'}::date + interval '13 hours 40 minutes' + make_interval(mins => ${si})) AT TIME ZONE 'Asia/Kolkata'`;
               await c.query(
+                // eslint-disable-next-line no-restricted-syntax -- demo seed: the interpolated fragment is a computed timestamp expression, not user input
                 `INSERT INTO attendance_marks (school_id, session_id, student_id, code, in_at, out_at, source, marked_by)
                  VALUES ($1, $2, $3, $5::attendance_code, ${inAt}, ${outAt}, 'rfid', NULL)`,
                 [alpha.id, session.rows[0]!.id, st.id, day, code],
@@ -2307,6 +2308,7 @@ async function main(): Promise<void> {
                 ['out', outAt],
               ] as Array<[string, string]>)
                 await c.query(
+                  // eslint-disable-next-line no-restricted-syntax -- demo seed: the interpolated fragment is a computed timestamp expression, not user input
                   `INSERT INTO rfid_events (school_id, device_id, tag, student_id, occurred_at, direction, outcome, raw, received_at)
                    VALUES ($1, $2, $3, $5, ${expr}, $6::rfid_direction, $7, '{"seeded":true}'::jsonb, ${expr})`,
                   [
@@ -2344,6 +2346,636 @@ async function main(): Promise<void> {
       await c.query(
         `UPDATE rfid_devices SET last_seen_at = now() - interval '1 day' WHERE id = $1`,
         [device.rows[0]!.id],
+      );
+      await clearCtx();
+    }
+
+    // ---- Sprint 10: communication (templates, groups, consent, requests), transport routes, queries, feedback, devices ----
+    for (const school of Object.values(schools)) {
+      await c.query(
+        `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by)
+         SELECT $1, 'message_approval', 'Message approval', 'message_request', $2::jsonb, $3
+          WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE school_id = $1 AND code = 'message_approval' AND deleted_at IS NULL)`,
+        [
+          school.id,
+          JSON.stringify([
+            {
+              level: 1,
+              name: 'Principal approval',
+              resolver: { kind: 'role', roleCode: 'school_admin' },
+              slaHours: 24,
+            },
+          ]),
+          userIds['dev-admin'],
+        ],
+      );
+      const purposes: Array<[string, string, string, string | null]> = [
+        [
+          'comms.sms',
+          'SMS updates',
+          'General circulars and event information by SMS. Fee, attendance and safety messages are sent regardless.',
+          'sms',
+        ],
+        [
+          'comms.whatsapp',
+          'WhatsApp updates',
+          'General circulars, homework reminders and event information on WhatsApp.',
+          'whatsapp',
+        ],
+        [
+          'comms.email',
+          'Email newsletters',
+          'Newsletters, circulars and event information by email.',
+          'email',
+        ],
+        [
+          'media.gallery',
+          'Photographs in the school gallery',
+          'Photographs of my child from school events may appear in the school gallery and app.',
+          null,
+        ],
+        [
+          'transport.tracking',
+          'Bus boarding alerts and location sharing',
+          'Boarding and alighting alerts and the live location of the school bus my child travels in.',
+          null,
+        ],
+      ];
+      for (const [i, [code, name, description, channel]] of purposes.entries())
+        await c.query(
+          `INSERT INTO consent_purposes (school_id, code, name, description, channel, sort_order) VALUES ($1, $2, $3, $4, $5::comms_channel, $6) ON CONFLICT (school_id, code) DO NOTHING`,
+          [school.id, code, name, description, channel, i],
+        );
+      const categories: Array<[string, string, string]> = [
+        ['academics', 'Academics and homework', 'class_teacher'],
+        ['attendance', 'Attendance and leave', 'class_teacher'],
+        ['fees', 'Fees and payments', 'accountant'],
+        ['transport', 'Transport', 'school_admin'],
+        ['admin', 'Office and documents', 'school_admin'],
+        ['other', 'Other', 'school_admin'],
+      ];
+      for (const [i, [code, name, routeTo]] of categories.entries())
+        await c.query(
+          `INSERT INTO query_categories (school_id, code, name, route_to, sort_order) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (school_id, code) DO NOTHING`,
+          [school.id, code, name, routeTo, i],
+        );
+      const templates: Array<
+        [string, string, string, string | null, string, string[], string | null]
+      > = [
+        [
+          'circular_whatsapp',
+          'whatsapp',
+          'Circular (WhatsApp)',
+          null,
+          'Dear {{guardian_name}}, {{title}}: {{body}} — {{school}}',
+          ['guardian_name', 'title', 'body', 'school'],
+          null,
+        ],
+        [
+          'circular_sms',
+          'sms',
+          'Circular (SMS)',
+          null,
+          '{{school}}: {{title}}. {{body}}',
+          ['title', 'body', 'school'],
+          '1107160000000012345',
+        ],
+        [
+          'circular_email',
+          'email',
+          'Circular (email)',
+          '{{title}} — {{school}}',
+          'Dear {{guardian_name}},\n\n{{body}}\n\nRegards,\n{{school}}',
+          ['guardian_name', 'title', 'body', 'school'],
+          null,
+        ],
+        [
+          'bus_boarded',
+          'whatsapp',
+          'Bus boarded',
+          null,
+          '{{student_name}} boarded the school bus at {{time}} ({{stop}}). — {{school}}',
+          ['student_name', 'time', 'stop', 'school'],
+          null,
+        ],
+        [
+          'bus_alighted',
+          'whatsapp',
+          'Bus alighted',
+          null,
+          '{{student_name}} got off the school bus at {{time}} ({{stop}}). — {{school}}',
+          ['student_name', 'time', 'stop', 'school'],
+          null,
+        ],
+        [
+          'query_reply',
+          'whatsapp',
+          'Query reply',
+          null,
+          'Update on {{query_no}} ({{student_name}}): {{reply}}',
+          ['query_no', 'student_name', 'reply'],
+          null,
+        ],
+      ];
+      for (const [code, channel, name, subject, body, variables, dlt] of templates)
+        await c.query(
+          `INSERT INTO comms_templates (school_id, code, channel, name, subject, body, variables, dlt_template_id, dlt_entity_id, sender_id, created_by)
+           SELECT $1, $2, $3::comms_channel, $4, $5, $6, $7::jsonb, $8::text, CASE WHEN $8::text IS NULL THEN NULL ELSE '1201160000000054321' END, CASE WHEN $3::text = 'sms' THEN 'EDUPRO' WHEN $3::text = 'email' THEN 'noreply@edupro.test' END, $9
+            WHERE NOT EXISTS (SELECT 1 FROM comms_templates WHERE school_id = $1 AND code = $2 AND channel = $3::comms_channel AND deleted_at IS NULL)`,
+          [
+            school.id,
+            code,
+            channel,
+            name,
+            subject,
+            body,
+            JSON.stringify(variables),
+            dlt,
+            userIds['dev-admin'],
+          ],
+        );
+    }
+    {
+      await withCtx(alpha.id, 'dev-admin');
+      const yearId = alpha.yearId;
+      const schoolDays: string[] = [];
+      for (let back = 1; back <= 12 && schoolDays.length < 5; back++) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - back);
+        const iso = d.toISOString().slice(0, 10);
+        if (d.getUTCDay() === 0) continue;
+        const h = await c.query(
+          `SELECT 1 FROM holidays WHERE school_id = $1 AND $2::date BETWEEN starts_on AND ends_on`,
+          [alpha.id, iso],
+        );
+        if (!h.rowCount) schoolDays.push(iso);
+      }
+      schoolDays.reverse();
+      const lastDay = schoolDays[schoolDays.length - 1]!;
+
+      // consents: the dev parent's choices and one office-recorded consent
+      const consentRows = await c.query(`SELECT 1 FROM consents WHERE school_id = $1 LIMIT 1`, [
+        alpha.id,
+      ]);
+      if (!consentRows.rowCount) {
+        for (const [purpose, status, source] of [
+          ['comms.whatsapp', 'granted', 'parent_app'],
+          ['comms.sms', 'granted', 'parent_app'],
+          ['comms.email', 'withdrawn', 'parent_app'],
+          ['media.gallery', 'granted', 'parent_app'],
+          ['transport.tracking', 'granted', 'office'],
+        ] as Array<[string, string, string]>)
+          await c.query(
+            `INSERT INTO consents (school_id, user_id, purpose_code, status, source, note, recorded_by, recorded_at) VALUES ($1, $2, $3, $4::consent_status, $5, $6, $7, now() - interval '12 days')`,
+            [
+              alpha.id,
+              userIds['dev-parent'],
+              purpose,
+              status,
+              source,
+              source === 'office' ? 'Signed transport form at the counter' : null,
+              source === 'office' ? userIds['dev-clerk'] : userIds['dev-parent'],
+            ],
+          );
+      }
+
+      // groups
+      const group = await c.query<{ id: string }>(
+        `INSERT INTO comms_groups (school_id, code, name, description, created_by) VALUES ($1, 'pta', 'PTA members', 'Parent-teacher association core group', $2)
+         ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+        [alpha.id, userIds['dev-admin']],
+      );
+      for (const sub of ['dev-parent', 'dev-teacher', 'dev-coordinator'])
+        await c.query(
+          `INSERT INTO comms_group_members (school_id, group_id, user_id, added_by) VALUES ($1, $2, $3, $4) ON CONFLICT (group_id, user_id) DO NOTHING`,
+          [alpha.id, group.rows[0]!.id, userIds[sub], userIds['dev-admin']],
+        );
+
+      // transport routes and the students riding them
+      const routeIds: Record<string, string> = {};
+      for (const [code, name, vehicle, driver, mobile] of [
+        ['R1', 'Kothrud – Karve Nagar', 'MH12AB1234', 'Ramesh Pawar', '9876500011'],
+        ['R2', 'Baner – Aundh', 'MH12CD5678', 'Sanjay More', '9876500012'],
+        ['R3', 'Hadapsar – Magarpatta', 'MH12EF9012', 'Vikas Shinde', '9876500013'],
+      ] as Array<[string, string, string, string, string]>) {
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO transport_routes (school_id, code, name, vehicle_no, driver_name, driver_mobile, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+           ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+          [alpha.id, code, name, vehicle, driver, mobile, userIds['dev-admin']],
+        );
+        routeIds[code] = r.rows[0]!.id;
+      }
+      const riders = async (
+        section: string,
+        route: string,
+        count: number,
+        stops: string[],
+        firstPickup: number,
+      ) => {
+        const roster = await c.query<{ id: string }>(
+          `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' ORDER BY e.roll_no LIMIT $3`,
+          [sections.ALPHA![section], yearId, count],
+        );
+        for (const [i, st] of roster.rows.entries())
+          await c.query(
+            `INSERT INTO student_route_assignments (school_id, student_id, route_id, academic_year_id, stop_name, pickup_time, drop_time, created_by)
+             VALUES ($1, $2, $3, $4, $5, make_interval(mins => $6)::time, make_interval(mins => $7)::time, $8) ON CONFLICT (student_id, academic_year_id) DO NOTHING`,
+            [
+              alpha.id,
+              st.id,
+              routeIds[route],
+              yearId,
+              stops[i % stops.length],
+              firstPickup + i * 4,
+              14 * 60 + 5 + i * 4,
+              userIds['dev-admin'],
+            ],
+          );
+      };
+      await riders(
+        'VI-A',
+        'R1',
+        4,
+        ['Karve Nagar chowk', 'Kothrud depot', 'Paud phata'],
+        7 * 60 + 10,
+      );
+      await riders('IV-A', 'R1', 3, ['Karve Nagar chowk', 'Kothrud depot'], 7 * 60 + 12);
+      await riders('VI-B', 'R2', 3, ['Baner phata', 'Aundh gaon'], 7 * 60 + 5);
+
+      // message requests: one sent circular to class VI, one waiting for approval, one rejected
+      const requestsExist = await c.query(
+        `SELECT 1 FROM message_requests WHERE school_id = $1 LIMIT 1`,
+        [alpha.id],
+      );
+      if (!requestsExist.rowCount) {
+        const tpl = await c.query<{ id: string }>(
+          `SELECT id::text FROM comms_templates WHERE school_id = $1 AND code = 'circular_whatsapp' AND deleted_at IS NULL`,
+          [alpha.id],
+        );
+        const classVI = await c.query<{ id: string }>(
+          `SELECT id::text FROM classes WHERE school_id = $1 AND code = 'VI'`,
+          [alpha.id],
+        );
+        const def = await c.query<{ id: string }>(
+          `SELECT id::text FROM workflow_definitions WHERE school_id = $1 AND code = 'message_approval' AND deleted_at IS NULL`,
+          [alpha.id],
+        );
+        const guardians = await c.query<{
+          user_id: string | null;
+          name: string;
+          mobile: string | null;
+          student_id: string;
+        }>(
+          `SELECT DISTINCT ON (s.id) g.user_id::text, g.display_name AS name, g.mobile, s.id::text AS student_id
+             FROM enrolments e JOIN students s ON s.id = e.student_id JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+             JOIN student_guardians sg ON sg.student_id = s.id JOIN guardians g ON g.id = sg.guardian_id
+            WHERE k.id = $1 AND e.academic_year_id = $2 AND e.status = 'active' ORDER BY s.id, sg.is_primary DESC`,
+          [classVI.rows[0]!.id, yearId],
+        );
+        const sentReq = await c.query<{ id: string }>(
+          `INSERT INTO message_requests (school_id, title, category, channel, template_id, body, audience, targets, status, requested_by, requested_at, decided_by, decided_at, decision_note, recipients_total, recipients_skipped, dispatched_at)
+           VALUES ($1, 'PTM on Saturday', 'general', 'whatsapp', $2, 'Parent-teacher meeting for Class VI on Saturday 10:00 in the school hall. Please carry the diary.', 'class', $3::jsonb, 'sent', $4, now() - interval '2 days', $5, now() - interval '2 days' + interval '3 hours', 'Approved', $6, 0, now() - interval '2 days' + interval '3 hours') RETURNING id::text`,
+          [
+            alpha.id,
+            tpl.rows[0]!.id,
+            JSON.stringify([{ type: 'class', id: classVI.rows[0]!.id }]),
+            userIds['dev-coordinator'],
+            userIds['dev-principal'],
+            guardians.rows.length,
+          ],
+        );
+        const seen = new Set<string>();
+        for (const [i, g] of guardians.rows.entries()) {
+          if (!g.mobile || seen.has(g.mobile)) {
+            await c.query(
+              `INSERT INTO message_request_recipients (school_id, request_id, user_id, student_id, name, address, skipped_reason) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [
+                alpha.id,
+                sentReq.rows[0]!.id,
+                g.user_id,
+                g.student_id,
+                g.name,
+                g.mobile,
+                g.mobile ? 'duplicate' : 'no_address',
+              ],
+            );
+            continue;
+          }
+          seen.add(g.mobile);
+          const status = i % 7 === 6 ? 'failed' : i % 5 === 4 ? 'sent' : 'delivered';
+          const msg = await c.query<{ id: string }>(
+            `INSERT INTO comms_messages (school_id, template_id, channel, recipient_user_id, recipient_address, body, variables, status, provider, provider_message_id, attempts, last_error, scheduled_at, sent_at, delivered_at, failed_at, created_by, created_at)
+             VALUES ($1, $2, 'whatsapp', $3, $4, $5, $6::jsonb, $7::comms_message_status, 'whatsapp-http', $8, 1, CASE WHEN $7 = 'failed' THEN 'Number not on WhatsApp' END, now() - interval '2 days' + interval '3 hours', now() - interval '2 days' + interval '3 hours', CASE WHEN $7 = 'delivered' THEN now() - interval '2 days' + interval '3 hours 4 minutes' END, CASE WHEN $7 = 'failed' THEN now() - interval '2 days' + interval '3 hours 1 minute' END, $9, now() - interval '2 days' + interval '3 hours') RETURNING id::text`,
+            [
+              alpha.id,
+              tpl.rows[0]!.id,
+              g.user_id,
+              g.mobile,
+              `Dear ${g.name}, PTM on Saturday: Parent-teacher meeting for Class VI on Saturday 10:00 in the school hall. Please carry the diary. — Alpha Public School`,
+              JSON.stringify({ guardian_name: g.name, title: 'PTM on Saturday' }),
+              status,
+              `WA-DEMO-${i}`,
+              userIds['dev-principal'],
+            ],
+          );
+          await c.query(
+            `INSERT INTO message_request_recipients (school_id, request_id, user_id, student_id, name, address, message_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              alpha.id,
+              sentReq.rows[0]!.id,
+              g.user_id,
+              g.student_id,
+              g.name,
+              g.mobile,
+              msg.rows[0]!.id,
+            ],
+          );
+        }
+        await c.query(
+          `UPDATE message_requests SET recipients_total = $2, recipients_skipped = $3 WHERE id = $1`,
+          [sentReq.rows[0]!.id, seen.size, guardians.rows.length - seen.size],
+        );
+        const pending = await c.query<{ id: string }>(
+          `INSERT INTO message_requests (school_id, title, category, channel, template_id, body, audience, targets, status, requested_by, requested_at, recipients_total, recipients_skipped)
+           VALUES ($1, 'Sports day volunteers', 'general', 'whatsapp', $2, 'We need parent volunteers for the sports day on 12 October. Reply to the class teacher by Friday.', 'group', $3::jsonb, 'pending_approval', $4, now() - interval '5 hours', 3, 0) RETURNING id::text`,
+          [
+            alpha.id,
+            tpl.rows[0]!.id,
+            JSON.stringify([{ type: 'group', id: group.rows[0]!.id }]),
+            userIds['dev-coordinator'],
+          ],
+        );
+        const inst = await c.query<{ id: string }>(
+          `INSERT INTO workflow_instances (school_id, definition_id, entity_type, entity_id, subject, payload, status, current_level, requested_by, requested_at)
+           VALUES ($1, $2, 'message_request', $3, 'Sports day volunteers · whatsapp · 3 recipients', '{"audience":"group","channel":"whatsapp"}'::jsonb, 'pending', 1, $4, now() - interval '5 hours') RETURNING id::text`,
+          [alpha.id, def.rows[0]!.id, pending.rows[0]!.id, userIds['dev-coordinator']],
+        );
+        await c.query(
+          `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status) VALUES ($1, $2, 1, 'Principal approval', '{"kind":"role","roleCode":"school_admin"}'::jsonb, $3::bigint[], 'pending')`,
+          [alpha.id, inst.rows[0]!.id, [userIds['dev-admin'], userIds['dev-principal']]],
+        );
+        await c.query(`UPDATE message_requests SET workflow_instance_id = $2 WHERE id = $1`, [
+          pending.rows[0]!.id,
+          inst.rows[0]!.id,
+        ]);
+        await c.query(
+          `INSERT INTO message_requests (school_id, title, category, channel, template_id, body, audience, targets, status, requested_by, requested_at, decided_by, decided_at, decision_note, recipients_total, recipients_skipped)
+           VALUES ($1, 'Winter uniform reminder', 'general', 'whatsapp', $2, 'Winter uniform from 1 November.', 'students', '[]'::jsonb, 'rejected', $3, now() - interval '6 days', $4, now() - interval '6 days' + interval '2 hours', 'Too early; send in the last week of October', 150, 11)`,
+          [alpha.id, tpl.rows[0]!.id, userIds['dev-teacher'], userIds['dev-principal']],
+        );
+      }
+
+      // queries, complaints and a leave request
+      const queriesExist = await c.query(
+        `SELECT 1 FROM parent_queries WHERE school_id = $1 LIMIT 1`,
+        [alpha.id],
+      );
+      if (!queriesExist.rowCount) {
+        const kids = await c.query<{ id: string; first_name: string }>(
+          `SELECT s.id::text, s.first_name FROM students s JOIN student_guardians sg ON sg.student_id = s.id JOIN guardians g ON g.id = sg.guardian_id WHERE g.user_id = $1 AND s.school_id = $2 ORDER BY s.first_name`,
+          [userIds['dev-parent'], alpha.id],
+        );
+        const aaravId = kids.rows.find((k) => k.first_name === 'Aarav')?.id ?? kids.rows[0]!.id;
+        const diyaId = kids.rows.find((k) => k.first_name === 'Diya')?.id ?? kids.rows[0]!.id;
+        const q = async (input: {
+          kind: string;
+          category: string;
+          student: string;
+          subject: string;
+          body: string;
+          status: string;
+          daysAgo: number;
+          leave?: [string, string];
+          decision?: string;
+          rating?: number;
+          assigned?: string | null;
+          role: string;
+        }) => {
+          const no = await c.query<{ n: string }>(`SELECT app.next_query_no($1) AS n`, [yearId]);
+          const r = await c.query<{ id: string }>(
+            `INSERT INTO parent_queries (school_id, academic_year_id, number, kind, category_code, student_id, raised_by_user_id, subject, body, leave_from, leave_to, status, assigned_role, assigned_user_id, decision, rating, rating_comment, opened_at, first_response_at, closed_at, closed_by)
+             VALUES ($1, $2, $3, $4::query_kind, $5, $6, $7, $8, $9, $10::date, $11::date, $12::query_status, $13, $14::bigint, $15, $16::int, $17, now() - make_interval(days => $18::int), CASE WHEN $12::text IN ('answered', 'closed') THEN now() - make_interval(days => $18::int) + interval '5 hours' END, CASE WHEN $12::text = 'closed' THEN now() - make_interval(days => $18::int) + interval '1 day' END, CASE WHEN $12::text = 'closed' THEN $14::bigint END) RETURNING id::text`,
+            [
+              alpha.id,
+              yearId,
+              no.rows[0]!.n,
+              input.kind,
+              input.category,
+              input.student,
+              userIds['dev-parent'],
+              input.subject,
+              input.body,
+              input.leave?.[0] ?? null,
+              input.leave?.[1] ?? null,
+              input.status,
+              input.role,
+              input.assigned ?? null,
+              input.decision ?? null,
+              input.rating ?? null,
+              input.rating ? 'Quick and clear' : null,
+              input.daysAgo,
+            ],
+          );
+          return r.rows[0]!.id;
+        };
+        const q1 = await q({
+          kind: 'query',
+          category: 'academics',
+          student: aaravId,
+          subject: 'Maths homework load',
+          body: 'Aarav gets three worksheets a day. Is that expected in Class VI?',
+          status: 'open',
+          daysAgo: 1,
+          role: 'class_teacher',
+        });
+        await c.query(
+          `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body, is_internal, created_at) VALUES ($1, $2, $3, 'staff', 'Checking with Suresh sir before replying.', true, now() - interval '20 hours')`,
+          [alpha.id, q1, userIds['dev-teacher']],
+        );
+        const q2 = await q({
+          kind: 'query',
+          category: 'fees',
+          student: aaravId,
+          subject: 'Receipt for the July instalment',
+          body: 'The receipt for the July payment has not reached us.',
+          status: 'answered',
+          daysAgo: 4,
+          assigned: userIds['dev-accounts'],
+          role: 'accountant',
+        });
+        await c.query(
+          `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body, created_at) VALUES ($1, $2, $3, 'staff', 'The receipt is available under Fees in the parent app; a copy has been emailed today.', now() - interval '3 days 19 hours')`,
+          [alpha.id, q2, userIds['dev-accounts']],
+        );
+        const q3 = await q({
+          kind: 'leave',
+          category: 'attendance',
+          student: diyaId,
+          subject: 'Leave for a family function',
+          body: 'Diya will be away for two days.',
+          status: 'closed',
+          daysAgo: 9,
+          leave: [schoolDays[0]!, schoolDays[1] ?? schoolDays[0]!],
+          decision: 'approved',
+          rating: 5,
+          assigned: userIds['dev-coordinator'],
+          role: 'class_teacher',
+        });
+        await c.query(
+          `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body, created_at) VALUES ($1, $2, $3, 'staff', 'Approved. Please collect the worksheets from the class teacher.', now() - interval '8 days')`,
+          [alpha.id, q3, userIds['dev-coordinator']],
+        );
+        const otherParent = await c.query<{ id: string; student_id: string }>(
+          `SELECT g.user_id::text AS id, sg.student_id::text FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE g.school_id = $1 AND g.user_id IS NOT NULL AND g.user_id <> $2 LIMIT 1`,
+          [alpha.id, userIds['dev-parent']],
+        );
+        void otherParent;
+        await q({
+          kind: 'complaint',
+          category: 'transport',
+          student: aaravId,
+          subject: 'Bus R1 late three days in a row',
+          body: 'The bus reached the stop after 7:40 on Monday, Tuesday and Wednesday.',
+          status: 'in_progress',
+          daysAgo: 2,
+          assigned: userIds['dev-admin'],
+          role: 'school_admin',
+        });
+      }
+
+      // feedback
+      const feedbackExists = await c.query(
+        `SELECT 1 FROM feedback_entries WHERE school_id = $1 LIMIT 1`,
+        [alpha.id],
+      );
+      if (!feedbackExists.rowCount)
+        for (const [category, rating, comment, sub] of [
+          ['teaching', 5, 'Very approachable class teacher', 'dev-parent'],
+          ['transport', 3, 'Bus is often late in the monsoon', 'dev-parent'],
+          ['communication', 4, 'WhatsApp updates are helpful', 'dev-parent'],
+          ['app', 4, 'Attendance view is useful', 'dev-student'],
+          ['facilities', 2, 'Drinking water coolers need service', 'dev-parent'],
+          ['fees', 4, null, 'dev-parent'],
+        ] as Array<[string, number, string | null, string]>)
+          await c.query(
+            `INSERT INTO feedback_entries (school_id, user_id, category, rating, comment, created_at) VALUES ($1, $2, $3, $4, $5, now() - (random() * interval '20 days'))`,
+            [alpha.id, userIds[sub], category, rating, comment],
+          );
+
+      // a pending profile change request from the dev parent
+      const changeExists = await c.query(
+        `SELECT 1 FROM profile_change_requests WHERE school_id = $1 LIMIT 1`,
+        [alpha.id],
+      );
+      if (!changeExists.rowCount) {
+        const g = await c.query<{ id: string; mobile: string | null; student_id: string }>(
+          `SELECT g.id::text, g.mobile, sg.student_id::text FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE g.user_id = $1 AND g.school_id = $2 LIMIT 1`,
+          [userIds['dev-parent'], alpha.id],
+        );
+        if (g.rows[0])
+          await c.query(
+            `INSERT INTO profile_change_requests (school_id, student_id, requested_by_user_id, entity, entity_id, changes, reason, created_at) VALUES ($1, $2, $3, 'guardian', $4, $5::jsonb, 'New mobile number after porting', now() - interval '1 day')`,
+            [
+              alpha.id,
+              g.rows[0].student_id,
+              userIds['dev-parent'],
+              g.rows[0].id,
+              JSON.stringify({
+                mobile: { from: g.rows[0].mobile, to: '9876543299' },
+                'address.city': { from: 'Pune', to: 'Pune (Kothrud)' },
+              }),
+            ],
+          );
+      }
+
+      // devices: bus reader on R1 and a biometric punch device; a week of punches; the last school day's bus taps
+      const busHash = createHash('sha256').update('dev_demo_bus_key_alpha').digest('hex');
+      const bioHash = createHash('sha256').update('dev_demo_bio_key_alpha').digest('hex');
+      const bus = await c.query<{ id: string }>(
+        `INSERT INTO rfid_devices (school_id, code, name, api_key_hash, kind, route_id, created_by) VALUES ($1, 'BUS1', 'Bus R1 reader', $2, 'bus', $3, $4)
+         ON CONFLICT (school_id, code) DO UPDATE SET api_key_hash = EXCLUDED.api_key_hash, kind = 'bus', route_id = EXCLUDED.route_id RETURNING id::text`,
+        [alpha.id, busHash, routeIds.R1, userIds['dev-admin']],
+      );
+      const bio = await c.query<{ id: string }>(
+        `INSERT INTO rfid_devices (school_id, code, name, api_key_hash, kind, created_by) VALUES ($1, 'BIO1', 'Staff room biometric', $2, 'biometric', $3)
+         ON CONFLICT (school_id, code) DO UPDATE SET api_key_hash = EXCLUDED.api_key_hash, kind = 'biometric' RETURNING id::text`,
+        [alpha.id, bioHash, userIds['dev-admin']],
+      );
+      await c.query(
+        `UPDATE employees SET biometric_id = 'BIO-' || employee_code WHERE school_id = $1 AND biometric_id IS NULL AND deleted_at IS NULL`,
+        [alpha.id],
+      );
+      const busExists = await c.query(`SELECT 1 FROM bus_attendance WHERE school_id = $1 LIMIT 1`, [
+        alpha.id,
+      ]);
+      if (!busExists.rowCount) {
+        const ridersR1 = await c.query<{
+          id: string;
+          tag: string | null;
+          stop: string | null;
+          pickup: string | null;
+        }>(
+          `SELECT s.id::text, s.rfid_tag AS tag, a.stop_name AS stop, a.pickup_time::text AS pickup FROM student_route_assignments a JOIN students s ON s.id = a.student_id WHERE a.route_id = $1 AND a.academic_year_id = $2 AND s.rfid_tag IS NOT NULL ORDER BY a.pickup_time`,
+          [routeIds.R1, yearId],
+        );
+        for (const [i, r] of ridersR1.rows.entries()) {
+          const pickup = (r.pickup ?? '07:10:00').slice(0, 5);
+          const inAt = new Date(`${lastDay}T${pickup}:00+05:30`);
+          inAt.setMinutes(inAt.getMinutes() + 2);
+          const outAt = new Date(`${lastDay}T13:55:00+05:30`);
+          outAt.setMinutes(outAt.getMinutes() + i * 3);
+          for (const [dir, at, outcome] of [
+            ['in', inAt, 'boarded'],
+            ['out', outAt, 'alighted'],
+          ] as Array<[string, Date, string]>)
+            await c.query(
+              `INSERT INTO bus_attendance (school_id, device_id, route_id, student_id, tag, on_date, direction, occurred_at, lat, lng, outcome, alert_sent_at, raw, received_at)
+               VALUES ($1, $2, $3, $4, $5, $6::date, $7::rfid_direction, $8::timestamptz, 18.5074, 73.8077, $9, $8::timestamptz, '{"seeded":true}'::jsonb, $8::timestamptz)`,
+              [
+                alpha.id,
+                bus.rows[0]!.id,
+                routeIds.R1,
+                r.id,
+                r.tag,
+                lastDay,
+                dir,
+                at.toISOString(),
+                outcome,
+              ],
+            );
+        }
+        await c.query(
+          `INSERT INTO bus_attendance (school_id, device_id, route_id, tag, on_date, direction, occurred_at, outcome, raw, received_at) VALUES ($1, $2, $3, 'UNKNOWN-BUS-01', $4::date, 'in', ($4::date + interval '7 hours 31 minutes') AT TIME ZONE 'Asia/Kolkata', 'unknown_tag', '{"seeded":true}'::jsonb, ($4::date + interval '7 hours 31 minutes') AT TIME ZONE 'Asia/Kolkata')`,
+          [alpha.id, bus.rows[0]!.id, routeIds.R1, lastDay],
+        );
+      }
+      const punchExists = await c.query(`SELECT 1 FROM punch_logs WHERE school_id = $1 LIMIT 1`, [
+        alpha.id,
+      ]);
+      if (!punchExists.rowCount) {
+        const staff = await c.query<{ id: string; bio: string }>(
+          `SELECT id::text, biometric_id AS bio FROM employees WHERE school_id = $1 AND deleted_at IS NULL AND status = 'active' ORDER BY employee_code`,
+          [alpha.id],
+        );
+        for (const [di, day] of schoolDays.entries())
+          for (const [ei, e] of staff.rows.entries()) {
+            if ((ei + di) % 11 === 10) continue; // one absentee per day
+            const inMin = 8 * 60 + 20 + ((ei * 7 + di * 3) % 35);
+            const outMin = 16 * 60 + ((ei * 5 + di) % 50);
+            for (const [mins, dir] of [
+              [inMin, 'in'],
+              [outMin, 'out'],
+            ] as Array<[number, string]>)
+              await c.query(
+                `INSERT INTO punch_logs (school_id, device_id, employee_id, biometric_id, punched_at, direction, outcome, raw, received_at)
+                 VALUES ($1, $2, $3, $4, ($5::date + make_interval(mins => $6)) AT TIME ZONE 'Asia/Kolkata', $7::rfid_direction, 'recorded', '{"seeded":true}'::jsonb, ($5::date + make_interval(mins => $6)) AT TIME ZONE 'Asia/Kolkata') ON CONFLICT DO NOTHING`,
+                [alpha.id, bio.rows[0]!.id, e.id, e.bio, day, mins, dir],
+              );
+          }
+      }
+      await c.query(
+        `UPDATE rfid_devices SET last_seen_at = now() - interval '1 day' WHERE id IN ($1, $2) AND last_seen_at IS NULL`,
+        [bus.rows[0]!.id, bio.rows[0]!.id],
       );
       await clearCtx();
     }

@@ -27,6 +27,8 @@ const EnvSchema = z.object({
   PAYU_BASE_URL: z.string().url().default('https://test.payu.in/_payment'),
   PUBLIC_APP_URL: z.string().url().default('http://localhost:3003'),
   ADMIN_APP_URL: z.string().url().default('http://localhost:3000'),
+  /** Shared secret for provider delivery receipts (S10): header x-webhook-token. */
+  COMMS_WEBHOOK_TOKEN: z.string().min(8).default('dev-comms-webhook-token'),
   /** Public base URL of this API, used to build local-driver file URLs. */
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   /** File storage (S2-08): local disk for development, S3-compatible object storage otherwise. */
@@ -67,6 +69,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment: ${issues}`);
   }
   const env = parsed.data;
+  if (env.NODE_ENV === 'production' && env.COMMS_WEBHOOK_TOKEN.startsWith('dev-')) {
+    throw new Error('Refusing to start: COMMS_WEBHOOK_TOKEN must be set in production');
+  }
   if (env.NODE_ENV === 'production' && env.AUTH_DEV_BYPASS) {
     throw new Error('Refusing to start: AUTH_DEV_BYPASS must not be set in production');
   }

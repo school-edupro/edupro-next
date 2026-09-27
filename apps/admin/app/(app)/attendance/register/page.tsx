@@ -161,6 +161,7 @@ export default async function RegisterPage({
                       <input
                         className="ep-input"
                         name={`remarks-${r.studentId}`}
+                        aria-label={`${a('remarks')} · ${r.name}`}
                         defaultValue={r.remarks ?? ''}
                         maxLength={200}
                         disabled={!canMark || session.locked}

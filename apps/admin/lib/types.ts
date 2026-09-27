@@ -979,6 +979,9 @@ export interface RfidDevice {
   code: string;
   name: string;
   campus: string | null;
+  kind: 'gate' | 'bus' | 'biometric';
+  routeId: string | null;
+  route: string | null;
   direction: 'in' | 'out' | null;
   status: 'active' | 'inactive';
   lastSeenAt: string | null;
@@ -992,4 +995,229 @@ export interface RfidEvent {
   occurredAt: string;
   direction: 'in' | 'out';
   outcome: string;
+}
+
+// ---- Sprint 10: communication requests, consent, groups, engagement, transport, devices ----------------
+export type MessageAudience =
+  | 'everyone'
+  | 'students'
+  | 'employees'
+  | 'class'
+  | 'class_section'
+  | 'route'
+  | 'group'
+  | 'individuals';
+export interface MessageRequest {
+  id: string;
+  title: string;
+  category: 'service' | 'general';
+  channel: Channel;
+  templateId: string;
+  templateCode: string | null;
+  body: string;
+  variables: Record<string, unknown>;
+  audience: MessageAudience;
+  targets: Array<{ type: string; id: string }>;
+  targetLabels: string[];
+  status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'sending' | 'sent' | 'cancelled';
+  scheduledAt: string | null;
+  requestedBy: string | null;
+  requestedAt: string;
+  workflowInstanceId: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  recipientsTotal: number;
+  recipientsSkipped: number;
+  dispatchedAt: string | null;
+  delivery: Record<string, number>;
+  recipients?: Array<{
+    id: string;
+    name: string | null;
+    address: string | null;
+    student: string | null;
+    skippedReason: string | null;
+    status: string | null;
+    sentAt: string | null;
+    lastError: string | null;
+  }>;
+}
+export interface RequestPreview {
+  total: number;
+  skipped: number;
+  skippedReasons: Record<string, number>;
+  sample: Array<{ name: string; address: string; student: string | null }>;
+}
+export interface CommsGroup {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  members: number;
+  createdAt: string;
+}
+export interface ConsentPurpose {
+  code: string;
+  name: string;
+  description: string;
+  channel: string | null;
+  isRequired: boolean;
+  version: number;
+  status: 'granted' | 'withdrawn' | null;
+  recordedAt: string | null;
+  source: string | null;
+}
+export interface ConsentView {
+  user: { id: string; name: string };
+  purposes: ConsentPurpose[];
+  history: Array<{
+    id: string;
+    purposeCode: string;
+    status: string;
+    source: string;
+    note: string | null;
+    recordedBy: string | null;
+    recordedAt: string;
+  }>;
+}
+
+export interface ParentQuery {
+  id: string;
+  number: string;
+  kind: 'query' | 'complaint' | 'leave';
+  categoryCode: string;
+  categoryName: string;
+  studentId: string;
+  studentName: string;
+  section: string | null;
+  raisedBy: string | null;
+  raisedByUserId: string;
+  subject: string;
+  body: string;
+  fileIds: string[];
+  leaveFrom: string | null;
+  leaveTo: string | null;
+  status: 'open' | 'in_progress' | 'answered' | 'closed';
+  assignedRole: string | null;
+  assignedTo: string | null;
+  assignedUserId: string | null;
+  decision: string | null;
+  rating: number | null;
+  ratingComment: string | null;
+  openedAt: string;
+  firstResponseAt: string | null;
+  closedAt: string | null;
+  responses?: Array<{
+    id: string;
+    author: string | null;
+    authorKind: 'guardian' | 'student' | 'staff';
+    body: string;
+    fileIds: string[];
+    isInternal: boolean;
+    createdAt: string;
+  }>;
+}
+export interface FeedbackEntry {
+  id: string;
+  author: string;
+  student: string | null;
+  category: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
+export interface ChangeRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  requestedBy: string | null;
+  entity: 'student' | 'guardian';
+  entityId: string;
+  entityName: string | null;
+  changes: Record<string, { from: unknown; to: string }>;
+  reason: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  createdAt: string;
+}
+export interface TransportRoute {
+  id: string;
+  code: string;
+  name: string;
+  vehicleNo: string | null;
+  driverName: string | null;
+  driverMobile: string | null;
+  status: 'active' | 'inactive';
+  students: number;
+}
+export interface RouteStudent {
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  section: string | null;
+  stopName: string | null;
+  pickupTime: string | null;
+  dropTime: string | null;
+  guardianMobile: string | null;
+}
+export interface RfidDashboard {
+  date: string;
+  devices: Array<{
+    id: string;
+    code: string;
+    name: string;
+    kind: 'gate' | 'bus' | 'biometric';
+    status: string;
+    route: string | null;
+    lastSeenAt: string | null;
+    health: 'online' | 'idle' | 'silent' | 'inactive';
+    gateIn: number;
+    gateOut: number;
+    gateRejected: number;
+    boarded: number;
+    alighted: number;
+    punches: number;
+  }>;
+  sections: Array<{
+    classSectionId: string;
+    section: string;
+    strength: number;
+    tagged: number;
+    inToday: number;
+    late: number;
+    notIn: number;
+  }>;
+  notIn: Array<{ id: string; name: string; section: string; tag: string }>;
+}
+export interface BusEvent {
+  id: string;
+  occurredAt: string;
+  direction: string;
+  outcome: string;
+  tag: string;
+  lat: string | null;
+  lng: string | null;
+  student: string | null;
+  studentId: string | null;
+  route: string | null;
+  device: string;
+  alertSentAt: string | null;
+}
+export interface PunchSummary {
+  date: string;
+  present: number;
+  absent: number;
+  rows: Array<{
+    employeeId: string;
+    code: string;
+    name: string;
+    designation: string | null;
+    department: string | null;
+    firstIn: string | null;
+    lastOut: string | null;
+    punches: number;
+    hours: number | null;
+  }>;
 }

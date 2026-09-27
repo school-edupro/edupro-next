@@ -1,11 +1,17 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { CreateDeviceDto, RfidEventsQueryDto, RfidIngestDto } from './attendance.dto';
+import type {
+  CreateDeviceDto,
+  DayQueryDto,
+  RfidEventsQueryDto,
+  RfidIngestDto,
+} from './attendance.dto';
+import { BusService, type DeviceLookup } from './bus.service';
 
 const publicTenant = (schoolId: string): TenantContext => ({
   schoolId,
@@ -25,6 +31,7 @@ export class RfidService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly bus: BusService,
   ) {}
 
   async devices(ctx: RequestContext) {
@@ -37,11 +44,16 @@ export class RfidService {
         direction: string | null;
         status: string;
         last_seen_at: Date | null;
+        kind: string;
+        route_id: string | null;
+        route: string | null;
         events: number;
       }>(
-        `SELECT d.id::text, d.code, d.name, ca.name AS campus, d.direction::text, d.status::text, d.last_seen_at,
-                (SELECT count(*)::int FROM rfid_events e WHERE e.device_id = d.id AND e.occurred_at > now() - interval '1 day') AS events
-           FROM rfid_devices d LEFT JOIN campuses ca ON ca.id = d.campus_id ORDER BY d.code`,
+        `SELECT d.id::text, d.code, d.name, ca.name AS campus, d.direction::text, d.status::text, d.last_seen_at, d.kind::text, d.route_id::text, r.code AS route,
+                (SELECT count(*)::int FROM rfid_events e WHERE e.device_id = d.id AND e.occurred_at > now() - interval '1 day')
+                + (SELECT count(*)::int FROM bus_attendance b WHERE b.device_id = d.id AND b.occurred_at > now() - interval '1 day')
+                + (SELECT count(*)::int FROM punch_logs p WHERE p.device_id = d.id AND p.punched_at > now() - interval '1 day') AS events
+           FROM rfid_devices d LEFT JOIN campuses ca ON ca.id = d.campus_id LEFT JOIN transport_routes r ON r.id = d.route_id ORDER BY d.code`,
       );
       return r.rows.map((x) => ({
         id: x.id,
@@ -51,6 +63,9 @@ export class RfidService {
         direction: x.direction,
         status: x.status,
         lastSeenAt: x.last_seen_at ? x.last_seen_at.toISOString() : null,
+        kind: x.kind,
+        routeId: x.route_id,
+        route: x.route,
         eventsToday: x.events,
       }));
     });
@@ -63,8 +78,16 @@ export class RfidService {
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO rfid_devices (school_id, code, name, campus_id, direction, api_key_hash, created_by) VALUES (app.current_school_id(), $1, $2, $3, $4::rfid_direction, $5, app.current_user_id()) RETURNING id::text`,
-          [dto.code, dto.name, dto.campusId ?? null, dto.direction ?? null, hashKey(key)],
+          `INSERT INTO rfid_devices (school_id, code, name, campus_id, direction, api_key_hash, kind, route_id, created_by) VALUES (app.current_school_id(), $1, $2, $3, $4::rfid_direction, $5, $6::device_kind, $7, app.current_user_id()) RETURNING id::text`,
+          [
+            dto.code,
+            dto.name,
+            dto.campusId ?? null,
+            dto.direction ?? null,
+            hashKey(key),
+            dto.kind,
+            dto.routeId ?? null,
+          ],
         );
         id = r.rows[0]!.id;
       } catch (error) {
@@ -76,9 +99,9 @@ export class RfidService {
         action: 'attendance.rfid.device_create',
         entityType: 'rfid_devices',
         entityId: id,
-        after: { code: dto.code, name: dto.name },
+        after: { code: dto.code, name: dto.name, kind: dto.kind, routeId: dto.routeId ?? null },
       });
-      return { id, code: dto.code, apiKey: key };
+      return { id, code: dto.code, kind: dto.kind, apiKey: key };
     });
   }
 
@@ -111,17 +134,16 @@ export class RfidService {
     });
   }
 
-  async ingest(dto: RfidIngestDto, apiKey: string | undefined) {
+  /** Verifies the device key (constant time) and returns the device with its school, kind and route. */
+  async authenticateDevice(
+    school: string,
+    device: string,
+    apiKey: string | undefined,
+  ): Promise<DeviceLookup & { api_key_hash: string; status: string }> {
     const lookup = await this.db.global(async (c) => {
-      const r = await c.query<{
-        school_id: string;
-        device_id: string;
-        api_key_hash: string;
-        status: string;
-        direction: string | null;
-      }>(
-        `SELECT school_id::text, device_id::text, api_key_hash, status::text, direction::text FROM app.rfid_device_lookup($1, $2)`,
-        [dto.school, dto.device],
+      const r = await c.query<DeviceLookup & { api_key_hash: string; status: string }>(
+        `SELECT school_id::text, device_id::text, api_key_hash, status::text, direction::text, kind::text, route_id::text FROM app.rfid_device_lookup($1, $2)`,
+        [school, device],
       );
       return r.rows[0] ?? null;
     });
@@ -133,6 +155,32 @@ export class RfidService {
       });
     if (lookup.status !== 'active')
       throw new DomainError('device-inactive', 'The device is inactive', { status: 403 });
+    return lookup;
+  }
+
+  tenantFor(schoolId: string): TenantContext {
+    return publicTenant(schoolId);
+  }
+
+  /** A device acts without a user: the context carries only the school. */
+  deviceContext(schoolId: string): RequestContext {
+    return {
+      requestId: randomUUID(),
+      user: { id: null, displayName: 'device', memberships: [] },
+      tenant: publicTenant(schoolId),
+    } as unknown as RequestContext;
+  }
+
+  async ingest(dto: RfidIngestDto, apiKey: string | undefined) {
+    const lookup = await this.authenticateDevice(dto.school, dto.device, apiKey);
+    if (lookup.kind === 'biometric')
+      throw new DomainError('device-kind', 'Biometric devices post to /attendance/punch/events', {
+        status: 409,
+      });
+    if (lookup.kind === 'bus')
+      return this.db.tenant(publicTenant(lookup.school_id), (c) =>
+        this.bus.handle(c, this.deviceContext(lookup.school_id), lookup, dto),
+      );
     return this.db.tenant(publicTenant(lookup.school_id), async (c) => {
       const outcomes: Record<string, number> = {};
       const settings = await c.query<{
@@ -226,6 +274,94 @@ export class RfidService {
         lookup.device_id,
       ]);
       return { received: dto.events.length, outcomes };
+    });
+  }
+
+  /** RFID dashboard (S10): reader health, gate in/out counts, tagged students not yet in, bus counts. */
+  async dashboard(ctx: RequestContext, q: DayQueryDto) {
+    const yearId = requireTenant(ctx).academicYearId;
+    if (!yearId)
+      throw new DomainError('year.not_selected', 'No academic year is active or selected', {
+        status: 409,
+      });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const date =
+        q.date ??
+        (
+          await c.query<{ d: string }>(
+            `SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS d`,
+          )
+        ).rows[0]!.d;
+      const devices = await c.query<Record<string, unknown>>(
+        `SELECT d.id::text, d.code, d.name, d.kind::text, d.status::text, d.last_seen_at, r.code AS route,
+                (SELECT count(*)::int FROM rfid_events e WHERE e.device_id = d.id AND (e.occurred_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date AND e.direction = 'in' AND e.outcome IN ('marked_present', 'marked_late')) AS gate_in,
+                (SELECT count(*)::int FROM rfid_events e WHERE e.device_id = d.id AND (e.occurred_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date AND e.direction = 'out' AND e.outcome = 'out_recorded') AS gate_out,
+                (SELECT count(*)::int FROM rfid_events e WHERE e.device_id = d.id AND (e.occurred_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date AND e.outcome IN ('unknown_tag', 'duplicate')) AS gate_rejected,
+                (SELECT count(*)::int FROM bus_attendance b WHERE b.device_id = d.id AND b.on_date = $1::date AND b.outcome = 'boarded') AS boarded,
+                (SELECT count(*)::int FROM bus_attendance b WHERE b.device_id = d.id AND b.on_date = $1::date AND b.outcome = 'alighted') AS alighted,
+                (SELECT count(*)::int FROM punch_logs p WHERE p.device_id = d.id AND (p.punched_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date AND p.outcome = 'recorded') AS punches
+           FROM rfid_devices d LEFT JOIN transport_routes r ON r.id = d.route_id ORDER BY d.kind, d.code`,
+        [date],
+      );
+      const sections = await c.query<Record<string, unknown>>(
+        `SELECT cs.id::text AS section_id, k.code || '-' || cs.name AS section,
+                count(e.id)::int AS strength, count(s.rfid_tag)::int AS tagged,
+                count(*) FILTER (WHERE EXISTS (SELECT 1 FROM rfid_events x WHERE x.student_id = s.id AND x.direction = 'in' AND x.outcome IN ('marked_present', 'marked_late') AND (x.occurred_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date))::int AS in_today,
+                count(*) FILTER (WHERE EXISTS (SELECT 1 FROM rfid_events x WHERE x.student_id = s.id AND x.outcome = 'marked_late' AND (x.occurred_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date))::int AS late
+           FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+           JOIN enrolments e ON e.class_section_id = cs.id AND e.academic_year_id = $2::bigint AND e.status = 'active'
+           JOIN students s ON s.id = e.student_id
+          GROUP BY cs.id, k.code, cs.name, k.display_order ORDER BY k.display_order, cs.name`,
+        [date, yearId],
+      );
+      const notIn = await c.query<{ id: string; name: string; section: string; tag: string }>(
+        `SELECT s.id::text, s.display_name AS name, k.code || '-' || cs.name AS section, s.rfid_tag AS tag
+           FROM students s JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = $2::bigint AND e.status = 'active'
+           JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+          WHERE s.rfid_tag IS NOT NULL AND s.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM rfid_events x WHERE x.student_id = s.id AND x.direction = 'in' AND x.outcome IN ('marked_present', 'marked_late') AND (x.occurred_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date)
+          ORDER BY k.display_order, cs.name, s.display_name LIMIT 100`,
+        [date, yearId],
+      );
+      const now = Date.now();
+      return {
+        date,
+        devices: devices.rows.map((d) => {
+          const seen = d.last_seen_at ? (d.last_seen_at as Date).getTime() : null;
+          return {
+            id: d.id,
+            code: d.code,
+            name: d.name,
+            kind: d.kind,
+            status: d.status,
+            route: d.route ?? null,
+            lastSeenAt: seen ? new Date(seen).toISOString() : null,
+            health:
+              d.status !== 'active'
+                ? 'inactive'
+                : seen && now - seen < 30 * 60_000
+                  ? 'online'
+                  : seen && now - seen < 24 * 3_600_000
+                    ? 'idle'
+                    : 'silent',
+            gateIn: d.gate_in,
+            gateOut: d.gate_out,
+            gateRejected: d.gate_rejected,
+            boarded: d.boarded,
+            alighted: d.alighted,
+            punches: d.punches,
+          };
+        }),
+        sections: sections.rows.map((x) => ({
+          classSectionId: x.section_id,
+          section: x.section,
+          strength: x.strength,
+          tagged: x.tagged,
+          inToday: x.in_today,
+          late: x.late,
+          notIn: (x.tagged as number) - (x.in_today as number),
+        })),
+        notIn: notIn.rows,
+      };
     });
   }
 }

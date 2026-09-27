@@ -7,6 +7,8 @@ export const ATTENDANCE = {
   mark: 'attendance.session.mark',
   lock: 'attendance.session.lock',
   rfid: 'attendance.rfid.manage',
+  busView: 'attendance.bus.view',
+  punchView: 'attendance.punch.view',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -74,6 +76,8 @@ export const CreateDeviceSchema = z.object({
   name: z.string().trim().min(1).max(80),
   campusId: IdSchema.optional(),
   direction: z.enum(['in', 'out']).optional(),
+  kind: z.enum(['gate', 'bus', 'biometric']).default('gate'),
+  routeId: IdSchema.optional(),
 });
 export class CreateDeviceDto extends createZodDto(CreateDeviceSchema) {}
 
@@ -92,6 +96,8 @@ export const RfidIngestSchema = z.object({
         tag: z.string().trim().min(4).max(64),
         at: z.string().datetime({ offset: true }),
         direction: z.enum(['in', 'out']).optional(),
+        lat: z.number().min(-90).max(90).optional(),
+        lng: z.number().min(-180).max(180).optional(),
       }),
     )
     .min(1)
@@ -104,3 +110,28 @@ export const RfidEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
 export class RfidEventsQueryDto extends createZodDto(RfidEventsQuerySchema) {}
+
+// ---- Sprint 10: bus readers, biometric punches, dashboards ----------------------------------------
+export const DeviceKindSchema = z.enum(['gate', 'bus', 'biometric']);
+export const PunchIngestSchema = z.object({
+  school: z.string().trim().min(2).max(20),
+  device: z.string().trim().min(1).max(40),
+  events: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(64),
+        at: z.string().datetime({ offset: true }),
+        direction: z.enum(['in', 'out']).optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+export class PunchIngestDto extends createZodDto(PunchIngestSchema) {}
+export const DayQuerySchema = z.object({ date: DateSchema.optional() });
+export class DayQueryDto extends createZodDto(DayQuerySchema) {}
+export const BusQuerySchema = z.object({
+  date: DateSchema.optional(),
+  routeId: IdSchema.optional(),
+});
+export class BusQueryDto extends createZodDto(BusQuerySchema) {}

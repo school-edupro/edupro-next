@@ -13,7 +13,7 @@ import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createRfidDevice } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
-import type { RfidDevice, RfidEvent } from '@/lib/types';
+import type { RfidDevice, RfidEvent, TransportRoute } from '@/lib/types';
 
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 const outcomeTone = (o: string) =>
@@ -39,10 +39,13 @@ export default async function RfidPage({
 }) {
   const sp = await searchParams;
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today();
-  const [t, a, devices, log] = await Promise.all([
+  const [t, a, devices, routes, log] = await Promise.all([
     getTranslations('pages.attendance_rfid'),
     getTranslations('attendance'),
     apiFetch<{ data: RfidDevice[] }>('/attendance/rfid/devices').then((r) => r.data),
+    apiFetch<{ data: TransportRoute[] }>('/transport/routes')
+      .then((r) => r.data)
+      .catch(() => [] as TransportRoute[]),
     apiFetch<{ data: RfidEvent[] }>(`/attendance/rfid/log?date=${date}&limit=200`).then(
       (r) => r.data,
     ),
@@ -74,6 +77,11 @@ export default async function RfidPage({
             columns={[
               { key: 'code', header: a('deviceCode'), render: (d) => <code>{d.code}</code> },
               { key: 'name', header: a('deviceName'), render: (d) => d.name },
+              {
+                key: 'kind',
+                header: a('kind'),
+                render: (d) => `${a(`kinds.${d.kind}`)}${d.route ? ` · ${d.route}` : ''}`,
+              },
               {
                 key: 'dir',
                 header: a('direction'),
@@ -114,6 +122,26 @@ export default async function RfidPage({
                 name="direction"
                 label={a('direction')}
                 options={['', 'in', 'out'].map((d) => ({ value: d, label: a(`directions.${d}`) }))}
+              />
+            </FormRow>
+            <FormRow columns={3}>
+              <SelectField
+                id="kind"
+                name="kind"
+                label={a('kind')}
+                options={(['gate', 'bus', 'biometric'] as const).map((k) => ({
+                  value: k,
+                  label: a(`kinds.${k}`),
+                }))}
+              />
+              <SelectField
+                id="routeId"
+                name="routeId"
+                label={a('route')}
+                options={[
+                  { value: '', label: '—' },
+                  ...routes.map((r) => ({ value: r.id, label: `${r.code} · ${r.name}` })),
+                ]}
               />
             </FormRow>
             <FormActions>
