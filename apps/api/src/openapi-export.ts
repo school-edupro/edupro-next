@@ -10,10 +10,14 @@ import { cleanupOpenApiDoc } from 'nestjs-zod';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AppModule } from './app.module';
+import { setupApp } from './app.setup';
+import { loadEnv } from './config/env';
 
 async function main(): Promise<void> {
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false });
-  app.setGlobalPrefix('api/v1');
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
+    logger: false,
+  });
+  await setupApp(app, loadEnv());
   const document = cleanupOpenApiDoc(
     SwaggerModule.createDocument(
       app,

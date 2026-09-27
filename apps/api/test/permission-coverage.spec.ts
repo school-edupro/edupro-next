@@ -37,7 +37,10 @@ describe('permission coverage', () => {
         const route = `${metatype.name}.${name} (${controllerPath ?? ''})`;
         const isPublic = reflector.getAllAndOverride<boolean>(IS_PUBLIC, [fn, metatype]);
         const authOnly = reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY, [fn, metatype]);
-        const requirement = reflector.getAllAndOverride<unknown>(REQUIRE_PERMISSION, [fn, metatype]);
+        const requirement = reflector.getAllAndOverride<unknown>(REQUIRE_PERMISSION, [
+          fn,
+          metatype,
+        ]);
 
         if (isPublic) publicRoutes.push(route);
         else if (!authOnly && !requirement) unprotected.push(route);
@@ -47,7 +50,12 @@ describe('permission coverage', () => {
     await moduleRef.close();
 
     // Public routes are an allow-list reviewed by security; extend deliberately.
-    expect(publicRoutes.sort()).toEqual(['HealthController.health (health)']);
+    // The two local-driver file endpoints authenticate with HMAC tokens (docs/design/00 section 5, S2-08).
+    expect(publicRoutes.sort()).toEqual([
+      'FilesController.localGet (platform/files)',
+      'FilesController.localPut (platform/files)',
+      'HealthController.health (health)',
+    ]);
     if (unprotected.length > 0) {
       throw new Error(`handlers without a permission: ${unprotected.join(', ')}`);
     }

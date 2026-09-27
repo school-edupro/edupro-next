@@ -9,7 +9,12 @@ export async function GET(req: NextRequest) {
   store.delete('edupro_login');
   if (!raw) return NextResponse.redirect(new URL('/login?error=login-expired', req.url));
 
-  const pending = JSON.parse(raw) as { codeVerifier: string; state: string; nonce: string; returnTo: string };
+  const pending = JSON.parse(raw) as {
+    codeVerifier: string;
+    state: string;
+    nonce: string;
+    returnTo: string;
+  };
   try {
     const result = await completeLogin(req.nextUrl, pending);
     await writeSession({
@@ -19,7 +24,10 @@ export async function GET(req: NextRequest) {
       expiresAt: result.expiresAt,
       displayName: result.displayName,
     });
-    const safeReturn = pending.returnTo.startsWith('/') && !pending.returnTo.startsWith('//') ? pending.returnTo : '/';
+    const safeReturn =
+      pending.returnTo.startsWith('/') && !pending.returnTo.startsWith('//')
+        ? pending.returnTo
+        : '/';
     return NextResponse.redirect(new URL(safeReturn, req.url));
   } catch {
     return NextResponse.redirect(new URL('/login?error=login-failed', req.url));

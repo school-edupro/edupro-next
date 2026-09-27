@@ -90,7 +90,15 @@ export async function runStep<TRaw, TRow>(
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (school_id, legacy_table, legacy_key, legacy_year)
            DO UPDATE SET target_table = EXCLUDED.target_table, target_id = EXCLUDED.target_id, run_id = EXCLUDED.run_id, loaded_at = now()`,
-          [opts.schoolId, step.legacyTable, row.legacyKey, row.legacyYear ?? '', loader.targetTable, ids[i], runId],
+          [
+            opts.schoolId,
+            step.legacyTable,
+            row.legacyKey,
+            row.legacyYear ?? '',
+            loader.targetTable,
+            ids[i],
+            runId,
+          ],
         );
       }
       loaded += rows.length;
@@ -109,7 +117,16 @@ export async function runStep<TRaw, TRow>(
             c.query(
               `INSERT INTO etl.rejects (run_id, school_id, legacy_table, legacy_key, column_name, reason, raw_value, blocking)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [runId, opts.schoolId, step.legacyTable, rj.legacyKey ?? null, rj.column ?? null, rj.reason, String(rj.raw ?? ''), rj.blocking],
+              [
+                runId,
+                opts.schoolId,
+                step.legacyTable,
+                rj.legacyKey ?? null,
+                rj.column ?? null,
+                rj.reason,
+                String(rj.raw ?? ''),
+                rj.blocking,
+              ],
             ),
           );
         }
@@ -128,7 +145,10 @@ export async function runStep<TRaw, TRow>(
     );
   } catch (error) {
     await opts.withBookkeeping((c) =>
-      c.query(`UPDATE etl.runs SET status = 'failed', finished_at = now(), notes = $2 WHERE id = $1`, [runId, String(error)]),
+      c.query(
+        `UPDATE etl.runs SET status = 'failed', finished_at = now(), notes = $2 WHERE id = $1`,
+        [runId, String(error)],
+      ),
     );
     throw error;
   }
@@ -137,7 +157,12 @@ export async function runStep<TRaw, TRow>(
 }
 
 /** Records reconciliation measures for a run; the report generator reads them back. */
-export async function recordMeasures(client: PoolClient, runId: string, schoolId: string, measures: ReconcileMeasure[]): Promise<void> {
+export async function recordMeasures(
+  client: PoolClient,
+  runId: string,
+  schoolId: string,
+  measures: ReconcileMeasure[],
+): Promise<void> {
   for (const m of measures) {
     await client.query(
       `INSERT INTO etl.reconciliations (run_id, school_id, measure, legacy_value, target_value, status)

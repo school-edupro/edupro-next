@@ -55,7 +55,10 @@ const SECTION_COLUMNS = `id::text, academic_year_id::text, class_id::text, campu
 export class ClassesRepository {
   constructor(private readonly db: DbService) {}
 
-  async list(tenant: TenantContext, q: ListClassesQueryDto): Promise<{ rows: ClassRow[]; total: number }> {
+  async list(
+    tenant: TenantContext,
+    q: ListClassesQueryDto,
+  ): Promise<{ rows: ClassRow[]; total: number }> {
     return this.db.tenant(tenant, async (c) => {
       const where: string[] = ['deleted_at IS NULL'];
       const params: unknown[] = [];
@@ -68,9 +71,14 @@ export class ClassesRepository {
         where.push(`(code ILIKE $${params.length} OR name ILIKE $${params.length})`);
       }
       const whereSql = where.join(' AND ');
-      const total = await c.query<{ n: string }>(`SELECT count(*)::text AS n FROM classes WHERE ${whereSql}`, params);
+      const total = await c.query<{ n: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- whereSql is a conjunction of fixed fragments; values are bound parameters
+        `SELECT count(*)::text AS n FROM classes WHERE ${whereSql}`,
+        params,
+      );
       params.push(q.size, (q.page - 1) * q.size);
       const rows = await c.query<ClassDbRow>(
+        // eslint-disable-next-line no-restricted-syntax -- whereSql is a conjunction of fixed fragments; values are bound parameters
         `SELECT ${CLASS_COLUMNS} FROM classes WHERE ${whereSql}
           ORDER BY display_order, code LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
@@ -81,15 +89,23 @@ export class ClassesRepository {
 
   async findById(tenant: TenantContext, id: string, client?: PoolClient): Promise<ClassRow | null> {
     const run = async (c: PoolClient) => {
-      const r = await c.query<ClassDbRow>(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = $1 AND deleted_at IS NULL`, [id]);
+      const r = await c.query<ClassDbRow>(
+        // eslint-disable-next-line no-restricted-syntax -- column list and select constants; values are bound parameters
+        `SELECT ${CLASS_COLUMNS} FROM classes WHERE id = $1 AND deleted_at IS NULL`,
+        [id],
+      );
       return r.rows[0] ? toClass(r.rows[0]) : null;
     };
     return client ? run(client) : this.db.tenant(tenant, run);
   }
 
-  async insert(tenant: TenantContext, input: { code: string; name: string; displayOrder: number }): Promise<ClassRow> {
+  async insert(
+    tenant: TenantContext,
+    input: { code: string; name: string; displayOrder: number },
+  ): Promise<ClassRow> {
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<ClassDbRow>(
+        // eslint-disable-next-line no-restricted-syntax -- column list and select constants; values are bound parameters
         `INSERT INTO classes (school_id, code, name, display_order, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id(), app.current_user_id())
          RETURNING ${CLASS_COLUMNS}`,
@@ -102,7 +118,12 @@ export class ClassesRepository {
   async update(
     tenant: TenantContext,
     id: string,
-    patch: Partial<{ code: string; name: string; displayOrder: number; status: 'active' | 'inactive' }>,
+    patch: Partial<{
+      code: string;
+      name: string;
+      displayOrder: number;
+      status: 'active' | 'inactive';
+    }>,
   ): Promise<{ before: ClassRow; after: ClassRow } | null> {
     return this.db.tenant(tenant, async (c) => {
       const before = await this.findById(tenant, id, c);
@@ -119,6 +140,7 @@ export class ClassesRepository {
       if (patch.status !== undefined) set('status', patch.status);
       params.push(id);
       const r = await c.query<ClassDbRow>(
+        // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters
         `UPDATE classes SET ${sets.join(', ')} WHERE id = $${params.length} AND deleted_at IS NULL RETURNING ${CLASS_COLUMNS}`,
         params,
       );
@@ -137,10 +159,14 @@ export class ClassesRepository {
         [id],
       );
       if (Number(live.rows[0]?.n ?? 0) > 0) {
-        throw new DomainError('academics.class.has_sections', 'Class has sections in an open academic year', {
-          status: 409,
-          extra: { classId: id },
-        });
+        throw new DomainError(
+          'academics.class.has_sections',
+          'Class has sections in an open academic year',
+          {
+            status: 409,
+            extra: { classId: id },
+          },
+        );
       }
       await c.query(
         `UPDATE classes SET deleted_at = now(), status = 'inactive', updated_by = app.current_user_id() WHERE id = $1`,
@@ -150,7 +176,11 @@ export class ClassesRepository {
     });
   }
 
-  async listSections(tenant: TenantContext, classId: string, allowedSectionIds: string[] | null): Promise<ClassSectionRow[]> {
+  async listSections(
+    tenant: TenantContext,
+    classId: string,
+    allowedSectionIds: string[] | null,
+  ): Promise<ClassSectionRow[]> {
     return this.db.tenant(tenant, async (c) => {
       const params: unknown[] = [classId, tenant.academicYearId];
       let scopeSql = '';
@@ -159,6 +189,7 @@ export class ClassesRepository {
         scopeSql = `AND id = ANY($${params.length}::bigint[])`;
       }
       const r = await c.query<SectionDbRow>(
+        // eslint-disable-next-line no-restricted-syntax -- scopeSql is a fixed fragment chosen by scope presence; values are bound parameters
         `SELECT ${SECTION_COLUMNS} FROM class_sections
           WHERE class_id = $1 AND academic_year_id = $2 AND deleted_at IS NULL ${scopeSql}
           ORDER BY name`,
@@ -177,10 +208,17 @@ export class ClassesRepository {
       // ADR-003: the procedure layer decides whether the year accepts academic changes.
       await c.query(`SELECT app.assert_year_open($1, 'academics')`, [tenant.academicYearId]);
       const r = await c.query<SectionDbRow>(
+        // eslint-disable-next-line no-restricted-syntax -- column list and select constants; values are bound parameters
         `INSERT INTO class_sections (school_id, academic_year_id, class_id, campus_id, name, capacity, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id(), app.current_user_id())
          RETURNING ${SECTION_COLUMNS}`,
-        [tenant.academicYearId, classId, input.campusId ?? null, input.name, input.capacity ?? null],
+        [
+          tenant.academicYearId,
+          classId,
+          input.campusId ?? null,
+          input.name,
+          input.capacity ?? null,
+        ],
       );
       return toSection(r.rows[0]!);
     });

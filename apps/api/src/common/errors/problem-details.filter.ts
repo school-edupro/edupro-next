@@ -1,4 +1,11 @@
-import { Catch, HttpException, HttpStatus, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
+import {
+  Catch,
+  HttpException,
+  HttpStatus,
+  Logger,
+  type ArgumentsHost,
+  type ExceptionFilter,
+} from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
 import type { ZodError } from 'zod';
@@ -42,7 +49,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       this.logger.error(`${problem.type} on ${req.method} ${req.url}: ${String(exception)}`);
     }
 
-    void reply.status(problem.status).header('content-type', 'application/problem+json').send(problem);
+    void reply
+      .status(problem.status)
+      .header('content-type', 'application/problem+json')
+      .send(problem);
   }
 
   private toProblem(exception: unknown): ProblemDetails {
@@ -53,7 +63,11 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         type: 'validation-failed',
         title: 'Validation failed',
         status: HttpStatus.BAD_REQUEST,
-        errors: zodError.issues.map((i) => ({ path: i.path.join('.'), message: i.message, code: i.code })),
+        errors: zodError.issues.map((i) => ({
+          path: i.path.join('.'),
+          message: i.message,
+          code: i.code,
+        })),
       };
     }
 
@@ -78,7 +92,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         type: this.defaultType(status),
         title: typeof body === 'string' ? body : exception.message,
         status,
-        detail: typeof body === 'object' && body !== null ? (body as { message?: string }).message : undefined,
+        detail:
+          typeof body === 'object' && body !== null
+            ? (body as { message?: string }).message
+            : undefined,
       };
     }
 
@@ -86,13 +103,41 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     if (pg && typeof pg.code === 'string') {
       switch (pg.code) {
         case '42501':
-          return { type: 'tenant-forbidden', title: 'Forbidden', status: 403, detail: 'Row-level security denied the operation' };
+          return {
+            type: 'tenant-forbidden',
+            title: 'Forbidden',
+            status: 403,
+            detail: 'Row-level security denied the operation',
+          };
         case '23505':
-          return { type: 'conflict', title: 'Conflict', status: 409, detail: `Duplicate value${pg.constraint ? ` (${pg.constraint})` : ''}` };
+          return {
+            type: 'conflict',
+            title: 'Conflict',
+            status: 409,
+            detail: `Duplicate value${pg.constraint ? ` (${pg.constraint})` : ''}`,
+          };
         case '23503':
-          return { type: 'reference-violation', title: 'Invalid reference', status: 409, detail: pg.detail };
+          return {
+            type: 'reference-violation',
+            title: 'Invalid reference',
+            status: 409,
+            detail: pg.detail,
+          };
         case '23514':
-          return { type: 'validation-failed', title: 'Validation failed', status: 400, detail: pg.detail ?? pg.message };
+          return {
+            type: 'validation-failed',
+            title: 'Validation failed',
+            status: 400,
+            detail: pg.detail ?? pg.message,
+          };
+        case '22P02': // invalid text representation, for example a non-numeric id in the path
+        case '22007': // invalid datetime format
+          return {
+            type: 'validation-failed',
+            title: 'Validation failed',
+            status: 400,
+            detail: 'A value has the wrong format',
+          };
         case 'P0001':
         case 'P0002':
         case 'P0003': {

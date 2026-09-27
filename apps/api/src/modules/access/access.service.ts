@@ -1,34 +1,33 @@
 import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
-import type { TenantContext } from '@edupro/db';
+import type { PoolClient, TenantContext } from '@edupro/db';
 import { PermissionRegistry } from '../../common/access/permission-registry';
+import { CacheService } from '../../common/cache/cache.service';
 import { DbService } from '../../common/db/db.service';
 
 export type ScopeType = 'class_section' | 'subject' | 'department' | 'route' | 'campus';
 
-interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
+const PERM_TTL_SECONDS = 300;
+const permKey = (schoolId: string, userId: string) => `perm:${schoolId}:${userId}`;
 
 /**
  * Effective permissions, scopes, segregation of duties and catalogue synchronisation (ADR-004).
- * The in-process cache is a placeholder for the Redis cache planned in Sprint 3; both use the same keys so
- * the swap is local to this file.
+ * Permission sets are cached in Redis (S2-11) and invalidated on every grant, revoke, delegation or role
+ * change through invalidateUser / invalidateSchool.
  */
 @Injectable()
 export class AccessService implements OnApplicationBootstrap {
   private readonly logger = new Logger(AccessService.name);
-  private readonly permissionCache = new Map<string, CacheEntry<ReadonlySet<string>>>();
-  private readonly mfaCache = new Map<string, CacheEntry<boolean>>();
-  private readonly ttlMs = 5 * 60 * 1000;
 
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly cache: CacheService,
+  ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     await this.syncCatalogue();
   }
 
-  /** Upserts every permission declared in code into the permissions table; flags database-only rows. */
+  /** Upserts every permission declared in code into the permissions table; flags code-declared codes that vanished. */
   async syncCatalogue(): Promise<void> {
     const declared = PermissionRegistry.all();
     if (declared.length === 0) return;
@@ -47,72 +46,96 @@ export class AccessService implements OnApplicationBootstrap {
           [p.code, PermissionRegistry.moduleOf(p.code), p.description ?? '', p.mfa === true],
         );
       }
-      // Only codes that code once declared can become orphaned; seeded permissions awaiting their module are untouched.
       const orphaned = await c.query<{ code: string }>(
         `UPDATE permissions SET orphaned = true, updated_at = now()
          WHERE declared_in_code = true AND code <> ALL($1::text[]) AND orphaned = false RETURNING code`,
         [declared.map((p) => p.code)],
       );
       if ((orphaned.rowCount ?? 0) > 0) {
-        this.logger.warn(`permissions in database but not in code: ${orphaned.rows.map((r) => r.code).join(', ')}`);
+        this.logger.warn(
+          `permissions in database but not in code: ${orphaned.rows.map((r) => r.code).join(', ')}`,
+        );
       }
     });
     this.logger.log(`permission catalogue synchronised (${declared.length} codes)`);
   }
 
-  private cacheKey(tenant: TenantContext): string {
-    return `perm:${tenant.schoolId}:${tenant.userId ?? 'anon'}`;
+  // ---- effective permissions ---------------------------------------------------------------------
+
+  /** Effective permissions of the acting user in the tenant. */
+  effectivePermissions(tenant: TenantContext): Promise<ReadonlySet<string>> {
+    if (!tenant.userId) return Promise.resolve(new Set());
+    return this.effectivePermissionsFor(tenant, tenant.userId);
   }
 
-  /** Union of permissions from active role assignments and active delegations for (user, school). */
-  async effectivePermissions(tenant: TenantContext): Promise<ReadonlySet<string>> {
-    const key = this.cacheKey(tenant);
-    const hit = this.permissionCache.get(key);
-    if (hit && hit.expiresAt > Date.now()) return hit.value;
+  /** Effective permissions of any user in the tenant (used by SoD checks at grant time). */
+  async effectivePermissionsFor(
+    tenant: TenantContext,
+    userId: string,
+  ): Promise<ReadonlySet<string>> {
+    const key = permKey(tenant.schoolId, userId);
+    const cached = await this.cache.get<string[]>(key);
+    if (cached) return new Set(cached);
 
-    const codes = await this.db.tenant(tenant, async (c) => {
-      const r = await c.query<{ code: string }>(
-        `SELECT DISTINCT rp.permission_code AS code
-           FROM user_roles ur
-           JOIN roles r ON r.id = ur.role_id AND r.status = 'active' AND r.deleted_at IS NULL
-           JOIN role_permissions rp ON rp.role_id = ur.role_id
-          WHERE ur.user_id = app.current_user_id()
-            AND ur.revoked_at IS NULL
-            AND ur.valid_from <= CURRENT_DATE
-            AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
-         UNION
-         SELECT DISTINCT rp.permission_code
-           FROM delegations d
-           JOIN role_permissions rp ON rp.role_id = d.role_id
-          WHERE d.to_user_id = app.current_user_id()
-            AND d.revoked_at IS NULL
-            AND now() BETWEEN d.starts_at AND d.ends_at`,
-      );
-      return r.rows.map((x) => x.code);
-    });
-
-    const value: ReadonlySet<string> = new Set(codes);
-    this.permissionCache.set(key, { value, expiresAt: Date.now() + this.ttlMs });
-    return value;
+    const codes = await this.db.tenant(tenant, (c) => this.queryPermissions(c, userId));
+    await this.cache.set(key, codes, PERM_TTL_SECONDS);
+    return new Set(codes);
   }
 
-  invalidate(tenant: TenantContext): void {
-    this.permissionCache.delete(this.cacheKey(tenant));
+  private async queryPermissions(c: PoolClient, userId: string): Promise<string[]> {
+    const r = await c.query<{ code: string }>(
+      `SELECT DISTINCT rp.permission_code AS code
+         FROM user_roles ur
+         JOIN roles r ON r.id = ur.role_id AND r.status = 'active' AND r.deleted_at IS NULL
+         JOIN role_permissions rp ON rp.role_id = ur.role_id
+        WHERE ur.user_id = $1
+          AND ur.revoked_at IS NULL
+          AND ur.valid_from <= CURRENT_DATE
+          AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
+       UNION
+       SELECT DISTINCT rp.permission_code
+         FROM delegations d
+         JOIN roles r ON r.id = d.role_id AND r.status = 'active' AND r.deleted_at IS NULL
+         JOIN role_permissions rp ON rp.role_id = d.role_id
+        WHERE d.to_user_id = $1
+          AND d.revoked_at IS NULL
+          AND now() BETWEEN d.starts_at AND d.ends_at`,
+      [userId],
+    );
+    return r.rows.map((x) => x.code);
   }
+
+  async invalidateUser(schoolId: string, userId: string): Promise<void> {
+    await this.cache.del(permKey(schoolId, userId));
+  }
+
+  async invalidateSchool(schoolId: string): Promise<void> {
+    await this.cache.delByPrefix(`perm:${schoolId}:`);
+  }
+
+  // ---- MFA flag and SoD ----------------------------------------------------------------------------
 
   async requiresMfa(code: string): Promise<boolean> {
-    const hit = this.mfaCache.get(code);
-    if (hit && hit.expiresAt > Date.now()) return hit.value;
+    const key = `perm-mfa:${code}`;
+    const cached = await this.cache.get<boolean>(key);
+    if (cached !== null) return cached;
     const value = await this.db.global(async (c) => {
-      const r = await c.query<{ requires_mfa: boolean }>(`SELECT requires_mfa FROM permissions WHERE code = $1`, [code]);
+      const r = await c.query<{ requires_mfa: boolean }>(
+        `SELECT requires_mfa FROM permissions WHERE code = $1`,
+        [code],
+      );
       return r.rows[0]?.requires_mfa ?? false;
     });
-    this.mfaCache.set(code, { value, expiresAt: Date.now() + this.ttlMs });
+    await this.cache.set(key, value, PERM_TTL_SECONDS);
     return value;
   }
 
   /** Returns the conflicting permission if the user holds both sides of a SoD rule, else null. */
-  async sodConflict(tenant: TenantContext, code: string, held: ReadonlySet<string>): Promise<string | null> {
+  async sodConflict(
+    tenant: TenantContext,
+    code: string,
+    held: ReadonlySet<string>,
+  ): Promise<string | null> {
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<{ other: string }>(
         `SELECT CASE WHEN permission_a = $1 THEN permission_b ELSE permission_a END AS other
@@ -127,10 +150,41 @@ export class AccessService implements OnApplicationBootstrap {
   }
 
   /**
-   * Scope ids the user may act on for a permission and scope type. null = unrestricted (at least one
-   * granting assignment has no scope rows of that type).
+   * Grant-time check (ADR-004 point 5): would giving `roleId` to `userId` make them hold both sides of a
+   * segregation-of-duties rule? Returns the first conflicting pair or null.
    */
-  async scopesFor(tenant: TenantContext, permission: string, scopeType: ScopeType): Promise<string[] | null> {
+  async sodConflictForGrant(
+    tenant: TenantContext,
+    userId: string,
+    roleId: string,
+  ): Promise<{ a: string; b: string } | null> {
+    const held = await this.effectivePermissionsFor(tenant, userId);
+    return this.db.tenant(tenant, async (c) => {
+      const rolePerms = await c.query<{ code: string }>(
+        `SELECT permission_code AS code FROM role_permissions WHERE role_id = $1`,
+        [roleId],
+      );
+      const union = new Set(held);
+      for (const p of rolePerms.rows) union.add(p.code);
+      const rules = await c.query<{ permission_a: string; permission_b: string }>(
+        `SELECT permission_a, permission_b FROM sod_rules WHERE school_id IS NULL OR school_id = app.current_school_id()`,
+      );
+      for (const rule of rules.rows) {
+        if (union.has(rule.permission_a) && union.has(rule.permission_b))
+          return { a: rule.permission_a, b: rule.permission_b };
+      }
+      return null;
+    });
+  }
+
+  // ---- scopes ----------------------------------------------------------------------------------------
+
+  /** Scope ids the user may act on; null = unrestricted (an assignment granting the permission has no scope rows). */
+  async scopesFor(
+    tenant: TenantContext,
+    permission: string,
+    scopeType: ScopeType,
+  ): Promise<string[] | null> {
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<{ scopes: string[] | null }>(
         `SELECT (
@@ -150,49 +204,32 @@ export class AccessService implements OnApplicationBootstrap {
       if (r.rowCount === 0) return [];
       const union = new Set<string>();
       for (const row of r.rows) {
-        if (row.scopes === null) return null; // an unscoped assignment grants everything
+        if (row.scopes === null) return null;
         for (const id of row.scopes) union.add(id);
       }
       return [...union];
     });
   }
 
-  async listPermissions(): Promise<Array<{ code: string; module: string; description: string; requiresMfa: boolean }>> {
+  // ---- catalogue -------------------------------------------------------------------------------------
+
+  async listPermissions(): Promise<
+    Array<{ code: string; module: string; description: string; requiresMfa: boolean }>
+  > {
     return this.db.global(async (c) => {
-      const r = await c.query<{ code: string; module: string; description: string; requires_mfa: boolean }>(
+      const r = await c.query<{
+        code: string;
+        module: string;
+        description: string;
+        requires_mfa: boolean;
+      }>(
         `SELECT code, module, description, requires_mfa FROM permissions WHERE orphaned = false ORDER BY code`,
       );
-      return r.rows.map((p) => ({ code: p.code, module: p.module, description: p.description, requiresMfa: p.requires_mfa }));
-    });
-  }
-
-  async listRoles(tenant: TenantContext) {
-    return this.db.tenant(tenant, async (c) => {
-      const r = await c.query<{
-        id: string;
-        code: string;
-        name: string;
-        kind: string;
-        is_system: boolean;
-        school_id: string | null;
-        permissions: string[];
-      }>(
-        `SELECT r.id::text, r.code, r.name, r.kind, r.is_system, r.school_id::text,
-                COALESCE(array_agg(rp.permission_code ORDER BY rp.permission_code) FILTER (WHERE rp.permission_code IS NOT NULL), '{}') AS permissions
-           FROM roles r
-           LEFT JOIN role_permissions rp ON rp.role_id = r.id
-          WHERE r.deleted_at IS NULL
-          GROUP BY r.id
-          ORDER BY r.is_system DESC, r.name`,
-      );
-      return r.rows.map((x) => ({
-        id: x.id,
-        code: x.code,
-        name: x.name,
-        kind: x.kind,
-        isSystem: x.is_system,
-        schoolId: x.school_id,
-        permissions: x.permissions,
+      return r.rows.map((p) => ({
+        code: p.code,
+        module: p.module,
+        description: p.description,
+        requiresMfa: p.requires_mfa,
       }));
     });
   }

@@ -91,6 +91,7 @@ export class Db {
     };
     try {
       await client.query('BEGIN');
+      // eslint-disable-next-line no-restricted-syntax -- integer timeout from configuration; SET LOCAL takes no bound parameters
       await client.query(`SET LOCAL statement_timeout = ${this.statementTimeoutMs}`);
       await client.query(
         `SELECT set_config('app.school_id', $1, true),
@@ -132,6 +133,7 @@ export class Db {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      // eslint-disable-next-line no-restricted-syntax -- integer timeout from configuration; SET LOCAL takes no bound parameters
       await client.query(`SET LOCAL statement_timeout = ${this.statementTimeoutMs}`);
       await client.query(`SELECT set_config('app.auth_sub', $1, true)`, [sub]);
       const result = await fn(client);
@@ -153,6 +155,7 @@ export class Db {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      // eslint-disable-next-line no-restricted-syntax -- integer timeout from configuration; SET LOCAL takes no bound parameters
       await client.query(`SET LOCAL statement_timeout = ${this.statementTimeoutMs}`);
       const result = await fn(client);
       await client.query('COMMIT');
@@ -170,9 +173,11 @@ export class Db {
    * Throws if the connected role could bypass row-level security.
    */
   async assertApplicationRole(): Promise<void> {
-    const { rows } = await this.pool.query<{ rolname: string; rolbypassrls: boolean; rolsuper: boolean }>(
-      'SELECT rolname, rolbypassrls, rolsuper FROM pg_roles WHERE rolname = current_user',
-    );
+    const { rows } = await this.pool.query<{
+      rolname: string;
+      rolbypassrls: boolean;
+      rolsuper: boolean;
+    }>('SELECT rolname, rolbypassrls, rolsuper FROM pg_roles WHERE rolname = current_user');
     const role = rows[0];
     if (!role) throw new Error('Could not determine the current database role');
     if (role.rolbypassrls || role.rolsuper || role.rolname === 'edupro_migrator') {
@@ -188,4 +193,9 @@ export class Db {
 }
 
 export type { PoolClient } from 'pg';
-export { maskSensitive, isSensitiveKey, GLOBAL_SENSITIVE_KEYS, ENTITY_SENSITIVE_KEYS } from './audit-masks';
+export {
+  maskSensitive,
+  isSensitiveKey,
+  GLOBAL_SENSITIVE_KEYS,
+  ENTITY_SENSITIVE_KEYS,
+} from './audit-masks';

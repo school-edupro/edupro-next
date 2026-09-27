@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/callback', '/api/auth/dev', '/healthz'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/api/auth/login',
+  '/api/auth/callback',
+  '/api/auth/dev',
+  '/healthz',
+];
 
 /**
  * Redirects unauthenticated browsers to /login. Session validity is checked server-side in the layout;
@@ -8,8 +14,14 @@ const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/callback', '/api/a
  */
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
-  if (pathname.startsWith('/_next') || pathname.startsWith('/assets') || pathname === '/favicon.ico') return NextResponse.next();
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)))
+    return NextResponse.next();
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/assets') ||
+    pathname === '/favicon.ico'
+  )
+    return NextResponse.next();
 
   if (!req.cookies.get('edupro_session')) {
     const login = req.nextUrl.clone();
@@ -17,7 +29,10 @@ export function middleware(req: NextRequest) {
     login.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(login);
   }
-  return NextResponse.next();
+  // Expose the path to server layouts for the active navigation state.
+  const headers = new Headers(req.headers);
+  headers.set('x-pathname', pathname);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {

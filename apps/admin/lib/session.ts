@@ -78,7 +78,8 @@ export async function readContext(): Promise<WorkingContext> {
     const id = /^[0-9]{1,18}$/;
     return {
       schoolId: parsed.schoolId && id.test(parsed.schoolId) ? parsed.schoolId : undefined,
-      academicYearId: parsed.academicYearId && id.test(parsed.academicYearId) ? parsed.academicYearId : undefined,
+      academicYearId:
+        parsed.academicYearId && id.test(parsed.academicYearId) ? parsed.academicYearId : undefined,
     };
   } catch {
     return {};

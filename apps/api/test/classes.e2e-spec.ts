@@ -9,7 +9,8 @@ import { Client } from 'pg';
 import { AppModule } from '../src/app.module';
 
 const MIGRATOR_URL =
-  process.env.DATABASE_MIGRATOR_URL ?? 'postgresql://edupro_migrator:edupro_migrator_dev@localhost:5432/edupro';
+  process.env.DATABASE_MIGRATOR_URL ??
+  'postgresql://edupro_migrator:edupro_migrator_dev@localhost:5432/edupro';
 
 interface Fixture {
   schoolA: string;
@@ -26,7 +27,10 @@ async function seed(): Promise<Fixture> {
   try {
     const stamp = `E2E${Date.now().toString(36).toUpperCase()}`;
     const school = async (code: string) => {
-      const s = await c.query<{ id: string }>(`INSERT INTO schools (code, name) VALUES ($1, $1) RETURNING id::text`, [code]);
+      const s = await c.query<{ id: string }>(
+        `INSERT INTO schools (code, name) VALUES ($1, $1) RETURNING id::text`,
+        [code],
+      );
       const y = await c.query<{ id: string }>(
         `INSERT INTO academic_years (school_id, code, name, start_date, end_date, status)
          VALUES ($1, '2026-27', 'Session', '2026-04-01', '2027-03-31', 'active') RETURNING id::text`,
@@ -59,7 +63,14 @@ async function seed(): Promise<Fixture> {
     await user(teacherSub, a.id, 'class_teacher');
     await user(outsiderSub, b.id, 'school_admin');
 
-    return { schoolA: a.id, schoolB: b.id, yearA: a.yearId, coordinatorSub, teacherSub, outsiderSub };
+    return {
+      schoolA: a.id,
+      schoolB: b.id,
+      yearA: a.yearId,
+      coordinatorSub,
+      teacherSub,
+      outsiderSub,
+    };
   } finally {
     await c.end();
   }
@@ -89,16 +100,25 @@ describe('academics/classes (e2e)', () => {
     if (app) await app.close();
   });
 
-  const inject = (opts: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string; headers: Record<string, string>; payload?: unknown }) => {
+  const inject = (opts: {
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    url: string;
+    headers: Record<string, string>;
+    payload?: unknown;
+  }) => {
     // Fastify rejects a JSON content type with an empty body, so only send it with a payload.
     const { 'content-type': contentType, ...rest } = opts.headers;
-    const headers = opts.payload !== undefined && contentType ? { ...rest, 'content-type': contentType } : rest;
-    return app.getHttpAdapter().getInstance().inject({
-      method: opts.method,
-      url: `/api/v1${opts.url}`,
-      headers,
-      ...(opts.payload !== undefined ? { payload: JSON.stringify(opts.payload) } : {}),
-    });
+    const headers =
+      opts.payload !== undefined && contentType ? { ...rest, 'content-type': contentType } : rest;
+    return app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: opts.method,
+        url: `/api/v1${opts.url}`,
+        headers,
+        ...(opts.payload !== undefined ? { payload: JSON.stringify(opts.payload) } : {}),
+      });
   };
 
   let classId: string;
@@ -110,7 +130,11 @@ describe('academics/classes (e2e)', () => {
   });
 
   it('rejects a school the user is not a member of', async () => {
-    const res = await inject({ method: 'GET', url: '/academics/classes', headers: headers(f.coordinatorSub, f.schoolB) });
+    const res = await inject({
+      method: 'GET',
+      url: '/academics/classes',
+      headers: headers(f.coordinatorSub, f.schoolB),
+    });
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({ type: 'tenant-forbidden' });
   });
@@ -150,7 +174,11 @@ describe('academics/classes (e2e)', () => {
   });
 
   it('class teacher can view but not create', async () => {
-    const list = await inject({ method: 'GET', url: '/academics/classes', headers: headers(f.teacherSub, f.schoolA) });
+    const list = await inject({
+      method: 'GET',
+      url: '/academics/classes',
+      headers: headers(f.teacherSub, f.schoolA),
+    });
     expect(list.statusCode).toBe(200);
     expect(list.json().data.map((c: { id: string }) => c.id)).toContain(classId);
 
@@ -161,11 +189,18 @@ describe('academics/classes (e2e)', () => {
       payload: { code: 'VII', name: 'Class VII' },
     });
     expect(create.statusCode).toBe(403);
-    expect(create.json()).toMatchObject({ type: 'permission-denied', permission: 'academics.class.create' });
+    expect(create.json()).toMatchObject({
+      type: 'permission-denied',
+      permission: 'academics.class.create',
+    });
   });
 
   it('another school never sees the class, even with full rights there', async () => {
-    const res = await inject({ method: 'GET', url: `/academics/classes/${classId}`, headers: headers(f.outsiderSub, f.schoolB) });
+    const res = await inject({
+      method: 'GET',
+      url: `/academics/classes/${classId}`,
+      headers: headers(f.outsiderSub, f.schoolB),
+    });
     expect(res.statusCode).toBe(404);
   });
 
@@ -192,7 +227,10 @@ describe('academics/classes (e2e)', () => {
     const m = new Client({ connectionString: MIGRATOR_URL });
     await m.connect();
     try {
-      await m.query(`UPDATE academic_years SET locks = '{"academics": true}'::jsonb WHERE id = $1`, [f.yearA]);
+      await m.query(
+        `UPDATE academic_years SET locks = '{"academics": true}'::jsonb WHERE id = $1`,
+        [f.yearA],
+      );
       const res = await inject({
         method: 'POST',
         url: `/academics/classes/${classId}/sections`,
@@ -208,7 +246,11 @@ describe('academics/classes (e2e)', () => {
   });
 
   it('refuses to delete a class that has sections in an open year', async () => {
-    const res = await inject({ method: 'DELETE', url: `/academics/classes/${classId}`, headers: headers(f.coordinatorSub, f.schoolA) });
+    const res = await inject({
+      method: 'DELETE',
+      url: `/academics/classes/${classId}`,
+      headers: headers(f.coordinatorSub, f.schoolA),
+    });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ type: 'academics.class.has_sections' });
   });
@@ -229,7 +271,11 @@ describe('academics/classes (e2e)', () => {
   });
 
   it('GET /me returns memberships and permissions', async () => {
-    const res = await inject({ method: 'GET', url: '/me', headers: headers(f.teacherSub, f.schoolA) });
+    const res = await inject({
+      method: 'GET',
+      url: '/me',
+      headers: headers(f.teacherSub, f.schoolA),
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.memberships.map((m: { schoolId: string }) => m.schoolId)).toEqual([f.schoolA]);

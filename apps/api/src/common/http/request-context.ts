@@ -10,7 +10,12 @@ export interface AuthenticatedUser {
   sub: string;
   displayName: string;
   /** Schools the user is an active member of */
-  memberships: Array<{ schoolId: string; schoolCode: string; schoolName: string; personType: string }>;
+  memberships: Array<{
+    schoolId: string;
+    schoolCode: string;
+    schoolName: string;
+    personType: string;
+  }>;
   /** True when the token proves an MFA authentication */
   mfa: boolean;
   /** Unix seconds of the authentication event, when the IdP provides it */
@@ -49,9 +54,11 @@ export function getRequestContext(req: ContextualRequest): RequestContext {
 }
 
 /** Injects the RequestContext into a handler parameter. */
-export const ReqCtx = createParamDecorator((_data: unknown, ctx: ExecutionContext): RequestContext => {
-  return getRequestContext(ctx.switchToHttp().getRequest<ContextualRequest>());
-});
+export const ReqCtx = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): RequestContext => {
+    return getRequestContext(ctx.switchToHttp().getRequest<ContextualRequest>());
+  },
+);
 
 /** Returns the tenant context or throws; use in services that must never run without a school. */
 export function requireTenant(ctx: RequestContext): TenantContext {

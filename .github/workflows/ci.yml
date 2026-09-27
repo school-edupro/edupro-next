@@ -35,19 +35,19 @@ jobs:
           POSTGRES_DB: edupro
           POSTGRES_USER: edupro_migrator
           POSTGRES_PASSWORD: edupro_migrator_dev
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U edupro_migrator -d edupro"
           --health-interval 5s --health-timeout 3s --health-retries 20
       redis:
         image: redis:7-alpine
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
     env:
       NODE_ENV: test
       DATABASE_MIGRATOR_URL: postgresql://edupro_migrator:edupro_migrator_dev@localhost:5432/edupro
       DATABASE_URL: postgresql://edupro_app:edupro_app_dev@localhost:5432/edupro
       REDIS_URL: redis://localhost:6379
-      AUTH_DEV_BYPASS: "1"
+      AUTH_DEV_BYPASS: '1'
       SESSION_SECRET: ci-only-session-secret-not-for-production-0123456789
       ONEAUTH_ISSUER: https://oneauth.example.test
       ONEAUTH_AUDIENCE: edupro-next
@@ -74,6 +74,8 @@ jobs:
         run: pnpm test
       - name: Permission coverage
         run: pnpm --filter @edupro/api test:permissions
+      - name: Repository scripts (schema diff report, SQL lint rule fixture)
+        run: pnpm test:scripts
       - name: Design token lint
         run: pnpm --filter @edupro/ui lint
       - name: Storybook build (components and accessibility addon)

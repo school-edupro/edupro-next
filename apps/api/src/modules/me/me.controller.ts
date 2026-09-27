@@ -15,11 +15,15 @@ export class MeController {
   constructor(private readonly access: AccessService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Current user, memberships, active school and year, effective permissions' })
+  @ApiOperation({
+    summary: 'Current user, memberships, active school and year, effective permissions',
+  })
   @AuthenticatedOnly()
   @TenantOptional()
   async me(@ReqCtx() ctx: RequestContext) {
-    const permissions = ctx.tenant ? [...(await this.access.effectivePermissions(ctx.tenant))].sort() : [];
+    const permissions = ctx.tenant
+      ? [...(await this.access.effectivePermissions(ctx.tenant))].sort()
+      : [];
     return {
       user: {
         id: ctx.user.id,

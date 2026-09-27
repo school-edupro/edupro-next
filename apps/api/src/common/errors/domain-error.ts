@@ -7,7 +7,11 @@ export class DomainError extends Error {
   readonly status: number;
   readonly extra: Record<string, unknown> | undefined;
 
-  constructor(type: string, detail: string, options: { status?: number; extra?: Record<string, unknown> } = {}) {
+  constructor(
+    type: string,
+    detail: string,
+    options: { status?: number; extra?: Record<string, unknown> } = {},
+  ) {
     super(detail);
     this.name = 'DomainError';
     this.type = type;
@@ -17,7 +21,8 @@ export class DomainError extends Error {
 
   static defaultStatus(type: string): number {
     if (type === 'not-found' || type.endsWith('.not_found')) return 404;
-    if (type === 'conflict' || type.endsWith('.conflict') || type.endsWith('.duplicate')) return 409;
+    if (type === 'conflict' || type.endsWith('.conflict') || type.endsWith('.duplicate'))
+      return 409;
     if (type.startsWith('year.') || type.endsWith('.locked')) return 409;
     if (type === 'validation-failed') return 400;
     return 422;

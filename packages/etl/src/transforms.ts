@@ -6,7 +6,9 @@ import { ok, reject, type Result } from './reject';
 
 const clean = (v: unknown): string | null => {
   if (v === null || v === undefined) return null;
-  const s = String(v).trim().replace(/\s{2,}/g, ' ');
+  const s = String(v)
+    .trim()
+    .replace(/\s{2,}/g, ' ');
   return s === '' ? null : s;
 };
 
@@ -62,7 +64,9 @@ export function normaliseYearCode(v: unknown): Result<string> {
 }
 
 /** 'VI-A' -> { classCode: 'VI', section: 'A' }; 'XI-Sci-A' -> { classCode: 'XI-Sci', section: 'A' }; 'VI' -> section null. */
-export function splitLegacySection(v: unknown): Result<{ classCode: string; section: string | null }> {
+export function splitLegacySection(
+  v: unknown,
+): Result<{ classCode: string; section: string | null }> {
   const s = clean(v);
   if (s === null) return reject('class.empty', v, true);
   const idx = s.lastIndexOf('-');
@@ -99,9 +103,10 @@ export function normaliseEmail(v: unknown): Result<string | null> {
  * Zero dates and empties become null. Ambiguous day/month is read day-first (Indian convention).
  */
 export function normaliseDate(v: unknown): Result<string | null> {
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? reject('date.invalid', v) : ok(v.toISOString().slice(0, 10));
+  if (v instanceof Date)
+    return Number.isNaN(v.getTime()) ? reject('date.invalid', v) : ok(v.toISOString().slice(0, 10));
   const s = clean(v);
-  if (s === null || s.startsWith('0000-00-00') || s === '0' ) return ok(null);
+  if (s === null || s.startsWith('0000-00-00') || s === '0') return ok(null);
   let y: number, mo: number, d: number;
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?$/.exec(s);
   if (m) {
@@ -111,7 +116,8 @@ export function normaliseDate(v: unknown): Result<string | null> {
     if (!m) return reject('date.unparseable', v);
     [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
   }
-  if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1900 || y > 2100) return reject('date.out_of_range', v);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1900 || y > 2100)
+    return reject('date.out_of_range', v);
   const iso = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   const check = new Date(`${iso}T00:00:00Z`);
   if (check.getUTCMonth() + 1 !== mo || check.getUTCDate() !== d) return reject('date.invalid', v);
@@ -124,7 +130,14 @@ export function istToUtc(v: unknown): Result<string | null> {
   if (s === null || s.startsWith('0000-00-00')) return ok(null);
   const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(s);
   if (!m) return reject('datetime.unparseable', v);
-  const utc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] ?? '0'));
+  const utc = Date.UTC(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+    Number(m[6] ?? '0'),
+  );
   const shifted = new Date(utc - (5 * 60 + 30) * 60 * 1000);
   if (Number.isNaN(shifted.getTime())) return reject('datetime.invalid', v);
   return ok(shifted.toISOString());
@@ -148,7 +161,9 @@ export function combineDateTime(date: unknown, time: unknown): Result<string | n
 /** Money as a string with two decimals; strips commas and currency symbols; rounds half up. Blocking reject. */
 export function toMoney(v: unknown): Result<string | null> {
   if (v === null || v === undefined) return ok(null);
-  const s = String(v).replace(/[₹,\s]|Rs\.?|INR/gi, '').trim();
+  const s = String(v)
+    .replace(/[₹,\s]|Rs\.?|INR/gi, '')
+    .trim();
   if (s === '') return ok(null);
   if (!/^-?\d+(\.\d+)?$/.test(s)) return reject('money.invalid', v, true);
   const n = Number(s);
@@ -156,7 +171,20 @@ export function toMoney(v: unknown): Result<string | null> {
   return ok((n < 0 ? '-' : '') + rounded.toFixed(2));
 }
 
-const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const MONTHS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
 
 /** 'April', 'Apr', 'apr', '4', '04' -> 4 */
 export function normaliseMonth(v: unknown): Result<number | null> {
@@ -194,7 +222,11 @@ export function repairMojibake(v: unknown): string | null {
 }
 
 /** Legacy 'isTrash' plus last-updated to deleted_at. */
-export function trashToDeletedAt(isTrash: unknown, updatedAt: unknown, fallbackIso: string): string | null {
+export function trashToDeletedAt(
+  isTrash: unknown,
+  updatedAt: unknown,
+  fallbackIso: string,
+): string | null {
   const flag = yesNoToBoolean(isTrash);
   if (flag.kind === 'reject' || !flag.value) return null;
   const when = istToUtc(updatedAt);
@@ -239,7 +271,9 @@ export function phpUnserialize(v: unknown): Result<unknown> {
         for (let k = 0; k < count; k += 1) entries.push([parse(), parse()]);
         i += 1; // '}'
         const isList = entries.every(([key], idx) => key === idx);
-        return isList ? entries.map(([, val]) => val) : Object.fromEntries(entries.map(([k, val]) => [String(k), val]));
+        return isList
+          ? entries.map(([, val]) => val)
+          : Object.fromEntries(entries.map(([k, val]) => [String(k), val]));
       }
       default:
         throw new Error('unsupported');

@@ -33,7 +33,10 @@ export class JwtAuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<ContextualRequest>();
     const requestId = (req.headers['x-request-id'] as string | undefined) ?? randomUUID();
 
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [context.getHandler(), context.getClass()]);
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (isPublic) {
       // Public routes carry no identity; downstream guards skip as well.
       return true;
@@ -49,6 +52,7 @@ export class JwtAuthGuard implements CanActivate {
     let mfa = false;
     let authTime: number | undefined;
     let dev = false;
+    let mobile: string | null = null;
 
     if (token.startsWith('dev:')) {
       if (!this.env.AUTH_DEV_BYPASS || this.env.NODE_ENV === 'production') {
@@ -64,10 +68,15 @@ export class JwtAuthGuard implements CanActivate {
       const amr = Array.isArray(payload.amr) ? (payload.amr as string[]) : [];
       mfa = amr.includes('mfa') || amr.includes('otp') || amr.includes('hwk');
       authTime = typeof payload.auth_time === 'number' ? payload.auth_time : undefined;
+      const claimMobile =
+        (payload as { mobile?: unknown; phone_number?: unknown }).mobile ??
+        (payload as { phone_number?: unknown }).phone_number;
+      mobile = typeof claimMobile === 'string' ? claimMobile : null;
     }
-    if (!sub) throw new UnauthorizedException({ type: 'unauthenticated', detail: 'Token has no subject' });
+    if (!sub)
+      throw new UnauthorizedException({ type: 'unauthenticated', detail: 'Token has no subject' });
 
-    const resolved = await this.identity.resolveBySub(sub);
+    const resolved = await this.identity.resolveBySub(sub, { mobile });
     if (!resolved) {
       throw new UnauthorizedException({
         type: 'user-not-provisioned',
@@ -96,7 +105,10 @@ export class JwtAuthGuard implements CanActivate {
       });
       return payload;
     } catch {
-      throw new UnauthorizedException({ type: 'unauthenticated', detail: 'Invalid or expired token' });
+      throw new UnauthorizedException({
+        type: 'unauthenticated',
+        detail: 'Invalid or expired token',
+      });
     }
   }
 }

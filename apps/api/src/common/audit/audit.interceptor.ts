@@ -1,7 +1,16 @@
-import { Injectable, Logger, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  type CallHandler,
+  type ExecutionContext,
+  type NestInterceptor,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable, tap } from 'rxjs';
-import { REQUIRE_PERMISSION, type PermissionRequirement } from '../access/require-permission.decorator';
+import {
+  REQUIRE_PERMISSION,
+  type PermissionRequirement,
+} from '../access/require-permission.decorator';
 import type { ContextualRequest } from '../http/request-context';
 import { AuditService } from './audit.service';
 
@@ -27,17 +36,20 @@ export class AuditInterceptor implements NestInterceptor {
     const ctx = req.ctx;
     if (!ctx || !ctx.tenant || !MUTATING.has(method)) return next.handle();
 
-    const requirement = this.reflector.getAllAndOverride<PermissionRequirement | undefined>(REQUIRE_PERMISSION, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const requirement = this.reflector.getAllAndOverride<PermissionRequirement | undefined>(
+      REQUIRE_PERMISSION,
+      [context.getHandler(), context.getClass()],
+    );
 
     return next.handle().pipe(
       tap({
         next: () => {
           const snapshot = ctx.audit ?? {
             action: `${method.toLowerCase()} ${req.routeOptions?.url ?? req.url}`,
-            entityType: context.getClass().name.replace(/Controller$/, '').toLowerCase(),
+            entityType: context
+              .getClass()
+              .name.replace(/Controller$/, '')
+              .toLowerCase(),
           };
           void this.audit.record(ctx, snapshot, requirement?.code).catch((error: unknown) => {
             this.logger.error(`audit write failed for request ${ctx.requestId}: ${String(error)}`);

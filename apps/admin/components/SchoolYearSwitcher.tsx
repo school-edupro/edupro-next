@@ -8,17 +8,33 @@ export function SchoolYearSwitcher({ me }: { me: Me }) {
   if (me.memberships.length <= 1) {
     const only = me.memberships[0];
     return (
-      <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 'var(--fw-semibold)', color: 'var(--text-heading)' }}>
+      <span
+        style={{
+          fontFamily: 'var(--font-heading)',
+          fontWeight: 'var(--fw-semibold)',
+          color: 'var(--text-heading)',
+        }}
+      >
         {only?.schoolName ?? 'No school'}
       </span>
     );
   }
   return (
-    <form method="post" action="/api/context" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+    <form
+      method="post"
+      action="/api/context"
+      style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}
+    >
       <label htmlFor="schoolId" className="ep-field__label" style={{ margin: 0 }}>
         School
       </label>
-      <select id="schoolId" name="schoolId" className="ep-select" defaultValue={me.school?.id ?? ''} style={{ minHeight: '36px' }}>
+      <select
+        id="schoolId"
+        name="schoolId"
+        className="ep-select"
+        defaultValue={me.school?.id ?? ''}
+        style={{ minHeight: '36px' }}
+      >
         {me.memberships.map((m) => (
           <option key={m.schoolId} value={m.schoolId}>
             {m.schoolName}

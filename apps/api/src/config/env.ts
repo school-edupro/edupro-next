@@ -13,6 +13,17 @@ const EnvSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
   /** Minutes within which an MFA authentication counts for step-up. */
   MFA_FRESHNESS_MINUTES: z.coerce.number().int().positive().default(15),
+  /** Public base URL of this API, used to build local-driver file URLs. */
+  API_BASE_URL: z.string().url().default('http://localhost:4000'),
+  /** File storage (S2-08): local disk for development, S3-compatible object storage otherwise. */
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('.data/uploads'),
+  FILES_SIGNING_SECRET: z.string().min(16).default('dev-files-signing-secret-change-me'),
+  FILES_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -28,6 +39,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const env = parsed.data;
   if (env.NODE_ENV === 'production' && env.AUTH_DEV_BYPASS) {
     throw new Error('Refusing to start: AUTH_DEV_BYPASS must not be set in production');
+  }
+  if (env.NODE_ENV === 'production' && env.FILES_SIGNING_SECRET.startsWith('dev-')) {
+    throw new Error('Refusing to start: FILES_SIGNING_SECRET must be set in production');
+  }
+  if (env.STORAGE_DRIVER === 's3' && (!env.S3_BUCKET || !env.S3_REGION)) {
+    throw new Error('S3_BUCKET and S3_REGION are required when STORAGE_DRIVER=s3');
   }
   return env;
 }

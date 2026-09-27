@@ -2,7 +2,12 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } fr
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
-import { CreateClassDto, CreateClassSectionDto, ListClassesQueryDto, UpdateClassDto } from './classes.dto';
+import {
+  CreateClassDto,
+  CreateClassSectionDto,
+  ListClassesQueryDto,
+  UpdateClassDto,
+} from './classes.dto';
 import { PERMISSIONS } from './classes.permissions';
 import { ClassesService } from './classes.service';
 
@@ -53,7 +58,9 @@ export class ClassesController {
   }
 
   @Get(':id/sections')
-  @ApiOperation({ summary: 'List sections of a class in the working academic year (scoped for teachers)' })
+  @ApiOperation({
+    summary: 'List sections of a class in the working academic year (scoped for teachers)',
+  })
   @RequirePermission(PERMISSIONS.sectionView, { description: 'View sections (scoped)' })
   async sections(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return { data: await this.classes.listSections(ctx, id) };
@@ -62,7 +69,11 @@ export class ClassesController {
   @Post(':id/sections')
   @ApiOperation({ summary: 'Create a section in the working academic year' })
   @RequirePermission(PERMISSIONS.sectionCreate, { description: 'Create a section' })
-  createSection(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: CreateClassSectionDto) {
+  createSection(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: CreateClassSectionDto,
+  ) {
     return this.classes.createSection(ctx, id, body);
   }
 }

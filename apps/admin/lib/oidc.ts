@@ -49,7 +49,10 @@ export interface LoginResult {
   displayName?: string;
 }
 
-export async function completeLogin(currentUrl: URL, expected: { codeVerifier: string; state: string; nonce: string }): Promise<LoginResult> {
+export async function completeLogin(
+  currentUrl: URL,
+  expected: { codeVerifier: string; state: string; nonce: string },
+): Promise<LoginResult> {
   const config = await oidcConfig();
   const tokens = await client.authorizationCodeGrant(config, currentUrl, {
     pkceCodeVerifier: expected.codeVerifier,

@@ -31,7 +31,11 @@ async function main(): Promise<void> {
     await client.query('SELECT pg_advisory_lock(727001)');
 
     const applied = new Map<string, string>();
-    for (const row of (await client.query<{ name: string; checksum: string }>('SELECT name, checksum FROM app.schema_migrations')).rows) {
+    for (const row of (
+      await client.query<{ name: string; checksum: string }>(
+        'SELECT name, checksum FROM app.schema_migrations',
+      )
+    ).rows) {
       applied.set(row.name, row.checksum);
     }
 
@@ -44,7 +48,9 @@ async function main(): Promise<void> {
 
       if (existing) {
         if (existing !== checksum) {
-          throw new Error(`Migration ${file} was modified after being applied. Add a new migration instead.`);
+          throw new Error(
+            `Migration ${file} was modified after being applied. Add a new migration instead.`,
+          );
         }
         continue;
       }
@@ -53,7 +59,10 @@ async function main(): Promise<void> {
       await client.query('BEGIN');
       try {
         await client.query(sql);
-        await client.query('INSERT INTO app.schema_migrations (name, checksum) VALUES ($1, $2)', [file, checksum]);
+        await client.query('INSERT INTO app.schema_migrations (name, checksum) VALUES ($1, $2)', [
+          file,
+          checksum,
+        ]);
         await client.query('COMMIT');
         process.stdout.write('ok\n');
       } catch (error) {

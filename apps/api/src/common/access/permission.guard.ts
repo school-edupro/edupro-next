@@ -35,7 +35,10 @@ export class PermissionGuard implements CanActivate {
 
     if (this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY, targets)) return true;
 
-    const requirement = this.reflector.getAllAndOverride<PermissionRequirement | undefined>(REQUIRE_PERMISSION, targets);
+    const requirement = this.reflector.getAllAndOverride<PermissionRequirement | undefined>(
+      REQUIRE_PERMISSION,
+      targets,
+    );
     if (!requirement) {
       throw new InternalServerErrorException({
         type: 'handler-misconfigured',
@@ -43,7 +46,10 @@ export class PermissionGuard implements CanActivate {
       });
     }
     if (!ctx.tenant) {
-      throw new ForbiddenException({ type: 'tenant-required', detail: 'A school must be selected for this action' });
+      throw new ForbiddenException({
+        type: 'tenant-required',
+        detail: 'A school must be selected for this action',
+      });
     }
 
     const permissions = await this.access.effectivePermissions(ctx.tenant);

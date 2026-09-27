@@ -38,12 +38,12 @@ docs/
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|---|---|---|
-| Node.js | 22 LTS | `.nvmrc` pins it; use nvm or fnm |
-| pnpm | 9 | `corepack enable && corepack prepare pnpm@9 --activate` |
-| Docker | 24 or later | runs PostgreSQL 16, Redis 7 and Mailpit locally |
-| PostgreSQL client | 16 | optional, for `psql` against the local database |
+| Tool              | Version     | Notes                                                   |
+| ----------------- | ----------- | ------------------------------------------------------- |
+| Node.js           | 22 LTS      | `.nvmrc` pins it; use nvm or fnm                        |
+| pnpm              | 9           | `corepack enable && corepack prepare pnpm@9 --activate` |
+| Docker            | 24 or later | runs PostgreSQL 16, Redis 7 and Mailpit locally         |
+| PostgreSQL client | 16          | optional, for `psql` against the local database         |
 
 Without Docker (for example a laptop without administrator rights), PostgreSQL and Redis can run in user space instead: see `scripts/local-stack.sh` and the first-build notes in `docs/sprint-0-checklist.md`. The scaffold was first built and run that way on 2026-09-26.
 
@@ -79,3 +79,12 @@ Developer sign-in on the login page appears only when `AUTH_DEV_BYPASS=1` and th
 3. `docs/design/01-reference-module.md`
 4. `docs/design/02-rbac-permission-catalogue.md`
 5. `docs/sprint-0-checklist.md`
+6. `docs/sprints/` for what each sprint delivered and what it carried over
+
+## Repository scripts
+
+| Command                                                          | Purpose                                                                            |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `pnpm test:scripts`                                              | Runs the schema-diff fixture test and the SQL lint rule fixture check (also in CI) |
+| `pnpm schema-diff <ref.sql> <cmp.sql> [REF] [CMP] [legacy-root]` | Per-school schema diff report into `docs/data/reports/` (git-ignored)              |
+| `pnpm api:openapi && pnpm client:generate`                       | Regenerates the OpenAPI document and the typed client                              |

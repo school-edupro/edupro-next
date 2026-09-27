@@ -39,8 +39,17 @@ export class ClassesService {
   async create(ctx: RequestContext, dto: CreateClassDto): Promise<ClassRow> {
     const tenant = requireTenant(ctx);
     try {
-      const created = await this.repo.insert(tenant, { code: dto.code, name: dto.name, displayOrder: dto.displayOrder });
-      ctx.audit = { action: 'academics.class.create', entityType: 'classes', entityId: created.id, after: created };
+      const created = await this.repo.insert(tenant, {
+        code: dto.code,
+        name: dto.name,
+        displayOrder: dto.displayOrder,
+      });
+      ctx.audit = {
+        action: 'academics.class.create',
+        entityType: 'classes',
+        entityId: created.id,
+        after: created,
+      };
       return created;
     } catch (error) {
       if ((error as { code?: string }).code === '23505') {
@@ -55,7 +64,13 @@ export class ClassesService {
     try {
       const result = await this.repo.update(tenant, id, dto);
       if (!result) throw new DomainError('not-found', 'Class not found');
-      ctx.audit = { action: 'academics.class.edit', entityType: 'classes', entityId: id, before: result.before, after: result.after };
+      ctx.audit = {
+        action: 'academics.class.edit',
+        entityType: 'classes',
+        entityId: id,
+        before: result.before,
+        after: result.after,
+      };
       return result.after;
     } catch (error) {
       if ((error as { code?: string }).code === '23505') {
@@ -74,23 +89,41 @@ export class ClassesService {
 
   async listSections(ctx: RequestContext, classId: string): Promise<ClassSectionRow[]> {
     const tenant = requireTenant(ctx);
-    if (!tenant.academicYearId) throw new DomainError('year.not_selected', 'No academic year is active or selected', { status: 409 });
+    if (!tenant.academicYearId)
+      throw new DomainError('year.not_selected', 'No academic year is active or selected', {
+        status: 409,
+      });
     await this.get(ctx, classId);
     const allowed = await this.scopes.filter(tenant, PERMISSIONS.sectionView, 'class_section');
     return this.repo.listSections(tenant, classId, allowed);
   }
 
-  async createSection(ctx: RequestContext, classId: string, dto: CreateClassSectionDto): Promise<ClassSectionRow> {
+  async createSection(
+    ctx: RequestContext,
+    classId: string,
+    dto: CreateClassSectionDto,
+  ): Promise<ClassSectionRow> {
     const tenant = requireTenant(ctx);
-    if (!tenant.academicYearId) throw new DomainError('year.not_selected', 'No academic year is active or selected', { status: 409 });
+    if (!tenant.academicYearId)
+      throw new DomainError('year.not_selected', 'No academic year is active or selected', {
+        status: 409,
+      });
     await this.get(ctx, classId);
     try {
       const created = await this.repo.insertSection(tenant, classId, dto);
-      ctx.audit = { action: 'academics.class_section.create', entityType: 'class_sections', entityId: created.id, after: created };
+      ctx.audit = {
+        action: 'academics.class_section.create',
+        entityType: 'class_sections',
+        entityId: created.id,
+        after: created,
+      };
       return created;
     } catch (error) {
       if ((error as { code?: string }).code === '23505') {
-        throw new DomainError('conflict', `Section "${dto.name}" already exists for this class and year`);
+        throw new DomainError(
+          'conflict',
+          `Section "${dto.name}" already exists for this class and year`,
+        );
       }
       throw error;
     }

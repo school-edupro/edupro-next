@@ -46,12 +46,18 @@ export class TenantGuard implements CanActivate {
       });
     }
     if (!ID.test(schoolId) || !allowedSchoolIds.includes(schoolId)) {
-      throw new ForbiddenException({ type: 'tenant-forbidden', detail: 'You are not a member of this school' });
+      throw new ForbiddenException({
+        type: 'tenant-forbidden',
+        detail: 'You are not a member of this school',
+      });
     }
 
     const requestedYear = (req.headers['x-academic-year-id'] as string | undefined)?.trim();
     if (requestedYear && !ID.test(requestedYear)) {
-      throw new BadRequestException({ type: 'validation-failed', detail: 'X-Academic-Year-Id must be numeric' });
+      throw new BadRequestException({
+        type: 'validation-failed',
+        detail: 'X-Academic-Year-Id must be numeric',
+      });
     }
 
     const baseCtx = {

@@ -12,12 +12,28 @@ type ResolvedUser = Omit<AuthenticatedUser, 'mfa' | 'authTime' | 'dev'>;
 export class IdentityService {
   constructor(private readonly db: DbService) {}
 
-  async resolveBySub(sub: string): Promise<ResolvedUser | null> {
+  async resolveBySub(
+    sub: string,
+    claims: { mobile?: string | null } = {},
+  ): Promise<ResolvedUser | null> {
     return this.db.authLookup(sub, async (c) => {
-      const user = await c.query<{ id: string; display_name: string; status: string }>(
+      let user = await c.query<{ id: string; display_name: string; status: string }>(
         `SELECT id::text, display_name, status FROM users WHERE oneauth_sub = $1 AND deleted_at IS NULL`,
         [sub],
       );
+      if (!user.rows[0] && claims.mobile) {
+        // First login of an invited user: claim the 'pending:<mobile>' row created by app.invite_user.
+        const claimed = await c.query<{ id: string | null }>(
+          `SELECT app.claim_pending_identity($1, $2)::text AS id`,
+          [claims.mobile.replace(/\D/g, '').slice(-10), sub],
+        );
+        if (claimed.rows[0]?.id) {
+          user = await c.query<{ id: string; display_name: string; status: string }>(
+            `SELECT id::text, display_name, status FROM users WHERE oneauth_sub = $1 AND deleted_at IS NULL`,
+            [sub],
+          );
+        }
+      }
       const row = user.rows[0];
       if (!row || row.status !== 'active') return null;
 

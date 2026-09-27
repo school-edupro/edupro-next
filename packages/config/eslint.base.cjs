@@ -3,6 +3,7 @@ const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const importPlugin = require('eslint-plugin-import');
 const prettier = require('eslint-config-prettier');
+const sqlTemplateLiteral = require('./rules/sql-template-literal.cjs');
 
 module.exports = [
   {
@@ -22,12 +23,19 @@ module.exports = [
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'import/no-relative-packages': 'error',
       // Legacy tree must never be referenced (ADR-008).
-      'no-restricted-imports': [
-        'error',
-        { patterns: ['**/schoolerpalpha/**', '**/FTP/**'] },
-      ],
+      'no-restricted-imports': ['error', { patterns: ['**/schoolerpalpha/**', '**/FTP/**'] }],
       // Business rules never live in Next.js route handlers (ADR-007): forbid database drivers there.
       'no-restricted-modules': 'off',
+    },
+  },
+  {
+    // S2-12: no SQL assembled from template literals with interpolation (see rules/sql-template-literal.cjs).
+    files: sqlTemplateLiteral.files,
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: sqlTemplateLiteral.selector, message: sqlTemplateLiteral.message },
+      ],
     },
   },
   {

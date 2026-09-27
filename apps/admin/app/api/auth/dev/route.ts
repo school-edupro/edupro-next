@@ -10,7 +10,8 @@ export async function POST(req: NextRequest) {
   if (!env.devBypass) return NextResponse.json({ type: 'not-found' }, { status: 404 });
   const form = await req.formData();
   const sub = String(form.get('sub') ?? '').trim();
-  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sub)) return NextResponse.json({ type: 'validation-failed' }, { status: 400 });
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sub))
+    return NextResponse.json({ type: 'validation-failed' }, { status: 400 });
   await writeSession({
     sub: `dev:${sub}`,
     accessToken: `dev:${sub}`,

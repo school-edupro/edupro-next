@@ -16,7 +16,11 @@ interface Page<T> {
 }
 
 /** Reference module screen: server component, generated-client shape, tokens-only UI. */
-export default async function ClassesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+export default async function ClassesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const params = await searchParams;
   const page = Number(params.page ?? '1') || 1;
 
@@ -31,7 +35,11 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHeader kicker="Academics" title="Classes and sections" description="Master classes for this school. Sections are defined per academic year." />
+      <PageHeader
+        kicker="Academics"
+        title="Classes and sections"
+        description="Master classes for this school. Sections are defined per academic year."
+      />
       {problem ? (
         <div className="ep-alert ep-alert--danger" role="alert">
           {problem.problem.type === 'permission-denied'
@@ -48,16 +56,32 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
               { key: 'code', header: 'Code', render: (r) => <strong>{r.code}</strong> },
               { key: 'name', header: 'Name', render: (r) => r.name },
               { key: 'order', header: 'Order', numeric: true, render: (r) => r.displayOrder },
-              { key: 'status', header: 'Status', render: (r) => <Badge tone={toneForStatus(r.status)}>{r.status}</Badge> },
-              { key: 'updated', header: 'Updated', render: (r) => new Date(r.updatedAt).toLocaleDateString('en-IN') },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (r) => <Badge tone={toneForStatus(r.status)}>{r.status}</Badge>,
+              },
+              {
+                key: 'updated',
+                header: 'Updated',
+                render: (r) => new Date(r.updatedAt).toLocaleDateString('en-IN'),
+              },
             ]}
             rows={result?.data ?? []}
             rowKey={(r) => r.id}
             emptyTitle="No classes yet"
-            emptyHint={<p>Create the first class through the API or wait for the create form in Sprint 3.</p>}
+            emptyHint={
+              <p>Create the first class through the API or wait for the create form in Sprint 3.</p>
+            }
           />
           {result && result.page.total > result.page.size ? (
-            <p style={{ marginTop: 'var(--sp-3)', color: 'var(--text-muted)', fontSize: 'var(--fs-small)' }}>
+            <p
+              style={{
+                marginTop: 'var(--sp-3)',
+                color: 'var(--text-muted)',
+                fontSize: 'var(--fs-small)',
+              }}
+            >
               Page {result.page.number} of {Math.ceil(result.page.total / result.page.size)}
             </p>
           ) : null}

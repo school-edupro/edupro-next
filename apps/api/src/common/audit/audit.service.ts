@@ -11,13 +11,21 @@ import type { AuditSnapshot, RequestContext } from '../http/request-context';
 export class AuditService {
   constructor(private readonly db: DbService) {}
 
-  async record(ctx: RequestContext, snapshot: AuditSnapshot, permissionCode?: string): Promise<void> {
+  async record(
+    ctx: RequestContext,
+    snapshot: AuditSnapshot,
+    permissionCode?: string,
+  ): Promise<void> {
     const tenant = ctx.tenant;
     if (!tenant) return; // nothing tenant-scoped to record; identity events go to login_events
 
     // Sensitive fields are masked in audit images (logging standard section 3); personal fields stay.
-    const maskedBefore = snapshot.before === undefined ? undefined : maskSensitive(snapshot.before, snapshot.entityType);
-    const maskedAfter = snapshot.after === undefined ? undefined : maskSensitive(snapshot.after, snapshot.entityType);
+    const maskedBefore =
+      snapshot.before === undefined
+        ? undefined
+        : maskSensitive(snapshot.before, snapshot.entityType);
+    const maskedAfter =
+      snapshot.after === undefined ? undefined : maskSensitive(snapshot.after, snapshot.entityType);
     const before = maskedBefore === undefined ? null : JSON.stringify(maskedBefore);
     const after = maskedAfter === undefined ? null : JSON.stringify(maskedAfter);
     const diff = diffRecords(maskedBefore, maskedAfter);
@@ -50,7 +58,10 @@ export class AuditService {
 }
 
 /** Changed top-level fields only: { field: { from, to } }. Null when either side is not a plain object. */
-export function diffRecords(before: unknown, after: unknown): Record<string, { from: unknown; to: unknown }> | null {
+export function diffRecords(
+  before: unknown,
+  after: unknown,
+): Record<string, { from: unknown; to: unknown }> | null {
   if (!isRecord(before) || !isRecord(after)) return null;
   const out: Record<string, { from: unknown; to: unknown }> = {};
   for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {

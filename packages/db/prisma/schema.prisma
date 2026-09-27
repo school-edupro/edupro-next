@@ -184,6 +184,8 @@ model User {
   preferredLocale String    @default("en") @map("preferred_locale")
   status          RowStatus @default(active)
   lastLoginAt     DateTime? @map("last_login_at")
+  invitedAt       DateTime? @map("invited_at")
+  invitedBy       BigInt?   @map("invited_by")
   legacyRef       String?   @map("legacy_ref")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @map("updated_at")

@@ -11,11 +11,20 @@ import { AccessService, type ScopeType } from '../../modules/access/access.servi
 export class ScopePolicy {
   constructor(private readonly access: AccessService) {}
 
-  async filter(tenant: TenantContext, permission: string, scopeType: ScopeType): Promise<string[] | null> {
+  async filter(
+    tenant: TenantContext,
+    permission: string,
+    scopeType: ScopeType,
+  ): Promise<string[] | null> {
     return this.access.scopesFor(tenant, permission, scopeType);
   }
 
-  async assert(tenant: TenantContext, permission: string, scopeType: ScopeType, id: string): Promise<void> {
+  async assert(
+    tenant: TenantContext,
+    permission: string,
+    scopeType: ScopeType,
+    id: string,
+  ): Promise<void> {
     const allowed = await this.filter(tenant, permission, scopeType);
     if (allowed === null) return;
     if (!allowed.includes(id)) {

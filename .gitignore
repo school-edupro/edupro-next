@@ -33,3 +33,9 @@ logs/
 
 # storybook
 storybook-static/
+
+# local file storage driver
+apps/api/.data/
+
+# Schema diff reports name real schools and derive from production dumps
+docs/data/reports/

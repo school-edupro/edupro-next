@@ -9,11 +9,15 @@ import { readContext, writeContext } from '@/lib/session';
 export async function GET(req: NextRequest) {
   const returnTo = req.nextUrl.searchParams.get('returnTo') ?? '/';
   const safeReturn = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
-  const current = await readContext();
+  const reset = req.nextUrl.searchParams.get('reset') === '1';
+  const current = reset ? {} : await readContext();
   if (!current.schoolId) {
+    if (reset) await writeContext({}); // clear the stale school before calling the API
     const me = await getMe();
     const first = me.memberships[0];
     if (first) await writeContext({ schoolId: first.schoolId });
+    else if (reset)
+      return NextResponse.redirect(new URL('/login?error=no-membership', req.url), { status: 303 });
   }
   return NextResponse.redirect(new URL(safeReturn, req.url), { status: 303 });
 }

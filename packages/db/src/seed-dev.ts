@@ -8,7 +8,8 @@
 import { Client } from 'pg';
 
 async function main(): Promise<void> {
-  if (process.env.NODE_ENV === 'production') throw new Error('seed-dev refuses to run in production');
+  if (process.env.NODE_ENV === 'production')
+    throw new Error('seed-dev refuses to run in production');
   const url = process.env.DATABASE_MIGRATOR_URL;
   if (!url) throw new Error('DATABASE_MIGRATOR_URL is required');
 
@@ -92,7 +93,9 @@ async function main(): Promise<void> {
     }
 
     await c.query('COMMIT');
-    process.stdout.write(`seeded schools ${schoolIds.join(', ')} and user dev-admin (id ${userId})\n`);
+    process.stdout.write(
+      `seeded schools ${schoolIds.join(', ')} and user dev-admin (id ${userId})\n`,
+    );
     process.stdout.write('dev token for the API: Authorization: Bearer dev:dev-admin\n');
   } catch (error) {
     await c.query('ROLLBACK');

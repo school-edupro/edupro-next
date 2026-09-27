@@ -19,7 +19,9 @@ const CODE = /^[a-z_]+\.[a-z_]+\.[a-z_]+$/;
  */
 export function RequirePermission(code: string, options: Omit<PermissionRequirement, 'code'> = {}) {
   if (!CODE.test(code)) {
-    throw new Error(`Permission code "${code}" must match module.resource.action in lower snake case`);
+    throw new Error(
+      `Permission code "${code}" must match module.resource.action in lower snake case`,
+    );
   }
   const requirement: PermissionRequirement = { code, ...options };
   PermissionRegistry.register(requirement);

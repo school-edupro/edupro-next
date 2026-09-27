@@ -9,8 +9,19 @@ export async function GET(req: NextRequest) {
   const store = await cookies();
   store.set(
     'edupro_login',
-    JSON.stringify({ codeVerifier: start.codeVerifier, state: start.state, nonce: start.nonce, returnTo }),
-    { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 600 },
+    JSON.stringify({
+      codeVerifier: start.codeVerifier,
+      state: start.state,
+      nonce: start.nonce,
+      returnTo,
+    }),
+    {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 600,
+    },
   );
   return NextResponse.redirect(start.url);
 }

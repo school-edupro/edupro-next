@@ -30,7 +30,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (yearId) headers.set('X-Academic-Year-Id', yearId);
   headers.set('X-Request-Id', crypto.randomUUID());
 
-  const res = await fetch(`${env.apiBaseUrl}/api/v1${path}`, { ...init, headers, cache: 'no-store' });
+  const res = await fetch(`${env.apiBaseUrl}/api/v1${path}`, {
+    ...init,
+    headers,
+    cache: 'no-store',
+  });
   if (res.status === 204) return undefined as T;
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
@@ -41,7 +45,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
 export interface Me {
   user: { id: string; displayName: string; mfa: boolean };
-  memberships: Array<{ schoolId: string; schoolCode: string; schoolName: string; personType: string }>;
+  memberships: Array<{
+    schoolId: string;
+    schoolCode: string;
+    schoolName: string;
+    personType: string;
+  }>;
   school: { id: string } | null;
   academicYear: { id: string } | null;
   permissions: string[];

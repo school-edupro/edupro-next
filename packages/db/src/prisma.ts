@@ -28,6 +28,7 @@ export async function prismaWithTenant<T>(
   }
   return prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
+      // eslint-disable-next-line no-restricted-syntax -- Prisma tagged template binds every value as a parameter
       await tx.$executeRaw`
         SELECT set_config('app.school_id', ${ctx.schoolId}, true),
                set_config('app.user_id', ${ctx.userId ?? ''}, true),

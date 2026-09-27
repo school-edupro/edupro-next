@@ -1,0 +1,13 @@
+export const PLATFORM = {
+  schoolView: 'platform.school.view',
+  schoolManage: 'platform.school.manage',
+  campusManage: 'platform.campus.manage',
+  yearView: 'platform.year.view',
+  yearManage: 'platform.year.manage',
+  yearLock: 'platform.year.lock',
+  yearReopen: 'platform.year.reopen',
+  settingsView: 'platform.settings.view',
+  settingsEdit: 'platform.settings.edit',
+  filesUpload: 'platform.files.upload',
+  filesView: 'platform.files.view',
+} as const;
