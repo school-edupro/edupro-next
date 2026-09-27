@@ -12,7 +12,12 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { scoreApplication, setApplicationStatus } from '@/lib/actions';
+import {
+  admitApplication,
+  requestApplicationApproval,
+  scoreApplication,
+  setApplicationStatus,
+} from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { AdmissionApplication, AdmissionCycle } from '@/lib/types';
 import { applicationTone as tone } from '@/lib/admissions';
@@ -43,6 +48,8 @@ export default async function ApplicationPage({
   ]);
   const cycle = await apiFetch<AdmissionCycle>(`/admissions/cycles/${app.cycleId}`);
   const canReview = me.permissions.includes('admissions.application.review');
+  const canAdmit = me.permissions.includes('admissions.application.admit');
+  const offer = app.offer ?? null;
   const manual = cycle.scoreCriteria.filter((s) => !s.autoRule);
   const awarded = new Set(app.scoreBreakdown.map((b) => b.code));
   const fieldLabel = (key: string) => cycle.formSchema.find((f) => f.key === key)?.label ?? key;
@@ -135,7 +142,71 @@ export default async function ApplicationPage({
               </form>
             ) : null}
           </Card>
-          {canReview && app.status !== 'draft' ? (
+          {app.status !== 'draft' ? (
+            <Card title={a('approval')}>
+              {app.workflowInstanceId ? (
+                <p>
+                  <a href="/workflow/instances?entityType=application">{a('openInbox')}</a>
+                </p>
+              ) : canReview && ['submitted', 'shortlisted', 'under_review'].includes(app.status) ? (
+                <form action={requestApplicationApproval}>
+                  <input type="hidden" name="id" value={app.id} />
+                  <Button type="submit" variant="secondary">
+                    {a('requestApproval')}
+                  </Button>
+                </form>
+              ) : null}
+              {offer ? (
+                <p style={{ marginTop: 'var(--sp-3)' }}>
+                  <strong>{a('offer')}</strong>: {a(`offers.${offer.status}`)} · {a('admissionFee')}{' '}
+                  ₹{offer.admissionFee} ·{' '}
+                  <Badge tone={app.feePaidAt ? 'success' : 'warning'}>
+                    {app.feePaidAt ? a('feePaid') : a('feePending')}
+                  </Badge>
+                  {offer.payment ? (
+                    <span className="ep-kicker" style={{ display: 'block' }}>
+                      {a('paymentStatus')}: {offer.payment.status} ·{' '}
+                      <code>{offer.payment.txnId}</code>
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
+              {app.status === 'admitted' && app.studentId ? (
+                <p style={{ marginTop: 'var(--sp-3)' }}>
+                  <a href={`/people/students/${app.studentId}`}>{a('admittedAs')}</a>
+                </p>
+              ) : null}
+              {canAdmit && app.status === 'selected' ? (
+                <form action={admitApplication} style={{ marginTop: 'var(--sp-3)' }}>
+                  <input type="hidden" name="id" value={app.id} />
+                  <p className="ep-field__help">{a('admitHelp')}</p>
+                  <FormRow columns={2}>
+                    <InputField
+                      id="rollNo"
+                      name="rollNo"
+                      label={a('rollNo')}
+                      type="number"
+                      min={1}
+                    />
+                    <label
+                      style={{
+                        display: 'flex',
+                        gap: 'var(--sp-2)',
+                        alignItems: 'center',
+                        alignSelf: 'end',
+                      }}
+                    >
+                      <input type="checkbox" name="waiveFeeCheck" /> {a('waiveFee')}
+                    </label>
+                  </FormRow>
+                  <FormActions>
+                    <Button type="submit">{a('admit')}</Button>
+                  </FormActions>
+                </form>
+              ) : null}
+            </Card>
+          ) : null}
+          {canReview && app.status !== 'draft' && app.status !== 'admitted' ? (
             <Card title={a('decide')}>
               <form action={setApplicationStatus}>
                 <input type="hidden" name="id" value={app.id} />

@@ -82,6 +82,18 @@ export interface Application {
   submittedAt: string | null;
   createdAt: string;
   data: Record<string, unknown>;
+  feePaidAt?: string | null;
+  offer?: {
+    status: 'offered' | 'accepted' | 'expired' | 'withdrawn';
+    admissionFee: string;
+    expiresAt: string;
+    acceptedAt: string | null;
+    payment: {
+      status: 'created' | 'pending' | 'succeeded' | 'failed' | 'cancelled';
+      txnId: string;
+      form: { action: string; fields: Record<string, string> } | null;
+    } | null;
+  } | null;
 }
 
 export type Lang = 'en' | 'hi';

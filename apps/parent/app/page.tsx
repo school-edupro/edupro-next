@@ -18,7 +18,7 @@ export default async function HomePage() {
     ['Homework', 'Homework, classwork and assignments', '/homework'],
     ['Notices', 'School notices and circulars', '/notices'],
     ['Calendar', 'Holidays and the almanac', '/calendar'],
-    ['Attendance', 'Daily attendance and leave requests'],
+    ['Attendance', 'Daily attendance of your children', '/attendance'],
     ['Fees', 'Dues, receipts and online payment'],
     ['Results', 'Report cards and progress'],
   ];

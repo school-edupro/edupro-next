@@ -1347,3 +1347,147 @@ export async function generateClassDemand(fd: FormData) {
     apiFetch('/fees/demands/generate', { method: 'POST', body: JSON.stringify({ classId }) }),
   );
 }
+
+// ---- Sprint 9: workflow, admissions decisions, payments, attendance --------------------------------
+export async function installWorkflowDefaults() {
+  return run('/workflow/definitions', () =>
+    apiFetch('/workflow/definitions/defaults', { method: 'POST' }),
+  );
+}
+
+export async function actOnStep(fd: FormData) {
+  const id = str(fd, 'id');
+  const decision = str(fd, 'decision') === 'reject' ? 'reject' : 'approve';
+  return run('/workflow/inbox', () =>
+    apiFetch(`/workflow/steps/${id}/${decision}`, {
+      method: 'POST',
+      body: JSON.stringify({ note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function shortlistCycle(fd: FormData) {
+  const id = str(fd, 'cycleId');
+  const body: Record<string, unknown> = { classId: str(fd, 'classId') };
+  if (opt(fd, 'minScore')) body.minScore = Number(str(fd, 'minScore'));
+  if (opt(fd, 'count')) body.count = Number(str(fd, 'count'));
+  return run(`/admissions/cycles/${id}`, () =>
+    apiFetch(`/admissions/cycles/${id}/shortlist`, { method: 'POST', body: JSON.stringify(body) }),
+  );
+}
+
+export async function drawCycle(fd: FormData) {
+  const id = str(fd, 'cycleId');
+  const body: Record<string, unknown> = { classId: str(fd, 'classId') };
+  if (opt(fd, 'seats')) body.seats = Number(str(fd, 'seats'));
+  if (opt(fd, 'seed')) body.seed = str(fd, 'seed');
+  return run(`/admissions/cycles/${id}`, () =>
+    apiFetch(`/admissions/cycles/${id}/draw`, { method: 'POST', body: JSON.stringify(body) }),
+  );
+}
+
+export async function requestCycleApprovals(fd: FormData) {
+  const id = str(fd, 'cycleId');
+  return run(`/admissions/cycles/${id}`, () =>
+    apiFetch(`/admissions/cycles/${id}/request-approvals`, {
+      method: 'POST',
+      body: JSON.stringify({ classId: opt(fd, 'classId') }),
+    }),
+  );
+}
+
+export async function requestApplicationApproval(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/admissions/applications/${id}`, () =>
+    apiFetch(`/admissions/applications/${id}/request-approval`, { method: 'POST' }),
+  );
+}
+
+export async function admitApplication(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/admissions/applications/${id}`, () =>
+    apiFetch(`/admissions/applications/${id}/admit`, {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: opt(fd, 'classSectionId'),
+        rollNo: opt(fd, 'rollNo') ? Number(str(fd, 'rollNo')) : undefined,
+        waiveFeeCheck: fd.get('waiveFeeCheck') === 'on',
+      }),
+    }),
+  );
+}
+
+export async function recordOfflinePayment(fd: FormData) {
+  return run('/fees/payments', () =>
+    apiFetch('/payments/offline', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        amount: Number(str(fd, 'amount')),
+        mode: str(fd, 'mode') || 'cash',
+        reference: opt(fd, 'reference'),
+        receivedOn: opt(fd, 'receivedOn'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    }),
+  );
+}
+
+export async function markAttendance(fd: FormData) {
+  const classSectionId = str(fd, 'classSectionId');
+  const date = str(fd, 'date');
+  const subjectId = opt(fd, 'subjectId');
+  const marks: Array<{ studentId: string; code: string; remarks?: string }> = [];
+  for (const [key, value] of fd.entries()) {
+    if (!key.startsWith('code-') || typeof value !== 'string' || !value) continue;
+    const studentId = key.slice(5);
+    marks.push({ studentId, code: value, remarks: opt(fd, `remarks-${studentId}`) });
+  }
+  const back = `/attendance/register?classSectionId=${classSectionId}&date=${date}${subjectId ? `&subjectId=${subjectId}` : ''}`;
+  return run(back, () =>
+    apiFetch('/attendance/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId,
+        date,
+        kind: subjectId ? 'subject' : 'day',
+        subjectId,
+        marks,
+        notes: opt(fd, 'notes'),
+      }),
+    }),
+  );
+}
+
+export async function lockAttendance(fd: FormData) {
+  const id = str(fd, 'sessionId');
+  const back = `/attendance/register?classSectionId=${str(fd, 'classSectionId')}&date=${str(fd, 'date')}`;
+  return run(back, () =>
+    apiFetch(`/attendance/sessions/${id}/lock`, {
+      method: 'PUT',
+      body: JSON.stringify({ locked: str(fd, 'locked') === 'true' }),
+    }),
+  );
+}
+
+/** Creates a reader; the key is shown once on the redirect target and never stored in clear. */
+export async function createRfidDevice(fd: FormData) {
+  let key = '';
+  try {
+    const r = await apiFetch<{ apiKey: string }>('/attendance/rfid/devices', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        direction: opt(fd, 'direction'),
+      }),
+    });
+    key = r.apiKey;
+  } catch (error) {
+    if (error instanceof ApiError)
+      back('/attendance/rfid', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  revalidatePath('/attendance/rfid');
+  redirect(`/attendance/rfid?ok=1&key=${encodeURIComponent(key)}`);
+}

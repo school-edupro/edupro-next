@@ -43,7 +43,16 @@
     "fees": "Fees",
     "feeMasters": "Heads, periods, slabs",
     "feeStructures": "Class fee structure",
-    "feeDemands": "Demands"
+    "feeDemands": "Demands",
+    "attendance": "Attendance",
+    "attendanceDashboard": "Day summary",
+    "attendanceRegister": "Register",
+    "rfid": "RFID readers",
+    "workflow": "Approvals",
+    "inbox": "My inbox",
+    "instances": "Requests",
+    "definitions": "Workflows",
+    "payments": "Payments"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -370,6 +379,41 @@
       "kicker": "Fees",
       "title": "Fee demands",
       "description": "Generate the year's demand for a class (the legacy GenerateFee rules) and see per-student totals."
+    },
+    "workflow_inbox": {
+      "kicker": "Approvals",
+      "title": "My inbox",
+      "description": "Requests waiting for your decision at the current level."
+    },
+    "workflow_instances": {
+      "kicker": "Approvals",
+      "title": "Requests",
+      "description": "Every approval request with its levels and decisions."
+    },
+    "workflow_definitions": {
+      "kicker": "Approvals",
+      "title": "Workflows",
+      "description": "Approval chains per entity: levels and who resolves each level."
+    },
+    "fees_payments": {
+      "kicker": "Fees",
+      "title": "Payments",
+      "description": "Online intents from the gateway and counter receipts, allocated to the oldest dues first."
+    },
+    "attendance_dashboard": {
+      "kicker": "Attendance",
+      "title": "Day summary",
+      "description": "Every section for a date: marked or not, present, absent and late."
+    },
+    "attendance_register": {
+      "kicker": "Attendance",
+      "title": "Register",
+      "description": "Mark or correct a section for a date; lock it when the day is closed."
+    },
+    "attendance_rfid": {
+      "kicker": "Attendance",
+      "title": "RFID readers",
+      "description": "Gate readers, their keys and the tap log."
     }
   },
   "stepUp": {
@@ -739,7 +783,7 @@
     "instructionsHi": "Instructions (Hindi)",
     "criteria": "Classes, seats and age windows",
     "class": "Class",
-    "seats": "Seats",
+    "seats": "Seats to fill",
     "dobFrom": "Born on or after",
     "dobTo": "Born on or before",
     "passcode": "Passcode",
@@ -774,7 +818,8 @@
       "selected": "Selected",
       "waitlisted": "Waitlisted",
       "rejected": "Rejected",
-      "withdrawn": "Withdrawn"
+      "withdrawn": "Withdrawn",
+      "admitted": "Admitted"
     },
     "answers": "Answers",
     "history": "History",
@@ -790,7 +835,38 @@
     "shortlisted": "Shortlisted",
     "selected": "Selected",
     "possibleDuplicates": "Possible duplicates",
-    "allCycles": "All cycles"
+    "allCycles": "All cycles",
+    "decisions": "Decisions",
+    "shortlist": "Shortlist",
+    "shortlistHelp": "Moves submitted applications of the class to shortlisted, by minimum score or top count.",
+    "minScore": "Minimum score",
+    "count": "Top N",
+    "draw": "Draw of lots",
+    "drawHelp": "Random pick among the shortlisted for the seats left; the seed makes the draw reproducible.",
+    "seed": "Seed",
+    "requestApprovals": "Send shortlisted for approval",
+    "requestApproval": "Request approval",
+    "admit": "Admit",
+    "admitHelp": "Creates the student, links the guardian and enrols in the cycle year; needs a paid admission fee unless waived.",
+    "sectionOptional": "Section (optional)",
+    "rollNo": "Roll number",
+    "waiveFee": "Waive the fee check",
+    "offer": "Offer",
+    "offerStatus": "Offer status",
+    "admissionFee": "Admission fee",
+    "feePaid": "Fee paid",
+    "feePending": "Fee pending",
+    "offers": {
+      "offered": "offered",
+      "accepted": "accepted",
+      "expired": "expired",
+      "withdrawn": "withdrawn"
+    },
+    "approval": "Approval",
+    "approvalAt": "Approval at level {level}",
+    "admittedAs": "Admitted as student",
+    "openInbox": "Open the approvals inbox",
+    "paymentStatus": "Payment"
   },
   "fees": {
     "heads": "Fee heads",
@@ -884,5 +960,152 @@
     "hasProfile": "Profile",
     "generated": "Generated for {count} students",
     "skipped": "{count} skipped"
+  },
+  "workflow": {
+    "step": "Step",
+    "level": "Level",
+    "subject": "Request",
+    "requestedBy": "Requested by",
+    "requestedAt": "Requested",
+    "assignees": "Assigned to",
+    "approve": "Approve",
+    "reject": "Reject",
+    "note": "Note",
+    "noSteps": "Nothing waiting for you",
+    "definition": "Workflow",
+    "entityType": "Entity",
+    "levels": "Levels",
+    "status": "Status",
+    "statuses": {
+      "pending": "pending",
+      "approved": "approved",
+      "rejected": "rejected",
+      "cancelled": "cancelled",
+      "skipped": "skipped"
+    },
+    "installDefaults": "Install default workflows",
+    "resolver": "Resolved by",
+    "resolvers": {
+      "named_user": "named user",
+      "role": "role holders",
+      "position": "designation",
+      "approver_chain": "reporting chain"
+    },
+    "open": "Open requests",
+    "history": "Decisions",
+    "actedBy": "Decided by",
+    "actedAt": "Decided on",
+    "noInstances": "No requests yet",
+    "noDefinitions": "No workflows yet; install the defaults",
+    "currentLevel": "At level",
+    "sla": "SLA (hours)",
+    "viewEntity": "Open the application"
+  },
+  "payments": {
+    "intents": "Online payments",
+    "txnId": "Transaction",
+    "purpose": "Purpose",
+    "purposes": {
+      "admission_fee": "Admission fee",
+      "fee_instalment": "Fee instalment",
+      "misc": "Other"
+    },
+    "amount": "Amount",
+    "status": "Status",
+    "statuses": {
+      "created": "created",
+      "pending": "pending",
+      "succeeded": "succeeded",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    },
+    "provider": "Gateway",
+    "payer": "Payer",
+    "createdAt": "Created",
+    "recordOffline": "Record a counter receipt",
+    "student": "Student",
+    "mode": "Mode",
+    "modes": {
+      "cash": "Cash",
+      "cheque": "Cheque",
+      "upi": "UPI",
+      "bank": "Bank transfer"
+    },
+    "reference": "Receipt / reference",
+    "receivedOn": "Received on",
+    "remarks": "Remarks",
+    "record": "Record payment",
+    "noIntents": "No online payments yet",
+    "filter": "Show",
+    "events": "Gateway events",
+    "admissionNo": "Admission number",
+    "findStudent": "Find student",
+    "noStudent": "No student matches that admission number",
+    "recorded": "Receipts are allocated to the oldest dues; the student page shows the balance."
+  },
+  "attendance": {
+    "date": "Date",
+    "section": "Section",
+    "strength": "Strength",
+    "present": "Present",
+    "absent": "Absent",
+    "late": "Late",
+    "unmarked": "Unmarked",
+    "markedBy": "Marked by",
+    "locked": "Locked",
+    "lock": "Lock register",
+    "unlock": "Unlock",
+    "notMarked": "not marked",
+    "register": "Register",
+    "save": "Save attendance",
+    "update": "Update attendance",
+    "code": "Mark",
+    "codes": {
+      "P": "Present",
+      "A": "Absent",
+      "L": "Late",
+      "SR": "Short leave",
+      "H": "Half day",
+      "OD": "On duty",
+      "SB": "Stay back"
+    },
+    "remarks": "Remarks",
+    "student": "Student",
+    "kind": "Kind",
+    "day": "Day",
+    "subject": "Subject",
+    "source": "Source",
+    "sources": {
+      "manual": "manual",
+      "rfid": "RFID gate"
+    },
+    "devices": "Readers",
+    "deviceCode": "Reader code",
+    "deviceName": "Name",
+    "direction": "Direction",
+    "directions": {
+      "": "from the event",
+      "in": "entry only",
+      "out": "exit only"
+    },
+    "addDevice": "Add reader",
+    "keyShown": "Reader key (shown once; configure it on the device as the x-device-key header):",
+    "log": "Tap log",
+    "tag": "Tag",
+    "outcome": "Outcome",
+    "occurredAt": "Time",
+    "noDevices": "No readers yet",
+    "noEvents": "No taps on this date",
+    "lastSeen": "Last seen",
+    "eventsToday": "Taps (24 h)",
+    "show": "Show",
+    "open": "Open register",
+    "inAt": "In",
+    "outAt": "Out",
+    "totals": "{present} present · {absent} absent · {late} late",
+    "sessionOf": "Register of {section} on {date}",
+    "helpCodes": "P present · A absent · L late · SR short leave · H half day · OD on duty · SB stay back",
+    "alerts": "Guardians of absent students receive a WhatsApp alert once.",
+    "ingest": "Readers post to POST /api/v1/attendance/rfid/events with header x-device-key."
   }
 }

@@ -80,6 +80,11 @@ export interface ApplicationRow {
   decidedAt: string | null;
   remarks: string | null;
   createdAt: string;
+  feePaidAt: string | null;
+  studentId: string | null;
+  workflowInstanceId: string | null;
+  /** Sprint 9: the offer (with the admission fee payment form) once the application is selected. */
+  offer?: unknown;
   events?: Array<{
     id: string;
     fromStatus: string | null;
@@ -142,7 +147,8 @@ export const toCycle = (r: CycleDb): CycleRow => ({
 export const APP_SELECT = `SELECT a.id::text, a.cycle_id::text, c.code AS cycle_code, a.class_id::text, cl.code AS class_code, a.applicant_id::text,
         ap.mobile AS applicant_mobile, ap.name AS applicant_name, a.application_no, a.status::text, a.child_first_name, a.child_last_name,
         btrim(a.child_first_name || ' ' || coalesce(a.child_last_name, '')) AS child_name, a.child_dob::text, a.child_gender::text, a.data,
-        a.score::text, a.score_breakdown, a.possible_duplicate_of::text, a.submitted_at, a.decided_at, a.remarks, a.created_at
+        a.score::text, a.score_breakdown, a.possible_duplicate_of::text, a.submitted_at, a.decided_at, a.remarks, a.created_at,
+        a.fee_paid_at, a.student_id::text, a.workflow_instance_id::text
    FROM applications a JOIN admission_cycles c ON c.id = a.cycle_id JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id`;
 
 export interface AppDb {
@@ -169,6 +175,9 @@ export interface AppDb {
   decided_at: Date | null;
   remarks: string | null;
   created_at: Date;
+  fee_paid_at?: Date | null;
+  student_id?: string | null;
+  workflow_instance_id?: string | null;
 }
 
 export const toApplication = (r: AppDb): ApplicationRow => ({
@@ -195,6 +204,9 @@ export const toApplication = (r: AppDb): ApplicationRow => ({
   decidedAt: r.decided_at ? r.decided_at.toISOString() : null,
   remarks: r.remarks,
   createdAt: r.created_at.toISOString(),
+  feePaidAt: r.fee_paid_at ? r.fee_paid_at.toISOString() : null,
+  studentId: r.student_id ?? null,
+  workflowInstanceId: r.workflow_instance_id ?? null,
 });
 
 /**
@@ -439,7 +451,7 @@ export class AdmissionsService {
     });
   }
 
-  private async applicationWith(c: PoolClient, id: string): Promise<ApplicationRow> {
+  async applicationWith(c: PoolClient, id: string): Promise<ApplicationRow> {
     // eslint-disable-next-line no-restricted-syntax -- APP_SELECT is a constant; values are bound parameters
     const r = await c.query<AppDb>(`${APP_SELECT} WHERE a.id = $1`, [id]);
     if (!r.rows[0]) throw new DomainError('not-found', 'Application not found');

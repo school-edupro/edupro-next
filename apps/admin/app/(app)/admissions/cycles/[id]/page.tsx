@@ -12,7 +12,12 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { updateAdmissionCycle } from '@/lib/actions';
+import {
+  drawCycle,
+  requestCycleApprovals,
+  shortlistCycle,
+  updateAdmissionCycle,
+} from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type {
   AdmissionCriterion,
@@ -50,6 +55,8 @@ export default async function CyclePage({
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
   ]);
   const canManage = me.permissions.includes('admissions.cycle.manage');
+  const canDecide = me.permissions.includes('admissions.application.review');
+  const classOptions = cycle.criteria.map((k) => ({ value: k.classId, label: k.classCode }));
   const local = (iso: string) =>
     new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000)
       .toISOString()
@@ -140,6 +147,77 @@ export default async function CyclePage({
           {a('form')}: {cycle.formSchema.length} fields · {a('formHelp')}
         </p>
       </Card>
+      {canDecide && cycle.criteria.length ? (
+        <Card title={a('decisions')} style={{ marginTop: 'var(--sp-5)' }}>
+          <div
+            style={{
+              display: 'grid',
+              gap: 'var(--sp-4)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            }}
+          >
+            <form action={shortlistCycle}>
+              <input type="hidden" name="cycleId" value={cycle.id} />
+              <p className="ep-field__help">{a('shortlistHelp')}</p>
+              <FormRow columns={3}>
+                <SelectField
+                  id="sl-class"
+                  name="classId"
+                  label={a('class')}
+                  options={classOptions}
+                />
+                <InputField
+                  id="sl-min"
+                  name="minScore"
+                  label={a('minScore')}
+                  type="number"
+                  min={0}
+                />
+                <InputField id="sl-count" name="count" label={a('count')} type="number" min={1} />
+              </FormRow>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  {a('shortlist')}
+                </Button>
+              </FormActions>
+            </form>
+            <form action={drawCycle}>
+              <input type="hidden" name="cycleId" value={cycle.id} />
+              <p className="ep-field__help">{a('drawHelp')}</p>
+              <FormRow columns={3}>
+                <SelectField
+                  id="dr-class"
+                  name="classId"
+                  label={a('class')}
+                  options={classOptions}
+                />
+                <InputField id="dr-seats" name="seats" label={a('seats')} type="number" min={1} />
+                <InputField id="dr-seed" name="seed" label={a('seed')} maxLength={40} />
+              </FormRow>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  {a('draw')}
+                </Button>
+              </FormActions>
+            </form>
+            <form action={requestCycleApprovals}>
+              <input type="hidden" name="cycleId" value={cycle.id} />
+              <p className="ep-field__help">{a('approval')}</p>
+              <FormRow columns={2}>
+                <SelectField
+                  id="ap-class"
+                  name="classId"
+                  label={a('class')}
+                  options={[{ value: '', label: c('all') }, ...classOptions]}
+                />
+              </FormRow>
+              <FormActions>
+                <Button type="submit">{a('requestApprovals')}</Button>
+              </FormActions>
+            </form>
+          </div>
+        </Card>
+      ) : null}
       {canManage ? (
         <Card title={c('save')} style={{ marginTop: 'var(--sp-5)' }}>
           <form action={updateAdmissionCycle}>

@@ -1,0 +1,111 @@
+import { Body, Controller, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { Public } from '../../common/auth/decorators';
+import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import {
+  ATTENDANCE,
+  CreateDeviceDto,
+  LockDto,
+  MarkSessionDto,
+  MineQueryDto,
+  RfidEventsQueryDto,
+  RfidIngestDto,
+  SessionQueryDto,
+  StudentRangeQueryDto,
+  SummaryQueryDto,
+} from './attendance.dto';
+import { AttendanceService } from './attendance.service';
+import { RfidService } from './rfid.service';
+
+@ApiTags('attendance')
+@ApiBearerAuth()
+@Controller('attendance')
+export class AttendanceController {
+  constructor(private readonly attendance: AttendanceService) {}
+
+  @Get('session')
+  @ApiOperation({ summary: 'Roster of a section for a date with any marks recorded (scoped)' })
+  @RequirePermission(ATTENDANCE.view, {
+    description: 'View attendance sessions, marks and dashboards',
+  })
+  session(@ReqCtx() ctx: RequestContext, @Query() q: SessionQueryDto) {
+    return this.attendance.session(ctx, q);
+  }
+
+  @Post('sessions')
+  @ApiOperation({ summary: 'Mark a session (day or subject); absent alerts go to guardians' })
+  @RequirePermission(ATTENDANCE.mark, {
+    description: 'Mark or edit attendance (scope: class_section)',
+  })
+  mark(@ReqCtx() ctx: RequestContext, @Body() body: MarkSessionDto) {
+    return this.attendance.mark(ctx, body);
+  }
+
+  @Put('sessions/:id/lock')
+  @RequirePermission(ATTENDANCE.lock, { description: 'Lock or unlock attendance sessions' })
+  lock(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: LockDto) {
+    return this.attendance.lock(ctx, id, body);
+  }
+
+  @Get('summary')
+  @ApiOperation({ summary: 'Per-section counts for a day (dashboard)' })
+  @RequirePermission(ATTENDANCE.view)
+  summary(@ReqCtx() ctx: RequestContext, @Query() q: SummaryQueryDto) {
+    return this.attendance.summary(ctx, q);
+  }
+
+  @Get('students/:id')
+  @RequirePermission(ATTENDANCE.view)
+  student(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: StudentRangeQueryDto,
+  ) {
+    return this.attendance.student(ctx, id, q);
+  }
+
+  @Get('mine')
+  @ApiOperation({ summary: 'A family’s children for a month (parent app)' })
+  @RequirePermission(ATTENDANCE.view)
+  mine(@ReqCtx() ctx: RequestContext, @Query() q: MineQueryDto) {
+    return this.attendance.mine(ctx, q);
+  }
+}
+
+@ApiTags('attendance')
+@Controller('attendance/rfid')
+export class RfidController {
+  constructor(private readonly rfid: RfidService) {}
+
+  @Post('events')
+  @Public()
+  @ApiOperation({ summary: 'Device ingestion: taps with tag, time and direction (X-Device-Key)' })
+  ingest(@Body() body: RfidIngestDto, @Headers('x-device-key') key?: string) {
+    return this.rfid.ingest(body, key);
+  }
+
+  @Get('devices')
+  @ApiBearerAuth()
+  @RequirePermission(ATTENDANCE.rfid, {
+    description: 'Register RFID devices and view the event log',
+  })
+  async devices(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.rfid.devices(ctx) };
+  }
+
+  @Post('devices')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Register a device; the key is shown once' })
+  @RequirePermission(ATTENDANCE.rfid)
+  createDevice(@ReqCtx() ctx: RequestContext, @Body() body: CreateDeviceDto) {
+    return this.rfid.createDevice(ctx, body);
+  }
+
+  @Get('log')
+  @ApiBearerAuth()
+  @RequirePermission(ATTENDANCE.rfid)
+  async log(@ReqCtx() ctx: RequestContext, @Query() q: RfidEventsQueryDto) {
+    return { data: await this.rfid.events(ctx, q) };
+  }
+}

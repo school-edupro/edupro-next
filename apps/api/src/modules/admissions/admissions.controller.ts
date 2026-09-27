@@ -11,12 +11,23 @@ import {
   UpdateCycleDto,
 } from './admissions.dto';
 import { AdmissionsService } from './admissions.service';
+import {
+  ADMISSIONS_DECIDE,
+  AdmitDto,
+  DrawDto,
+  RequestApprovalsDto,
+  ShortlistDto,
+} from './decisions.dto';
+import { DecisionsService } from './decisions.service';
 
 @ApiTags('admissions')
 @ApiBearerAuth()
 @Controller('admissions')
 export class AdmissionsController {
-  constructor(private readonly admissions: AdmissionsService) {}
+  constructor(
+    private readonly admissions: AdmissionsService,
+    private readonly decisions: DecisionsService,
+  ) {}
 
   @Get('cycles')
   @ApiOperation({ summary: 'Admission cycles with criteria and scoring masters' })
@@ -73,8 +84,11 @@ export class AdmissionsController {
 
   @Get('applications/:id')
   @RequirePermission(ADMISSIONS.applicationView)
-  getApplication(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.admissions.getApplication(ctx, id);
+  async getApplication(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    const application = await this.admissions.getApplication(ctx, id);
+    if (application.status === 'selected' || application.status === 'admitted')
+      application.offer = await this.decisions.offer(ctx, id);
+    return application;
   }
 
   @Post('applications/:id/status')
@@ -100,5 +114,48 @@ export class AdmissionsController {
   @RequirePermission(ADMISSIONS.applicationReview)
   score(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ScoreApplicationDto) {
     return this.admissions.score(ctx, id, body);
+  }
+
+  // ---- decisions (S9-03) --------------------------------------------------------------------------
+  @Post('cycles/:id/shortlist')
+  @ApiOperation({ summary: 'Shortlist the top applications of a class by score' })
+  @RequirePermission(ADMISSIONS.applicationReview)
+  shortlist(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ShortlistDto) {
+    return this.decisions.shortlist(ctx, id, body);
+  }
+
+  @Post('cycles/:id/draw')
+  @ApiOperation({ summary: 'Draw of lots for the seats left; the seed is recorded' })
+  @RequirePermission(ADMISSIONS.applicationReview)
+  draw(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DrawDto) {
+    return this.decisions.draw(ctx, id, body);
+  }
+
+  @Post('cycles/:id/request-approvals')
+  @ApiOperation({ summary: 'Send every shortlisted application (of a class) for L1/L2 approval' })
+  @RequirePermission(ADMISSIONS.applicationReview)
+  requestApprovals(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: RequestApprovalsDto,
+  ) {
+    return this.decisions.requestApprovals(ctx, id, body);
+  }
+
+  @Post('applications/:id/request-approval')
+  @RequirePermission(ADMISSIONS.applicationReview)
+  requestApproval(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.decisions.requestApproval(ctx, id);
+  }
+
+  @Post('applications/:id/admit')
+  @ApiOperation({
+    summary: 'Admit: admission number, student and guardian records, enrolment in the cycle year',
+  })
+  @RequirePermission(ADMISSIONS_DECIDE.admit, {
+    description: 'Admit a selected applicant: admission number, student record, enrolment',
+  })
+  admit(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AdmitDto) {
+    return this.decisions.admit(ctx, id, body);
   }
 }

@@ -25,7 +25,8 @@ export default async function HomePage() {
     [
       'Attendance',
       'Mark today’s attendance for your sections',
-      can('academics.class_section.view'),
+      can('attendance.session.mark'),
+      '/attendance',
     ],
     ['Daily work', 'Post homework and classwork', can('academics.daily_work.post'), '/daily-work'],
     ['Students', 'Your sections and student profiles', can('people.student.view')],

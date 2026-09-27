@@ -10,6 +10,7 @@
  * Usage: DATABASE_MIGRATOR_URL=postgresql://... tsx src/seed-demo.ts
  * Sign in with the development bypass using the subjects printed at the end (dev-admin, dev-teacher, ...).
  */
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Client } from 'pg';
@@ -2036,6 +2037,314 @@ async function main(): Promise<void> {
             ],
           );
       }
+      await clearCtx();
+    }
+
+    // ---- Sprint 9: workflow definitions and approvals, offers with a paid admission fee, attendance, RFID ----
+    for (const school of Object.values(schools)) {
+      await c.query(
+        `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by)
+         SELECT $1, 'admission_approval', 'Admission approval', 'application', $2::jsonb, $3
+          WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE school_id = $1 AND code = 'admission_approval' AND deleted_at IS NULL)`,
+        [
+          school.id,
+          JSON.stringify([
+            {
+              level: 1,
+              name: 'Academic Coordinator review',
+              resolver: { kind: 'role', roleCode: 'academic_coordinator' },
+              slaHours: 48,
+            },
+            {
+              level: 2,
+              name: 'Principal approval',
+              resolver: { kind: 'role', roleCode: 'school_admin' },
+              slaHours: 48,
+            },
+          ]),
+          userIds['dev-admin'],
+        ],
+      );
+      for (const [key, value] of [
+        ['admissions.admission_fee', school.id === alpha.id ? '8000' : '5000'],
+        ['attendance.rfid_late_after', '"08:15"'],
+        ['attendance.weekly_off', '[7]'],
+      ] as Array<[string, string]>)
+        await c.query(
+          `INSERT INTO school_settings (school_id, key, value) SELECT $1, $2, $3::jsonb WHERE NOT EXISTS (SELECT 1 FROM school_settings WHERE school_id = $1 AND key = $2)`,
+          [school.id, key, value],
+        );
+    }
+    {
+      await withCtx(alpha.id, 'dev-admin');
+      const def = await c.query<{ id: string }>(
+        `SELECT id::text FROM workflow_definitions WHERE school_id = $1 AND code = 'admission_approval' AND deleted_at IS NULL`,
+        [alpha.id],
+      );
+      const admins = [userIds['dev-admin']!, userIds['dev-principal']!];
+      // applications under review wait in the coordinator's inbox; one already has the coordinator's approval
+      const pending = await c.query<{
+        id: string;
+        application_no: string;
+        child: string;
+        class_code: string;
+      }>(
+        `SELECT a.id::text, a.application_no, a.child_first_name || ' ' || COALESCE(a.child_last_name, '') AS child, k.code AS class_code
+           FROM applications a JOIN classes k ON k.id = a.class_id JOIN admission_cycles cy ON cy.id = a.cycle_id
+          WHERE a.school_id = $1 AND cy.code = 'ADM-2027-28' AND a.status = 'under_review' AND a.workflow_instance_id IS NULL ORDER BY a.id`,
+        [alpha.id],
+      );
+      for (const [i, app] of pending.rows.entries()) {
+        const advanced = i === 0;
+        const inst = await c.query<{ id: string }>(
+          `INSERT INTO workflow_instances (school_id, definition_id, entity_type, entity_id, subject, payload, status, current_level, requested_by, requested_at)
+           VALUES ($1, $2, 'application', $3, $4, $5::jsonb, 'pending', $6, $7, now() - interval '2 days') RETURNING id::text`,
+          [
+            alpha.id,
+            def.rows[0]!.id,
+            app.id,
+            `${app.application_no} · ${app.child.trim()} · Class ${app.class_code}`,
+            JSON.stringify({ applicationId: app.id, classCode: app.class_code }),
+            advanced ? 2 : 1,
+            userIds['dev-admin'],
+          ],
+        );
+        await c.query(
+          `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status, acted_by, acted_at, note)
+           VALUES ($1, $2, 1, 'Academic Coordinator review', '{"kind":"role","roleCode":"academic_coordinator"}'::jsonb, $3::bigint[], $4::step_status, $5, CASE WHEN $4 = 'approved' THEN now() - interval '1 day' END, $6)`,
+          [
+            alpha.id,
+            inst.rows[0]!.id,
+            [userIds['dev-coordinator']],
+            advanced ? 'approved' : 'pending',
+            advanced ? userIds['dev-coordinator'] : null,
+            advanced ? 'Documents verified at the interaction' : null,
+          ],
+        );
+        if (advanced)
+          await c.query(
+            `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status)
+             VALUES ($1, $2, 2, 'Principal approval', '{"kind":"role","roleCode":"school_admin"}'::jsonb, $3::bigint[], 'pending')`,
+            [alpha.id, inst.rows[0]!.id, admins],
+          );
+        await c.query(`UPDATE applications SET workflow_instance_id = $2 WHERE id = $1`, [
+          app.id,
+          inst.rows[0]!.id,
+        ]);
+      }
+      // the selected application holds an offer whose admission fee was paid through the mock gateway
+      const selected = await c.query<{
+        id: string;
+        applicant_id: string;
+        child: string;
+        mobile: string;
+        name: string | null;
+      }>(
+        `SELECT a.id::text, a.applicant_id::text, a.child_first_name || ' ' || COALESCE(a.child_last_name, '') AS child, p.mobile, p.name
+           FROM applications a JOIN applicants p ON p.id = a.applicant_id JOIN admission_cycles cy ON cy.id = a.cycle_id
+          WHERE a.school_id = $1 AND cy.code = 'ADM-2027-28' AND a.status = 'selected'
+            AND NOT EXISTS (SELECT 1 FROM admission_offers o WHERE o.application_id = a.id) ORDER BY a.id`,
+        [alpha.id],
+      );
+      for (const app of selected.rows) {
+        const intent = await c.query<{ id: string }>(
+          `INSERT INTO payment_intents (school_id, purpose, entity_type, entity_id, amount, status, provider, txn_id, provider_ref, payer_name, payer_email, payer_mobile, return_url, created_by_applicant, succeeded_at, meta, created_at)
+           VALUES ($1, 'admission_fee', 'application', $2, 8000, 'succeeded', 'mock', $3, $4, $5, $6, $7, 'http://localhost:3003/alpha/status', $8, now() - interval '20 hours', $9::jsonb, now() - interval '1 day') RETURNING id::text`,
+          [
+            alpha.id,
+            app.id,
+            `EPDEMO${app.id.padStart(6, '0')}`,
+            `MOCK${app.id.padStart(8, '0')}`,
+            app.name ?? 'Applicant',
+            `applicant${app.id}@example.test`,
+            app.mobile,
+            app.applicant_id,
+            JSON.stringify({ applicationId: app.id, seeded: true }),
+          ],
+        );
+        for (const [kind, offset] of [
+          ['created', '1 day'],
+          ['webhook', '20 hours'],
+        ] as Array<[string, string]>)
+          await c.query(
+            `INSERT INTO payment_events (school_id, intent_id, kind, provider_ref, payload, created_at) VALUES ($1, $2, $3, $4, '{"seeded":true}'::jsonb, now() - $5::interval)`,
+            [
+              alpha.id,
+              intent.rows[0]!.id,
+              kind,
+              kind === 'webhook' ? `MOCK${app.id.padStart(8, '0')}` : null,
+              offset,
+            ],
+          );
+        await c.query(
+          `INSERT INTO admission_offers (school_id, application_id, offered_at, expires_at, admission_fee, intent_id, status, accepted_at, created_by)
+           VALUES ($1, $2, now() - interval '1 day', now() + interval '13 days', 8000, $3, 'accepted', now() - interval '20 hours', $4) ON CONFLICT (application_id) DO NOTHING`,
+          [alpha.id, app.id, intent.rows[0]!.id, userIds['dev-admin']],
+        );
+        await c.query(
+          `UPDATE applications SET fee_paid_at = now() - interval '20 hours' WHERE id = $1`,
+          [app.id],
+        );
+      }
+      // a failed online fee instalment attempt by Aarav's guardian, for the payments list
+      const aarav = await c.query<{ id: string }>(
+        `SELECT id::text FROM students WHERE school_id = $1 AND (user_id = $2 OR (first_name = 'Aarav' AND last_name = 'Sharma')) ORDER BY (user_id = $2) DESC LIMIT 1`,
+        [alpha.id, userIds['dev-student']],
+      );
+      if (aarav.rows[0]) {
+        await c.query(
+          `INSERT INTO payment_intents (school_id, purpose, entity_type, entity_id, amount, status, provider, txn_id, payer_name, payer_mobile, created_by_user, failed_reason, meta, created_at)
+           SELECT $1, 'fee_instalment', 'student', $2, 4500, 'failed', 'mock', $3, 'Suresh Sharma', '9876543210', $4, 'Cancelled by user at the bank page', '{"seeded":true}'::jsonb, now() - interval '3 days'
+            WHERE NOT EXISTS (SELECT 1 FROM payment_intents WHERE txn_id = $3)`,
+          [
+            alpha.id,
+            aarav.rows[0].id,
+            `EPDEMOFAIL${aarav.rows[0].id.padStart(6, '0')}`,
+            userIds['dev-parent'],
+          ],
+        );
+      }
+
+      // a cash instalment received at the counter for Aarav, allocated to the oldest dues
+      if (aarav.rows[0]) {
+        const paid = await c.query(
+          `SELECT 1 FROM fee_payments WHERE student_id = $1 AND reference = 'RCPT-DEMO-0001'`,
+          [aarav.rows[0].id],
+        );
+        const due = await c.query(
+          `SELECT 1 FROM fee_demands WHERE student_id = $1 AND academic_year_id = $2 LIMIT 1`,
+          [aarav.rows[0].id, alpha.yearId],
+        );
+        if (!paid.rowCount && due.rowCount) {
+          const fp = await c.query<{ id: string }>(
+            `INSERT INTO fee_payments (school_id, student_id, academic_year_id, amount, received_on, mode, reference, remarks, received_by)
+             VALUES ($1, $2, $3, 4500, CURRENT_DATE - 2, 'cash', 'RCPT-DEMO-0001', 'First instalment at the counter', $4) RETURNING id::text`,
+            [alpha.id, aarav.rows[0].id, alpha.yearId, userIds['dev-accounts']],
+          );
+          await c.query(`SELECT app.allocate_fee_payment($1)`, [fp.rows[0]!.id]);
+        }
+      }
+
+      // attendance for the last school days of VI-A, VI-B and IV-A; VI-A's last day came in through the RFID gate
+      const gateKey = 'dev_demo_gate_key_alpha';
+      const gateHash = createHash('sha256').update(gateKey).digest('hex');
+      const device = await c.query<{ id: string }>(
+        `INSERT INTO rfid_devices (school_id, code, name, api_key_hash, created_by) VALUES ($1, 'GATE1', 'Main gate reader', $2, $3)
+         ON CONFLICT (school_id, code) DO UPDATE SET api_key_hash = EXCLUDED.api_key_hash RETURNING id::text`,
+        [alpha.id, gateHash, userIds['dev-admin']],
+      );
+      const isSchoolDay = async (iso: string): Promise<boolean> => {
+        const d = new Date(`${iso}T00:00:00Z`);
+        if (d.getUTCDay() === 0) return false;
+        const h = await c.query(
+          `SELECT 1 FROM holidays WHERE school_id = $1 AND $2::date BETWEEN starts_on AND ends_on`,
+          [alpha.id, iso],
+        );
+        return h.rowCount === 0;
+      };
+      const days: string[] = [];
+      for (let back = 1; back <= 12 && days.length < 6; back++) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - back);
+        const iso = d.toISOString().slice(0, 10);
+        if (await isSchoolDay(iso)) days.push(iso);
+      }
+      days.reverse();
+      const markers: Record<string, string> = {
+        'VI-A': 'dev-teacher',
+        'VI-B': 'dev-coordinator',
+        'IV-A': 'dev-coordinator',
+      };
+      for (const [key, sub] of Object.entries(markers)) {
+        const sectionId = sections.ALPHA![key];
+        if (!sectionId) continue;
+        const roster = await c.query<{ id: string; roll_no: number }>(
+          `SELECT s.id::text, e.roll_no FROM enrolments e JOIN students s ON s.id = e.student_id
+            WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' ORDER BY e.roll_no`,
+          [sectionId, alpha.yearId],
+        );
+        if (key === 'VI-A')
+          for (const st of roster.rows)
+            await c.query(`UPDATE students SET rfid_tag = $2 WHERE id = $1 AND rfid_tag IS NULL`, [
+              st.id,
+              `ALPHA-VIA-${String(st.roll_no).padStart(3, '0')}`,
+            ]);
+        for (const [di, day] of days.entries()) {
+          const exists = await c.query(
+            `SELECT 1 FROM attendance_sessions WHERE class_section_id = $1 AND on_date = $2::date AND kind = 'day'`,
+            [sectionId, day],
+          );
+          if (exists.rowCount) continue;
+          const rfidDay = key === 'VI-A' && di === days.length - 1;
+          const session = await c.query<{ id: string }>(
+            `INSERT INTO attendance_sessions (school_id, academic_year_id, class_section_id, on_date, kind, source, marked_by, marked_at, locked)
+             VALUES ($1, $2, $3, $4::date, 'day', $5::attendance_source, $6, ($4::date + time '09:05') AT TIME ZONE 'Asia/Kolkata', $7) RETURNING id::text`,
+            [
+              alpha.id,
+              alpha.yearId,
+              sectionId,
+              day,
+              rfidDay ? 'rfid' : 'manual',
+              userIds[sub],
+              di < days.length - 2,
+            ],
+          );
+          for (const [si, st] of roster.rows.entries()) {
+            const absent = (si + di) % 9 === 0;
+            const late = !absent && (si * 3 + di) % 11 === 0;
+            const code = absent ? 'A' : late ? 'L' : 'P';
+            if (rfidDay && !absent) {
+              const inMinutes = late ? 8 * 60 + 25 + si : 7 * 60 + 45 + si;
+              const inAt = `(${'$4'}::date + make_interval(mins => ${inMinutes})) AT TIME ZONE 'Asia/Kolkata'`;
+              const outAt = `(${'$4'}::date + interval '13 hours 40 minutes' + make_interval(mins => ${si})) AT TIME ZONE 'Asia/Kolkata'`;
+              await c.query(
+                `INSERT INTO attendance_marks (school_id, session_id, student_id, code, in_at, out_at, source, marked_by)
+                 VALUES ($1, $2, $3, $5::attendance_code, ${inAt}, ${outAt}, 'rfid', NULL)`,
+                [alpha.id, session.rows[0]!.id, st.id, day, code],
+              );
+              for (const [dir, expr] of [
+                ['in', inAt],
+                ['out', outAt],
+              ] as Array<[string, string]>)
+                await c.query(
+                  `INSERT INTO rfid_events (school_id, device_id, tag, student_id, occurred_at, direction, outcome, raw, received_at)
+                   VALUES ($1, $2, $3, $5, ${expr}, $6::rfid_direction, $7, '{"seeded":true}'::jsonb, ${expr})`,
+                  [
+                    alpha.id,
+                    device.rows[0]!.id,
+                    `ALPHA-VIA-${String(st.roll_no).padStart(3, '0')}`,
+                    day,
+                    st.id,
+                    dir,
+                    dir === 'in' ? (late ? 'marked_late' : 'marked_present') : 'out_recorded',
+                  ],
+                );
+            } else
+              await c.query(
+                `INSERT INTO attendance_marks (school_id, session_id, student_id, code, remarks, source, alert_sent_at, marked_by)
+                 VALUES ($1, $2, $3, $4::attendance_code, $5, 'manual', CASE WHEN $4 = 'A' THEN now() - interval '1 hour' END, $6)`,
+                [
+                  alpha.id,
+                  session.rows[0]!.id,
+                  st.id,
+                  code,
+                  absent ? 'No leave note' : null,
+                  userIds[sub],
+                ],
+              );
+          }
+          if (rfidDay)
+            await c.query(
+              `INSERT INTO rfid_events (school_id, device_id, tag, student_id, occurred_at, direction, outcome, raw, received_at)
+               VALUES ($1, $2, 'UNKNOWN-0001', NULL, ($3::date + interval '8 hours 2 minutes') AT TIME ZONE 'Asia/Kolkata', 'in', 'unknown_tag', '{"seeded":true}'::jsonb, ($3::date + interval '8 hours 2 minutes') AT TIME ZONE 'Asia/Kolkata')`,
+              [alpha.id, device.rows[0]!.id, day],
+            );
+        }
+      }
+      await c.query(
+        `UPDATE rfid_devices SET last_seen_at = now() - interval '1 day' WHERE id = $1`,
+        [device.rows[0]!.id],
+      );
       await clearCtx();
     }
 

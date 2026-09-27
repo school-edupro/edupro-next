@@ -13,13 +13,12 @@ This repository is deliberately **separate from the legacy PHP tree**. Nothing h
 
 ```
 apps/
-  api/        NestJS domain API (tenancy, access, audit, reference module)
+  api/        NestJS domain API (tenancy, access, audit, people, academics, admissions, fees, workflow, payments, attendance)
   workers/    BullMQ processors (notifications, exports, RFID, reconciliation)
   admin/      Next.js admin application (thin BFF for session and tenant context)
-  parent/     Next.js parent application (PWA shell since Sprint 5, features from Sprint 9)
-  teacher/    Next.js teacher application (PWA shell since Sprint 5, daily work from Sprint 7)
-  public/     Next.js public admissions app (Sprint 8): OTP sign-in with a proof-of-work check, bilingual form, status
-  public/     Next.js public application (admission forms), starts Sprint 8
+  parent/     Next.js parent application (PWA shell since Sprint 5; homework, notices, calendar from Sprint 7; attendance from Sprint 9)
+  teacher/    Next.js teacher application (PWA shell since Sprint 5; timetable and daily work from Sprint 7; attendance from Sprint 9)
+  public/     Next.js public admissions app (Sprint 8): OTP sign-in with a proof-of-work check, bilingual form, status; admission fee payment from Sprint 9
 packages/
   db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool, audit masks
   etl/        Legacy MySQL to PostgreSQL migration: transforms, identity map, pipeline runner

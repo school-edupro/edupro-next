@@ -43,7 +43,16 @@
     "fees": "शुल्क",
     "feeMasters": "शीर्ष, अवधि, स्लैब",
     "feeStructures": "कक्षा शुल्क संरचना",
-    "feeDemands": "मांग"
+    "feeDemands": "मांग",
+    "attendance": "उपस्थिति",
+    "attendanceDashboard": "दिन का सार",
+    "attendanceRegister": "रजिस्टर",
+    "rfid": "RFID रीडर",
+    "workflow": "अनुमोदन",
+    "inbox": "मेरा इनबॉक्स",
+    "instances": "अनुरोध",
+    "definitions": "वर्कफ़्लो",
+    "payments": "भुगतान"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
@@ -370,6 +379,41 @@
       "kicker": "शुल्क",
       "title": "शुल्क मांग",
       "description": "किसी कक्षा के लिए वर्ष की मांग बनाएँ (लीगेसी GenerateFee नियम) और प्रति विद्यार्थी योग देखें।"
+    },
+    "workflow_inbox": {
+      "kicker": "अनुमोदन",
+      "title": "मेरा इनबॉक्स",
+      "description": "वर्तमान स्तर पर आपके निर्णय की प्रतीक्षा में अनुरोध।"
+    },
+    "workflow_instances": {
+      "kicker": "अनुमोदन",
+      "title": "अनुरोध",
+      "description": "हर अनुमोदन अनुरोध, उसके स्तर और निर्णय।"
+    },
+    "workflow_definitions": {
+      "kicker": "अनुमोदन",
+      "title": "वर्कफ़्लो",
+      "description": "इकाई के अनुसार अनुमोदन श्रृंखला: स्तर और उन्हें कौन तय करता है।"
+    },
+    "fees_payments": {
+      "kicker": "फ़ीस",
+      "title": "भुगतान",
+      "description": "गेटवे से ऑनलाइन इंटेंट और काउंटर रसीदें, सबसे पुराने बकाया में पहले समायोजित।"
+    },
+    "attendance_dashboard": {
+      "kicker": "उपस्थिति",
+      "title": "दिन का सार",
+      "description": "एक तारीख़ के लिए हर सेक्शन: दर्ज या नहीं, उपस्थित, अनुपस्थित और विलंब।"
+    },
+    "attendance_register": {
+      "kicker": "उपस्थिति",
+      "title": "रजिस्टर",
+      "description": "किसी तारीख़ के लिए सेक्शन दर्ज या सुधारें; दिन बंद होने पर लॉक करें।"
+    },
+    "attendance_rfid": {
+      "kicker": "उपस्थिति",
+      "title": "RFID रीडर",
+      "description": "गेट रीडर, उनकी कुंजियाँ और टैप लॉग।"
     }
   },
   "stepUp": {
@@ -739,7 +783,7 @@
     "instructionsHi": "निर्देश (हिन्दी)",
     "criteria": "कक्षाएँ, सीटें और आयु सीमा",
     "class": "कक्षा",
-    "seats": "सीटें",
+    "seats": "भरने वाली सीटें",
     "dobFrom": "जन्म इसके बाद",
     "dobTo": "जन्म इससे पहले",
     "passcode": "पासकोड",
@@ -774,7 +818,8 @@
       "selected": "चयनित",
       "waitlisted": "प्रतीक्षा सूची",
       "rejected": "अस्वीकृत",
-      "withdrawn": "वापस"
+      "withdrawn": "वापस",
+      "admitted": "प्रवेशित"
     },
     "answers": "उत्तर",
     "history": "इतिहास",
@@ -790,7 +835,38 @@
     "shortlisted": "शॉर्टलिस्ट",
     "selected": "चयनित",
     "possibleDuplicates": "संभावित डुप्लिकेट",
-    "allCycles": "सभी चक्र"
+    "allCycles": "सभी चक्र",
+    "decisions": "निर्णय",
+    "shortlist": "शॉर्टलिस्ट",
+    "shortlistHelp": "कक्षा के जमा आवेदनों को न्यूनतम अंक या शीर्ष संख्या के आधार पर शॉर्टलिस्ट करता है।",
+    "minScore": "न्यूनतम अंक",
+    "count": "शीर्ष N",
+    "draw": "लॉटरी",
+    "drawHelp": "बची सीटों के लिए शॉर्टलिस्ट में से यादृच्छिक चयन; सीड से ड्रॉ पुनरुत्पादित होता है।",
+    "seed": "सीड",
+    "requestApprovals": "शॉर्टलिस्ट अनुमोदन के लिए भेजें",
+    "requestApproval": "अनुमोदन का अनुरोध",
+    "admit": "प्रवेश दें",
+    "admitHelp": "विद्यार्थी बनाता है, अभिभावक जोड़ता है और चक्र-वर्ष में नामांकन करता है; छूट न हो तो प्रवेश शुल्क भुगतान आवश्यक।",
+    "sectionOptional": "सेक्शन (वैकल्पिक)",
+    "rollNo": "रोल नंबर",
+    "waiveFee": "शुल्क जाँच छोड़ें",
+    "offer": "प्रस्ताव",
+    "offerStatus": "प्रस्ताव स्थिति",
+    "admissionFee": "प्रवेश शुल्क",
+    "feePaid": "शुल्क भुगतान हुआ",
+    "feePending": "शुल्क बकाया",
+    "offers": {
+      "offered": "प्रस्तावित",
+      "accepted": "स्वीकृत",
+      "expired": "समाप्त",
+      "withdrawn": "वापस"
+    },
+    "approval": "अनुमोदन",
+    "approvalAt": "स्तर {level} पर अनुमोदन",
+    "admittedAs": "विद्यार्थी के रूप में प्रवेश",
+    "openInbox": "अनुमोदन इनबॉक्स खोलें",
+    "paymentStatus": "भुगतान"
   },
   "fees": {
     "heads": "शुल्क शीर्ष",
@@ -884,5 +960,152 @@
     "hasProfile": "प्रोफ़ाइल",
     "generated": "{count} विद्यार्थियों के लिए बनी",
     "skipped": "{count} छोड़े गए"
+  },
+  "workflow": {
+    "step": "चरण",
+    "level": "स्तर",
+    "subject": "अनुरोध",
+    "requestedBy": "अनुरोधकर्ता",
+    "requestedAt": "अनुरोध तिथि",
+    "assignees": "जिम्मेदार",
+    "approve": "स्वीकृत करें",
+    "reject": "अस्वीकार करें",
+    "note": "टिप्पणी",
+    "noSteps": "आपके लिए कुछ प्रतीक्षित नहीं",
+    "definition": "वर्कफ़्लो",
+    "entityType": "इकाई",
+    "levels": "स्तर",
+    "status": "स्थिति",
+    "statuses": {
+      "pending": "प्रतीक्षित",
+      "approved": "स्वीकृत",
+      "rejected": "अस्वीकृत",
+      "cancelled": "रद्द",
+      "skipped": "छोड़ा गया"
+    },
+    "installDefaults": "डिफ़ॉल्ट वर्कफ़्लो स्थापित करें",
+    "resolver": "निर्णायक",
+    "resolvers": {
+      "named_user": "नामित उपयोगकर्ता",
+      "role": "भूमिका धारक",
+      "position": "पदनाम",
+      "approver_chain": "रिपोर्टिंग श्रृंखला"
+    },
+    "open": "खुले अनुरोध",
+    "history": "निर्णय",
+    "actedBy": "निर्णयकर्ता",
+    "actedAt": "निर्णय तिथि",
+    "noInstances": "अभी कोई अनुरोध नहीं",
+    "noDefinitions": "अभी कोई वर्कफ़्लो नहीं; डिफ़ॉल्ट स्थापित करें",
+    "currentLevel": "स्तर पर",
+    "sla": "SLA (घंटे)",
+    "viewEntity": "आवेदन खोलें"
+  },
+  "payments": {
+    "intents": "ऑनलाइन भुगतान",
+    "txnId": "लेन-देन",
+    "purpose": "उद्देश्य",
+    "purposes": {
+      "admission_fee": "प्रवेश शुल्क",
+      "fee_instalment": "फ़ीस किस्त",
+      "misc": "अन्य"
+    },
+    "amount": "राशि",
+    "status": "स्थिति",
+    "statuses": {
+      "created": "बनाया",
+      "pending": "प्रतीक्षित",
+      "succeeded": "सफल",
+      "failed": "विफल",
+      "cancelled": "रद्द"
+    },
+    "provider": "गेटवे",
+    "payer": "भुगतानकर्ता",
+    "createdAt": "बनाया गया",
+    "recordOffline": "काउंटर रसीद दर्ज करें",
+    "student": "विद्यार्थी",
+    "mode": "माध्यम",
+    "modes": {
+      "cash": "नक़द",
+      "cheque": "चेक",
+      "upi": "UPI",
+      "bank": "बैंक अंतरण"
+    },
+    "reference": "रसीद / संदर्भ",
+    "receivedOn": "प्राप्ति तिथि",
+    "remarks": "टिप्पणी",
+    "record": "भुगतान दर्ज करें",
+    "noIntents": "अभी कोई ऑनलाइन भुगतान नहीं",
+    "filter": "दिखाएँ",
+    "events": "गेटवे घटनाएँ",
+    "admissionNo": "प्रवेश संख्या",
+    "findStudent": "विद्यार्थी खोजें",
+    "noStudent": "इस प्रवेश संख्या का कोई विद्यार्थी नहीं",
+    "recorded": "रसीदें सबसे पुराने बकाया में समायोजित होती हैं; शेष विद्यार्थी पृष्ठ पर दिखता है।"
+  },
+  "attendance": {
+    "date": "तारीख़",
+    "section": "सेक्शन",
+    "strength": "संख्या",
+    "present": "उपस्थित",
+    "absent": "अनुपस्थित",
+    "late": "विलंब",
+    "unmarked": "अदर्ज",
+    "markedBy": "दर्ज किया",
+    "locked": "लॉक",
+    "lock": "रजिस्टर लॉक करें",
+    "unlock": "अनलॉक",
+    "notMarked": "दर्ज नहीं",
+    "register": "रजिस्टर",
+    "save": "उपस्थिति सहेजें",
+    "update": "उपस्थिति अद्यतन करें",
+    "code": "चिह्न",
+    "codes": {
+      "P": "उपस्थित",
+      "A": "अनुपस्थित",
+      "L": "विलंब",
+      "SR": "अल्प अवकाश",
+      "H": "आधा दिन",
+      "OD": "ड्यूटी पर",
+      "SB": "रुकना"
+    },
+    "remarks": "टिप्पणी",
+    "student": "विद्यार्थी",
+    "kind": "प्रकार",
+    "day": "दिन",
+    "subject": "विषय",
+    "source": "स्रोत",
+    "sources": {
+      "manual": "हस्त",
+      "rfid": "RFID गेट"
+    },
+    "devices": "रीडर",
+    "deviceCode": "रीडर कोड",
+    "deviceName": "नाम",
+    "direction": "दिशा",
+    "directions": {
+      "": "घटना से",
+      "in": "केवल प्रवेश",
+      "out": "केवल निकास"
+    },
+    "addDevice": "रीडर जोड़ें",
+    "keyShown": "रीडर कुंजी (एक बार दिखती है; डिवाइस पर x-device-key हेडर के रूप में सेट करें):",
+    "log": "टैप लॉग",
+    "tag": "टैग",
+    "outcome": "परिणाम",
+    "occurredAt": "समय",
+    "noDevices": "अभी कोई रीडर नहीं",
+    "noEvents": "इस तारीख़ को कोई टैप नहीं",
+    "lastSeen": "अंतिम संपर्क",
+    "eventsToday": "टैप (24 घं.)",
+    "show": "दिखाएँ",
+    "open": "रजिस्टर खोलें",
+    "inAt": "प्रवेश",
+    "outAt": "निकास",
+    "totals": "{present} उपस्थित · {absent} अनुपस्थित · {late} विलंब",
+    "sessionOf": "{date} को {section} का रजिस्टर",
+    "helpCodes": "P उपस्थित · A अनुपस्थित · L विलंब · SR अल्प अवकाश · H आधा दिन · OD ड्यूटी · SB रुकना",
+    "alerts": "अनुपस्थित विद्यार्थियों के अभिभावकों को एक बार WhatsApp सूचना जाती है।",
+    "ingest": "रीडर x-device-key हेडर के साथ POST /api/v1/attendance/rfid/events पर भेजते हैं।"
   }
 }

@@ -20,6 +20,13 @@ const EnvSchema = z.object({
   PUBLIC_POW_DIFFICULTY: z.coerce.number().int().min(1).max(8).default(4),
   PUBLIC_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(5).default(60),
   OTP_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
+  /** Sprint 9: payments v0 (PayU) and the public app origin for return URLs. */
+  PAYU_KEY: z.string().min(1).default('dev-payu-key'),
+  PAYU_SALT: z.string().min(8).default('dev-payu-salt-change-me'),
+  PAYU_MODE: z.enum(['mock', 'test', 'live']).default('mock'),
+  PAYU_BASE_URL: z.string().url().default('https://test.payu.in/_payment'),
+  PUBLIC_APP_URL: z.string().url().default('http://localhost:3003'),
+  ADMIN_APP_URL: z.string().url().default('http://localhost:3000'),
   /** Public base URL of this API, used to build local-driver file URLs. */
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   /** File storage (S2-08): local disk for development, S3-compatible object storage otherwise. */
@@ -72,6 +79,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   ) {
     throw new Error(
       'Refusing to start: COMPAT_JWT_SECRET and COMPAT_HANDSHAKE_SECRET must be set in production',
+    );
+  }
+  if (
+    env.NODE_ENV === 'production' &&
+    (env.PAYU_MODE === 'mock' || env.PAYU_SALT.startsWith('dev-'))
+  ) {
+    throw new Error(
+      'Refusing to start: PAYU_MODE must be test or live with real PAYU_KEY and PAYU_SALT in production',
     );
   }
   if (env.NODE_ENV === 'production' && env.APPLICANT_JWT_SECRET.startsWith('dev-')) {

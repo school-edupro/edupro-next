@@ -684,7 +684,8 @@ export type ApplicationStatus =
   | 'selected'
   | 'waitlisted'
   | 'rejected'
-  | 'withdrawn';
+  | 'withdrawn'
+  | 'admitted';
 export interface AdmissionApplication {
   id: string;
   cycleId: string;
@@ -709,6 +710,10 @@ export interface AdmissionApplication {
   decidedAt: string | null;
   remarks: string | null;
   createdAt: string;
+  feePaidAt: string | null;
+  studentId: string | null;
+  workflowInstanceId: string | null;
+  offer?: AdmissionOffer | null;
   events?: Array<{
     id: string;
     fromStatus: string | null;
@@ -717,6 +722,17 @@ export interface AdmissionApplication {
     actor: string | null;
     createdAt: string;
   }>;
+}
+export interface AdmissionOffer {
+  status: 'offered' | 'accepted' | 'expired' | 'withdrawn';
+  admissionFee: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  payment: {
+    status: PaymentIntent['status'];
+    txnId: string;
+    form: { action: string; fields: Record<string, string> } | null;
+  } | null;
 }
 export interface AdmissionsDashboard {
   byStatus: Array<{ status: string; count: number }>;
@@ -837,4 +853,143 @@ export interface FeeClassSummaryRow {
   balance: string;
   rows: number;
   hasProfile: boolean;
+}
+
+// ---- Sprint 9: workflow, payments, attendance ----------------------------------------------------
+export type WorkflowResolver =
+  | { kind: 'named_user'; userId: string }
+  | { kind: 'role'; roleCode: string }
+  | { kind: 'position'; designation: string }
+  | { kind: 'approver_chain'; depth: number };
+export interface WorkflowLevel {
+  level: number;
+  name: string;
+  resolver: WorkflowResolver;
+  slaHours?: number;
+}
+export interface WorkflowDefinition {
+  id: string;
+  code: string;
+  name: string;
+  entityType: string;
+  levels: WorkflowLevel[];
+  status: 'active' | 'inactive';
+  open: number;
+}
+export interface WorkflowStep {
+  id: string;
+  instanceId: string;
+  level: number;
+  name: string;
+  resolver: WorkflowResolver;
+  assignees: Array<{ id: string; name: string }>;
+  status: 'pending' | 'approved' | 'rejected' | 'skipped';
+  actedBy: string | null;
+  actedAt: string | null;
+  note: string | null;
+}
+export interface WorkflowInstance {
+  id: string;
+  definitionId: string;
+  definitionCode: string;
+  definitionName: string;
+  entityType: string;
+  entityId: string;
+  subject: string;
+  payload: Record<string, unknown>;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  currentLevel: number;
+  requestedBy: string | null;
+  requestedAt: string;
+  completedAt: string | null;
+  steps: WorkflowStep[];
+}
+/** An inbox row: the step plus the instance it belongs to. */
+export interface InboxItem extends WorkflowStep {
+  instance: Omit<WorkflowInstance, 'steps'>;
+}
+
+export interface PaymentIntent {
+  id: string;
+  purpose: 'admission_fee' | 'fee_instalment' | 'misc';
+  entityType: string | null;
+  entityId: string | null;
+  amount: string;
+  currency: string;
+  status: 'created' | 'pending' | 'succeeded' | 'failed' | 'cancelled';
+  provider: string;
+  txnId: string;
+  providerRef: string | null;
+  payerName: string | null;
+  payerEmail: string | null;
+  payerMobile: string | null;
+  returnUrl: string | null;
+  succeededAt: string | null;
+  failedReason: string | null;
+  createdAt: string;
+  events?: Array<{ id: string; kind: string; providerRef: string | null; createdAt: string }>;
+}
+
+export type AttendanceCode = 'P' | 'A' | 'L' | 'SR' | 'H' | 'OD' | 'SB';
+export interface AttendanceRosterRow {
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  rollNo: number | null;
+  code: AttendanceCode | null;
+  remarks: string | null;
+  inAt: string | null;
+  outAt: string | null;
+  source: string | null;
+}
+export interface AttendanceSession {
+  id: string | null;
+  classSectionId: string;
+  section: string;
+  date: string;
+  kind: 'day' | 'subject';
+  subjectId: string | null;
+  subjectName: string | null;
+  source: string | null;
+  markedBy: string | null;
+  markedAt: string | null;
+  locked: boolean;
+  roster: AttendanceRosterRow[];
+  counts: Record<string, number>;
+}
+export interface AttendanceSummaryRow {
+  classSectionId: string;
+  section: string;
+  strength: number;
+  sessionId: string | null;
+  source: string | null;
+  locked: boolean;
+  markedBy: string | null;
+  present: number;
+  absent: number;
+  late: number;
+  codes: Record<string, number>;
+}
+export interface AttendanceSummary {
+  date: string;
+  sections: AttendanceSummaryRow[];
+}
+export interface RfidDevice {
+  id: string;
+  code: string;
+  name: string;
+  campus: string | null;
+  direction: 'in' | 'out' | null;
+  status: 'active' | 'inactive';
+  lastSeenAt: string | null;
+  events: number;
+}
+export interface RfidEvent {
+  id: string;
+  device: string;
+  tag: string;
+  student: string | null;
+  occurredAt: string;
+  direction: 'in' | 'out';
+  outcome: string;
 }

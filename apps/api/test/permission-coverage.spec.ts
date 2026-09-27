@@ -53,12 +53,16 @@ describe('permission coverage', () => {
     // The two local-driver file endpoints authenticate with HMAC tokens (docs/design/00 section 5, S2-08).
     // The compatibility handshake exchanges the legacy central-auth token; it is signed, not anonymous (S4-05).
     // The public admissions surface (S8-01) authenticates applicants with OTP-issued tokens inside ApplicantGuard.
+    // Gateway notifications verify a PayU signature; device ingestion verifies a per-device key (S9).
     expect(publicRoutes.sort()).toEqual([
       'CompatController.handshake (compat/v1)',
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
       'HealthController.health (health)',
       'MetricsController.metricsText (metrics)',
+      'PaymentsController.mock (payments)',
+      'PaymentsController.returned (payments)',
+      'PaymentsController.webhook (payments)',
       'PublicAdmissionsController.challenge (public/admissions)',
       'PublicAdmissionsController.createApplication (public/admissions)',
       'PublicAdmissionsController.cycles (public/admissions)',
@@ -70,6 +74,7 @@ describe('permission coverage', () => {
       'PublicAdmissionsController.submitApplication (public/admissions)',
       'PublicAdmissionsController.updateApplication (public/admissions)',
       'PublicAdmissionsController.verifyOtp (public/admissions)',
+      'RfidController.ingest (attendance/rfid)',
     ]);
     if (unprotected.length > 0) {
       throw new Error(`handlers without a permission: ${unprotected.join(', ')}`);

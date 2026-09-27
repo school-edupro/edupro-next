@@ -44,6 +44,31 @@ const NAV: Array<{
       { href: '/fees/masters', label: 'feeMasters', permission: 'fees.master.view' },
       { href: '/fees/structures', label: 'feeStructures', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
+      { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },
+    ],
+  },
+  {
+    section: 'attendance',
+    items: [
+      { href: '/attendance', label: 'attendanceDashboard', permission: 'attendance.session.view' },
+      {
+        href: '/attendance/register',
+        label: 'attendanceRegister',
+        permission: 'attendance.session.view',
+      },
+      { href: '/attendance/rfid', label: 'rfid', permission: 'attendance.rfid.manage' },
+    ],
+  },
+  {
+    section: 'workflow',
+    items: [
+      { href: '/workflow/inbox', label: 'inbox', permission: 'workflow.inbox.act' },
+      { href: '/workflow/instances', label: 'instances', permission: 'workflow.instance.view' },
+      {
+        href: '/workflow/definitions',
+        label: 'definitions',
+        permission: 'workflow.definition.view',
+      },
     ],
   },
   {

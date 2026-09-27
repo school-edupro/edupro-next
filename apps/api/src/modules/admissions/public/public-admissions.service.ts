@@ -11,6 +11,7 @@ import {
   type CycleRow,
 } from '../admissions.service';
 import type { CreateApplicationDto, UpdateApplicationDto } from '../admissions.dto';
+import { DecisionsService } from '../decisions.service';
 import { publicTenant, type Applicant } from './otp.service';
 
 const CYCLE_SELECT_PUBLIC = `SELECT c.id::text, c.academic_year_id::text, y.code AS academic_year, c.code, c.name, c.name_hi, c.instructions, c.instructions_hi,
@@ -24,7 +25,10 @@ const CYCLE_SELECT_PUBLIC = `SELECT c.id::text, c.academic_year_id::text, y.code
 /** The applicant's side of admissions (S8-05): open cycles, drafts, submission with criteria and duplicate checks. */
 @Injectable()
 export class PublicAdmissionsService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly decisions: DecisionsService,
+  ) {}
 
   async schools() {
     return this.db.global(async (c) => {
@@ -137,12 +141,21 @@ export class PublicAdmissionsService {
         `${APP_SELECT} WHERE a.applicant_id = $1 ORDER BY a.id DESC`,
         [applicant.id],
       );
-      return r.rows.map(toApplication);
+      const rows = r.rows.map(toApplication);
+      for (const row of rows)
+        if (row.status === 'selected' || row.status === 'admitted')
+          row.offer = await this.decisions.offerFor(c, row.id);
+      return rows;
     });
   }
 
   async get(applicant: Applicant, id: string): Promise<ApplicationRow> {
-    return this.db.tenant(publicTenant(applicant.schoolId), (c) => this.find(c, applicant, id));
+    return this.db.tenant(publicTenant(applicant.schoolId), async (c) => {
+      const row = await this.find(c, applicant, id);
+      if (row.status === 'selected' || row.status === 'admitted')
+        row.offer = await this.decisions.offerFor(c, row.id);
+      return row;
+    });
   }
 
   private checkCriteria(
