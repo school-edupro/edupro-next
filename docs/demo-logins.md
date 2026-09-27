@@ -61,6 +61,17 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 | `dev-student`     | Aarav Sharma        | Student                                        | Parent app as the student: own homework, notices and calendar; nothing in the admin app                                                                                                                                                                                                                                                                                                                                                      |
 | `dev-nobody`      | Nobody Member       | No roles                                       | Deny by default: empty navigation, every direct URL answers "permission denied"                                                                                                                                                                                                                                                                                                                                                              |
 
+### Switching the academic year (added after the Phase 2 review)
+
+Every request carries the working year (`X-Academic-Year-Id`); when the header is absent the API uses the
+school's active year. The admin header now shows a **Year** select next to the school name for every signed-in
+member (the list comes from `/me`, so it needs no extra permission): pick `2025-26 · closed` and press
+**Switch** to browse last year's students, enrolments, attendance, fees and reports read-only; the header
+says "viewing closed year" and the dashboard tile shows the year code. Planned years cannot be selected
+(the API refuses them until they are activated from System → Years). Switching school resets the year to
+that school's active year. The teacher and parent apps always show the active year; a history selector for
+them is on the Sprint 12 list.
+
 ### Sprint 11 walk-through
 
 1. As `dev-parent`: sign in to the parent app. The **privacy notice** appears first (version 1, English or Hindi); set the consents and continue. It does not appear again until `dev-admin` publishes a new version under **System → Privacy notice**. Switch to हिन्दी on the home page.

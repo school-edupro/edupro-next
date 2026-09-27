@@ -33,8 +33,11 @@ export default async function DashboardPage() {
         </Card>
         <Card elevated>
           <div className="ep-kpi">
-            <span className="ep-kpi__value">{me.academicYear ? t('active') : t('none')}</span>
-            <span className="ep-kpi__label">{t('academicYear')}</span>
+            <span className="ep-kpi__value">{me.academicYear?.code ?? t('none')}</span>
+            <span className="ep-kpi__label">
+              {t('academicYear')}
+              {me.academicYear?.status ? ` · ${me.academicYear.status}` : ''}
+            </span>
           </div>
         </Card>
       </div>

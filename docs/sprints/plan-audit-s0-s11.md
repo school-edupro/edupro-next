@@ -132,6 +132,17 @@
 | Internal pentest; UAT with pilot; ETL rehearsal 2                    | Pentest done and clean; UAT script prepared, not run; rehearsal 2 as a dry run        | Open: needs the business (pilot, dumps)            |
 | M2 gate                                                              | Pass with conditions (`m2-gate-report.md`)                                            | Conditions open (business)                         |
 
+### Post-review fix (2026-09-27): academic-year switch
+
+The review after the audit found that the API and the admin session honoured `X-Academic-Year-Id` since
+Sprint 1 but the admin header offered only a school select, so nobody could open a previous year from the
+UI. Fixed the same day: `/me` returns the school's open years (`academicYears`, planned years excluded
+because the tenant guard refuses them) and the current year's code and status; the header switcher posts
+`academicYearId` to `/api/context`; the dashboard tile shows the year code. Teacher and parent history
+selectors, and a seeded 2025-26 history for the demo, go to Sprint 12. The AI layer (assistant, analytical
+dashboards, principal and department dashboards and reports) is designed in `docs/design/07-ai-layer.md` and
+scheduled on the AI track of the sprint plan.
+
 ## 2. Open items, grouped by who can close them
 
 | Owner                        | Item                                                                                                                                                                                                                                             |

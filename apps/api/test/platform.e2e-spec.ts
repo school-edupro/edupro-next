@@ -154,7 +154,19 @@ describe('platform settings, years and school (e2e)', () => {
       const old = list.json().data.find((y: { id: string }) => y.id === school.yearId);
       expect(old.status).toBe('locked');
       const me = await inject({ method: 'GET', url: '/me', headers: A(admin.sub) });
-      expect(me.json().academicYear.id).toBe(newYearId);
+      expect(me.json().academicYear).toMatchObject({ id: newYearId, status: 'active' });
+      const listed = me
+        .json()
+        .academicYears.map((y: { id: string; status: string }) => [y.id, y.status]);
+      expect(listed).toEqual(
+        expect.arrayContaining([
+          [newYearId, 'active'],
+          [school.yearId, 'locked'],
+        ]),
+      );
+      // A member without platform.year.view still sees the open years for the year switch
+      const viewerMe = await inject({ method: 'GET', url: '/me', headers: A(viewer.sub) });
+      expect(viewerMe.json().academicYears.length).toBeGreaterThanOrEqual(2);
     });
 
     it('locks and reopens a stage, which the procedure layer enforces', async () => {

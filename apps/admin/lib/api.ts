@@ -62,7 +62,16 @@ export interface Me {
     personType: string;
   }>;
   school: { id: string } | null;
-  academicYear: { id: string } | null;
+  academicYear: { id: string; code: string | null; status: string | null } | null;
+  /** Open (non-planned) academic years of the selected school, newest first; used by the year switch. */
+  academicYears: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+  }>;
   permissions: string[];
 }
 
