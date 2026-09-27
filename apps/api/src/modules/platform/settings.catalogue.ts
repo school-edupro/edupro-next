@@ -117,6 +117,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Per-day late fee when the mode is daywise',
     module: 'fees',
   },
+  'fees.instalment_visible_days_before': {
+    schema: z.number().int().min(0).max(365),
+    default: 30,
+    description:
+      'Families see an instalment this many days before its due date unless the period sets its own visible-from date (Sprint 12)',
+    module: 'fees',
+  },
   'fees.cheque_bounce_charge': {
     schema: money,
     default: '0.00',

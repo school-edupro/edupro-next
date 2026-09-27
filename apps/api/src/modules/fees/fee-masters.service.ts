@@ -32,6 +32,10 @@ export interface PeriodRow {
   year: number;
   instalment: number;
   dueOn: string;
+  /** Sprint 12: slab-mode late fee after the due date, later slabs, and the family visibility date. */
+  lateFeeAmount: string;
+  slabs: Array<{ on: string; amount: string }>;
+  visibleFrom: string | null;
 }
 export interface StructureRow {
   id: string;
@@ -68,8 +72,19 @@ export interface DiscountRow {
 }
 
 const HEAD_COLS = `id::text, code, name, kind, ledger::text, is_optional AS "isOptional", refundable, sort_order AS "sortOrder", status`;
-const PERIOD_COLS = `id::text, sequence, name, month, year, instalment, due_on::text AS "dueOn"`;
+const PERIOD_COLS = `id::text, sequence, name, month, year, instalment, due_on::text AS "dueOn", late_fee_amount::text AS "lateFeeAmount", visible_from::text AS "visibleFrom",
+  (SELECT jsonb_agg(jsonb_build_object('on', s.on_date::text, 'amount', s.amount::text) ORDER BY s.on_date)
+     FROM (VALUES (late_slab_1_on, late_slab_1_amount), (late_slab_2_on, late_slab_2_amount), (late_slab_3_on, late_slab_3_amount)) AS s(on_date, amount)
+    WHERE s.on_date IS NOT NULL) AS slabs_json`;
 const SLAB_COLS = `id::text, code, name, distance_from_km::text AS "distanceFromKm", distance_to_km::text AS "distanceToKm", monthly_amount::text AS "monthlyAmount"`;
+
+const toPeriod = ({
+  slabs_json,
+  ...p
+}: PeriodRow & { slabs_json: PeriodRow['slabs'] | null }): PeriodRow => ({
+  ...p,
+  slabs: slabs_json ?? [],
+});
 
 const MONTHS = [
   'January',
@@ -176,12 +191,12 @@ export class FeeMastersService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
-      const r = await c.query<PeriodRow>(
+      const r = await c.query<PeriodRow & { slabs_json: PeriodRow['slabs'] | null }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed SQL fragments assembled in code; values are bound parameters
         `SELECT ${PERIOD_COLS} FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence`,
         [yearId],
       );
-      return r.rows;
+      return r.rows.map(toPeriod);
     });
   }
 
@@ -227,12 +242,12 @@ export class FeeMastersService {
         entityId: yearId,
         after: dto,
       });
-      const r = await c.query<PeriodRow>(
+      const r = await c.query<PeriodRow & { slabs_json: PeriodRow['slabs'] | null }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed SQL fragments assembled in code; values are bound parameters
         `SELECT ${PERIOD_COLS} FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence`,
         [yearId],
       );
-      return r.rows;
+      return r.rows.map(toPeriod);
     });
   }
 

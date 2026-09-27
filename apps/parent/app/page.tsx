@@ -68,6 +68,44 @@ export default async function HomePage({
           </span>
         }
       />
+      {me.academicYears && me.academicYears.length > 1 ? (
+        <form
+          method="post"
+          action="/api/context"
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-2)',
+            alignItems: 'center',
+            marginBottom: 'var(--sp-3)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <label htmlFor="academicYearId" className="ep-field__label" style={{ margin: 0 }}>
+            {t(lang, 'Session')}
+          </label>
+          <select
+            id="academicYearId"
+            name="academicYearId"
+            className="ep-select"
+            defaultValue={me.academicYear?.id ?? ''}
+          >
+            {me.academicYears.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.code}
+                {y.status === 'active' ? ` · ${t(lang, 'current')}` : ` · ${t(lang, 'previous')}`}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            {t(lang, 'View')}
+          </button>
+          {me.academicYear && me.academicYear.status !== 'active' ? (
+            <span className="ep-badge ep-badge--warning">
+              {t(lang, 'Viewing a previous session (read-only)')}
+            </span>
+          ) : null}
+        </form>
+      ) : null}
       {me.memberships.length > 1 ? (
         <form
           method="post"

@@ -108,6 +108,36 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       }
       return;
     }
+    if (kind === 'insights.refresh') {
+      // Sprint 12 (AI track): rebuild the reporting marts of every active school under its own tenant context.
+      const schools = await db.withoutTenant((c) =>
+        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
+      );
+      let refreshed = 0;
+      for (const s of schools.rows) {
+        try {
+          const r = await db.withTenant(
+            { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+            (c) =>
+              c.query<{ o_mart: string; o_rows: number; o_ms: number }>(
+                'SELECT o_mart, o_rows, o_ms FROM app.refresh_marts()',
+              ),
+          );
+          refreshed += 1;
+          log.debug(
+            { schoolId: s.id, marts: Object.fromEntries(r.rows.map((x) => [x.o_mart, x.o_rows])) },
+            'marts refreshed',
+          );
+        } catch (error) {
+          log.error(
+            { schoolId: s.id, err: error instanceof Error ? error.message : String(error) },
+            'mart refresh failed',
+          );
+        }
+      }
+      log.info({ schools: schools.rows.length, refreshed }, 'insights refresh run');
+      return;
+    }
     if (kind === 'audit.partitions') {
       if (!migratorUrl) {
         log.warn('audit.partitions needs DATABASE_MIGRATOR_URL; skipped');

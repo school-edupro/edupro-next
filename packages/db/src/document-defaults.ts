@@ -2,7 +2,7 @@
 export interface DefaultTemplate {
   code: string;
   name: string;
-  kind: 'transfer_certificate' | 'bonafide' | 'letter';
+  kind: 'transfer_certificate' | 'bonafide' | 'letter' | 'fee_receipt';
   pageWidth: string;
   pageHeight: string;
   bodyHtml: string;
@@ -81,5 +81,35 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
 <p>&nbsp;</p>
 <p>Yours sincerely,</p>
 <div class="sign"><div>Class teacher</div><div>Principal<br>{{school.name}}</div></div>`,
+  },
+  {
+    code: 'fee_receipt_default',
+    name: 'Fee receipt',
+    kind: 'fee_receipt',
+    pageWidth: '210mm',
+    pageHeight: '148mm',
+    stylesCss:
+      CSS +
+      `
+  table.lines { width: 100%; border-collapse: collapse; font-size: 3.4mm; margin-top: 3mm; }
+  table.lines th { text-align: left; color: #52606D; font-weight: 600; border-bottom: 0.3mm solid #00265D; padding: 1.5mm; }
+  table.lines td { padding: 1.5mm; border-bottom: 0.2mm solid #E4E7EB; }
+  table.lines td.n, table.lines th.n { text-align: right; }
+  .total { display: flex; justify-content: flex-end; gap: 6mm; font-size: 4mm; margin-top: 3mm; }
+  .words { font-size: 3.2mm; color: #52606D; }
+`,
+    bodyHtml: `<div class="head"><h1>{{school.name}}</h1><div class="sub">{{school.addressLine}}{{#if school.phone}} · {{school.phone}}{{/if}}</div></div>
+<h2>Fee receipt</h2>
+<div class="meta"><span>Receipt no. <strong>{{receipt.no}}</strong></span><span>Date <strong>{{receipt.receivedOn}}</strong></span><span>Session <strong>{{receipt.academicYear}}</strong></span></div>
+<table class="fields">
+<tr><td class="k">Student</td><td class="v">{{student.name}} ({{student.admissionNo}}) · {{student.classCode}}-{{student.section}}</td></tr>
+<tr><td class="k">Guardian</td><td class="v">{{student.guardianName}}</td></tr>
+<tr><td class="k">Mode</td><td class="v">{{receipt.mode}}{{#if receipt.reference}} · {{receipt.reference}}{{/if}}</td></tr>
+</table>
+<table class="lines"><thead><tr><th>Fee head</th><th>Period</th><th class="n">Amount</th></tr></thead>
+<tbody>{{#each receipt.lines}}<tr><td>{{this.head}}</td><td>{{this.period}}</td><td class="n">{{this.amount}}</td></tr>{{/each}}</tbody></table>
+<div class="total"><span>Total received</span><strong>₹ {{receipt.amount}}</strong></div>
+<div class="words">Rupees {{receipt.amountWords}} only{{#if receipt.unallocated}} · advance carried forward ₹ {{receipt.unallocated}}{{/if}}</div>
+<div class="sign"><div>Received by<br>{{receipt.receivedBy}}</div><div>Cashier<br>{{school.name}}</div></div>`,
   },
 ];

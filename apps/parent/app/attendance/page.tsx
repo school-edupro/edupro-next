@@ -39,7 +39,22 @@ export default async function AttendancePage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const sp = await searchParams;
-  const month = monthOf(sp.month);
+  // Sprint 12: a previous session (chosen on the home page) opens on its last month, not on today's
+  let yearHint = '';
+  let defaultMonth: string | undefined;
+  if (!sp.month) {
+    try {
+      const me = await bff.api.me();
+      const y = me.academicYears?.find((x) => x.id === me.academicYear?.id);
+      if (y && y.status !== 'active') {
+        defaultMonth = y.endDate.slice(0, 7);
+        yearHint = ` · Session ${y.code} (read-only)`;
+      }
+    } catch {
+      /* the fetch below reports session problems */
+    }
+  }
+  const month = monthOf(sp.month ?? defaultMonth);
   let data: { month: string; children: Child[] };
   try {
     data = await bff.api.fetch<{ month: string; children: Child[] }>(
@@ -68,7 +83,7 @@ export default async function AttendancePage({
       <PageHeader
         kicker="Attendance"
         title={title}
-        description={`${data.children.length} ${data.children.length === 1 ? 'child' : 'children'}`}
+        description={`${data.children.length} ${data.children.length === 1 ? 'child' : 'children'}${yearHint}`}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             <a

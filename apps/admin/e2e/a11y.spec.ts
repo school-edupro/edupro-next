@@ -31,6 +31,10 @@ const PAGES = [
   '/academics/lesson-plans',
   '/attendance/rules',
   '/system/privacy',
+  '/fees/masters',
+  '/transport/vehicles',
+  '/transport/drivers',
+  '/insights/principal',
 ];
 
 test.describe('accessibility (axe)', () => {

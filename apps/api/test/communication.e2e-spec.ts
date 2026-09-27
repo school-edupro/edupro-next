@@ -123,6 +123,7 @@ describe('communication (e2e)', () => {
       'comms.email',
       'media.gallery',
       'transport.tracking',
+      'ai.assistant',
     ]);
     expect(mine.json().purposes[1].status).toBeNull();
     const w = await inject({

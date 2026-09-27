@@ -2,8 +2,13 @@ import type { PoolClient } from 'pg';
 import type { TemplateData } from './template-engine';
 
 /** Entities a document template can be filled from. */
-export type DocumentEntity = 'student' | 'transfer_certificate' | 'employee';
-export const DOCUMENT_ENTITIES: DocumentEntity[] = ['student', 'transfer_certificate', 'employee'];
+export type DocumentEntity = 'student' | 'transfer_certificate' | 'employee' | 'fee_receipt';
+export const DOCUMENT_ENTITIES: DocumentEntity[] = [
+  'student',
+  'transfer_certificate',
+  'employee',
+  'fee_receipt',
+];
 
 type Row = Record<string, unknown>;
 
@@ -56,6 +61,86 @@ async function employee(c: PoolClient, id: string): Promise<Row | null> {
   return r.rows[0] ?? null;
 }
 
+const ONES = [
+  '',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'thirteen',
+  'fourteen',
+  'fifteen',
+  'sixteen',
+  'seventeen',
+  'eighteen',
+  'nineteen',
+];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const below100 = (n: number): string =>
+  n < 20 ? ONES[n]! : `${TENS[Math.floor(n / 10)]}${n % 10 ? ` ${ONES[n % 10]}` : ''}`;
+const below1000 = (n: number): string =>
+  n < 100
+    ? below100(n)
+    : `${ONES[Math.floor(n / 100)]} hundred${n % 100 ? ` ${below100(n % 100)}` : ''}`;
+
+/** Indian numbering (lakh, crore) for receipts: 1234567.5 → "twelve lakh thirty four thousand five hundred sixty seven and fifty paise". */
+export function amountInWords(value: number | string): string {
+  const n = Math.round(Number(value) * 100);
+  if (!Number.isFinite(n) || n === 0) return 'zero';
+  const rupees = Math.floor(Math.abs(n) / 100);
+  const paise = Math.abs(n) % 100;
+  const parts: string[] = [];
+  const crore = Math.floor(rupees / 10_000_000);
+  const lakh = Math.floor((rupees % 10_000_000) / 100_000);
+  const thousand = Math.floor((rupees % 100_000) / 1000);
+  const rest = rupees % 1000;
+  if (crore) parts.push(`${below100(crore)} crore`);
+  if (lakh) parts.push(`${below100(lakh)} lakh`);
+  if (thousand) parts.push(`${below100(thousand)} thousand`);
+  if (rest) parts.push(below1000(rest));
+  const words = parts.join(' ') || 'zero';
+  return paise ? `${words} and ${below100(paise)} paise` : words;
+}
+
+async function feeReceipt(c: PoolClient, id: string): Promise<Row | null> {
+  const r = await c.query<Row>(
+    `SELECT p.id::text, p.receipt_no AS "no", to_char(p.received_on, 'DD Mon YYYY') AS "receivedOn", p.amount::text, p.mode, p.reference, p.remarks,
+            p.student_id::text AS "studentId", y.code AS "academicYear", fy.code AS "financialYear", p.ledger::text,
+            COALESCE(u.display_name, 'Online') AS "receivedBy",
+            (p.amount - COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0))::text AS unallocated
+       FROM fee_payments p
+       JOIN academic_years y ON y.id = p.academic_year_id
+       LEFT JOIN financial_years fy ON fy.id = p.financial_year_id
+       LEFT JOIN users u ON u.id = p.received_by
+      WHERE p.id = $1`,
+    [id],
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  const lines = await c.query<Row>(
+    `SELECT h.name AS head, fp.name AS period, a.amount::text
+       FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
+      WHERE a.payment_id = $1 ORDER BY fp.sequence, h.sort_order`,
+    [id],
+  );
+  const unallocated = Number(row.unallocated);
+  return {
+    ...row,
+    mode: String(row.mode ?? '').toUpperCase(),
+    amountWords: amountInWords(String(row.amount)),
+    unallocated: unallocated > 0 ? unallocated.toFixed(2) : null,
+    lines: lines.rows,
+  };
+}
+
 /** Loads the data a template of the given entity can reference, under the caller's tenant context. */
 export async function loadDocumentData(
   c: PoolClient,
@@ -75,6 +160,12 @@ export async function loadDocumentData(
     const e = await employee(c, entityId);
     if (!e) throw new Error(`employee ${entityId} not found`);
     return { ...base, employee: e };
+  }
+  if (entity === 'fee_receipt') {
+    const receipt = await feeReceipt(c, entityId);
+    if (!receipt) throw new Error(`fee payment ${entityId} not found`);
+    const s = await student(c, String(receipt.studentId));
+    return { ...base, receipt, student: s ?? {} };
   }
   const tc = await c.query<Row>(
     `SELECT t.id::text, t.tc_no AS "no", t.serial, to_char(t.issued_on, 'DD Mon YYYY') AS "issuedOn", t.reason, t.last_class AS "lastClass",
@@ -124,6 +215,34 @@ export function sampleDocumentData(entity: DocumentEntity): TemplateData {
     joinedOn: '06 Apr 2026',
   };
   const base = { school, today: '27 Sep 2026' };
+  if (entity === 'fee_receipt')
+    return {
+      ...base,
+      student,
+      receipt: {
+        no: 'TF/FY2026-27/000042',
+        receivedOn: '12 Jul 2026',
+        amount: '12500.00',
+        amountWords: amountInWords(12500),
+        mode: 'UPI',
+        reference: 'UPI-9981',
+        academicYear: '2026-27',
+        financialYear: 'FY2026-27',
+        receivedBy: 'Meena Iyer',
+        unallocated: null,
+        lines: [
+          { head: 'Tuition fee', period: 'July 2026', amount: '2100.00' },
+          { head: 'Tuition fee', period: 'August 2026', amount: '2100.00' },
+          { head: 'Tuition fee', period: 'September 2026', amount: '2100.00' },
+          { head: 'Development fee', period: 'July 2026', amount: '1000.00' },
+          { head: 'Computer fee', period: 'July 2026', amount: '300.00' },
+          { head: 'Examination fee', period: 'July 2026', amount: '300.00' },
+          { head: 'Transport fee', period: 'July 2026', amount: '1500.00' },
+          { head: 'Transport fee', period: 'August 2026', amount: '1500.00' },
+          { head: 'Transport fee', period: 'September 2026', amount: '1600.00' },
+        ],
+      },
+    };
   if (entity === 'employee')
     return {
       ...base,

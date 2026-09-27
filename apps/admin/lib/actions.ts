@@ -1672,6 +1672,7 @@ export async function assignRouteStudents(fd: FormData) {
     .filter(Boolean)
     .map((studentId) => ({
       studentId,
+      stopId: opt(fd, 'stopId'),
       stopName: opt(fd, 'stopName'),
       pickupTime: opt(fd, 'pickupTime'),
       dropTime: opt(fd, 'dropTime'),
@@ -1764,4 +1765,189 @@ export async function publishPrivacyNotice(fd: FormData) {
       }),
     }),
   );
+}
+
+// ---- Sprint 12: fee ledger, receipts, fleet, insights ------------------------------------------------
+export async function regenerateStudentDemand(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(`/fees/ledger/${studentId}`, () =>
+    apiFetch(`/fees/students/${studentId}/demands/regenerate`, { method: 'POST' }),
+  );
+}
+
+export async function setLateFeeOverride(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(`/fees/ledger/${studentId}`, () =>
+    apiFetch(`/fees/students/${studentId}/late-fee`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        periodId: str(fd, 'periodId'),
+        amount: Number(str(fd, 'amount') || '0'),
+        reason: str(fd, 'reason'),
+      }),
+    }),
+  );
+}
+
+export async function revokeLateFeeOverride(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const id = str(fd, 'overrideId');
+  return run(`/fees/ledger/${studentId}`, () =>
+    apiFetch(`/fees/students/${studentId}/late-fee/${id}`, { method: 'DELETE' }),
+  );
+}
+
+export async function queueReceiptPdf(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const id = str(fd, 'paymentId');
+  return run(`/fees/ledger/${studentId}`, () =>
+    apiFetch(`/fees/payments/${id}/receipt`, { method: 'POST' }),
+  );
+}
+
+export async function recordLedgerPayment(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(`/fees/ledger/${studentId}`, () =>
+    apiFetch('/payments/offline', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        amount: Number(str(fd, 'amount')),
+        mode: str(fd, 'mode') || 'cash',
+        reference: opt(fd, 'reference'),
+        receivedOn: opt(fd, 'receivedOn'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    }),
+  );
+}
+
+export async function setPeriodLateFee(fd: FormData) {
+  const id = str(fd, 'periodId');
+  const slabs: Array<{ on: string; amount: number }> = [];
+  for (const n of [1, 2, 3]) {
+    const on = opt(fd, `slab${n}On`);
+    if (on) slabs.push({ on, amount: Number(str(fd, `slab${n}Amount`) || '0') });
+  }
+  return run('/fees/masters', () =>
+    apiFetch(`/fees/periods/${id}/late-fee`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        lateFeeAmount: Number(str(fd, 'lateFeeAmount') || '0'),
+        slabs,
+        visibleFrom: opt(fd, 'visibleFrom') ?? null,
+      }),
+    }),
+  );
+}
+
+export async function setReceiptSequence(fd: FormData) {
+  return run('/fees/masters', () =>
+    apiFetch('/fees/receipt-sequences', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ledger: str(fd, 'ledger'),
+        financialYearId: str(fd, 'financialYearId'),
+        prefix: str(fd, 'prefix'),
+        width: Number(str(fd, 'width') || '6'),
+        startAt: Number(str(fd, 'startAt') || '1'),
+      }),
+    }),
+  );
+}
+
+export async function createVehicle(fd: FormData) {
+  return run('/transport/vehicles', () =>
+    apiFetch('/transport/vehicles', {
+      method: 'POST',
+      body: JSON.stringify({
+        regNo: str(fd, 'regNo'),
+        make: opt(fd, 'make'),
+        capacity: opt(fd, 'capacity') ? Number(str(fd, 'capacity')) : undefined,
+        insuranceExpiry: opt(fd, 'insuranceExpiry'),
+        fitnessExpiry: opt(fd, 'fitnessExpiry'),
+        permitExpiry: opt(fd, 'permitExpiry'),
+        gpsDeviceId: opt(fd, 'gpsDeviceId'),
+      }),
+    }),
+  );
+}
+
+export async function setVehicleStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/transport/vehicles', () =>
+    apiFetch(`/transport/vehicles/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status') }),
+    }),
+  );
+}
+
+export async function createDriver(fd: FormData) {
+  return run('/transport/drivers', () =>
+    apiFetch('/transport/drivers', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        mobile: opt(fd, 'mobile'),
+        licenceNo: opt(fd, 'licenceNo'),
+        licenceExpiry: opt(fd, 'licenceExpiry'),
+      }),
+    }),
+  );
+}
+
+export async function setDriverStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/transport/drivers', () =>
+    apiFetch(`/transport/drivers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status') }),
+    }),
+  );
+}
+
+export async function setRouteFleet(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/transport/routes/${id}`, () =>
+    apiFetch(`/transport/routes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        vehicleId: opt(fd, 'vehicleId') ?? null,
+        driverId: opt(fd, 'driverId') ?? null,
+        conductorName: opt(fd, 'conductorName') ?? null,
+        conductorMobile: opt(fd, 'conductorMobile') ?? null,
+      }),
+    }),
+  );
+}
+
+/** Stops arrive as parallel field lists (stopId[], stopName[], ...); blank names are dropped. */
+export async function setRouteStops(fd: FormData) {
+  const id = str(fd, 'id');
+  const ids = fd.getAll('stopId').map(String);
+  const names = fd.getAll('stopName').map(String);
+  const lats = fd.getAll('lat').map(String);
+  const lngs = fd.getAll('lng').map(String);
+  const pickups = fd.getAll('pickupTime').map(String);
+  const drops = fd.getAll('dropTime').map(String);
+  const slabs = fd.getAll('slabId').map(String);
+  const stops = names
+    .map((name, i) => ({
+      id: ids[i] || undefined,
+      name: name.trim(),
+      lat: lats[i]?.trim() ? Number(lats[i]) : undefined,
+      lng: lngs[i]?.trim() ? Number(lngs[i]) : undefined,
+      pickupTime: pickups[i]?.trim() || undefined,
+      dropTime: drops[i]?.trim() || undefined,
+      slabId: slabs[i]?.trim() || undefined,
+    }))
+    .filter((s) => s.name);
+  return run(`/transport/routes/${id}`, () =>
+    apiFetch(`/transport/routes/${id}/stops`, { method: 'PUT', body: JSON.stringify({ stops }) }),
+  );
+}
+
+export async function refreshMarts() {
+  return run('/insights/principal', () => apiFetch('/insights/marts/refresh', { method: 'POST' }));
 }

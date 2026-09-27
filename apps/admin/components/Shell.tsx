@@ -144,7 +144,21 @@ const NAV: Array<{
   },
   {
     section: 'transport',
-    items: [{ href: '/transport/routes', label: 'routes', permission: 'transport.route.view' }],
+    items: [
+      { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
+      { href: '/transport/vehicles', label: 'vehicles', permission: 'transport.fleet.view' },
+      { href: '/transport/drivers', label: 'drivers', permission: 'transport.fleet.view' },
+    ],
+  },
+  {
+    section: 'insights',
+    items: [
+      {
+        href: '/insights/principal',
+        label: 'principalDashboard',
+        permission: 'insights.dashboard.view',
+      },
+    ],
   },
   {
     section: 'reports',

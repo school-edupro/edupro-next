@@ -456,7 +456,7 @@ describe('daily academics and student lifecycle (e2e)', () => {
         .json()
         .data.map((t: { code: string }) => t.code)
         .sort(),
-    ).toEqual(['bonafide_default', 'letter_default', 'tc_default']);
+    ).toEqual(['bonafide_default', 'fee_receipt_default', 'letter_default', 'tc_default']);
     const bonafide = installed.json().data.find((t: { kind: string }) => t.kind === 'bonafide');
     const preview = await inject({
       method: 'POST',

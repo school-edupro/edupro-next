@@ -96,6 +96,11 @@ async function main(): Promise<void> {
     { name: 'audit.partitions', data: SYSTEM_ENVELOPE('audit.partitions') },
   );
   await maintenance.upsertJobScheduler(
+    'insights.refresh',
+    { every: 15 * 60 * 1000 },
+    { name: 'insights.refresh', data: SYSTEM_ENVELOPE('insights.refresh') },
+  );
+  await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },
     { name: 'break_glass.expire', data: SYSTEM_ENVELOPE('break_glass.expire') },

@@ -21,6 +21,8 @@ export interface Session {
   expiresAt: number;
   displayName?: string;
   schoolId?: string;
+  /** Sprint 12: a previous (closed or locked) year chosen for history views; absent = the active year. */
+  academicYearId?: string;
 }
 
 export interface Me {
@@ -152,6 +154,7 @@ export function createBff(options: BffOptions) {
       if (!headers.has('Content-Type') && init.body)
         headers.set('Content-Type', 'application/json');
       if (s.schoolId) headers.set('X-School-Id', s.schoolId);
+      if (s.academicYearId) headers.set('X-Academic-Year-Id', s.academicYearId);
       headers.set('X-Request-Id', crypto.randomUUID());
       const res = await fetch(`${env.apiBaseUrl}/api/v1${path}`, {
         ...init,
@@ -256,14 +259,29 @@ export function createBff(options: BffOptions) {
         { status: 303 },
       );
     },
-    /** POST /api/context: choose the working school */
+    /** POST /api/context: choose the working school and, optionally, a previous academic year */
     async context(req: NextRequest) {
       const s = await session.read();
       if (!s) return NextResponse.redirect(new URL('/login', req.url), { status: 303 });
       const form = await req.formData();
       const schoolId = String(form.get('schoolId') ?? '');
-      if (/^[0-9]{1,18}$/.test(schoolId)) await session.write({ ...s, schoolId });
-      return NextResponse.redirect(new URL(home, req.url), { status: 303 });
+      const academicYearId = form.get('academicYearId');
+      const next: Session = { ...s };
+      if (/^[0-9]{1,18}$/.test(schoolId) && schoolId !== s.schoolId) {
+        next.schoolId = schoolId;
+        next.academicYearId = undefined; // years are school-specific; the API falls back to the active year
+      }
+      if (typeof academicYearId === 'string') {
+        if (/^[0-9]{1,18}$/.test(academicYearId)) next.academicYearId = academicYearId;
+        else if (academicYearId === '') next.academicYearId = undefined;
+      }
+      await session.write(next);
+      return NextResponse.redirect(
+        new URL(safeReturn(String(form.get('returnTo') ?? '')), req.url),
+        {
+          status: 303,
+        },
+      );
     },
   };
 

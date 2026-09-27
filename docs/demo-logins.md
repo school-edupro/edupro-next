@@ -61,6 +61,37 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 | `dev-student`     | Aarav Sharma        | Student                                        | Parent app as the student: own homework, notices and calendar; nothing in the admin app                                                                                                                                                                                                                                                                                                                                                      |
 | `dev-nobody`      | Nobody Member       | No roles                                       | Deny by default: empty navigation, every direct URL answers "permission denied"                                                                                                                                                                                                                                                                                                                                                              |
 
+### Sprint 12 walk-through (Phase 3 start: fee ledger, fleet, principal dashboard)
+
+- **dev-accounts** (Accountant): open **Fees → Demands**, choose Class VI and click **Ledger** next to a
+  student (or **Open ledger** on the student page). The ledger groups the demand by due date: the April and
+  July instalments are overdue as of today, so the day-wise late fee (Alpha: ₹10 per day, System → Settings)
+  shows per instalment; the "as of" date at the top recomputes it. VI-A roll 2 carries a **waived July late fee**
+  (override with the principal's reason); revoke it or set a fixed amount for another instalment. Record a
+  counter payment: the receipt gets the next number `TF/FY2026-27/…`, the row shows the advance if any, and
+  **Receipt PDF** queues the document to the export centre from the default fee receipt template
+  (System → Templates). **Regenerate with diff** re-runs the rules and lists added, removed and changed rows;
+  paid rows are kept. Under **Fees → Fee masters** the new **Receipt numbering** card shows prefix, digits and
+  next number per ledger and financial year (editable until the first receipt), and **Late fee slabs and
+  visibility** sets slab dates and amounts per instalment (Beta uses slab mode: ₹100 after the due date, ₹250
+  after 15 days, ₹500 after 45 days).
+- **dev-admin**: switch the header year to **2025-26 · closed** and open the same ledger: last year's
+  instalments are fully paid with numbered `TF/FY2025-26/…` receipts (seeded history for current VI-A, VI-B
+  and VII-A students), and every write button is hidden because the year is closed. Back on 2026-27, open
+  **Transport → Vehicles** and **Drivers** (the three buses with insurance, fitness and permit expiries; R2's
+  fitness certificate expires soon) and a route page: the ordered **Stops** with coordinates, times and the
+  slab each stop falls in, **Vehicle and crew** linking, and stop-aware student assignment.
+- **dev-admin** or **dev-coordinator**: **Insights → Principal dashboard**. Attendance today by class with
+  unmarked sections, the 14-day trend, fees due and collected till date, ageing buckets, collection by mode,
+  the largest overdue balances (each links to the ledger), admissions funnel, message delivery, pending
+  approvals and reader health, plus the alert list. Every number comes from the reporting marts (`mart.*`),
+  refreshed every 15 minutes by the workers; **Refresh marts now** rebuilds them and the freshness table shows
+  when each mart last ran. dev-teacher gets no Insights entry (permission `insights.dashboard.view`).
+- **dev-parent** and **dev-teacher**: the home page now has a **Session** selector; choose 2025-26 to read
+  last year's attendance, homework and timetable read-only (the API refuses writes on a closed year).
+- Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
+  parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
+
 ### Switching the academic year (added after the Phase 2 review)
 
 Every request carries the working year (`X-Academic-Year-Id`); when the header is absent the API uses the

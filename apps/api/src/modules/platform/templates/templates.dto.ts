@@ -3,7 +3,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { IdSchema } from '../../academics/classes/classes.dto';
 
-export const TemplateKindSchema = z.enum(['transfer_certificate', 'bonafide', 'letter']);
+export const TemplateKindSchema = z.enum(['transfer_certificate', 'bonafide', 'letter', 'fee_receipt']);
 const SizeSchema = z.string().regex(/^\d+(\.\d+)?(mm|cm|in)$/, 'must be a length such as 210mm');
 
 export const CreateTemplateSchema = z.object({

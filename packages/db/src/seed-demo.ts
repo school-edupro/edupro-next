@@ -2400,6 +2400,12 @@ async function main(): Promise<void> {
           'Boarding and alighting alerts and the live location of the school bus my child travels in.',
           null,
         ],
+        [
+          'ai.assistant',
+          'AI assistant in the parent app',
+          'The school assistant may answer my questions using my child’s attendance, homework, fee and notice records. Answers are generated from school data only; nothing is used to train models.',
+          null,
+        ],
       ];
       for (const [i, [code, name, description, channel]] of purposes.entries())
         await c.query(
@@ -3286,6 +3292,257 @@ async function main(): Promise<void> {
         }
       }
       await clearCtx();
+    }
+
+    // ---- Sprint 12: fee ledger (late fee settings and slabs, an override, receipt numbers), 2025-26 fee history, fleet, marts ----
+    {
+      const yearId = alpha.yearId;
+      const setting = async (schoolId: string, key: string, value: string) =>
+        c.query(
+          `INSERT INTO school_settings (school_id, key, value) SELECT $1, $2, $3::jsonb WHERE NOT EXISTS (SELECT 1 FROM school_settings WHERE school_id = $1 AND key = $2)`,
+          [schoolId, key, value],
+        );
+      for (const [schoolCode, school] of Object.entries(schools)) {
+        await setting(school.id, 'fees.late_fee_per_day', '"10.00"');
+        await setting(school.id, 'fees.instalment_visible_days_before', '30');
+        await c.query(
+          `INSERT INTO financial_years (school_id, code, name, start_date, end_date, status) VALUES ($1, 'FY2025-26', 'Financial Year 2025-26', '2025-04-01', '2026-03-31', 'closed') ON CONFLICT (school_id, code) DO NOTHING`,
+          [school.id],
+        );
+        if (schoolCode === 'BETA') {
+          // Beta charges slab-wise: 100 after the due date, 250 after 15 days, 500 after 45 days
+          await c.query(
+            `UPDATE school_settings SET value = '"slab"'::jsonb WHERE school_id = $1 AND key = 'fees.late_fee_mode'`,
+            [school.id],
+          );
+          await c.query(
+            `UPDATE fee_periods SET late_fee_amount = 100, late_slab_1_on = due_on + 15, late_slab_1_amount = 250, late_slab_2_on = due_on + 45, late_slab_2_amount = 500
+              WHERE academic_year_id = $1 AND sequence IN (1, 4, 7, 10) AND late_slab_1_on IS NULL`,
+            [school.yearId],
+          );
+        }
+      }
+      // number the counter receipts recorded before Sprint 12 (the Sprint 9 demo receipt)
+      await withCtx(alpha.id, 'dev-accounts');
+      await c.query(
+        `UPDATE fee_payments p SET financial_year_id = x.fy, receipt_no = app.next_receipt_no(p.ledger, x.fy)
+           FROM (SELECT id, app.financial_year_for(received_on) AS fy FROM fee_payments WHERE school_id = $1 AND receipt_no IS NULL) x
+          WHERE p.id = x.id AND x.fy IS NOT NULL`,
+        [alpha.id],
+      );
+      // late fee override: VI-A roll 2's July instalment is waived (hospitalised; principal approved)
+      const viA2 = await c.query<{ id: string }>(
+        `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' AND e.roll_no = 2 LIMIT 1`,
+        [sections.ALPHA!['VI-A'], yearId],
+      );
+      const july = await c.query<{ id: string }>(
+        `SELECT id::text FROM fee_periods WHERE academic_year_id = $1 AND sequence = 4`,
+        [yearId],
+      );
+      if (viA2.rows[0] && july.rows[0])
+        await c.query(
+          `INSERT INTO fee_late_fee_overrides (school_id, student_id, academic_year_id, period_id, amount, reason, created_by)
+           SELECT $1, $2, $3, $4, 0, 'Hospitalised in July; late fee waived by the principal', $5
+            WHERE NOT EXISTS (SELECT 1 FROM fee_late_fee_overrides WHERE student_id = $2 AND academic_year_id = $3 AND period_id = $4 AND revoked_at IS NULL)`,
+          [alpha.id, viA2.rows[0].id, yearId, july.rows[0].id, userIds['dev-accounts']],
+        );
+      await clearCtx();
+
+      // 2025-26 history for Alpha: sections, enrolments one class lower, periods, structures (10% lower),
+      // fully paid demands with numbered receipts, so a closed year reads like real history
+      const prev = await c.query<{ id: string }>(
+        `SELECT id::text FROM academic_years WHERE school_id = $1 AND code = '2025-26'`,
+        [alpha.id],
+      );
+      const fy25 = await c.query<{ id: string }>(
+        `SELECT id::text FROM financial_years WHERE school_id = $1 AND code = 'FY2025-26'`,
+        [alpha.id],
+      );
+      const prevId = prev.rows[0]!.id;
+      const historyExists = await c.query(
+        `SELECT 1 FROM fee_periods WHERE academic_year_id = $1 LIMIT 1`,
+        [prevId],
+      );
+      if (!historyExists.rowCount) {
+        const monthNames = [
+          'January',
+          'February',
+          'March',
+          'April',
+          'May',
+          'June',
+          'July',
+          'August',
+          'September',
+          'October',
+          'November',
+          'December',
+        ];
+        for (let i = 0; i < 12; i += 1) {
+          const m0 = 3 + i;
+          const month = (m0 % 12) + 1;
+          const year = 2025 + Math.floor(m0 / 12);
+          const first = i - (i % 3);
+          await c.query(
+            `INSERT INTO fee_periods (school_id, academic_year_id, sequence, name, month, year, instalment, due_on) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date)`,
+            [
+              alpha.id,
+              prevId,
+              i + 1,
+              `${monthNames[month - 1]} ${year}`,
+              month,
+              year,
+              Math.floor(i / 3) + 1,
+              `${2025 + Math.floor((3 + first) / 12)}-${pad(((3 + first) % 12) + 1, 2)}-10`,
+            ],
+          );
+        }
+        await c.query(
+          `INSERT INTO class_sections (school_id, academic_year_id, class_id, campus_id, name, capacity, legacy_ref)
+           SELECT school_id, $2, class_id, campus_id, name, capacity, legacy_ref FROM class_sections WHERE academic_year_id = $1 AND deleted_at IS NULL
+           ON CONFLICT DO NOTHING`,
+          [yearId, prevId],
+        );
+        await c.query(
+          `INSERT INTO fee_structures (school_id, academic_year_id, class_id, head_id, fee_group, student_type, amount, frequency, periods)
+           SELECT school_id, $2, class_id, head_id, fee_group, student_type, round(amount * 0.9), frequency, periods FROM fee_structures WHERE academic_year_id = $1
+           ON CONFLICT DO NOTHING`,
+          [yearId, prevId],
+        );
+        // current VI-A, VI-B and VII-A students were in V-A, V-B and VI-A last year
+        await c.query(
+          `INSERT INTO enrolments (school_id, student_id, academic_year_id, class_section_id, roll_no, status, joined_on, ended_on)
+           SELECT e.school_id, e.student_id, $2, pcs.id, e.roll_no, 'promoted', '2025-04-07', '2026-03-31'
+             FROM enrolments e
+             JOIN class_sections cs ON cs.id = e.class_section_id
+             JOIN classes k ON k.id = cs.class_id
+             JOIN classes pk ON pk.school_id = k.school_id AND pk.display_order = k.display_order - 1 AND pk.deleted_at IS NULL
+             JOIN class_sections pcs ON pcs.academic_year_id = $2 AND pcs.class_id = pk.id AND pcs.name = cs.name
+             JOIN students s ON s.id = e.student_id
+            WHERE e.academic_year_id = $1 AND e.status = 'active' AND e.class_section_id = ANY($3::bigint[]) AND s.status = 'active' AND s.admitted_on < '2026-04-01'
+           ON CONFLICT (student_id, academic_year_id) DO NOTHING`,
+          [
+            yearId,
+            prevId,
+            [sections.ALPHA!['VI-A'], sections.ALPHA!['VI-B'], sections.ALPHA!['VII-A']],
+          ],
+        );
+        await withCtx(alpha.id, 'dev-accounts');
+        await c.query(
+          `INSERT INTO fee_demands (school_id, student_id, academic_year_id, period_id, head_id, gross, discount, net, paid, status, due_on, source)
+           SELECT e.school_id, e.student_id, $1, fp.id, fs.head_id, fs.amount, 0, fs.amount, fs.amount, 'paid', fp.due_on, 'structure'
+             FROM enrolments e
+             JOIN class_sections cs ON cs.id = e.class_section_id
+             JOIN fee_structures fs ON fs.academic_year_id = $1 AND fs.class_id = cs.class_id AND fs.fee_group = 'general' AND fs.student_type = 'all'
+             JOIN fee_periods fp ON fp.academic_year_id = $1
+              AND CASE WHEN fs.periods IS NOT NULL THEN fp.sequence = ANY (fs.periods)
+                       WHEN fs.frequency = 'monthly' THEN true
+                       WHEN fs.frequency = 'quarterly' THEN fp.sequence IN (1, 4, 7, 10)
+                       WHEN fs.frequency = 'half_yearly' THEN fp.sequence IN (1, 7)
+                       ELSE fp.sequence = 1 END
+            WHERE e.academic_year_id = $1
+           ON CONFLICT (student_id, academic_year_id, period_id, head_id) DO NOTHING`,
+          [prevId],
+        );
+        // one receipt per student and instalment, three days before the due date, cash and UPI alternating
+        await c.query(
+          `INSERT INTO fee_payments (school_id, student_id, academic_year_id, amount, received_on, mode, received_by, ledger, financial_year_id, receipt_no)
+           SELECT d.school_id, d.student_id, $1, sum(d.net), d.due_on - 3, CASE WHEN (d.student_id + fp.instalment) % 2 = 0 THEN 'cash' ELSE 'upi' END, $2, 'school', $3,
+                  app.next_receipt_no('school', $3)
+             FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
+            WHERE d.academic_year_id = $1
+            GROUP BY d.school_id, d.student_id, d.due_on, fp.instalment
+            ORDER BY d.due_on, d.student_id`,
+          [prevId, userIds['dev-accounts'], fy25.rows[0]!.id],
+        );
+        await c.query(
+          `INSERT INTO fee_payment_allocations (school_id, payment_id, demand_id, amount)
+           SELECT p.school_id, p.id, d.id, d.net FROM fee_payments p JOIN fee_demands d ON d.student_id = p.student_id AND d.academic_year_id = p.academic_year_id AND d.due_on = p.received_on + 3
+            WHERE p.academic_year_id = $1`,
+          [prevId],
+        );
+        await clearCtx();
+      }
+
+      // fleet: the routes' vehicles and drivers become records; stops with geo per route; riders keep their stop
+      await withCtx(alpha.id, 'dev-admin');
+      await c.query(
+        `INSERT INTO transport_vehicles (school_id, reg_no, make, capacity, insurance_expiry, fitness_expiry, permit_expiry, created_by, updated_by)
+         SELECT r.school_id, r.vehicle_no, 'Tata Starbus', 42, '2027-03-31'::date, (CASE WHEN r.code = 'R2' THEN '2026-10-15' ELSE '2027-01-31' END)::date, '2027-06-30'::date, $2, $2
+           FROM transport_routes r WHERE r.school_id = $1 AND r.deleted_at IS NULL AND r.vehicle_no IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM transport_vehicles v WHERE v.school_id = r.school_id AND v.reg_no = r.vehicle_no AND v.deleted_at IS NULL)`,
+        [alpha.id, userIds['dev-admin']],
+      );
+      await c.query(
+        `INSERT INTO transport_drivers (school_id, name, mobile, licence_no, licence_expiry, created_by, updated_by)
+         SELECT r.school_id, r.driver_name, r.driver_mobile, 'MH12 ' || lpad((row_number() OVER (ORDER BY r.code) * 1234567)::text, 11, '0'), '2028-05-31'::date, $2, $2
+           FROM transport_routes r WHERE r.school_id = $1 AND r.deleted_at IS NULL AND r.driver_name IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM transport_drivers d WHERE d.school_id = r.school_id AND d.name = r.driver_name AND d.deleted_at IS NULL)`,
+        [alpha.id, userIds['dev-admin']],
+      );
+      await c.query(
+        `UPDATE transport_routes r SET vehicle_id = v.id, driver_id = d.id, conductor_name = COALESCE(r.conductor_name, 'Kishor Jadhav'), conductor_mobile = COALESCE(r.conductor_mobile, '9876500031')
+           FROM transport_vehicles v, transport_drivers d
+          WHERE r.school_id = $1 AND v.school_id = r.school_id AND v.reg_no = r.vehicle_no AND d.school_id = r.school_id AND d.name = r.driver_name AND r.vehicle_id IS NULL`,
+        [alpha.id],
+      );
+      const slabOf = Object.fromEntries(
+        (
+          await c.query<{ code: string; id: string }>(
+            `SELECT code, id::text FROM transport_slabs WHERE academic_year_id = $1`,
+            [yearId],
+          )
+        ).rows.map((x) => [x.code, x.id]),
+      );
+      const stops: Array<[string, Array<[string, number, number, string, string, string]>]> = [
+        [
+          'R1',
+          [
+            ['Karve Nagar chowk', 18.4894, 73.8163, '07:10', '14:05', 'S2'],
+            ['Kothrud depot', 18.5074, 73.8077, '07:18', '14:12', 'S2'],
+            ['Paud phata', 18.5093, 73.806, '07:25', '14:20', 'S1'],
+          ],
+        ],
+        [
+          'R2',
+          [
+            ['Baner phata', 18.559, 73.7868, '07:05', '14:10', 'S3'],
+            ['Aundh gaon', 18.562, 73.81, '07:14', '14:18', 'S2'],
+          ],
+        ],
+        [
+          'R3',
+          [
+            ['Magarpatta gate', 18.5158, 73.9272, '07:00', '14:15', 'S3'],
+            ['Hadapsar gadital', 18.5018, 73.926, '07:12', '14:25', 'S3'],
+          ],
+        ],
+      ];
+      for (const [code, list] of stops) {
+        const route = await c.query<{ id: string }>(
+          `SELECT id::text FROM transport_routes WHERE school_id = $1 AND code = $2 AND deleted_at IS NULL`,
+          [alpha.id, code],
+        );
+        if (!route.rows[0]) continue;
+        for (const [i, [name, lat, lng, pickup, drop, slab]] of list.entries())
+          await c.query(
+            `INSERT INTO transport_stops (school_id, route_id, sequence, name, lat, lng, pickup_time, drop_time, slab_id)
+             SELECT $1, $2, $3, $4, $5, $6, $7::time, $8::time, $9 WHERE NOT EXISTS (SELECT 1 FROM transport_stops WHERE route_id = $2 AND (name = $4 OR sequence = $3))`,
+            [alpha.id, route.rows[0].id, i + 1, name, lat, lng, pickup, drop, slabOf[slab] ?? null],
+          );
+      }
+      await c.query(
+        `UPDATE student_route_assignments a SET stop_id = s.id FROM transport_stops s WHERE s.route_id = a.route_id AND s.name = a.stop_name AND a.stop_id IS NULL AND a.school_id = $1`,
+        [alpha.id],
+      );
+      await clearCtx();
+
+      // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
+      for (const school of Object.values(schools)) {
+        await withCtx(school.id, 'dev-admin');
+        await c.query(`SELECT app.refresh_marts()`);
+        await clearCtx();
+      }
     }
 
     await c.query('COMMIT');

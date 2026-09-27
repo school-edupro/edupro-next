@@ -1,0 +1,378 @@
+import {
+  Badge,
+  Breadcrumbs,
+  Button,
+  Card,
+  DataTable,
+  FormActions,
+  FormRow,
+  InputField,
+  PageHeader,
+  SelectField,
+} from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
+import { Notice } from '@/components/Notice';
+import {
+  queueReceiptPdf,
+  recordLedgerPayment,
+  regenerateStudentDemand,
+  revokeLateFeeOverride,
+  setLateFeeOverride,
+} from '@/lib/actions';
+import { apiFetch, getMe } from '@/lib/api';
+import type { FeeLedger, FeeLedgerInstalment, FeeLedgerPayment } from '@/lib/types';
+
+const toneFor = (s: FeeLedgerInstalment['status']) =>
+  s === 'paid' ? 'success' : s === 'overdue' ? 'danger' : s === 'due' ? 'warning' : 'neutral';
+
+/** Sprint 12: the student fee ledger (instalments, late fee, receipts, overrides, regeneration diff). */
+export default async function FeeLedgerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ studentId: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string; asOf?: string }>;
+}) {
+  const { studentId } = await params;
+  const sp = await searchParams;
+  const [t, f, c, me] = await Promise.all([
+    getTranslations('pages.fees_ledger'),
+    getTranslations('fees'),
+    getTranslations('common'),
+    getMe(),
+  ]);
+  const can = (p: string) => me.permissions.includes(p);
+  const ledger = await apiFetch<FeeLedger>(
+    `/fees/students/${studentId}/ledger${sp.asOf ? `?asOf=${sp.asOf}` : ''}`,
+  );
+  const yearOpen = ledger.year.status === 'active';
+  const diff = ledger.lastRun?.diff ?? null;
+  return (
+    <>
+      <Breadcrumbs
+        items={[
+          { label: t('kicker'), href: '/fees/demands' },
+          { label: ledger.student.name, href: `/people/students/${ledger.student.id}` },
+          { label: t('title') },
+        ]}
+      />
+      <PageHeader
+        kicker={t('kicker')}
+        title={`${ledger.student.name} · ${ledger.student.admissionNo}`}
+        description={`${ledger.student.section ?? ''} · ${ledger.year.code} (${ledger.year.status}) · ${f('lateFeeMode')}: ${f(`modes.${ledger.lateFeeMode === 'daywise' || ledger.lateFeeMode === 'slab' ? ledger.lateFeeMode : 'none'}`)}`}
+        actions={
+          <form
+            method="get"
+            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
+          >
+            <InputField
+              id="asOf"
+              name="asOf"
+              label={f('asOf')}
+              type="date"
+              defaultValue={ledger.asOf}
+            />
+            <Button type="submit" variant="secondary">
+              {c('apply')}
+            </Button>
+          </form>
+        }
+      />
+      <Notice params={sp} />
+      <div
+        style={{
+          display: 'grid',
+          gap: 'var(--sp-3)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          marginBottom: 'var(--sp-4)',
+        }}
+      >
+        {(
+          [
+            ['net', ledger.totals.net],
+            ['paid', ledger.totals.paid],
+            ['balance', ledger.totals.balance],
+            ['lateFee', ledger.totals.lateFee],
+            ['payable', ledger.totals.payable],
+          ] as const
+        ).map(([k, v]) => (
+          <Card key={k} elevated>
+            <div className="ep-kicker">{f(k)}</div>
+            <div
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: 'var(--fs-h2)',
+                fontWeight: 600,
+              }}
+            >
+              ₹{v}
+            </div>
+          </Card>
+        ))}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: 'var(--sp-5)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))',
+        }}
+      >
+        <Card title={f('instalmentsTitle')}>
+          <DataTable<FeeLedgerInstalment>
+            caption={f('instalmentsTitle')}
+            density="dense"
+            columns={[
+              { key: 'label', header: f('instalment'), render: (x) => <strong>{x.label}</strong> },
+              { key: 'due', header: f('dueOn'), render: (x) => x.dueOn },
+              { key: 'net', header: f('net'), numeric: true, render: (x) => x.net },
+              { key: 'paid', header: f('paid'), numeric: true, render: (x) => x.paid },
+              { key: 'bal', header: f('balance'), numeric: true, render: (x) => x.balance },
+              {
+                key: 'late',
+                header: f('lateFee'),
+                numeric: true,
+                render: (x) =>
+                  Number(x.lateFee.amount) > 0 || x.lateFee.overridden ? (
+                    <span title={x.lateFee.reason ?? ''}>
+                      {x.lateFee.amount}{' '}
+                      <small>
+                        ({f(`modes.${x.lateFee.mode}`)}
+                        {x.lateFee.mode === 'daywise' ? ` · ${x.lateFee.days} ${f('days')}` : ''})
+                      </small>
+                    </span>
+                  ) : (
+                    '—'
+                  ),
+              },
+              {
+                key: 'status',
+                header: c('status'),
+                render: (x) => (
+                  <Badge tone={toneFor(x.status)}>
+                    {f(`statuses.${x.status}`)}
+                    {!x.visible ? ` · ${f('hidden')}` : ''}
+                  </Badge>
+                ),
+              },
+              { key: 'vis', header: f('visibleFrom'), render: (x) => x.visibleFrom },
+            ]}
+            rows={ledger.instalments}
+            rowKey={(x) => x.dueOn}
+            emptyTitle={f('noInstalments')}
+          />
+          {can('fees.demand.generate') && yearOpen ? (
+            <form action={regenerateStudentDemand} style={{ marginTop: 'var(--sp-3)' }}>
+              <input type="hidden" name="studentId" value={studentId} />
+              <p className="ep-field__help">{f('regenerateHelp')}</p>
+              <Button type="submit" variant="secondary">
+                {f('regenerateDiff')}
+              </Button>
+            </form>
+          ) : null}
+          {ledger.lastRun ? (
+            <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
+              {f('lastDiff')}: {new Date(ledger.lastRun.ranAt).toLocaleString('en-IN')}{' '}
+              {ledger.lastRun.ranBy ? `(${ledger.lastRun.ranBy})` : ''}
+              {diff
+                ? ` · ${f('added')} ${diff.added.length} · ${f('removed')} ${diff.removed.length} · ${f('changed')} ${diff.changed.length} · ${diff.kept} ${f('kept')} · ₹${diff.totalBefore} ${f('totalBefore')} → ₹${diff.totalAfter} ${f('totalAfter')}`
+                : ''}
+            </p>
+          ) : null}
+          {diff && (diff.added.length || diff.removed.length || diff.changed.length) ? (
+            <DataTable<{ kind: string; period: string; head: string; detail: string }>
+              caption={f('lastDiff')}
+              density="dense"
+              columns={[
+                {
+                  key: 'kind',
+                  header: '',
+                  render: (x) => (
+                    <Badge
+                      tone={
+                        x.kind === 'added' ? 'success' : x.kind === 'removed' ? 'danger' : 'warning'
+                      }
+                    >
+                      {f(x.kind)}
+                    </Badge>
+                  ),
+                },
+                { key: 'period', header: f('period'), render: (x) => x.period },
+                { key: 'head', header: f('head'), render: (x) => x.head },
+                { key: 'detail', header: f('net'), render: (x) => x.detail },
+              ]}
+              rows={[
+                ...diff.added.map((x) => ({
+                  kind: 'added',
+                  period: x.period,
+                  head: x.head,
+                  detail: `${x.net} · ${x.dueOn}`,
+                })),
+                ...diff.removed.map((x) => ({
+                  kind: 'removed',
+                  period: x.period,
+                  head: x.head,
+                  detail: `${x.net} · ${x.dueOn}`,
+                })),
+                ...diff.changed.map((x) => ({
+                  kind: 'changed',
+                  period: x.period,
+                  head: x.head,
+                  detail: `${x.before.net} (${x.before.dueOn}) → ${x.after.net} (${x.after.dueOn})`,
+                })),
+              ]}
+              rowKey={(x) => `${x.kind}-${x.period}-${x.head}`}
+              emptyTitle={f('noDiff')}
+            />
+          ) : null}
+        </Card>
+
+        <Card title={f('receipts')}>
+          <DataTable<FeeLedgerPayment>
+            caption={f('receipts')}
+            density="dense"
+            columns={[
+              {
+                key: 'no',
+                header: f('receiptNo'),
+                render: (p) => <strong>{p.receiptNo ?? '—'}</strong>,
+              },
+              { key: 'on', header: f('receivedOn'), render: (p) => p.receivedOn },
+              { key: 'amount', header: f('amount'), numeric: true, render: (p) => p.amount },
+              {
+                key: 'mode',
+                header: f('mode'),
+                render: (p) => `${p.mode}${p.reference ? ` · ${p.reference}` : ''}`,
+              },
+              {
+                key: 'adv',
+                header: f('unallocated'),
+                numeric: true,
+                render: (p) => (Number(p.unallocated) > 0 ? p.unallocated : '—'),
+              },
+              { key: 'by', header: f('receivedBy'), render: (p) => p.receivedBy ?? '' },
+              {
+                key: 'pdf',
+                header: '',
+                render: (p) => (
+                  <form action={queueReceiptPdf}>
+                    <input type="hidden" name="studentId" value={studentId} />
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <Button type="submit" variant="ghost" size="sm">
+                      {f('receiptPdf')}
+                    </Button>
+                  </form>
+                ),
+              },
+            ]}
+            rows={ledger.payments}
+            rowKey={(p) => p.id}
+            emptyTitle={f('noPayments')}
+          />
+          {can('payments.offline.record') && yearOpen ? (
+            <form action={recordLedgerPayment} style={{ marginTop: 'var(--sp-4)' }}>
+              <input type="hidden" name="studentId" value={studentId} />
+              <p className="ep-field__help">{f('recordPayment')}</p>
+              <FormRow columns={4}>
+                <InputField
+                  id="amount"
+                  name="amount"
+                  label={f('amount')}
+                  type="number"
+                  min={1}
+                  step="0.01"
+                  required
+                />
+                <SelectField
+                  id="mode"
+                  name="mode"
+                  label={f('mode')}
+                  options={['cash', 'cheque', 'upi', 'bank'].map((m) => ({
+                    value: m,
+                    label: m.toUpperCase(),
+                  }))}
+                />
+                <InputField id="receivedOn" name="receivedOn" label={f('receivedOn')} type="date" />
+                <InputField id="reference" name="reference" label={f('reference')} maxLength={80} />
+              </FormRow>
+              <FormActions>
+                <Button type="submit">{f('recordPayment')}</Button>
+              </FormActions>
+            </form>
+          ) : null}
+        </Card>
+
+        {can('fees.late_fee.manage') ? (
+          <Card title={f('overrides')}>
+            <DataTable<FeeLedger['overrides'][number]>
+              caption={f('overrides')}
+              density="dense"
+              columns={[
+                { key: 'period', header: f('period'), render: (o) => o.periodName },
+                { key: 'amount', header: f('lateFee'), numeric: true, render: (o) => o.amount },
+                { key: 'reason', header: f('reason'), render: (o) => o.reason },
+                { key: 'by', header: f('receivedBy'), render: (o) => o.createdBy ?? '' },
+                {
+                  key: 'revoke',
+                  header: '',
+                  render: (o) =>
+                    yearOpen ? (
+                      <form action={revokeLateFeeOverride}>
+                        <input type="hidden" name="studentId" value={studentId} />
+                        <input type="hidden" name="overrideId" value={o.id} />
+                        <Button type="submit" variant="ghost" size="sm">
+                          {f('revoke')}
+                        </Button>
+                      </form>
+                    ) : null,
+                },
+              ]}
+              rows={ledger.overrides}
+              rowKey={(o) => o.id}
+              emptyTitle={f('noOverrides')}
+            />
+            {yearOpen && ledger.instalments.some((x) => x.lateFee.periodId) ? (
+              <form action={setLateFeeOverride} style={{ marginTop: 'var(--sp-4)' }}>
+                <input type="hidden" name="studentId" value={studentId} />
+                <FormRow columns={3}>
+                  <SelectField
+                    id="periodId"
+                    name="periodId"
+                    label={f('instalment')}
+                    options={ledger.instalments
+                      .filter((x) => x.lateFee.periodId)
+                      .map((x) => ({
+                        value: x.lateFee.periodId as string,
+                        label: `${x.label} · ${x.dueOn}`,
+                      }))}
+                  />
+                  <InputField
+                    id="amount"
+                    name="amount"
+                    label={f('overrideAmount')}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={0}
+                  />
+                  <InputField
+                    id="reason"
+                    name="reason"
+                    label={f('reason')}
+                    required
+                    minLength={3}
+                    maxLength={300}
+                  />
+                </FormRow>
+                <FormActions>
+                  <Button type="submit" variant="secondary">
+                    {f('setLateFee')}
+                  </Button>
+                </FormActions>
+              </form>
+            ) : null}
+          </Card>
+        ) : null}
+      </div>
+    </>
+  );
+}

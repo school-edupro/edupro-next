@@ -18,9 +18,11 @@ import {
   createTransportSlab,
   generateFeePeriods,
   setFeeHeadStatus,
+  setPeriodLateFee,
+  setReceiptSequence,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { FeeDiscount, FeeHead, FeePeriod, TransportSlab } from '@/lib/types';
+import type { FeeDiscount, FeeHead, FeePeriod, ReceiptSequence, TransportSlab } from '@/lib/types';
 
 const KINDS = ['regular', 'transport', 'opening_balance', 'late_fee', 'misc'] as const;
 
@@ -38,12 +40,14 @@ export default async function FeeMastersPage({
     getMe(),
   ]);
   const canManage = me.permissions.includes('fees.master.manage');
-  const [heads, periods, slabs, discounts] = await Promise.all([
+  const [heads, periods, slabs, discounts, sequences] = await Promise.all([
     apiFetch<{ data: FeeHead[] }>('/fees/heads').then((r) => r.data),
     apiFetch<{ data: FeePeriod[] }>('/fees/periods').then((r) => r.data),
     apiFetch<{ data: TransportSlab[] }>('/fees/slabs').then((r) => r.data),
     apiFetch<{ data: FeeDiscount[] }>('/fees/discounts').then((r) => r.data),
+    apiFetch<{ data: ReceiptSequence[] }>('/fees/receipt-sequences').then((r) => r.data),
   ]);
+  const anchors = periods.filter((p, i) => i === 0 || periods[i - 1]!.instalment !== p.instalment);
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
@@ -167,6 +171,145 @@ export default async function FeeMastersPage({
               <FormActions>
                 <Button type="submit" variant="secondary">
                   {f('generatePeriods')}
+                </Button>
+              </FormActions>
+            </form>
+          ) : null}
+        </Card>
+        {canManage && anchors.length ? (
+          <Card title={f('lateFeeSetup')}>
+            <p className="ep-field__help">{f('lateFeeSetupHelp')}</p>
+            {anchors.map((p) => (
+              <form
+                key={p.id}
+                action={setPeriodLateFee}
+                style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--sp-3)' }}
+              >
+                <input type="hidden" name="periodId" value={p.id} />
+                <strong>
+                  {f('instalment')} {p.instalment} · {p.name} · {f('dueOn')} {p.dueOn}
+                </strong>
+                <FormRow columns={4}>
+                  <InputField
+                    id={`lf-${p.id}`}
+                    name="lateFeeAmount"
+                    label={f('lateFeeAfterDue')}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={Number(p.lateFeeAmount ?? 0)}
+                  />
+                  <InputField
+                    id={`vf-${p.id}`}
+                    name="visibleFrom"
+                    label={f('visibleFrom')}
+                    type="date"
+                    defaultValue={p.visibleFrom ?? ''}
+                  />
+                  {[1, 2, 3].map((n) => (
+                    <span key={n} style={{ display: 'contents' }}>
+                      <InputField
+                        id={`s${n}on-${p.id}`}
+                        name={`slab${n}On`}
+                        label={`${f('slabOn')} ${n}`}
+                        type="date"
+                        defaultValue={p.slabs?.[n - 1]?.on ?? ''}
+                      />
+                      <InputField
+                        id={`s${n}amt-${p.id}`}
+                        name={`slab${n}Amount`}
+                        label={`${f('slabAmount')} ${n}`}
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        defaultValue={p.slabs?.[n - 1] ? Number(p.slabs[n - 1]!.amount) : ''}
+                      />
+                    </span>
+                  ))}
+                </FormRow>
+                <FormActions>
+                  <Button type="submit" variant="ghost" size="sm">
+                    {f('saveLateFee')}
+                  </Button>
+                </FormActions>
+              </form>
+            ))}
+          </Card>
+        ) : null}
+        <Card title={f('receiptSequences')}>
+          <p className="ep-field__help">{f('sequenceHelp')}</p>
+          <DataTable<ReceiptSequence>
+            caption={f('receiptSequences')}
+            density="dense"
+            columns={[
+              { key: 'fy', header: f('financialYear'), render: (s) => s.financialYear },
+              { key: 'ledger', header: f('ledgerType'), render: (s) => s.ledger },
+              {
+                key: 'prefix',
+                header: f('prefix'),
+                render: (s) => (
+                  <span>
+                    <strong>{s.prefix}</strong>
+                    {s.configured ? '' : ` (${f('notConfigured')})`}
+                  </span>
+                ),
+              },
+              { key: 'width', header: f('width'), numeric: true, render: (s) => s.width },
+              { key: 'next', header: f('nextNo'), numeric: true, render: (s) => s.nextNo },
+              { key: 'issued', header: f('issued'), numeric: true, render: (s) => s.issued },
+            ]}
+            rows={sequences}
+            rowKey={(s) => `${s.financialYearId}-${s.ledger}`}
+            emptyTitle={f('receiptSequences')}
+          />
+          {canManage && sequences.length ? (
+            <form action={setReceiptSequence} style={{ marginTop: 'var(--sp-4)' }}>
+              <FormRow columns={4}>
+                <SelectField
+                  id="rsFy"
+                  name="financialYearId"
+                  label={f('financialYear')}
+                  options={[
+                    ...new Map(sequences.map((s) => [s.financialYearId, s.financialYear])),
+                  ].map(([value, label]) => ({ value, label }))}
+                />
+                <SelectField
+                  id="rsLedger"
+                  name="ledger"
+                  label={f('ledgerType')}
+                  options={['school', 'hostel', 'misc', 'admission'].map((l) => ({
+                    value: l,
+                    label: l,
+                  }))}
+                />
+                <InputField
+                  id="rsPrefix"
+                  name="prefix"
+                  label={f('prefix')}
+                  required
+                  maxLength={24}
+                />
+                <InputField
+                  id="rsWidth"
+                  name="width"
+                  label={f('width')}
+                  type="number"
+                  min={1}
+                  max={12}
+                  defaultValue={6}
+                />
+                <InputField
+                  id="rsStart"
+                  name="startAt"
+                  label={f('startAt')}
+                  type="number"
+                  min={1}
+                  defaultValue={1}
+                />
+              </FormRow>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  {f('saveSequence')}
                 </Button>
               </FormActions>
             </form>

@@ -94,6 +94,11 @@ export class SettingsService {
           WHERE key = $1 AND valid_to IS NULL AND valid_from < COALESCE($2::date, CURRENT_DATE)`,
         [key, validFrom ?? null],
       );
+      // A second change on the same day replaces that day's row (the audit log keeps every value).
+      await c.query(
+        `DELETE FROM school_settings WHERE key = $1 AND valid_from = COALESCE($2::date, CURRENT_DATE)`,
+        [key, validFrom ?? null],
+      );
       await c.query(
         `INSERT INTO school_settings (school_id, key, value, valid_from, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2::jsonb, COALESCE($3::date, CURRENT_DATE), app.current_user_id(), app.current_user_id())`,

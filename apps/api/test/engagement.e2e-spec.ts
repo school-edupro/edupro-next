@@ -141,7 +141,7 @@ describe('engagement (e2e)', () => {
       isMe: true,
       relation: 'mother',
     });
-    expect(fam.json().consents).toHaveLength(5);
+    expect(fam.json().consents).toHaveLength(6);
     const staff = await inject({ method: 'GET', url: '/engagement/family', headers: h() });
     expect(staff.statusCode).toBe(403);
   });

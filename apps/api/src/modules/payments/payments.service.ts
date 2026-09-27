@@ -378,6 +378,7 @@ export class PaymentsService {
           dto.remarks ?? null,
         ],
       );
+      const receiptNo = await this.numberReceipt(c, p.rows[0]!.id, true);
       const left = await c.query<{ left: string }>(
         `SELECT app.allocate_fee_payment($1)::text AS left`,
         [p.rows[0]!.id],
@@ -386,10 +387,11 @@ export class PaymentsService {
         action: 'payments.offline.record',
         entityType: 'fee_payments',
         entityId: p.rows[0]!.id,
-        after: { ...dto, unallocated: left.rows[0]!.left },
+        after: { ...dto, receiptNo, unallocated: left.rows[0]!.left },
       });
       return {
         paymentId: p.rows[0]!.id,
+        receiptNo,
         amount: money(dto.amount),
         unallocated: left.rows[0]!.left,
       };
@@ -460,6 +462,40 @@ export class PaymentsService {
        VALUES (app.current_school_id(), $1, $2, $3, $4, 'online', $5) RETURNING id::text`,
       [intent.entityId, yearId, intent.id, intent.amount, intent.providerRef],
     );
+    await this.numberReceipt(c, p.rows[0]!.id, false);
     await c.query(`SELECT app.allocate_fee_payment($1)`, [p.rows[0]!.id]);
+  }
+
+  /**
+   * Sprint 12: every payment gets a receipt number from app.next_receipt_no (row-locked sequence per school,
+   * ledger and financial year). Counter receipts refuse a date outside any financial year; gateway payments
+   * fall back to the financial year of today so a webhook never fails on numbering.
+   */
+  private async numberReceipt(
+    c: PoolClient,
+    paymentId: string,
+    strict: boolean,
+  ): Promise<string | null> {
+    const fy = await c.query<{ fy: string | null }>(
+      `SELECT COALESCE(app.financial_year_for(p.received_on), CASE WHEN $2::boolean THEN NULL ELSE app.financial_year_for(CURRENT_DATE) END)::text AS fy
+         FROM fee_payments p WHERE p.id = $1`,
+      [paymentId, strict],
+    );
+    const fyId = fy.rows[0]?.fy ?? null;
+    if (!fyId) {
+      if (strict)
+        throw new DomainError(
+          'fees.no_financial_year',
+          'No financial year covers the receipt date; create it under System → Years',
+          { status: 409 },
+        );
+      this.logger.warn(`no financial year for payment ${paymentId}; receipt left unnumbered`);
+      return null;
+    }
+    const r = await c.query<{ no: string }>(
+      `UPDATE fee_payments SET financial_year_id = $2, receipt_no = app.next_receipt_no(ledger, $2) WHERE id = $1 RETURNING receipt_no AS no`,
+      [paymentId, fyId],
+    );
+    return r.rows[0]?.no ?? null;
   }
 }

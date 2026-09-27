@@ -52,6 +52,14 @@ export const DEFAULT_PURPOSES: Array<{
     channel: null,
     required: false,
   },
+  {
+    code: 'ai.assistant',
+    name: 'AI assistant in the parent app',
+    description:
+      'The school assistant may answer my questions using my child’s attendance, homework, fee and notice records. Answers are generated from school data only; nothing is used to train models.',
+    channel: null,
+    required: false,
+  },
 ];
 
 export interface PurposeStatus {

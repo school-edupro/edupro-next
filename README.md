@@ -13,21 +13,22 @@ This repository is deliberately **separate from the legacy PHP tree**. Nothing h
 
 ```
 apps/
-  api/        NestJS domain API (tenancy, access, audit, people, academics, admissions, fees, workflow, payments, attendance, communication, engagement, transport, planner, compat writes)
-  workers/    BullMQ processors (notifications, exports, RFID, reconciliation)
+  api/        NestJS domain API (tenancy, access, audit, people, academics, admissions, fees and the fee ledger, workflow, payments, attendance, communication, engagement, transport and fleet, planner, insights, compat writes)
+  workers/    BullMQ processors (notifications, exports, RFID, reconciliation, mart refresh)
   admin/      Next.js admin application (thin BFF for session and tenant context)
-  parent/     Next.js parent application (PWA shell since Sprint 5; homework, notices, calendar from Sprint 7; attendance from Sprint 9; timetable, queries, profile, consents, school bus from Sprint 10; privacy onboarding, Hindi toggle, offline shell from Sprint 11)
-  teacher/    Next.js teacher application (PWA shell since Sprint 5; timetable and daily work from Sprint 7; attendance from Sprint 9; family queries from Sprint 10; lesson plans and substitutions from Sprint 11)
+  parent/     Next.js parent application (PWA shell since Sprint 5; homework, notices, calendar from Sprint 7; attendance from Sprint 9; timetable, queries, profile, consents, school bus from Sprint 10; privacy onboarding, Hindi toggle, offline shell from Sprint 11; session selector for previous years from Sprint 12)
+  teacher/    Next.js teacher application (PWA shell since Sprint 5; timetable and daily work from Sprint 7; attendance from Sprint 9; family queries from Sprint 10; lesson plans and substitutions from Sprint 11; session selector from Sprint 12)
   public/     Next.js public admissions app (Sprint 8): OTP sign-in with a proof-of-work check, bilingual form, status; admission fee payment from Sprint 9
 packages/
   db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool, audit masks
   etl/        Legacy MySQL to PostgreSQL migration: transforms, identity map, pipeline runner
+  ai/         AI layer foundation (Sprint 12): model provider abstraction (Claude API, mock), redaction, budget meter, audit sink, assistant pipeline
   ui/         Mobilise Design System tokens, React components, Storybook
   api-client/ Generated TypeScript client from the API's OpenAPI document
   config/     Shared TypeScript, ESLint and Prettier configuration
 docs/
   adr/        Architecture decision records
-  design/     Foundation design, reference module guide, permission catalogue, threat model, environment plan
+  design/     Foundation design, reference module guide, permission catalogue, threat models, environment plan, DPDP consent, AI layer, fee ledger and marts
   standards/  Logging and personal data standard
   data/       Type mapping catalogue, DPDP data inventory, ETL framework, schema diff template
   quality/    Test strategy

@@ -11,6 +11,8 @@ export const FEES = {
   profileManage: 'fees.profile.manage',
   demandView: 'fees.demand.view',
   demandGenerate: 'fees.demand.generate',
+  lateFeeManage: 'fees.late_fee.manage',
+  ledgerView: 'fees.ledger.view',
 } as const;
 
 export const HeadKindSchema = z.enum([
@@ -146,5 +148,40 @@ export class ListDemandsQueryDto extends createZodDto(ListDemandsQuerySchema) {}
 
 export const ClassSummaryQuerySchema = z.object({ classId: IdSchema });
 export class ClassSummaryQueryDto extends createZodDto(ClassSummaryQuerySchema) {}
+
+// ---- Sprint 12: ledger, late fee, receipts -------------------------------------------------------
+export const LedgerQuerySchema = z.object({ asOf: DateSchema.optional() });
+export class LedgerQueryDto extends createZodDto(LedgerQuerySchema) {}
+
+export const SetLateFeeOverrideSchema = z.object({
+  /** The instalment's anchor period (from the ledger row). */
+  periodId: IdSchema,
+  /** 0 waives the late fee. */
+  amount: Money,
+  reason: z.string().trim().min(3).max(300),
+});
+export class SetLateFeeOverrideDto extends createZodDto(SetLateFeeOverrideSchema) {}
+
+export const SetPeriodLateFeeSchema = z.object({
+  /** Slab mode: charged after the due date until the first slab date. */
+  lateFeeAmount: Money.default(0),
+  /** Up to three later slabs (legacy LastFee_date_1..3 with Late_fees_1..3). */
+  slabs: z
+    .array(z.object({ on: DateSchema, amount: Money }))
+    .max(3)
+    .default([]),
+  /** Families see the instalment from this date; null = the school-wide days-before setting. */
+  visibleFrom: DateSchema.nullable().optional(),
+});
+export class SetPeriodLateFeeDto extends createZodDto(SetPeriodLateFeeSchema) {}
+
+export const SetReceiptSequenceSchema = z.object({
+  ledger: z.enum(['school', 'hostel', 'misc', 'admission']),
+  financialYearId: IdSchema,
+  prefix: z.string().trim().min(1).max(24),
+  width: z.number().int().min(1).max(12).default(6),
+  startAt: z.number().int().min(1).max(10_000_000).default(1),
+});
+export class SetReceiptSequenceDto extends createZodDto(SetReceiptSequenceSchema) {}
 
 export { DateSchema as FeeDateSchema };

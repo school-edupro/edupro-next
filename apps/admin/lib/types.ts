@@ -766,6 +766,9 @@ export interface FeePeriod {
   year: number;
   instalment: number;
   dueOn: string;
+  lateFeeAmount?: string;
+  slabs?: Array<{ on: string; amount: string }>;
+  visibleFrom?: string | null;
 }
 export interface FeeStructure {
   id: string;
@@ -1155,12 +1158,20 @@ export interface TransportRoute {
   alertBoarding: boolean;
   alertAlighting: boolean;
   lateAfter: string | null;
+  vehicleId: string | null;
+  vehicleRegNo: string | null;
+  driverId: string | null;
+  driverOnRecord: string | null;
+  conductorName: string | null;
+  conductorMobile: string | null;
+  stops: number;
 }
 export interface RouteStudent {
   studentId: string;
   name: string;
   admissionNo: string;
   section: string | null;
+  stopId: string | null;
   stopName: string | null;
   pickupTime: string | null;
   dropTime: string | null;
@@ -1293,4 +1304,209 @@ export interface PrivacyNotice {
   bodyHi: string | null;
   publishedAt: string | null;
   acknowledgements: number;
+}
+
+// ---- Sprint 12: fee ledger, fleet, insights ------------------------------------------------------
+export interface FeeLateFee {
+  amount: string;
+  mode: string;
+  days: number;
+  overridden: boolean;
+  reason: string | null;
+  periodId: string | null;
+}
+export interface FeeLedgerInstalment {
+  dueOn: string;
+  label: string;
+  instalment: number;
+  sequences: number[];
+  net: string;
+  paid: string;
+  balance: string;
+  lateFee: FeeLateFee;
+  visibleFrom: string;
+  visible: boolean;
+  status: 'paid' | 'overdue' | 'due' | 'upcoming';
+}
+export interface FeeLedgerPayment {
+  id: string;
+  receiptNo: string | null;
+  receivedOn: string;
+  amount: string;
+  mode: string;
+  reference: string | null;
+  remarks: string | null;
+  receivedBy: string | null;
+  allocated: string;
+  unallocated: string;
+  intentId: string | null;
+}
+export interface FeeDemandDiff {
+  added: Array<{ period: string; head: string; net: string; dueOn: string }>;
+  removed: Array<{ period: string; head: string; net: string; dueOn: string }>;
+  changed: Array<{
+    period: string;
+    head: string;
+    before: { net: string; dueOn: string };
+    after: { net: string; dueOn: string };
+  }>;
+  kept: number;
+  totalBefore: string;
+  totalAfter: string;
+}
+export interface FeeLedger {
+  student: { id: string; name: string; admissionNo: string; section: string | null };
+  year: { id: string; code: string; status: string };
+  asOf: string;
+  lateFeeMode: string;
+  instalments: FeeLedgerInstalment[];
+  totals: { net: string; paid: string; balance: string; lateFee: string; payable: string };
+  payments: FeeLedgerPayment[];
+  overrides: Array<{
+    id: string;
+    periodId: string;
+    periodName: string;
+    amount: string;
+    reason: string;
+    createdBy: string | null;
+    createdAt: string;
+  }>;
+  lastRun: {
+    id: string;
+    ranAt: string;
+    ranBy: string | null;
+    rows: number;
+    total: string;
+    diff: FeeDemandDiff | null;
+  } | null;
+}
+export interface ReceiptSequence {
+  ledger: string;
+  financialYearId: string;
+  financialYear: string;
+  prefix: string;
+  width: number;
+  nextNo: number;
+  issued: number;
+  configured: boolean;
+}
+export interface TransportVehicle {
+  id: string;
+  regNo: string;
+  make: string | null;
+  capacity: number | null;
+  insuranceExpiry: string | null;
+  fitnessExpiry: string | null;
+  permitExpiry: string | null;
+  gpsDeviceId: string | null;
+  status: 'active' | 'inactive';
+  routes: string[];
+  nextExpiry: string | null;
+}
+export interface TransportDriver {
+  id: string;
+  name: string;
+  mobile: string | null;
+  licenceNo: string | null;
+  licenceExpiry: string | null;
+  employeeId: string | null;
+  status: 'active' | 'inactive';
+  routes: string[];
+}
+export interface TransportStop {
+  id: string;
+  routeId: string;
+  sequence: number;
+  name: string;
+  lat: string | null;
+  lng: string | null;
+  pickupTime: string | null;
+  dropTime: string | null;
+  slabId: string | null;
+  slabCode: string | null;
+  students: number;
+}
+export interface DashboardAlert {
+  severity: 'info' | 'warning' | 'danger';
+  code: string;
+  message: string;
+  href: string | null;
+}
+export interface MartStatus {
+  mart: string;
+  refreshedAt: string | null;
+  rows: number | null;
+  durationMs: number | null;
+  stale: boolean;
+}
+export interface PrincipalDashboard {
+  date: string;
+  year: { id: string; code: string; status: string };
+  attendance: {
+    strength: number;
+    present: number;
+    absent: number;
+    late: number;
+    pct: number | null;
+    sections: number;
+    markedSections: number;
+    unmarked: string[];
+    byClass: Array<{
+      classId: string;
+      classCode: string;
+      strength: number;
+      present: number;
+      absent: number;
+      pct: number | null;
+    }>;
+    trend: Array<{ date: string; pct: number | null; strength: number; present: number }>;
+  };
+  fees: {
+    dueTillDate: string;
+    collectedTillDate: string;
+    balance: string;
+    ageing: Array<{ bucket: string; balance: string; students: number }>;
+    collectedToday: string;
+    collected7d: string;
+    collected30d: string;
+    previous7d: string;
+    byMode30d: Array<{ mode: string; amount: string; receipts: number }>;
+    daily: Array<{ date: string; amount: string }>;
+    defaulters: Array<{
+      studentId: string;
+      name: string;
+      admissionNo: string;
+      section: string | null;
+      balance: string;
+      daysOverdue: number;
+    }>;
+    byClass: Array<{ classCode: string; net: string; paid: string; balance: string }>;
+  };
+  admissions: Array<{
+    cycleId: string;
+    code: string;
+    status: string;
+    total: number;
+    byStatus: Array<{ status: string; count: number }>;
+  }>;
+  comms: {
+    last7: Array<{
+      channel: string;
+      sent: number;
+      delivered: number;
+      failed: number;
+      queued: number;
+    }>;
+    deliveryRate: number | null;
+  };
+  approvals: { pending: number; oldestHours: number | null };
+  readers: Array<{
+    code: string;
+    name: string;
+    kind: string;
+    lastSeenAt: string | null;
+    silentHours: number | null;
+  }>;
+  alerts: DashboardAlert[];
+  marts: MartStatus[];
 }

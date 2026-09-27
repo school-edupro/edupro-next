@@ -29,7 +29,12 @@ export default async function HomePage() {
       '/attendance',
     ],
     ['Daily work', 'Post homework and classwork', can('academics.daily_work.post'), '/daily-work'],
-    ['Lesson plans', 'Weekly plans with approvals', can('academics.lesson_plan.manage'), '/lesson-plans'],
+    [
+      'Lesson plans',
+      'Weekly plans with approvals',
+      can('academics.lesson_plan.manage'),
+      '/lesson-plans',
+    ],
     [
       'Queries',
       'Family queries and leave requests for your sections',
@@ -56,6 +61,43 @@ export default async function HomePage() {
           </form>
         }
       />
+      {me.academicYears && me.academicYears.length > 1 ? (
+        <form
+          method="post"
+          action="/api/context"
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-2)',
+            alignItems: 'center',
+            marginBottom: 'var(--sp-3)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <label htmlFor="academicYearId" className="ep-field__label" style={{ margin: 0 }}>
+            Session
+          </label>
+          <select
+            id="academicYearId"
+            name="academicYearId"
+            className="ep-select"
+            defaultValue={me.academicYear?.id ?? ''}
+          >
+            {me.academicYears.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.code} · {y.status}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            View
+          </button>
+          {me.academicYear && me.academicYear.status !== 'active' ? (
+            <span className="ep-badge ep-badge--warning">
+              Viewing a previous session (read-only)
+            </span>
+          ) : null}
+        </form>
+      ) : null}
       <div
         style={{
           display: 'grid',

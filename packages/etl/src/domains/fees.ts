@@ -4,7 +4,8 @@
  * fees_discountmaster (percent or fixed per head) become fee_heads, fee_structures, fee_periods and
  * fee_discounts. Transforms only here; the loader lands with the fee module ETL rehearsal.
  */
-import type { Step } from '../pipeline';
+import type { PoolClient } from 'pg';
+import type { Loader, ReconcileMeasure, Step, Transformed } from '../pipeline';
 import { reject, type Reject } from '../reject';
 import {
   normaliseCode,
@@ -297,3 +298,255 @@ export const feeDiscountStep: Step<RawDiscount, FeeDiscountRecord> = {
     };
   },
 };
+
+// ---- Sprint 12: fees_student (the legacy demand) → fee_demands for every year ----------------------
+
+export interface RawFeeStudentDemand {
+  sadmission?: unknown;
+  feeshead?: unknown;
+  head_original_amount?: unknown;
+  head_concession_amount?: unknown;
+  amount?: unknown;
+  quarter?: unknown;
+  Month?: unknown;
+  StudentType?: unknown;
+  FeesType?: unknown;
+  InputSource?: unknown;
+  FinancialYear?: unknown;
+}
+
+export interface FeeDemandRecord {
+  admissionNo: string;
+  headCode: string;
+  gross: string;
+  discount: string;
+  net: string;
+  /** academic period sequence: April = 1 ... March = 12 */
+  sequence: number;
+  instalment: number | null;
+  studentType: 'new' | 'old' | null;
+  feeGroup: string;
+  source: string;
+  legacyYear: string;
+}
+
+const money2 = (v: string) => Number(v).toFixed(2);
+
+/**
+ * One legacy `fees_student` row is one demand row: admission number, head, original amount, concession and
+ * net per month. The net is recomputed from gross minus concession and the legacy `amount` is checked
+ * against it (a mismatch is a blocking reject: the legacy ledger disagrees with itself).
+ */
+export const feeDemandStep: Step<RawFeeStudentDemand, FeeDemandRecord> = {
+  legacyTable: 'fees_student',
+  transform(raw) {
+    const rejects: Rejects = [];
+    const admissionNo = text(raw.sadmission)?.toUpperCase() ?? null;
+    if (!admissionNo)
+      rejects.push({
+        ...reject('fee_demand.admission_missing', raw.sadmission, true),
+        column: 'sadmission',
+      });
+    const head = normaliseCode(raw.feeshead);
+    if (head.kind !== 'ok') rejects.push({ ...head, column: 'feeshead' });
+    const gross = toMoney(raw.head_original_amount ?? raw.amount);
+    if (gross.kind !== 'ok') rejects.push({ ...gross, column: 'head_original_amount' });
+    else if (gross.value === null)
+      rejects.push({
+        ...reject('fee_demand.amount_missing', raw.head_original_amount, true),
+        column: 'head_original_amount',
+      });
+    const concession = toMoney(raw.head_concession_amount ?? '0');
+    if (concession.kind !== 'ok') rejects.push({ ...concession, column: 'head_concession_amount' });
+    const month = normaliseMonth(raw.Month);
+    if (month.kind !== 'ok') rejects.push({ ...month, column: 'Month' });
+    else if (month.value === null)
+      rejects.push({ ...reject('fee_demand.month_missing', raw.Month, true), column: 'Month' });
+    const year =
+      raw.FinancialYear === undefined || raw.FinancialYear === null || raw.FinancialYear === ''
+        ? null
+        : normaliseYearCode(raw.FinancialYear);
+    if (!year)
+      rejects.push({
+        ...reject('fee_demand.year_missing', raw.FinancialYear, true),
+        column: 'FinancialYear',
+      });
+    else if (year.kind !== 'ok') rejects.push({ ...year, column: 'FinancialYear' });
+    if (
+      rejects.length ||
+      !admissionNo ||
+      head.kind !== 'ok' ||
+      gross.kind !== 'ok' ||
+      concession.kind !== 'ok' ||
+      month.kind !== 'ok' ||
+      !year ||
+      year.kind !== 'ok'
+    )
+      return rejects;
+    const g = Number(gross.value);
+    const d = Number(concession.value ?? '0');
+    const net = Math.max(g - d, 0);
+    const legacyNet = toMoney(raw.amount);
+    if (
+      legacyNet.kind === 'ok' &&
+      legacyNet.value !== null &&
+      raw.head_original_amount !== undefined &&
+      Math.abs(Number(legacyNet.value) - net) > 0.01
+    )
+      return [
+        {
+          ...reject('fee_demand.net_mismatch', `${raw.amount} vs ${net.toFixed(2)}`, true),
+          column: 'amount',
+          legacyKey: `${admissionNo}|${head.value}|${raw.Month}|${year.value}`,
+        },
+      ];
+    const st = String(raw.StudentType ?? '')
+      .trim()
+      .toLowerCase();
+    const q = Number(String(raw.quarter ?? '').replace(/\D/g, ''));
+    return {
+      legacyKey: `${admissionNo}|${head.value}|${month.value}|${year.value}`,
+      legacyYear: year.value,
+      row: {
+        admissionNo,
+        headCode: head.value,
+        gross: g.toFixed(2),
+        discount: d.toFixed(2),
+        net: net.toFixed(2),
+        sequence: ((month.value! + 8) % 12) + 1,
+        instalment: q >= 1 && q <= 12 ? q : null,
+        studentType: st === 'new' ? 'new' : st === 'old' ? 'old' : null,
+        feeGroup:
+          (text(raw.FeesType) ?? 'general')
+            .toLowerCase()
+            .replace(/[^a-z]+/g, '_')
+            .replace(/^_|_$/g, '') || 'general',
+        source: text(raw.InputSource)?.toLowerCase() ?? 'legacy',
+        legacyYear: year.value,
+      },
+    };
+  },
+};
+
+export interface YearTotals {
+  legacyYear: string;
+  rows: number;
+  students: number;
+  gross: string;
+  discount: string;
+  net: string;
+  byHead: Array<{ headCode: string; rows: number; net: string }>;
+}
+
+/** Per-year totals of the transformed demand, the figures the rehearsal compares with the legacy SQL sums. */
+export function feeDemandTotalsByYear(rows: FeeDemandRecord[]): YearTotals[] {
+  const years = new Map<
+    string,
+    {
+      rows: number;
+      students: Set<string>;
+      gross: number;
+      discount: number;
+      net: number;
+      heads: Map<string, { rows: number; net: number }>;
+    }
+  >();
+  for (const r of rows) {
+    const y = years.get(r.legacyYear) ?? {
+      rows: 0,
+      students: new Set<string>(),
+      gross: 0,
+      discount: 0,
+      net: 0,
+      heads: new Map(),
+    };
+    y.rows += 1;
+    y.students.add(r.admissionNo);
+    y.gross += Number(r.gross);
+    y.discount += Number(r.discount);
+    y.net += Number(r.net);
+    const h = y.heads.get(r.headCode) ?? { rows: 0, net: 0 };
+    h.rows += 1;
+    h.net += Number(r.net);
+    y.heads.set(r.headCode, h);
+    years.set(r.legacyYear, y);
+  }
+  return [...years.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([legacyYear, y]) => ({
+      legacyYear,
+      rows: y.rows,
+      students: y.students.size,
+      gross: money2(String(y.gross)),
+      discount: money2(String(y.discount)),
+      net: money2(String(y.net)),
+      byHead: [...y.heads.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([headCode, h]) => ({ headCode, rows: h.rows, net: money2(String(h.net)) })),
+    }));
+}
+
+/** Reconcile measures for one year: legacy sums (from the source SQL) against the transformed rows. */
+export function reconcileFeeDemandYear(
+  legacy: { rows: number; net: number; students: number },
+  totals: YearTotals,
+): ReconcileMeasure[] {
+  return [
+    { measure: 'fee_demand.rows', legacyValue: legacy.rows, targetValue: totals.rows },
+    {
+      measure: 'fee_demand.net',
+      legacyValue: Number(legacy.net.toFixed(2)),
+      targetValue: Number(totals.net),
+    },
+    { measure: 'fee_demand.students', legacyValue: legacy.students, targetValue: totals.students },
+  ];
+}
+
+/**
+ * Loads demand rows for one academic year into fee_demands (upsert on student, year, period and head).
+ * The caller resolves the target academic year and passes the lookups; unknown students, heads or periods
+ * are reported as rejects by the pipeline through the thrown error, one batch at a time.
+ */
+export function feeDemandLoader(lookups: {
+  academicYearId: string;
+  studentIdByAdmissionNo: Map<string, string>;
+  headIdByCode: Map<string, string>;
+  periodIdBySequence: Map<number, string>;
+  periodDueOnBySequence: Map<number, string>;
+}): Loader<FeeDemandRecord> {
+  return {
+    targetTable: 'fee_demands',
+    async load(client: PoolClient, rows: Array<Transformed<FeeDemandRecord>>): Promise<string[]> {
+      const ids: string[] = [];
+      for (const { row } of rows) {
+        const studentId = lookups.studentIdByAdmissionNo.get(row.admissionNo);
+        const headId = lookups.headIdByCode.get(row.headCode);
+        const periodId = lookups.periodIdBySequence.get(row.sequence);
+        const dueOn = lookups.periodDueOnBySequence.get(row.sequence);
+        if (!studentId) throw new Error(`fee_demand.student_unknown:${row.admissionNo}`);
+        if (!headId) throw new Error(`fee_demand.head_unknown:${row.headCode}`);
+        if (!periodId || !dueOn) throw new Error(`fee_demand.period_unknown:${row.sequence}`);
+        const r = await client.query<{ id: string }>(
+          `INSERT INTO fee_demands (school_id, student_id, academic_year_id, period_id, head_id, gross, discount, net, due_on, source)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::date, $9)
+           ON CONFLICT (student_id, academic_year_id, period_id, head_id)
+           DO UPDATE SET gross = EXCLUDED.gross, discount = EXCLUDED.discount, net = EXCLUDED.net, due_on = EXCLUDED.due_on, source = EXCLUDED.source, updated_at = now()
+           RETURNING id::text`,
+          [
+            studentId,
+            lookups.academicYearId,
+            periodId,
+            headId,
+            row.gross,
+            row.discount,
+            row.net,
+            dueOn,
+            `legacy:${row.source}`,
+          ],
+        );
+        ids.push(r.rows[0]!.id);
+      }
+      return ids;
+    },
+  };
+}

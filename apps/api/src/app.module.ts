@@ -24,6 +24,7 @@ import { AttendanceModule } from './modules/attendance/attendance.module';
 import { EngagementModule } from './modules/engagement/engagement.module';
 import { TransportModule } from './modules/transport/transport.module';
 import { PlannerModule } from './modules/planner/planner.module';
+import { InsightsModule } from './modules/insights/insights.module';
 import { TemplatesModule } from './modules/platform/templates/templates.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommsModule } from './modules/comms/comms.module';
@@ -68,6 +69,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     TransportModule,
     EngagementModule,
     PlannerModule,
+    InsightsModule,
     PeopleModule,
     CompatModule,
   ],

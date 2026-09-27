@@ -25,7 +25,7 @@ export interface TemplateRow {
   id: string;
   code: string;
   name: string;
-  kind: 'transfer_certificate' | 'bonafide' | 'letter';
+  kind: 'transfer_certificate' | 'bonafide' | 'letter' | 'fee_receipt';
   pageWidth: string;
   pageHeight: string;
   bodyHtml: string;
@@ -71,6 +71,7 @@ export const ENTITY_FOR_KIND: Record<TemplateRow['kind'], DocumentEntity> = {
   transfer_certificate: 'transfer_certificate',
   bonafide: 'student',
   letter: 'student',
+  fee_receipt: 'fee_receipt',
 };
 
 /** Document templates (S7-01): editable HTML with placeholders, rendered to PDF by the export service. */

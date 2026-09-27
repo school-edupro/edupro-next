@@ -611,7 +611,16 @@ export default async function StudentPage({
         ) : null}
 
         {feeProfile && feeDemands ? (
-          <Card title={f('demand')}>
+          <Card
+            title={f('demand')}
+            actions={
+              can('fees.ledger.view') ? (
+                <a href={`/fees/ledger/${student.id}`} className="ep-btn ep-btn--ghost ep-btn--sm">
+                  {f('viewLedger')}
+                </a>
+              ) : undefined
+            }
+          >
             <p className="ep-field__help">
               {f('profile')}:{' '}
               {feeProfile.isDefault

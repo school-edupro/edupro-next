@@ -18,6 +18,7 @@ export default async function FeeDemandsPage({
     getMe(),
   ]);
   const canGenerate = me.permissions.includes('fees.demand.generate');
+  const canLedger = me.permissions.includes('fees.ledger.view');
   const [classes, rows] = await Promise.all([
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
     sp.classId
@@ -73,9 +74,17 @@ export default async function FeeDemandsPage({
                 key: 'name',
                 header: f('student'),
                 render: (r) => (
-                  <a href={`/people/students/${r.studentId}`}>
-                    {r.name} · {r.admissionNo}
-                  </a>
+                  <span>
+                    <a href={`/people/students/${r.studentId}`}>
+                      {r.name} · {r.admissionNo}
+                    </a>
+                    {canLedger ? (
+                      <>
+                        {' · '}
+                        <a href={`/fees/ledger/${r.studentId}`}>{f('ledger')}</a>
+                      </>
+                    ) : null}
+                  </span>
                 ),
               },
               {

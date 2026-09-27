@@ -18,11 +18,21 @@ export interface RouteRow {
   alertBoarding: boolean;
   alertAlighting: boolean;
   lateAfter: string | null;
+  vehicleId: string | null;
+  vehicleRegNo: string | null;
+  driverId: string | null;
+  driverOnRecord: string | null;
+  conductorName: string | null;
+  conductorMobile: string | null;
+  stops: number;
 }
 
-const SELECT = `SELECT r.id::text, r.code, r.name, r.vehicle_no, r.driver_name, r.driver_mobile, r.status::text, r.alert_boarding, r.alert_alighting, to_char(r.late_after, 'HH24:MI') AS late_after,
-        (SELECT count(*)::int FROM student_route_assignments a WHERE a.route_id = r.id AND a.academic_year_id = $1::bigint) AS students
-   FROM transport_routes r`;
+const SELECT = `SELECT r.id::text, r.code, r.name, COALESCE(v.reg_no, r.vehicle_no) AS vehicle_no, COALESCE(d.name, r.driver_name) AS driver_name, COALESCE(d.mobile, r.driver_mobile) AS driver_mobile,
+        r.status::text, r.alert_boarding, r.alert_alighting, to_char(r.late_after, 'HH24:MI') AS late_after,
+        r.vehicle_id::text, v.reg_no AS vehicle_reg_no, r.driver_id::text, d.name AS driver_on_record, r.conductor_name, r.conductor_mobile,
+        (SELECT count(*)::int FROM student_route_assignments a WHERE a.route_id = r.id AND a.academic_year_id = $1::bigint) AS students,
+        (SELECT count(*)::int FROM transport_stops s WHERE s.route_id = r.id) AS stops
+   FROM transport_routes r LEFT JOIN transport_vehicles v ON v.id = r.vehicle_id LEFT JOIN transport_drivers d ON d.id = r.driver_id`;
 
 /** Minimal transport (S10): routes and the students riding them, enough for route audiences and bus readers. */
 @Injectable()
@@ -87,10 +97,29 @@ export class TransportService {
   async update(ctx: RequestContext, id: string, dto: UpdateRouteDto): Promise<RouteRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.find(c, id, this.year(ctx));
+      if (dto.vehicleId) {
+        const v = await c.query(
+          `SELECT 1 FROM transport_vehicles WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+          [dto.vehicleId],
+        );
+        if (v.rowCount === 0) throw new DomainError('not-found', 'Vehicle not found or inactive');
+      }
+      if (dto.driverId) {
+        const d = await c.query(
+          `SELECT 1 FROM transport_drivers WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+          [dto.driverId],
+        );
+        if (d.rowCount === 0) throw new DomainError('not-found', 'Driver not found or inactive');
+      }
       await c.query(
         `UPDATE transport_routes SET name = COALESCE($2, name), vehicle_no = COALESCE($3, vehicle_no), driver_name = COALESCE($4, driver_name), driver_mobile = COALESCE($5, driver_mobile),
                 status = COALESCE($6::row_status, status), alert_boarding = COALESCE($7, alert_boarding), alert_alighting = COALESCE($8, alert_alighting),
-                late_after = CASE WHEN $9::boolean THEN $10::time ELSE late_after END, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
+                late_after = CASE WHEN $9::boolean THEN $10::time ELSE late_after END,
+                vehicle_id = CASE WHEN $11::boolean THEN $12::bigint ELSE vehicle_id END,
+                driver_id = CASE WHEN $13::boolean THEN $14::bigint ELSE driver_id END,
+                conductor_name = CASE WHEN $15::boolean THEN $16 ELSE conductor_name END,
+                conductor_mobile = CASE WHEN $17::boolean THEN $18 ELSE conductor_mobile END,
+                updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
         [
           id,
           dto.name ?? null,
@@ -102,6 +131,14 @@ export class TransportService {
           dto.alertAlighting ?? null,
           dto.lateAfter !== undefined,
           dto.lateAfter ?? null,
+          dto.vehicleId !== undefined,
+          dto.vehicleId ?? null,
+          dto.driverId !== undefined,
+          dto.driverId ?? null,
+          dto.conductorName !== undefined,
+          dto.conductorName ?? null,
+          dto.conductorMobile !== undefined,
+          dto.conductorMobile ?? null,
         ],
       );
       const after = await this.find(c, id, this.year(ctx));
@@ -130,6 +167,7 @@ export class TransportService {
       name: string;
       admission_no: string;
       section: string | null;
+      stop_id: string | null;
       stop_name: string | null;
       pickup_time: string | null;
       drop_time: string | null;
@@ -137,7 +175,7 @@ export class TransportService {
     }>(
       `SELECT a.student_id::text, s.display_name AS name, s.admission_no,
               (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' LIMIT 1) AS section,
-              a.stop_name, a.pickup_time::text, a.drop_time::text,
+              a.stop_id::text, a.stop_name, a.pickup_time::text, a.drop_time::text,
               (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1) AS guardian_mobile
          FROM student_route_assignments a JOIN students s ON s.id = a.student_id
         WHERE a.route_id = $1 AND a.academic_year_id = $2 ORDER BY a.pickup_time NULLS LAST, s.display_name`,
@@ -148,6 +186,7 @@ export class TransportService {
       name: x.name,
       admissionNo: x.admission_no,
       section: x.section,
+      stopId: x.stop_id,
       stopName: x.stop_name,
       pickupTime: x.pickup_time ? x.pickup_time.slice(0, 5) : null,
       dropTime: x.drop_time ? x.drop_time.slice(0, 5) : null,
@@ -160,20 +199,31 @@ export class TransportService {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.find(c, routeId, yearId);
-      for (const a of dto.assignments)
+      for (const a of dto.assignments) {
+        let stop: { name: string; pickup: string | null; drop: string | null } | null = null;
+        if (a.stopId) {
+          const st = await c.query<{ name: string; pickup: string | null; drop: string | null }>(
+            `SELECT name, to_char(pickup_time, 'HH24:MI') AS pickup, to_char(drop_time, 'HH24:MI') AS drop FROM transport_stops WHERE id = $1 AND route_id = $2`,
+            [a.stopId, routeId],
+          );
+          if (!st.rows[0]) throw new DomainError('not-found', 'Stop is not on this route');
+          stop = st.rows[0];
+        }
         await c.query(
-          `INSERT INTO student_route_assignments (school_id, student_id, route_id, academic_year_id, stop_name, pickup_time, drop_time, created_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::time, $6::time, app.current_user_id())
-           ON CONFLICT (student_id, academic_year_id) DO UPDATE SET route_id = EXCLUDED.route_id, stop_name = EXCLUDED.stop_name, pickup_time = EXCLUDED.pickup_time, drop_time = EXCLUDED.drop_time`,
+          `INSERT INTO student_route_assignments (school_id, student_id, route_id, academic_year_id, stop_id, stop_name, pickup_time, drop_time, created_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6::time, $7::time, app.current_user_id())
+           ON CONFLICT (student_id, academic_year_id) DO UPDATE SET route_id = EXCLUDED.route_id, stop_id = EXCLUDED.stop_id, stop_name = EXCLUDED.stop_name, pickup_time = EXCLUDED.pickup_time, drop_time = EXCLUDED.drop_time`,
           [
             a.studentId,
             routeId,
             yearId,
-            a.stopName ?? null,
-            a.pickupTime ?? null,
-            a.dropTime ?? null,
+            a.stopId ?? null,
+            a.stopName ?? stop?.name ?? null,
+            a.pickupTime ?? stop?.pickup ?? null,
+            a.dropTime ?? stop?.drop ?? null,
           ],
         );
+      }
       await this.audit.stage(ctx, c, {
         action: 'transport.route.assign',
         entityType: 'transport_routes',
@@ -226,4 +276,11 @@ const toRoute = (x: Record<string, unknown>): RouteRow => ({
   alertBoarding: x.alert_boarding as boolean,
   alertAlighting: x.alert_alighting as boolean,
   lateAfter: (x.late_after as string) ?? null,
+  vehicleId: (x.vehicle_id as string) ?? null,
+  vehicleRegNo: (x.vehicle_reg_no as string) ?? null,
+  driverId: (x.driver_id as string) ?? null,
+  driverOnRecord: (x.driver_on_record as string) ?? null,
+  conductorName: (x.conductor_name as string) ?? null,
+  conductorMobile: (x.conductor_mobile as string) ?? null,
+  stops: x.stops as number,
 });
