@@ -1133,3 +1133,217 @@ export async function applyPromotions(fd: FormData) {
     }),
   );
 }
+
+// ---- Sprint 8: admissions -----------------------------------------------------------------------
+function criteriaFrom(fd: FormData) {
+  const classIds = fd.getAll('criteriaClassId').map(String);
+  return classIds
+    .map((classId, i) => ({
+      classId,
+      seats: Number(fd.getAll('criteriaSeats')[i] ?? 0),
+      dobFrom: String(fd.getAll('criteriaDobFrom')[i] ?? '') || undefined,
+      dobTo: String(fd.getAll('criteriaDobTo')[i] ?? '') || undefined,
+      passcode: String(fd.getAll('criteriaPasscode')[i] ?? '') || undefined,
+    }))
+    .filter((k) => k.classId);
+}
+
+function scoringFrom(fd: FormData) {
+  const codes = fd.getAll('scoreCode').map(String);
+  return codes
+    .map((code, i) => ({
+      code,
+      name: String(fd.getAll('scoreName')[i] ?? ''),
+      points: Number(fd.getAll('scorePoints')[i] ?? 0),
+      autoRule: String(fd.getAll('scoreRule')[i] ?? '') || undefined,
+    }))
+    .filter((s) => s.code && s.name);
+}
+
+export async function createAdmissionCycle(fd: FormData) {
+  return run('/admissions/cycles', () =>
+    apiFetch('/admissions/cycles', {
+      method: 'POST',
+      body: JSON.stringify({
+        academicYearId: str(fd, 'academicYearId'),
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        nameHi: opt(fd, 'nameHi'),
+        instructions: opt(fd, 'instructions'),
+        instructionsHi: opt(fd, 'instructionsHi'),
+        opensAt: new Date(str(fd, 'opensAt')).toISOString(),
+        closesAt: new Date(str(fd, 'closesAt')).toISOString(),
+        applicationFee: Number(str(fd, 'applicationFee') || '0'),
+        criteria: criteriaFrom(fd),
+        scoreCriteria: scoringFrom(fd),
+      }),
+    }),
+  );
+}
+
+export async function updateAdmissionCycle(fd: FormData) {
+  const id = str(fd, 'id');
+  const body: Record<string, unknown> = {};
+  if (fd.has('name')) {
+    body.name = str(fd, 'name');
+    body.nameHi = opt(fd, 'nameHi') ?? null;
+    body.instructions = opt(fd, 'instructions') ?? null;
+    body.instructionsHi = opt(fd, 'instructionsHi') ?? null;
+    body.opensAt = new Date(str(fd, 'opensAt')).toISOString();
+    body.closesAt = new Date(str(fd, 'closesAt')).toISOString();
+    body.applicationFee = Number(str(fd, 'applicationFee') || '0');
+    body.criteria = criteriaFrom(fd);
+    body.scoreCriteria = scoringFrom(fd);
+  }
+  if (fd.has('status')) body.status = str(fd, 'status');
+  return run(`/admissions/cycles/${id}`, () =>
+    apiFetch(`/admissions/cycles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  );
+}
+
+export async function setApplicationStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/admissions/applications/${id}`, () =>
+    apiFetch(`/admissions/applications/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status: str(fd, 'status'), note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function scoreApplication(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/admissions/applications/${id}`, () =>
+    apiFetch(`/admissions/applications/${id}/score`, {
+      method: 'POST',
+      body: JSON.stringify({ award: fd.getAll('award').map(String), remarks: opt(fd, 'remarks') }),
+    }),
+  );
+}
+
+// ---- Sprint 8: fees -----------------------------------------------------------------------------
+export async function createFeeHead(fd: FormData) {
+  return run('/fees/masters', () =>
+    apiFetch('/fees/heads', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        kind: str(fd, 'kind') || 'regular',
+        ledger: str(fd, 'ledger') || 'school',
+        isOptional: fd.get('isOptional') !== null,
+        refundable: fd.get('refundable') !== null,
+        sortOrder: Number(str(fd, 'sortOrder') || '0'),
+      }),
+    }),
+  );
+}
+
+export async function setFeeHeadStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/fees/masters', () =>
+    apiFetch(`/fees/heads/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status') }),
+    }),
+  );
+}
+
+export async function generateFeePeriods(fd: FormData) {
+  return run('/fees/masters', () =>
+    apiFetch('/fees/periods/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        dueDay: Number(str(fd, 'dueDay') || '10'),
+        monthsPerInstalment: Number(str(fd, 'monthsPerInstalment') || '3'),
+      }),
+    }),
+  );
+}
+
+export async function createTransportSlab(fd: FormData) {
+  return run('/fees/masters', () =>
+    apiFetch('/fees/slabs', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        distanceFromKm: opt(fd, 'distanceFromKm') ? Number(str(fd, 'distanceFromKm')) : undefined,
+        distanceToKm: opt(fd, 'distanceToKm') ? Number(str(fd, 'distanceToKm')) : undefined,
+        monthlyAmount: Number(str(fd, 'monthlyAmount') || '0'),
+      }),
+    }),
+  );
+}
+
+export async function createFeeDiscount(fd: FormData) {
+  const mode = str(fd, 'mode') || 'percent';
+  return run('/fees/masters', () =>
+    apiFetch('/fees/discounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        headId: opt(fd, 'headId'),
+        percent: mode === 'percent' ? Number(str(fd, 'value') || '0') : undefined,
+        amount: mode === 'amount' ? Number(str(fd, 'value') || '0') : undefined,
+        appliesToTransport: fd.get('appliesToTransport') !== null,
+      }),
+    }),
+  );
+}
+
+export async function setFeeStructure(fd: FormData) {
+  const classId = str(fd, 'classId');
+  const feeGroup = str(fd, 'feeGroup') || 'general';
+  const entries: Array<{ headId: string; amount: number; frequency: string; studentType: string }> =
+    [];
+  for (const headId of fd.getAll('headIds').map(String)) {
+    const amount = Number(str(fd, `amount:${headId}`) || '0');
+    if (amount <= 0) continue;
+    entries.push({
+      headId,
+      amount,
+      frequency: str(fd, `frequency:${headId}`) || 'monthly',
+      studentType: str(fd, `studentType:${headId}`) || 'all',
+    });
+  }
+  return run(`/fees/structures?classId=${classId}`, () =>
+    apiFetch(`/fees/structures/${classId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ feeGroup, entries }),
+    }),
+  );
+}
+
+export async function setFeeProfile(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(`/people/students/${studentId}`, () =>
+    apiFetch(`/fees/students/${studentId}/profile`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        feeGroup: str(fd, 'feeGroup') || 'general',
+        studentType: str(fd, 'studentType') || 'old',
+        transportSlabId: opt(fd, 'transportSlabId') ?? null,
+        transportDisabled: fd.get('transportDisabled') !== null,
+        discountId: opt(fd, 'discountId') ?? null,
+        openingBalance: Number(str(fd, 'openingBalance') || '0'),
+        notes: opt(fd, 'notes'),
+      }),
+    }),
+  );
+}
+
+export async function generateStudentDemand(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(str(fd, 'returnTo') || `/people/students/${studentId}`, () =>
+    apiFetch(`/fees/students/${studentId}/demands/generate`, { method: 'POST' }),
+  );
+}
+
+export async function generateClassDemand(fd: FormData) {
+  const classId = str(fd, 'classId');
+  return run(`/fees/demands?classId=${classId}`, () =>
+    apiFetch('/fees/demands/generate', { method: 'POST', body: JSON.stringify({ classId }) }),
+  );
+}

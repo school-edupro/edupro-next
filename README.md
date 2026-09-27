@@ -17,7 +17,8 @@ apps/
   workers/    BullMQ processors (notifications, exports, RFID, reconciliation)
   admin/      Next.js admin application (thin BFF for session and tenant context)
   parent/     Next.js parent application (PWA shell since Sprint 5, features from Sprint 9)
-  teacher/    Next.js teacher application (PWA shell since Sprint 5, features from Sprint 9)
+  teacher/    Next.js teacher application (PWA shell since Sprint 5, daily work from Sprint 7)
+  public/     Next.js public admissions app (Sprint 8): OTP sign-in with a proof-of-work check, bilingual form, status
   public/     Next.js public application (admission forms), starts Sprint 8
 packages/
   db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool, audit masks
@@ -60,7 +61,7 @@ pnpm --filter @edupro/db local:setup       # only for the user-space stack (crea
 pnpm db:migrate          # applies packages/db/migrations in order
 pnpm db:test             # cross-tenant RLS tests must pass before anything else
 pnpm --filter @edupro/db seed:dev          # two schools and a dev admin (developer sign-in: dev-admin)
-pnpm --filter @edupro/db seed:demo         # sample students, staff, messages and one login per role (docs/demo-logins.md)
+pnpm --filter @edupro/db seed:demo         # sample students, staff, fees, admissions and one login per role (docs/demo-logins.md)
 pnpm dev                 # api on :4000 (docs at /api/docs), admin on :3000, workers (outbox publisher and queues)
 ```
 

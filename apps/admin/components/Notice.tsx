@@ -55,6 +55,12 @@ const MESSAGES: Record<string, string> = {
   'promotion.same_year': 'The target year must differ from the source year.',
   'promotion.section_not_in_year': 'A chosen section does not belong to the target year.',
   'promotion.not_enrolled': 'A student is not enrolled in the source year.',
+  'admission.not_submitted': 'The application has not been submitted yet.',
+  'fees.periods_in_use': 'Demands exist for this year; the periods cannot be regenerated.',
+  'fees.student_inactive': 'Withdrawn or inactive students get no demand.',
+  'fees.not_enrolled': 'The student has no active enrolment in this year.',
+  'fees.no_periods': 'Generate the fee periods of the year first.',
+  'fees.no_opening_balance_head': 'Create a fee head of kind opening balance first.',
 };
 
 /** Reads ?ok=1 or ?error=<type>&detail=... written by server actions and renders the matching alert. */

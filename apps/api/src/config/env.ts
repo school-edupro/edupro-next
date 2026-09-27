@@ -15,6 +15,11 @@ const EnvSchema = z.object({
   MFA_FRESHNESS_MINUTES: z.coerce.number().int().positive().default(15),
   /** Requests per minute per bearer token (or IP when anonymous); tests use 10,000. */
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).default(600),
+  /** Sprint 8: public admissions surface. */
+  APPLICANT_JWT_SECRET: z.string().min(32).default('dev-applicant-jwt-secret-change-me-0123456789'),
+  PUBLIC_POW_DIFFICULTY: z.coerce.number().int().min(1).max(8).default(4),
+  PUBLIC_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(5).default(60),
+  OTP_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
   /** Public base URL of this API, used to build local-driver file URLs. */
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   /** File storage (S2-08): local disk for development, S3-compatible object storage otherwise. */
@@ -68,6 +73,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(
       'Refusing to start: COMPAT_JWT_SECRET and COMPAT_HANDSHAKE_SECRET must be set in production',
     );
+  }
+  if (env.NODE_ENV === 'production' && env.APPLICANT_JWT_SECRET.startsWith('dev-')) {
+    throw new Error('Refusing to start: APPLICANT_JWT_SECRET must be set in production');
   }
   if (env.NODE_ENV === 'production' && env.IMPERSONATION_JWT_SECRET.startsWith('dev-')) {
     throw new Error('Refusing to start: IMPERSONATION_JWT_SECRET must be set in production');

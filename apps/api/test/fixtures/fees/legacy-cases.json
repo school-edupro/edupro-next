@@ -1,0 +1,51 @@
+{
+  "note": "Reconstructed from the legacy GenerateFee() rules (MERN_MIGRATION_BLUEPRINT section 5.3): per head per month, discount per head, transport head from the slab, opening balance, whole-rupee rounding per period. Replace with historical cases from the production dump when it arrives (S0-08).",
+  "structure": {
+    "class": "VI",
+    "heads": [
+      { "code": "TUI", "name": "Tuition fee", "amount": 2500, "frequency": "monthly" },
+      { "code": "DEV", "name": "Development fee", "amount": 1200, "frequency": "quarterly" },
+      { "code": "COMP", "name": "Computer fee", "amount": 300, "frequency": "monthly" },
+      { "code": "ANN", "name": "Annual charges", "amount": 3500, "frequency": "annual" },
+      { "code": "EXAM", "name": "Examination fee", "amount": 400, "frequency": "half_yearly" }
+    ],
+    "transportSlab": { "code": "S2", "monthlyAmount": 1500 },
+    "discounts": [
+      { "code": "SIB", "name": "Sibling", "head": "TUI", "percent": 50 },
+      { "code": "STAFF", "name": "Staff ward", "percent": 100 },
+      { "code": "EWS", "name": "EWS", "percent": 33.33 }
+    ]
+  },
+  "cases": [
+    {
+      "id": "regular",
+      "title": "Regular new student, no transport",
+      "profile": {},
+      "expectedRows": 31,
+      "expectedTotal": 42700
+    },
+    {
+      "id": "sibling-transport",
+      "title": "Sibling discount on tuition with transport slab S2 (transport allowed for discounted students)",
+      "profile": { "discount": "SIB", "slab": "S2" },
+      "settings": { "fees.transport_for_discounted": true },
+      "expectedRows": 43,
+      "expectedTotal": 45700
+    },
+    {
+      "id": "staff-opening",
+      "title": "Staff ward, 100% discount, opening balance carried forward",
+      "profile": { "discount": "STAFF", "openingBalance": 2000 },
+      "expectedRows": 32,
+      "expectedTotal": 2000
+    },
+    {
+      "id": "ews-rounding",
+      "title": "EWS 33.33% on every head: every period rounds to whole rupees",
+      "profile": { "discount": "EWS" },
+      "expectedRows": 31,
+      "expectedTotal": 28470,
+      "wholeRupeePeriods": true
+    }
+  ]
+}

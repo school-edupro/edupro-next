@@ -1,0 +1,128 @@
+import { Badge, Card, PageHeader } from '@edupro/ui';
+import { cookies } from 'next/headers';
+import { OtpSignIn } from '@/components/OtpSignIn';
+import { COOKIE, PublicApiError, langOf, publicFetch, t, type Application } from '@/lib/api';
+
+const STATUS: Record<
+  string,
+  [string, string, 'neutral' | 'info' | 'success' | 'warning' | 'danger']
+> = {
+  draft: ['Draft', 'ड्राफ़्ट', 'neutral'],
+  submitted: ['Submitted', 'जमा', 'info'],
+  under_review: ['Under review', 'समीक्षा में', 'info'],
+  shortlisted: ['Shortlisted', 'शॉर्टलिस्ट', 'warning'],
+  selected: ['Selected', 'चयनित', 'success'],
+  waitlisted: ['Waitlisted', 'प्रतीक्षा सूची', 'warning'],
+  rejected: ['Not selected', 'चयनित नहीं', 'danger'],
+  withdrawn: ['Withdrawn', 'वापस लिया', 'neutral'],
+};
+
+/** Applicant sign-in and the status of their applications (S8-05). */
+export default async function StatusPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ school: string }>;
+  searchParams: Promise<{ lang?: string; submitted?: string }>;
+}) {
+  const { school } = await params;
+  const sp = await searchParams;
+  const lang = langOf(sp.lang);
+  const token = (await cookies()).get(COOKIE)?.value;
+  let apps: Application[] | null = null;
+  let me: { name: string | null; mobile: string } | null = null;
+  if (token) {
+    try {
+      [me, apps] = await Promise.all([
+        publicFetch<{ name: string | null; mobile: string }>('/me'),
+        publicFetch<{ data: Application[] }>('/me/applications').then((r) => r.data),
+      ]);
+    } catch (error) {
+      if (!(error instanceof PublicApiError && error.status === 401)) throw error;
+    }
+  }
+  return (
+    <>
+      <PageHeader
+        kicker={school.toUpperCase()}
+        title={t(lang, 'My applications', 'मेरे आवेदन')}
+        description={
+          me
+            ? `${me.name ?? ''} · ${me.mobile}`
+            : t(
+                lang,
+                'Sign in with the mobile you applied with.',
+                'उस मोबाइल से साइन इन करें जिससे आपने आवेदन किया था।',
+              )
+        }
+        actions={
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/${school}?lang=${lang}`}>
+              {t(lang, 'Cycles', 'चक्र')}
+            </a>
+            {me ? (
+              <form method="post" action={`/api/logout?to=/${school}?lang=${lang}`}>
+                <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                  {t(lang, 'Sign out', 'साइन आउट')}
+                </button>
+              </form>
+            ) : null}
+          </span>
+        }
+      />
+      {sp.submitted ? (
+        <div
+          className="ep-alert ep-alert--success"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {t(lang, 'Application submitted. Your number is', 'आवेदन जमा हो गया। आपका क्रमांक है')}{' '}
+          <strong>{sp.submitted}</strong>.
+        </div>
+      ) : null}
+      {!me ? (
+        <Card>
+          <OtpSignIn school={school} lang={lang} returnTo={`/${school}/status?lang=${lang}`} />
+        </Card>
+      ) : (
+        <>
+          {apps && apps.length === 0 ? (
+            <Card>{t(lang, 'No applications yet.', 'अभी कोई आवेदन नहीं।')}</Card>
+          ) : null}
+          {(apps ?? []).map((a) => {
+            const [en, hi, tone] = STATUS[a.status] ?? [a.status, a.status, 'neutral'];
+            return (
+              <Card key={a.id} elevated style={{ marginBottom: 'var(--sp-3)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 'var(--sp-2)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-heading)',
+                        fontWeight: 600,
+                        color: 'var(--text-heading)',
+                      }}
+                    >
+                      {a.childName} · {t(lang, 'Class', 'कक्षा')} {a.classCode}
+                    </div>
+                    <div className="ep-kicker">
+                      {a.applicationNo ?? t(lang, 'draft', 'ड्राफ़्ट')} · {a.cycleCode} ·{' '}
+                      {t(lang, 'DOB', 'जन्म')} {a.childDob}
+                    </div>
+                  </div>
+                  <Badge tone={tone}>{lang === 'hi' ? hi : en}</Badge>
+                </div>
+              </Card>
+            );
+          })}
+        </>
+      )}
+    </>
+  );
+}

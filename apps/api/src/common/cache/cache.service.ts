@@ -61,6 +61,31 @@ export class CacheService implements OnModuleDestroy {
     this.local.set(key, { value: raw, expiresAt: Date.now() + ttlSeconds * 1000 });
   }
 
+  /** Atomic counter with a window (S8 public throttling); the first hit starts the TTL. */
+  async incr(key: string, ttlSeconds: number): Promise<number> {
+    const k = `edupro:${key}`;
+    if (this.redisHealthy) {
+      try {
+        const res = await this.redis.multi().incr(k).expire(k, ttlSeconds, 'NX').exec();
+        const n = res?.[0]?.[1];
+        if (typeof n === 'number') return n;
+      } catch (error) {
+        this.logger.warn(
+          `redis incr failed, using in-process counter: ${(error as Error).message}`,
+        );
+      }
+    }
+    const now = Date.now();
+    const cur = this.local.get(k);
+    if (cur && cur.expiresAt > now) {
+      const n = Number(cur.value) + 1;
+      this.local.set(k, { value: String(n), expiresAt: cur.expiresAt });
+      return n;
+    }
+    this.local.set(k, { value: '1', expiresAt: now + ttlSeconds * 1000 });
+    return 1;
+  }
+
   async del(...keys: string[]): Promise<void> {
     for (const k of keys) this.local.delete(k);
     if (this.redisHealthy && keys.length > 0) {

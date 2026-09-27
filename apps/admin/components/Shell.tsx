@@ -23,6 +23,30 @@ const NAV: Array<{
     ],
   },
   {
+    section: 'admissions',
+    items: [
+      {
+        href: '/admissions',
+        label: 'admissionsDashboard',
+        permission: 'admissions.application.view',
+      },
+      { href: '/admissions/cycles', label: 'cycles', permission: 'admissions.cycle.view' },
+      {
+        href: '/admissions/applications',
+        label: 'applications',
+        permission: 'admissions.application.view',
+      },
+    ],
+  },
+  {
+    section: 'fees',
+    items: [
+      { href: '/fees/masters', label: 'feeMasters', permission: 'fees.master.view' },
+      { href: '/fees/structures', label: 'feeStructures', permission: 'fees.master.view' },
+      { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
+    ],
+  },
+  {
     section: 'academics',
     items: [
       { href: '/academics/classes', label: 'classes', permission: 'academics.class.view' },

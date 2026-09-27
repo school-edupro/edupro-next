@@ -28,6 +28,8 @@ data is created only once), and refuses to run when `NODE_ENV=production`.
 | Gallery                | "Independence Day 2026" with 3 images                                                                                                                                                                                | none                        |
 | Templates              | transfer certificate, bonafide certificate and letter templates                                                                                                                                                      | same                        |
 | Lifecycle              | TC/2026-27/0001 for the student who left; a withdrawal in progress for a IX-B student (2 of 4 departments cleared); 2027-28 sections and promotion decisions for IX-A and X-A                                        | none                        |
+| Fees (Sprint 8)        | 8 fee heads, 12 periods (quarterly instalments due on the 10th), structures for every class, 3 transport slabs, 3 discounts; VI-A and VI-B have fee profiles and generated demands                                   | same masters, no demands    |
+| Admissions             | cycle ADM-2027-28 (open) for classes I, VI (passcode `ALPHA-VI`) and IX with scoring masters; 11 applications in every status, one flagged possible duplicate                                                        | one draft cycle             |
 
 ## Sign in as a role
 
@@ -45,9 +47,17 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 | `dev-auditor`     | Priya Auditor       | Auditor                                        | Read everything, Audit log with **Export** (needs MFA, satisfied by the dev bypass), no forms                                                                                        |
 | `dev-support`     | Sam Support         | Support Engineer in both schools               | Jobs, security page, platform views; no people data                                                                                                                                  |
 | `dev-clerk`       | Kavita Front Office | Front Office (school role created by the seed) | Admit students, link guardians, enrol, search, exports, send notifications; nothing under Access, Academics setup or System                                                          |
+| `dev-accounts`    | Ravi Accounts       | Accountant (employee E015)                     | Fees → masters, class fee structure, demands; student page fee profile and generate; no admissions, no people edits                                                                  |
 | `dev-parent`      | Suresh Sharma       | Guardian of Aarav (VI-A) and Diya (IV-A)       | Parent app: Homework (both children), Notices, Calendar; admin app shows an empty navigation                                                                                         |
 | `dev-student`     | Aarav Sharma        | Student                                        | Parent app as the student: own homework, notices and calendar; nothing in the admin app                                                                                              |
 | `dev-nobody`      | Nobody Member       | No roles                                       | Deny by default: empty navigation, every direct URL answers "permission denied"                                                                                                      |
+
+### Sprint 8 walk-through
+
+1. Public app http://localhost:3003: choose Alpha Public School → **Apply** for Class I → enter any name and mobile `9999900002` → the code is shown on screen as the development code → fill the form (a date of birth between 1 Apr 2020 and 31 Mar 2021) → submit → the application number appears; **My applications** shows its status. Try Class VI without the passcode to see the refusal. The demo applicant `9999900001` already has an application.
+2. As `dev-admin`: **Admissions → Applications**, open the new application, award **Interaction** and recompute the score, move it to shortlisted; **Dashboard** shows seats against applications and the possible duplicate.
+3. As `dev-accounts`: **Fees → Demands**, choose Class VI and see the per-student totals; open a student and change the transport slab, then **Regenerate demand**; **Class fee structure** shows the amounts per head.
+4. As `dev-coordinator`: reviews applications but cannot touch fee masters; `dev-clerk` sees neither.
 
 ### Sprint 7 walk-through
 

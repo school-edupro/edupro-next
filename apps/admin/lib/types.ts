@@ -632,3 +632,209 @@ export interface PromotionRow {
   remarks: string | null;
   appliedAt: string | null;
 }
+
+// ---- Sprint 8 -----------------------------------------------------------------------------------
+export interface AdmissionCriterion {
+  id: string;
+  classId: string;
+  classCode: string;
+  className: string;
+  seats: number;
+  dobFrom: string | null;
+  dobTo: string | null;
+  passcode: string | null;
+  applications: number;
+}
+export interface ScoreCriterion {
+  id: string;
+  code: string;
+  name: string;
+  points: number;
+  autoRule: string | null;
+}
+export interface AdmissionCycle {
+  id: string;
+  academicYearId: string;
+  academicYear: string;
+  code: string;
+  name: string;
+  nameHi: string | null;
+  instructions: string | null;
+  instructionsHi: string | null;
+  opensAt: string;
+  closesAt: string;
+  status: 'draft' | 'open' | 'closed';
+  formSchema: Array<{
+    key: string;
+    label: string;
+    type: string;
+    required?: boolean;
+    section: string;
+  }>;
+  applicationFee: string;
+  criteria: AdmissionCriterion[];
+  scoreCriteria: ScoreCriterion[];
+  applications: number;
+}
+export type ApplicationStatus =
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'shortlisted'
+  | 'selected'
+  | 'waitlisted'
+  | 'rejected'
+  | 'withdrawn';
+export interface AdmissionApplication {
+  id: string;
+  cycleId: string;
+  cycleCode: string;
+  classId: string;
+  classCode: string;
+  applicantId: string;
+  applicantMobile: string;
+  applicantName: string | null;
+  applicationNo: string | null;
+  status: ApplicationStatus;
+  childFirstName: string;
+  childLastName: string | null;
+  childName: string;
+  childDob: string;
+  childGender: string;
+  data: Record<string, unknown>;
+  score: string | null;
+  scoreBreakdown: Array<{ code: string; name: string; points: number; source: string }>;
+  possibleDuplicateOf: string | null;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  remarks: string | null;
+  createdAt: string;
+  events?: Array<{
+    id: string;
+    fromStatus: string | null;
+    toStatus: string;
+    note: string | null;
+    actor: string | null;
+    createdAt: string;
+  }>;
+}
+export interface AdmissionsDashboard {
+  byStatus: Array<{ status: string; count: number }>;
+  byClass: Array<{
+    cycle: string;
+    classCode: string;
+    seats: number;
+    applications: number;
+    shortlisted: number;
+    selected: number;
+  }>;
+  possibleDuplicates: number;
+}
+
+export interface FeeHead {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'regular' | 'transport' | 'opening_balance' | 'late_fee' | 'misc';
+  ledger: string;
+  isOptional: boolean;
+  refundable: boolean;
+  sortOrder: number;
+  status: 'active' | 'inactive';
+}
+export interface FeePeriod {
+  id: string;
+  sequence: number;
+  name: string;
+  month: number;
+  year: number;
+  instalment: number;
+  dueOn: string;
+}
+export interface FeeStructure {
+  id: string;
+  classId: string;
+  headId: string;
+  headCode: string;
+  headName: string;
+  feeGroup: string;
+  studentType: 'all' | 'new' | 'old';
+  amount: string;
+  frequency: 'monthly' | 'quarterly' | 'half_yearly' | 'annual' | 'one_time';
+  periods: number[] | null;
+  annual: string;
+}
+export interface TransportSlab {
+  id: string;
+  code: string;
+  name: string;
+  distanceFromKm: string | null;
+  distanceToKm: string | null;
+  monthlyAmount: string;
+}
+export interface FeeDiscount {
+  id: string;
+  code: string;
+  name: string;
+  headId: string | null;
+  headCode: string | null;
+  percent: string | null;
+  amount: string | null;
+  appliesToTransport: boolean;
+  status: 'active' | 'inactive';
+}
+export interface FeeProfile {
+  studentId: string;
+  academicYearId: string;
+  feeGroup: string;
+  studentType: 'new' | 'old';
+  transportSlabId: string | null;
+  transportSlab: string | null;
+  transportDisabled: boolean;
+  discountId: string | null;
+  discount: string | null;
+  openingBalance: string;
+  notes: string | null;
+  isDefault: boolean;
+}
+export interface FeeDemandRow {
+  id: string;
+  periodId: string;
+  periodName: string;
+  sequence: number;
+  instalment: number;
+  headId: string;
+  headCode: string;
+  headName: string;
+  gross: string;
+  discount: string;
+  net: string;
+  paid: string;
+  status: string;
+  dueOn: string;
+  source: string;
+}
+export interface FeeDemandSummary {
+  rows: FeeDemandRow[];
+  byInstalment: Array<{
+    instalment: number;
+    dueOn: string;
+    net: string;
+    paid: string;
+    balance: string;
+  }>;
+  total: { net: string; paid: string; balance: string };
+  lastRun: { id: string; ranAt: string; ranBy: string | null; rows: number; total: string } | null;
+}
+export interface FeeClassSummaryRow {
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  section: string;
+  rollNo: number | null;
+  net: string;
+  paid: string;
+  balance: string;
+  rows: number;
+  hasProfile: boolean;
+}

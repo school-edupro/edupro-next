@@ -212,3 +212,4 @@ export * from './schema-version';
 export * from './template-engine';
 export * from './document-data';
 export * from './document-defaults';
+export * from './admission-form';

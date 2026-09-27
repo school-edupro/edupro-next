@@ -13,6 +13,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Client } from 'pg';
+import { DEFAULT_ADMISSION_FORM } from './admission-form';
 import { DEFAULT_TEMPLATES } from './document-defaults';
 import { templatePlaceholders } from './template-engine';
 
@@ -110,6 +111,15 @@ const DEMO_USERS: DemoUser[] = [
     roles: { ALPHA: ['front_office'] },
     description:
       'Front office (school role): students, guardians, enrolments, search, exports, send notifications',
+  },
+  {
+    sub: 'dev-accounts',
+    name: 'Ravi Accounts',
+    mobile: '9999999912',
+    email: 'accounts@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['accountant'] },
+    description: 'Accountant: fee masters, student fee profiles, demand generation',
   },
   {
     sub: 'dev-parent',
@@ -521,6 +531,7 @@ async function main(): Promise<void> {
         E006: 'dev-teacher',
         E004: 'dev-subject',
         E016: 'dev-clerk',
+        E015: 'dev-accounts',
       };
       for (const [i, [code, designation, department]] of empList.entries()) {
         const female = i % 2 === 1;
@@ -532,7 +543,7 @@ async function main(): Promise<void> {
         const e = await c.query<{ id: string }>(
           `INSERT INTO employees (school_id, employee_code, first_name, last_name, dob, gender, employee_type, designation, department, joined_on, mobile, email, user_id, legacy_ref)
            VALUES ($1, $2, $3, $4, $5::date, $6::gender, $7::employee_type, $8, $9, $10::date, $11, $12, $13, $2)
-           ON CONFLICT (school_id, employee_code) DO UPDATE SET designation = EXCLUDED.designation RETURNING id::text`,
+           ON CONFLICT (school_id, employee_code) DO UPDATE SET designation = EXCLUDED.designation, user_id = COALESCE(employees.user_id, EXCLUDED.user_id) RETURNING id::text`,
           [
             school.id,
             code,
@@ -1662,6 +1673,370 @@ async function main(): Promise<void> {
             ],
           );
       }
+    }
+
+    // ---- Sprint 8: fee masters, student fee profiles and demands; admission cycles and applications ---
+    const feeHeadIds: Record<string, Record<string, string>> = {};
+    for (const [schoolCode, school] of Object.entries(schools)) {
+      feeHeadIds[schoolCode] = {};
+      const heads: Array<[string, string, string, number]> = [
+        ['TUI', 'Tuition fee', 'regular', 1],
+        ['DEV', 'Development fee', 'regular', 2],
+        ['COMP', 'Computer fee', 'regular', 3],
+        ['ANN', 'Annual charges', 'regular', 4],
+        ['EXAM', 'Examination fee', 'regular', 5],
+        ['TRN', 'Transport fee', 'transport', 6],
+        ['OPB', 'Opening balance', 'opening_balance', 7],
+        ['LATE', 'Late fee', 'late_fee', 8],
+      ];
+      for (const [code, name, kind, order] of heads) {
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO fee_heads (school_id, code, name, kind, sort_order, legacy_ref) VALUES ($1, $2, $3, $4::fee_head_kind, $5, $2)
+           ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+          [school.id, code, name, kind, order],
+        );
+        feeHeadIds[schoolCode]![code] = r.rows[0]!.id;
+      }
+      const periodCount = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM fee_periods WHERE academic_year_id = $1`,
+        [school.yearId],
+      );
+      if (Number(periodCount.rows[0]!.n) === 0) {
+        const monthNames = [
+          'January',
+          'February',
+          'March',
+          'April',
+          'May',
+          'June',
+          'July',
+          'August',
+          'September',
+          'October',
+          'November',
+          'December',
+        ];
+        for (let i = 0; i < 12; i += 1) {
+          const m0 = 3 + i; // April = index 3
+          const month = (m0 % 12) + 1;
+          const year = 2026 + Math.floor(m0 / 12);
+          const first = i - (i % 3);
+          const dueYear = 2026 + Math.floor((3 + first) / 12);
+          const dueMonth = ((3 + first) % 12) + 1;
+          await c.query(
+            `INSERT INTO fee_periods (school_id, academic_year_id, sequence, name, month, year, instalment, due_on) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date)`,
+            [
+              school.id,
+              school.yearId,
+              i + 1,
+              `${monthNames[month - 1]} ${year}`,
+              month,
+              year,
+              Math.floor(i / 3) + 1,
+              `${dueYear}-${pad(dueMonth, 2)}-10`,
+            ],
+          );
+        }
+      }
+      const classRows = await c.query<{ id: string; code: string }>(
+        `SELECT id::text, code FROM classes WHERE school_id = $1 AND deleted_at IS NULL`,
+        [school.id],
+      );
+      for (const cls of classRows.rows) {
+        const order = CLASSES.findIndex(([code]) => code === cls.code) + 1;
+        const entries: Array<[string, number, string]> = [
+          ['TUI', 1500 + 100 * order, 'monthly'],
+          ['DEV', 1000, 'quarterly'],
+          ['COMP', order >= 6 ? 300 : 200, 'monthly'],
+          ['ANN', 3000, 'annual'],
+          ['EXAM', 300, 'half_yearly'],
+        ];
+        for (const [code, amount, frequency] of entries)
+          await c.query(
+            `INSERT INTO fee_structures (school_id, academic_year_id, class_id, head_id, fee_group, student_type, amount, frequency)
+             VALUES ($1, $2, $3, $4, 'general', 'all', $5, $6::fee_frequency) ON CONFLICT (academic_year_id, class_id, head_id, fee_group, student_type) DO NOTHING`,
+            [school.id, school.yearId, cls.id, feeHeadIds[schoolCode]![code], amount, frequency],
+          );
+      }
+      const slabs: Array<[string, string, number, number, number]> = [
+        ['S1', 'Up to 3 km', 0, 3, 1200],
+        ['S2', '3 to 8 km', 3, 8, 1500],
+        ['S3', '8 to 15 km', 8, 15, 1800],
+      ];
+      for (const [code, name, from, to, amount] of slabs)
+        await c.query(
+          `INSERT INTO transport_slabs (school_id, academic_year_id, code, name, distance_from_km, distance_to_km, monthly_amount) VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (academic_year_id, code) DO NOTHING`,
+          [school.id, school.yearId, code, name, from, to, amount],
+        );
+      const discounts: Array<[string, string, string | null, number]> = [
+        ['SIB', 'Sibling (50% tuition)', 'TUI', 50],
+        ['STAFF', 'Staff ward (100%)', null, 100],
+        ['EWS', 'EWS (25%)', null, 25],
+      ];
+      for (const [code, name, head, percent] of discounts)
+        await c.query(
+          `INSERT INTO fee_discounts (school_id, academic_year_id, code, name, head_id, percent) VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (academic_year_id, code) DO NOTHING`,
+          [
+            school.id,
+            school.yearId,
+            code,
+            name,
+            head ? feeHeadIds[schoolCode]![head] : null,
+            percent,
+          ],
+        );
+      await c.query(
+        `INSERT INTO school_settings (school_id, key, value) SELECT $1, 'fees.transport_for_discounted', 'true'::jsonb WHERE NOT EXISTS (SELECT 1 FROM school_settings WHERE school_id = $1 AND key = 'fees.transport_for_discounted')`,
+        [school.id],
+      );
+    }
+    // profiles and demands for VI-A and VI-B (Alpha), generated as the accountant
+    {
+      const slabIds = Object.fromEntries(
+        (
+          await c.query<{ code: string; id: string }>(
+            `SELECT code, id::text FROM transport_slabs WHERE academic_year_id = $1`,
+            [alpha.yearId],
+          )
+        ).rows.map((x) => [x.code, x.id]),
+      );
+      const discountIds = Object.fromEntries(
+        (
+          await c.query<{ code: string; id: string }>(
+            `SELECT code, id::text FROM fee_discounts WHERE academic_year_id = $1`,
+            [alpha.yearId],
+          )
+        ).rows.map((x) => [x.code, x.id]),
+      );
+      const pupils = await c.query<{ id: string; is_new: boolean }>(
+        `SELECT s.id::text, (s.admitted_on >= y.start_date) AS is_new FROM enrolments e JOIN students s ON s.id = e.student_id JOIN academic_years y ON y.id = e.academic_year_id
+          WHERE e.academic_year_id = $1 AND e.class_section_id = ANY($2::bigint[]) AND e.status = 'active' AND s.status = 'active' ORDER BY e.class_section_id, e.roll_no`,
+        [alpha.yearId, [sections.ALPHA!['VI-A'], sections.ALPHA!['VI-B']]],
+      );
+      await withCtx(alpha.id, 'dev-accounts');
+      for (const [i, p] of pupils.rows.entries()) {
+        const discount =
+          i % 8 === 0
+            ? discountIds.SIB
+            : i % 8 === 3
+              ? discountIds.STAFF
+              : i % 8 === 6
+                ? discountIds.EWS
+                : null;
+        const slab = i % 3 === 0 ? slabIds.S2 : i % 3 === 1 ? slabIds.S1 : null;
+        await c.query(
+          `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, transport_slab_id, discount_id, opening_balance, created_by, updated_by)
+           VALUES ($1, $2, $3, 'general', $4, $5, $6, $7, $8, $8) ON CONFLICT (student_id, academic_year_id) DO NOTHING`,
+          [
+            alpha.id,
+            p.id,
+            alpha.yearId,
+            p.is_new ? 'new' : 'old',
+            slab ?? null,
+            discount ?? null,
+            i % 5 === 4 ? 2500 : 0,
+            userIds['dev-accounts'],
+          ],
+        );
+        const has = await c.query(
+          `SELECT 1 FROM fee_demands WHERE student_id = $1 AND academic_year_id = $2 LIMIT 1`,
+          [p.id, alpha.yearId],
+        );
+        if (has.rowCount === 0)
+          await c.query(`SELECT app.generate_fee_demand($1, $2)`, [p.id, alpha.yearId]);
+      }
+      await clearCtx();
+    }
+
+    // admission cycle 2027-28 for Alpha (open) with applications, and a draft cycle for Beta
+    for (const [schoolCode, school] of Object.entries(schools)) {
+      const target = await c.query<{ id: string }>(
+        `SELECT id::text FROM academic_years WHERE school_id = $1 AND code = '2027-28'`,
+        [school.id],
+      );
+      if (!target.rows[0]) continue;
+      const exists = await c.query(
+        `SELECT 1 FROM admission_cycles WHERE school_id = $1 AND code = 'ADM-2027-28' AND deleted_at IS NULL`,
+        [school.id],
+      );
+      if (exists.rowCount) continue;
+      const cyc = await c.query<{ id: string }>(
+        `INSERT INTO admission_cycles (school_id, academic_year_id, code, name, name_hi, instructions, instructions_hi, opens_at, closes_at, status, form_schema, application_fee, created_by)
+         VALUES ($1, $2, 'ADM-2027-28', 'Admissions 2027-28', 'प्रवेश 2027-28',
+                 'Fill the form in one sitting; keep the birth certificate and address proof ready. The registration fee is payable after submission.',
+                 'फ़ॉर्म एक बार में भरें; जन्म प्रमाणपत्र और पते का प्रमाण तैयार रखें। पंजीकरण शुल्क जमा करने के बाद देय है।',
+                 now() - interval '10 days', now() + interval '45 days', $3::admission_cycle_status, $4::jsonb, 500, $5) RETURNING id::text`,
+        [
+          school.id,
+          target.rows[0].id,
+          schoolCode === 'ALPHA' ? 'open' : 'draft',
+          JSON.stringify(DEFAULT_ADMISSION_FORM),
+          userIds['dev-admin'],
+        ],
+      );
+      const cycleId = cyc.rows[0]!.id;
+      const classOf = async (code: string) =>
+        (
+          await c.query<{ id: string }>(
+            `SELECT id::text FROM classes WHERE school_id = $1 AND code = $2 AND deleted_at IS NULL`,
+            [school.id, code],
+          )
+        ).rows[0]?.id;
+      const criteria: Array<[string, number, string, string, string | null]> = [
+        ['I', 60, '2020-04-01', '2021-03-31', null],
+        ['VI', 20, '2015-04-01', '2016-03-31', 'ALPHA-VI'],
+        ['IX', 10, '2012-04-01', '2013-03-31', null],
+      ];
+      for (const [code, seats, from, to, passcode] of criteria) {
+        const classId = await classOf(code);
+        if (!classId) continue;
+        await c.query(
+          `INSERT INTO admission_class_criteria (school_id, cycle_id, class_id, seats, dob_from, dob_to, passcode) VALUES ($1, $2, $3, $4, $5::date, $6::date, $7)`,
+          [school.id, cycleId, classId, seats, from, to, passcode],
+        );
+      }
+      const scoring: Array<[string, string, number, string | null]> = [
+        ['sibling', 'Sibling in school', 20, 'sibling'],
+        ['staff_ward', 'Ward of staff', 25, 'staff_ward'],
+        ['alumni', 'Alumni parent', 10, 'alumni'],
+        ['distance', 'Within 5 km', 15, 'distance_within:5'],
+        ['girl', 'Single girl child', 5, 'single_girl_child'],
+        ['interview', 'Interaction', 30, null],
+      ];
+      for (const [i, [code, name, points, rule]] of scoring.entries())
+        await c.query(
+          `INSERT INTO admission_score_criteria (school_id, cycle_id, code, name, points, auto_rule, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [school.id, cycleId, code, name, points, rule, i],
+        );
+      if (schoolCode !== 'ALPHA') continue;
+
+      await withCtx(alpha.id, 'dev-admin');
+      const applicants: Array<[string, string]> = [
+        ['9811000001', 'Neha Kapoor'],
+        ['9811000002', 'Amit Joshi'],
+        ['9811000003', 'Farah Khan'],
+        ['9811000004', 'Sunil Patil'],
+        ['9811000005', 'Rekha Menon'],
+        ['9811000006', 'Vikram Rao'],
+        ['9811000007', 'Pooja Nair'],
+        ['9811000008', 'Tanvir Singh'],
+        ['9811000009', 'Meera Das'],
+        ['9811000010', 'Karan Malhotra'],
+        ['9999900001', 'Dev Applicant'],
+      ];
+      const applicantIds: string[] = [];
+      for (const [mobile, name] of applicants) {
+        const a = await c.query<{ id: string }>(
+          `INSERT INTO applicants (school_id, mobile, name, last_login_at) VALUES ($1, $2, $3, now() - interval '3 days') ON CONFLICT (school_id, mobile) DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+          [school.id, mobile, name],
+        );
+        applicantIds.push(a.rows[0]!.id);
+      }
+      const children: Array<[string, string, string, string, string, string]> = [
+        // first, last, dob, gender, class, status
+        ['Ishaan', 'Kapoor', '2020-07-12', 'male', 'I', 'submitted'],
+        ['Myra', 'Joshi', '2020-11-03', 'female', 'I', 'under_review'],
+        ['Zara', 'Khan', '2021-01-20', 'female', 'I', 'shortlisted'],
+        ['Advait', 'Patil', '2020-05-30', 'male', 'I', 'selected'],
+        ['Anvi', 'Menon', '2020-09-09', 'female', 'I', 'submitted'],
+        ['Kabir', 'Rao', '2015-06-18', 'male', 'VI', 'submitted'],
+        ['Saanvi', 'Nair', '2015-10-02', 'female', 'VI', 'rejected'],
+        ['Arjun', 'Singh', '2015-12-25', 'male', 'VI', 'under_review'],
+        ['Riya', 'Das', '2012-08-14', 'female', 'IX', 'shortlisted'],
+        ['Ishaan', 'Kapoor', '2020-07-12', 'male', 'I', 'submitted'], // possible duplicate of the first child, another mobile
+        ['Dev', 'Child', '2020-06-01', 'male', 'I', 'submitted'],
+      ];
+      let firstId: string | null = null;
+      let application: { rows: Array<{ id: string }> };
+      for (const [i, [first, last, dob, gender, classCode, status]] of children.entries()) {
+        const classId = await classOf(classCode);
+        if (!classId) continue;
+        const data = {
+          fatherName: `${applicants[i]![1].split(' ')[0]} ${last}`,
+          motherName: `Mrs ${last}`,
+          email: `${first.toLowerCase()}.${last.toLowerCase()}@example.test`,
+          address: `${12 + i}, Model Colony`,
+          city: 'Pune',
+          pin: '411016',
+          distanceKm: 2 + (i % 7),
+          category: i % 4 === 3 ? 'EWS' : 'GEN',
+          alumniParent: i % 3 === 0,
+          siblingInSchool: false,
+          staffWard: false,
+          singleGirlChild: gender === 'female' && i % 2 === 0,
+        };
+        const breakdown: Array<{ code: string; name: string; points: number; source: string }> = [];
+        if (data.distanceKm <= 5)
+          breakdown.push({ code: 'distance', name: 'Within 5 km', points: 15, source: 'auto' });
+        if (data.alumniParent)
+          breakdown.push({ code: 'alumni', name: 'Alumni parent', points: 10, source: 'auto' });
+        if (data.singleGirlChild)
+          breakdown.push({ code: 'girl', name: 'Single girl child', points: 5, source: 'auto' });
+        if (status === 'shortlisted' || status === 'selected')
+          breakdown.push({ code: 'interview', name: 'Interaction', points: 30, source: 'manual' });
+        const score = breakdown.reduce((sum, b) => sum + b.points, 0);
+        const no = await c.query<{ application_no: string; serial: number }>(
+          `SELECT * FROM app.next_application_no($1)`,
+          [cycleId],
+        );
+        application = await c.query<{ id: string }>(
+          `INSERT INTO applications (school_id, cycle_id, class_id, applicant_id, application_no, serial, status, child_first_name, child_last_name, child_dob, child_gender, data, passcode_used, score, score_breakdown, possible_duplicate_of, submitted_at, decided_at, decided_by, remarks)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::application_status, $8, $9, $10::date, $11::gender, $12::jsonb, $13, $14, $15::jsonb, $16, now() - make_interval(days => $17), CASE WHEN $7 IN ('selected', 'rejected') THEN now() - interval '1 day' END, CASE WHEN $7 IN ('selected', 'rejected') THEN $18::bigint END, $19)
+           RETURNING id::text`,
+          [
+            school.id,
+            cycleId,
+            classId,
+            applicantIds[i],
+            no.rows[0]!.application_no,
+            no.rows[0]!.serial,
+            status,
+            first,
+            last,
+            dob,
+            gender,
+            JSON.stringify(data),
+            classCode === 'VI' ? 'ALPHA-VI' : null,
+            score,
+            JSON.stringify(breakdown),
+            i === 9 ? firstId : null,
+            9 - Math.min(i, 8),
+            userIds['dev-coordinator'],
+            status === 'rejected'
+              ? 'Age criteria met; interaction not cleared'
+              : status === 'selected'
+                ? 'Offer letter to be issued'
+                : null,
+          ],
+        );
+        if (i === 0) firstId = application.rows[0]!.id;
+        await c.query(
+          `INSERT INTO application_events (school_id, application_id, from_status, to_status, note, actor_applicant_id, created_at) VALUES
+             ($1, $2, NULL, 'draft', 'created', $3, now() - make_interval(days => $4)),
+             ($1, $2, 'draft', 'submitted', $5, $3, now() - make_interval(days => $4) + interval '10 minutes')`,
+          [
+            school.id,
+            application.rows[0]!.id,
+            applicantIds[i],
+            9 - Math.min(i, 8),
+            no.rows[0]!.application_no,
+          ],
+        );
+        if (status !== 'submitted')
+          await c.query(
+            `INSERT INTO application_events (school_id, application_id, from_status, to_status, note, actor_user_id, created_at) VALUES ($1, $2, 'submitted', $3::application_status, $4, $5, now() - interval '1 day')`,
+            [
+              school.id,
+              application.rows[0]!.id,
+              status,
+              status === 'shortlisted' ? 'Interaction on Saturday 10:00' : null,
+              userIds['dev-coordinator'],
+            ],
+          );
+      }
+      await clearCtx();
     }
 
     await c.query('COMMIT');

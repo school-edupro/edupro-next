@@ -17,8 +17,10 @@ import { Notice } from '@/components/Notice';
 import {
   enrolStudent,
   linkGuardian,
+  generateStudentDemand,
   issueTc,
   renderTemplateFor,
+  setFeeProfile,
   requestStudentIdCard,
   requestWithdrawal,
   setStudentStatus,
@@ -29,6 +31,10 @@ import { apiFetch, getMe } from '@/lib/api';
 import type {
   DocumentTemplate,
   Enrolment,
+  FeeDemandSummary,
+  FeeDiscount,
+  FeeProfile,
+  TransportSlab,
   GuardianLink,
   PersonDocument,
   StatusHistoryRow,
@@ -80,6 +86,25 @@ export default async function StudentPage({
   const openWithdrawal = withdrawals.find(
     (w) => w.status === 'requested' || w.status === 'cleared',
   );
+  const [feeProfile, feeDemands, slabs, feeDiscounts, f] = await Promise.all([
+    can('fees.demand.view')
+      ? apiFetch<FeeProfile>(`/fees/students/${id}/profile`).catch(() => null)
+      : Promise.resolve<FeeProfile | null>(null),
+    can('fees.demand.view')
+      ? apiFetch<FeeDemandSummary>(`/fees/students/${id}/demands`).catch(() => null)
+      : Promise.resolve<FeeDemandSummary | null>(null),
+    can('fees.profile.manage')
+      ? apiFetch<{ data: TransportSlab[] }>('/fees/slabs')
+          .then((r) => r.data)
+          .catch(() => [] as TransportSlab[])
+      : Promise.resolve<TransportSlab[]>([]),
+    can('fees.profile.manage')
+      ? apiFetch<{ data: FeeDiscount[] }>('/fees/discounts')
+          .then((r) => r.data)
+          .catch(() => [] as FeeDiscount[])
+      : Promise.resolve<FeeDiscount[]>([]),
+    getTranslations('fees'),
+  ]);
   const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
     <>
@@ -581,6 +606,122 @@ export default async function StudentPage({
                   </Button>
                 </FormActions>
               </form>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {feeProfile && feeDemands ? (
+          <Card title={f('demand')}>
+            <p className="ep-field__help">
+              {f('profile')}:{' '}
+              {feeProfile.isDefault
+                ? f('defaultProfile')
+                : `${feeProfile.feeGroup} · ${feeProfile.studentType}`}
+              {feeProfile.transportSlab
+                ? ` · ${f('transportSlab')} ${feeProfile.transportSlab}`
+                : ''}
+              {feeProfile.discount ? ` · ${f('discount')} ${feeProfile.discount}` : ''}
+              {Number(feeProfile.openingBalance) !== 0
+                ? ` · ${f('openingBalance')} ${feeProfile.openingBalance}`
+                : ''}
+            </p>
+            {can('fees.profile.manage') ? (
+              <form action={setFeeProfile} style={{ marginTop: 'var(--sp-3)' }}>
+                <input type="hidden" name="studentId" value={student.id} />
+                <input type="hidden" name="feeGroup" value={feeProfile.feeGroup} />
+                <FormRow columns={4}>
+                  <SelectField
+                    id="feeStudentType"
+                    name="studentType"
+                    label={f('studentType')}
+                    defaultValue={feeProfile.studentType}
+                    options={[
+                      { value: 'new', label: f('studentTypes.new') },
+                      { value: 'old', label: f('studentTypes.old') },
+                    ]}
+                  />
+                  <SelectField
+                    id="feeSlab"
+                    name="transportSlabId"
+                    label={f('transportSlab')}
+                    defaultValue={feeProfile.transportSlabId ?? ''}
+                    options={[
+                      { value: '', label: f('none') },
+                      ...slabs.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` })),
+                    ]}
+                  />
+                  <SelectField
+                    id="feeDiscount"
+                    name="discountId"
+                    label={f('discount')}
+                    defaultValue={feeProfile.discountId ?? ''}
+                    options={[
+                      { value: '', label: f('none') },
+                      ...feeDiscounts.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` })),
+                    ]}
+                  />
+                  <InputField
+                    id="feeOpening"
+                    name="openingBalance"
+                    label={f('openingBalance')}
+                    type="number"
+                    step="0.01"
+                    defaultValue={Number(feeProfile.openingBalance)}
+                  />
+                </FormRow>
+                <FormActions>
+                  <Button type="submit" variant="secondary">
+                    {f('saveProfile')}
+                  </Button>
+                </FormActions>
+              </form>
+            ) : null}
+            {can('fees.demand.generate') ? (
+              <form action={generateStudentDemand} style={{ marginTop: 'var(--sp-2)' }}>
+                <input type="hidden" name="studentId" value={student.id} />
+                <p className="ep-field__help">{f('generateHelp')}</p>
+                <Button type="submit">
+                  {feeDemands.rows.length ? f('regenerate') : f('generate')}
+                </Button>
+              </form>
+            ) : null}
+            {feeDemands.rows.length ? (
+              <div style={{ marginTop: 'var(--sp-4)' }}>
+                <DataTable<FeeDemandSummary['byInstalment'][number]>
+                  caption={f('byInstalment')}
+                  density="dense"
+                  columns={[
+                    {
+                      key: 'inst',
+                      header: f('instalment'),
+                      numeric: true,
+                      render: (x) => x.instalment,
+                    },
+                    { key: 'due', header: f('dueOn'), render: (x) => x.dueOn },
+                    { key: 'net', header: f('net'), numeric: true, render: (x) => x.net },
+                    { key: 'paid', header: f('paid'), numeric: true, render: (x) => x.paid },
+                    {
+                      key: 'bal',
+                      header: f('balance'),
+                      numeric: true,
+                      render: (x) => <strong>{x.balance}</strong>,
+                    },
+                  ]}
+                  rows={feeDemands.byInstalment}
+                  rowKey={(x) => String(x.instalment)}
+                  emptyTitle={f('noDemand')}
+                />
+                <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
+                  {f('total')}: {f('net')} {feeDemands.total.net} · {f('paid')}{' '}
+                  {feeDemands.total.paid} ·{' '}
+                  <strong>
+                    {f('balance')} {feeDemands.total.balance}
+                  </strong>
+                  {feeDemands.lastRun
+                    ? ` · ${f('lastRun')} ${new Date(feeDemands.lastRun.ranAt).toLocaleString('en-IN')} (${feeDemands.lastRun.ranBy ?? ''})`
+                    : ''}
+                </p>
+              </div>
             ) : null}
           </Card>
         ) : null}

@@ -52,12 +52,24 @@ describe('permission coverage', () => {
     // Public routes are an allow-list reviewed by security; extend deliberately.
     // The two local-driver file endpoints authenticate with HMAC tokens (docs/design/00 section 5, S2-08).
     // The compatibility handshake exchanges the legacy central-auth token; it is signed, not anonymous (S4-05).
+    // The public admissions surface (S8-01) authenticates applicants with OTP-issued tokens inside ApplicantGuard.
     expect(publicRoutes.sort()).toEqual([
       'CompatController.handshake (compat/v1)',
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
       'HealthController.health (health)',
       'MetricsController.metricsText (metrics)',
+      'PublicAdmissionsController.challenge (public/admissions)',
+      'PublicAdmissionsController.createApplication (public/admissions)',
+      'PublicAdmissionsController.cycles (public/admissions)',
+      'PublicAdmissionsController.getApplication (public/admissions)',
+      'PublicAdmissionsController.me (public/admissions)',
+      'PublicAdmissionsController.myApplications (public/admissions)',
+      'PublicAdmissionsController.requestOtp (public/admissions)',
+      'PublicAdmissionsController.schools (public/admissions)',
+      'PublicAdmissionsController.submitApplication (public/admissions)',
+      'PublicAdmissionsController.updateApplication (public/admissions)',
+      'PublicAdmissionsController.verifyOtp (public/admissions)',
     ]);
     if (unprotected.length > 0) {
       throw new Error(`handlers without a permission: ${unprotected.join(', ')}`);

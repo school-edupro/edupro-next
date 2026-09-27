@@ -100,6 +100,7 @@ export class NoticesService {
       );
       const sec = params.length - 1;
       const stu = params.length;
+      // eslint-disable-next-line no-restricted-syntax -- fixed SQL fragments assembled in code; values are bound parameters
       return `${live} AND n.audience IN ('everyone', 'students') AND (
         NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id)
         OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id AND (
@@ -116,6 +117,7 @@ export class NoticesService {
             params.push(v.sectionIds);
             return `(t.target_type = 'class_section' AND t.target_id = ANY($${params.length}::bigint[]))`;
           })();
+    // eslint-disable-next-line no-restricted-syntax -- fixed SQL fragments assembled in code; values are bound parameters
     return `${live} AND n.audience IN ('everyone', 'employees') AND (
       NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id)
       OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id AND (
