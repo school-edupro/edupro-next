@@ -16,8 +16,8 @@ apps/
   api/        NestJS domain API (tenancy, access, audit, reference module)
   workers/    BullMQ processors (notifications, exports, RFID, reconciliation)
   admin/      Next.js admin application (thin BFF for session and tenant context)
-  parent/     Next.js parent application (PWA), starts Sprint 5
-  teacher/    Next.js teacher application (PWA), starts Sprint 5
+  parent/     Next.js parent application (PWA shell since Sprint 5, features from Sprint 9)
+  teacher/    Next.js teacher application (PWA shell since Sprint 5, features from Sprint 9)
   public/     Next.js public application (admission forms), starts Sprint 8
 packages/
   db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool, audit masks
@@ -33,6 +33,8 @@ docs/
   quality/    Test strategy
   playbooks/  Fees, exams, people and admissions rule drafts with open questions
   backlog/    Sprint 2 to 5 stories (markdown and CSV)
+  security/   Foundation security review (Sprint 5)
+  runbooks/   Disaster recovery
   sprints/    Sprint records
 ```
 
@@ -93,3 +95,6 @@ Developer sign-in on the login page appears only when `AUTH_DEV_BYPASS=1` and th
 | `pnpm --filter @edupro/ui build-storybook && pnpm --filter @edupro/ui test:storybook`                       | Storybook interaction tests                                                                    |
 | `pnpm --filter @edupro/etl run:domain -- --school <id> --domain tenancy\|identity\|people --fixture <json>` | Runs an ETL domain against a fixture file (or `--mysql <url>` once dumps arrive)               |
 | `POST /api/v1/compat/v1/auth/handshake`                                                                     | Compatibility handshake for the current mobile apps (Sprint 4); see `docs/sprints/sprint-4.md` |
+| `pnpm perf:local`                                                                                           | Local latency baseline for /me, classes and search with autocannon (k6 script in `perf/k6`)    |
+| `scripts/backup.sh`, `scripts/restore-drill.sh`                                                             | Logical backup and the quarterly restore drill (`docs/runbooks/disaster-recovery.md`)          |
+| `ALLOW_ANONYMISE=1 pnpm --filter @edupro/db anonymise`                                                      | Anonymises a restored copy for staging                                                         |

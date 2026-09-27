@@ -50,6 +50,7 @@ Permission codes are `module.resource.action`. The catalogue is generated from `
 | `people.employee.delete`         | Remove an employee record                                               | Yes |
 | `people.document.view`           | View person documents                                                   |     |
 | `people.person.search`           | Search people by name, number or mobile                                 |     |
+| `platform.security.view`         | View security alerts, impersonation and break-glass activity            |     |
 | `academics.class.view`           | View classes                                                            |     |
 | `academics.class.create`         | Create a class                                                          |     |
 | `academics.class.edit`           | Edit a class                                                            |     |

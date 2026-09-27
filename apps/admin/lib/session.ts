@@ -14,6 +14,13 @@ export interface Session {
   displayName?: string;
   schoolId?: string;
   academicYearId?: string;
+  /** Set while acting as another member (S5-02); the original token is restored when the session ends. */
+  impersonation?: {
+    sessionId: string;
+    targetName: string;
+    expiresAt: string;
+    originalAccessToken: string;
+  };
 }
 
 const COOKIE = 'edupro_session';

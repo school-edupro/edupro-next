@@ -8,4 +8,5 @@ export const ACCESS = {
   delegationManage: 'access.delegation.manage',
   membershipManage: 'access.membership.manage',
   userSearch: 'access.user.search',
+  impersonate: 'access.session.impersonate',
 } as const;

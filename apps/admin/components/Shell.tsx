@@ -1,5 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
+import { endImpersonation } from '@/lib/actions';
 import type { Me } from '@/lib/api';
 import { SchoolYearSwitcher } from './SchoolYearSwitcher';
 
@@ -48,6 +49,7 @@ const NAV: Array<{
       { href: '/system/years', label: 'years', permission: 'platform.year.view' },
       { href: '/system/settings', label: 'settings', permission: 'platform.settings.view' },
       { href: '/system/audit', label: 'auditLog', permission: 'platform.audit.view' },
+      { href: '/system/security', label: 'security', permission: 'platform.security.view' },
       { href: '/system/jobs', label: 'jobs', permission: 'platform.jobs.view' },
     ],
   },
@@ -62,10 +64,11 @@ export async function Shell({
   currentPath: string;
   children: ReactNode;
 }) {
-  const [t, nav, common, locale] = await Promise.all([
+  const [t, nav, common, banner, locale] = await Promise.all([
     getTranslations('shell'),
     getTranslations('nav'),
     getTranslations('common'),
+    getTranslations('impersonationBanner'),
     getLocale(),
   ]);
   const allowed = new Set(me.permissions);
@@ -155,7 +158,37 @@ export async function Shell({
           </form>
         </div>
       </header>
-      <main className="ep-main">{children}</main>
+      <main className="ep-main">
+        {me.impersonation ? (
+          <div
+            className="ep-alert ep-alert--warning"
+            role="status"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 'var(--sp-3)',
+              marginBottom: 'var(--sp-4)',
+            }}
+          >
+            <span>
+              {banner('acting', {
+                name: me.user.displayName,
+                until: new Date(me.impersonation.expiresAt).toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              })}
+            </span>
+            <form action={endImpersonation}>
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                {banner('end')}
+              </button>
+            </form>
+          </div>
+        ) : null}
+        {children}
+      </main>
     </div>
   );
 }

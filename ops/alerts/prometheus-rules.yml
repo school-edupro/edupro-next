@@ -1,0 +1,40 @@
+# Alert rules (S5-04). Loaded by the Prometheus that scrapes /metrics with the METRICS_TOKEN bearer.
+groups:
+  - name: edupro-security
+    rules:
+      - alert: EduProPermissionDenialsBurst
+        expr: sum by (school) (increase(edupro_security_events_total{kind="permission_denied"}[1m])) >= 10
+        for: 0m
+        labels: { severity: warning, team: security }
+        annotations:
+          summary: '10 or more permission denials in one minute (school {{ $labels.school }})'
+          description: 'Possible privilege probing or a broken client. Check /system/security in the admin app and the audit log.'
+      - alert: EduProAuthFailuresBurst
+        expr: sum(increase(edupro_security_events_total{kind="unauthenticated"}[5m])) >= 50
+        labels: { severity: warning, team: security }
+        annotations:
+          summary: '50 or more authentication failures in five minutes'
+      - alert: EduProImpersonationStarted
+        expr: increase(edupro_security_events_total{kind="impersonation_start"}[10m]) > 0
+        labels: { severity: info, team: security }
+        annotations:
+          summary: 'An impersonation session started (school {{ $labels.school }})'
+      - alert: EduProBreakGlassOpened
+        expr: increase(edupro_security_events_total{kind="break_glass_start"}[10m]) > 0
+        labels: { severity: critical, team: security }
+        annotations:
+          summary: 'Break-glass access opened (school {{ $labels.school }}); review within the window'
+  - name: edupro-availability
+    rules:
+      - alert: EduProApiErrorRate
+        expr: sum(rate(edupro_http_requests_total{status=~"5.."}[5m])) / sum(rate(edupro_http_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: critical, team: platform }
+        annotations:
+          summary: 'API 5xx rate above 2 percent for five minutes'
+      - alert: EduProApiLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(edupro_http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: { severity: warning, team: platform }
+        annotations:
+          summary: 'API p95 latency above 500 ms for ten minutes'

@@ -57,6 +57,7 @@ describe('permission coverage', () => {
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
       'HealthController.health (health)',
+      'MetricsController.metricsText (metrics)',
     ]);
     if (unprotected.length > 0) {
       throw new Error(`handlers without a permission: ${unprotected.join(', ')}`);

@@ -1,0 +1,29 @@
+{
+  "name": "@edupro/parent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EduPro Parent app: installable Next.js PWA shell (Sprint 5), features arrive in Sprint 9",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "eslint app components lib middleware.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"parent app e2e starts with its features (Sprint 9)\""
+  },
+  "dependencies": {
+    "@edupro/bff": "workspace:*",
+    "@edupro/ui": "workspace:*",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@edupro/config": "workspace:*",
+    "@types/node": "^22.7.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.12.0",
+    "typescript": "^5.6.2"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "title": "EduPro API",
+  "uid": "edupro-api",
+  "schemaVersion": 39,
+  "tags": ["edupro"],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Requests per second by status",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum by (status) (rate(edupro_http_requests_total[1m]))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency by route",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(edupro_http_request_duration_seconds_bucket[5m])))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Security events per minute",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum by (kind) (increase(edupro_security_events_total[1m]))" }]
+    },
+    {
+      "type": "stat",
+      "title": "Security alerts (24h)",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "targets": [{ "expr": "sum(increase(edupro_security_alerts_total[24h]))" }]
+    },
+    {
+      "type": "stat",
+      "title": "Logins (1h)",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+      "targets": [{ "expr": "sum by (outcome) (increase(edupro_logins_total[1h]))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Node.js heap",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [{ "expr": "edupro_nodejs_heap_size_used_bytes" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Event loop lag p99",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [{ "expr": "edupro_nodejs_eventloop_lag_p99_seconds" }]
+    }
+  ]
+}

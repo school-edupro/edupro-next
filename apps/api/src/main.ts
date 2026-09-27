@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { startTracing } from './tracing';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -9,11 +10,16 @@ import type { IncomingMessage } from 'node:http';
 import { AppModule } from './app.module';
 import { RAW_BODY_LIMIT, setupApp } from './app.setup';
 import { loadEnv } from './config/env';
+import { loadSecretsFromKeyVault } from './config/keyvault';
 import { loggerOptions } from './config/logging';
 
 async function bootstrap(): Promise<void> {
+  await startTracing('edupro-api'); // no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set (S5-04)
+  const loaded = await loadSecretsFromKeyVault(); // no-op unless KEY_VAULT_URL is set (S5-05)
   const env = loadEnv();
   const logger = new Logger('bootstrap');
+  if (loaded.length > 0)
+    logger.log(`loaded ${loaded.length} secret(s) from Key Vault: ${loaded.join(', ')}`);
 
   const adapter = new FastifyAdapter({
     logger: loggerOptions(env.NODE_ENV),
@@ -36,7 +42,7 @@ async function bootstrap(): Promise<void> {
         .setDescription(
           'Multi-school, multi-year School ERP. Tenant via X-School-Id, year via X-Academic-Year-Id.',
         )
-        .setVersion('0.2.0')
+        .setVersion('0.5.0')
         .addBearerAuth()
         .build(),
     );

@@ -22,7 +22,10 @@ export interface LoginStart {
   nonce: string;
 }
 
-export async function startLogin(returnTo: string): Promise<LoginStart> {
+export async function startLogin(
+  returnTo: string,
+  options: { stepUp?: boolean } = {},
+): Promise<LoginStart> {
   const config = await oidcConfig();
   const codeVerifier = client.randomPKCECodeVerifier();
   const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
@@ -35,6 +38,9 @@ export async function startLogin(returnTo: string): Promise<LoginStart> {
     code_challenge_method: 'S256',
     state,
     nonce,
+    // Step-up (S5-01): ask the IdP for a fresh multi-factor authentication; auth_time in the new token
+    // then satisfies the API's freshness window.
+    ...(options.stepUp ? { acr_values: env.oidc.mfaAcr, max_age: '0', prompt: 'login' } : {}),
     // carry the post-login destination through state storage on our side, not in the URL
   });
   void returnTo;

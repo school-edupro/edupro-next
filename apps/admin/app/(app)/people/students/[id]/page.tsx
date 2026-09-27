@@ -23,7 +23,7 @@ import {
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Enrolment, GuardianLink, PersonDocument, Student360 } from '@/lib/types';
-import { sectionOptions } from '../page';
+import { sectionOptions } from '@/lib/sections';
 
 export default async function StudentPage({
   params,

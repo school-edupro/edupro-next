@@ -30,6 +30,7 @@ export class MeController {
         displayName: ctx.user.displayName,
         mfa: ctx.user.mfa,
       },
+      impersonation: ctx.user.impersonation ?? null,
       memberships: ctx.user.memberships,
       school: ctx.tenant ? { id: ctx.tenant.schoolId } : null,
       academicYear: ctx.tenant?.academicYearId ? { id: ctx.tenant.academicYearId } : null,

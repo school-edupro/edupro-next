@@ -1,0 +1,100 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to deploy (defaults to the commit)
+        required: false
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  images:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "tag=${{ inputs.tag || github.sha }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/api:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Workers
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/workers/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/workers:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Admin
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/admin/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/admin:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Migrate and roll out to staging
+    needs: images
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Run migrations as a one-off job (migrator credentials from Key Vault)
+        run: |
+          az containerapp job start \
+            --name edupro-staging-migrate --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.IMAGE_PREFIX }}/api:${{ needs.images.outputs.tag }} \
+            --command "node" --args "node_modules/@edupro/db/dist/migrate.js"
+      - name: Roll out the API, workers and admin
+        run: |
+          for app in api workers admin; do
+            az containerapp update --name edupro-staging-$app --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+              --image ${{ env.IMAGE_PREFIX }}/$app:${{ needs.images.outputs.tag }}
+          done
+      - name: Smoke against staging
+        env:
+          ADMIN_BASE_URL: ${{ vars.STAGING_ADMIN_URL }}
+        run: |
+          curl -sf "${{ vars.STAGING_API_URL }}/api/v1/health"
+          corepack enable && pnpm install --frozen-lockfile
+          pnpm --filter @edupro/admin exec playwright install --with-deps chromium
+          pnpm --filter @edupro/admin e2e

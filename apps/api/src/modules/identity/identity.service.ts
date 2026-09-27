@@ -69,4 +69,40 @@ export class IdentityService {
       };
     });
   }
+
+  /** Validates an impersonation session before any tenant context exists (S5-02, SECURITY DEFINER lookup). */
+  async impersonationCheck(sessionId: string): Promise<{
+    schoolId: string;
+    actorUserId: string;
+    targetUserId: string;
+    actorName: string;
+    expiresAt: Date;
+    endedAt: Date | null;
+  } | null> {
+    if (!/^[0-9]{1,18}$/.test(sessionId)) return null;
+    return this.db.global(async (c) => {
+      const r = await c.query<{
+        o_school_id: string;
+        o_actor_user_id: string;
+        o_target_user_id: string;
+        o_actor_name: string;
+        o_expires_at: Date;
+        o_ended_at: Date | null;
+      }>(
+        'SELECT o_school_id::text, o_actor_user_id::text, o_target_user_id::text, o_actor_name, o_expires_at, o_ended_at FROM app.impersonation_check($1)',
+        [sessionId],
+      );
+      const row = r.rows[0];
+      return row
+        ? {
+            schoolId: row.o_school_id,
+            actorUserId: row.o_actor_user_id,
+            targetUserId: row.o_target_user_id,
+            actorName: row.o_actor_name,
+            expiresAt: row.o_expires_at,
+            endedAt: row.o_ended_at,
+          }
+        : null;
+    });
+  }
 }

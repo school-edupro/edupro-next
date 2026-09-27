@@ -11,7 +11,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createStudent } from '@/lib/actions';
-import { sectionOptions } from '../page';
+import { sectionOptions } from '@/lib/sections';
 
 export default async function NewStudentPage({
   searchParams,

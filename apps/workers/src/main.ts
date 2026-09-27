@@ -1,3 +1,4 @@
+import { startTracing } from './tracing';
 import { Queue, Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { Db, QUEUES, type JobEnvelope } from '@edupro/db';
@@ -17,6 +18,7 @@ import { NoPdfEngine, PlaywrightPdfEngine } from './processors/pdf';
  * background work exactly as it does to API requests (ADR-002, ADR-009).
  */
 async function main(): Promise<void> {
+  await startTracing('edupro-workers');
   const env = loadEnv();
   const log = createLogger(env.LOG_LEVEL);
   const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -92,6 +94,11 @@ async function main(): Promise<void> {
     'audit.partitions',
     { every: 24 * 60 * 60 * 1000 },
     { name: 'audit.partitions', data: SYSTEM_ENVELOPE('audit.partitions') },
+  );
+  await maintenance.upsertJobScheduler(
+    'break_glass.expire',
+    { every: 5 * 60 * 1000 },
+    { name: 'break_glass.expire', data: SYSTEM_ENVELOPE('break_glass.expire') },
   );
 
   log.info(

@@ -3,6 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { Server } from 'node:http';
+import { MetricsService } from './common/metrics/metrics.service';
 import { corsOrigins, type Env } from './config/env';
 
 export const JSON_BODY_LIMIT = 1_048_576; // 1 MB for JSON (threat model T15)
@@ -52,7 +53,7 @@ export async function setupApp(app: NestFastifyApplication, env: Env): Promise<v
     exposedHeaders: ['X-Request-Id'],
   });
   await app.register(rateLimit, {
-    max: env.NODE_ENV === 'test' ? 10_000 : 600,
+    max: env.NODE_ENV === 'test' ? 10_000 : env.RATE_LIMIT_PER_MINUTE,
     timeWindow: '1 minute',
     keyGenerator: (req) =>
       req.headers.authorization ? `u:${req.headers.authorization.slice(-32)}` : `ip:${req.ip}`,
@@ -60,5 +61,13 @@ export async function setupApp(app: NestFastifyApplication, env: Env): Promise<v
 
   fastify.addHook('onSend', async (req, reply) => {
     void reply.header('X-Request-Id', req.id);
+  });
+
+  // Request metrics by route template (never by raw URL, which may carry ids) for Prometheus (S5-04).
+  const metrics = app.get(MetricsService, { strict: false });
+  fastify.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions?.url ?? 'unmatched';
+    metrics.httpRequests.inc({ method: req.method, route, status: String(reply.statusCode) });
+    metrics.httpDuration.observe({ method: req.method, route }, reply.elapsedTime / 1000);
   });
 }

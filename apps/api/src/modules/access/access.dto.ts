@@ -126,3 +126,22 @@ export class ListMembershipsQueryDto extends createZodDto(ListMembershipsQuerySc
 
 export const UserSearchQuerySchema = z.object({ q: z.string().trim().min(2).max(100) });
 export class UserSearchQueryDto extends createZodDto(UserSearchQuerySchema) {}
+
+// ---- impersonation and break glass (Sprint 5) ----------------------------------------------------
+export const StartImpersonationSchema = z.object({
+  userId: IdSchema,
+  reason: z.string().trim().min(10).max(500),
+  minutes: z.number().int().min(5).max(240).default(30),
+});
+export class StartImpersonationDto extends createZodDto(StartImpersonationSchema) {}
+
+export const BreakGlassSchema = z.object({
+  reason: z.string().trim().min(20).max(1000),
+  roleCode: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,39}$/)
+    .default('school_admin'),
+  hours: z.number().int().min(1).max(4).default(4),
+});
+export class BreakGlassDto extends createZodDto(BreakGlassSchema) {}

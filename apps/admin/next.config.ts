@@ -2,7 +2,24 @@ import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 /** Security headers per the foundation design section 11. CSP nonces are added with middleware in Sprint 2. */
+// Content Security Policy for production builds (S5-10 review item 3). Development keeps Next's eval/hmr
+// requirements; Google Fonts serves the Devanagari face for Hindi.
+const csp = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "base-uri 'self'",
+].join('; ');
+
 const securityHeaders = [
+  ...(process.env.NODE_ENV === 'production'
+    ? [{ key: 'Content-Security-Policy', value: csp }]
+    : []),
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

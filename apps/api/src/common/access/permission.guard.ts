@@ -7,6 +7,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { SecurityEventsService } from '../security/security-events.service';
 import { ENV, type Env } from '../../config/env';
 import { AccessService } from '../../modules/access/access.service';
 import { AUTHENTICATED_ONLY, IS_PUBLIC } from '../auth/decorators';
@@ -23,6 +24,7 @@ export class PermissionGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly access: AccessService,
     @Inject(ENV) private readonly env: Env,
+    private readonly security: SecurityEventsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -57,6 +59,11 @@ export class PermissionGuard implements CanActivate {
     ctx.requiredPermission = requirement.code;
 
     if (!permissions.has(requirement.code)) {
+      this.security.record('permission_denied', {
+        schoolId: ctx.tenant.schoolId,
+        userId: ctx.user.id,
+        detail: requirement.code,
+      });
       throw new ForbiddenException({
         type: 'permission-denied',
         detail: `Missing permission ${requirement.code}`,
@@ -65,7 +72,25 @@ export class PermissionGuard implements CanActivate {
     }
 
     const needsMfa = requirement.mfa === true || (await this.access.requiresMfa(requirement.code));
+    if (needsMfa && ctx.user.impersonation) {
+      // Privileged actions never run under an impersonated identity (S5-02).
+      this.security.record('permission_denied', {
+        schoolId: ctx.tenant.schoolId,
+        userId: ctx.user.id,
+        detail: `${requirement.code} (impersonated)`,
+      });
+      throw new ForbiddenException({
+        type: 'impersonation-restricted',
+        detail: 'Privileged actions are not available while impersonating',
+        permission: requirement.code,
+      });
+    }
     if (needsMfa && !this.isFreshMfa(ctx.user.mfa, ctx.user.authTime)) {
+      this.security.record('mfa_required', {
+        schoolId: ctx.tenant.schoolId,
+        userId: ctx.user.id,
+        detail: requirement.code,
+      });
       throw new ForbiddenException({
         type: 'mfa-required',
         detail: 'This action requires a recent multi-factor authentication',

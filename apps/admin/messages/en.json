@@ -23,7 +23,8 @@
     "years": "Years",
     "settings": "Settings",
     "auditLog": "Audit log",
-    "jobs": "Background jobs"
+    "jobs": "Background jobs",
+    "security": "Security"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -247,5 +248,48 @@
       "title": "Academic and financial years",
       "description": "Years are dimensions: activate the next one, lock stages as they close, and never copy master data."
     }
+  },
+  "stepUp": {
+    "kicker": "Security",
+    "title": "Verify it is you",
+    "intro": "This action needs a recent multi-factor sign-in. Continue to verify with One Auth; you will return to where you were.",
+    "continue": "Verify with One Auth",
+    "devNotice": "Development step-up (AUTH_DEV_BYPASS): re-signing refreshes the authentication time.",
+    "devSubject": "Developer subject",
+    "devSubmit": "Re-sign as developer"
+  },
+  "security": {
+    "kicker": "System",
+    "title": "Security",
+    "description": "Alerts from the in-process detector, impersonation sessions and break-glass windows.",
+    "alerts": "Alerts",
+    "when": "When",
+    "kind": "Kind",
+    "count": "Events in a minute",
+    "noAlerts": "No alerts",
+    "impersonations": "Impersonation sessions",
+    "actor": "By",
+    "target": "Acting as",
+    "reason": "Reason",
+    "window": "Window",
+    "status": "Status",
+    "active": "active",
+    "ended": "ended",
+    "reported": "reported",
+    "noImpersonations": "No impersonation sessions",
+    "breakGlass": "Break-glass windows",
+    "role": "Role",
+    "noBreakGlass": "No break-glass windows",
+    "openBreakGlass": "Open break-glass access",
+    "breakGlassHelp": "Emergency self-grant for at most four hours. The security lead is notified now and receives a report of every action when the window closes.",
+    "hours": "Hours",
+    "reasonPlaceholder": "At least 20 characters: what is broken and why normal access cannot fix it"
+  },
+  "impersonationBanner": {
+    "acting": "You are acting as {name} until {until}.",
+    "end": "End impersonation",
+    "actAs": "Act as",
+    "reason": "Reason (shown in the audit log)",
+    "minutes": "Minutes"
   }
 }

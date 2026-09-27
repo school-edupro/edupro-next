@@ -65,6 +65,7 @@ export class TenantGuard implements CanActivate {
       userId: ctx.user.id,
       allowedSchoolIds,
       requestId: ctx.requestId,
+      impersonatedBy: ctx.user.impersonation?.byUserId ?? null,
     };
 
     // Resolve the working year inside the tenant context so RLS proves the year belongs to this school.

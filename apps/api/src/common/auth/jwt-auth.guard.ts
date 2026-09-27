@@ -53,15 +53,45 @@ export class JwtAuthGuard implements CanActivate {
     let authTime: number | undefined;
     let dev = false;
     let mobile: string | null = null;
+    let impersonation: AuthenticatedUser['impersonation'];
 
     if (token.startsWith('dev:')) {
       if (!this.env.AUTH_DEV_BYPASS || this.env.NODE_ENV === 'production') {
         throw new UnauthorizedException({ type: 'unauthenticated', detail: 'Invalid token' });
       }
-      sub = token.slice('dev:'.length);
+      // dev:<sub> or dev:<sub>;auth_time=<unix seconds>;mfa=false to exercise the MFA rules (S5-01).
+      const [devSub, ...devOpts] = token.slice('dev:'.length).split(';');
+      sub = devSub ?? '';
       mfa = true; // development identities are treated as MFA-verified to exercise step-up paths
       authTime = Math.floor(Date.now() / 1000);
+      for (const opt of devOpts) {
+        const [k, v] = opt.split('=');
+        if (k === 'auth_time' && v && /^\d+$/.test(v)) authTime = Number(v);
+        if (k === 'mfa' && v === 'false') mfa = false;
+      }
       dev = true;
+    } else if (token.startsWith('imp.')) {
+      // Impersonation session token (S5-02): the session row is the source of truth and is re-checked here.
+      const payload = await this.verifySigned(
+        token.slice('imp.'.length),
+        this.env.IMPERSONATION_JWT_SECRET,
+        'edupro-impersonation',
+      );
+      const session = await this.identity.impersonationCheck(String(payload.jti ?? ''));
+      if (!session || session.endedAt || session.expiresAt.getTime() < Date.now()) {
+        throw new UnauthorizedException({
+          type: 'impersonation-ended',
+          detail: 'The impersonation session has ended',
+        });
+      }
+      sub = typeof payload.sub === 'string' ? payload.sub : '';
+      impersonation = {
+        sessionId: String(payload.jti),
+        byUserId: session.actorUserId,
+        byDisplayName: session.actorName,
+        expiresAt: session.expiresAt.toISOString(),
+      };
+      if (!req.headers['x-school-id']) req.headers['x-school-id'] = session.schoolId;
     } else if (token.startsWith('compat.')) {
       // Session token issued by the compatibility handshake (S4-05): HS256, short-lived, carries the school.
       const payload = await this.verifyCompat(token.slice('compat.'.length));
@@ -92,6 +122,7 @@ export class JwtAuthGuard implements CanActivate {
 
     const user: AuthenticatedUser = { ...resolved, mfa, dev };
     if (authTime !== undefined) user.authTime = authTime;
+    if (impersonation) user.impersonation = impersonation;
 
     req.ctx = {
       requestId,
@@ -118,6 +149,23 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException({
         type: 'unauthenticated',
         detail: 'Invalid or expired app session',
+      });
+    }
+  }
+
+  /** HS256 tokens issued by this platform (compatibility sessions, impersonation sessions). */
+  private async verifySigned(token: string, secret: string, issuer: string): Promise<JWTPayload> {
+    try {
+      const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
+        issuer,
+        audience: issuer,
+        clockTolerance: 30,
+      });
+      return payload;
+    } catch {
+      throw new UnauthorizedException({
+        type: 'unauthenticated',
+        detail: 'Invalid or expired session token',
       });
     }
   }

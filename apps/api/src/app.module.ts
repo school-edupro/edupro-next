@@ -9,6 +9,7 @@ import { CacheModule } from './common/cache/cache.module';
 import { DbModule } from './common/db/db.module';
 import { JobsModule } from './common/jobs/jobs.module';
 import { ProblemDetailsFilter } from './common/errors/problem-details.filter';
+import { SecurityModule } from './common/security/security.module';
 import { TenantGuard } from './common/tenant/tenant.guard';
 import { EnvModule } from './config/env.module';
 import { ClassesModule } from './modules/academics/classes/classes.module';
@@ -17,6 +18,7 @@ import { CommsModule } from './modules/comms/comms.module';
 import { CompatModule } from './modules/compat/compat.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthController } from './modules/health/health.controller';
+import { MetricsController } from './modules/health/metrics.controller';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeController } from './modules/me/me.controller';
 import { PeopleModule } from './modules/people/people.module';
@@ -33,6 +35,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     DiscoveryModule,
     DbModule,
     CacheModule,
+    SecurityModule,
     JobsModule,
     IdentityModule,
     AccessModule,
@@ -44,7 +47,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     PeopleModule,
     CompatModule,
   ],
-  controllers: [HealthController, MeController],
+  controllers: [HealthController, MetricsController, MeController],
   providers: [
     AuditService,
     { provide: APP_PIPE, useClass: ZodValidationPipe },

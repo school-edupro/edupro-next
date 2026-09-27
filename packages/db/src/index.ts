@@ -5,6 +5,7 @@
  * sets the transaction-local context that row-level security policies read (ADR-002), runs the callback and
  * commits. Nothing else in the codebase may hand out a raw pool client.
  */
+import { checkSchemaVersion, type SchemaCheckResult } from './schema-version';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 
 export interface TenantContext {
@@ -187,6 +188,11 @@ export class Db {
     }
   }
 
+  /** Compares the applied migration with the one this package ships (S5-05). */
+  async schemaVersion(): Promise<SchemaCheckResult> {
+    return checkSchemaVersion(this.pool);
+  }
+
   async close(): Promise<void> {
     await this.pool.end();
   }
@@ -202,3 +208,4 @@ export {
 export * from './jobs';
 export * from './datasets';
 export * from './renderers';
+export * from './schema-version';

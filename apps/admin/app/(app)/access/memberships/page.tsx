@@ -1,8 +1,8 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { inviteMember, setMembershipStatus } from '@/lib/actions';
-import { apiFetch } from '@/lib/api';
+import { inviteMember, setMembershipStatus, startImpersonation } from '@/lib/actions';
+import { apiFetch, getMe } from '@/lib/api';
 import type { Membership, Page, Role } from '@/lib/types';
 
 export default async function MembershipsPage({
@@ -21,10 +21,12 @@ export default async function MembershipsPage({
   const filter = new URLSearchParams({ size: '200' });
   if (sp.q) filter.set('q', sp.q);
   if (sp.personType) filter.set('personType', sp.personType);
-  const [members, roles] = await Promise.all([
+  const [members, roles, me] = await Promise.all([
     apiFetch<Page<Membership>>(`/access/memberships?${filter.toString()}`),
     apiFetch<{ data: Role[] }>('/access/roles'),
+    getMe(),
   ]);
+  const canImpersonate = me.permissions.includes('access.session.impersonate') && !me.impersonation;
 
   return (
     <>
@@ -90,23 +92,49 @@ export default async function MembershipsPage({
               key: 'actions',
               header: '',
               render: (m) => (
-                <form action={setMembershipStatus} style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                  <input type="hidden" name="id" value={m.id} />
-                  <input
-                    type="hidden"
-                    name="status"
-                    value={m.status === 'active' ? 'inactive' : 'active'}
-                  />
-                  <a
-                    className="ep-btn ep-btn--ghost ep-btn--sm"
-                    href={`/access/assignments?userId=${m.userId}`}
+                <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                  <form
+                    action={setMembershipStatus}
+                    style={{ display: 'flex', gap: 'var(--sp-2)' }}
                   >
-                    Roles
-                  </a>
-                  <Button type="submit" variant="ghost" size="sm">
-                    {m.status === 'active' ? 'Deactivate' : 'Activate'}
-                  </Button>
-                </form>
+                    <input type="hidden" name="id" value={m.id} />
+                    <input
+                      type="hidden"
+                      name="status"
+                      value={m.status === 'active' ? 'inactive' : 'active'}
+                    />
+                    <a
+                      className="ep-btn ep-btn--ghost ep-btn--sm"
+                      href={`/access/assignments?userId=${m.userId}`}
+                    >
+                      Roles
+                    </a>
+                    <Button type="submit" variant="ghost" size="sm">
+                      {m.status === 'active' ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </form>
+                  {canImpersonate && m.userId !== me.user.id && m.status === 'active' ? (
+                    <form
+                      action={startImpersonation}
+                      style={{ display: 'flex', gap: 'var(--sp-1)' }}
+                    >
+                      <input type="hidden" name="userId" value={m.userId} />
+                      <input type="hidden" name="minutes" value="30" />
+                      <input
+                        className="ep-input"
+                        name="reason"
+                        required
+                        minLength={10}
+                        placeholder="Reason (audited)"
+                        aria-label={`Reason for acting as ${m.displayName}`}
+                        style={{ width: 200 }}
+                      />
+                      <Button type="submit" variant="secondary" size="sm">
+                        Act as
+                      </Button>
+                    </form>
+                  ) : null}
+                </div>
               ),
             },
           ]}

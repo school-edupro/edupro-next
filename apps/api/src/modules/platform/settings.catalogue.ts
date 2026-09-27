@@ -15,6 +15,26 @@ const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:MM');
 const money = z.string().regex(/^\d+(\.\d{1,2})?$/, 'amount with up to two decimals');
 
 export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
+  'security.break_glass_email': {
+    schema: z.union([z.string().email(), z.literal('')]),
+    default: '',
+    description:
+      'Security lead who receives the break-glass report when an emergency grant expires',
+    module: 'platform',
+  },
+  'compat.holidays': {
+    schema: z
+      .array(
+        z.object({
+          date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          name: z.string().min(1).max(80),
+        }),
+      )
+      .max(200),
+    default: [],
+    description: 'Holiday list served to the current apps through the compatibility API',
+    module: 'compat',
+  },
   'compat.student_menu': {
     schema: z
       .array(

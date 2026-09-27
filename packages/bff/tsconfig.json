@@ -1,0 +1,10 @@
+{
+  "extends": "@edupro/config/tsconfig.next.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "preserve",
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -15,13 +15,17 @@ export class ApiError extends Error {
  * Server-side call to the NestJS API with the user's token and the working school and year (ADR-007).
  * Client components never call this; they go through /api/proxy (Sprint 2), which uses the same helper.
  */
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  options: { token?: string } = {},
+): Promise<T> {
   const session = await readSession();
   if (!session) throw new ApiError(401, { type: 'unauthenticated' });
   const ctx = await readContext();
 
   const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${session.accessToken}`);
+  headers.set('Authorization', `Bearer ${options.token ?? session.accessToken}`);
   headers.set('Accept', 'application/json');
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
   const schoolId = ctx.schoolId ?? session.schoolId;
@@ -45,6 +49,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
 export interface Me {
   user: { id: string; displayName: string; mfa: boolean };
+  impersonation: {
+    sessionId: string;
+    byUserId: string;
+    byDisplayName: string;
+    expiresAt: string;
+  } | null;
   memberships: Array<{
     schoolId: string;
     schoolCode: string;

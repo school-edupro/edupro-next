@@ -22,6 +22,8 @@ export interface AuthenticatedUser {
   authTime?: number;
   /** Development bypass token was used */
   dev: boolean;
+  /** Present when the request runs under an impersonation session (S5-02). */
+  impersonation?: { sessionId: string; byUserId: string; byDisplayName: string; expiresAt: string };
 }
 
 /** Everything a handler needs about the current request. Built by the guards, read by services. */

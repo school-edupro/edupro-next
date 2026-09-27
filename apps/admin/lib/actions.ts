@@ -6,6 +6,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
+import { readSession, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
   const params = new URLSearchParams();
@@ -19,6 +20,9 @@ async function run(path: string, fn: () => Promise<unknown>): Promise<never> {
   try {
     await fn();
   } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required') {
+      redirect(`/step-up?returnTo=${encodeURIComponent(path)}`); // S5-01: re-authenticate, then retry
+    }
     if (error instanceof ApiError) back(path, error.problem.type, error.problem.detail);
     throw error;
   }
@@ -538,5 +542,74 @@ export async function requestEmployeeIdCard(fd: FormData) {
   const id = str(fd, 'id');
   return run('/reports/exports', () =>
     apiFetch(`/people/employees/${id}/id-card`, { method: 'POST', body: '{}' }),
+  );
+}
+
+// ---- security (Sprint 5) -------------------------------------------------------------------------
+export async function startImpersonation(fd: FormData) {
+  const session = await readSession();
+  if (!session) redirect('/login');
+  let result: {
+    token: string;
+    session: { id: string; targetName: string; expiresAt: string };
+  } | null = null;
+  try {
+    result = await apiFetch('/access/impersonation', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: str(fd, 'userId'),
+        reason: str(fd, 'reason'),
+        minutes: Number(str(fd, 'minutes') || '30'),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect('/step-up?returnTo=%2Faccess%2Fmemberships');
+    if (error instanceof ApiError)
+      back('/access/memberships', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  await writeSession({
+    ...session,
+    accessToken: result!.token,
+    impersonation: {
+      sessionId: result!.session.id,
+      targetName: result!.session.targetName,
+      expiresAt: result!.session.expiresAt,
+      originalAccessToken: session.accessToken,
+    },
+  });
+  revalidatePath('/');
+  redirect('/?ok=1');
+}
+
+export async function endImpersonation() {
+  const session = await readSession();
+  if (!session) redirect('/login');
+  const imp = session.impersonation;
+  if (imp) {
+    await apiFetch(
+      `/access/impersonation/${imp.sessionId}`,
+      { method: 'DELETE' },
+      { token: imp.originalAccessToken },
+    ).catch(() => undefined);
+    const { impersonation: _dropped, ...rest } = session;
+    void _dropped;
+    await writeSession({ ...rest, accessToken: imp.originalAccessToken });
+  }
+  revalidatePath('/');
+  redirect('/access/memberships?ok=1');
+}
+
+export async function openBreakGlass(fd: FormData) {
+  return run('/system/security', () =>
+    apiFetch('/access/break-glass', {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: str(fd, 'reason'),
+        roleCode: str(fd, 'roleCode') || 'school_admin',
+        hours: Number(str(fd, 'hours') || '4'),
+      }),
+    }),
   );
 }

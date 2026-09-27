@@ -22,6 +22,8 @@ export const env = {
       clientId: required('ONEAUTH_CLIENT_ID'),
       clientSecret: required('ONEAUTH_CLIENT_SECRET'),
       redirectUri: required('ONEAUTH_REDIRECT_URI'),
+      /** ACR value that requests multi-factor authentication from One Auth (step-up). */
+      mfaAcr: process.env.ONEAUTH_MFA_ACR ?? 'mfa',
     };
   },
   get devBypass(): boolean {

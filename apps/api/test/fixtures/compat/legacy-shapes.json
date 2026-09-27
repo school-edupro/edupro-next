@@ -1,0 +1,61 @@
+{
+  "_comment": "Recorded from the legacy PHP endpoints (s-webservices) on 2026-09-27: keys per item, not values. Contract tests assert the new responses carry the same keys.",
+  "GetMenuDetail": {
+    "envelope": ["items"],
+    "item": [
+      "menu_name",
+      "menu_link",
+      "status",
+      "link_order",
+      "IconId",
+      "IconURL",
+      "Time_Stamp",
+      "app_icon_url",
+      "category",
+      "category_priority"
+    ]
+  },
+  "GetSchoolConfig": {
+    "envelope": ["items"],
+    "item": [
+      "SchoolId",
+      "PREFIX",
+      "SchoolName",
+      "SchoolAddress",
+      "PhoneNo",
+      "LogoURL",
+      "Class",
+      "AccountNo",
+      "AffiliationNo",
+      "SchoolNo",
+      "website",
+      "facebook",
+      "school_geo",
+      "School_Eamil",
+      "youtube",
+      "help"
+    ]
+  },
+  "GetDirectory": {
+    "envelope": ["channel"],
+    "item": ["EmpId", "Name", "Designation", "Department", "MobileNo", "Email_Id"]
+  },
+  "GetHolidays": {
+    "envelope": ["channel"],
+    "item": ["srno", "holidaydate", "holidayname", "datetime"]
+  },
+  "GetNotice": { "envelope": ["channels"], "item": ["srno", "noticetitle", "notice", "datetime"] },
+  "GetHomework": {
+    "envelope": ["status", "info", "msg", "items"],
+    "item": ["subject", "homework", "homeworkdate", "datetime"]
+  },
+  "GetClasswork": {
+    "envelope": ["channels"],
+    "item": ["subject", "classworkdate", "classwork", "datetime"]
+  },
+  "GetTimetable": {
+    "envelope": ["channels"],
+    "item": ["srno", "sclass", "subject", "weekday", "daytime", "datetime"]
+  },
+  "GetAttendance": { "envelope": ["channels"], "item": ["year", "attendance"] }
+}

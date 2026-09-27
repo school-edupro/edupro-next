@@ -18,5 +18,7 @@ export async function POST(req: NextRequest) {
     expiresAt: Math.floor(Date.now() / 1000) + 12 * 3600,
     displayName: sub,
   });
-  return NextResponse.redirect(new URL('/', req.url), { status: 303 });
+  const returnTo = String(form.get('returnTo') ?? '/');
+  const safeReturn = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
+  return NextResponse.redirect(new URL(safeReturn, req.url), { status: 303 });
 }
