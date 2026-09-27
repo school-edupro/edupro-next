@@ -32,8 +32,12 @@ export interface RequestContext {
   tenant?: TenantContext;
   /** Effective permission codes for (user, school). Set by PermissionGuard. */
   permissions?: ReadonlySet<string>;
-  /** Snapshot the service wants recorded by AuditInterceptor. */
+  /** Snapshot the service wants recorded by AuditInterceptor (after commit). */
   audit?: AuditSnapshot;
+  /** Set by AuditService.stage() when the service already wrote the audit row inside its transaction. */
+  auditWritten?: boolean;
+  /** Permission code the handler declared (PermissionGuard), recorded on audit rows. */
+  requiredPermission?: string;
   ip?: string;
   userAgent?: string;
 }

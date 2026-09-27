@@ -24,11 +24,22 @@ export function Button({
   type = 'button',
   ...rest
 }: ButtonProps) {
-  const classes = ['ep-btn', `ep-btn--${variant}`, size === 'sm' ? 'ep-btn--sm' : '', className ?? '']
+  const classes = [
+    'ep-btn',
+    `ep-btn--${variant}`,
+    size === 'sm' ? 'ep-btn--sm' : '',
+    className ?? '',
+  ]
     .filter(Boolean)
     .join(' ');
   return (
-    <button type={type} className={classes} disabled={disabled || loading} aria-busy={loading || undefined} {...rest}>
+    <button
+      type={type}
+      className={classes}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
       {leadingIcon}
       {children}
     </button>

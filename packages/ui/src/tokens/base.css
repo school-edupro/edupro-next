@@ -8,12 +8,22 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
   color: var(--text-heading);
   line-height: var(--lh-heading);
   letter-spacing: var(--ls-heading);
   margin: 0;
 }
-a { color: var(--text-link); text-decoration: none; }
-a:hover { color: var(--text-link-hover); }
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--text-link-hover);
+}

@@ -22,7 +22,8 @@ export const ConfirmDialog: StoryObj = {
           onClose={() => setOpen(false)}
           primary={{ label: 'Reverse', variant: 'danger', onClick: () => setOpen(false) }}
         >
-          The receipt will be marked reversed and the demand reopened. This is recorded in the audit log and cannot be undone.
+          The receipt will be marked reversed and the demand reopened. This is recorded in the audit
+          log and cannot be undone.
         </Dialog>
       </>
     );
@@ -37,7 +38,12 @@ export const SideDrawer: StoryObj = {
         <Button variant="secondary" onClick={() => setOpen(true)}>
           Open student
         </Button>
-        <Drawer open={open} title="Aarav Sharma, VI-A" onClose={() => setOpen(false)} footer={<Button onClick={() => setOpen(false)}>Done</Button>}>
+        <Drawer
+          open={open}
+          title="Aarav Sharma, VI-A"
+          onClose={() => setOpen(false)}
+          footer={<Button onClick={() => setOpen(false)}>Done</Button>}
+        >
           <p>Detail panels keep the list behind them visible.</p>
         </Drawer>
       </>
@@ -49,13 +55,19 @@ function ToastDemo() {
   const toast = useToast();
   return (
     <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-      <Button variant="secondary" onClick={() => toast.push('success', 'Receipt posted', 'TF/FY2026-27/000013')}>
+      <Button
+        variant="secondary"
+        onClick={() => toast.push('success', 'Receipt posted', 'TF/FY2026-27/000013')}
+      >
         Success
       </Button>
       <Button variant="secondary" onClick={() => toast.push('warning', 'Year locks in 2 days')}>
         Warning
       </Button>
-      <Button variant="secondary" onClick={() => toast.push('danger', 'Payment gateway unreachable', 'Retry in a minute')}>
+      <Button
+        variant="secondary"
+        onClick={() => toast.push('danger', 'Payment gateway unreachable', 'Retry in a minute')}
+      >
         Danger
       </Button>
     </div>

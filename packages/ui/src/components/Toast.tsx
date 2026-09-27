@@ -20,11 +20,15 @@ const ToastContext = createContext<ToastApi | null>(null);
 /** Bottom-right stack, 250 ms fade, auto-dismiss after 6 s except danger, which stays until dismissed. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastMessage[]>([]);
-  const dismiss = useCallback((id: number) => setItems((prev) => prev.filter((t) => t.id !== id)), []);
+  const dismiss = useCallback(
+    (id: number) => setItems((prev) => prev.filter((t) => t.id !== id)),
+    [],
+  );
   const push = useCallback(
     (tone: ToastTone, title: string, detail?: string) => {
       const id = Date.now() + Math.floor(Math.random() * 1000);
-      const item: ToastMessage = detail === undefined ? { id, tone, title } : { id, tone, title, detail };
+      const item: ToastMessage =
+        detail === undefined ? { id, tone, title } : { id, tone, title, detail };
       setItems((prev) => [...prev, item]);
       if (tone !== 'danger') setTimeout(() => dismiss(id), 6000);
     },
@@ -36,12 +40,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="ep-toast-stack" role="region" aria-label="Notifications" aria-live="polite">
         {items.map((t) => (
-          <div key={t.id} className={`ep-toast ep-toast--${t.tone}`} role={t.tone === 'danger' ? 'alert' : 'status'}>
+          <div
+            key={t.id}
+            className={`ep-toast ep-toast--${t.tone}`}
+            role={t.tone === 'danger' ? 'alert' : 'status'}
+          >
             <div className="ep-toast__text">
               <strong>{t.title}</strong>
               {t.detail ? <div>{t.detail}</div> : null}
             </div>
-            <button type="button" className="ep-toast__close" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
+            <button
+              type="button"
+              className="ep-toast__close"
+              aria-label="Dismiss"
+              onClick={() => dismiss(t.id)}
+            >
               ×
             </button>
           </div>

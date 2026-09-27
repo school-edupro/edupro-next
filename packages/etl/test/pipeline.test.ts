@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { PoolClient } from 'pg';
-import { MemoryLegacyMap, MemorySource, normaliseCode, normaliseStatus, reject, runStep, type Loader, type Step } from '../src';
+import {
+  MemoryLegacyMap,
+  MemorySource,
+  normaliseCode,
+  normaliseStatus,
+  reject,
+  runStep,
+  type Loader,
+  type Step,
+} from '../src';
 
 interface RawStudent extends Record<string, unknown> {
   srno: number;
@@ -38,11 +47,17 @@ describe('runStep', () => {
       const code = normaliseCode(raw.sadmission);
       const status = normaliseStatus(raw.status);
       const rejects = [];
-      if (code.kind === 'reject') rejects.push({ ...code, column: 'sadmission', legacyKey: `srno=${raw.srno}` });
-      if (status.kind === 'reject') rejects.push({ ...status, column: 'status', legacyKey: `srno=${raw.srno}` });
+      if (code.kind === 'reject')
+        rejects.push({ ...code, column: 'sadmission', legacyKey: `srno=${raw.srno}` });
+      if (status.kind === 'reject')
+        rejects.push({ ...status, column: 'status', legacyKey: `srno=${raw.srno}` });
       if (rejects.length > 0 || code.kind === 'reject' || status.kind === 'reject') return rejects;
       return {
-        row: { admissionNo: code.value, name: String(raw.sname).trim(), status: status.value ?? 'active' },
+        row: {
+          admissionNo: code.value,
+          name: String(raw.sname).trim(),
+          status: status.value ?? 'active',
+        },
         legacyKey: `sadmission=${code.value}`,
         legacyYear: raw.FinancialYear,
       };
@@ -67,7 +82,11 @@ describe('runStep', () => {
         for (const r of rows) {
           loaded.push(r.row);
           const id = String(100 + loaded.length);
-          await map.set({ table: 'student_master', key: r.legacyKey, year: r.legacyYear }, 'students', id);
+          await map.set(
+            { table: 'student_master', key: r.legacyKey, year: r.legacyYear },
+            'students',
+            id,
+          );
           ids.push(id);
         }
         return ids;
@@ -76,26 +95,37 @@ describe('runStep', () => {
     const log: string[] = [];
     const client = fakeClient(log);
 
-    const report = await runStep(source, step, loader, {
-      schoolId: '9',
-      domain: 'people',
-      sourceLabel: 'fixture',
-      batchSize: 2,
-      withTenant: (fn) => fn(client),
-      withBookkeeping: (fn) => fn(client),
-    }, '2025');
+    const report = await runStep(
+      source,
+      step,
+      loader,
+      {
+        schoolId: '9',
+        domain: 'people',
+        sourceLabel: 'fixture',
+        batchSize: 2,
+        withTenant: (fn) => fn(client),
+        withBookkeeping: (fn) => fn(client),
+      },
+      '2025',
+    );
 
     expect(report).toMatchObject({ extracted: 3, loaded: 1, rejected: 2, blockingRejects: 1 });
     expect(loaded).toEqual([{ admissionNo: 'R1', name: 'A', status: 'active' }]);
     expect(map.size).toBe(1);
-    expect(await map.get({ table: 'student_master', key: 'sadmission=R1', year: '2025' })).toEqual({ targetTable: 'students', targetId: '101' });
+    expect(await map.get({ table: 'student_master', key: 'sadmission=R1', year: '2025' })).toEqual({
+      targetTable: 'students',
+      targetId: '101',
+    });
     expect(log.filter((l) => l.startsWith('INSERT INTO etl.rejects')).length).toBe(2);
-    expect(log.some((l) => l.startsWith('UPDATE etl.runs SET status = \'succeeded\''))).toBe(true);
+    expect(log.some((l) => l.startsWith("UPDATE etl.runs SET status = 'succeeded'"))).toBe(true);
   });
 
   it('marks the run failed when the loader throws', async () => {
     const source = new MemorySource<RawStudent>({
-      student_master: [{ srno: 1, sadmission: 'r1', sname: 'A', status: 'Active', FinancialYear: '2025' }],
+      student_master: [
+        { srno: 1, sadmission: 'r1', sname: 'A', status: 'Active', FinancialYear: '2025' },
+      ],
     });
     const loader: Loader<StudentRow> = {
       targetTable: 'students',

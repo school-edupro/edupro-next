@@ -195,7 +195,9 @@
 .ep-card--elevated {
   border: none;
   box-shadow: var(--shadow-card);
-  transition: box-shadow var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
+  transition:
+    box-shadow var(--dur-med) var(--ease-out),
+    transform var(--dur-med) var(--ease-out);
 }
 
 .ep-card--elevated:hover {
@@ -224,7 +226,9 @@
   cursor: pointer;
   text-decoration: none;
   min-height: 40px;
-  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 
 .ep-btn:disabled {
@@ -485,7 +489,9 @@
   margin-top: 2px;
   border: 1px solid var(--border-strong);
   background: var(--surface-card);
-  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 .ep-check__box {
   border-radius: var(--radius-sm);
@@ -589,7 +595,9 @@
   cursor: pointer;
   white-space: nowrap;
   margin-bottom: -1px;
-  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 .ep-tabs__tab:hover:not(:disabled) {
   color: var(--text-heading);
@@ -768,4 +776,140 @@
 .ep-breadcrumbs li[aria-current='page'] {
   color: var(--text-heading);
   font-weight: var(--fw-semibold);
+}
+
+/* ---- DataGrid (Sprint 3) ---------------------------------------------------- */
+.ep-grid {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-grid__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+.ep-grid__spacer {
+  flex: 1 1 auto;
+}
+.ep-grid__search,
+.ep-grid__views {
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-grid__search .ep-input {
+  min-width: 220px;
+}
+.ep-grid__chooser {
+  position: relative;
+}
+.ep-grid__chooser > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ep-grid__chooser > summary::-webkit-details-marker {
+  display: none;
+}
+.ep-grid__popover {
+  position: absolute;
+  right: 0;
+  z-index: 20;
+  margin-top: var(--sp-1);
+  min-width: 220px;
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+}
+.ep-grid__sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font: inherit;
+  color: inherit;
+}
+.ep-grid__sort:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.ep-grid__sort-icon {
+  font-size: var(--fs-caption);
+  color: var(--mob-cyan-500);
+}
+.ep-grid__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-grid__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---- Form layout (Sprint 3) ------------------------------------------------- */
+.ep-form-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  margin: 0 0 var(--sp-5);
+  background: var(--surface);
+}
+.ep-form-section__title {
+  font-family: var(--ff-heading);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-h5);
+  color: var(--text-heading);
+  padding: 0 var(--sp-2);
+}
+.ep-form-section__description {
+  margin: 0 0 var(--sp-4);
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-form-section__body {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-form-row {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .ep-form-row[data-columns='2'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ep-form-row[data-columns='3'] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ep-form-row[data-columns='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.ep-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding-top: var(--sp-2);
+}
+.ep-form-actions[data-align='end'] {
+  justify-content: flex-end;
+}
+.ep-form-actions[data-sticky='true'] {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: var(--sp-3) 0;
 }

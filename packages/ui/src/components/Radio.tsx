@@ -19,10 +19,25 @@ export interface RadioGroupProps {
   error?: string;
 }
 
-export function RadioGroup({ name, legend, options, value, defaultValue, onChange, inline = false, required, error }: RadioGroupProps) {
+export function RadioGroup({
+  name,
+  legend,
+  options,
+  value,
+  defaultValue,
+  onChange,
+  inline = false,
+  required,
+  error,
+}: RadioGroupProps) {
   const errorId = error ? `${name}-error` : undefined;
   return (
-    <fieldset className="ep-radio-group" data-inline={inline ? 'true' : undefined} aria-describedby={errorId} aria-invalid={error ? 'true' : undefined}>
+    <fieldset
+      className="ep-radio-group"
+      data-inline={inline ? 'true' : undefined}
+      aria-describedby={errorId}
+      aria-invalid={error ? 'true' : undefined}
+    >
       <legend className="ep-field__label" data-required={required ? 'true' : undefined}>
         {legend}
       </legend>

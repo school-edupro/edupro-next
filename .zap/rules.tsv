@@ -1,0 +1,3 @@
+10021	IGNORE	(X-Content-Type-Options header on API JSON handled by Helmet; verified manually)
+10096	IGNORE	(Timestamp disclosure: ISO dates in API responses are expected)
+90022	WARN	(Application error disclosure: warn only; problem details never include stack traces)

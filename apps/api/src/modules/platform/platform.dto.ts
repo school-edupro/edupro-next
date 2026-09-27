@@ -79,3 +79,40 @@ export const UpdateCampusSchema = CampusSchema.partial().extend({
   status: z.enum(['active', 'inactive']).optional(),
 });
 export class UpdateCampusDto extends createZodDto(UpdateCampusSchema) {}
+
+// ---- audit and jobs (Sprint 3) -------------------------------------------------------------------
+export const AuditQuerySchema = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  entityType: z.string().trim().max(60).optional(),
+  entityId: z.string().trim().max(60).optional(),
+  actorUserId: IdSchema.optional(),
+  action: z.string().trim().max(80).optional(),
+  requestId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class AuditQueryDto extends createZodDto(AuditQuerySchema) {}
+
+export const AuditExportSchema = z.object({
+  format: z.enum(['xlsx', 'csv', 'pdf']).default('xlsx'),
+  params: z
+    .object({
+      from: z.string().datetime().optional(),
+      to: z.string().datetime().optional(),
+      entityType: z.string().trim().max(60).optional(),
+      entityId: z.string().trim().max(60).optional(),
+      actorUserId: IdSchema.optional(),
+      action: z.string().trim().max(80).optional(),
+    })
+    .default({}),
+});
+export class AuditExportDto extends createZodDto(AuditExportSchema) {}
+
+export const OutboxQuerySchema = z.object({
+  status: z.enum(['pending', 'published', 'failed']).optional(),
+  queue: z.string().trim().max(40).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class OutboxQueryDto extends createZodDto(OutboxQuerySchema) {}

@@ -1,68 +1,110 @@
-import { Worker, type Job } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
-import pino from 'pino';
-import { Db, type TenantContext } from '@edupro/db';
-import { QUEUES, type JobEnvelope, type QueueName } from './queues';
-
-const log = pino({ level: process.env.LOG_LEVEL ?? 'info', redact: ['payload.mobile', 'payload.email'] });
-
-const connection = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
-const db = new Db({ connectionString: process.env.DATABASE_URL ?? '' });
+import { Db, QUEUES, type JobEnvelope } from '@edupro/db';
+import { createStorageDriver } from '@edupro/storage';
+import { buildAdapters } from './adapters';
+import { loadEnv, storageConfigFrom } from './env';
+import { createLogger } from './logger';
+import { OutboxPublisher } from './outbox-publisher';
+import { exportProcessor } from './processors/exports';
+import { SYSTEM_ENVELOPE, maintenanceProcessor } from './processors/maintenance';
+import { notificationProcessor } from './processors/notifications';
+import { NoPdfEngine, PlaywrightPdfEngine } from './processors/pdf';
 
 /**
- * Every job runs with a tenant context (ADR-002): the envelope carries school_id and the worker sets it on
- * the transaction, so RLS applies to background work exactly as it does to API requests.
+ * Worker process (S3-01 to S3-03): publishes the transactional outbox to BullMQ and consumes the queues.
+ * Every job runs under the tenant context carried in its envelope, so row-level security applies to
+ * background work exactly as it does to API requests (ADR-002, ADR-009).
  */
-function tenantFor(envelope: JobEnvelope): TenantContext {
-  return {
-    schoolId: envelope.schoolId,
-    userId: null,
-    allowedSchoolIds: [envelope.schoolId],
-    requestId: envelope.requestId ?? null,
-  };
-}
-
-const processors: Record<QueueName, (job: Job<JobEnvelope>) => Promise<void>> = {
-  async notifications(job) {
-    // Sprint 4: provider adapters (SMS DLT, WhatsApp, SMTP, FCM) and delivery log.
-    log.info({ jobId: job.id, schoolId: job.data.schoolId }, 'notification job received (adapter pending)');
-  },
-  async exports(job) {
-    // Sprint 4: Playwright PDF and exceljs generation, status endpoint, signed download URL.
-    log.info({ jobId: job.id, schoolId: job.data.schoolId }, 'export job received (generator pending)');
-  },
-  async rfid(job) {
-    // Sprint 9: device batches to attendance_sessions and attendance_marks via rules.
-    await db.withTenant(tenantFor(job.data), async (c) => {
-      await c.query('SELECT app.assert_context()');
-    });
-    log.info({ jobId: job.id, schoolId: job.data.schoolId }, 'rfid batch received (rules pending)');
-  },
-  async reconciliation(job) {
-    log.info({ jobId: job.id, schoolId: job.data.schoolId }, 'reconciliation job received (Sprint 15)');
-  },
-  async maintenance(job) {
-    // Partition management runs with the migrator connection in a dedicated maintenance job (ADR-005).
-    log.info({ jobId: job.id }, 'maintenance job received');
-  },
-};
-
 async function main(): Promise<void> {
+  const env = loadEnv();
+  const log = createLogger(env.LOG_LEVEL);
+  const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const db = new Db({ connectionString: env.DATABASE_URL });
   await db.assertApplicationRole();
-  const workers = (Object.keys(processors) as QueueName[]).map(
-    (name) =>
-      new Worker<JobEnvelope>(QUEUES[name], processors[name], {
-        connection,
-        concurrency: name === 'exports' ? 2 : 10,
-      })
-        .on('failed', (job, error) => log.error({ queue: name, jobId: job?.id, err: error.message }, 'job failed'))
-        .on('completed', (job) => log.debug({ queue: name, jobId: job.id }, 'job completed')),
+
+  const storage = createStorageDriver(storageConfigFrom(env));
+  const adapters = buildAdapters(env, log);
+  const pdf =
+    env.EXPORT_PDF_ENGINE === 'playwright' ? new PlaywrightPdfEngine() : new NoPdfEngine();
+
+  const publisher = new OutboxPublisher(db, connection, log, {
+    batch: env.OUTBOX_BATCH,
+    lockSeconds: 60,
+    maxAttempts: env.OUTBOX_MAX_ATTEMPTS,
+    pollMs: env.OUTBOX_POLL_MS,
+  });
+  publisher.start();
+
+  type Processor = (job: Job<JobEnvelope<never>>) => Promise<void>;
+  const processors: Record<string, Processor> = {
+    [QUEUES.notifications]: notificationProcessor(db, adapters, log) as unknown as Processor,
+    [QUEUES.exports]: exportProcessor({
+      db,
+      storage,
+      pdf,
+      log,
+      ttlDays: env.EXPORTS_TTL_DAYS,
+    }) as unknown as Processor,
+    [QUEUES.maintenance]: maintenanceProcessor({
+      db,
+      storage,
+      log,
+      migratorUrl: env.DATABASE_MIGRATOR_URL,
+    }) as unknown as Processor,
+    async [QUEUES.rfid](job) {
+      // Sprint 9: device batches to attendance_sessions and attendance_marks via rules.
+      log.info(
+        { jobId: job.id, schoolId: job.data.schoolId },
+        'rfid batch received (rules pending)',
+      );
+    },
+    async [QUEUES.reconciliation](job) {
+      log.info(
+        { jobId: job.id, schoolId: job.data.schoolId },
+        'reconciliation job received (Sprint 15)',
+      );
+    },
+  };
+
+  const workers = Object.entries(processors).map(([name, processor]) =>
+    new Worker<JobEnvelope<never>>(name, processor, {
+      connection,
+      concurrency: name === QUEUES.exports ? 2 : 10,
+    })
+      .on('failed', (job, error) =>
+        log.error(
+          { queue: name, jobId: job?.id, attempts: job?.attemptsMade, err: error.message },
+          'job failed',
+        ),
+      )
+      .on('completed', (job) => log.debug({ queue: name, jobId: job.id }, 'job completed')),
   );
-  log.info({ queues: Object.values(QUEUES) }, 'workers started');
+
+  // Scheduled housekeeping: expire export files hourly, keep audit partitions ahead daily.
+  const maintenance = new Queue(QUEUES.maintenance, { connection });
+  await maintenance.upsertJobScheduler(
+    'exports.expire',
+    { every: 60 * 60 * 1000 },
+    { name: 'exports.expire', data: SYSTEM_ENVELOPE('exports.expire') },
+  );
+  await maintenance.upsertJobScheduler(
+    'audit.partitions',
+    { every: 24 * 60 * 60 * 1000 },
+    { name: 'audit.partitions', data: SYSTEM_ENVELOPE('audit.partitions') },
+  );
+
+  log.info(
+    { queues: Object.keys(processors), storage: storage.name, pdf: env.EXPORT_PDF_ENGINE },
+    'workers started',
+  );
 
   const shutdown = async () => {
     log.info('shutting down');
+    await publisher.stop();
     await Promise.all(workers.map((w) => w.close()));
+    await maintenance.close();
+    await pdf.close();
     await connection.quit();
     await db.close();
     process.exit(0);
@@ -72,6 +114,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  log.fatal({ err: error }, 'workers failed to start');
+  console.error('workers failed to start', error);
   process.exit(1);
 });

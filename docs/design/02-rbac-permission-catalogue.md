@@ -29,6 +29,14 @@ Permission codes are `module.resource.action`. The catalogue is generated from `
 | `access.session.impersonate`     | Start an impersonation session                               | Yes |
 | `access.membership.manage`       | Invite users to the school, deactivate memberships           | Yes |
 | `access.user.search`             | Search users across schools by mobile or email when inviting |     |
+| `comms.template.view`            | View notification templates                                  |     |
+| `comms.template.manage`          | Create and edit notification templates                       |     |
+| `comms.message.send`             | Send notifications                                           |     |
+| `comms.message.view`             | View the delivery log                                        |     |
+| `reports.export.create`          | Request PDF, Excel and CSV exports                           |     |
+| `reports.export.view`            | View and download exports                                    |     |
+| `platform.jobs.view`             | View background jobs and the dead-letter list                |     |
+| `platform.jobs.manage`           | Retry or cancel background jobs                              |     |
 | `academics.class.view`           | View classes                                                 |     |
 | `academics.class.create`         | Create a class                                               |     |
 | `academics.class.edit`           | Edit a class                                                 |     |
@@ -44,7 +52,7 @@ Permission codes are `module.resource.action`. The catalogue is generated from `
 | -------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Group Admin          | global | all `platform.*` except `platform.audit.export` (SoD with `access.assignment.manage`), all `access.*`, every module's `*.view`; must be granted per school (a group admin is a member of every school in the group) |
 | School Admin         | global | `platform.*` except `platform.year.rollover` and `platform.audit.export` (SoD with `access.assignment.manage`), `access.*` except `access.session.impersonate`, all module permissions of the school                |
-| Auditor              | global | every `*.view`, `platform.audit.view`, `platform.audit.export`; no write permission may be added (enforced by `roles.kind = 'global'` and `is_system`)                                                              |
+| Auditor              | global | every `*.view`, `platform.audit.view`, `platform.audit.export`, `reports.export.create` (to export what it may view); no write permission may be added (enforced by `roles.kind = 'global'` and `is_system`)        |
 | Support Engineer     | global | `platform.*.view`, `access.*.view`, time-boxed by `valid_to`; no PII export permissions                                                                                                                             |
 | Academic Coordinator | module | `academics.*`, `platform.files.view`, `access.delegation.create`                                                                                                                                                    |
 | Class Teacher        | module | `academics.class.view`, `academics.class_section.view` (scoped), `platform.files.view`, `access.delegation.create`; attendance and daily-work permissions when those modules arrive                                 |

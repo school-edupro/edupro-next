@@ -34,8 +34,14 @@ logs/
 # storybook
 storybook-static/
 
-# local file storage driver
+# local file storage driver (shared by the API and the workers)
+.data/
 apps/api/.data/
 
 # Schema diff reports name real schools and derive from production dumps
 docs/data/reports/
+
+# Playwright
+apps/*/playwright-report/
+apps/*/test-results/
+packages/ui/storybook-static/

@@ -240,3 +240,109 @@ export async function createCampus(fd: FormData) {
     }),
   );
 }
+
+// ---- comms (Sprint 3) ----------------------------------------------------------------------------
+export async function createTemplate(fd: FormData) {
+  return run('/comms/templates', () =>
+    apiFetch('/comms/templates', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code'),
+        channel: str(fd, 'channel'),
+        name: str(fd, 'name'),
+        subject: opt(fd, 'subject'),
+        body: String(fd.get('body') ?? ''),
+        dltTemplateId: opt(fd, 'dltTemplateId'),
+        dltEntityId: opt(fd, 'dltEntityId'),
+        senderId: opt(fd, 'senderId'),
+      }),
+    }),
+  );
+}
+
+export async function updateTemplate(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/comms/templates/${id}`, () =>
+    apiFetch(`/comms/templates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        subject: opt(fd, 'subject'),
+        body: String(fd.get('body') ?? ''),
+        dltTemplateId: opt(fd, 'dltTemplateId'),
+        dltEntityId: opt(fd, 'dltEntityId'),
+        senderId: opt(fd, 'senderId'),
+        status: str(fd, 'status') || 'active',
+      }),
+    }),
+  );
+}
+
+export async function sendMessage(fd: FormData) {
+  let variables: Record<string, unknown> = {};
+  const raw = str(fd, 'variables');
+  if (raw) {
+    try {
+      variables = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      back(
+        '/comms/messages',
+        'validation-failed',
+        'Variables must be a JSON object such as {"name":"Asha"}',
+      );
+    }
+  }
+  return run('/comms/messages', () =>
+    apiFetch('/comms/messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        templateId: str(fd, 'templateId'),
+        recipientUserId: opt(fd, 'recipientUserId'),
+        recipientAddress: opt(fd, 'recipientAddress'),
+        variables,
+      }),
+    }),
+  );
+}
+
+export async function cancelMessage(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/comms/messages', () =>
+    apiFetch(`/comms/messages/${id}/cancel`, { method: 'POST', body: '{}' }),
+  );
+}
+
+// ---- reports and audit (Sprint 3) ----------------------------------------------------------------
+export async function createExport(fd: FormData) {
+  return run('/reports/exports', () =>
+    apiFetch('/reports/exports', {
+      method: 'POST',
+      body: JSON.stringify({
+        dataset: str(fd, 'dataset'),
+        format: str(fd, 'format') || 'xlsx',
+        title: opt(fd, 'title'),
+      }),
+    }),
+  );
+}
+
+export async function exportAudit(fd: FormData) {
+  const params: Record<string, string> = {};
+  for (const key of ['from', 'to', 'entityType', 'entityId', 'actorUserId', 'action']) {
+    const v = opt(fd, key);
+    if (v) params[key] = key === 'from' || key === 'to' ? new Date(v).toISOString() : v;
+  }
+  return run('/reports/exports', () =>
+    apiFetch('/platform/audit/export', {
+      method: 'POST',
+      body: JSON.stringify({ format: str(fd, 'format') || 'xlsx', params }),
+    }),
+  );
+}
+
+export async function retryJob(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/system/jobs', () =>
+    apiFetch(`/platform/jobs/outbox/${id}/retry`, { method: 'POST', body: '{}' }),
+  );
+}

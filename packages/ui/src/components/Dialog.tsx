@@ -8,13 +8,26 @@ export interface DialogProps {
   onClose: () => void;
   children: ReactNode;
   /** Primary action; for irreversible actions state the consequence in the body and use variant "danger". */
-  primary?: { label: string; onClick: () => void; variant?: 'primary' | 'accent' | 'danger'; loading?: boolean };
+  primary?: {
+    label: string;
+    onClick: () => void;
+    variant?: 'primary' | 'accent' | 'danger';
+    loading?: boolean;
+  };
   secondaryLabel?: string;
   size?: 'sm' | 'md' | 'lg';
 }
 
 /** Native <dialog> for focus trapping and Escape handling; overlay shadow token; 250 ms fade. */
-export function Dialog({ open, title, onClose, children, primary, secondaryLabel = 'Cancel', size = 'md' }: DialogProps) {
+export function Dialog({
+  open,
+  title,
+  onClose,
+  children,
+  primary,
+  secondaryLabel = 'Cancel',
+  size = 'md',
+}: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -43,7 +56,11 @@ export function Dialog({ open, title, onClose, children, primary, secondaryLabel
             {secondaryLabel}
           </Button>
           {primary ? (
-            <Button variant={primary.variant ?? 'primary'} onClick={primary.onClick} loading={primary.loading}>
+            <Button
+              variant={primary.variant ?? 'primary'}
+              onClick={primary.onClick}
+              loading={primary.loading}
+            >
               {primary.label}
             </Button>
           ) : null}

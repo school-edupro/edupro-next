@@ -1,12 +1,12 @@
 # Environment plan
 
-| Environment | Purpose | Data | Identity | Who deploys | Availability |
-|---|---|---|---|---|---|
-| local | developer machine | synthetic seed (`seed:dev`) | dev bypass or One Auth dev realm | developer | n/a |
-| test | CI per pull request | fixtures | dev bypass | GitHub Actions | ephemeral |
-| staging | production-like integration, demos, pentest target | anonymised copy of the pilot school | One Auth staging realm, MFA on | `main` auto-deploy | business hours |
-| uat | per school during rollout | migrated copy of that school | One Auth production realm, MFA on | release manager | business hours |
-| production | live | live | One Auth production realm, MFA on | release manager with change approval | 99.9 percent school hours |
+| Environment | Purpose                                            | Data                                | Identity                          | Who deploys                          | Availability              |
+| ----------- | -------------------------------------------------- | ----------------------------------- | --------------------------------- | ------------------------------------ | ------------------------- |
+| local       | developer machine                                  | synthetic seed (`seed:dev`)         | dev bypass or One Auth dev realm  | developer                            | n/a                       |
+| test        | CI per pull request                                | fixtures                            | dev bypass                        | GitHub Actions                       | ephemeral                 |
+| staging     | production-like integration, demos, pentest target | anonymised copy of the pilot school | One Auth staging realm, MFA on    | `main` auto-deploy                   | business hours            |
+| uat         | per school during rollout                          | migrated copy of that school        | One Auth production realm, MFA on | release manager                      | business hours            |
+| production  | live                                               | live                                | One Auth production realm, MFA on | release manager with change approval | 99.9 percent school hours |
 
 ## Topology per environment (staging and above)
 
@@ -24,14 +24,14 @@
 
 ## Configuration matrix
 
-| Setting | local | test | staging | uat | production |
-|---|---|---|---|---|---|
-| `AUTH_DEV_BYPASS` | 1 | 1 | unset | unset | unset (API refuses otherwise) |
-| Swagger at `/api/docs` | on | on | on | off | off |
-| Rate limit per minute | 600 | 600 | 600 | 300 | 300 |
-| Statement timeout | 15 s | 15 s | 15 s | 10 s | 10 s |
-| Log level | debug | info | info | info | info |
-| Session max age | 12 h | 12 h | 8 h | 8 h | 8 h |
+| Setting                | local | test | staging | uat   | production                    |
+| ---------------------- | ----- | ---- | ------- | ----- | ----------------------------- |
+| `AUTH_DEV_BYPASS`      | 1     | 1    | unset   | unset | unset (API refuses otherwise) |
+| Swagger at `/api/docs` | on    | on   | on      | off   | off                           |
+| Rate limit per minute  | 600   | 600  | 600     | 300   | 300                           |
+| Statement timeout      | 15 s  | 15 s | 15 s    | 10 s  | 10 s                          |
+| Log level              | debug | info | info    | info  | info                          |
+| Session max age        | 12 h  | 12 h | 8 h     | 8 h   | 8 h                           |
 
 ## Sprint 5 deliverables that complete this plan
 

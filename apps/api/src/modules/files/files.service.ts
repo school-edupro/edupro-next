@@ -5,7 +5,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ALLOWED_CONTENT_TYPES, MAX_BYTES_BY_CLASS, type CreateUploadDto } from './files.dto';
-import { LocalStorage } from './local.storage';
+import { LocalStorage } from '@edupro/storage';
 import { SCANNER, STORAGE_DRIVER, type Scanner, type StorageDriver } from './storage';
 
 export interface FileRow {

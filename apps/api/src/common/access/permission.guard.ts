@@ -54,6 +54,7 @@ export class PermissionGuard implements CanActivate {
 
     const permissions = await this.access.effectivePermissions(ctx.tenant);
     ctx.permissions = permissions;
+    ctx.requiredPermission = requirement.code;
 
     if (!permissions.has(requirement.code)) {
       throw new ForbiddenException({

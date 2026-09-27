@@ -9,18 +9,18 @@ The legacy School ERP is PHP 5 to 8 with MySQL, server-rendered pages, jQuery, p
 
 ## Decision
 
-| Layer | Choice |
-|---|---|
-| Front end | Next.js 15 (App Router), React 18, TypeScript. Three applications in one monorepo: admin, parent, teacher (PWA), plus a public application for admission forms. Route handlers act only as a thin BFF for the OIDC session and tenant context. |
-| API | NestJS 11 on Node.js 22 with the Fastify adapter, one deployable modular monolith, a module per business domain, OpenAPI generated from decorators, zod for DTO validation. |
-| Database | PostgreSQL 16. Normalised, tenant-keyed schema; row-level security; declarative partitioning for large tables; PL/pgSQL procedures and functions for money and marks; JSONB for document-shaped data. |
-| Data access | Prisma (PostgreSQL provider) for typed CRUD; Kysely or raw SQL for reports; `pg` for procedure calls inside explicit transactions. Migrations are plain SQL files applied in order, so RLS, policies, partitions and procedures are first-class. |
-| Jobs | BullMQ on Redis in a separate `workers` application. |
-| Identity | One Auth (OIDC). The ERP holds roles and permissions; the IdP holds credentials and MFA. |
-| Files | S3-compatible object storage with signed URLs. |
-| Secrets | Azure Key Vault. |
-| Observability | pino, OpenTelemetry, Prometheus metrics, Sentry. |
-| Monorepo | Turborepo with pnpm workspaces. |
+| Layer         | Choice                                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Front end     | Next.js 15 (App Router), React 18, TypeScript. Three applications in one monorepo: admin, parent, teacher (PWA), plus a public application for admission forms. Route handlers act only as a thin BFF for the OIDC session and tenant context.   |
+| API           | NestJS 11 on Node.js 22 with the Fastify adapter, one deployable modular monolith, a module per business domain, OpenAPI generated from decorators, zod for DTO validation.                                                                      |
+| Database      | PostgreSQL 16. Normalised, tenant-keyed schema; row-level security; declarative partitioning for large tables; PL/pgSQL procedures and functions for money and marks; JSONB for document-shaped data.                                            |
+| Data access   | Prisma (PostgreSQL provider) for typed CRUD; Kysely or raw SQL for reports; `pg` for procedure calls inside explicit transactions. Migrations are plain SQL files applied in order, so RLS, policies, partitions and procedures are first-class. |
+| Jobs          | BullMQ on Redis in a separate `workers` application.                                                                                                                                                                                             |
+| Identity      | One Auth (OIDC). The ERP holds roles and permissions; the IdP holds credentials and MFA.                                                                                                                                                         |
+| Files         | S3-compatible object storage with signed URLs.                                                                                                                                                                                                   |
+| Secrets       | Azure Key Vault.                                                                                                                                                                                                                                 |
+| Observability | pino, OpenTelemetry, Prometheus metrics, Sentry.                                                                                                                                                                                                 |
+| Monorepo      | Turborepo with pnpm workspaces.                                                                                                                                                                                                                  |
 
 ## Consequences
 

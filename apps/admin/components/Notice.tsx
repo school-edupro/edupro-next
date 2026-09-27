@@ -18,6 +18,11 @@ const MESSAGES: Record<string, string> = {
   'year.active': 'Activate another year before closing this one.',
   'year.stage_locked': 'That stage of the year is locked.',
   'not-found': 'Not found.',
+  'comms.template.inactive': 'The template is inactive.',
+  'comms.template.not_found': 'No active template with that code and channel.',
+  'comms.recipient.address_missing': 'The recipient has no mobile number or email address on file.',
+  'comms.message.not_queued': 'Only queued messages can be cancelled.',
+  'job.not_failed': 'Only failed jobs can be retried.',
 };
 
 /** Reads ?ok=1 or ?error=<type>&detail=... written by server actions and renders the matching alert. */

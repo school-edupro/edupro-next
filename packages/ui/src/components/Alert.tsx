@@ -14,7 +14,9 @@ export function Alert({ tone = 'info', title, children, action }: AlertProps) {
   return (
     <div className={`ep-alert ep-alert--${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
       <div style={{ flex: 1 }}>
-        {title ? <strong style={{ display: 'block', marginBottom: 'var(--sp-1)' }}>{title}</strong> : null}
+        {title ? (
+          <strong style={{ display: 'block', marginBottom: 'var(--sp-1)' }}>{title}</strong>
+        ) : null}
         {children}
       </div>
       {action}

@@ -1,7 +1,10 @@
 'use client';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-export interface SwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange' | 'type'> {
+export interface SwitchProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'onChange' | 'type'
+> {
   id: string;
   label: ReactNode;
   checked: boolean;
@@ -10,7 +13,16 @@ export interface SwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 
 /** Accessible toggle: a button with role="switch" so screen readers announce on and off. */
-export function Switch({ id, label, checked, onChange, help, disabled, className, ...rest }: SwitchProps) {
+export function Switch({
+  id,
+  label,
+  checked,
+  onChange,
+  help,
+  disabled,
+  className,
+  ...rest
+}: SwitchProps) {
   return (
     <div className={['ep-switch', className ?? ''].filter(Boolean).join(' ')}>
       <button

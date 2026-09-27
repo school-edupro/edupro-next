@@ -3,37 +3,37 @@
    navy #00265D (letterforms), cyan #00A0C6 (globe "o") */
 :root {
   /* Base — brand */
-  --mob-navy-900: #001A44;
-  --mob-navy-800: #00265D; /* logo navy */
-  --mob-navy-700: #0A3A7D;
-  --mob-navy-600: #14509E;
-  --mob-navy-100: #DCE7F5;
-  --mob-navy-50: #EEF4FB;
+  --mob-navy-900: #001a44;
+  --mob-navy-800: #00265d; /* logo navy */
+  --mob-navy-700: #0a3a7d;
+  --mob-navy-600: #14509e;
+  --mob-navy-100: #dce7f5;
+  --mob-navy-50: #eef4fb;
 
-  --mob-cyan-700: #007A9B;
-  --mob-cyan-600: #00A0C6; /* logo cyan */
-  --mob-cyan-500: #17B4D8;
-  --mob-cyan-100: #D3F0F8;
-  --mob-cyan-50: #EAF8FC;
+  --mob-cyan-700: #007a9b;
+  --mob-cyan-600: #00a0c6; /* logo cyan */
+  --mob-cyan-500: #17b4d8;
+  --mob-cyan-100: #d3f0f8;
+  --mob-cyan-50: #eaf8fc;
 
   /* Base — neutrals (cool, navy-tinted) */
-  --mob-gray-900: #131C2B;
-  --mob-gray-700: #3B4757;
+  --mob-gray-900: #131c2b;
+  --mob-gray-700: #3b4757;
   --mob-gray-500: #647080;
-  --mob-gray-400: #8B96A5;
-  --mob-gray-300: #C3CBD6;
-  --mob-gray-200: #DFE4EB;
-  --mob-gray-100: #EEF1F5;
-  --mob-gray-50: #F7F9FB;
-  --mob-white: #FFFFFF;
+  --mob-gray-400: #8b96a5;
+  --mob-gray-300: #c3cbd6;
+  --mob-gray-200: #dfe4eb;
+  --mob-gray-100: #eef1f5;
+  --mob-gray-50: #f7f9fb;
+  --mob-white: #ffffff;
 
   /* Base — semantic hues */
-  --mob-green-600: #1E8E5A;
-  --mob-green-50: #E7F6EE;
-  --mob-amber-600: #B9770E;
-  --mob-amber-50: #FDF3E1;
-  --mob-red-600: #C43D3D;
-  --mob-red-50: #FBEAEA;
+  --mob-green-600: #1e8e5a;
+  --mob-green-50: #e7f6ee;
+  --mob-amber-600: #b9770e;
+  --mob-amber-50: #fdf3e1;
+  --mob-red-600: #c43d3d;
+  --mob-red-50: #fbeaea;
 
   /* Semantic aliases — text */
   --text-heading: var(--mob-navy-800);

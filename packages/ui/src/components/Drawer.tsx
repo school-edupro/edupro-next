@@ -12,7 +12,15 @@ export interface DrawerProps {
 }
 
 /** Side panel for detail views and forms that keep the list visible. Native <dialog> for focus and Escape. */
-export function Drawer({ open, title, onClose, children, footer, side = 'right', width = 'md' }: DrawerProps) {
+export function Drawer({
+  open,
+  title,
+  onClose,
+  children,
+  footer,
+  side = 'right',
+  width = 'md',
+}: DrawerProps) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -37,7 +45,12 @@ export function Drawer({ open, title, onClose, children, footer, side = 'right',
           <h3 id="ep-drawer-title" className="ep-card__title" style={{ marginBottom: 0 }}>
             {title}
           </h3>
-          <button type="button" className="ep-btn ep-btn--ghost ep-btn--sm" aria-label="Close" onClick={onClose}>
+          <button
+            type="button"
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            aria-label="Close"
+            onClick={onClose}
+          >
             ×
           </button>
         </header>

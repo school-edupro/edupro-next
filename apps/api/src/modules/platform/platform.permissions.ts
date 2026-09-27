@@ -10,4 +10,8 @@ export const PLATFORM = {
   settingsEdit: 'platform.settings.edit',
   filesUpload: 'platform.files.upload',
   filesView: 'platform.files.view',
+  auditView: 'platform.audit.view',
+  auditExport: 'platform.audit.export',
+  jobsView: 'platform.jobs.view',
+  jobsManage: 'platform.jobs.manage',
 } as const;

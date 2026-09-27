@@ -32,9 +32,16 @@ describe('normaliseYearCode', () => {
   });
 
   it('rejects non-consecutive and empty years as blocking', () => {
-    expect(normaliseYearCode('2025-27')).toMatchObject({ kind: 'reject', reason: 'year.non_consecutive', blocking: true });
+    expect(normaliseYearCode('2025-27')).toMatchObject({
+      kind: 'reject',
+      reason: 'year.non_consecutive',
+      blocking: true,
+    });
     expect(normaliseYearCode('')).toMatchObject({ kind: 'reject', blocking: true });
-    expect(normaliseYearCode('Session')).toMatchObject({ kind: 'reject', reason: 'year.unparseable' });
+    expect(normaliseYearCode('Session')).toMatchObject({
+      kind: 'reject',
+      reason: 'year.unparseable',
+    });
   });
 });
 
@@ -114,7 +121,10 @@ describe('dates and times', () => {
 
   it('rejects impossible dates', () => {
     expect(normaliseDate('31/02/2025')).toMatchObject({ kind: 'reject', reason: 'date.invalid' });
-    expect(normaliseDate('2025-13-01')).toMatchObject({ kind: 'reject', reason: 'date.out_of_range' });
+    expect(normaliseDate('2025-13-01')).toMatchObject({
+      kind: 'reject',
+      reason: 'date.out_of_range',
+    });
   });
 
   it('converts IST datetimes to UTC', () => {
@@ -142,7 +152,11 @@ describe('money and months', () => {
   });
 
   it('rejects non-numeric money as blocking', () => {
-    expect(toMoney('twelve')).toMatchObject({ kind: 'reject', reason: 'money.invalid', blocking: true });
+    expect(toMoney('twelve')).toMatchObject({
+      kind: 'reject',
+      reason: 'money.invalid',
+      blocking: true,
+    });
   });
 
   it.each([
@@ -163,8 +177,12 @@ describe('codes, trash, mojibake, php', () => {
   });
 
   it('derives deleted_at from isTrash', () => {
-    expect(trashToDeletedAt('1', '2025-04-01 10:00:00', '2026-01-01T00:00:00.000Z')).toBe('2025-04-01T04:30:00.000Z');
-    expect(trashToDeletedAt('1', null, '2026-01-01T00:00:00.000Z')).toBe('2026-01-01T00:00:00.000Z');
+    expect(trashToDeletedAt('1', '2025-04-01 10:00:00', '2026-01-01T00:00:00.000Z')).toBe(
+      '2025-04-01T04:30:00.000Z',
+    );
+    expect(trashToDeletedAt('1', null, '2026-01-01T00:00:00.000Z')).toBe(
+      '2026-01-01T00:00:00.000Z',
+    );
     expect(trashToDeletedAt('0', '2025-04-01 10:00:00', '2026-01-01T00:00:00.000Z')).toBeNull();
   });
 

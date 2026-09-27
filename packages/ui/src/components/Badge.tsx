@@ -9,7 +9,10 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 /** Status chip. Status colours are used for status only, never for decoration. */
 export function Badge({ tone = 'neutral', className, children, ...rest }: BadgeProps) {
   return (
-    <span className={['ep-badge', `ep-badge--${tone}`, className ?? ''].filter(Boolean).join(' ')} {...rest}>
+    <span
+      className={['ep-badge', `ep-badge--${tone}`, className ?? ''].filter(Boolean).join(' ')}
+      {...rest}
+    >
       {children}
     </span>
   );

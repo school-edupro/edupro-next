@@ -9,7 +9,9 @@
     "start": "next start -p 3000",
     "lint": "eslint app components lib middleware.ts && oxlint -c ../../packages/ui/.oxlintrc.json app components lib",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo \"admin e2e tests start in Sprint 3 (Playwright)\""
+    "test": "echo \"admin e2e: pnpm --filter @edupro/admin e2e (Playwright smoke against a running stack)\"",
+    "e2e": "playwright test --project smoke",
+    "e2e:visual": "playwright test --project visual"
   },
   "dependencies": {
     "@edupro/ui": "workspace:*",
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "@edupro/config": "workspace:*",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.7.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

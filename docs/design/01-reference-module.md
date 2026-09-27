@@ -31,14 +31,14 @@ packages/db/migrations/0005_reference_module_classes.sql   tables, indexes, RLS,
 
 ## 3. Endpoints delivered by the reference module
 
-| Method and path | Permission | Notes |
-|---|---|---|
-| `GET /api/v1/academics/classes` | `academics.class.view` | paginated, filter by status |
-| `POST /api/v1/academics/classes` | `academics.class.create` | unique `code` per school |
-| `PATCH /api/v1/academics/classes/{id}` | `academics.class.edit` | partial update, audit before and after |
-| `DELETE /api/v1/academics/classes/{id}` | `academics.class.delete` | soft delete; rejected if sections exist in the active year |
-| `GET /api/v1/academics/classes/{id}/sections` | `academics.class_section.view` | year-scoped by `X-Academic-Year-Id`; Class Teacher scope filters to own sections |
-| `POST /api/v1/academics/classes/{id}/sections` | `academics.class_section.create` | rejected when the year is locked for `academics` |
+| Method and path                                | Permission                       | Notes                                                                            |
+| ---------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `GET /api/v1/academics/classes`                | `academics.class.view`           | paginated, filter by status                                                      |
+| `POST /api/v1/academics/classes`               | `academics.class.create`         | unique `code` per school                                                         |
+| `PATCH /api/v1/academics/classes/{id}`         | `academics.class.edit`           | partial update, audit before and after                                           |
+| `DELETE /api/v1/academics/classes/{id}`        | `academics.class.delete`         | soft delete; rejected if sections exist in the active year                       |
+| `GET /api/v1/academics/classes/{id}/sections`  | `academics.class_section.view`   | year-scoped by `X-Academic-Year-Id`; Class Teacher scope filters to own sections |
+| `POST /api/v1/academics/classes/{id}/sections` | `academics.class_section.create` | rejected when the year is locked for `academics`                                 |
 
 ## 4. Patterns illustrated
 

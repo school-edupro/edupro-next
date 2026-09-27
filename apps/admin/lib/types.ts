@@ -127,3 +127,102 @@ export interface SectionRow {
   capacity: number | null;
   status: 'active' | 'inactive';
 }
+
+// ---- Sprint 3 -----------------------------------------------------------------------------------
+export type Channel = 'sms' | 'whatsapp' | 'email' | 'push';
+
+export interface Template {
+  id: string;
+  code: string;
+  channel: Channel;
+  name: string;
+  subject: string | null;
+  body: string;
+  variables: string[];
+  dltTemplateId: string | null;
+  dltEntityId: string | null;
+  senderId: string | null;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+}
+
+export interface Message {
+  id: string;
+  channel: Channel;
+  templateId: string | null;
+  templateCode: string | null;
+  recipientUserId: string | null;
+  recipientName: string | null;
+  recipientAddress: string;
+  subject: string | null;
+  body: string;
+  status: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' | 'cancelled';
+  provider: string | null;
+  providerMessageId: string | null;
+  attempts: number;
+  lastError: string | null;
+  scheduledAt: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  failedAt: string | null;
+  createdAt: string;
+}
+
+export interface ExportRow {
+  id: string;
+  dataset: string;
+  format: 'xlsx' | 'csv' | 'pdf';
+  title: string;
+  params: Record<string, unknown>;
+  status: 'queued' | 'running' | 'ready' | 'failed' | 'expired';
+  fileId: string | null;
+  rowCount: number | null;
+  error: string | null;
+  requestedBy: string | null;
+  requestedByName: string | null;
+  requestedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  expiresAt: string;
+  downloadCount: number;
+}
+
+export interface Dataset {
+  id: string;
+  title: string;
+  columns: string[];
+  maxRows: number;
+}
+
+export interface AuditRow {
+  id: string;
+  occurredAt: string;
+  actorType: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  impersonatedBy: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  diff: Record<string, { from: unknown; to: unknown }> | null;
+  before?: unknown;
+  after?: unknown;
+  permissionCode: string | null;
+  requestId: string | null;
+  ip: string | null;
+  userAgent?: string | null;
+  source: string;
+}
+
+export interface OutboxRow {
+  id: string;
+  queue: string;
+  kind: string | null;
+  status: 'pending' | 'published' | 'failed';
+  attempts: number;
+  lastError: string | null;
+  availableAt: string;
+  createdAt: string;
+  publishedAt: string | null;
+  requestId: string | null;
+}

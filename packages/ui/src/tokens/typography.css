@@ -9,7 +9,7 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Scale */
-  --fs-display: 44px;   /* hero headlines */
+  --fs-display: 44px; /* hero headlines */
   --fs-h1: 34px;
   --fs-h2: 26px;
   --fs-h3: 20px;
@@ -18,7 +18,7 @@
   --fs-body: 16px;
   --fs-small: 14px;
   --fs-caption: 12.5px;
-  --fs-overline: 13px;  /* uppercase kicker, e.g. "SOFTWARE SOLUTIONS" */
+  --fs-overline: 13px; /* uppercase kicker, e.g. "SOFTWARE SOLUTIONS" */
 
   /* Weights */
   --fw-regular: 400;

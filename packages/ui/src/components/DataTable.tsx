@@ -43,7 +43,9 @@ export function DataTable<T>({
   return (
     <div className="ep-table-wrap">
       <table className="ep-table" data-density={density}>
-        {caption ? <caption style={{ position: 'absolute', left: '-9999px' }}>{caption}</caption> : null}
+        {caption ? (
+          <caption style={{ position: 'absolute', left: '-9999px' }}>{caption}</caption>
+        ) : null}
         <thead>
           <tr>
             {columns.map((c) => (

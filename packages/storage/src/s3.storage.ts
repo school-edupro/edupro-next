@@ -62,6 +62,24 @@ export class S3Storage implements StorageDriver {
     return { url, expiresAt: new Date(Date.now() + this.ttlSeconds * 1000).toISOString() };
   }
 
+  async write(objectKey: string, bytes: Buffer, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Body: bytes,
+        ContentType: contentType,
+        ContentLength: bytes.length,
+      }),
+    );
+  }
+
+  async read(objectKey: string): Promise<Buffer> {
+    const r = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }));
+    const bytes = await r.Body?.transformToByteArray();
+    return Buffer.from(bytes ?? new Uint8Array());
+  }
+
   async head(objectKey: string): Promise<{ sizeBytes: number } | null> {
     try {
       const r = await this.client.send(

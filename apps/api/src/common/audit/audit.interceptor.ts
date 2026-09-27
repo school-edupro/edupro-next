@@ -44,6 +44,7 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: () => {
+          if (ctx.auditWritten) return; // written inside the service transaction (AuditService.stage)
           const snapshot = ctx.audit ?? {
             action: `${method.toLowerCase()} ${req.routeOptions?.url ?? req.url}`,
             entityType: context

@@ -9,7 +9,13 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
 export function Checkbox({ id, label, help, className, ...rest }: CheckboxProps) {
   return (
     <label className={['ep-check', className ?? ''].filter(Boolean).join(' ')} htmlFor={id}>
-      <input id={id} type="checkbox" className="ep-check__input" aria-describedby={help ? `${id}-help` : undefined} {...rest} />
+      <input
+        id={id}
+        type="checkbox"
+        className="ep-check__input"
+        aria-describedby={help ? `${id}-help` : undefined}
+        {...rest}
+      />
       <span className="ep-check__box" aria-hidden="true" />
       <span className="ep-check__text">
         {label}

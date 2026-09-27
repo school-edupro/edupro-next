@@ -31,12 +31,26 @@ const NAV: Array<{
     ],
   },
   {
+    section: 'Communication',
+    items: [
+      { href: '/comms/templates', label: 'Templates', permission: 'comms.template.view' },
+      { href: '/comms/messages', label: 'Delivery log', permission: 'comms.message.view' },
+    ],
+  },
+  {
+    section: 'Reports',
+    items: [
+      { href: '/reports/exports', label: 'Export centre', permission: 'reports.export.view' },
+    ],
+  },
+  {
     section: 'System',
     items: [
       { href: '/system/school', label: 'School profile', permission: 'platform.school.view' },
       { href: '/system/years', label: 'Years', permission: 'platform.year.view' },
       { href: '/system/settings', label: 'Settings', permission: 'platform.settings.view' },
       { href: '/system/audit', label: 'Audit log', permission: 'platform.audit.view' },
+      { href: '/system/jobs', label: 'Background jobs', permission: 'platform.jobs.view' },
     ],
   },
 ];
@@ -55,11 +69,11 @@ export function Shell({
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
   return (
     <div className="ep-shell">
-      <aside className="ep-sidebar" aria-label="Primary">
+      <aside className="ep-sidebar" aria-label="Sidebar">
         <div className="ep-sidebar__brand">
           Edu<b>Pro</b>&nbsp;Next
         </div>
-        <nav>
+        <nav aria-label="Primary">
           {NAV.map((group) => {
             const items = group.items.filter(
               (i) => i.permission === null || allowed.has(i.permission),

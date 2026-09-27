@@ -112,30 +112,30 @@ erDiagram
 
 Conventions on every table: `id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `created_by BIGINT`, `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `updated_by BIGINT`, `deleted_at TIMESTAMPTZ NULL` (soft delete), `legacy_ref TEXT NULL` (source table and key for ETL traceability). Tenant tables add `school_id BIGINT NOT NULL REFERENCES schools(id)` as the second column and in every index.
 
-| Table | Scope | Key columns | Notes |
-|---|---|---|---|
-| `schools` | global, membership-filtered | `code` unique, `name`, `affiliation_no`, `board` (CBSE, ICSE, STATE, IB), `group_id`, `timezone`, `status` | One row per legal school |
-| `school_groups` | global | `code`, `name` | Trust or group |
-| `campuses` | tenant | `school_id`, `code`, `name`, `address` | Physical sites |
-| `academic_years` | tenant | `school_id`, `code` (2026-27), `start_date`, `end_date`, `status` (planned, active, locked, closed), `locks JSONB` (attendance, exams, fees) | Exactly one `active` per school (partial unique index) |
-| `financial_years` | tenant | same shape as academic years | Fee accounting periods |
-| `school_settings` | tenant | `school_id`, `key`, `value JSONB`, `valid_from`, `valid_to` | Typed on read by the settings service; replaces `AppConf.php` and `tbl_module_settings` |
-| `users` | global, membership-filtered | `oneauth_sub` unique, `email`, `mobile`, `display_name`, `preferred_locale`, `status`, `last_login_at` | Credentials live in One Auth only |
-| `user_school_memberships` | tenant | `user_id`, `school_id`, `person_type` (employee, guardian, student, external), `person_ref_id`, `status` | Determines `allowed_school_ids` |
-| `permissions` | global | `code` PK (`module.resource.action`), `module`, `description`, `requires_mfa`, `is_public_safe` | Synchronised from code at API start |
-| `roles` | tenant or template | `school_id NULL for templates`, `code`, `name`, `kind` (global, module), `is_system`, `description` | School roles may extend templates |
-| `role_permissions` | follows role | `role_id`, `permission_code` | |
-| `user_roles` | tenant | `user_id`, `role_id`, `school_id`, `campus_id NULL`, `valid_from`, `valid_to NULL`, `granted_by`, `reason` | Unique on (user, role, school, campus, valid_from) |
-| `user_role_scopes` | tenant | `user_role_id`, `scope_type` (class_section, subject, department, route, campus), `scope_id` | |
-| `sod_rules` | tenant or template | `school_id NULL`, `permission_a`, `permission_b`, `description` | Symmetric pairs |
-| `delegations` | tenant | `from_user_id`, `to_user_id`, `role_id`, `school_id`, `starts_at`, `ends_at`, `reason`, `created_by`, `revoked_at` | |
-| `audit_logs` | tenant, partitioned monthly | `occurred_at`, `school_id`, `actor_type`, `actor_user_id`, `impersonated_by`, `action`, `entity_type`, `entity_id TEXT`, `before JSONB`, `after JSONB`, `diff JSONB`, `permission_code`, `request_id UUID`, `ip INET`, `user_agent`, `source` (api, trigger, job, migration) | Append-only |
-| `login_events` | global, membership-filtered | `user_id`, `school_id NULL`, `occurred_at`, `method` (oidc, dev, impersonation, compat), `ip`, `user_agent`, `outcome` | Replaces `LoginTracking` |
-| `receipt_sequences` | tenant | `school_id`, `ledger_type` (school, hostel, misc, admission), `financial_year_id`, `prefix`, `next_no`, `width` | Row-locked by `app.next_receipt_no` |
-| `files` | tenant | `school_id`, `bucket`, `object_key`, `content_type`, `size_bytes`, `sha256`, `owner_entity_type`, `owner_entity_id`, `classification` (public, internal, personal, sensitive), `scanned_at`, `scan_result` | Object storage index |
-| `jobs_outbox` | tenant | `school_id`, `queue`, `payload JSONB`, `status`, `available_at`, `attempts` | Transactional outbox for reliable job publishing |
-| `classes` | tenant (reference module) | `school_id`, `code`, `name`, `display_order`, `status` | Master class such as VI |
-| `class_sections` | tenant, year-scoped (reference module) | `school_id`, `academic_year_id`, `class_id`, `name` (A), `capacity`, `campus_id NULL` | Section within a year |
+| Table                     | Scope                                  | Key columns                                                                                                                                                                                                                                                                  | Notes                                                                                   |
+| ------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `schools`                 | global, membership-filtered            | `code` unique, `name`, `affiliation_no`, `board` (CBSE, ICSE, STATE, IB), `group_id`, `timezone`, `status`                                                                                                                                                                   | One row per legal school                                                                |
+| `school_groups`           | global                                 | `code`, `name`                                                                                                                                                                                                                                                               | Trust or group                                                                          |
+| `campuses`                | tenant                                 | `school_id`, `code`, `name`, `address`                                                                                                                                                                                                                                       | Physical sites                                                                          |
+| `academic_years`          | tenant                                 | `school_id`, `code` (2026-27), `start_date`, `end_date`, `status` (planned, active, locked, closed), `locks JSONB` (attendance, exams, fees)                                                                                                                                 | Exactly one `active` per school (partial unique index)                                  |
+| `financial_years`         | tenant                                 | same shape as academic years                                                                                                                                                                                                                                                 | Fee accounting periods                                                                  |
+| `school_settings`         | tenant                                 | `school_id`, `key`, `value JSONB`, `valid_from`, `valid_to`                                                                                                                                                                                                                  | Typed on read by the settings service; replaces `AppConf.php` and `tbl_module_settings` |
+| `users`                   | global, membership-filtered            | `oneauth_sub` unique, `email`, `mobile`, `display_name`, `preferred_locale`, `status`, `last_login_at`                                                                                                                                                                       | Credentials live in One Auth only                                                       |
+| `user_school_memberships` | tenant                                 | `user_id`, `school_id`, `person_type` (employee, guardian, student, external), `person_ref_id`, `status`                                                                                                                                                                     | Determines `allowed_school_ids`                                                         |
+| `permissions`             | global                                 | `code` PK (`module.resource.action`), `module`, `description`, `requires_mfa`, `is_public_safe`                                                                                                                                                                              | Synchronised from code at API start                                                     |
+| `roles`                   | tenant or template                     | `school_id NULL for templates`, `code`, `name`, `kind` (global, module), `is_system`, `description`                                                                                                                                                                          | School roles may extend templates                                                       |
+| `role_permissions`        | follows role                           | `role_id`, `permission_code`                                                                                                                                                                                                                                                 |                                                                                         |
+| `user_roles`              | tenant                                 | `user_id`, `role_id`, `school_id`, `campus_id NULL`, `valid_from`, `valid_to NULL`, `granted_by`, `reason`                                                                                                                                                                   | Unique on (user, role, school, campus, valid_from)                                      |
+| `user_role_scopes`        | tenant                                 | `user_role_id`, `scope_type` (class_section, subject, department, route, campus), `scope_id`                                                                                                                                                                                 |                                                                                         |
+| `sod_rules`               | tenant or template                     | `school_id NULL`, `permission_a`, `permission_b`, `description`                                                                                                                                                                                                              | Symmetric pairs                                                                         |
+| `delegations`             | tenant                                 | `from_user_id`, `to_user_id`, `role_id`, `school_id`, `starts_at`, `ends_at`, `reason`, `created_by`, `revoked_at`                                                                                                                                                           |                                                                                         |
+| `audit_logs`              | tenant, partitioned monthly            | `occurred_at`, `school_id`, `actor_type`, `actor_user_id`, `impersonated_by`, `action`, `entity_type`, `entity_id TEXT`, `before JSONB`, `after JSONB`, `diff JSONB`, `permission_code`, `request_id UUID`, `ip INET`, `user_agent`, `source` (api, trigger, job, migration) | Append-only                                                                             |
+| `login_events`            | global, membership-filtered            | `user_id`, `school_id NULL`, `occurred_at`, `method` (oidc, dev, impersonation, compat), `ip`, `user_agent`, `outcome`                                                                                                                                                       | Replaces `LoginTracking`                                                                |
+| `receipt_sequences`       | tenant                                 | `school_id`, `ledger_type` (school, hostel, misc, admission), `financial_year_id`, `prefix`, `next_no`, `width`                                                                                                                                                              | Row-locked by `app.next_receipt_no`                                                     |
+| `files`                   | tenant                                 | `school_id`, `bucket`, `object_key`, `content_type`, `size_bytes`, `sha256`, `owner_entity_type`, `owner_entity_id`, `classification` (public, internal, personal, sensitive), `scanned_at`, `scan_result`                                                                   | Object storage index                                                                    |
+| `jobs_outbox`             | tenant                                 | `school_id`, `queue`, `payload JSONB`, `status`, `available_at`, `attempts`                                                                                                                                                                                                  | Transactional outbox for reliable job publishing                                        |
+| `classes`                 | tenant (reference module)              | `school_id`, `code`, `name`, `display_order`, `status`                                                                                                                                                                                                                       | Master class such as VI                                                                 |
+| `class_sections`          | tenant, year-scoped (reference module) | `school_id`, `academic_year_id`, `class_id`, `name` (A), `capacity`, `campus_id NULL`                                                                                                                                                                                        | Section within a year                                                                   |
 
 ### 4.2 Indexing rules
 
@@ -150,11 +150,11 @@ Conventions on every table: `id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`
 
 ### 5.1 Database roles
 
-| Role | Rights | Used by |
-|---|---|---|
-| `edupro_migrator` | owner of all objects; runs migrations; `NOBYPASSRLS` | CI migration step, DBA |
-| `edupro_app` | `CONNECT`, `USAGE` on schemas, `SELECT INSERT UPDATE DELETE` on tenant tables except audit (INSERT, SELECT only), `EXECUTE` on `app.*`; `NOBYPASSRLS`, `NOSUPERUSER`, `NOCREATEDB` | API and workers |
-| `edupro_readonly` | `SELECT` on reporting schema | BI, group dashboards |
+| Role              | Rights                                                                                                                                                                             | Used by                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `edupro_migrator` | owner of all objects; runs migrations; `NOBYPASSRLS`                                                                                                                               | CI migration step, DBA |
+| `edupro_app`      | `CONNECT`, `USAGE` on schemas, `SELECT INSERT UPDATE DELETE` on tenant tables except audit (INSERT, SELECT only), `EXECUTE` on `app.*`; `NOBYPASSRLS`, `NOSUPERUSER`, `NOCREATEDB` | API and workers        |
+| `edupro_readonly` | `SELECT` on reporting schema                                                                                                                                                       | BI, group dashboards   |
 
 ### 5.2 Context functions (`app` schema)
 
@@ -168,12 +168,12 @@ app.is_context_set()         -> boolean  -- guards accidental unscoped writes
 
 ### 5.3 Policy patterns
 
-| Pattern | Applies to | Policy |
-|---|---|---|
-| Tenant | every tenant table | `USING (school_id = app.current_school_id()) WITH CHECK (school_id = app.current_school_id())` |
-| Membership-filtered global | `schools`, `users`, `login_events` | `USING (id = ANY(app.allowed_school_ids()))` for schools; users visible when they share a membership with an allowed school |
-| Template plus tenant | `roles`, `sod_rules` | `USING (school_id IS NULL OR school_id = app.current_school_id())`; `WITH CHECK (school_id = app.current_school_id())` so templates are read-only for the app role |
-| Append-only | `audit_logs` | INSERT `WITH CHECK (school_id = app.current_school_id())`; SELECT by tenant; no UPDATE or DELETE grants; trigger rejects both |
+| Pattern                    | Applies to                         | Policy                                                                                                                                                             |
+| -------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tenant                     | every tenant table                 | `USING (school_id = app.current_school_id()) WITH CHECK (school_id = app.current_school_id())`                                                                     |
+| Membership-filtered global | `schools`, `users`, `login_events` | `USING (id = ANY(app.allowed_school_ids()))` for schools; users visible when they share a membership with an allowed school                                        |
+| Template plus tenant       | `roles`, `sod_rules`               | `USING (school_id IS NULL OR school_id = app.current_school_id())`; `WITH CHECK (school_id = app.current_school_id())` so templates are read-only for the app role |
+| Append-only                | `audit_logs`                       | INSERT `WITH CHECK (school_id = app.current_school_id())`; SELECT by tenant; no UPDATE or DELETE grants; trigger rejects both                                      |
 
 `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` on every table above. Policies are named `<table>_tenant_isolation`.
 
@@ -236,20 +236,20 @@ For every tenant table (discovered from `pg_tables` joined with `pg_policies`): 
 
 ## 10. API conventions
 
-| Topic | Convention |
-|---|---|
-| Base path | `/api/v1`; breaking changes add `/v2` for the affected module only |
-| Headers | `Authorization: Bearer`, `X-School-Id`, `X-Academic-Year-Id` (optional), `X-Request-Id` (generated if absent), `Idempotency-Key` on money and marks writes |
-| Resources | plural nouns, nested only one level (`/academics/classes/{id}/sections`) |
-| Pagination | `?page=1&size=50` (max 200), response `{ data, page: { number, size, total } }` |
-| Filtering and sorting | `?filter[status]=active&sort=-updated_at` |
-| Errors | RFC 7807 problem details: `{ type, title, status, detail, instance, requestId, errors? }`; `type` is a stable slug such as `validation-failed`, `tenant-forbidden`, `permission-denied`, `mfa-required`, `year-locked`, `conflict` |
-| Validation | zod schemas in `*.dto.ts`, applied by `ZodValidationPipe`; OpenAPI generated from the same schemas |
-| Dates | ISO 8601 in UTC in payloads; dates without time as `YYYY-MM-DD`; the school timezone drives display |
-| Money | strings with two decimals in JSON (`"1250.00"`), `NUMERIC(12,2)` in the database |
-| Ids | opaque numeric strings in JSON to avoid JavaScript precision loss on `BIGINT` |
-| Soft delete | `DELETE` sets `deleted_at`; lists exclude deleted rows unless `?include=deleted` and permission `*.view_deleted` |
-| OpenAPI | served at `/api/docs` in non-production; exported to `apps/api/openapi.json` by `pnpm api:openapi` and consumed by `packages/api-client` |
+| Topic                 | Convention                                                                                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base path             | `/api/v1`; breaking changes add `/v2` for the affected module only                                                                                                                                                                 |
+| Headers               | `Authorization: Bearer`, `X-School-Id`, `X-Academic-Year-Id` (optional), `X-Request-Id` (generated if absent), `Idempotency-Key` on money and marks writes                                                                         |
+| Resources             | plural nouns, nested only one level (`/academics/classes/{id}/sections`)                                                                                                                                                           |
+| Pagination            | `?page=1&size=50` (max 200), response `{ data, page: { number, size, total } }`                                                                                                                                                    |
+| Filtering and sorting | `?filter[status]=active&sort=-updated_at`                                                                                                                                                                                          |
+| Errors                | RFC 7807 problem details: `{ type, title, status, detail, instance, requestId, errors? }`; `type` is a stable slug such as `validation-failed`, `tenant-forbidden`, `permission-denied`, `mfa-required`, `year-locked`, `conflict` |
+| Validation            | zod schemas in `*.dto.ts`, applied by `ZodValidationPipe`; OpenAPI generated from the same schemas                                                                                                                                 |
+| Dates                 | ISO 8601 in UTC in payloads; dates without time as `YYYY-MM-DD`; the school timezone drives display                                                                                                                                |
+| Money                 | strings with two decimals in JSON (`"1250.00"`), `NUMERIC(12,2)` in the database                                                                                                                                                   |
+| Ids                   | opaque numeric strings in JSON to avoid JavaScript precision loss on `BIGINT`                                                                                                                                                      |
+| Soft delete           | `DELETE` sets `deleted_at`; lists exclude deleted rows unless `?include=deleted` and permission `*.view_deleted`                                                                                                                   |
+| OpenAPI               | served at `/api/docs` in non-production; exported to `apps/api/openapi.json` by `pnpm api:openapi` and consumed by `packages/api-client`                                                                                           |
 
 ---
 
@@ -267,13 +267,13 @@ For every tenant table (discovered from `pg_tables` joined with `pg_policies`): 
 
 ## 12. Environments and CI
 
-| Environment | Purpose | Data |
-|---|---|---|
-| local | developer machine, docker compose | synthetic seed |
-| test | CI ephemeral PostgreSQL and Redis services | fixtures |
-| staging | production-like, auto-deployed from `main` | anonymised pilot copy |
-| uat | per school during rollout | migrated school data |
-| production | Indian region | live |
+| Environment | Purpose                                    | Data                  |
+| ----------- | ------------------------------------------ | --------------------- |
+| local       | developer machine, docker compose          | synthetic seed        |
+| test        | CI ephemeral PostgreSQL and Redis services | fixtures              |
+| staging     | production-like, auto-deployed from `main` | anonymised pilot copy |
+| uat         | per school during rollout                  | migrated school data  |
+| production  | Indian region                              | live                  |
 
 CI (`.github/workflows/ci.yml`): install, lint, typecheck, unit tests, database migrations against a PostgreSQL 16 service, RLS and procedure tests, API e2e including the permission-coverage test, front-end build, token lint, gitleaks, dependency audit. Deploy workflows are added in Sprint 5.
 

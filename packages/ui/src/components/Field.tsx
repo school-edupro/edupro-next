@@ -36,7 +36,15 @@ export interface InputFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
 }
 
-export function InputField({ id, label, help, error, required, className, ...rest }: InputFieldProps) {
+export function InputField({
+  id,
+  label,
+  help,
+  error,
+  required,
+  className,
+  ...rest
+}: InputFieldProps) {
   return (
     <FieldShell id={id} label={label} required={required} help={help} error={error}>
       <input
@@ -59,7 +67,16 @@ export interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement
   options: Array<{ value: string; label: string }>;
 }
 
-export function SelectField({ id, label, help, error, required, options, className, ...rest }: SelectFieldProps) {
+export function SelectField({
+  id,
+  label,
+  help,
+  error,
+  required,
+  options,
+  className,
+  ...rest
+}: SelectFieldProps) {
   return (
     <FieldShell id={id} label={label} required={required} help={help} error={error}>
       <select

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import type { DownloadTarget, StorageDriver, UploadTarget } from './storage';
 
 export interface LocalToken {
@@ -15,8 +16,9 @@ export interface LocalToken {
 }
 
 /**
- * Development driver: bytes live under STORAGE_LOCAL_DIR and the API itself serves signed upload and
- * download URLs. The token is an HMAC-signed JSON payload; nothing about it is guessable.
+ * Development driver: bytes live under a directory and the API itself serves signed upload and download
+ * URLs. The token is an HMAC-signed JSON payload; nothing about it is guessable. Fastify caps path
+ * parameters at 100 characters, so the token travels in the query string.
  */
 export class LocalStorage implements StorageDriver {
   readonly name = 'local' as const;
@@ -130,8 +132,21 @@ export class LocalStorage implements StorageDriver {
     await rm(this.pathFor(objectKey), { force: true });
   }
 
-  static resolveDir(configured: string): string {
-    return resolve(process.cwd(), configured);
+  /**
+   * A relative STORAGE_LOCAL_DIR resolves against the repository root (the folder holding
+   * pnpm-workspace.yaml) rather than the process directory, so the API and the workers, which start in
+   * different package folders, read and write the same files.
+   */
+  static resolveDir(configured: string, cwd = process.cwd()): string {
+    if (isAbsolute(configured)) return configured;
+    let dir = cwd;
+    for (let i = 0; i < 6; i += 1) {
+      if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return resolve(dir, configured);
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return resolve(cwd, configured);
   }
 
   static joinKey(...parts: string[]): string {

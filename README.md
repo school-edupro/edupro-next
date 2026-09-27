@@ -58,7 +58,7 @@ pnpm --filter @edupro/db local:setup       # only for the user-space stack (crea
 pnpm db:migrate          # applies packages/db/migrations in order
 pnpm db:test             # cross-tenant RLS tests must pass before anything else
 pnpm --filter @edupro/db seed:dev          # two schools and a dev admin (developer sign-in: dev-admin)
-pnpm dev                 # api on :4000 (docs at /api/docs), admin on :3000, workers attached
+pnpm dev                 # api on :4000 (docs at /api/docs), admin on :3000, workers (outbox publisher and queues)
 ```
 
 Developer sign-in on the login page appears only when `AUTH_DEV_BYPASS=1` and the app runs in development mode (`pnpm dev`). A production build (`next start`) never shows it.
@@ -83,8 +83,12 @@ Developer sign-in on the login page appears only when `AUTH_DEV_BYPASS=1` and th
 
 ## Repository scripts
 
-| Command                                                          | Purpose                                                                            |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm test:scripts`                                              | Runs the schema-diff fixture test and the SQL lint rule fixture check (also in CI) |
-| `pnpm schema-diff <ref.sql> <cmp.sql> [REF] [CMP] [legacy-root]` | Per-school schema diff report into `docs/data/reports/` (git-ignored)              |
-| `pnpm api:openapi && pnpm client:generate`                       | Regenerates the OpenAPI document and the typed client                              |
+| Command                                                                                             | Purpose                                                                                 |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `pnpm test:scripts`                                                                                 | Runs the schema-diff fixture test and the SQL lint rule fixture check (also in CI)      |
+| `pnpm schema-diff <ref.sql> <cmp.sql> [REF] [CMP] [legacy-root]`                                    | Per-school schema diff report into `docs/data/reports/` (git-ignored)                   |
+| `pnpm api:openapi && pnpm client:generate`                                                          | Regenerates the OpenAPI document and the typed client                                   |
+| `pnpm --filter @edupro/workers dev`                                                                 | Starts the outbox publisher and the queue workers (notifications, exports, maintenance) |
+| `pnpm --filter @edupro/admin e2e`                                                                   | Playwright smoke against a running API and admin app                                    |
+| `pnpm --filter @edupro/ui build-storybook && pnpm --filter @edupro/ui test:storybook`               | Storybook interaction tests                                                             |
+| `pnpm --filter @edupro/etl run:domain -- --school <id> --domain tenancy\|identity --fixture <json>` | Runs an ETL domain against a fixture file (or `--mysql <url>` once dumps arrive)        |

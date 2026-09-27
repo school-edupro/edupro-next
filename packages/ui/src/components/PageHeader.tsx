@@ -15,7 +15,9 @@ export function PageHeader({ kicker, title, description, actions }: PageHeaderPr
       <div>
         <div className="ep-kicker">{kicker}</div>
         <h2 className="ep-page-title">{title}</h2>
-        {description ? <p style={{ marginTop: 'var(--sp-2)', color: 'var(--text-muted)' }}>{description}</p> : null}
+        {description ? (
+          <p style={{ marginTop: 'var(--sp-2)', color: 'var(--text-muted)' }}>{description}</p>
+        ) : null}
       </div>
       {actions ? <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>{actions}</div> : null}
     </div>
