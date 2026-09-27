@@ -18,11 +18,18 @@ import {
   enrolStudent,
   linkGuardian,
   requestStudentIdCard,
+  setStudentStatus,
   unlinkGuardian,
   updateStudent,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { Enrolment, GuardianLink, PersonDocument, Student360 } from '@/lib/types';
+import type {
+  Enrolment,
+  GuardianLink,
+  PersonDocument,
+  StatusHistoryRow,
+  Student360,
+} from '@/lib/types';
 import { sectionOptions } from '@/lib/sections';
 
 export default async function StudentPage({
@@ -47,6 +54,9 @@ export default async function StudentPage({
   const can = (perm: string) => me.permissions.includes(perm);
   const genders = ['unspecified', 'male', 'female', 'other'] as const;
   const relations = ['father', 'mother', 'guardian', 'grandparent', 'sibling', 'other'] as const;
+  const history = await apiFetch<{ data: StatusHistoryRow[] }>(
+    `/people/students/${id}/status-history`,
+  ).then((r) => r.data);
   return (
     <>
       <Breadcrumbs
@@ -343,6 +353,58 @@ export default async function StudentPage({
               the document endpoint; a browser uploader arrives with the admissions module.
             </Alert>
           </div>
+        </Card>
+
+        <Card title={t('statusHistory')}>
+          <DataTable<StatusHistoryRow>
+            caption={t('statusHistory')}
+            density="dense"
+            columns={[
+              {
+                key: 'when',
+                header: t('statusWhen'),
+                render: (h) => new Date(h.changedAt).toLocaleString('en-IN'),
+              },
+              { key: 'from', header: t('statusFrom'), render: (h) => h.fromStatus ?? '' },
+              {
+                key: 'to',
+                header: t('statusTo'),
+                render: (h) => (
+                  <Badge tone={h.toStatus === 'active' ? 'success' : 'danger'}>{h.toStatus}</Badge>
+                ),
+              },
+              { key: 'reason', header: t('statusReason'), render: (h) => h.reason ?? '' },
+              { key: 'by', header: t('statusChangedBy'), render: (h) => h.changedBy ?? '' },
+            ]}
+            rows={history}
+            rowKey={(h) => h.id}
+            emptyTitle={t('noHistory')}
+          />
+          {can('people.student.edit') ? (
+            <form action={setStudentStatus} style={{ marginTop: 'var(--sp-4)' }}>
+              <input type="hidden" name="id" value={student.id} />
+              <input
+                type="hidden"
+                name="status"
+                value={student.status === 'active' ? 'inactive' : 'active'}
+              />
+              <p className="ep-field__help">{t('changeStatusHelp')}</p>
+              <FormRow columns={2}>
+                <InputField
+                  id="statusReason"
+                  name="statusReason"
+                  label={t('statusReason')}
+                  maxLength={200}
+                  required
+                />
+              </FormRow>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  {t('changeStatus')}: {student.status === 'active' ? c('inactive') : c('active')}
+                </Button>
+              </FormActions>
+            </form>
+          ) : null}
         </Card>
       </div>
     </>

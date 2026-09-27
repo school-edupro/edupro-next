@@ -36,6 +36,15 @@ export class StudentsController {
     return this.students.get(ctx, id);
   }
 
+  @Get(':id/status-history')
+  @ApiOperation({
+    summary: 'Status changes of a student (created, inactive, removed) with actor and reason',
+  })
+  @RequirePermission(PEOPLE.studentView)
+  async statusHistory(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return { data: await this.students.statusHistory(ctx, id) };
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a student with optional guardians and enrolment' })
   @RequirePermission(PEOPLE.studentCreate, { description: 'Admit or create students' })

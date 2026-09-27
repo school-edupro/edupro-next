@@ -216,6 +216,33 @@ export class StudentsService {
   }
 
   /** The 360 view: record, guardians, enrolment history, documents and siblings. */
+  async statusHistory(ctx: RequestContext, id: string) {
+    await this.get(ctx, id); // applies the class-section scope
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        from_status: string | null;
+        to_status: string;
+        reason: string | null;
+        changed_at: Date;
+        changed_by: string | null;
+      }>(
+        `SELECT h.id::text, h.from_status, h.to_status, h.reason, h.changed_at, u.display_name AS changed_by
+           FROM student_status_history h LEFT JOIN users u ON u.id = h.changed_by
+          WHERE h.student_id = $1 ORDER BY h.changed_at DESC, h.id DESC`,
+        [id],
+      );
+      return r.rows.map((x) => ({
+        id: x.id,
+        fromStatus: x.from_status,
+        toStatus: x.to_status,
+        reason: x.reason,
+        changedAt: x.changed_at.toISOString(),
+        changedBy: x.changed_by,
+      }));
+    });
+  }
+
   async get(ctx: RequestContext, id: string) {
     const tenant = requireTenant(ctx);
     const allowed = await this.scopeFilter(tenant);
@@ -337,6 +364,8 @@ export class StudentsService {
       if (dto.admittedOn !== undefined) set('admitted_on', dto.admittedOn, '::date');
       if (dto.leftOn !== undefined) set('left_on', dto.leftOn, '::date');
       if (dto.status !== undefined) set('status', dto.status, '::row_status');
+      if (dto.status !== undefined && dto.statusReason)
+        await c.query(`SELECT set_config('app.status_reason', $1, true)`, [dto.statusReason]);
       if (dto.photoFileId !== undefined) {
         if (dto.photoFileId) await this.files.get(ctx, dto.photoFileId); // must exist in this school
         set('photo_file_id', dto.photoFileId);

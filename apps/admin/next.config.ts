@@ -34,6 +34,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@edupro/ui'],
   output: 'standalone',
+  // S6-05: CSV imports are posted through a server action; the API accepts up to 2 MB of CSV text.
+  experimental: { serverActions: { bodySizeLimit: '4mb' } },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },

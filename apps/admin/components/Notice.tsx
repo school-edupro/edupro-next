@@ -27,6 +27,19 @@ const MESSAGES: Record<string, string> = {
   'enrolment.section_year_mismatch': 'That section belongs to another academic year.',
   'enrolment.student_not_active': 'The student is not active.',
   'file.not_ready': 'Upload the file before attaching it.',
+  'scope-denied': 'That section is outside your assigned scope.',
+  'year.not_selected': 'Select an academic year in the header first.',
+  'academics.subject.in_use':
+    'The subject is mapped to classes in an open year; remove the mapping first.',
+  'assignment.class_teacher_exists':
+    'The section already has a class teacher. End that assignment first.',
+  'assignment.section_year_mismatch': 'That section belongs to another academic year.',
+  'assignment.already_ended': 'The assignment has already ended.',
+  'timetable.teacher_conflict': 'The teacher is already taking another section in this period.',
+  'timetable.not_teaching_period': 'Subjects and teachers go in teaching periods only.',
+  'timetable.period_in_use': 'The period still has timetable slots.',
+  'import.has_rejects': 'Fix the rejected rows and upload the file again before committing.',
+  'import.not_validated': 'Only a validated import can be committed.',
 };
 
 /** Reads ?ok=1 or ?error=<type>&detail=... written by server actions and renders the matching alert. */

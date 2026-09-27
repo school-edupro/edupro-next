@@ -13,6 +13,7 @@ import { SecurityModule } from './common/security/security.module';
 import { TenantGuard } from './common/tenant/tenant.guard';
 import { EnvModule } from './config/env.module';
 import { ClassesModule } from './modules/academics/classes/classes.module';
+import { AcademicsSetupModule } from './modules/academics/setup/academics-setup.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommsModule } from './modules/comms/comms.module';
 import { CompatModule } from './modules/compat/compat.module';
@@ -44,6 +45,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     PlatformModule,
     CommsModule,
     ClassesModule,
+    AcademicsSetupModule,
     PeopleModule,
     CompatModule,
   ],

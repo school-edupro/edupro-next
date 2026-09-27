@@ -12,4 +12,5 @@ export const PEOPLE = {
   employeeDelete: 'people.employee.delete',
   documentView: 'people.document.view',
   search: 'people.person.search',
+  importRun: 'people.import.run',
 } as const;

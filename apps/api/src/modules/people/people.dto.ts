@@ -87,6 +87,8 @@ export class CreateStudentDto extends createZodDto(CreateStudentSchema) {}
 export const UpdateStudentSchema = StudentCore.omit({ admissionNo: true })
   .extend({
     status: z.enum(['active', 'inactive']),
+    /** Recorded in student_status_history when the status changes (S6-06). */
+    statusReason: z.string().trim().max(200),
     leftOn: DateSchema.nullable(),
     photoFileId: IdSchema.nullable(),
   })
@@ -151,6 +153,8 @@ export class CreateEmployeeDto extends createZodDto(CreateEmployeeSchema) {}
 export const UpdateEmployeeSchema = EmployeeCore.omit({ employeeCode: true })
   .extend({
     status: z.enum(['active', 'inactive']),
+    /** Recorded in student_status_history when the status changes (S6-06). */
+    statusReason: z.string().trim().max(200),
     leftOn: DateSchema.nullable(),
     photoFileId: IdSchema.nullable(),
   })

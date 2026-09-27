@@ -343,3 +343,106 @@ export interface SearchHit {
   subtitle: string;
   rank: number;
 }
+
+// ---- Sprint 6 -----------------------------------------------------------------------------------
+export type SubjectKind = 'scholastic' | 'co_scholastic' | 'language' | 'vocational';
+export type AssignmentKind = 'class_teacher' | 'subject_teacher' | 'coordinator' | 'indicator';
+export type PeriodKind = 'teaching' | 'break' | 'assembly' | 'activity';
+
+export interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  kind: SubjectKind;
+  displayOrder: number;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+}
+
+export interface ClassSubject {
+  id: string;
+  classId: string;
+  subjectId: string;
+  code: string;
+  name: string;
+  kind: SubjectKind;
+  isElective: boolean;
+  periodsPerWeek: number | null;
+}
+
+export interface TeacherAssignment {
+  id: string;
+  academicYearId: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  userId: string | null;
+  classSectionId: string;
+  classCode: string;
+  section: string;
+  subjectId: string | null;
+  subjectCode: string | null;
+  subjectName: string | null;
+  kind: AssignmentKind;
+  canMarkAttendance: boolean;
+  canPostHomework: boolean;
+  canAnswerQueries: boolean;
+  validFrom: string;
+  validTo: string | null;
+}
+
+export interface Period {
+  id: string;
+  campusId: string | null;
+  number: number;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  kind: PeriodKind;
+}
+
+export interface Slot {
+  id: string;
+  classSectionId: string;
+  classCode: string;
+  section: string;
+  weekday: number;
+  periodId: string;
+  periodNumber: number;
+  subjectId: string | null;
+  subjectCode: string | null;
+  subjectName: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  room: string | null;
+}
+
+export interface ImportIssue {
+  row: number;
+  field: string;
+  message: string;
+}
+
+export interface ImportRow {
+  id: string;
+  kind: 'students' | 'employees';
+  fileName: string | null;
+  status: 'validated' | 'committed' | 'failed';
+  totalRows: number;
+  okRows: number;
+  rejectedRows: number;
+  report: ImportIssue[];
+  requestedBy: string | null;
+  createdAt: string;
+  committedAt: string | null;
+  preview: Array<Record<string, string>>;
+}
+
+export interface StatusHistoryRow {
+  id: string;
+  fromStatus: string | null;
+  toStatus: string;
+  reason: string | null;
+  changedAt: string;
+  changedBy: string | null;
+}

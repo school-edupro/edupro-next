@@ -334,7 +334,7 @@ async function main(): Promise<void> {
     await c.query(
       `INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN
         ('people.student.view','people.student.create','people.student.edit','people.guardian.view','people.guardian.edit','people.enrolment.manage','people.employee.view','people.document.view','people.person.search',
-         'academics.class.view','academics.class_section.view','comms.message.send','comms.template.view','reports.export.create','reports.export.view','platform.files.upload','platform.files.view')
+         'academics.class.view','academics.class_section.view','academics.subject.view','academics.teacher_assignment.view','academics.timetable.view','people.import.run','comms.message.send','comms.template.view','reports.export.create','reports.export.view','platform.files.upload','platform.files.view')
        ON CONFLICT DO NOTHING`,
       [frontOffice.rows[0]!.id],
     );
@@ -722,6 +722,267 @@ async function main(): Promise<void> {
       }
     }
 
+    // ---- Sprint 6: subjects, class-subject mapping, teacher assignments, periods and timetable ------
+    const SUBJECTS: Array<[string, string, string, number]> = [
+      ['ENG', 'English', 'language', 1],
+      ['HIN', 'Hindi', 'language', 2],
+      ['MAT', 'Mathematics', 'scholastic', 3],
+      ['EVS', 'Environmental Studies', 'scholastic', 4],
+      ['SCI', 'Science', 'scholastic', 5],
+      ['SST', 'Social Science', 'scholastic', 6],
+      ['CS', 'Computer Science', 'vocational', 7],
+      ['ART', 'Art and Craft', 'co_scholastic', 8],
+      ['PE', 'Physical Education', 'co_scholastic', 9],
+      ['MUS', 'Music', 'co_scholastic', 10],
+    ];
+    const PRIMARY = ['ENG', 'HIN', 'MAT', 'EVS', 'ART', 'PE', 'MUS'];
+    const SECONDARY = ['ENG', 'HIN', 'MAT', 'SCI', 'SST', 'CS', 'ART', 'PE'];
+    const PERIODS: Array<[number, string, string, string, string]> = [
+      [1, 'Assembly', '07:50', '08:10', 'assembly'],
+      [2, 'Period 1', '08:10', '08:50', 'teaching'],
+      [3, 'Period 2', '08:50', '09:30', 'teaching'],
+      [4, 'Period 3', '09:30', '10:10', 'teaching'],
+      [5, 'Break', '10:10', '10:30', 'break'],
+      [6, 'Period 4', '10:30', '11:10', 'teaching'],
+      [7, 'Period 5', '11:10', '11:50', 'teaching'],
+      [8, 'Period 6', '11:50', '12:30', 'teaching'],
+      [9, 'Period 7', '12:30', '13:10', 'teaching'],
+    ];
+    const classOrder = (sectionKey: string) =>
+      CLASSES.findIndex(([code]) => code === sectionKey.split('-')[0]);
+    for (const [schoolCode, school] of Object.entries(schools)) {
+      const subjectIds: Record<string, string> = {};
+      const subjectList =
+        schoolCode === 'ALPHA' ? SUBJECTS : SUBJECTS.filter(([code]) => PRIMARY.includes(code));
+      for (const [code, name, kind, order] of subjectList) {
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO subjects (school_id, code, name, kind, display_order, legacy_ref) VALUES ($1, $2, $3, $4::subject_kind, $5, $2)
+           ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+          [school.id, code, name, kind, order],
+        );
+        subjectIds[code] = r.rows[0]!.id;
+      }
+      const classRows = await c.query<{ id: string; code: string }>(
+        `SELECT id::text, code FROM classes WHERE school_id = $1 AND deleted_at IS NULL`,
+        [school.id],
+      );
+      const classSubjects: Record<string, string[]> = {};
+      for (const cls of classRows.rows) {
+        const order = classOrder(cls.code);
+        const codes = (order < 5 ? PRIMARY : SECONDARY).filter((code) => subjectIds[code]);
+        classSubjects[cls.code] = codes;
+        for (const code of codes) {
+          await c.query(
+            `INSERT INTO class_subjects (school_id, academic_year_id, class_id, subject_id, is_elective, periods_per_week)
+             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (academic_year_id, class_id, subject_id) DO NOTHING`,
+            [
+              school.id,
+              school.yearId,
+              cls.id,
+              subjectIds[code],
+              code === 'CS' && order >= 8,
+              code === 'MAT' || code === 'ENG' ? 7 : ['ART', 'PE', 'MUS'].includes(code) ? 2 : 5,
+            ],
+          );
+        }
+      }
+      const teachingPeriods: string[] = [];
+      for (const [number, name, start, end, kind] of PERIODS) {
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO timetable_periods (school_id, number, name, starts_at, ends_at, kind) VALUES ($1, $2, $3, $4::time, $5::time, $6::period_kind)
+           ON CONFLICT (school_id, (COALESCE(campus_id, 0)), number) DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+          [school.id, number, name, start, end, kind],
+        );
+        if (kind === 'teaching') teachingPeriods.push(r.rows[0]!.id);
+      }
+
+      // teaching staff: E001 principal, E002 vice principal and E003 coordinator are not class teachers
+      const staff = await c.query<{ id: string; code: string; user_id: string | null }>(
+        `SELECT id::text, employee_code AS code, user_id::text FROM employees
+          WHERE school_id = $1 AND employee_type = 'teaching' AND deleted_at IS NULL ORDER BY employee_code`,
+        [school.id],
+      );
+      const byCode = Object.fromEntries(staff.rows.map((e) => [e.code, e.id]));
+      const pool = staff.rows.filter(
+        (e) =>
+          !['E001', 'E002', 'E003'].includes(e.code) &&
+          (schoolCode !== 'ALPHA' || e.code !== 'E004'),
+      );
+      const assign = async (
+        employeeId: string,
+        sectionId: string,
+        kind: string,
+        subjectId: string | null,
+      ) => {
+        await c.query(
+          `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, subject_id, kind, valid_from)
+           SELECT $1, $2, $3, $4, $5::bigint, $6::teacher_assignment_kind, '2026-04-01'
+            WHERE NOT EXISTS (SELECT 1 FROM teacher_assignments WHERE academic_year_id = $2 AND employee_id = $3 AND class_section_id = $4
+                                 AND kind = $6::teacher_assignment_kind AND COALESCE(subject_id, 0) = COALESCE($5::bigint, 0) AND valid_to IS NULL)
+              AND NOT ($6::teacher_assignment_kind = 'class_teacher' AND EXISTS (SELECT 1 FROM teacher_assignments WHERE academic_year_id = $2 AND class_section_id = $4 AND kind = 'class_teacher' AND valid_to IS NULL))`,
+          [school.id, school.yearId, employeeId, sectionId, subjectId, kind],
+        );
+      };
+      const sectionEntries = Object.entries(sections[schoolCode]!).sort(
+        (a, b) => classOrder(a[0]) - classOrder(b[0]) || a[0].localeCompare(b[0]),
+      );
+      const classTeacher: Record<string, string> = {};
+      let cursor = 0;
+      for (const [key, sectionId] of sectionEntries) {
+        let emp: string | undefined;
+        if (schoolCode === 'ALPHA' && key === 'VI-A') emp = byCode.E006;
+        else if (pool.length > 0) {
+          for (let tries = 0; tries < pool.length && !emp; tries += 1) {
+            const cand = pool[cursor % pool.length]!;
+            cursor += 1;
+            if (schoolCode === 'ALPHA' && cand.code === 'E006') continue;
+            emp = cand.id;
+          }
+        }
+        if (!emp) continue;
+        classTeacher[key] = emp;
+        await assign(emp, sectionId, 'class_teacher', null);
+        if (byCode.E003 && classOrder(key) >= 5)
+          await assign(byCode.E003, sectionId, 'coordinator', null);
+        if (byCode.E002 && ['IX', 'X'].includes(key.split('-')[0]!))
+          await assign(byCode.E002, sectionId, 'indicator', null);
+      }
+      // subject teachers for VI-A and VI-B (Alpha): the dev subject teacher takes Mathematics in both
+      const subjectTeacher: Record<string, Record<string, string>> = {};
+      if (schoolCode === 'ALPHA') {
+        const st: Array<[string, string]> = [
+          ['E004', 'MAT'],
+          ['E005', 'SCI'],
+          ['E007', 'HIN'],
+          ['E008', 'SST'],
+          ['E012', 'PE'],
+        ];
+        for (const key of ['VI-A', 'VI-B']) {
+          subjectTeacher[key] = {};
+          for (const [code, subj] of st) {
+            if (!byCode[code] || !subjectIds[subj]) continue;
+            subjectTeacher[key]![subj] = byCode[code]!;
+            await assign(
+              byCode[code]!,
+              sections.ALPHA![key]!,
+              'subject_teacher',
+              subjectIds[subj]!,
+            );
+          }
+        }
+      }
+      // roles and scopes follow the assignments (same routine the API uses), for staff who have a login
+      await c.query(
+        `SELECT set_config('app.school_id', $1, true), set_config('app.user_id', $2, true)`,
+        [school.id, userIds['dev-admin']],
+      );
+      for (const e of staff.rows.filter((x) => x.user_id))
+        await c.query(`SELECT app.sync_teacher_scopes($1, $2)`, [e.id, school.yearId]);
+      await c.query(
+        `SELECT set_config('app.school_id', '', true), set_config('app.user_id', '', true)`,
+      );
+
+      // a full week for every section; VI-A and VI-B first so their subject teachers keep their slots
+      const slotCount = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM timetable_slots WHERE school_id = $1`,
+        [school.id],
+      );
+      if (Number(slotCount.rows[0]!.n) === 0) {
+        const slotOrder = [...sectionEntries].sort(
+          (a, b) => Number(!a[0].startsWith('VI-')) - Number(!b[0].startsWith('VI-')),
+        );
+        for (const [k, [key, sectionId]] of slotOrder.entries()) {
+          const codes = classSubjects[key.split('-')[0]!] ?? [];
+          if (codes.length === 0) continue;
+          for (let weekday = 1; weekday <= 6; weekday += 1) {
+            const periodsToday = weekday === 6 ? teachingPeriods.slice(0, 4) : teachingPeriods;
+            for (const [p, periodId] of periodsToday.entries()) {
+              const subj = codes[(p + weekday + k) % codes.length]!;
+              let employeeId: string | null =
+                subjectTeacher[key]?.[subj] ?? classTeacher[key] ?? null;
+              if (employeeId) {
+                const busy = await c.query(
+                  `SELECT 1 FROM timetable_slots WHERE academic_year_id = $1 AND employee_id = $2 AND weekday = $3 AND period_id = $4`,
+                  [school.yearId, employeeId, weekday, periodId],
+                );
+                if (busy.rowCount) employeeId = null;
+              }
+              await c.query(
+                `INSERT INTO timetable_slots (school_id, academic_year_id, class_section_id, weekday, period_id, subject_id, employee_id, room)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+                [
+                  school.id,
+                  school.yearId,
+                  sectionId,
+                  weekday,
+                  periodId,
+                  subjectIds[subj],
+                  employeeId,
+                  `Room ${key}`,
+                ],
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // ---- status history: every student has a "created" entry; one student has left ----------------
+    await c.query(
+      `INSERT INTO student_status_history (school_id, student_id, from_status, to_status, reason, changed_at)
+       SELECT s.school_id, s.id, NULL, 'active', 'created', s.created_at FROM students s
+        WHERE NOT EXISTS (SELECT 1 FROM student_status_history h WHERE h.student_id = s.id)`,
+    );
+    const hasLeaver = await c.query(
+      `SELECT 1 FROM students WHERE school_id = $1 AND status = 'inactive' LIMIT 1`,
+      [alpha.id],
+    );
+    if (hasLeaver.rowCount === 0) {
+      const leaver = await c.query<{ id: string }>(
+        `SELECT s.id::text FROM students s JOIN enrolments e ON e.student_id = s.id
+           JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c ON c.id = cs.class_id
+          WHERE s.school_id = $1 AND c.code = 'X' AND cs.name = 'B' AND s.status = 'active' ORDER BY e.roll_no DESC LIMIT 1`,
+        [alpha.id],
+      );
+      if (leaver.rows[0]) {
+        await c.query(
+          `SELECT set_config('app.school_id', $1, true), set_config('app.user_id', $2, true),
+                  set_config('app.status_reason', 'Family relocated to Bengaluru; transfer certificate issued', true)`,
+          [alpha.id, userIds['dev-clerk']],
+        );
+        await c.query(
+          `UPDATE students SET status = 'inactive', left_on = CURRENT_DATE - 10 WHERE id = $1`,
+          [leaver.rows[0].id],
+        );
+        await c.query(
+          `UPDATE enrolments SET status = 'left', ended_on = CURRENT_DATE - 10 WHERE student_id = $1 AND academic_year_id = $2`,
+          [leaver.rows[0].id, alpha.yearId],
+        );
+        await c.query(
+          `SELECT set_config('app.school_id', '', true), set_config('app.user_id', '', true), set_config('app.status_reason', '', true)`,
+        );
+      }
+    }
+
+    // ---- import history: one committed roll and one validation with a rejected row ----------------
+    await c.query(
+      `INSERT INTO imports (school_id, kind, file_name, status, total_rows, ok_rows, rejected_rows, report, payload, requested_by, created_at, committed_at)
+       SELECT $1, 'students', 'class-vi-admissions-2026.csv', 'committed', 16, 16, 0, '[]', '[]', $2, now() - interval '20 days', now() - interval '20 days' + interval '3 minutes'
+        WHERE NOT EXISTS (SELECT 1 FROM imports WHERE school_id = $1)`,
+      [alpha.id, userIds['dev-clerk']],
+    );
+    await c.query(
+      `INSERT INTO imports (school_id, kind, file_name, status, total_rows, ok_rows, rejected_rows, report, payload, requested_by, created_at)
+       SELECT $1, 'employees', 'new-staff-sept.csv', 'validated', 3, 2, 1,
+              '[{"row": 4, "field": "mobile", "message": "10 digits starting 6-9"}]'::jsonb,
+              '[{"employee_code": "E021", "first_name": "Ritu", "last_name": "Menon", "employee_type": "teaching", "designation": "TGT Science", "mobile": "9822000001"},
+                {"employee_code": "E022", "first_name": "Arjun", "last_name": "Pillai", "employee_type": "teaching", "designation": "PRT", "mobile": "9822000002"},
+                {"employee_code": "E023", "first_name": "Zoya", "last_name": "Ali", "employee_type": "non_teaching", "designation": "Receptionist", "mobile": "12345"}]'::jsonb,
+              $2, now() - interval '2 days'
+        WHERE NOT EXISTS (SELECT 1 FROM imports WHERE school_id = $1 AND kind = 'employees')`,
+      [alpha.id, userIds['dev-admin']],
+    );
+
     // ---- sample security history: an ended impersonation and a closed break-glass window ----------
     await c.query(
       `INSERT INTO impersonation_sessions (school_id, actor_user_id, target_user_id, reason, started_at, expires_at, ended_at, ended_by)
@@ -780,11 +1041,18 @@ async function main(): Promise<void> {
       guardians: string;
       employees: string;
       messages: string;
+      subjects: string;
+      assignments: string;
+      slots: string;
     }>(
-      `SELECT (SELECT count(*) FROM students)::text AS students, (SELECT count(*) FROM guardians)::text AS guardians, (SELECT count(*) FROM employees)::text AS employees, (SELECT count(*) FROM comms_messages)::text AS messages`,
+      `SELECT (SELECT count(*) FROM students WHERE school_id = ANY($1))::text AS students, (SELECT count(*) FROM guardians WHERE school_id = ANY($1))::text AS guardians,
+              (SELECT count(*) FROM employees WHERE school_id = ANY($1))::text AS employees, (SELECT count(*) FROM comms_messages WHERE school_id = ANY($1))::text AS messages,
+              (SELECT count(*) FROM subjects WHERE school_id = ANY($1))::text AS subjects, (SELECT count(*) FROM teacher_assignments WHERE school_id = ANY($1))::text AS assignments,
+              (SELECT count(*) FROM timetable_slots WHERE school_id = ANY($1))::text AS slots`,
+      [Object.values(schools).map((s) => s.id)],
     );
     process.stdout.write(
-      `demo data ready: ${counts.rows[0]!.students} students, ${counts.rows[0]!.guardians} guardians, ${counts.rows[0]!.employees} employees, ${counts.rows[0]!.messages} messages\n\n`,
+      `demo data ready: ${counts.rows[0]!.students} students, ${counts.rows[0]!.guardians} guardians, ${counts.rows[0]!.employees} employees, ${counts.rows[0]!.messages} messages, ${counts.rows[0]!.subjects} subjects, ${counts.rows[0]!.assignments} teacher assignments, ${counts.rows[0]!.slots} timetable slots\n\n`,
     );
     process.stdout.write('Developer sign-in subjects (login page, AUTH_DEV_BYPASS=1):\n');
     for (const u of DEMO_USERS)

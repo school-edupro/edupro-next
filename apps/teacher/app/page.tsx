@@ -15,7 +15,13 @@ export default async function HomePage() {
   }
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
   const can = (p: string) => me.permissions.includes(p);
-  const tiles: Array<[string, string, boolean]> = [
+  const tiles: Array<[string, string, boolean, string?]> = [
+    [
+      'My classes',
+      'Your sections, subjects and this week’s timetable',
+      can('academics.timetable.view'),
+      '/timetable',
+    ],
     [
       'Attendance',
       'Mark today’s attendance for your sections',
@@ -48,20 +54,29 @@ export default async function HomePage() {
           gap: 'var(--sp-3)',
         }}
       >
-        {tiles.map(([title, help, enabled]) => (
-          <Card key={title} elevated style={{ opacity: enabled ? 1 : 0.55 }}>
-            <div
-              style={{
-                fontFamily: 'var(--font-heading)',
-                fontWeight: 600,
-                color: 'var(--text-heading)',
-              }}
-            >
-              {title}
-            </div>
-            <div className="ep-field__help">{help}</div>
-          </Card>
-        ))}
+        {tiles.map(([title, help, enabled, href]) => {
+          const body = (
+            <Card key={title} elevated style={{ opacity: enabled ? 1 : 0.55, height: '100%' }}>
+              <div
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontWeight: 600,
+                  color: 'var(--text-heading)',
+                }}
+              >
+                {title}
+              </div>
+              <div className="ep-field__help">{help}</div>
+            </Card>
+          );
+          return href && enabled ? (
+            <a key={title} href={href} style={{ textDecoration: 'none' }}>
+              {body}
+            </a>
+          ) : (
+            body
+          );
+        })}
       </div>
     </main>
   );

@@ -613,3 +613,163 @@ export async function openBreakGlass(fd: FormData) {
     }),
   );
 }
+
+// ---- Sprint 6: subjects ---------------------------------------------------------------------------
+export async function createSubject(fd: FormData) {
+  return run('/academics/subjects', () =>
+    apiFetch('/academics/subjects', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        kind: str(fd, 'kind') || 'scholastic',
+        displayOrder: Number(str(fd, 'displayOrder') || '0'),
+      }),
+    }),
+  );
+}
+
+export async function setSubjectStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/subjects', () =>
+    apiFetch(`/academics/subjects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status') }),
+    }),
+  );
+}
+
+export async function deleteSubject(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/subjects', () =>
+    apiFetch(`/academics/subjects/${id}`, { method: 'DELETE' }),
+  );
+}
+
+export async function setClassSubjects(fd: FormData) {
+  const classId = str(fd, 'classId');
+  const electives = new Set(fd.getAll('elective').map(String));
+  return run(`/academics/subjects?classId=${classId}`, () =>
+    apiFetch(`/academics/classes/${classId}/subjects`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        subjects: fd.getAll('subjectIds').map((id) => ({
+          subjectId: String(id),
+          isElective: electives.has(String(id)),
+        })),
+      }),
+    }),
+  );
+}
+
+// ---- Sprint 6: teacher assignments ---------------------------------------------------------------
+export async function createTeacherAssignment(fd: FormData) {
+  return run('/academics/teacher-assignments', () =>
+    apiFetch('/academics/teacher-assignments', {
+      method: 'POST',
+      body: JSON.stringify({
+        employeeId: str(fd, 'employeeId'),
+        classSectionId: str(fd, 'classSectionId'),
+        kind: str(fd, 'kind'),
+        subjectId: opt(fd, 'subjectId'),
+        canMarkAttendance: fd.get('canMarkAttendance') !== null,
+        canPostHomework: fd.get('canPostHomework') !== null,
+        canAnswerQueries: fd.get('canAnswerQueries') !== null,
+      }),
+    }),
+  );
+}
+
+export async function endTeacherAssignment(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/teacher-assignments', () =>
+    apiFetch(`/academics/teacher-assignments/${id}/end`, { method: 'POST' }),
+  );
+}
+
+// ---- Sprint 6: timetable --------------------------------------------------------------------------
+export async function createPeriod(fd: FormData) {
+  return run('/academics/timetable', () =>
+    apiFetch('/academics/timetable/periods', {
+      method: 'POST',
+      body: JSON.stringify({
+        number: Number(str(fd, 'number')),
+        name: str(fd, 'name'),
+        startsAt: str(fd, 'startsAt'),
+        endsAt: str(fd, 'endsAt'),
+        kind: str(fd, 'kind') || 'teaching',
+      }),
+    }),
+  );
+}
+
+export async function deletePeriod(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/timetable', () =>
+    apiFetch(`/academics/timetable/periods/${id}`, { method: 'DELETE' }),
+  );
+}
+
+export async function setSlot(fd: FormData) {
+  const classSectionId = str(fd, 'classSectionId');
+  return run(`/academics/timetable?classSectionId=${classSectionId}`, () =>
+    apiFetch('/academics/timetable/slots', {
+      method: 'PUT',
+      body: JSON.stringify({
+        classSectionId,
+        weekday: Number(str(fd, 'weekday')),
+        periodId: str(fd, 'periodId'),
+        subjectId: opt(fd, 'subjectId'),
+        employeeId: opt(fd, 'employeeId'),
+        room: opt(fd, 'room'),
+      }),
+    }),
+  );
+}
+
+export async function clearSlot(fd: FormData) {
+  const id = str(fd, 'id');
+  const classSectionId = str(fd, 'classSectionId');
+  return run(`/academics/timetable?classSectionId=${classSectionId}`, () =>
+    apiFetch(`/academics/timetable/slots/${id}`, { method: 'DELETE' }),
+  );
+}
+
+// ---- Sprint 6: imports ----------------------------------------------------------------------------
+export async function validateImport(fd: FormData) {
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0)
+    back('/people/import', 'validation-failed', 'Choose a CSV file');
+  let created: { id: string };
+  try {
+    created = await apiFetch<{ id: string }>('/people/imports/validate', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: str(fd, 'kind') || 'students',
+        fileName: (file as File).name.slice(0, 200),
+        csv: await (file as File).text(),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back('/people/import', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`/people/import/${created.id}`);
+}
+
+export async function commitImport(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/import/${id}`, () =>
+    apiFetch(`/people/imports/${id}/commit`, { method: 'POST' }),
+  );
+}
+
+export async function setStudentStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/students/${id}`, () =>
+    apiFetch(`/people/students/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status'), statusReason: opt(fd, 'statusReason') }),
+    }),
+  );
+}

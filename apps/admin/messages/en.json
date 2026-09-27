@@ -24,7 +24,11 @@
     "settings": "Settings",
     "auditLog": "Audit log",
     "jobs": "Background jobs",
-    "security": "Security"
+    "security": "Security",
+    "subjects": "Subjects",
+    "teacherAssignments": "Teacher assignments",
+    "timetable": "Timetable",
+    "import": "Bulk import"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -125,7 +129,16 @@
       "unlink": "Unlink",
       "noGuardians": "No guardians linked",
       "noDocuments": "No documents attached",
-      "photo": "Photo"
+      "photo": "Photo",
+      "statusHistory": "Status history",
+      "statusFrom": "From",
+      "statusTo": "To",
+      "statusReason": "Reason",
+      "statusChangedBy": "By",
+      "statusWhen": "When",
+      "changeStatus": "Change status",
+      "changeStatusHelp": "Deactivating keeps the record and every enrolment; the reason is stored with the change.",
+      "noHistory": "No changes recorded"
     },
     "employees": {
       "title": "Employees",
@@ -248,6 +261,30 @@
       "kicker": "System",
       "title": "Academic and financial years",
       "description": "Years are dimensions: activate the next one, lock stages as they close, and never copy master data."
+    },
+    "academics_subjects": {
+      "kicker": "Academics",
+      "title": "Subjects",
+      "description": "Subject master for this school and the subjects each class studies in the working year."
+    },
+    "academics_teacher_assignments": {
+      "kicker": "Academics",
+      "title": "Teacher assignments",
+      "description": "Who teaches what. Each assignment grants the teacher's role and limits it to the assigned sections."
+    },
+    "academics_timetable": {
+      "kicker": "Academics",
+      "title": "Timetable",
+      "description": "Periods of the school day and the weekly timetable of every section. A teacher cannot be in two sections in one period."
+    },
+    "people_import": {
+      "kicker": "People",
+      "title": "Bulk import",
+      "description": "Upload a CSV of students or employees. The file is validated first; nothing is written until you commit a clean file."
+    },
+    "people_import_detail": {
+      "kicker": "People",
+      "title": "Import report"
     }
   },
   "stepUp": {
@@ -292,5 +329,128 @@
     "actAs": "Act as",
     "reason": "Reason (shown in the audit log)",
     "minutes": "Minutes"
+  },
+  "academics": {
+    "code": "Code",
+    "name": "Name",
+    "kind": "Kind",
+    "order": "Order",
+    "addSubject": "Add subject",
+    "subjects": "Subjects",
+    "noSubjects": "No subjects yet",
+    "kinds": {
+      "scholastic": "Scholastic",
+      "co_scholastic": "Co-scholastic",
+      "language": "Language",
+      "vocational": "Vocational"
+    },
+    "classSubjects": "Subjects by class",
+    "classSubjectsHelp": "Pick a class to see and change the subjects it studies this year.",
+    "chooseClass": "Class",
+    "show": "Show",
+    "elective": "Elective",
+    "periodsPerWeek": "Periods per week",
+    "saveMapping": "Save subjects for this class",
+    "mapped": "taught",
+    "notMapped": "not taught",
+    "employee": "Teacher",
+    "section": "Section",
+    "subject": "Subject",
+    "assignmentKind": "Assignment",
+    "since": "Since",
+    "until": "Until",
+    "assign": "Assign",
+    "end": "End",
+    "ended": "ended",
+    "active": "active",
+    "assignmentKinds": {
+      "class_teacher": "Class teacher",
+      "subject_teacher": "Subject teacher",
+      "coordinator": "Coordinator",
+      "indicator": "Indicator"
+    },
+    "assignments": "Assignments",
+    "noAssignments": "No assignments in this year",
+    "newAssignment": "New assignment",
+    "newAssignmentHelp": "The teacher receives the matching role scoped to the section as soon as you save. Ending the last assignment revokes it.",
+    "canMarkAttendance": "Marks attendance",
+    "canPostHomework": "Posts homework",
+    "canAnswerQueries": "Answers parent queries",
+    "allSections": "All sections",
+    "periods": "Periods",
+    "addPeriod": "Add period",
+    "number": "No.",
+    "startsAt": "Starts",
+    "endsAt": "Ends",
+    "periodKind": "Type",
+    "noPeriods": "Define the periods of the school day first",
+    "periodKinds": {
+      "teaching": "Teaching",
+      "break": "Break",
+      "assembly": "Assembly",
+      "activity": "Activity"
+    },
+    "weekdays": {
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat",
+      "7": "Sun"
+    },
+    "week": "Week of {section}",
+    "chooseSection": "Section",
+    "setSlot": "Set a slot",
+    "setSlotHelp": "Click a cell to prefill the day and period, then choose the subject and teacher.",
+    "weekday": "Day",
+    "period": "Period",
+    "room": "Room",
+    "teacher": "Teacher",
+    "none": "None",
+    "clear": "Clear",
+    "save": "Save slot",
+    "free": "free",
+    "delete": "Delete",
+    "deactivate": "Deactivate",
+    "activate": "Activate"
+  },
+  "imports": {
+    "kind": "What are you importing?",
+    "kinds": {
+      "students": "Students",
+      "employees": "Employees"
+    },
+    "file": "CSV file",
+    "validate": "Validate file",
+    "templates": "Column templates",
+    "templateHelp": "Download a header row with every accepted column. Required columns are marked with an asterisk in the list below.",
+    "columns": "Accepted columns",
+    "history": "Import history",
+    "noHistory": "No imports yet",
+    "status": "Status",
+    "statuses": {
+      "validated": "validated",
+      "committed": "committed",
+      "failed": "failed"
+    },
+    "total": "Rows",
+    "ok": "Accepted",
+    "rejected": "Rejected",
+    "requestedBy": "By",
+    "when": "When",
+    "open": "Open",
+    "report": "Validation report",
+    "noIssues": "No problems found",
+    "row": "Row",
+    "field": "Column",
+    "message": "Problem",
+    "headerRow": "header",
+    "preview": "Preview (first 20 rows)",
+    "commit": "Commit {count} rows",
+    "committed": "Committed on {date}",
+    "cannotCommit": "This file has rejected rows. Fix them and upload the file again.",
+    "failed": "The file could not be read: check the header row.",
+    "back": "Back to imports"
   }
 }

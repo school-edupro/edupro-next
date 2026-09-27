@@ -16,11 +16,21 @@ const NAV: Array<{
       { href: '/people/students', label: 'students', permission: 'people.student.view' },
       { href: '/people/employees', label: 'employees', permission: 'people.employee.view' },
       { href: '/people/search', label: 'peopleSearch', permission: 'people.person.search' },
+      { href: '/people/import', label: 'import', permission: 'people.import.run' },
     ],
   },
   {
     section: 'academics',
-    items: [{ href: '/academics/classes', label: 'classes', permission: 'academics.class.view' }],
+    items: [
+      { href: '/academics/classes', label: 'classes', permission: 'academics.class.view' },
+      { href: '/academics/subjects', label: 'subjects', permission: 'academics.subject.view' },
+      {
+        href: '/academics/teacher-assignments',
+        label: 'teacherAssignments',
+        permission: 'academics.teacher_assignment.view',
+      },
+      { href: '/academics/timetable', label: 'timetable', permission: 'academics.timetable.view' },
+    ],
   },
   {
     section: 'access',
