@@ -22,6 +22,12 @@ data is created only once), and refuses to run when `NODE_ENV=production`.
 | Timetable              | 9 periods (assembly, 7 teaching, break); a full Monday to Saturday timetable for all 20 sections with rooms; Saturday is a half day                                                                                  | same for 5 sections         |
 | Status history         | a "created" entry for every student; one student of X-B left (reason and actor recorded)                                                                                                                             | created entries             |
 | Imports                | one committed roll (class VI admissions) and one validated employee file with a rejected mobile number                                                                                                               | none                        |
+| Daily work (Sprint 7)  | 20 homework, classwork and assignment posts for VI-A, VI-B and IV-A by their teachers, with due dates                                                                                                                | none                        |
+| Notices                | reopening notice (pinned), fee instalment (students), PTM for VI–VIII (class targets), VI-A project (section target), staff circular, one draft                                                                      | winter uniform notice       |
+| Calendar               | 11 holidays (Dussehra, Diwali, winter break…) and 9 almanac events (exams, PTM, sports day, annual day)                                                                                                              | same                        |
+| Gallery                | "Independence Day 2026" with 3 images                                                                                                                                                                                | none                        |
+| Templates              | transfer certificate, bonafide certificate and letter templates                                                                                                                                                      | same                        |
+| Lifecycle              | TC/2026-27/0001 for the student who left; a withdrawal in progress for a IX-B student (2 of 4 departments cleared); 2027-28 sections and promotion decisions for IX-A and X-A                                        | none                        |
 
 ## Sign in as a role
 
@@ -39,9 +45,18 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 | `dev-auditor`     | Priya Auditor       | Auditor                                        | Read everything, Audit log with **Export** (needs MFA, satisfied by the dev bypass), no forms                                                                                        |
 | `dev-support`     | Sam Support         | Support Engineer in both schools               | Jobs, security page, platform views; no people data                                                                                                                                  |
 | `dev-clerk`       | Kavita Front Office | Front Office (school role created by the seed) | Admit students, link guardians, enrol, search, exports, send notifications; nothing under Access, Academics setup or System                                                          |
-| `dev-parent`      | Suresh Sharma       | Guardian of Aarav (VI-A) and Diya (IV-A)       | Parent app home; admin app shows an empty navigation (no admin permissions)                                                                                                          |
-| `dev-student`     | Aarav Sharma        | Student                                        | Parent or student app home; nothing in the admin app                                                                                                                                 |
+| `dev-parent`      | Suresh Sharma       | Guardian of Aarav (VI-A) and Diya (IV-A)       | Parent app: Homework (both children), Notices, Calendar; admin app shows an empty navigation                                                                                         |
+| `dev-student`     | Aarav Sharma        | Student                                        | Parent app as the student: own homework, notices and calendar; nothing in the admin app                                                                                              |
 | `dev-nobody`      | Nobody Member       | No roles                                       | Deny by default: empty navigation, every direct URL answers "permission denied"                                                                                                      |
+
+### Sprint 7 walk-through
+
+1. As `dev-teacher` in the teacher app: **Daily work** → post homework for VI-A with a PDF; it appears at once in the admin **Academics → Daily work** list and in the parent app.
+2. As `dev-parent` (http://localhost:3001): **Homework** shows Aarav (VI-A) and Diya (IV-A) with a child switch; **Notices** shows the reopening notice, the fee instalment, the PTM and the VI-A project note but not the staff circular; **Calendar** lists holidays and events.
+3. As `dev-admin`: **Academics → Notices**, create a circular for staff and publish it; only the teacher app shows it. **Holidays and almanac**: add a holiday inside the Diwali break and see it refused.
+4. As `dev-admin`: **System → Document templates**, open the bonafide certificate, edit the wording and watch the preview; on a student page choose the template and **Generate PDF**; download it from the Export centre.
+5. As `dev-clerk`: **People → Withdrawals**, open the IX-B request, clear transport and academics, then **Complete withdrawal**; the student becomes inactive with the reason in Status history. On another active student, **Issue transfer certificate**: TC/2026-27/0002 appears under **People → Transfer certificates** with its PDF.
+6. As `dev-coordinator`: **People → Promotion**, class IX to 2027-28: adjust decisions, **Save**, then **Apply pending decisions**; the students gain a 2027-28 enrolment.
 
 ### Sprint 6 walk-through
 

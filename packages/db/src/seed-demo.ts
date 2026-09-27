@@ -10,7 +10,11 @@
  * Usage: DATABASE_MIGRATOR_URL=postgresql://... tsx src/seed-demo.ts
  * Sign in with the development bypass using the subjects printed at the end (dev-admin, dev-teacher, ...).
  */
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { Client } from 'pg';
+import { DEFAULT_TEMPLATES } from './document-defaults';
+import { templatePlaceholders } from './template-engine';
 
 interface DemoUser {
   sub: string;
@@ -334,7 +338,8 @@ async function main(): Promise<void> {
     await c.query(
       `INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN
         ('people.student.view','people.student.create','people.student.edit','people.guardian.view','people.guardian.edit','people.enrolment.manage','people.employee.view','people.document.view','people.person.search',
-         'academics.class.view','academics.class_section.view','academics.subject.view','academics.teacher_assignment.view','academics.timetable.view','people.import.run','comms.message.send','comms.template.view','reports.export.create','reports.export.view','platform.files.upload','platform.files.view')
+         'academics.class.view','academics.class_section.view','academics.subject.view','academics.teacher_assignment.view','academics.timetable.view','people.import.run',
+         'academics.daily_work.view','academics.notice.view','academics.calendar.view','academics.gallery.view','people.tc.view','people.tc.issue','people.withdrawal.view','people.withdrawal.manage','people.withdrawal.clear','platform.template.view','comms.message.send','comms.template.view','reports.export.create','reports.export.view','platform.files.upload','platform.files.view')
        ON CONFLICT DO NOTHING`,
       [frontOffice.rows[0]!.id],
     );
@@ -1032,6 +1037,630 @@ async function main(): Promise<void> {
            VALUES (now() - ($1 || ' days')::interval, $2, 'user', $3, $4, $5, '1', '{"status": {"from": "planned", "to": "active"}}'::jsonb, $4, 'migration')`,
           [String(daysAgo), alpha.id, userIds[sub], action, entity],
         );
+      }
+    }
+
+    // ---- Sprint 7: templates, daily work, notices, calendar, gallery, TC, withdrawal, promotions ----
+    const withCtx = async (schoolId: string, sub: string) =>
+      c.query(`SELECT set_config('app.school_id', $1, true), set_config('app.user_id', $2, true)`, [
+        schoolId,
+        userIds[sub],
+      ]);
+    const clearCtx = () =>
+      c.query(`SELECT set_config('app.school_id', '', true), set_config('app.user_id', '', true)`);
+    for (const school of Object.values(schools)) {
+      for (const t of DEFAULT_TEMPLATES)
+        await c.query(
+          `INSERT INTO document_templates (school_id, code, name, kind, page_width, page_height, body_html, styles_css, variables)
+           SELECT $1, $2, $3, $4::template_kind, $5, $6, $7, $8, $9::jsonb
+            WHERE NOT EXISTS (SELECT 1 FROM document_templates WHERE school_id = $1 AND code = $2 AND deleted_at IS NULL)`,
+          [
+            school.id,
+            t.code,
+            t.name,
+            t.kind,
+            t.pageWidth,
+            t.pageHeight,
+            t.bodyHtml,
+            t.stylesCss,
+            JSON.stringify(templatePlaceholders(t.bodyHtml)),
+          ],
+        );
+    }
+
+    const subjectId = async (schoolId: string, code: string) =>
+      (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM subjects WHERE school_id = $1 AND code = $2 AND deleted_at IS NULL`,
+          [schoolId, code],
+        )
+      ).rows[0]?.id ?? null;
+    const employeeId = async (schoolId: string, code: string) =>
+      (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM employees WHERE school_id = $1 AND employee_code = $2`,
+          [schoolId, code],
+        )
+      ).rows[0]?.id ?? null;
+    const schoolDays = (count: number): string[] => {
+      const days: string[] = [];
+      const d = new Date();
+      while (days.length < count) {
+        if (d.getDay() !== 0) days.push(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() - 1);
+      }
+      return days;
+    };
+    const addDays = (iso: string, n: number) => {
+      const d = new Date(`${iso}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+
+    // daily work for VI-A, VI-B and IV-A (the dev parent's children are in VI-A and IV-A)
+    const workCount = await c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM daily_work WHERE school_id = $1`,
+      [alpha.id],
+    );
+    if (Number(workCount.rows[0]!.n) === 0) {
+      const plan: Array<[string, string, string, string, string]> = [
+        // section, subject, employee code, homework title, classwork title
+        [
+          'VI-A',
+          'MAT',
+          'E004',
+          'Fractions: exercise 4.2, questions 1 to 10',
+          'Adding fractions with unlike denominators',
+        ],
+        [
+          'VI-A',
+          'ENG',
+          'E006',
+          'Write a paragraph on "My school"',
+          'Reading: The Banyan Tree, comprehension',
+        ],
+        [
+          'VI-A',
+          'SCI',
+          'E005',
+          'Draw and label the parts of a flower',
+          'Photosynthesis: experiment with a leaf',
+        ],
+        [
+          'VI-A',
+          'HIN',
+          'E007',
+          'निबंध: मेरा प्रिय त्योहार (150 शब्द)',
+          'व्याकरण: संज्ञा और सर्वनाम',
+        ],
+        ['VI-A', 'SST', 'E008', 'Map work: rivers of India', 'The Harappan civilisation'],
+        [
+          'VI-B',
+          'MAT',
+          'E004',
+          'Fractions: exercise 4.2, questions 1 to 10',
+          'Adding fractions with unlike denominators',
+        ],
+        ['VI-B', 'SCI', 'E005', 'Chapter 5 questions 1 to 6', 'Separation of substances'],
+        [
+          'IV-A',
+          'EVS',
+          null as unknown as string,
+          'Collect five leaves and paste them in the scrapbook',
+          'Plants around us',
+        ],
+        [
+          'IV-A',
+          'MAT',
+          null as unknown as string,
+          'Tables 12 to 15, write twice',
+          'Multiplication by two-digit numbers',
+        ],
+      ];
+      const days = schoolDays(6);
+      for (const [i, [sectionKey, subj, emp, hwTitle, cwTitle]] of plan.entries()) {
+        const sectionIdValue = sections.ALPHA![sectionKey]!;
+        const teacher =
+          emp !== null
+            ? await employeeId(alpha.id, emp)
+            : ((
+                await c.query<{ id: string }>(
+                  `SELECT employee_id::text AS id FROM teacher_assignments WHERE class_section_id = $1 AND kind = 'class_teacher' AND valid_to IS NULL LIMIT 1`,
+                  [sectionIdValue],
+                )
+              ).rows[0]?.id ?? null);
+        const subjId = await subjectId(alpha.id, subj);
+        const day = days[i % days.length]!;
+        await c.query(
+          `INSERT INTO daily_work (school_id, academic_year_id, class_section_id, subject_id, kind, title, body, assigned_on, due_on, posted_by_employee_id)
+           VALUES ($1, $2, $3, $4, 'homework', $5, $6, $7::date, $8::date, $9)`,
+          [
+            alpha.id,
+            alpha.yearId,
+            sectionIdValue,
+            subjId,
+            hwTitle,
+            'Please complete in the class notebook. Parents may sign the diary.',
+            day,
+            addDays(day, 2),
+            teacher,
+          ],
+        );
+        await c.query(
+          `INSERT INTO daily_work (school_id, academic_year_id, class_section_id, subject_id, kind, title, body, assigned_on, posted_by_employee_id)
+           VALUES ($1, $2, $3, $4, 'classwork', $5, $6, $7::date, $8)`,
+          [
+            alpha.id,
+            alpha.yearId,
+            sectionIdValue,
+            subjId,
+            cwTitle,
+            'Covered in class today.',
+            day,
+            teacher,
+          ],
+        );
+      }
+      const maths = await subjectId(alpha.id, 'MAT');
+      const sci = await subjectId(alpha.id, 'SCI');
+      await c.query(
+        `INSERT INTO daily_work (school_id, academic_year_id, class_section_id, subject_id, kind, title, body, assigned_on, due_on, posted_by_employee_id)
+         VALUES ($1, $2, $3, $4, 'assignment', 'Maths project: measure your room and draw a scaled floor plan', 'Submit on A3 sheet with scale 1:50. Marks: 10.', $5::date, $6::date, $7),
+                ($1, $2, $3, $8, 'assignment', 'Science: model of the water cycle', 'Working or static model; group of three.', $5::date, $9::date, $10)`,
+        [
+          alpha.id,
+          alpha.yearId,
+          sections.ALPHA!['VI-A'],
+          maths,
+          days[3],
+          addDays(days[0]!, 10),
+          await employeeId(alpha.id, 'E004'),
+          sci,
+          addDays(days[0]!, 14),
+          await employeeId(alpha.id, 'E005'),
+        ],
+      );
+    }
+
+    // notices and circulars
+    const noticeCount = await c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM notices WHERE school_id = $1`,
+      [alpha.id],
+    );
+    if (Number(noticeCount.rows[0]!.n) === 0) {
+      const classIds = await c.query<{ id: string; code: string }>(
+        `SELECT id::text, code FROM classes WHERE school_id = $1 AND deleted_at IS NULL`,
+        [alpha.id],
+      );
+      const classId = (code: string) => classIds.rows.find((k) => k.code === code)!.id;
+      const notice = async (
+        sub: string,
+        fields: {
+          kind?: string;
+          title: string;
+          body: string;
+          audience?: string;
+          pinned?: boolean;
+          publish: boolean;
+          daysAgo: number;
+          until?: string | null;
+          targets?: Array<[string, string]>;
+        },
+      ) => {
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by, created_by)
+           VALUES ($1, $2, $3::notice_kind, $4, $5, $6::audience_kind, CURRENT_DATE - $7::int, $8::date, $9,
+                   CASE WHEN $10 THEN now() - make_interval(days => $7::int) END, CASE WHEN $10 THEN $11::bigint END, $11::bigint)
+           RETURNING id::text`,
+          [
+            alpha.id,
+            alpha.yearId,
+            fields.kind ?? 'notice',
+            fields.title,
+            fields.body,
+            fields.audience ?? 'everyone',
+            fields.daysAgo,
+            fields.until ?? null,
+            fields.pinned ?? false,
+            fields.publish,
+            userIds[sub],
+          ],
+        );
+        for (const [type, id] of fields.targets ?? [])
+          await c.query(
+            `INSERT INTO notice_targets (notice_id, school_id, target_type, target_id) VALUES ($1, $2, $3::notice_target_type, $4)`,
+            [r.rows[0]!.id, alpha.id, type, id],
+          );
+      };
+      await notice('dev-admin', {
+        title: 'School reopens after the Dussehra break on Thursday, 22 October',
+        body: 'Regular timings apply from 22 October. Buses run on the usual routes. Students must carry the almanac and the ID card.',
+        pinned: true,
+        publish: true,
+        daysAgo: 5,
+      });
+      await notice('dev-clerk', {
+        title: 'Second fee instalment due by 10 October',
+        body: 'The second instalment of the annual fee is due by 10 October 2026. Pay online through the parent app or at the fee counter between 8:30 am and 1:00 pm. A late fee applies after the due date.',
+        audience: 'students',
+        publish: true,
+        daysAgo: 8,
+        until: '2026-10-15',
+      });
+      await notice('dev-coordinator', {
+        title: 'Parent–teacher meeting for Classes VI to VIII',
+        body: 'The PTM is on Saturday, 3 October, 9:00 am to 12:00 noon. Please meet the class teacher first and then the subject teachers. Report cards of the half-yearly examination will be shared.',
+        publish: true,
+        daysAgo: 3,
+        targets: [
+          ['class', classId('VI')],
+          ['class', classId('VII')],
+          ['class', classId('VIII')],
+        ],
+      });
+      await notice('dev-teacher', {
+        title: 'VI-A: bring material for the science project on Monday',
+        body: 'Groups should bring a shoebox, chart paper, cotton and glue. The project will be assessed on Friday.',
+        publish: true,
+        daysAgo: 1,
+        targets: [['class_section', sections.ALPHA!['VI-A']!]],
+      });
+      await notice('dev-principal', {
+        kind: 'circular',
+        title: 'Staff meeting on Friday at 3:00 pm',
+        body: 'Agenda: half-yearly result analysis, annual day rehearsals, timetable substitutions during the sports week. Attendance is mandatory for all teaching staff.',
+        audience: 'employees',
+        publish: true,
+        daysAgo: 2,
+      });
+      await notice('dev-coordinator', {
+        title: 'Annual day rehearsal schedule (draft)',
+        body: 'Rehearsals for the annual day will run from 1 December. The class-wise schedule will be published after the PTM.',
+        publish: false,
+        daysAgo: 0,
+      });
+      const beta = schools.BETA!;
+      await c.query(
+        `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, is_pinned, published_at, published_by, created_by)
+         VALUES ($1, $2, 'notice', 'Winter uniform from 1 November', 'Students should wear the winter uniform from 1 November. Blazers are available at the school store.', 'everyone', CURRENT_DATE - 2, false, now() - interval '2 days', $3, $3)`,
+        [beta.id, beta.yearId, userIds['dev-admin']],
+      );
+    }
+
+    // holidays and almanac
+    for (const school of Object.values(schools)) {
+      const holidayCount = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM holidays WHERE school_id = $1`,
+        [school.id],
+      );
+      if (Number(holidayCount.rows[0]!.n) === 0) {
+        const holidays: Array<[string, string, string, string]> = [
+          ['Independence Day', 'holiday', '2026-08-15', '2026-08-15'],
+          ['Ganesh Chaturthi', 'holiday', '2026-09-14', '2026-09-14'],
+          ['Gandhi Jayanti', 'holiday', '2026-10-02', '2026-10-02'],
+          ['Dussehra break', 'vacation', '2026-10-19', '2026-10-21'],
+          ['Diwali break', 'vacation', '2026-11-07', '2026-11-12'],
+          ['Guru Nanak Jayanti', 'holiday', '2026-11-24', '2026-11-24'],
+          ['Christmas', 'holiday', '2026-12-25', '2026-12-25'],
+          ['Winter break', 'vacation', '2026-12-26', '2027-01-01'],
+          ['Republic Day', 'holiday', '2027-01-26', '2027-01-26'],
+          ['Holi', 'holiday', '2027-03-03', '2027-03-04'],
+        ];
+        for (const [name, kind, from, to] of holidays)
+          await c.query(
+            `INSERT INTO holidays (school_id, academic_year_id, name, kind, starts_on, ends_on) VALUES ($1, $2, $3, $4::holiday_kind, $5::date, $6::date)`,
+            [school.id, school.yearId, name, kind, from, to],
+          );
+        await c.query(
+          `INSERT INTO holidays (school_id, academic_year_id, name, kind, starts_on, ends_on, applies_to) VALUES ($1, $2, 'Autumn break (students)', 'vacation', '2026-10-22', '2026-10-24', 'students')`,
+          [school.id, school.yearId],
+        );
+      }
+      const eventCount = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM almanac_events WHERE school_id = $1`,
+        [school.id],
+      );
+      if (Number(eventCount.rows[0]!.n) === 0) {
+        const events: Array<[string, string, string, string, string | null, string]> = [
+          ['Half-yearly examinations', 'exam', '2026-09-21', '2026-09-30', null, 'everyone'],
+          [
+            'Parent–teacher meeting (VI to VIII)',
+            'meeting',
+            '2026-10-03',
+            '2026-10-03',
+            '09:00',
+            'everyone',
+          ],
+          ['Report card distribution', 'deadline', '2026-10-09', '2026-10-09', null, 'students'],
+          [
+            'Staff development workshop',
+            'meeting',
+            '2026-10-17',
+            '2026-10-17',
+            '10:00',
+            'employees',
+          ],
+          ['Inter-house sports week', 'activity', '2026-11-16', '2026-11-20', null, 'everyone'],
+          ['Sports day', 'activity', '2026-12-15', '2026-12-15', '08:00', 'everyone'],
+          ['Annual day', 'event', '2026-12-20', '2026-12-20', '17:00', 'everyone'],
+          ['Pre-board examinations (X)', 'exam', '2027-01-11', '2027-01-22', null, 'students'],
+          ['Annual examinations', 'exam', '2027-03-08', '2027-03-20', null, 'everyone'],
+        ];
+        for (const [title, kind, from, to, at, audience] of events)
+          await c.query(
+            `INSERT INTO almanac_events (school_id, academic_year_id, title, kind, starts_on, ends_on, starts_at, audience)
+             VALUES ($1, $2, $3, $4::almanac_kind, $5::date, $6::date, $7::time, $8::audience_kind)`,
+            [school.id, school.yearId, title, kind, from, to, at, audience],
+          );
+      }
+    }
+
+    // gallery: one album with placeholder images stored through the local driver
+    const albumCount = await c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM gallery_albums WHERE school_id = $1`,
+      [alpha.id],
+    );
+    if (Number(albumCount.rows[0]!.n) === 0) {
+      const uploads = resolve(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        process.env.STORAGE_LOCAL_DIR ?? '.data/uploads',
+      );
+      const png = (r: number, g: number, b: number): Buffer => {
+        // 1x1 PNG built by hand: signature, IHDR, IDAT (stored deflate block), IEND
+        const crcTable = Array.from({ length: 256 }, (_, n) => {
+          let cc = n;
+          for (let k = 0; k < 8; k += 1) cc = cc & 1 ? 0xedb88320 ^ (cc >>> 1) : cc >>> 1;
+          return cc >>> 0;
+        });
+        const crc = (buf: Buffer) => {
+          let cc = 0xffffffff;
+          for (const byte of buf) cc = crcTable[(cc ^ byte) & 0xff]! ^ (cc >>> 8);
+          return (cc ^ 0xffffffff) >>> 0;
+        };
+        const chunk = (type: string, data: Buffer) => {
+          const len = Buffer.alloc(4);
+          len.writeUInt32BE(data.length);
+          const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+          const cr = Buffer.alloc(4);
+          cr.writeUInt32BE(crc(td));
+          return Buffer.concat([len, td, cr]);
+        };
+        const ihdr = Buffer.alloc(13);
+        ihdr.writeUInt32BE(1, 0);
+        ihdr.writeUInt32BE(1, 4);
+        ihdr[8] = 8;
+        ihdr[9] = 2;
+        const raw = Buffer.from([0, r, g, b]);
+        const adler = (() => {
+          let a = 1;
+          let bb = 0;
+          for (const byte of raw) {
+            a = (a + byte) % 65521;
+            bb = (bb + a) % 65521;
+          }
+          return ((bb << 16) | a) >>> 0;
+        })();
+        const stored = Buffer.concat([
+          Buffer.from([
+            0x78,
+            0x01,
+            0x01,
+            raw.length & 0xff,
+            (raw.length >> 8) & 0xff,
+            ~raw.length & 0xff,
+            (~raw.length >> 8) & 0xff,
+          ]),
+          raw,
+          (() => {
+            const b4 = Buffer.alloc(4);
+            b4.writeUInt32BE(adler);
+            return b4;
+          })(),
+        ]);
+        return Buffer.concat([
+          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          chunk('IHDR', ihdr),
+          chunk('IDAT', stored),
+          chunk('IEND', Buffer.alloc(0)),
+        ]);
+      };
+      const fileIds: string[] = [];
+      const colours: Array<[string, number, number, number]> = [
+        ['flag-hoisting.png', 0, 38, 93],
+        ['march-past.png', 0, 160, 198],
+        ['cultural-programme.png', 240, 128, 0],
+      ];
+      for (const [i, [name, r, g, b]] of colours.entries()) {
+        const bytes = png(r, g, b);
+        const objectKey = `school-${alpha.id}/2026/08/seed-gallery-${i + 1}.png`;
+        const full = resolve(uploads, objectKey);
+        mkdirSync(dirname(full), { recursive: true });
+        writeFileSync(full, bytes);
+        const f = await c.query<{ id: string }>(
+          `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, original_name, classification, status, storage_driver, created_by)
+           VALUES ($1, 'local', $2, 'image/png', $3, $4, 'public', 'ready', 'local', $5)
+           ON CONFLICT (bucket, object_key) DO UPDATE SET status = 'ready' RETURNING id::text`,
+          [alpha.id, objectKey, bytes.length, name, userIds['dev-admin']],
+        );
+        fileIds.push(f.rows[0]!.id);
+      }
+      const album = await c.query<{ id: string }>(
+        `INSERT INTO gallery_albums (school_id, academic_year_id, title, description, event_on, cover_file_id, created_by)
+         VALUES ($1, $2, 'Independence Day 2026', 'Flag hoisting, march past and the cultural programme.', '2026-08-15', $3, $4) RETURNING id::text`,
+        [alpha.id, alpha.yearId, fileIds[0], userIds['dev-admin']],
+      );
+      for (const [i, fileId] of fileIds.entries())
+        await c.query(
+          `INSERT INTO gallery_items (school_id, album_id, file_id, caption, sort_order) VALUES ($1, $2, $3, $4, $5)`,
+          [
+            alpha.id,
+            album.rows[0]!.id,
+            fileId,
+            colours[i]![0].replace('.png', '').replace('-', ' '),
+            i,
+          ],
+        );
+    }
+
+    // transfer certificate for the student who left (issued by the front office)
+    const tcCount = await c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM transfer_certificates WHERE school_id = $1`,
+      [alpha.id],
+    );
+    if (Number(tcCount.rows[0]!.n) === 0) {
+      const leaver = await c.query<{ id: string; snapshot: unknown; last_class: string | null }>(
+        `SELECT s.id::text,
+                (SELECT c.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c ON c.id = cs.class_id
+                  WHERE e.student_id = s.id ORDER BY e.academic_year_id DESC LIMIT 1) AS last_class,
+                jsonb_build_object('name', s.display_name, 'admissionNo', s.admission_no, 'dob', to_char(s.dob, 'DD Mon YYYY'), 'gender', s.gender::text,
+                  'category', s.category, 'admittedOn', to_char(s.admitted_on, 'DD Mon YYYY'), 'house', s.house,
+                  'guardianName', (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1),
+                  'guardianMobile', (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1)) AS snapshot
+           FROM students s WHERE s.school_id = $1 AND s.status = 'inactive' ORDER BY s.id LIMIT 1`,
+        [alpha.id],
+      );
+      if (leaver.rows[0]) {
+        await withCtx(alpha.id, 'dev-clerk');
+        const no = await c.query<{ tc_no: string; serial: number }>(
+          `SELECT * FROM app.next_tc_no('2026-27')`,
+        );
+        const template = await c.query<{ id: string }>(
+          `SELECT id::text FROM document_templates WHERE school_id = $1 AND kind = 'transfer_certificate' AND deleted_at IS NULL LIMIT 1`,
+          [alpha.id],
+        );
+        await c.query(
+          `INSERT INTO transfer_certificates (school_id, student_id, academic_year_id, tc_no, serial, issued_on, reason, last_class, conduct, promotion_status, dues_cleared, remarks, snapshot, template_id, issued_by)
+           VALUES ($1, $2, $3, $4, $5, CURRENT_DATE - 9, 'Family relocated to Bengaluru', $6, 'Good', 'Eligible for promotion to the next class', true, 'All library books returned; no dues.', $7::jsonb, $8, $9)`,
+          [
+            alpha.id,
+            leaver.rows[0].id,
+            alpha.yearId,
+            no.rows[0]!.tc_no,
+            no.rows[0]!.serial,
+            leaver.rows[0].last_class,
+            JSON.stringify(leaver.rows[0].snapshot),
+            template.rows[0]?.id ?? null,
+            userIds['dev-clerk'],
+          ],
+        );
+        await clearCtx();
+      }
+    }
+
+    // a withdrawal in progress: two departments cleared, transport on hold, academics pending
+    const withdrawalCount = await c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM student_withdrawals WHERE school_id = $1`,
+      [alpha.id],
+    );
+    if (Number(withdrawalCount.rows[0]!.n) === 0) {
+      const candidate = await c.query<{ id: string }>(
+        `SELECT s.id::text FROM students s JOIN enrolments e ON e.student_id = s.id AND e.status = 'active'
+          WHERE s.school_id = $1 AND s.status = 'active' AND e.class_section_id = $2 ORDER BY e.roll_no DESC LIMIT 1`,
+        [alpha.id, sections.ALPHA!['IX-B']],
+      );
+      if (candidate.rows[0]) {
+        const w = await c.query<{ id: string }>(
+          `INSERT INTO student_withdrawals (school_id, student_id, academic_year_id, requested_on, leaving_on, reason, requested_by)
+           VALUES ($1, $2, $3, CURRENT_DATE - 4, CURRENT_DATE + 20, 'Father transferred to Hyderabad', $4) RETURNING id::text`,
+          [alpha.id, candidate.rows[0].id, alpha.yearId, userIds['dev-clerk']],
+        );
+        const clearances: Array<[string, string, string, string | null, string | null]> = [
+          ['fees', 'cleared', '0', 'No dues after the second instalment', 'dev-admin'],
+          ['library', 'cleared', '0', 'Two books returned on 24 Sep', 'dev-admin'],
+          [
+            'transport',
+            'hold',
+            '1500.00',
+            'Bus pass not returned; refundable deposit pending',
+            'dev-clerk',
+          ],
+          ['academics', 'pending', '0', null, null],
+        ];
+        for (const [department, status, dues, remarks, by] of clearances)
+          await c.query(
+            `INSERT INTO withdrawal_clearances (school_id, withdrawal_id, department, status, dues, remarks, acted_by, acted_at)
+             VALUES ($1, $2, $3, $4::clearance_status, $5, $6, $7, CASE WHEN $7::bigint IS NULL THEN NULL ELSE now() - interval '1 day' END)`,
+            [alpha.id, w.rows[0]!.id, department, status, dues, remarks, by ? userIds[by] : null],
+          );
+      }
+    }
+
+    // promotion decisions: sections for 2027-28 and decisions for IX-A (promote/retain) and X-A (graduate)
+    const nextYear = await c.query<{ id: string }>(
+      `SELECT id::text FROM academic_years WHERE school_id = $1 AND code = '2027-28'`,
+      [alpha.id],
+    );
+    if (nextYear.rows[0]) {
+      const nextYearId = nextYear.rows[0].id;
+      const classRows = await c.query<{ id: string; code: string }>(
+        `SELECT id::text, code FROM classes WHERE school_id = $1 AND deleted_at IS NULL`,
+        [alpha.id],
+      );
+      for (const cls of classRows.rows)
+        for (const sec of ['A', 'B'])
+          await c.query(
+            `INSERT INTO class_sections (school_id, academic_year_id, class_id, campus_id, name, capacity)
+             SELECT $1, $2, $3, $4, $5, 40 WHERE NOT EXISTS (SELECT 1 FROM class_sections WHERE academic_year_id = $2 AND class_id = $3 AND name = $5)`,
+            [alpha.id, nextYearId, cls.id, alpha.campusId, sec],
+          );
+      const decisionCount = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM promotion_decisions WHERE school_id = $1`,
+        [alpha.id],
+      );
+      if (Number(decisionCount.rows[0]!.n) === 0) {
+        const nextSection = async (classCode: string, name: string) =>
+          (
+            await c.query<{ id: string }>(
+              `SELECT cs.id::text FROM class_sections cs JOIN classes c ON c.id = cs.class_id WHERE cs.academic_year_id = $1 AND c.code = $2 AND cs.name = $3`,
+              [nextYearId, classCode, name],
+            )
+          ).rows[0]!.id;
+        const ixA = await c.query<{ id: string; enrolment_id: string; roll_no: number }>(
+          `SELECT s.id::text, e.id::text AS enrolment_id, e.roll_no FROM enrolments e JOIN students s ON s.id = e.student_id
+            WHERE e.class_section_id = $1 AND e.status = 'active' ORDER BY e.roll_no`,
+          [sections.ALPHA!['IX-A']],
+        );
+        const xA = await nextSection('X', 'A');
+        const ixANext = await nextSection('IX', 'A');
+        for (const st of ixA.rows)
+          await c.query(
+            `INSERT INTO promotion_decisions (school_id, from_year_id, to_year_id, student_id, from_enrolment_id, decision, to_class_section_id, remarks, decided_by)
+             VALUES ($1, $2, $3, $4, $5, $6::promotion_decision, $7, $8, $9)`,
+            [
+              alpha.id,
+              alpha.yearId,
+              nextYearId,
+              st.id,
+              st.enrolment_id,
+              st.roll_no === 8 ? 'retain' : 'promote',
+              st.roll_no === 8 ? ixANext : xA,
+              st.roll_no === 8
+                ? 'Below 33% in three subjects; retained after the parent meeting'
+                : null,
+              userIds['dev-coordinator'],
+            ],
+          );
+        const xAStudents = await c.query<{ id: string; enrolment_id: string }>(
+          `SELECT s.id::text, e.id::text AS enrolment_id FROM enrolments e JOIN students s ON s.id = e.student_id
+            WHERE e.class_section_id = $1 AND e.status = 'active' ORDER BY e.roll_no LIMIT 4`,
+          [sections.ALPHA!['X-A']],
+        );
+        for (const st of xAStudents.rows)
+          await c.query(
+            `INSERT INTO promotion_decisions (school_id, from_year_id, to_year_id, student_id, from_enrolment_id, decision, decided_by)
+             VALUES ($1, $2, $3, $4, $5, 'graduate', $6)`,
+            [
+              alpha.id,
+              alpha.yearId,
+              nextYearId,
+              st.id,
+              st.enrolment_id,
+              userIds['dev-coordinator'],
+            ],
+          );
       }
     }
 

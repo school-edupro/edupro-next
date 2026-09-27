@@ -14,13 +14,13 @@ export default async function HomePage() {
     throw error;
   }
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
-  const tiles = [
+  const tiles: Array<[string, string, string?]> = [
+    ['Homework', 'Homework, classwork and assignments', '/homework'],
+    ['Notices', 'School notices and circulars', '/notices'],
+    ['Calendar', 'Holidays and the almanac', '/calendar'],
     ['Attendance', 'Daily attendance and leave requests'],
-    ['Homework', 'Homework, classwork and diary'],
     ['Fees', 'Dues, receipts and online payment'],
-    ['Notices', 'School notices and circulars'],
     ['Results', 'Report cards and progress'],
-    ['Transport', 'Bus route and live tracking'],
   ];
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
@@ -70,20 +70,29 @@ export default async function HomePage() {
           gap: 'var(--sp-3)',
         }}
       >
-        {tiles.map(([title, help]) => (
-          <Card key={title} elevated>
-            <div
-              style={{
-                fontFamily: 'var(--font-heading)',
-                fontWeight: 600,
-                color: 'var(--text-heading)',
-              }}
-            >
-              {title}
-            </div>
-            <div className="ep-field__help">{help}</div>
-          </Card>
-        ))}
+        {tiles.map(([title, help, href]) => {
+          const body = (
+            <Card key={title} elevated style={{ opacity: href ? 1 : 0.6, height: '100%' }}>
+              <div
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontWeight: 600,
+                  color: 'var(--text-heading)',
+                }}
+              >
+                {title}
+              </div>
+              <div className="ep-field__help">{help}</div>
+            </Card>
+          );
+          return href ? (
+            <a key={title} href={href} style={{ textDecoration: 'none' }}>
+              {body}
+            </a>
+          ) : (
+            body
+          );
+        })}
       </div>
       <p className="ep-field__help" style={{ marginTop: 'var(--sp-4)' }}>
         Installed as an app from the browser menu. Features open here sprint by sprint from Sprint

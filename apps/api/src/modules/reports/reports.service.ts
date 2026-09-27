@@ -164,7 +164,9 @@ export class ReportsService {
       );
     }
     for (const key of renderer.requiredParams) {
-      if (!/^[0-9]{1,18}$/.test(String(dto.params[key] ?? ''))) {
+      // ids are numeric strings; other required parameters (such as the document entity) are short slugs
+      const pattern = key.endsWith('Id') ? /^[0-9]{1,18}$/ : /^[a-z_]{1,40}$/;
+      if (!pattern.test(String(dto.params[key] ?? ''))) {
         throw new DomainError('validation-failed', `${key} is required for ${renderer.title}`, {
           status: 400,
         });

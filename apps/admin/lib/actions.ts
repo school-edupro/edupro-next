@@ -773,3 +773,363 @@ export async function setStudentStatus(fd: FormData) {
     }),
   );
 }
+
+// ---- Sprint 7: files (shared by daily work, notices and gallery) ---------------------------------
+/** Uploads the files of a form field through the file service and returns the ready ids. */
+async function uploadAll(
+  fd: FormData,
+  field: string,
+  classification = 'internal',
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const entry of fd.getAll(field)) {
+    if (!(entry instanceof File) || entry.size === 0) continue;
+    const reg = await apiFetch<{
+      file: { id: string };
+      upload: { url: string; method: string; headers?: Record<string, string> };
+    }>('/platform/files', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: entry.name.slice(0, 200),
+        contentType: entry.type,
+        sizeBytes: entry.size,
+        classification,
+      }),
+    });
+    const target = reg.upload.url.startsWith('http')
+      ? reg.upload.url
+      : `${process.env.API_BASE_URL ?? 'http://localhost:4000'}${reg.upload.url}`;
+    const headers: Record<string, string> = { 'content-type': entry.type };
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers[k] = v;
+    const put = await fetch(target, {
+      method: reg.upload.method || 'PUT',
+      headers,
+      body: Buffer.from(await entry.arrayBuffer()),
+    });
+    if (!put.ok) throw new ApiError(put.status, { type: 'file.upload_failed' });
+    ids.push(reg.file.id);
+  }
+  return ids;
+}
+
+// ---- Sprint 7: daily work -----------------------------------------------------------------------
+export async function postDailyWork(fd: FormData) {
+  const back = str(fd, 'returnTo') || '/academics/daily-work';
+  return run(back, async () => {
+    const fileIds = await uploadAll(fd, 'files');
+    await apiFetch('/academics/daily-work', {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: str(fd, 'classSectionId'),
+        subjectId: opt(fd, 'subjectId'),
+        kind: str(fd, 'kind') || 'homework',
+        title: str(fd, 'title'),
+        body: str(fd, 'body'),
+        assignedOn: opt(fd, 'assignedOn'),
+        dueOn: opt(fd, 'dueOn'),
+        fileIds,
+      }),
+    });
+  });
+}
+
+export async function deleteDailyWork(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(str(fd, 'returnTo') || '/academics/daily-work', () =>
+    apiFetch(`/academics/daily-work/${id}`, { method: 'DELETE' }),
+  );
+}
+
+// ---- Sprint 7: notices --------------------------------------------------------------------------
+export async function createNotice(fd: FormData) {
+  return run('/academics/notices', async () => {
+    const fileIds = await uploadAll(fd, 'files');
+    const targets = [
+      ...fd.getAll('classIds').map((id) => ({ type: 'class', id: String(id) })),
+      ...fd.getAll('classSectionIds').map((id) => ({ type: 'class_section', id: String(id) })),
+    ];
+    await apiFetch('/academics/notices', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: str(fd, 'kind') || 'notice',
+        title: str(fd, 'title'),
+        body: str(fd, 'body'),
+        audience: str(fd, 'audience') || 'everyone',
+        publishFrom: opt(fd, 'publishFrom'),
+        publishUntil: opt(fd, 'publishUntil'),
+        isPinned: fd.get('isPinned') !== null,
+        targets,
+        fileIds,
+        publish: fd.get('publish') !== null,
+      }),
+    });
+  });
+}
+
+export async function publishNotice(fd: FormData) {
+  const id = str(fd, 'id');
+  const action = str(fd, 'action') === 'unpublish' ? 'unpublish' : 'publish';
+  return run('/academics/notices', () =>
+    apiFetch(`/academics/notices/${id}/${action}`, { method: 'POST' }),
+  );
+}
+
+export async function deleteNotice(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/notices', () =>
+    apiFetch(`/academics/notices/${id}`, { method: 'DELETE' }),
+  );
+}
+
+// ---- Sprint 7: calendar -------------------------------------------------------------------------
+export async function createHoliday(fd: FormData) {
+  return run('/academics/calendar', () =>
+    apiFetch('/academics/calendar/holidays', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        kind: str(fd, 'kind') || 'holiday',
+        startsOn: str(fd, 'startsOn'),
+        endsOn: opt(fd, 'endsOn'),
+        appliesTo: str(fd, 'appliesTo') || 'everyone',
+      }),
+    }),
+  );
+}
+
+export async function deleteHoliday(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/calendar', () =>
+    apiFetch(`/academics/calendar/holidays/${id}`, { method: 'DELETE' }),
+  );
+}
+
+export async function createEvent(fd: FormData) {
+  return run('/academics/calendar', () =>
+    apiFetch('/academics/calendar/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: str(fd, 'title'),
+        kind: str(fd, 'kind') || 'event',
+        startsOn: str(fd, 'startsOn'),
+        endsOn: opt(fd, 'endsOn'),
+        startsAt: opt(fd, 'startsAt'),
+        description: opt(fd, 'description'),
+        audience: str(fd, 'audience') || 'everyone',
+      }),
+    }),
+  );
+}
+
+export async function deleteEvent(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/calendar', () =>
+    apiFetch(`/academics/calendar/events/${id}`, { method: 'DELETE' }),
+  );
+}
+
+// ---- Sprint 7: gallery --------------------------------------------------------------------------
+export async function createAlbum(fd: FormData) {
+  return run('/academics/gallery', async () => {
+    const fileIds = await uploadAll(fd, 'files', 'public');
+    await apiFetch('/academics/gallery/albums', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: str(fd, 'title'),
+        description: opt(fd, 'description'),
+        eventOn: opt(fd, 'eventOn'),
+        audience: str(fd, 'audience') || 'everyone',
+        fileIds,
+      }),
+    });
+  });
+}
+
+export async function addAlbumPhotos(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/academics/gallery/${id}`, async () => {
+    const fileIds = await uploadAll(fd, 'files', 'public');
+    if (fileIds.length === 0)
+      throw new ApiError(400, { type: 'validation-failed', detail: 'Choose at least one image' });
+    await apiFetch(`/academics/gallery/albums/${id}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ items: fileIds.map((fileId) => ({ fileId })) }),
+    });
+  });
+}
+
+export async function deleteAlbum(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/gallery', () =>
+    apiFetch(`/academics/gallery/albums/${id}`, { method: 'DELETE' }),
+  );
+}
+
+// ---- Sprint 7: templates ------------------------------------------------------------------------
+export async function installTemplateDefaults() {
+  return run('/system/templates', () =>
+    apiFetch('/platform/templates/defaults', { method: 'POST' }),
+  );
+}
+
+export async function createDocumentTemplate(fd: FormData) {
+  return run('/system/templates', () =>
+    apiFetch('/platform/templates', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code'),
+        name: str(fd, 'name'),
+        kind: str(fd, 'kind'),
+        pageWidth: str(fd, 'pageWidth') || '210mm',
+        pageHeight: str(fd, 'pageHeight') || '297mm',
+        bodyHtml: str(fd, 'bodyHtml'),
+        stylesCss: str(fd, 'stylesCss'),
+      }),
+    }),
+  );
+}
+
+export async function updateDocumentTemplate(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/system/templates/${id}`, () =>
+    apiFetch(`/platform/templates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        pageWidth: str(fd, 'pageWidth') || '210mm',
+        pageHeight: str(fd, 'pageHeight') || '297mm',
+        bodyHtml: str(fd, 'bodyHtml'),
+        stylesCss: str(fd, 'stylesCss'),
+        status: str(fd, 'status') || 'active',
+      }),
+    }),
+  );
+}
+
+export async function renderTemplateFor(fd: FormData) {
+  const id = str(fd, 'templateId');
+  const entityId = str(fd, 'entityId');
+  return run(str(fd, 'returnTo') || '/reports/exports', () =>
+    apiFetch(`/platform/templates/${id}/render`, {
+      method: 'POST',
+      body: JSON.stringify({
+        entity: str(fd, 'entity') || 'student',
+        entityId,
+        title: opt(fd, 'title'),
+      }),
+    }),
+  );
+}
+
+// ---- Sprint 7: transfer certificate, withdrawal, promotion ----------------------------------------
+export async function issueTc(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(`/people/students/${studentId}`, () =>
+    apiFetch(`/people/students/${studentId}/tc`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: str(fd, 'reason'),
+        issuedOn: opt(fd, 'issuedOn'),
+        conduct: str(fd, 'conduct') || 'Good',
+        promotionStatus: opt(fd, 'promotionStatus'),
+        duesCleared: fd.get('duesCleared') !== null,
+        remarks: opt(fd, 'remarks'),
+      }),
+    }),
+  );
+}
+
+export async function renderTc(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(str(fd, 'returnTo') || '/people/tc', () =>
+    apiFetch(`/people/tc/${id}/render`, { method: 'POST' }),
+  );
+}
+
+export async function cancelTc(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(str(fd, 'returnTo') || '/people/tc', () =>
+    apiFetch(`/people/tc/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
+export async function requestWithdrawal(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  return run(`/people/students/${studentId}`, () =>
+    apiFetch(`/people/students/${studentId}/withdrawal`, {
+      method: 'POST',
+      body: JSON.stringify({ leavingOn: str(fd, 'leavingOn'), reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
+export async function recordClearance(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/clearances/${encodeURIComponent(str(fd, 'department'))}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: str(fd, 'status') || 'cleared',
+        dues: Number(str(fd, 'dues') || '0'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    }),
+  );
+}
+
+export async function completeWithdrawal(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/complete`, { method: 'POST' }),
+  );
+}
+
+export async function cancelWithdrawal(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
+export async function savePromotions(fd: FormData) {
+  const classId = str(fd, 'classId');
+  const toYearId = str(fd, 'toYearId');
+  const decisions: Array<{ studentId: string; decision: string; toClassSectionId?: string }> = [];
+  for (const studentId of fd.getAll('studentIds').map(String)) {
+    const decision = str(fd, `decision:${studentId}`);
+    if (!decision) continue;
+    const section = opt(fd, `section:${studentId}`);
+    const entry: { studentId: string; decision: string; toClassSectionId?: string } = {
+      studentId,
+      decision,
+    };
+    if (section) entry.toClassSectionId = section;
+    decisions.push(entry);
+  }
+  const back = `/people/promotions?classId=${classId}&toYearId=${toYearId}`;
+  if (decisions.length === 0)
+    redirect(`${back}&error=validation-failed&detail=No+decisions+chosen`);
+  return run(back, () =>
+    apiFetch('/people/promotions', {
+      method: 'PUT',
+      body: JSON.stringify({ toYearId, decisions }),
+    }),
+  );
+}
+
+export async function applyPromotions(fd: FormData) {
+  const classId = str(fd, 'classId');
+  const toYearId = str(fd, 'toYearId');
+  return run(`/people/promotions?classId=${classId}&toYearId=${toYearId}`, () =>
+    apiFetch('/people/promotions/apply', {
+      method: 'POST',
+      body: JSON.stringify({ toYearId, classId }),
+    }),
+  );
+}

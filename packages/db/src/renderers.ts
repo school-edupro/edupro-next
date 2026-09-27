@@ -28,6 +28,14 @@ export const RENDERERS: Record<string, RendererDefinition> = {
     page: { width: '85.6mm', height: '54mm' },
     requiredParams: ['employeeId'],
   },
+  /** Sprint 7: a document template (transfer certificate, bonafide, letter) filled for one entity. */
+  document: {
+    id: 'document',
+    title: 'Document from template',
+    permission: 'platform.template.view',
+    page: { width: '210mm', height: '297mm' },
+    requiredParams: ['templateId', 'entity', 'entityId'],
+  },
 };
 
 export const RENDERER_IDS = Object.keys(RENDERERS) as [string, ...string[]];

@@ -40,6 +40,21 @@ const MESSAGES: Record<string, string> = {
   'timetable.period_in_use': 'The period still has timetable slots.',
   'import.has_rejects': 'Fix the rejected rows and upload the file again before committing.',
   'import.not_validated': 'Only a validated import can be committed.',
+  'file.upload_failed': 'The file could not be uploaded.',
+  'file.too_large': 'The file is too large for its classification.',
+  'holiday.overlap': 'The dates overlap an existing holiday.',
+  'tc.already_issued': 'The student already holds an issued transfer certificate.',
+  'tc.already_cancelled': 'The certificate is already cancelled.',
+  'template.missing':
+    'No active template of that kind. Install the defaults under System → Templates.',
+  'template.inactive': 'The template is inactive.',
+  'withdrawal.open_exists': 'The student already has an open withdrawal.',
+  'withdrawal.student_inactive': 'The student is not active.',
+  'withdrawal.not_open': 'The withdrawal is already completed or cancelled.',
+  'withdrawal.clearance_pending': 'Every department must clear the student before completion.',
+  'promotion.same_year': 'The target year must differ from the source year.',
+  'promotion.section_not_in_year': 'A chosen section does not belong to the target year.',
+  'promotion.not_enrolled': 'A student is not enrolled in the source year.',
 };
 
 /** Reads ?ok=1 or ?error=<type>&detail=... written by server actions and renders the matching alert. */

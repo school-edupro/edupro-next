@@ -5,6 +5,7 @@ import type { Logger } from '../logger';
 import { toCsv, toHtml, toXlsx, type Row } from './generators';
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
+import { renderDocument } from '../renderers/document';
 import { idCardHtml, loadIdCard } from '../renderers/id-card';
 
 interface ExportDbRow {
@@ -108,11 +109,17 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
     try {
       const renderer = rendererOrNull(row.dataset);
       if (renderer) {
-        const data = await loadIdCard(db, storage, envelope, renderer.id, row.params);
-        const bytes = await pdf.render(idCardHtml(data), {
-          width: renderer.page.width,
-          height: renderer.page.height,
-        });
+        let bytes: Buffer;
+        if (renderer.id === 'document') {
+          const doc = await renderDocument(db, envelope, row.params);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else {
+          const data = await loadIdCard(db, storage, envelope, renderer.id, row.params);
+          bytes = await pdf.render(idCardHtml(data), {
+            width: renderer.page.width,
+            height: renderer.page.height,
+          });
+        }
         await store(bytes, 'application/pdf', 1);
         log.info({ exportId, renderer: renderer.id, bytes: bytes.length }, 'document rendered');
         return;

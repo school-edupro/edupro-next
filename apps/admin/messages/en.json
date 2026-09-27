@@ -14,7 +14,7 @@
     "members": "Members",
     "delegations": "Delegations",
     "communication": "Communication",
-    "templates": "Templates",
+    "templates": "Document templates",
     "deliveryLog": "Delivery log",
     "reports": "Reports",
     "exportCentre": "Export centre",
@@ -28,7 +28,14 @@
     "subjects": "Subjects",
     "teacherAssignments": "Teacher assignments",
     "timetable": "Timetable",
-    "import": "Bulk import"
+    "import": "Bulk import",
+    "dailyWork": "Daily work",
+    "notices": "Notices and circulars",
+    "calendar": "Holidays and almanac",
+    "gallery": "Gallery",
+    "transferCertificates": "Transfer certificates",
+    "withdrawals": "Withdrawals",
+    "promotions": "Promotion"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -285,6 +292,46 @@
     "people_import_detail": {
       "kicker": "People",
       "title": "Import report"
+    },
+    "academics_daily_work": {
+      "kicker": "Academics",
+      "title": "Daily work",
+      "description": "Homework, classwork and assignments by section. Teachers post for their own sections; families see their children's."
+    },
+    "academics_notices": {
+      "kicker": "Academics",
+      "title": "Notices and circulars",
+      "description": "Published notices reach their audience and targets in the parent and teacher apps; drafts stay here."
+    },
+    "academics_calendar": {
+      "kicker": "Academics",
+      "title": "Holidays and almanac",
+      "description": "Holidays block attendance and alerts; almanac events appear in every app's calendar."
+    },
+    "academics_gallery": {
+      "kicker": "Academics",
+      "title": "Gallery",
+      "description": "Albums of school events. Images go through the file service."
+    },
+    "people_tc": {
+      "kicker": "People",
+      "title": "Transfer certificates",
+      "description": "Numbered per school. Issuing ends the student's enrolment; the PDF comes from the school's TC template."
+    },
+    "people_withdrawals": {
+      "kicker": "People",
+      "title": "Withdrawals",
+      "description": "Two steps: a request opens one clearance per department; completion is possible once every department has cleared."
+    },
+    "people_promotions": {
+      "kicker": "People",
+      "title": "Promotion",
+      "description": "Record a decision per student, then apply the pending decisions into next year's enrolments."
+    },
+    "system_templates": {
+      "kicker": "System",
+      "title": "Document templates",
+      "description": "HTML templates with placeholders for transfer certificates, bonafide certificates and letters."
     }
   },
   "stepUp": {
@@ -452,5 +499,187 @@
     "cannotCommit": "This file has rejected rows. Fix them and upload the file again.",
     "failed": "The file could not be read: check the header row.",
     "back": "Back to imports"
+  },
+  "daily": {
+    "kinds": {
+      "homework": "Homework",
+      "classwork": "Classwork",
+      "assignment": "Assignment"
+    },
+    "allKinds": "All kinds",
+    "section": "Section",
+    "subject": "Subject",
+    "title": "Title",
+    "details": "Details",
+    "assignedOn": "Given on",
+    "dueOn": "Due",
+    "postedBy": "Posted by",
+    "files": "Files",
+    "attachments": "Attachments",
+    "post": "Post",
+    "postWork": "Post homework or classwork",
+    "noWork": "No daily work in this range",
+    "from": "From",
+    "to": "To",
+    "delete": "Delete",
+    "children": "Children",
+    "viewingAs": "Showing {section}",
+    "noticeKinds": {
+      "notice": "Notice",
+      "circular": "Circular"
+    },
+    "audience": "Audience",
+    "audiences": {
+      "everyone": "Everyone",
+      "students": "Students and parents",
+      "employees": "Staff"
+    },
+    "targets": "Targets",
+    "noTargets": "Whole audience",
+    "publishFrom": "Publish from",
+    "publishUntil": "Until",
+    "pinned": "Pinned",
+    "status": "Status",
+    "draft": "Draft",
+    "published": "Published",
+    "publish": "Publish",
+    "unpublish": "Unpublish",
+    "publishNow": "Publish immediately",
+    "newNotice": "New notice or circular",
+    "targetClasses": "Classes",
+    "targetSections": "Sections",
+    "noNotices": "No notices",
+    "body": "Text",
+    "holidays": "Holidays",
+    "events": "Almanac",
+    "holidayKinds": {
+      "holiday": "Holiday",
+      "vacation": "Vacation",
+      "working_day": "Working day"
+    },
+    "eventKinds": {
+      "event": "Event",
+      "exam": "Examination",
+      "meeting": "Meeting",
+      "activity": "Activity",
+      "deadline": "Deadline"
+    },
+    "name": "Name",
+    "kind": "Kind",
+    "startsOn": "From",
+    "endsOn": "To",
+    "startsAt": "Time",
+    "appliesTo": "Applies to",
+    "addHoliday": "Add holiday",
+    "addEvent": "Add event",
+    "noHolidays": "No holidays yet",
+    "noEvents": "No events yet",
+    "description": "Description",
+    "albums": "Albums",
+    "newAlbum": "New album",
+    "eventOn": "Event date",
+    "photos": "Photos",
+    "addPhotos": "Add photos",
+    "noAlbums": "No albums yet",
+    "images": "Images (JPEG, PNG, WebP)",
+    "photoCount": "{count} photos"
+  },
+  "lifecycle": {
+    "tcNo": "TC no.",
+    "student": "Student",
+    "issuedOn": "Issued on",
+    "reason": "Reason",
+    "lastClass": "Last class",
+    "conduct": "Conduct",
+    "promotionStatus": "Promotion status",
+    "duesCleared": "All dues cleared",
+    "remarks": "Remarks",
+    "issuedBy": "Issued by",
+    "status": "Status",
+    "issued": "issued",
+    "cancelled": "cancelled",
+    "issueTc": "Issue transfer certificate",
+    "issueTcHelp": "Issuing ends the active enrolment and marks the student inactive. The PDF is queued to the export centre.",
+    "issue": "Issue",
+    "pdf": "PDF",
+    "generatePdf": "Generate PDF",
+    "cancel": "Cancel",
+    "cancelReason": "Reason for cancelling",
+    "noTc": "No transfer certificates",
+    "search": "TC number, name or admission number",
+    "leavingOn": "Leaving on",
+    "requestedOn": "Requested on",
+    "requestedBy": "Requested by",
+    "clearances": "Department clearances",
+    "department": "Department",
+    "dues": "Dues",
+    "actedBy": "By",
+    "cleared": "cleared",
+    "pending": "pending",
+    "hold": "on hold",
+    "clear": "Clear",
+    "putOnHold": "Hold",
+    "complete": "Complete withdrawal",
+    "completeHelp": "Ends the enrolment, deactivates the student and their login.",
+    "requestWithdrawal": "Request withdrawal",
+    "requestHelp": "Opens one clearance per department (fees, library, transport, academics).",
+    "noWithdrawals": "No withdrawals",
+    "open": "Open",
+    "all": "All",
+    "withdrawalStatuses": {
+      "requested": "requested",
+      "cleared": "cleared",
+      "completed": "completed",
+      "cancelled": "cancelled"
+    },
+    "fromYear": "From year",
+    "toYear": "To year",
+    "class": "Class",
+    "decision": "Decision",
+    "decisions": {
+      "promote": "Promote",
+      "retain": "Retain",
+      "transfer_out": "Transfer out",
+      "graduate": "Graduate"
+    },
+    "toSection": "To section",
+    "applied": "Applied",
+    "pendingDecision": "pending",
+    "noDecision": "—",
+    "save": "Save decisions",
+    "apply": "Apply pending decisions",
+    "applyHelp": "Creates next-year enrolments for promote and retain, ends this year's enrolment for transfer out and graduate.",
+    "noStudents": "No students in this class",
+    "chooseClass": "Choose a class and the target year",
+    "show": "Show",
+    "rollNo": "Roll"
+  },
+  "templates": {
+    "code": "Code",
+    "name": "Name",
+    "kind": "Kind",
+    "kinds": {
+      "transfer_certificate": "Transfer certificate",
+      "bonafide": "Bonafide certificate",
+      "letter": "Letter"
+    },
+    "page": "Page",
+    "version": "Version",
+    "status": "Status",
+    "installDefaults": "Install default templates",
+    "noTemplates": "No templates yet. Install the defaults to start.",
+    "newTemplate": "New template",
+    "bodyHtml": "Body (HTML with placeholders)",
+    "stylesCss": "Styles (CSS)",
+    "placeholders": "Placeholders used",
+    "preview": "Preview",
+    "previewHelp": "Rendered with sample data. Placeholders are always escaped.",
+    "save": "Save template",
+    "edit": "Edit",
+    "pageWidth": "Width",
+    "pageHeight": "Height",
+    "render": "Create PDF for a student",
+    "studentId": "Student id",
+    "queue": "Queue PDF"
   }
 }

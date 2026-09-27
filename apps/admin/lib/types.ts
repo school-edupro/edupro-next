@@ -446,3 +446,189 @@ export interface StatusHistoryRow {
   changedAt: string;
   changedBy: string | null;
 }
+
+// ---- Sprint 7 -----------------------------------------------------------------------------------
+export type DailyWorkKind = 'homework' | 'classwork' | 'assignment';
+export type Audience = 'everyone' | 'students' | 'employees';
+
+export interface AttachedFile {
+  id: string;
+  name: string | null;
+  contentType: string;
+  sizeBytes: number;
+}
+
+export interface DailyWork {
+  id: string;
+  kind: DailyWorkKind;
+  classSectionId: string;
+  section: string;
+  subjectId: string | null;
+  subjectCode: string | null;
+  subjectName: string | null;
+  title: string;
+  body: string;
+  assignedOn: string;
+  dueOn: string | null;
+  postedBy: string | null;
+  files: AttachedFile[];
+  createdAt: string;
+}
+
+export interface Viewer {
+  kind: 'staff' | 'family';
+  sectionIds: string[] | null;
+  students: Array<{
+    id: string;
+    name: string;
+    classSectionId: string | null;
+    section: string | null;
+  }>;
+  employeeId: string | null;
+}
+
+export interface NoticeTarget {
+  type: 'class' | 'class_section' | 'student' | 'employee';
+  id: string;
+  label: string;
+}
+
+export interface Notice {
+  id: string;
+  kind: 'notice' | 'circular';
+  title: string;
+  body: string;
+  audience: Audience;
+  publishFrom: string;
+  publishUntil: string | null;
+  isPinned: boolean;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  targets: NoticeTarget[];
+  files: AttachedFile[];
+  createdAt: string;
+}
+
+export interface Holiday {
+  id: string;
+  name: string;
+  kind: 'holiday' | 'vacation' | 'working_day';
+  startsOn: string;
+  endsOn: string;
+  appliesTo: Audience;
+  campusId: string | null;
+}
+
+export interface AlmanacEvent {
+  id: string;
+  title: string;
+  kind: 'event' | 'exam' | 'meeting' | 'activity' | 'deadline';
+  startsOn: string;
+  endsOn: string;
+  startsAt: string | null;
+  description: string | null;
+  audience: Audience;
+}
+
+export interface Calendar {
+  holidays: Holiday[];
+  events: AlmanacEvent[];
+  from: string;
+  to: string;
+}
+
+export interface Album {
+  id: string;
+  title: string;
+  description: string | null;
+  eventOn: string | null;
+  audience: Audience;
+  itemCount: number;
+  coverFileId: string | null;
+  createdAt: string;
+  items?: Array<{
+    id: string;
+    fileId: string;
+    name: string | null;
+    contentType: string;
+    caption: string | null;
+  }>;
+}
+
+export interface DocumentTemplate {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'transfer_certificate' | 'bonafide' | 'letter';
+  pageWidth: string;
+  pageHeight: string;
+  bodyHtml: string;
+  stylesCss: string;
+  placeholders: string[];
+  version: number;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+}
+
+export interface TransferCertificate {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  tcNo: string;
+  serial: number;
+  issuedOn: string;
+  reason: string;
+  lastClass: string | null;
+  conduct: string;
+  promotionStatus: string | null;
+  duesCleared: boolean;
+  remarks: string | null;
+  templateId: string | null;
+  exportId: string | null;
+  status: 'issued' | 'cancelled';
+  issuedBy: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+}
+
+export interface Clearance {
+  id: string;
+  department: string;
+  status: 'pending' | 'cleared' | 'hold';
+  dues: string;
+  remarks: string | null;
+  actedBy: string | null;
+  actedAt: string | null;
+}
+
+export interface Withdrawal {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  section: string | null;
+  requestedOn: string;
+  leavingOn: string;
+  reason: string;
+  status: 'requested' | 'cleared' | 'completed' | 'cancelled';
+  requestedBy: string | null;
+  completedAt: string | null;
+  cancelReason: string | null;
+  clearances: Clearance[];
+}
+
+export interface PromotionRow {
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  fromSection: string;
+  rollNo: number | null;
+  decisionId: string | null;
+  decision: 'promote' | 'retain' | 'transfer_out' | 'graduate' | null;
+  toClassSectionId: string | null;
+  toSection: string | null;
+  remarks: string | null;
+  appliedAt: string | null;
+}

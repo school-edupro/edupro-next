@@ -209,3 +209,6 @@ export * from './jobs';
 export * from './datasets';
 export * from './renderers';
 export * from './schema-version';
+export * from './template-engine';
+export * from './document-data';
+export * from './document-defaults';

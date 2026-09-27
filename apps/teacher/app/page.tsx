@@ -27,10 +27,11 @@ export default async function HomePage() {
       'Mark today’s attendance for your sections',
       can('academics.class_section.view'),
     ],
-    ['Daily work', 'Homework and classwork', can('academics.class_section.view')],
+    ['Daily work', 'Post homework and classwork', can('academics.daily_work.post'), '/daily-work'],
     ['Students', 'Your sections and student profiles', can('people.student.view')],
     ['Marks', 'Exam marks and remarks', false],
-    ['Notices', 'Publish notices to your classes', can('comms.message.send')],
+    ['Notices', 'Notices and circulars for staff', can('academics.notice.view'), '/notices'],
+    ['Calendar', 'Holidays and the almanac', can('academics.calendar.view'), '/calendar'],
     ['Leave', 'Apply for leave and approvals', true],
   ];
   return (

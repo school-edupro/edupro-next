@@ -14,7 +14,7 @@
     "members": "सदस्य",
     "delegations": "प्रत्यायोजन",
     "communication": "संचार",
-    "templates": "टेम्पलेट",
+    "templates": "दस्तावेज़ टेम्पलेट",
     "deliveryLog": "डिलीवरी लॉग",
     "reports": "रिपोर्ट",
     "exportCentre": "निर्यात केंद्र",
@@ -28,7 +28,14 @@
     "subjects": "विषय",
     "teacherAssignments": "शिक्षक आवंटन",
     "timetable": "समय-सारणी",
-    "import": "बल्क आयात"
+    "import": "बल्क आयात",
+    "dailyWork": "दैनिक कार्य",
+    "notices": "सूचनाएँ और परिपत्र",
+    "calendar": "अवकाश और पंचांग",
+    "gallery": "गैलरी",
+    "transferCertificates": "स्थानांतरण प्रमाणपत्र",
+    "withdrawals": "निकासी",
+    "promotions": "पदोन्नति"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
@@ -285,6 +292,46 @@
     "people_import_detail": {
       "kicker": "लोग",
       "title": "आयात रिपोर्ट"
+    },
+    "academics_daily_work": {
+      "kicker": "शैक्षणिक",
+      "title": "दैनिक कार्य",
+      "description": "अनुभाग के अनुसार गृहकार्य, कक्षाकार्य और असाइनमेंट। शिक्षक अपने अनुभागों के लिए पोस्ट करते हैं; परिवार अपने बच्चों का देखते हैं।"
+    },
+    "academics_notices": {
+      "kicker": "शैक्षणिक",
+      "title": "सूचनाएँ और परिपत्र",
+      "description": "प्रकाशित सूचनाएँ अभिभावक और शिक्षक ऐप में अपने लक्षित दर्शकों तक पहुँचती हैं; ड्राफ़्ट यहीं रहते हैं।"
+    },
+    "academics_calendar": {
+      "kicker": "शैक्षणिक",
+      "title": "अवकाश और पंचांग",
+      "description": "अवकाश उपस्थिति और अलर्ट रोकते हैं; पंचांग की घटनाएँ हर ऐप के कैलेंडर में दिखती हैं।"
+    },
+    "academics_gallery": {
+      "kicker": "शैक्षणिक",
+      "title": "गैलरी",
+      "description": "विद्यालय के आयोजनों के एल्बम। चित्र फ़ाइल सेवा से जाते हैं।"
+    },
+    "people_tc": {
+      "kicker": "लोग",
+      "title": "स्थानांतरण प्रमाणपत्र",
+      "description": "प्रति विद्यालय क्रमांकित। जारी करने से विद्यार्थी का नामांकन समाप्त होता है; PDF विद्यालय के TC टेम्पलेट से बनती है।"
+    },
+    "people_withdrawals": {
+      "kicker": "लोग",
+      "title": "निकासी",
+      "description": "दो चरण: अनुरोध से हर विभाग की एक क्लियरेंस खुलती है; सभी विभागों की क्लियरेंस के बाद ही पूर्ण किया जा सकता है।"
+    },
+    "people_promotions": {
+      "kicker": "लोग",
+      "title": "पदोन्नति",
+      "description": "प्रति विद्यार्थी निर्णय दर्ज करें, फिर लंबित निर्णयों को अगले सत्र के नामांकन में लागू करें।"
+    },
+    "system_templates": {
+      "kicker": "सिस्टम",
+      "title": "दस्तावेज़ टेम्पलेट",
+      "description": "स्थानांतरण प्रमाणपत्र, बोनाफ़ाइड प्रमाणपत्र और पत्रों के लिए प्लेसहोल्डर वाले HTML टेम्पलेट।"
     }
   },
   "stepUp": {
@@ -452,5 +499,187 @@
     "cannotCommit": "इस फ़ाइल में अस्वीकृत पंक्तियाँ हैं। उन्हें ठीक करके फ़ाइल फिर अपलोड करें।",
     "failed": "फ़ाइल पढ़ी नहीं जा सकी: हेडर पंक्ति जाँचें।",
     "back": "आयात पर वापस"
+  },
+  "daily": {
+    "kinds": {
+      "homework": "गृहकार्य",
+      "classwork": "कक्षाकार्य",
+      "assignment": "असाइनमेंट"
+    },
+    "allKinds": "सभी प्रकार",
+    "section": "अनुभाग",
+    "subject": "विषय",
+    "title": "शीर्षक",
+    "details": "विवरण",
+    "assignedOn": "दिया गया",
+    "dueOn": "देय",
+    "postedBy": "पोस्ट किया",
+    "files": "फ़ाइलें",
+    "attachments": "संलग्नक",
+    "post": "पोस्ट करें",
+    "postWork": "गृहकार्य या कक्षाकार्य पोस्ट करें",
+    "noWork": "इस अवधि में कोई दैनिक कार्य नहीं",
+    "from": "से",
+    "to": "तक",
+    "delete": "हटाएँ",
+    "children": "बच्चे",
+    "viewingAs": "{section} दिखा रहे हैं",
+    "noticeKinds": {
+      "notice": "सूचना",
+      "circular": "परिपत्र"
+    },
+    "audience": "दर्शक",
+    "audiences": {
+      "everyone": "सभी",
+      "students": "विद्यार्थी और अभिभावक",
+      "employees": "कर्मचारी"
+    },
+    "targets": "लक्ष्य",
+    "noTargets": "पूरा दर्शक वर्ग",
+    "publishFrom": "प्रकाशन से",
+    "publishUntil": "तक",
+    "pinned": "पिन",
+    "status": "स्थिति",
+    "draft": "ड्राफ़्ट",
+    "published": "प्रकाशित",
+    "publish": "प्रकाशित करें",
+    "unpublish": "अप्रकाशित करें",
+    "publishNow": "तुरंत प्रकाशित करें",
+    "newNotice": "नई सूचना या परिपत्र",
+    "targetClasses": "कक्षाएँ",
+    "targetSections": "अनुभाग",
+    "noNotices": "कोई सूचना नहीं",
+    "body": "पाठ",
+    "holidays": "अवकाश",
+    "events": "पंचांग",
+    "holidayKinds": {
+      "holiday": "अवकाश",
+      "vacation": "छुट्टियाँ",
+      "working_day": "कार्य दिवस"
+    },
+    "eventKinds": {
+      "event": "आयोजन",
+      "exam": "परीक्षा",
+      "meeting": "बैठक",
+      "activity": "गतिविधि",
+      "deadline": "अंतिम तिथि"
+    },
+    "name": "नाम",
+    "kind": "प्रकार",
+    "startsOn": "से",
+    "endsOn": "तक",
+    "startsAt": "समय",
+    "appliesTo": "लागू",
+    "addHoliday": "अवकाश जोड़ें",
+    "addEvent": "घटना जोड़ें",
+    "noHolidays": "अभी कोई अवकाश नहीं",
+    "noEvents": "अभी कोई घटना नहीं",
+    "description": "विवरण",
+    "albums": "एल्बम",
+    "newAlbum": "नया एल्बम",
+    "eventOn": "आयोजन तिथि",
+    "photos": "फ़ोटो",
+    "addPhotos": "फ़ोटो जोड़ें",
+    "noAlbums": "अभी कोई एल्बम नहीं",
+    "images": "चित्र (JPEG, PNG, WebP)",
+    "photoCount": "{count} फ़ोटो"
+  },
+  "lifecycle": {
+    "tcNo": "TC क्रमांक",
+    "student": "विद्यार्थी",
+    "issuedOn": "जारी तिथि",
+    "reason": "कारण",
+    "lastClass": "अंतिम कक्षा",
+    "conduct": "आचरण",
+    "promotionStatus": "पदोन्नति स्थिति",
+    "duesCleared": "सभी बकाया चुकता",
+    "remarks": "टिप्पणी",
+    "issuedBy": "जारीकर्ता",
+    "status": "स्थिति",
+    "issued": "जारी",
+    "cancelled": "रद्द",
+    "issueTc": "स्थानांतरण प्रमाणपत्र जारी करें",
+    "issueTcHelp": "जारी करने से सक्रिय नामांकन समाप्त होता है और विद्यार्थी निष्क्रिय हो जाता है। PDF निर्यात केंद्र में कतारबद्ध होती है।",
+    "issue": "जारी करें",
+    "pdf": "PDF",
+    "generatePdf": "PDF बनाएँ",
+    "cancel": "रद्द करें",
+    "cancelReason": "रद्द करने का कारण",
+    "noTc": "कोई स्थानांतरण प्रमाणपत्र नहीं",
+    "search": "TC क्रमांक, नाम या प्रवेश संख्या",
+    "leavingOn": "छोड़ने की तिथि",
+    "requestedOn": "अनुरोध तिथि",
+    "requestedBy": "अनुरोधकर्ता",
+    "clearances": "विभागीय क्लियरेंस",
+    "department": "विभाग",
+    "dues": "बकाया",
+    "actedBy": "द्वारा",
+    "cleared": "क्लियर",
+    "pending": "लंबित",
+    "hold": "रोका गया",
+    "clear": "क्लियर करें",
+    "putOnHold": "रोकें",
+    "complete": "निकासी पूर्ण करें",
+    "completeHelp": "नामांकन समाप्त करता है, विद्यार्थी और उसका लॉगिन निष्क्रिय करता है।",
+    "requestWithdrawal": "निकासी का अनुरोध",
+    "requestHelp": "हर विभाग (शुल्क, पुस्तकालय, परिवहन, शैक्षणिक) की एक क्लियरेंस खोलता है।",
+    "noWithdrawals": "कोई निकासी नहीं",
+    "open": "खुली",
+    "all": "सभी",
+    "withdrawalStatuses": {
+      "requested": "अनुरोधित",
+      "cleared": "क्लियर",
+      "completed": "पूर्ण",
+      "cancelled": "रद्द"
+    },
+    "fromYear": "किस सत्र से",
+    "toYear": "किस सत्र में",
+    "class": "कक्षा",
+    "decision": "निर्णय",
+    "decisions": {
+      "promote": "पदोन्नत",
+      "retain": "रोकें",
+      "transfer_out": "स्थानांतरण",
+      "graduate": "उत्तीर्ण"
+    },
+    "toSection": "किस अनुभाग में",
+    "applied": "लागू",
+    "pendingDecision": "लंबित",
+    "noDecision": "—",
+    "save": "निर्णय सहेजें",
+    "apply": "लंबित निर्णय लागू करें",
+    "applyHelp": "पदोन्नत और रोके गए के लिए अगले सत्र का नामांकन बनाता है; स्थानांतरण और उत्तीर्ण के लिए इस सत्र का नामांकन समाप्त करता है।",
+    "noStudents": "इस कक्षा में कोई विद्यार्थी नहीं",
+    "chooseClass": "कक्षा और लक्षित सत्र चुनें",
+    "show": "दिखाएँ",
+    "rollNo": "रोल"
+  },
+  "templates": {
+    "code": "कोड",
+    "name": "नाम",
+    "kind": "प्रकार",
+    "kinds": {
+      "transfer_certificate": "स्थानांतरण प्रमाणपत्र",
+      "bonafide": "बोनाफ़ाइड प्रमाणपत्र",
+      "letter": "पत्र"
+    },
+    "page": "पृष्ठ",
+    "version": "संस्करण",
+    "status": "स्थिति",
+    "installDefaults": "डिफ़ॉल्ट टेम्पलेट स्थापित करें",
+    "noTemplates": "अभी कोई टेम्पलेट नहीं। शुरू करने के लिए डिफ़ॉल्ट स्थापित करें।",
+    "newTemplate": "नया टेम्पलेट",
+    "bodyHtml": "मुख्य भाग (प्लेसहोल्डर वाला HTML)",
+    "stylesCss": "शैली (CSS)",
+    "placeholders": "प्रयुक्त प्लेसहोल्डर",
+    "preview": "पूर्वावलोकन",
+    "previewHelp": "नमूना डेटा से रेंडर किया गया। प्लेसहोल्डर हमेशा एस्केप होते हैं।",
+    "save": "टेम्पलेट सहेजें",
+    "edit": "संपादित करें",
+    "pageWidth": "चौड़ाई",
+    "pageHeight": "ऊँचाई",
+    "render": "विद्यार्थी के लिए PDF बनाएँ",
+    "studentId": "विद्यार्थी आईडी",
+    "queue": "PDF कतार में डालें"
   }
 }

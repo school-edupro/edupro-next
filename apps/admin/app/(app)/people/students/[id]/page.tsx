@@ -17,18 +17,24 @@ import { Notice } from '@/components/Notice';
 import {
   enrolStudent,
   linkGuardian,
+  issueTc,
+  renderTemplateFor,
   requestStudentIdCard,
+  requestWithdrawal,
   setStudentStatus,
   unlinkGuardian,
   updateStudent,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type {
+  DocumentTemplate,
   Enrolment,
   GuardianLink,
   PersonDocument,
   StatusHistoryRow,
   Student360,
+  TransferCertificate,
+  Withdrawal,
 } from '@/lib/types';
 import { sectionOptions } from '@/lib/sections';
 
@@ -57,6 +63,24 @@ export default async function StudentPage({
   const history = await apiFetch<{ data: StatusHistoryRow[] }>(
     `/people/students/${id}/status-history`,
   ).then((r) => r.data);
+  const [tcs, withdrawals, templates, l] = await Promise.all([
+    can('people.tc.view')
+      ? apiFetch<{ data: TransferCertificate[] }>(`/people/students/${id}/tc`).then((r) => r.data)
+      : Promise.resolve<TransferCertificate[]>([]),
+    can('people.withdrawal.view')
+      ? apiFetch<{ data: Withdrawal[] }>(`/people/students/${id}/withdrawals`).then((r) => r.data)
+      : Promise.resolve<Withdrawal[]>([]),
+    can('platform.template.view')
+      ? apiFetch<{ data: DocumentTemplate[] }>('/platform/templates').then((r) =>
+          r.data.filter((x) => x.kind !== 'transfer_certificate' && x.status === 'active'),
+        )
+      : Promise.resolve<DocumentTemplate[]>([]),
+    getTranslations('lifecycle'),
+  ]);
+  const openWithdrawal = withdrawals.find(
+    (w) => w.status === 'requested' || w.status === 'cleared',
+  );
+  const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
     <>
       <Breadcrumbs
@@ -406,6 +430,160 @@ export default async function StudentPage({
             </form>
           ) : null}
         </Card>
+
+        {can('people.tc.view') || can('people.withdrawal.view') ? (
+          <Card title={l('issueTc')}>
+            {tcs.length > 0 ? (
+              <DataTable<TransferCertificate>
+                caption={l('issueTc')}
+                density="dense"
+                columns={[
+                  {
+                    key: 'no',
+                    header: l('tcNo'),
+                    render: (x) => <a href="/people/tc">{x.tcNo}</a>,
+                  },
+                  { key: 'on', header: l('issuedOn'), render: (x) => x.issuedOn },
+                  { key: 'reason', header: l('reason'), render: (x) => x.reason },
+                  {
+                    key: 'status',
+                    header: l('status'),
+                    render: (x) => (
+                      <Badge tone={x.status === 'issued' ? 'success' : 'danger'}>
+                        {l(x.status)}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    key: 'pdf',
+                    header: l('pdf'),
+                    render: (x) => (x.exportId ? <a href="/reports/exports">#{x.exportId}</a> : ''),
+                  },
+                ]}
+                rows={tcs}
+                rowKey={(x) => x.id}
+                emptyTitle={l('noTc')}
+              />
+            ) : null}
+            {can('people.tc.issue') && !issuedTc ? (
+              <form action={issueTc} style={{ marginTop: 'var(--sp-4)' }}>
+                <input type="hidden" name="studentId" value={student.id} />
+                <p className="ep-field__help">{l('issueTcHelp')}</p>
+                <FormRow columns={2}>
+                  <InputField
+                    id="tcReason"
+                    name="reason"
+                    label={l('reason')}
+                    required
+                    maxLength={300}
+                  />
+                  <InputField id="tcIssuedOn" name="issuedOn" label={l('issuedOn')} type="date" />
+                </FormRow>
+                <FormRow columns={3}>
+                  <InputField
+                    id="tcConduct"
+                    name="conduct"
+                    label={l('conduct')}
+                    defaultValue="Good"
+                  />
+                  <InputField
+                    id="tcPromotion"
+                    name="promotionStatus"
+                    label={l('promotionStatus')}
+                    maxLength={120}
+                  />
+                  <InputField id="tcRemarks" name="remarks" label={l('remarks')} maxLength={500} />
+                </FormRow>
+                <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                  <input type="checkbox" name="duesCleared" value="1" defaultChecked />{' '}
+                  {l('duesCleared')}
+                </label>
+                <FormActions>
+                  <Button type="submit" variant="secondary">
+                    {l('issue')}
+                  </Button>
+                </FormActions>
+              </form>
+            ) : null}
+            {withdrawals.length > 0 ? (
+              <p style={{ marginTop: 'var(--sp-4)' }}>
+                {withdrawals.map((w) => (
+                  <a
+                    key={w.id}
+                    href={`/people/withdrawals/${w.id}`}
+                    style={{ marginRight: 'var(--sp-3)' }}
+                  >
+                    {l('requestWithdrawal')} · {w.requestedOn} ·{' '}
+                    <Badge
+                      tone={
+                        w.status === 'completed'
+                          ? 'success'
+                          : w.status === 'cancelled'
+                            ? 'danger'
+                            : 'warning'
+                      }
+                    >
+                      {l(`withdrawalStatuses.${w.status}`)}
+                    </Badge>
+                  </a>
+                ))}
+              </p>
+            ) : null}
+            {can('people.withdrawal.manage') && !openWithdrawal && student.status === 'active' ? (
+              <form action={requestWithdrawal} style={{ marginTop: 'var(--sp-4)' }}>
+                <input type="hidden" name="studentId" value={student.id} />
+                <p className="ep-field__help">{l('requestHelp')}</p>
+                <FormRow columns={2}>
+                  <InputField
+                    id="wLeavingOn"
+                    name="leavingOn"
+                    label={l('leavingOn')}
+                    type="date"
+                    required
+                  />
+                  <InputField
+                    id="wReason"
+                    name="reason"
+                    label={l('reason')}
+                    required
+                    maxLength={300}
+                  />
+                </FormRow>
+                <FormActions>
+                  <Button type="submit" variant="secondary">
+                    {l('requestWithdrawal')}
+                  </Button>
+                </FormActions>
+              </form>
+            ) : null}
+            {templates.length > 0 ? (
+              <form
+                action={renderTemplateFor}
+                style={{
+                  marginTop: 'var(--sp-4)',
+                  display: 'flex',
+                  gap: 'var(--sp-3)',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <input type="hidden" name="entity" value="student" />
+                <input type="hidden" name="entityId" value={student.id} />
+                <input type="hidden" name="returnTo" value={`/people/students/${student.id}`} />
+                <SelectField
+                  id="docTemplate"
+                  name="templateId"
+                  label={l('pdf')}
+                  options={templates.map((x) => ({ value: x.id, label: x.name }))}
+                />
+                <FormActions>
+                  <Button type="submit" variant="ghost">
+                    {l('generatePdf')}
+                  </Button>
+                </FormActions>
+              </form>
+            ) : null}
+          </Card>
+        ) : null}
       </div>
     </>
   );

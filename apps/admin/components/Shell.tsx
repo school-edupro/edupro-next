@@ -17,6 +17,9 @@ const NAV: Array<{
       { href: '/people/employees', label: 'employees', permission: 'people.employee.view' },
       { href: '/people/search', label: 'peopleSearch', permission: 'people.person.search' },
       { href: '/people/import', label: 'import', permission: 'people.import.run' },
+      { href: '/people/tc', label: 'transferCertificates', permission: 'people.tc.view' },
+      { href: '/people/withdrawals', label: 'withdrawals', permission: 'people.withdrawal.view' },
+      { href: '/people/promotions', label: 'promotions', permission: 'people.promotion.view' },
     ],
   },
   {
@@ -30,6 +33,14 @@ const NAV: Array<{
         permission: 'academics.teacher_assignment.view',
       },
       { href: '/academics/timetable', label: 'timetable', permission: 'academics.timetable.view' },
+      {
+        href: '/academics/daily-work',
+        label: 'dailyWork',
+        permission: 'academics.daily_work.view',
+      },
+      { href: '/academics/notices', label: 'notices', permission: 'academics.notice.view' },
+      { href: '/academics/calendar', label: 'calendar', permission: 'academics.calendar.view' },
+      { href: '/academics/gallery', label: 'gallery', permission: 'academics.gallery.view' },
     ],
   },
   {
@@ -58,6 +69,7 @@ const NAV: Array<{
       { href: '/system/school', label: 'schoolProfile', permission: 'platform.school.view' },
       { href: '/system/years', label: 'years', permission: 'platform.year.view' },
       { href: '/system/settings', label: 'settings', permission: 'platform.settings.view' },
+      { href: '/system/templates', label: 'templates', permission: 'platform.template.view' },
       { href: '/system/audit', label: 'auditLog', permission: 'platform.audit.view' },
       { href: '/system/security', label: 'security', permission: 'platform.security.view' },
       { href: '/system/jobs', label: 'jobs', permission: 'platform.jobs.view' },
