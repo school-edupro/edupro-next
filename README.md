@@ -60,6 +60,7 @@ pnpm --filter @edupro/db local:setup       # only for the user-space stack (crea
 pnpm db:migrate          # applies packages/db/migrations in order
 pnpm db:test             # cross-tenant RLS tests must pass before anything else
 pnpm --filter @edupro/db seed:dev          # two schools and a dev admin (developer sign-in: dev-admin)
+pnpm --filter @edupro/db seed:demo         # sample students, staff, messages and one login per role (docs/demo-logins.md)
 pnpm dev                 # api on :4000 (docs at /api/docs), admin on :3000, workers (outbox publisher and queues)
 ```
 
@@ -82,6 +83,7 @@ Developer sign-in on the login page appears only when `AUTH_DEV_BYPASS=1` and th
 4. `docs/design/02-rbac-permission-catalogue.md`
 5. `docs/sprint-0-checklist.md`
 6. `docs/sprints/` for what each sprint delivered and what it carried over
+7. `docs/demo-logins.md` to try every role on the sample data
 
 ## Repository scripts
 

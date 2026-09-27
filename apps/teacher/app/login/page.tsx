@@ -1,4 +1,4 @@
-import { Button, Card, InputField } from '@edupro/ui';
+import { Button, Card } from '@edupro/ui';
 import { bff } from '@/lib/bff';
 
 export default async function LoginPage({
@@ -51,13 +51,23 @@ export default async function LoginPage({
             <div className="ep-alert ep-alert--warning">
               Development sign-in (AUTH_DEV_BYPASS). Not available in production.
             </div>
-            <InputField
-              id="sub"
-              name="sub"
-              label="Developer subject"
-              defaultValue="dev-admin"
-              required
-            />
+            <div className="ep-field">
+              <label className="ep-field__label" htmlFor="sub">
+                Sign in as
+              </label>
+              <select id="sub" name="sub" className="ep-select" required>
+                {[
+                  { sub: 'dev-teacher', label: 'Class Teacher VI-A' },
+                  { sub: 'dev-subject', label: 'Subject Teacher VI-A, VI-B' },
+                  { sub: 'dev-coordinator', label: 'Academic Coordinator' },
+                  { sub: 'dev-principal', label: 'Principal' },
+                ].map((r) => (
+                  <option key={r.sub} value={r.sub}>
+                    {r.sub} · {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <input type="hidden" name="returnTo" value={returnTo} />
             <Button type="submit" variant="secondary">
               Sign in as developer

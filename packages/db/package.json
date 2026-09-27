@@ -25,7 +25,8 @@
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
-    "anonymise": "tsx src/anonymise.ts"
+    "anonymise": "tsx src/anonymise.ts",
+    "seed:demo": "tsx src/seed-demo.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

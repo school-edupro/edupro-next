@@ -42,8 +42,9 @@
     "error": "Sign-in did not complete ({error}). Please try again.",
     "continue": "Continue with One Auth",
     "devNotice": "Development sign-in (AUTH_DEV_BYPASS). Not available in production.",
-    "devSubject": "Developer subject",
-    "devSubmit": "Sign in as developer"
+    "devSubject": "Sign in as",
+    "devSubmit": "Sign in as developer",
+    "devHelp": "Demo roles come from `pnpm --filter @edupro/db seed:demo`; each subject shows the app from that role’s viewpoint."
   },
   "dashboard": {
     "kicker": "Overview",

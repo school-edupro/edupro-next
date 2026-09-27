@@ -1,5 +1,6 @@
-import { Button, Card, InputField } from '@edupro/ui';
+import { Button, Card } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { DEMO_ROLES } from '@/lib/demo-roles';
 import { env } from '@/lib/env';
 
 export default async function LoginPage({
@@ -49,13 +50,19 @@ export default async function LoginPage({
             style={{ marginTop: 'var(--sp-5)', display: 'grid', gap: 'var(--sp-3)' }}
           >
             <div className="ep-alert ep-alert--warning">{t('devNotice')}</div>
-            <InputField
-              id="sub"
-              name="sub"
-              label={t('devSubject')}
-              defaultValue="dev-admin"
-              required
-            />
+            <div className="ep-field">
+              <label className="ep-field__label" htmlFor="sub">
+                {t('devSubject')}
+              </label>
+              <select id="sub" name="sub" className="ep-select" defaultValue="dev-admin" required>
+                {DEMO_ROLES.map((r) => (
+                  <option key={r.sub} value={r.sub}>
+                    {r.sub} · {r.label}
+                  </option>
+                ))}
+              </select>
+              <span className="ep-field__help">{t('devHelp')}</span>
+            </div>
             <input type="hidden" name="returnTo" value={returnTo} />
             <Button type="submit" variant="secondary">
               {t('devSubmit')}
