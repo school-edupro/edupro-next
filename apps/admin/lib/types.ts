@@ -812,6 +812,7 @@ export interface FeeProfile {
   openingBalance: string;
   notes: string | null;
   isDefault: boolean;
+  instalmentsOverride: number | null;
 }
 export interface FeeDemandRow {
   id: string;
@@ -1151,6 +1152,9 @@ export interface TransportRoute {
   driverMobile: string | null;
   status: 'active' | 'inactive';
   students: number;
+  alertBoarding: boolean;
+  alertAlighting: boolean;
+  lateAfter: string | null;
 }
 export interface RouteStudent {
   studentId: string;
@@ -1220,4 +1224,73 @@ export interface PunchSummary {
     punches: number;
     hours: number | null;
   }>;
+}
+
+// ---- Sprint 11: lesson plans, substitutions, attendance rules, privacy notices --------------------------
+export interface LessonPlan {
+  id: string;
+  employeeId: string;
+  teacher: string;
+  classSectionId: string;
+  section: string;
+  subjectId: string;
+  subject: string;
+  weekStart: string;
+  title: string;
+  objectives: string | null;
+  topics: Array<{
+    day: number;
+    topic: string;
+    activities?: string;
+    resources?: string;
+    homework?: string;
+  }>;
+  assessment: string | null;
+  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'returned';
+  workflowInstanceId: string | null;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  updatedAt: string;
+}
+export interface Substitution {
+  id: string;
+  onDate: string;
+  classSectionId: string;
+  section: string;
+  periodId: string;
+  periodNumber: number;
+  periodName: string;
+  absentEmployeeId: string | null;
+  absentTeacher: string | null;
+  substituteEmployeeId: string;
+  substitute: string;
+  subjectId: string | null;
+  subject: string | null;
+  reason: string | null;
+  note: string | null;
+}
+export interface FreeTeacher {
+  id: string;
+  name: string;
+  designation: string | null;
+  load: number;
+}
+export interface AttendanceRule {
+  studentId: string;
+  student: string;
+  section: string | null;
+  lateAfter: string | null;
+  alertsMuted: boolean;
+  reason: string | null;
+  validFrom: string;
+  validTo: string | null;
+}
+export interface PrivacyNotice {
+  version: number;
+  title: string;
+  body: string;
+  bodyHi: string | null;
+  publishedAt: string | null;
+  acknowledgements: number;
 }

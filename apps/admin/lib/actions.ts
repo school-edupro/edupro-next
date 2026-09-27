@@ -1196,6 +1196,17 @@ export async function updateAdmissionCycle(fd: FormData) {
     body.scoreCriteria = scoringFrom(fd);
   }
   if (fd.has('status')) body.status = str(fd, 'status');
+  if (fd.has('formSchema')) {
+    try {
+      body.formSchema = JSON.parse(str(fd, 'formSchema')) as unknown;
+    } catch {
+      back(
+        `/admissions/cycles/${id}`,
+        'validation-failed',
+        'The form schema must be a JSON array of fields',
+      );
+    }
+  }
   return run(`/admissions/cycles/${id}`, () =>
     apiFetch(`/admissions/cycles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   );
@@ -1329,6 +1340,9 @@ export async function setFeeProfile(fd: FormData) {
         discountId: opt(fd, 'discountId') ?? null,
         openingBalance: Number(str(fd, 'openingBalance') || '0'),
         notes: opt(fd, 'notes'),
+        instalmentsOverride: opt(fd, 'instalmentsOverride')
+          ? Number(str(fd, 'instalmentsOverride'))
+          : null,
       }),
     }),
   );
@@ -1674,5 +1688,80 @@ export async function unassignRouteStudent(fd: FormData) {
   const id = str(fd, 'id');
   return run(`/transport/routes/${id}`, () =>
     apiFetch(`/transport/routes/${id}/students/${str(fd, 'studentId')}`, { method: 'DELETE' }),
+  );
+}
+
+// ---- Sprint 11: substitutions, attendance rules, route rules, privacy notice, fee instalments ----------------
+export async function createSubstitution(fd: FormData) {
+  const date = str(fd, 'onDate');
+  return run(`/academics/substitutions?date=${date}`, () =>
+    apiFetch('/academics/substitutions', {
+      method: 'POST',
+      body: JSON.stringify({
+        onDate: date,
+        classSectionId: str(fd, 'classSectionId'),
+        periodId: str(fd, 'periodId'),
+        substituteEmployeeId: str(fd, 'substituteEmployeeId'),
+        reason: opt(fd, 'reason'),
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function removeSubstitution(fd: FormData) {
+  const date = str(fd, 'onDate');
+  return run(`/academics/substitutions?date=${date}`, () =>
+    apiFetch(`/academics/substitutions/${str(fd, 'id')}`, { method: 'DELETE' }),
+  );
+}
+
+export async function setAttendanceRule(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = opt(fd, 'back') ?? '/attendance/rules';
+  return run(back, () =>
+    apiFetch(`/attendance/rules/${studentId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        lateAfter: opt(fd, 'lateAfter'),
+        alertsMuted: fd.get('alertsMuted') === 'on',
+        reason: opt(fd, 'reason'),
+        validTo: opt(fd, 'validTo'),
+      }),
+    }),
+  );
+}
+
+export async function clearAttendanceRule(fd: FormData) {
+  const back = opt(fd, 'back') ?? '/attendance/rules';
+  return run(back, () =>
+    apiFetch(`/attendance/rules/${str(fd, 'studentId')}`, { method: 'DELETE' }),
+  );
+}
+
+export async function updateRouteRules(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/transport/routes/${id}`, () =>
+    apiFetch(`/transport/routes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        alertBoarding: fd.get('alertBoarding') === 'on',
+        alertAlighting: fd.get('alertAlighting') === 'on',
+        lateAfter: opt(fd, 'lateAfter') ?? null,
+      }),
+    }),
+  );
+}
+
+export async function publishPrivacyNotice(fd: FormData) {
+  return run('/system/privacy', () =>
+    apiFetch('/engagement/privacy-notices', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: str(fd, 'title'),
+        body: str(fd, 'body'),
+        bodyHi: opt(fd, 'bodyHi'),
+      }),
+    }),
   );
 }

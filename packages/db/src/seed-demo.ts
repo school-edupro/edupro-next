@@ -2980,6 +2980,314 @@ async function main(): Promise<void> {
       await clearCtx();
     }
 
+    // ---- Sprint 11: lesson plan workflow, substitutions, per-student rules, privacy notice, fee instalment variant ----
+    for (const school of Object.values(schools)) {
+      await c.query(
+        `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by)
+         SELECT $1, 'lesson_plan_approval', 'Lesson plan approval', 'lesson_plan', $2::jsonb, $3
+          WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE school_id = $1 AND code = 'lesson_plan_approval' AND deleted_at IS NULL)`,
+        [
+          school.id,
+          JSON.stringify([
+            {
+              level: 1,
+              name: 'Academic Coordinator review',
+              resolver: { kind: 'role', roleCode: 'academic_coordinator' },
+              slaHours: 48,
+            },
+            {
+              level: 2,
+              name: 'Vice Principal review',
+              resolver: { kind: 'position', designation: 'Vice Principal' },
+              slaHours: 48,
+            },
+            {
+              level: 3,
+              name: 'Principal approval',
+              resolver: { kind: 'role', roleCode: 'school_admin' },
+              slaHours: 48,
+            },
+          ]),
+          userIds['dev-admin'],
+        ],
+      );
+      await c.query(
+        `INSERT INTO privacy_notices (school_id, version, title, body, body_hi, published_at, created_by)
+         SELECT $1, 1, 'How the school uses your information', $2, $3, now() - interval '20 days', $4
+          WHERE NOT EXISTS (SELECT 1 FROM privacy_notices WHERE school_id = $1)`,
+        [
+          school.id,
+          'We collect and use your family’s details to run the school: admissions, attendance, fees, examinations, transport and safety, and to keep you informed. Attendance, fee and safety messages are necessary for the service. General circulars, event information and photographs in the gallery depend on the choices you make below, which you may change at any time in your profile. We keep records as long as the law and the school’s policies require and share them only with the authorities and service providers that run the school. Questions go to the school office.',
+          'हम आपके परिवार के विवरण विद्यालय संचालन के लिए उपयोग करते हैं: प्रवेश, उपस्थिति, फ़ीस, परीक्षा, परिवहन और सुरक्षा, और आपको सूचित रखने के लिए। उपस्थिति, फ़ीस और सुरक्षा संदेश सेवा के लिए आवश्यक हैं। सामान्य परिपत्र, कार्यक्रम की जानकारी और गैलरी में फ़ोटो नीचे आपके विकल्पों पर निर्भर हैं, जिन्हें आप अपनी प्रोफ़ाइल में कभी भी बदल सकते हैं।',
+          userIds['dev-admin'],
+        ],
+      );
+    }
+    {
+      await withCtx(alpha.id, 'dev-admin');
+      const yearId = alpha.yearId;
+      // the dev student acknowledged the notice; the dev parent has not (so the onboarding step shows)
+      await c.query(
+        `INSERT INTO privacy_acknowledgements (school_id, user_id, notice_version, acknowledged_at, source) VALUES ($1, $2, 1, now() - interval '15 days', 'parent_app') ON CONFLICT (user_id, notice_version) DO NOTHING`,
+        [alpha.id, userIds['dev-student']],
+      );
+      // lesson plans by Anita (VI-A class teacher, English) and Suresh (Mathematics): one approved, one at level 1
+      const plansExist = await c.query(`SELECT 1 FROM lesson_plans WHERE school_id = $1 LIMIT 1`, [
+        alpha.id,
+      ]);
+      if (!plansExist.rowCount) {
+        const def = await c.query<{ id: string }>(
+          `SELECT id::text FROM workflow_definitions WHERE school_id = $1 AND code = 'lesson_plan_approval' AND deleted_at IS NULL`,
+          [alpha.id],
+        );
+        const monday = await c.query<{ this_week: string; next_week: string }>(
+          `SELECT date_trunc('week', CURRENT_DATE)::date::text AS this_week, (date_trunc('week', CURRENT_DATE) + interval '7 days')::date::text AS next_week`,
+        );
+        const teachers = await c.query<{ id: string; user_id: string | null; code: string }>(
+          `SELECT id::text, user_id::text, employee_code AS code FROM employees WHERE school_id = $1 AND employee_code IN ('E006', 'E004')`,
+          [alpha.id],
+        );
+        const subj = async (name: string) =>
+          (
+            await c.query<{ id: string }>(
+              `SELECT id::text FROM subjects WHERE school_id = $1 AND name = $2 AND deleted_at IS NULL`,
+              [alpha.id, name],
+            )
+          ).rows[0]?.id;
+        const english =
+          (await subj('English')) ??
+          (
+            await c.query<{ id: string }>(
+              `SELECT id::text FROM subjects WHERE school_id = $1 AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+              [alpha.id],
+            )
+          ).rows[0]!.id;
+        const maths = (await subj('Mathematics')) ?? english;
+        const anita = teachers.rows.find((t) => t.code === 'E006');
+        const suresh = teachers.rows.find((t) => t.code === 'E004');
+        if (anita) {
+          const approved = await c.query<{ id: string }>(
+            `INSERT INTO lesson_plans (school_id, academic_year_id, employee_id, class_section_id, subject_id, week_start, title, objectives, topics, assessment, status, submitted_at, decided_at, decision_note, created_by, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6::date, 'Poetry: rhythm and rhyme', 'Read two poems aloud; identify rhyme schemes; write a four-line verse', $7::jsonb, 'Recitation on Friday; verse collected Monday', 'approved', now() - interval '6 days', now() - interval '4 days', 'Approved · good pacing', $8, $8) RETURNING id::text`,
+            [
+              alpha.id,
+              yearId,
+              anita.id,
+              sections.ALPHA!['VI-A'],
+              english,
+              monday.rows[0]!.this_week,
+              JSON.stringify([
+                {
+                  day: 1,
+                  topic: 'What makes a poem',
+                  activities: 'Read "The Road Not Taken"; discuss',
+                  resources: 'Textbook p. 42',
+                },
+                {
+                  day: 2,
+                  topic: 'Rhyme schemes',
+                  activities: 'Mark ABAB and AABB in two poems',
+                  homework: 'Find a poem with AABB',
+                },
+                { day: 3, topic: 'Rhythm and stress', activities: 'Clap the beat; read in pairs' },
+                { day: 4, topic: 'Writing a verse', activities: 'Draft four lines on the monsoon' },
+                { day: 5, topic: 'Recitation', activities: 'Recite; peer feedback' },
+              ]),
+              userIds['dev-teacher'],
+            ],
+          );
+          const inst = await c.query<{ id: string }>(
+            `INSERT INTO workflow_instances (school_id, definition_id, entity_type, entity_id, subject, payload, status, current_level, requested_by, requested_at, completed_at, completed_by)
+             VALUES ($1, $2, 'lesson_plan', $3, 'Poetry: rhythm and rhyme · VI-A · English · week of ' || $4, '{}'::jsonb, 'approved', 3, $5, now() - interval '6 days', now() - interval '4 days', $6) RETURNING id::text`,
+            [
+              alpha.id,
+              def.rows[0]!.id,
+              approved.rows[0]!.id,
+              monday.rows[0]!.this_week,
+              userIds['dev-teacher'],
+              userIds['dev-principal'],
+            ],
+          );
+          for (const [level, name, resolver, actor, assignees, ago] of [
+            [
+              1,
+              'Academic Coordinator review',
+              { kind: 'role', roleCode: 'academic_coordinator' },
+              'dev-coordinator',
+              ['dev-coordinator'],
+              '5 days 20 hours',
+            ],
+            [
+              2,
+              'Vice Principal review',
+              { kind: 'position', designation: 'Vice Principal' },
+              'dev-admin',
+              ['dev-admin'],
+              '5 days',
+            ],
+            [
+              3,
+              'Principal approval',
+              { kind: 'role', roleCode: 'school_admin' },
+              'dev-principal',
+              ['dev-admin', 'dev-principal'],
+              '4 days',
+            ],
+          ] as Array<[number, string, object, string, string[], string]>)
+            await c.query(
+              `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status, acted_by, acted_at, note) VALUES ($1, $2, $3, $4, $5::jsonb, $6::bigint[], 'approved', $7, now() - $8::interval, 'Approved')`,
+              [
+                alpha.id,
+                inst.rows[0]!.id,
+                level,
+                name,
+                JSON.stringify(resolver),
+                assignees.map((a) => userIds[a]),
+                userIds[actor],
+                ago,
+              ],
+            );
+          await c.query(`UPDATE lesson_plans SET workflow_instance_id = $2 WHERE id = $1`, [
+            approved.rows[0]!.id,
+            inst.rows[0]!.id,
+          ]);
+        }
+        if (suresh) {
+          const pending = await c.query<{ id: string }>(
+            `INSERT INTO lesson_plans (school_id, academic_year_id, employee_id, class_section_id, subject_id, week_start, title, objectives, topics, status, submitted_at, created_by, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6::date, 'Fractions: like and unlike denominators', 'Add and subtract fractions; word problems', $7::jsonb, 'submitted', now() - interval '1 day', $8, $8) RETURNING id::text`,
+            [
+              alpha.id,
+              yearId,
+              suresh.id,
+              sections.ALPHA!['VI-A'],
+              maths,
+              monday.rows[0]!.next_week,
+              JSON.stringify([
+                { day: 1, topic: 'Revision of fractions', activities: 'Number line game' },
+                {
+                  day: 2,
+                  topic: 'Like denominators',
+                  activities: 'Worksheet 3.1',
+                  homework: 'Ex 3.1 Q1-6',
+                },
+                { day: 3, topic: 'Unlike denominators', activities: 'LCM method on the board' },
+                { day: 4, topic: 'Word problems', activities: 'Pair work; 6 problems' },
+                { day: 5, topic: 'Quiz', activities: '15-minute quiz' },
+              ]),
+              userIds['dev-subject'],
+            ],
+          );
+          const inst = await c.query<{ id: string }>(
+            `INSERT INTO workflow_instances (school_id, definition_id, entity_type, entity_id, subject, payload, status, current_level, requested_by, requested_at)
+             VALUES ($1, $2, 'lesson_plan', $3, 'Fractions: like and unlike denominators · VI-A · Mathematics · week of ' || $4, '{}'::jsonb, 'pending', 1, $5, now() - interval '1 day') RETURNING id::text`,
+            [
+              alpha.id,
+              def.rows[0]!.id,
+              pending.rows[0]!.id,
+              monday.rows[0]!.next_week,
+              userIds['dev-subject'],
+            ],
+          );
+          await c.query(
+            `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status) VALUES ($1, $2, 1, 'Academic Coordinator review', '{"kind":"role","roleCode":"academic_coordinator"}'::jsonb, $3::bigint[], 'pending')`,
+            [alpha.id, inst.rows[0]!.id, [userIds['dev-coordinator']]],
+          );
+          await c.query(`UPDATE lesson_plans SET workflow_instance_id = $2 WHERE id = $1`, [
+            pending.rows[0]!.id,
+            inst.rows[0]!.id,
+          ]);
+        }
+      }
+      // a substitution on the next school day: Suresh Nair (VI-A Mathematics, period 2) is away; Anita takes the period
+      const nextDay = await c.query<{ d: string; dow: number }>(
+        `SELECT d::text, EXTRACT(ISODOW FROM d)::int AS dow FROM (SELECT CASE WHEN EXTRACT(ISODOW FROM CURRENT_DATE) = 6 THEN CURRENT_DATE + 2 WHEN EXTRACT(ISODOW FROM CURRENT_DATE) = 7 THEN CURRENT_DATE + 1 ELSE CURRENT_DATE + 1 END AS d) x`,
+      );
+      const slot = await c.query<{
+        id: string;
+        period_id: string;
+        employee_id: string | null;
+        subject_id: string | null;
+      }>(
+        `SELECT ts.id::text, ts.period_id::text, ts.employee_id::text, ts.subject_id::text FROM timetable_slots ts JOIN employees e ON e.id = ts.employee_id
+          WHERE ts.class_section_id = $1 AND ts.academic_year_id = $2 AND ts.weekday = $3 AND e.employee_code = 'E004' ORDER BY ts.period_id LIMIT 1`,
+        [sections.ALPHA!['VI-A'], yearId, nextDay.rows[0]!.dow],
+      );
+      const anitaEmp = await c.query<{ id: string }>(
+        `SELECT id::text FROM employees WHERE school_id = $1 AND employee_code = 'E006'`,
+        [alpha.id],
+      );
+      if (slot.rows[0] && anitaEmp.rows[0]) {
+        const busy = await c.query(
+          `SELECT 1 FROM timetable_slots WHERE employee_id = $1 AND academic_year_id = $2 AND weekday = $3 AND period_id = $4`,
+          [anitaEmp.rows[0].id, yearId, nextDay.rows[0]!.dow, slot.rows[0].period_id],
+        );
+        if (!busy.rowCount)
+          await c.query(
+            `INSERT INTO timetable_substitutions (school_id, academic_year_id, on_date, class_section_id, period_id, slot_id, absent_employee_id, substitute_employee_id, subject_id, reason, created_by)
+             VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8, $9, 'Casual leave', $10) ON CONFLICT (on_date, class_section_id, period_id) DO NOTHING`,
+            [
+              alpha.id,
+              yearId,
+              nextDay.rows[0]!.d,
+              sections.ALPHA!['VI-A'],
+              slot.rows[0].period_id,
+              slot.rows[0].id,
+              slot.rows[0].employee_id,
+              anitaEmp.rows[0].id,
+              slot.rows[0].subject_id,
+              userIds['dev-coordinator'],
+            ],
+          );
+      }
+      // per-student rule: Sai Sharma (VI-A roll 5) comes by 08:00 and his family asked for no alerts
+      const sai = await c.query<{ id: string }>(
+        `SELECT s.id::text FROM students s JOIN enrolments e ON e.student_id = s.id WHERE s.school_id = $1 AND e.class_section_id = $2 AND e.academic_year_id = $3 AND e.status = 'active' AND s.rfid_tag = 'ALPHA-VIA-005' LIMIT 1`,
+        [alpha.id, sections.ALPHA!['VI-A'], yearId],
+      );
+      if (sai.rows[0])
+        await c.query(
+          `INSERT INTO student_attendance_rules (school_id, student_id, academic_year_id, late_after, alerts_muted, reason, created_by) VALUES ($1, $2, $3, '08:00', true, 'Family asked for no alerts; arrives by 08:00 with the staff bus', $4) ON CONFLICT (student_id, academic_year_id) DO NOTHING`,
+          [alpha.id, sai.rows[0].id, yearId, userIds['dev-coordinator']],
+        );
+      // route rules: R2 does not alert on alighting; R1 flags boarding after 07:40
+      await c.query(
+        `UPDATE transport_routes SET alert_alighting = false WHERE school_id = $1 AND code = 'R2'`,
+        [alpha.id],
+      );
+      await c.query(
+        `UPDATE transport_routes SET late_after = '07:40' WHERE school_id = $1 AND code = 'R1' AND late_after IS NULL`,
+        [alpha.id],
+      );
+      // fee instalment variant: the first VI-B student pays in two instalments; regenerate the demand
+      const viB = await c.query<{ id: string }>(
+        `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' ORDER BY e.roll_no LIMIT 1`,
+        [sections.ALPHA!['VI-B'], yearId],
+      );
+      if (viB.rows[0]) {
+        const prof = await c.query<{ instalments_override: number | null }>(
+          `SELECT instalments_override FROM student_fee_profiles WHERE student_id = $1 AND academic_year_id = $2`,
+          [viB.rows[0].id, yearId],
+        );
+        if (prof.rows[0] && prof.rows[0].instalments_override === null) {
+          await c.query(
+            `UPDATE student_fee_profiles SET instalments_override = 2, notes = COALESCE(notes || ' · ', '') || 'Two instalments (parent request)' WHERE student_id = $1 AND academic_year_id = $2`,
+            [viB.rows[0].id, yearId],
+          );
+          const run = await c.query<{ run_id: string }>(
+            `SELECT o_run_id::text AS run_id FROM app.generate_fee_demand($1, $2)`,
+            [viB.rows[0].id, yearId],
+          );
+          await c.query(`SELECT app.apply_instalment_override($1, $2, $3)`, [
+            viB.rows[0].id,
+            yearId,
+            run.rows[0]!.run_id,
+          ]);
+        }
+      }
+      await clearCtx();
+    }
+
     await c.query('COMMIT');
     const counts = await c.query<{
       students: string;

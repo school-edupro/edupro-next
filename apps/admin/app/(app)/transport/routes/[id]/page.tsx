@@ -11,7 +11,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { assignRouteStudents, unassignRouteStudent } from '@/lib/actions';
+import { assignRouteStudents, unassignRouteStudent, updateRouteRules } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Page, RouteStudent, Student, TransportRoute } from '@/lib/types';
@@ -25,9 +25,10 @@ export default async function RoutePage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, tr, me, routes, riders, sections] = await Promise.all([
+  const [t, tr, a, me, routes, riders, sections] = await Promise.all([
     getTranslations('pages.transport_routes'),
     getTranslations('transport'),
+    getTranslations('attendance'),
     getMe(),
     apiFetch<{ data: TransportRoute[] }>('/transport/routes').then((r) => r.data),
     apiFetch<{ data: RouteStudent[] }>(`/transport/routes/${id}/students`).then((r) => r.data),
@@ -109,6 +110,46 @@ export default async function RoutePage({
             emptyTitle={tr('noRiders')}
           />
         </Card>
+        {canManage && route ? (
+          <Card title={a('routeRules')}>
+            <form action={updateRouteRules}>
+              <input type="hidden" name="id" value={route.id} />
+              <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                <input type="checkbox" name="alertBoarding" defaultChecked={route.alertBoarding} />{' '}
+                {a('alertBoarding')}
+              </label>
+              <label
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-2)',
+                  alignItems: 'center',
+                  marginTop: 'var(--sp-2)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  name="alertAlighting"
+                  defaultChecked={route.alertAlighting}
+                />{' '}
+                {a('alertAlighting')}
+              </label>
+              <FormRow columns={2}>
+                <InputField
+                  id="lateAfter"
+                  name="lateAfter"
+                  label={a('routeLateAfter')}
+                  type="time"
+                  defaultValue={route.lateAfter ?? ''}
+                />
+              </FormRow>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  {a('saveRules')}
+                </Button>
+              </FormActions>
+            </form>
+          </Card>
+        ) : null}
         {canManage ? (
           <Card title={tr('assign')}>
             <p className="ep-field__help">{tr('assignHelp')}</p>

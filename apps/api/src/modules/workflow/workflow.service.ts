@@ -234,6 +234,31 @@ export class WorkflowService {
         ],
       },
       {
+        code: 'lesson_plan_approval',
+        name: 'Lesson plan approval',
+        entityType: 'lesson_plan',
+        levels: [
+          {
+            level: 1,
+            name: 'Academic Coordinator review',
+            resolver: { kind: 'role', roleCode: 'academic_coordinator' },
+            slaHours: 48,
+          },
+          {
+            level: 2,
+            name: 'Vice Principal review',
+            resolver: { kind: 'position', designation: 'Vice Principal' },
+            slaHours: 48,
+          },
+          {
+            level: 3,
+            name: 'Principal approval',
+            resolver: { kind: 'role', roleCode: 'school_admin' },
+            slaHours: 48,
+          },
+        ],
+      },
+      {
         code: 'message_approval',
         name: 'Message approval',
         entityType: 'message_request',

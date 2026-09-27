@@ -9,6 +9,7 @@ export const ATTENDANCE = {
   rfid: 'attendance.rfid.manage',
   busView: 'attendance.bus.view',
   punchView: 'attendance.punch.view',
+  ruleManage: 'attendance.rule.manage',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -135,3 +136,16 @@ export const BusQuerySchema = z.object({
   routeId: IdSchema.optional(),
 });
 export class BusQueryDto extends createZodDto(BusQuerySchema) {}
+
+// ---- Sprint 11: per-student rules --------------------------------------------------------------------
+export const SetRuleSchema = z.object({
+  lateAfter: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional(),
+  alertsMuted: z.boolean().default(false),
+  reason: z.string().trim().max(200).optional(),
+  validFrom: DateSchema.optional(),
+  validTo: DateSchema.optional(),
+});
+export class SetRuleDto extends createZodDto(SetRuleSchema) {}

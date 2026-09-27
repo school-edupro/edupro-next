@@ -25,6 +25,6 @@ import { ViewerService } from './viewer.service';
     GalleryService,
     AuditService,
   ],
-  exports: [ViewerService, CalendarService],
+  exports: [ViewerService, CalendarService, DailyWorkService, NoticesService],
 })
 export class DailyAcademicsModule {}

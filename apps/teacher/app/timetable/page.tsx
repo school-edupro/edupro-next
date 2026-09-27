@@ -21,6 +21,17 @@ interface Period {
   endsAt: string;
   kind: 'teaching' | 'break' | 'assembly' | 'activity';
 }
+interface Substitution {
+  id: string;
+  onDate: string;
+  section: string;
+  periodName: string;
+  absentTeacher: string | null;
+  substitute: string;
+  substituteEmployeeId: string;
+  subject: string | null;
+  reason: string | null;
+}
 interface Slot {
   id: string;
   classCode: string;
@@ -44,13 +55,18 @@ export default async function TimetablePage() {
   let assignments: Assignment[];
   let periods: Period[];
   let slots: Slot[];
+  let substitutions: Substitution[] = [];
   try {
-    [assignments, periods, slots] = await Promise.all([
+    [assignments, periods, slots, substitutions] = await Promise.all([
       bff.api
         .fetch<{ data: Assignment[] }>('/academics/teacher-assignments/mine')
         .then((r) => r.data),
       bff.api.fetch<{ data: Period[] }>('/academics/timetable/periods').then((r) => r.data),
       bff.api.fetch<{ data: Slot[] }>('/academics/timetable/mine').then((r) => r.data),
+      bff.api
+        .fetch<{ data: Substitution[] }>('/academics/substitutions/mine')
+        .then((r) => r.data)
+        .catch(() => [] as Substitution[]),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -122,6 +138,20 @@ export default async function TimetablePage() {
           emptyTitle="No assignments in this year"
         />
       </Card>
+      {substitutions.length ? (
+        <Card title="Substitutions this week" style={{ marginTop: 'var(--sp-4)' }}>
+          <ul style={{ margin: 0, paddingLeft: 'var(--sp-3)' }}>
+            {substitutions.map((x) => (
+              <li key={x.id}>
+                <strong>{x.onDate}</strong> · {x.periodName} · {x.section}
+                {x.subject ? ` · ${x.subject}` : ''} — {x.substitute} covers for{' '}
+                {x.absentTeacher ?? 'the regular teacher'}
+                {x.reason ? ` (${x.reason})` : ''}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       <Card title="My week" style={{ marginTop: 'var(--sp-4)' }}>
         <DataTable<Period>
           caption="My week"

@@ -1,0 +1,37 @@
+[
+{
+"FeeHeadId": "1",
+"FeeHead": "Tuition Fee",
+"HeadType": "Regular",
+"Optional": "0",
+"SortOrder": "1"
+},
+{
+"FeeHeadId": "2",
+"FeeHead": "Development Fee",
+"HeadType": "Regular",
+"Optional": "0",
+"SortOrder": "2"
+},
+{
+"FeeHeadId": "3",
+"FeeHead": "Transport Fee",
+"HeadType": "Transport",
+"Optional": "0",
+"SortOrder": "3"
+},
+{
+"FeeHeadId": "4",
+"FeeHead": "Late Fee",
+"HeadType": "Late Fee",
+"Optional": "0",
+"SortOrder": "4"
+},
+{
+"FeeHeadId": "5",
+"FeeHead": "Opening Balance",
+"HeadType": "Opening Balance",
+"Optional": "0",
+"SortOrder": "5"
+}
+]

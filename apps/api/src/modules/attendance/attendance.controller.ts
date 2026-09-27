@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { Public } from '../../common/auth/decorators';
@@ -6,6 +6,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   ATTENDANCE,
   BusQueryDto,
+  SetRuleDto,
   CreateDeviceDto,
   DayQueryDto,
   PunchIngestDto,
@@ -22,6 +23,7 @@ import { AttendanceService } from './attendance.service';
 import { BusService } from './bus.service';
 import { PunchService } from './punch.service';
 import { RfidService } from './rfid.service';
+import { RulesService } from './rules.service';
 
 @ApiTags('attendance')
 @ApiBearerAuth()
@@ -169,5 +171,43 @@ export class PunchController {
   @RequirePermission(ATTENDANCE.punchView)
   log(@ReqCtx() ctx: RequestContext, @Query() q: DayQueryDto) {
     return this.punch.log(ctx, q);
+  }
+}
+
+@ApiTags('attendance')
+@ApiBearerAuth()
+@Controller('attendance/rules')
+export class RulesController {
+  constructor(private readonly rules: RulesService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'Per-student attendance rules of the working year (late time, muted alerts)',
+  })
+  @RequirePermission(ATTENDANCE.ruleManage)
+  list(@ReqCtx() ctx: RequestContext) {
+    return this.rules.list(ctx);
+  }
+
+  @Get(':studentId')
+  @RequirePermission(ATTENDANCE.ruleManage)
+  get(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.rules.get(ctx, studentId);
+  }
+
+  @Put(':studentId')
+  @RequirePermission(ATTENDANCE.ruleManage)
+  set(
+    @ReqCtx() ctx: RequestContext,
+    @Param('studentId') studentId: string,
+    @Body() dto: SetRuleDto,
+  ) {
+    return this.rules.set(ctx, studentId, dto);
+  }
+
+  @Delete(':studentId')
+  @RequirePermission(ATTENDANCE.ruleManage)
+  clear(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.rules.clear(ctx, studentId);
   }
 }

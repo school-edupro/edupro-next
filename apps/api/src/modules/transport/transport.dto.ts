@@ -20,7 +20,15 @@ export const CreateRouteSchema = z.object({
 });
 export class CreateRouteDto extends createZodDto(CreateRouteSchema) {}
 export const UpdateRouteSchema = CreateRouteSchema.omit({ code: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
+  .extend({
+    status: z.enum(['active', 'inactive']),
+    alertBoarding: z.boolean(),
+    alertAlighting: z.boolean(),
+    lateAfter: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable(),
+  })
   .partial();
 export class UpdateRouteDto extends createZodDto(UpdateRouteSchema) {}
 

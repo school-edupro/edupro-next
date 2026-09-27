@@ -29,6 +29,7 @@ export default async function HomePage() {
       '/attendance',
     ],
     ['Daily work', 'Post homework and classwork', can('academics.daily_work.post'), '/daily-work'],
+    ['Lesson plans', 'Weekly plans with approvals', can('academics.lesson_plan.manage'), '/lesson-plans'],
     [
       'Queries',
       'Family queries and leave requests for your sections',

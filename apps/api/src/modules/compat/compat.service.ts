@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { SignJWT } from 'jose';
+import { CacheService } from '../../common/cache/cache.service';
 import { DbService } from '../../common/db/db.service';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ENV, type Env } from '../../config/env';
@@ -51,6 +52,7 @@ export class CompatService {
     private readonly settings: SettingsService,
     private readonly school: SchoolService,
     private readonly access: AccessService,
+    private readonly cache: CacheService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -91,6 +93,13 @@ export class CompatService {
     if (!parsed || !parsed.success) return { status: false, info: 'Invalid token' };
     const p = parsed.data;
     if (p.exp < Math.floor(Date.now() / 1000)) return { status: false, info: 'Token expired' };
+    // Replay protection (S6-09 leftover, closed in S11): a handshake token is accepted once during its validity.
+    const ttl = Math.max(60, p.exp - Math.floor(Date.now() / 1000) + 60);
+    const seen = await this.cache.incr(
+      `compat:handshake:${createHash('sha256').update(dto.token).digest('hex')}`,
+      ttl,
+    );
+    if (seen > 1) return { status: false, info: 'Token already used' };
     const mobile = p.mobile_number ? p.mobile_number.replace(/\D/g, '').slice(-10) : null;
     const schoolRef = String(p.school_id);
 

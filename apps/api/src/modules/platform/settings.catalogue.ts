@@ -73,6 +73,38 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Admin session length in hours',
     module: 'platform',
   },
+  'admissions.admission_fee': {
+    schema: money,
+    default: '10000.00',
+    description: 'Admission fee charged when an application is selected (Sprint 9)',
+    module: 'admissions',
+  },
+  'admissions.number_prefix': {
+    schema: z.string().regex(/^[A-Z]{1,4}$/),
+    default: 'A',
+    description: 'Prefix of admission numbers issued at admission',
+    module: 'admissions',
+  },
+  'attendance.rfid_late_after': {
+    schema: z.string().regex(/^\d{2}:\d{2}$/),
+    default: '09:00',
+    description: 'A first gate tap after this time (IST) marks the student late',
+    module: 'attendance',
+  },
+  'attendance.weekly_off': {
+    schema: z.array(z.number().int().min(1).max(7)).max(7),
+    default: [7],
+    description:
+      'Weekly off days (ISO weekday numbers, 7 = Sunday); attendance cannot be marked on them',
+    module: 'attendance',
+  },
+  'comms.alert_throttle_per_hour': {
+    schema: z.number().int().min(1).max(60),
+    default: 6,
+    description:
+      'Maximum alert messages (absence, bus, query updates) to one mobile in a rolling hour (Sprint 11)',
+    module: 'comms',
+  },
   'fees.late_fee_mode': {
     schema: z.enum(['daywise', 'slab']),
     default: 'daywise',

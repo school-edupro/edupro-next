@@ -129,6 +129,10 @@ export const SetProfileSchema = z.object({
   discountId: IdSchema.nullable().optional(),
   openingBalance: z.number().min(-100_000_000).max(100_000_000).default(0),
   notes: z.string().trim().max(300).optional(),
+  instalmentsOverride: z
+    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(6), z.literal(12)])
+    .nullable()
+    .optional(),
 });
 export class SetProfileDto extends createZodDto(SetProfileSchema) {}
 

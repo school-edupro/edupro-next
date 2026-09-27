@@ -200,8 +200,13 @@ export class RfidService {
         const direction = ev.direction ?? lookup.direction ?? 'in';
         let outcome = 'ignored';
         let studentId: string | null = null;
-        const st = await c.query<{ id: string; section_id: string | null }>(
-          `SELECT s.id::text, (SELECT e.class_section_id::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $2::bigint AND e.status = 'active' LIMIT 1) AS section_id
+        const st = await c.query<{
+          id: string;
+          section_id: string | null;
+          late_after: string | null;
+        }>(
+          `SELECT s.id::text, (SELECT e.class_section_id::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $2::bigint AND e.status = 'active' LIMIT 1) AS section_id,
+                  (SELECT to_char(r.late_after, 'HH24:MI') FROM student_attendance_rules r WHERE r.student_id = s.id AND r.academic_year_id = $2::bigint AND r.late_after IS NOT NULL AND CURRENT_DATE BETWEEN r.valid_from AND COALESCE(r.valid_to, CURRENT_DATE)) AS late_after
              FROM students s WHERE s.rfid_tag = $1 AND s.deleted_at IS NULL AND s.status = 'active'`,
           [ev.tag, yearId ?? null],
         );
@@ -246,7 +251,7 @@ export class RfidService {
               if (existing?.source === 'manual') outcome = 'manual_kept';
               else if (existing?.in_at) outcome = 'duplicate';
               else {
-                const code = d.time <= lateAfter ? 'P' : 'L';
+                const code = d.time <= (st.rows[0]?.late_after ?? lateAfter) ? 'P' : 'L';
                 await c.query(
                   `INSERT INTO attendance_marks (school_id, session_id, student_id, code, in_at, source) VALUES (app.current_school_id(), $1, $2, $3::attendance_code, $4::timestamptz, 'rfid')
                    ON CONFLICT (session_id, student_id) DO UPDATE SET code = EXCLUDED.code, in_at = EXCLUDED.in_at, source = 'rfid', updated_at = now()`,

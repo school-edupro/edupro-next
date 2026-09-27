@@ -1,0 +1,422 @@
+[
+{
+"srno": "1",
+"query_id": "Q-2",
+"sadmission": "R2401",
+"queryresponse": "Reply 1",
+"datetime": "2025-08-02 10:00:00"
+},
+{
+"srno": "2",
+"query_id": "Q-3",
+"sadmission": "R2401",
+"queryresponse": "Reply 2",
+"datetime": "2025-08-03 10:00:00"
+},
+{
+"srno": "3",
+"query_id": "Q-4",
+"sadmission": "R2401",
+"queryresponse": "Reply 3",
+"datetime": "2025-08-04 10:00:00"
+},
+{
+"srno": "4",
+"query_id": "Q-5",
+"sadmission": "R2401",
+"queryresponse": "Reply 4",
+"datetime": "2025-08-05 10:00:00"
+},
+{
+"srno": "5",
+"query_id": "Q-6",
+"sadmission": "R2401",
+"queryresponse": "Reply 5",
+"datetime": "2025-08-06 10:00:00"
+},
+{
+"srno": "6",
+"query_id": "Q-7",
+"sadmission": "R2401",
+"queryresponse": "Reply 6",
+"datetime": "2025-08-07 10:00:00"
+},
+{
+"srno": "7",
+"query_id": "Q-8",
+"sadmission": "R2401",
+"queryresponse": "Reply 7",
+"datetime": "2025-08-08 10:00:00"
+},
+{
+"srno": "8",
+"query_id": "Q-9",
+"sadmission": "R2401",
+"queryresponse": "Reply 8",
+"datetime": "2025-08-09 10:00:00"
+},
+{
+"srno": "9",
+"query_id": "Q-10",
+"sadmission": "R2401",
+"queryresponse": "Reply 9",
+"datetime": "2025-08-10 10:00:00"
+},
+{
+"srno": "10",
+"query_id": "Q-11",
+"sadmission": "R2401",
+"queryresponse": "Reply 10",
+"datetime": "2025-08-11 10:00:00"
+},
+{
+"srno": "11",
+"query_id": "Q-12",
+"sadmission": "R2401",
+"queryresponse": "Reply 11",
+"datetime": "2025-08-12 10:00:00"
+},
+{
+"srno": "12",
+"query_id": "Q-13",
+"sadmission": "R2401",
+"queryresponse": "Reply 12",
+"datetime": "2025-08-13 10:00:00"
+},
+{
+"srno": "13",
+"query_id": "Q-14",
+"sadmission": "R2401",
+"queryresponse": "Reply 13",
+"datetime": "2025-08-14 10:00:00"
+},
+{
+"srno": "14",
+"query_id": "Q-15",
+"sadmission": "R2401",
+"queryresponse": "Reply 14",
+"datetime": "2025-08-15 10:00:00"
+},
+{
+"srno": "15",
+"query_id": "Q-16",
+"sadmission": "R2401",
+"queryresponse": "Reply 15",
+"datetime": "2025-08-16 10:00:00"
+},
+{
+"srno": "16",
+"query_id": "Q-17",
+"sadmission": "R2401",
+"queryresponse": "Reply 16",
+"datetime": "2025-08-17 10:00:00"
+},
+{
+"srno": "17",
+"query_id": "Q-18",
+"sadmission": "R2401",
+"queryresponse": "Reply 17",
+"datetime": "2025-08-18 10:00:00"
+},
+{
+"srno": "18",
+"query_id": "Q-19",
+"sadmission": "R2401",
+"queryresponse": "Reply 18",
+"datetime": "2025-08-19 10:00:00"
+},
+{
+"srno": "19",
+"query_id": "Q-20",
+"sadmission": "R2401",
+"queryresponse": "Reply 19",
+"datetime": "2025-08-20 10:00:00"
+},
+{
+"srno": "20",
+"query_id": "Q-21",
+"sadmission": "R2401",
+"queryresponse": "Reply 20",
+"datetime": "2025-08-21 10:00:00"
+},
+{
+"srno": "21",
+"query_id": "Q-22",
+"sadmission": "R2401",
+"queryresponse": "Reply 21",
+"datetime": "2025-08-22 10:00:00"
+},
+{
+"srno": "22",
+"query_id": "Q-23",
+"sadmission": "R2401",
+"queryresponse": "Reply 22",
+"datetime": "2025-08-23 10:00:00"
+},
+{
+"srno": "23",
+"query_id": "Q-24",
+"sadmission": "R2401",
+"queryresponse": "Reply 23",
+"datetime": "2025-08-24 10:00:00"
+},
+{
+"srno": "24",
+"query_id": "Q-25",
+"sadmission": "R2401",
+"queryresponse": "Reply 24",
+"datetime": "2025-08-25 10:00:00"
+},
+{
+"srno": "25",
+"query_id": "Q-26",
+"sadmission": "R2401",
+"queryresponse": "Reply 25",
+"datetime": "2025-08-26 10:00:00"
+},
+{
+"srno": "26",
+"query_id": "Q-27",
+"sadmission": "R2401",
+"queryresponse": "Reply 26",
+"datetime": "2025-08-27 10:00:00"
+},
+{
+"srno": "27",
+"query_id": "Q-28",
+"sadmission": "R2401",
+"queryresponse": "Reply 27",
+"datetime": "2025-08-28 10:00:00"
+},
+{
+"srno": "28",
+"query_id": "Q-29",
+"sadmission": "R2401",
+"queryresponse": "Reply 28",
+"datetime": "2025-08-01 10:00:00"
+},
+{
+"srno": "29",
+"query_id": "Q-30",
+"sadmission": "R2401",
+"queryresponse": "Reply 29",
+"datetime": "2025-08-02 10:00:00"
+},
+{
+"srno": "30",
+"query_id": "Q-31",
+"sadmission": "R2401",
+"queryresponse": "Reply 30",
+"datetime": "2025-08-03 10:00:00"
+},
+{
+"srno": "31",
+"query_id": "Q-32",
+"sadmission": "R2401",
+"queryresponse": "Reply 31",
+"datetime": "2025-08-04 10:00:00"
+},
+{
+"srno": "32",
+"query_id": "Q-33",
+"sadmission": "R2401",
+"queryresponse": "Reply 32",
+"datetime": "2025-08-05 10:00:00"
+},
+{
+"srno": "33",
+"query_id": "Q-34",
+"sadmission": "R2401",
+"queryresponse": "Reply 33",
+"datetime": "2025-08-06 10:00:00"
+},
+{
+"srno": "34",
+"query_id": "Q-35",
+"sadmission": "R2401",
+"queryresponse": "Reply 34",
+"datetime": "2025-08-07 10:00:00"
+},
+{
+"srno": "35",
+"query_id": "Q-36",
+"sadmission": "R2401",
+"queryresponse": "Reply 35",
+"datetime": "2025-08-08 10:00:00"
+},
+{
+"srno": "36",
+"query_id": "Q-37",
+"sadmission": "R2401",
+"queryresponse": "Reply 36",
+"datetime": "2025-08-09 10:00:00"
+},
+{
+"srno": "37",
+"query_id": "Q-38",
+"sadmission": "R2401",
+"queryresponse": "Reply 37",
+"datetime": "2025-08-10 10:00:00"
+},
+{
+"srno": "38",
+"query_id": "Q-39",
+"sadmission": "R2401",
+"queryresponse": "Reply 38",
+"datetime": "2025-08-11 10:00:00"
+},
+{
+"srno": "39",
+"query_id": "Q-40",
+"sadmission": "R2401",
+"queryresponse": "Reply 39",
+"datetime": "2025-08-12 10:00:00"
+},
+{
+"srno": "40",
+"query_id": "Q-41",
+"sadmission": "R2401",
+"queryresponse": "Reply 40",
+"datetime": "2025-08-13 10:00:00"
+},
+{
+"srno": "41",
+"query_id": "Q-42",
+"sadmission": "R2401",
+"queryresponse": "Reply 41",
+"datetime": "2025-08-14 10:00:00"
+},
+{
+"srno": "42",
+"query_id": "Q-43",
+"sadmission": "R2401",
+"queryresponse": "Reply 42",
+"datetime": "2025-08-15 10:00:00"
+},
+{
+"srno": "43",
+"query_id": "Q-44",
+"sadmission": "R2401",
+"queryresponse": "Reply 43",
+"datetime": "2025-08-16 10:00:00"
+},
+{
+"srno": "44",
+"query_id": "Q-45",
+"sadmission": "R2401",
+"queryresponse": "Reply 44",
+"datetime": "2025-08-17 10:00:00"
+},
+{
+"srno": "45",
+"query_id": "Q-46",
+"sadmission": "R2401",
+"queryresponse": "Reply 45",
+"datetime": "2025-08-18 10:00:00"
+},
+{
+"srno": "46",
+"query_id": "Q-47",
+"sadmission": "R2401",
+"queryresponse": "Reply 46",
+"datetime": "2025-08-19 10:00:00"
+},
+{
+"srno": "47",
+"query_id": "Q-48",
+"sadmission": "R2401",
+"queryresponse": "Reply 47",
+"datetime": "2025-08-20 10:00:00"
+},
+{
+"srno": "48",
+"query_id": "Q-49",
+"sadmission": "R2401",
+"queryresponse": "Reply 48",
+"datetime": "2025-08-21 10:00:00"
+},
+{
+"srno": "49",
+"query_id": "Q-50",
+"sadmission": "R2401",
+"queryresponse": "Reply 49",
+"datetime": "2025-08-22 10:00:00"
+},
+{
+"srno": "50",
+"query_id": "Q-51",
+"sadmission": "R2401",
+"queryresponse": "Reply 50",
+"datetime": "2025-08-23 10:00:00"
+},
+{
+"srno": "51",
+"query_id": "Q-52",
+"sadmission": "R2401",
+"queryresponse": "Reply 51",
+"datetime": "2025-08-24 10:00:00"
+},
+{
+"srno": "52",
+"query_id": "Q-53",
+"sadmission": "R2401",
+"queryresponse": "Reply 52",
+"datetime": "2025-08-25 10:00:00"
+},
+{
+"srno": "53",
+"query_id": "Q-54",
+"sadmission": "R2401",
+"queryresponse": "Reply 53",
+"datetime": "2025-08-26 10:00:00"
+},
+{
+"srno": "54",
+"query_id": "Q-55",
+"sadmission": "R2401",
+"queryresponse": "Reply 54",
+"datetime": "2025-08-27 10:00:00"
+},
+{
+"srno": "55",
+"query_id": "Q-56",
+"sadmission": "R2401",
+"queryresponse": "Reply 55",
+"datetime": "2025-08-28 10:00:00"
+},
+{
+"srno": "56",
+"query_id": "Q-57",
+"sadmission": "R2401",
+"queryresponse": "Reply 56",
+"datetime": "2025-08-01 10:00:00"
+},
+{
+"srno": "57",
+"query_id": "Q-58",
+"sadmission": "R2401",
+"queryresponse": "Reply 57",
+"datetime": "2025-08-02 10:00:00"
+},
+{
+"srno": "58",
+"query_id": "Q-59",
+"sadmission": "R2401",
+"queryresponse": "Reply 58",
+"datetime": "2025-08-03 10:00:00"
+},
+{
+"srno": "59",
+"query_id": "Q-60",
+"sadmission": "R2401",
+"queryresponse": "Reply 59",
+"datetime": "2025-08-04 10:00:00"
+},
+{
+"srno": "60",
+"query_id": "Q-61",
+"sadmission": "R2401",
+"queryresponse": "Reply 60",
+"datetime": "2025-08-05 10:00:00"
+}
+]

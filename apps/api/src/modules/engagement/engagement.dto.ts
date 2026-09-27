@@ -136,3 +136,25 @@ export const ListChangeRequestsSchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListChangeRequestsDto extends createZodDto(ListChangeRequestsSchema) {}
+
+// ---- Sprint 11: DPDP privacy notice and onboarding -----------------------------------------------------
+export const PublishNoticeSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  body: z.string().trim().min(20).max(20000),
+  bodyHi: z.string().trim().max(20000).optional(),
+});
+export class PublishNoticeDto extends createZodDto(PublishNoticeSchema) {}
+export const AcknowledgeSchema = z.object({
+  version: z.number().int().min(1),
+  consents: z
+    .array(
+      z.object({
+        purposeCode: z.string().trim().min(2).max(60),
+        status: z.enum(['granted', 'withdrawn']),
+      }),
+    )
+    .max(20)
+    .default([]),
+});
+export class AcknowledgeDto extends createZodDto(AcknowledgeSchema) {}
+export const PRIVACY = { manage: 'platform.privacy.manage' } as const;

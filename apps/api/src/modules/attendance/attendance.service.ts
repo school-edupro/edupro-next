@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
+import type { SendMessageDto } from '../comms/comms.dto';
 import { MessagesService } from '../comms/messages.service';
 import type {
   LockDto,
@@ -330,7 +331,8 @@ export class AttendanceService {
                 (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id AND sg.receives_notifications ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS mobile
            FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id JOIN students s ON s.id = m.student_id
            JOIN class_sections cs ON cs.id = a.class_section_id JOIN classes c ON c.id = cs.class_id
-          WHERE m.session_id = $1 AND m.code = 'A' AND m.alert_sent_at IS NULL`,
+          WHERE m.session_id = $1 AND m.code = 'A' AND m.alert_sent_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM student_attendance_rules r WHERE r.student_id = s.id AND r.alerts_muted AND a.on_date BETWEEN r.valid_from AND COALESCE(r.valid_to, a.on_date))`,
         [sessionId],
       );
       return r.rows;
@@ -339,16 +341,21 @@ export class AttendanceService {
     for (const p of pending) {
       if (!p.mobile) continue;
       try {
-        await this.messages.send(ctx, {
-          templateCode: 'absent_alert',
-          channel: 'whatsapp',
-          recipientAddress: p.mobile,
-          variables: { student_name: p.student, section: p.section, date },
+        const sentRow = await this.db.tenant(tenant, async (c) => {
+          const row = await this.messages.sendAlert(c, ctx, {
+            templateCode: 'absent_alert',
+            channel: 'whatsapp',
+            recipientAddress: p.mobile,
+            variables: { student_name: p.student, section: p.section, date },
+          } as SendMessageDto);
+          if (row)
+            await c.query(`UPDATE attendance_marks SET alert_sent_at = now() WHERE id = $1`, [
+              p.mark_id,
+            ]);
+          return row;
         });
-        await this.db.tenant(tenant, (c) =>
-          c.query(`UPDATE attendance_marks SET alert_sent_at = now() WHERE id = $1`, [p.mark_id]),
-        );
-        sent += 1;
+        if (sentRow) sent += 1;
+        else this.logger.warn(`absent alert throttled for mark ${p.mark_id}`);
       } catch (error) {
         // no template in this school (or an inactive one): attendance is still recorded, the alert is skipped
         this.logger.warn(`absent alert skipped for mark ${p.mark_id}: ${(error as Error).message}`);
@@ -446,6 +453,11 @@ export class AttendanceService {
     if (v.kind === 'family' && !v.students.some((s) => s.id === studentId))
       throw new DomainError('not-found', 'Student not found');
     return this.db.tenant(tenant, async (c) => {
+      const exists = await c.query(`SELECT 1 FROM students WHERE id = $1 AND deleted_at IS NULL`, [
+        studentId,
+      ]);
+      if (!exists.rowCount)
+        throw new DomainError('not-found', 'Student not found', { status: 404 });
       if (v.kind === 'staff' && v.sectionIds !== null) {
         const e = await c.query(
           `SELECT 1 FROM enrolments WHERE student_id = $1 AND academic_year_id = $2 AND status = 'active' AND class_section_id = ANY($3::bigint[])`,

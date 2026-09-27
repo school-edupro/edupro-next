@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  AcknowledgeDto,
   AssignDto,
   CloseDto,
   CreateChangeRequestDto,
@@ -13,10 +14,13 @@ import {
   ListChangeRequestsDto,
   ListFeedbackDto,
   ListQueriesDto,
+  PRIVACY,
+  PublishNoticeDto,
   RateDto,
   RespondDto,
 } from './engagement.dto';
 import { FamilyService } from './family.service';
+import { PrivacyService } from './privacy.service';
 import { QueriesService } from './queries.service';
 
 @ApiTags('engagement')
@@ -26,7 +30,38 @@ export class EngagementController {
   constructor(
     private readonly queries: QueriesService,
     private readonly family: FamilyService,
+    private readonly privacy: PrivacyService,
   ) {}
+
+  // ---- DPDP onboarding -----------------------------------------------------------------------------
+  @Get('onboarding')
+  @ApiOperation({ summary: 'The privacy notice to acknowledge (if any) and my consent purposes' })
+  @RequirePermission(ENGAGEMENT.familyView)
+  onboarding(@ReqCtx() ctx: RequestContext) {
+    return this.privacy.onboarding(ctx);
+  }
+
+  @Post('onboarding/acknowledge')
+  @ApiOperation({ summary: 'Acknowledge the current notice and record my consent choices' })
+  @RequirePermission(ENGAGEMENT.familyView)
+  acknowledge(@ReqCtx() ctx: RequestContext, @Body() dto: AcknowledgeDto) {
+    return this.privacy.acknowledge(ctx, dto);
+  }
+
+  @Get('privacy-notices')
+  @RequirePermission(PRIVACY.manage)
+  notices(@ReqCtx() ctx: RequestContext) {
+    return this.privacy.notices(ctx);
+  }
+
+  @Post('privacy-notices')
+  @ApiOperation({
+    summary: 'Publish a new privacy notice version; families acknowledge it on their next visit',
+  })
+  @RequirePermission(PRIVACY.manage)
+  publish(@ReqCtx() ctx: RequestContext, @Body() dto: PublishNoticeDto) {
+    return this.privacy.publish(ctx, dto);
+  }
 
   // ---- queries: staff ------------------------------------------------------------------------------
   @Get('categories')

@@ -65,7 +65,11 @@
     "routes": "Routes",
     "rfidDashboard": "RFID dashboard",
     "busAttendance": "Bus attendance",
-    "punches": "Staff punches"
+    "punches": "Staff punches",
+    "substitutions": "Substitutions",
+    "lessonPlans": "Lesson plans",
+    "attendanceRules": "Student rules",
+    "privacy": "Privacy notice"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -482,6 +486,26 @@
       "kicker": "Attendance",
       "title": "Staff punches",
       "description": "First in, last out and hours per employee from the biometric devices."
+    },
+    "academics_substitutions": {
+      "kicker": "Academics",
+      "title": "Substitutions",
+      "description": "Cover for absent teachers: pick the section and period, see who is free, assign."
+    },
+    "academics_lesson_plans": {
+      "kicker": "Academics",
+      "title": "Lesson plans",
+      "description": "Weekly plans by teachers; approvals run through Coordinator, Vice Principal and Principal."
+    },
+    "attendance_rules": {
+      "kicker": "Attendance",
+      "title": "Student rules",
+      "description": "Per-student late time and alert muting for the working year (RFID rules v2)."
+    },
+    "system_privacy": {
+      "kicker": "System",
+      "title": "Privacy notice",
+      "description": "The DPDP notice families read and acknowledge in the parent app; publishing a new version asks everyone again."
     }
   },
   "stepUp": {
@@ -1027,7 +1051,9 @@
     "rows": "Rows",
     "hasProfile": "Profile",
     "generated": "Generated for {count} students",
-    "skipped": "{count} skipped"
+    "skipped": "{count} skipped",
+    "instalments": "Instalments for this student",
+    "instalmentsDefault": "School periods"
   },
   "workflow": {
     "step": "Step",
@@ -1212,7 +1238,20 @@
     "absentStaff": "Not punched",
     "noPunches": "No punches on this date",
     "noBus": "No bus taps on this date",
-    "sections": "Sections"
+    "sections": "Sections",
+    "lateAfterRule": "Late after (this student)",
+    "alertsMuted": "Mute alerts",
+    "ruleReason": "Reason",
+    "validTo": "Until",
+    "setRule": "Save rule",
+    "clearRule": "Remove rule",
+    "noRules": "No per-student rules",
+    "rulesHelp": "A rule overrides the school late time and stops absent and bus alerts for one student.",
+    "routeRules": "Alert rules",
+    "alertBoarding": "Alert on boarding",
+    "alertAlighting": "Alert on alighting",
+    "routeLateAfter": "Late boarding after",
+    "saveRules": "Save rules"
   },
   "comms": {
     "title": "Title",
@@ -1392,5 +1431,54 @@
     "remove": "Remove",
     "noRiders": "No students assigned yet",
     "status": "Status"
+  },
+  "planner": {
+    "date": "Date",
+    "section": "Section",
+    "period": "Period",
+    "absent": "Absent teacher",
+    "substitute": "Substitute",
+    "reason": "Reason",
+    "subject": "Subject",
+    "free": "Free teachers",
+    "load": "Periods that day",
+    "assign": "Assign substitute",
+    "remove": "Remove",
+    "noSubstitutions": "No substitutions on this date",
+    "pick": "Pick a section and period to see who is free.",
+    "week": "Week of",
+    "teacher": "Teacher",
+    "title": "Title",
+    "status": "Status",
+    "statuses": {
+      "draft": "draft",
+      "submitted": "awaiting approval",
+      "approved": "approved",
+      "rejected": "rejected",
+      "returned": "returned for changes"
+    },
+    "objectives": "Objectives",
+    "topics": "Day-wise topics",
+    "day": "Day",
+    "topic": "Topic",
+    "activities": "Activities",
+    "resources": "Resources",
+    "homework": "Homework",
+    "assessment": "Assessment",
+    "decision": "Decision note",
+    "noPlans": "No lesson plans yet",
+    "openInbox": "Awaiting approval in the inbox"
+  },
+  "privacy": {
+    "version": "Version",
+    "title": "Title",
+    "body": "Notice (English)",
+    "bodyHi": "Notice (Hindi)",
+    "publishedAt": "Published",
+    "acknowledgements": "Acknowledged by",
+    "publish": "Publish new version",
+    "publishHelp": "Every family sees the new version on their next visit and confirms their consent choices.",
+    "noNotice": "No notice published yet",
+    "current": "Current"
   }
 }

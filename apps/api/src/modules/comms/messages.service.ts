@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { QUEUES, type PoolClient, type TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -92,6 +92,7 @@ const toRow = (x: MessageDbRow): MessageRow => ({
  */
 @Injectable()
 export class MessagesService {
+  private readonly logger = new Logger(MessagesService.name);
   constructor(
     private readonly db: DbService,
     private readonly templates: TemplatesService,
@@ -140,6 +141,32 @@ export class MessagesService {
 
   async send(ctx: RequestContext, dto: SendMessageDto): Promise<MessageRow> {
     return this.db.tenant(requireTenant(ctx), (c) => this.sendWith(c, ctx, dto));
+  }
+
+  /**
+   * Alerts (templates flagged `is_alert`) are throttled per recipient address: at most
+   * `comms.alert_throttle_per_hour` (default 6) in a rolling hour. Returns null when throttled so callers
+   * record the skip instead of failing the business transaction (S11).
+   */
+  async sendAlert(
+    c: PoolClient,
+    ctx: RequestContext,
+    dto: SendMessageDto,
+  ): Promise<MessageRow | null> {
+    const address = dto.recipientAddress;
+    if (address) {
+      const r = await c.query<{ n: number; limit: number | null }>(
+        `SELECT (SELECT count(*)::int FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id WHERE t.is_alert AND m.recipient_address = $1 AND m.created_at > now() - interval '1 hour') AS n,
+                (app.setting('comms.alert_throttle_per_hour'))::text::int AS limit`,
+        [address],
+      );
+      const limit = r.rows[0]?.limit ?? 6;
+      if ((r.rows[0]?.n ?? 0) >= limit) {
+        this.logger.warn({ address: address.slice(-4), limit }, 'alert throttled');
+        return null;
+      }
+    }
+    return this.sendWith(c, ctx, dto);
   }
 
   /** The same as `send`, inside a caller's transaction (bulk dispatch of an approved request, S10). */

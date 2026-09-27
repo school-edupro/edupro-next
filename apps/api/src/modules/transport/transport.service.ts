@@ -15,9 +15,12 @@ export interface RouteRow {
   driverMobile: string | null;
   status: 'active' | 'inactive';
   students: number;
+  alertBoarding: boolean;
+  alertAlighting: boolean;
+  lateAfter: string | null;
 }
 
-const SELECT = `SELECT r.id::text, r.code, r.name, r.vehicle_no, r.driver_name, r.driver_mobile, r.status::text,
+const SELECT = `SELECT r.id::text, r.code, r.name, r.vehicle_no, r.driver_name, r.driver_mobile, r.status::text, r.alert_boarding, r.alert_alighting, to_char(r.late_after, 'HH24:MI') AS late_after,
         (SELECT count(*)::int FROM student_route_assignments a WHERE a.route_id = r.id AND a.academic_year_id = $1::bigint) AS students
    FROM transport_routes r`;
 
@@ -86,7 +89,8 @@ export class TransportService {
       const before = await this.find(c, id, this.year(ctx));
       await c.query(
         `UPDATE transport_routes SET name = COALESCE($2, name), vehicle_no = COALESCE($3, vehicle_no), driver_name = COALESCE($4, driver_name), driver_mobile = COALESCE($5, driver_mobile),
-                status = COALESCE($6::row_status, status), updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
+                status = COALESCE($6::row_status, status), alert_boarding = COALESCE($7, alert_boarding), alert_alighting = COALESCE($8, alert_alighting),
+                late_after = CASE WHEN $9::boolean THEN $10::time ELSE late_after END, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
         [
           id,
           dto.name ?? null,
@@ -94,6 +98,10 @@ export class TransportService {
           dto.driverName ?? null,
           dto.driverMobile ?? null,
           dto.status ?? null,
+          dto.alertBoarding ?? null,
+          dto.alertAlighting ?? null,
+          dto.lateAfter !== undefined,
+          dto.lateAfter ?? null,
         ],
       );
       const after = await this.find(c, id, this.year(ctx));
@@ -215,4 +223,7 @@ const toRoute = (x: Record<string, unknown>): RouteRow => ({
   driverMobile: (x.driver_mobile as string) ?? null,
   status: x.status as 'active' | 'inactive',
   students: x.students as number,
+  alertBoarding: x.alert_boarding as boolean,
+  alertAlighting: x.alert_alighting as boolean,
+  lateAfter: (x.late_after as string) ?? null,
 });

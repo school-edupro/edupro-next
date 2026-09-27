@@ -219,6 +219,30 @@ export default async function CyclePage({
         </Card>
       ) : null}
       {canManage ? (
+        <Card title={a('form')} style={{ marginTop: 'var(--sp-5)' }}>
+          <form action={updateAdmissionCycle}>
+            <input type="hidden" name="id" value={cycle.id} />
+            <p className="ep-field__help">{a('formHelp')}</p>
+            <label className="ep-field" htmlFor="formSchema">
+              <span className="ep-field__label">{a('form')} (JSON)</span>
+              <textarea
+                id="formSchema"
+                name="formSchema"
+                className="ep-input"
+                rows={14}
+                style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--text-sm)' }}
+                defaultValue={JSON.stringify(cycle.formSchema, null, 2)}
+              />
+            </label>
+            <FormActions>
+              <Button type="submit" variant="secondary">
+                {a('save')}
+              </Button>
+            </FormActions>
+          </form>
+        </Card>
+      ) : null}
+      {canManage ? (
         <Card title={c('save')} style={{ marginTop: 'var(--sp-5)' }}>
           <form action={updateAdmissionCycle}>
             <input type="hidden" name="id" value={cycle.id} />

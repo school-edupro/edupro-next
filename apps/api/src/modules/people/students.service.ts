@@ -181,22 +181,37 @@ export class StudentsService {
     const tenant = requireTenant(ctx);
     const allowed = await this.scopeFilter(tenant);
     return this.db.tenant(tenant, async (c) => {
-      const where =
-        ' WHERE s.deleted_at IS NULL' +
-        " AND ($1::text IS NULL OR s.search_text LIKE app.search_text($1::text) || '%' OR s.search_text % app.search_text($1::text) OR lower(s.admission_no) = lower($1::text))" +
-        ' AND ($2::bigint IS NULL OR e.class_section_id = $2::bigint)' +
-        ' AND ($3::row_status IS NULL OR s.status = $3::row_status)' +
-        ' AND ($4::bigint[] IS NULL OR e.class_section_id = ANY($4::bigint[]))';
-      const params: unknown[] = [q.q ?? null, q.classSectionId ?? null, q.status ?? null, allowed];
+      // Predicates are added only when a filter is present, so an unfiltered list narrows by tenant and
+      // status through the indexes instead of evaluating the trigram search on every row (S11 tuning).
+      const params: unknown[] = [];
+      const clauses: string[] = ['s.deleted_at IS NULL'];
+      if (q.q) {
+        params.push(q.q);
+        clauses.push(
+          `(s.search_text LIKE app.search_text($${params.length}::text) || '%' OR s.search_text % app.search_text($${params.length}::text) OR lower(s.admission_no) = lower($${params.length}::text))`,
+        );
+      }
+      if (q.classSectionId) {
+        params.push(q.classSectionId);
+        clauses.push(`e.class_section_id = $${params.length}::bigint`);
+      }
+      if (q.status) {
+        params.push(q.status);
+        clauses.push(`s.status = $${params.length}::row_status`);
+      }
+      if (allowed) {
+        params.push(allowed);
+        clauses.push(`e.class_section_id = ANY($${params.length}::bigint[])`);
+      }
+      const where = ' WHERE ' + clauses.join(' AND ');
       const total = await c.query<{ n: string }>(
-        "SELECT count(*)::text AS n FROM students s LEFT JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'" +
-          where,
+        // eslint-disable-next-line no-restricted-syntax -- where is built from fixed clauses with numbered placeholders; values are bound parameters
+        `SELECT count(*)::text AS n FROM students s LEFT JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'${where}`,
         params,
       );
       const r = await c.query<StudentDbRow>(
-        STUDENT_SELECT +
-          where +
-          ' ORDER BY c.display_order NULLS LAST, cs.name, e.roll_no NULLS LAST, s.display_name LIMIT $5 OFFSET $6',
+        // eslint-disable-next-line no-restricted-syntax -- STUDENT_SELECT is a constant; where is built from fixed clauses; values are bound parameters
+        `${STUDENT_SELECT}${where} ORDER BY c.display_order NULLS LAST, cs.name, e.roll_no NULLS LAST, s.display_name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, q.size, (q.page - 1) * q.size],
       );
       return { rows: r.rows.map(toStudent), total: Number(total.rows[0]?.n ?? 0) };

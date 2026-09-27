@@ -32,21 +32,21 @@ export class CompatReadsController {
 
   @Get('student/GetHomework')
   @AuthenticatedOnly()
-  @ApiOperation({ summary: 'Homework (legacy shape; live data arrives with the academics module)' })
-  homework() {
-    return this.reads.homework();
+  @ApiOperation({ summary: 'Homework of the caller’s sections (live since Sprint 11)' })
+  homework(@ReqCtx() ctx: RequestContext) {
+    return this.reads.homework(ctx);
   }
 
   @Get('student/GetClasswork')
   @AuthenticatedOnly()
-  classwork() {
-    return this.reads.classwork();
+  classwork(@ReqCtx() ctx: RequestContext) {
+    return this.reads.classwork(ctx);
   }
 
   @Get('student/GetTimetable')
   @AuthenticatedOnly()
-  timetable() {
-    return this.reads.timetable();
+  timetable(@ReqCtx() ctx: RequestContext) {
+    return this.reads.timetable(ctx);
   }
 
   @Get('student/GetAttendance')

@@ -1,0 +1,9602 @@
+[
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "01/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "02/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "02/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "03/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "03/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "04/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "04/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "04/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "bad-date",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "06/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "06/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "07/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "08/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "09/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "10/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "11/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "12/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "13/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "13/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "13/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "14/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "14/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "15/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "15/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "16/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "17/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "SR",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "17/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "18/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "19/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "19/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2401",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2402",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2403",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2404",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2405",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2406",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2407",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2408",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2409",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2410",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2411",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2412",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2413",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2414",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2415",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2416",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2417",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2418",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "L",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2419",
+"sclass": "I-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2420",
+"sclass": "I-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2421",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2422",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2423",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2424",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2425",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2426",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2427",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2428",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2429",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2430",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2431",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2432",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2433",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2434",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2435",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2436",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2437",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2438",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2439",
+"sclass": "II-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2440",
+"sclass": "II-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2441",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2442",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2443",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2444",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2445",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2446",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2447",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2448",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2449",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2450",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2451",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2452",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2453",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "A",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2454",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2455",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2456",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2457",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2458",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "A.5",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2459",
+"sclass": "III-A",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+},
+{
+"sadmission": "R2460",
+"sclass": "III-B",
+"attendancedate": "20/07/2025",
+"attendance": "P",
+"emp_id": "E006",
+"FinancialYear": "2025"
+}
+]

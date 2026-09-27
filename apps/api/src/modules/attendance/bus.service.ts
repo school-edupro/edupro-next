@@ -37,6 +37,18 @@ export class BusService {
     const school = await c.query<{ name: string }>(
       `SELECT name FROM schools WHERE id = app.current_school_id()`,
     );
+    const route = lookup.route_id
+      ? ((
+          await c.query<{
+            alert_boarding: boolean;
+            alert_alighting: boolean;
+            late_after: string | null;
+          }>(
+            `SELECT alert_boarding, alert_alighting, to_char(late_after, 'HH24:MI') AS late_after FROM transport_routes WHERE id = $1`,
+            [lookup.route_id],
+          )
+        ).rows[0] ?? null)
+      : null;
     for (const ev of dto.events) {
       const direction = ev.direction ?? lookup.direction ?? 'in';
       const st = await c.query<{
@@ -45,9 +57,11 @@ export class BusService {
         guardian_user_id: string | null;
         guardian_mobile: string | null;
         stop: string | null;
+        muted: boolean;
       }>(
         `SELECT s.id::text, s.display_name AS name, g.user_id::text AS guardian_user_id, g.mobile AS guardian_mobile,
-                (SELECT a.stop_name FROM student_route_assignments a WHERE a.student_id = s.id AND a.route_id = $2::bigint ORDER BY a.academic_year_id DESC LIMIT 1) AS stop
+                (SELECT a.stop_name FROM student_route_assignments a WHERE a.student_id = s.id AND a.route_id = $2::bigint ORDER BY a.academic_year_id DESC LIMIT 1) AS stop,
+                EXISTS (SELECT 1 FROM student_attendance_rules r WHERE r.student_id = s.id AND r.alerts_muted AND CURRENT_DATE BETWEEN r.valid_from AND COALESCE(r.valid_to, CURRENT_DATE)) AS muted
            FROM students s
            LEFT JOIN LATERAL (SELECT g.user_id, g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id AND sg.receives_notifications ORDER BY sg.is_primary DESC, g.id LIMIT 1) g ON true
           WHERE s.rfid_tag = $1 AND s.deleted_at IS NULL AND s.status = 'active'`,
@@ -59,10 +73,21 @@ export class BusService {
       else {
         studentId = st.rows[0].id;
         const dup = await c.query(
-          `SELECT 1 FROM bus_attendance WHERE student_id = $1 AND direction = $2::rfid_direction AND occurred_at BETWEEN $3::timestamptz - interval '60 seconds' AND $3::timestamptz + interval '60 seconds' AND outcome IN ('boarded', 'alighted')`,
+          `SELECT 1 FROM bus_attendance WHERE student_id = $1 AND direction = $2::rfid_direction AND occurred_at BETWEEN $3::timestamptz - interval '60 seconds' AND $3::timestamptz + interval '60 seconds' AND outcome IN ('boarded', 'late_boarding', 'alighted')`,
           [studentId, direction, ev.at],
         );
-        outcome = dup.rowCount ? 'duplicate' : direction === 'in' ? 'boarded' : 'alighted';
+        const istTime = new Date(ev.at).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Asia/Kolkata',
+        });
+        outcome = dup.rowCount
+          ? 'duplicate'
+          : direction === 'in'
+            ? route?.late_after && istTime > route.late_after
+              ? 'late_boarding'
+              : 'boarded'
+            : 'alighted';
       }
       const ins = await c.query<{ id: string }>(
         `INSERT INTO bus_attendance (school_id, device_id, route_id, student_id, tag, on_date, direction, occurred_at, lat, lng, outcome, raw)
@@ -80,8 +105,16 @@ export class BusService {
           JSON.stringify(ev),
         ],
       );
-      if ((outcome === 'boarded' || outcome === 'alighted') && st.rows[0]?.guardian_mobile) {
-        const s = st.rows[0];
+      const routeAllows =
+        outcome === 'alighted' ? (route?.alert_alighting ?? true) : (route?.alert_boarding ?? true);
+      const s = st.rows[0];
+      if (
+        s &&
+        ['boarded', 'late_boarding', 'alighted'].includes(outcome) &&
+        s.guardian_mobile &&
+        routeAllows &&
+        !s.muted
+      ) {
         const withdrawn = s.guardian_user_id
           ? await c.query<{ s: string | null }>(
               `SELECT app.consent_status($1, 'transport.tracking')::text AS s`,
@@ -91,7 +124,7 @@ export class BusService {
         if (withdrawn.rows[0]?.s !== 'withdrawn') {
           const sent = await this.alert(c, ctx, outcome, {
             userId: s.guardian_user_id,
-            mobile: s.guardian_mobile!,
+            mobile: s.guardian_mobile,
             variables: {
               student_name: s.name,
               time: new Date(ev.at).toLocaleTimeString('en-IN', {
@@ -103,10 +136,11 @@ export class BusService {
               school: school.rows[0]?.name ?? '',
             },
           });
-          if (sent)
+          if (sent === 'sent')
             await c.query(`UPDATE bus_attendance SET alert_sent_at = now() WHERE id = $1`, [
               ins.rows[0]!.id,
             ]);
+          else if (sent === 'throttled') outcomes.throttled = (outcomes.throttled ?? 0) + 1;
         }
       }
       outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
@@ -120,10 +154,10 @@ export class BusService {
     ctx: RequestContext,
     outcome: string,
     to: { userId: string | null; mobile: string; variables: Record<string, string> },
-  ): Promise<boolean> {
-    const templateCode = outcome === 'boarded' ? 'bus_boarded' : 'bus_alighted';
+  ): Promise<'sent' | 'throttled' | 'no_template'> {
+    const templateCode = outcome === 'alighted' ? 'bus_alighted' : 'bus_boarded';
     const send = (userId: string | undefined) =>
-      this.messages.sendWith(c, ctx, {
+      this.messages.sendAlert(c, ctx, {
         templateCode,
         channel: 'whatsapp',
         recipientUserId: userId,
@@ -131,16 +165,14 @@ export class BusService {
         variables: to.variables,
       } as SendMessageDto);
     try {
-      await send(to.userId ?? undefined);
-      return true;
+      return (await send(to.userId ?? undefined)) !== null ? 'sent' : 'throttled';
     } catch (error) {
       if (error instanceof DomainError && error.type === 'comms.template.not_found') {
         this.log.warn({ outcome }, 'bus alert template missing; no alert sent');
-        return false;
+        return 'no_template';
       }
       if (error instanceof DomainError && error.type === 'user.not_member') {
-        await send(undefined); // the guardian has no login at this school: address only
-        return true;
+        return (await send(undefined)) !== null ? 'sent' : 'throttled'; // the guardian has no login at this school: address only
       }
       throw error;
     }

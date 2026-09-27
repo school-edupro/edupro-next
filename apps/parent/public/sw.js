@@ -1,6 +1,10 @@
-/* App-shell service worker (S5-08): network first for pages, cache fallback so the shell opens offline. */
-const CACHE = 'edupro-shell-v1';
-const SHELL = ['/', '/login', '/manifest.webmanifest', '/icons/icon.svg'];
+/*
+ * App-shell service worker (S5-08, extended S11): the shell and static assets are cached; pages are network
+ * first with the last copy as fallback; when nothing is cached the /offline page is shown instead of a
+ * browser error.
+ */
+const CACHE = 'edupro-shell-v2';
+const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon.svg'];
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -19,17 +23,32 @@ self.addEventListener('activate', (event) => {
 });
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).pathname.startsWith('/api/')) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/')) {
+    // immutable assets: cache first
+    event.respondWith(
+      caches.match(req).then(
+        (hit) =>
+          hit ||
+          fetch(req).then((res) => {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => undefined);
+            return res;
+          }),
+      ),
+    );
+    return;
+  }
   event.respondWith(
     fetch(req)
       .then((res) => {
-        const copy = res.clone();
-        caches
-          .open(CACHE)
-          .then((cache) => cache.put(req, copy))
-          .catch(() => undefined);
+        if (res.ok && req.mode === 'navigate') {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => undefined);
+        }
         return res;
       })
-      .catch(() => caches.match(req).then((hit) => hit || caches.match('/'))),
+      .catch(() => caches.match(req).then((hit) => hit || (req.mode === 'navigate' ? caches.match('/offline') : undefined) || caches.match('/'))),
   );
 });

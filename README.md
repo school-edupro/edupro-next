@@ -13,11 +13,11 @@ This repository is deliberately **separate from the legacy PHP tree**. Nothing h
 
 ```
 apps/
-  api/        NestJS domain API (tenancy, access, audit, people, academics, admissions, fees, workflow, payments, attendance, communication, engagement, transport)
+  api/        NestJS domain API (tenancy, access, audit, people, academics, admissions, fees, workflow, payments, attendance, communication, engagement, transport, planner, compat writes)
   workers/    BullMQ processors (notifications, exports, RFID, reconciliation)
   admin/      Next.js admin application (thin BFF for session and tenant context)
-  parent/     Next.js parent application (PWA shell since Sprint 5; homework, notices, calendar from Sprint 7; attendance from Sprint 9; timetable, queries, profile, consents, school bus from Sprint 10)
-  teacher/    Next.js teacher application (PWA shell since Sprint 5; timetable and daily work from Sprint 7; attendance from Sprint 9; family queries from Sprint 10)
+  parent/     Next.js parent application (PWA shell since Sprint 5; homework, notices, calendar from Sprint 7; attendance from Sprint 9; timetable, queries, profile, consents, school bus from Sprint 10; privacy onboarding, Hindi toggle, offline shell from Sprint 11)
+  teacher/    Next.js teacher application (PWA shell since Sprint 5; timetable and daily work from Sprint 7; attendance from Sprint 9; family queries from Sprint 10; lesson plans and substitutions from Sprint 11)
   public/     Next.js public admissions app (Sprint 8): OTP sign-in with a proof-of-work check, bilingual form, status; admission fee payment from Sprint 9
 packages/
   db/         SQL migrations, RLS policies, PL/pgSQL procedures, Prisma schema, tenant-aware pool, audit masks
@@ -33,7 +33,7 @@ docs/
   quality/    Test strategy
   playbooks/  Fees, exams, people and admissions rule drafts with open questions
   backlog/    Sprint 2 to 5 stories (markdown and CSV)
-  security/   Foundation security review (Sprint 5)
+  security/   Foundation security review (Sprint 5), Phase 2 pentest (Sprint 11)
   runbooks/   Disaster recovery
   sprints/    Sprint records
 ```

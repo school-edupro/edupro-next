@@ -27,6 +27,10 @@ const PAGES = [
   '/engagement/feedback',
   '/engagement/change-requests',
   '/transport/routes',
+  '/academics/substitutions',
+  '/academics/lesson-plans',
+  '/attendance/rules',
+  '/system/privacy',
 ];
 
 test.describe('accessibility (axe)', () => {

@@ -660,6 +660,18 @@ export default async function StudentPage({
                       ...feeDiscounts.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` })),
                     ]}
                   />
+                  <SelectField
+                    id="feeInstalments"
+                    name="instalmentsOverride"
+                    label={f('instalments')}
+                    defaultValue={
+                      feeProfile.instalmentsOverride ? String(feeProfile.instalmentsOverride) : ''
+                    }
+                    options={[
+                      { value: '', label: f('instalmentsDefault') },
+                      ...[1, 2, 3, 4, 6, 12].map((n) => ({ value: String(n), label: String(n) })),
+                    ]}
+                  />
                   <InputField
                     id="feeOpening"
                     name="openingBalance"

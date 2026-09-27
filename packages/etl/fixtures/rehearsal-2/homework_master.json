@@ -1,0 +1,802 @@
+[
+{
+"srno": "1",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "02/08/2025",
+"homework": "Exercise 1",
+"FinancialYear": "2025"
+},
+{
+"srno": "2",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "03/08/2025",
+"homework": "Exercise 2",
+"FinancialYear": "2025"
+},
+{
+"srno": "3",
+"sclass": "VII-A",
+"subject": "Maths",
+"homeworkdate": "04/08/2025",
+"homework": "Exercise 3",
+"FinancialYear": "2025"
+},
+{
+"srno": "4",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "05/08/2025",
+"homework": "Exercise 4",
+"FinancialYear": "2025"
+},
+{
+"srno": "5",
+"sclass": "VII-A",
+"subject": "Maths",
+"homeworkdate": "06/08/2025",
+"homework": "Exercise 5",
+"FinancialYear": "2025"
+},
+{
+"srno": "6",
+"sclass": "VI-B",
+"subject": "English",
+"homeworkdate": "07/08/2025",
+"homework": "Exercise 6",
+"FinancialYear": "2025"
+},
+{
+"srno": "7",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "08/08/2025",
+"homework": "Exercise 7",
+"FinancialYear": "2025"
+},
+{
+"srno": "8",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "09/08/2025",
+"homework": "Exercise 8",
+"FinancialYear": "2025"
+},
+{
+"srno": "9",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "10/08/2025",
+"homework": "Exercise 9",
+"FinancialYear": "2025"
+},
+{
+"srno": "10",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "11/08/2025",
+"homework": "Exercise 10",
+"FinancialYear": "2025"
+},
+{
+"srno": "11",
+"sclass": "VII-A",
+"subject": "English",
+"homeworkdate": "12/08/2025",
+"homework": "Exercise 11",
+"FinancialYear": "2025"
+},
+{
+"srno": "12",
+"sclass": "XII-Q",
+"subject": "Science",
+"homeworkdate": "13/08/2025",
+"homework": "Exercise 12",
+"FinancialYear": "2025"
+},
+{
+"srno": "13",
+"sclass": "XII-Q",
+"subject": "Science",
+"homeworkdate": "14/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "14",
+"sclass": "VII-A",
+"subject": "English",
+"homeworkdate": "15/08/2025",
+"homework": "Exercise 14",
+"FinancialYear": "2025"
+},
+{
+"srno": "15",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "16/08/2025",
+"homework": "Exercise 15",
+"FinancialYear": "2025"
+},
+{
+"srno": "16",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "17/08/2025",
+"homework": "Exercise 16",
+"FinancialYear": "2025"
+},
+{
+"srno": "17",
+"sclass": "VI-A",
+"subject": "Maths",
+"homeworkdate": "18/08/2025",
+"homework": "Exercise 17",
+"FinancialYear": "2025"
+},
+{
+"srno": "18",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "19/08/2025",
+"homework": "Exercise 18",
+"FinancialYear": "2025"
+},
+{
+"srno": "19",
+"sclass": "VII-A",
+"subject": "Maths",
+"homeworkdate": "20/08/2025",
+"homework": "Exercise 19",
+"FinancialYear": "2025"
+},
+{
+"srno": "20",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "21/08/2025",
+"homework": "Exercise 20",
+"FinancialYear": "2025"
+},
+{
+"srno": "21",
+"sclass": "XII-Q",
+"subject": "Science",
+"homeworkdate": "22/08/2025",
+"homework": "Exercise 21",
+"FinancialYear": "2025"
+},
+{
+"srno": "22",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "23/08/2025",
+"homework": "Exercise 22",
+"FinancialYear": "2025"
+},
+{
+"srno": "23",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "24/08/2025",
+"homework": "Exercise 23",
+"FinancialYear": "2025"
+},
+{
+"srno": "24",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "25/08/2025",
+"homework": "Exercise 24",
+"FinancialYear": "2025"
+},
+{
+"srno": "25",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "26/08/2025",
+"homework": "Exercise 25",
+"FinancialYear": "2025"
+},
+{
+"srno": "26",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "27/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "27",
+"sclass": "VI-B",
+"subject": "English",
+"homeworkdate": "28/08/2025",
+"homework": "Exercise 27",
+"FinancialYear": "2025"
+},
+{
+"srno": "28",
+"sclass": "VII-A",
+"subject": "English",
+"homeworkdate": "01/08/2025",
+"homework": "Exercise 28",
+"FinancialYear": "2025"
+},
+{
+"srno": "29",
+"sclass": "VI-A",
+"subject": "Maths",
+"homeworkdate": "02/08/2025",
+"homework": "Exercise 29",
+"FinancialYear": "2025"
+},
+{
+"srno": "30",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "03/08/2025",
+"homework": "Exercise 30",
+"FinancialYear": "2025"
+},
+{
+"srno": "31",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "04/08/2025",
+"homework": "Exercise 31",
+"FinancialYear": "2025"
+},
+{
+"srno": "32",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "05/08/2025",
+"homework": "Exercise 32",
+"FinancialYear": "2025"
+},
+{
+"srno": "33",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "06/08/2025",
+"homework": "Exercise 33",
+"FinancialYear": "2025"
+},
+{
+"srno": "34",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "07/08/2025",
+"homework": "Exercise 34",
+"FinancialYear": "2025"
+},
+{
+"srno": "35",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "08/08/2025",
+"homework": "Exercise 35",
+"FinancialYear": "2025"
+},
+{
+"srno": "36",
+"sclass": "VII-A",
+"subject": "Maths",
+"homeworkdate": "09/08/2025",
+"homework": "Exercise 36",
+"FinancialYear": "2025"
+},
+{
+"srno": "37",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "10/08/2025",
+"homework": "Exercise 37",
+"FinancialYear": "2025"
+},
+{
+"srno": "38",
+"sclass": "VI-B",
+"subject": "English",
+"homeworkdate": "11/08/2025",
+"homework": "Exercise 38",
+"FinancialYear": "2025"
+},
+{
+"srno": "39",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "12/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "40",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "13/08/2025",
+"homework": "Exercise 40",
+"FinancialYear": "2025"
+},
+{
+"srno": "41",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "14/08/2025",
+"homework": "Exercise 41",
+"FinancialYear": "2025"
+},
+{
+"srno": "42",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "15/08/2025",
+"homework": "Exercise 42",
+"FinancialYear": "2025"
+},
+{
+"srno": "43",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "16/08/2025",
+"homework": "Exercise 43",
+"FinancialYear": "2025"
+},
+{
+"srno": "44",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "17/08/2025",
+"homework": "Exercise 44",
+"FinancialYear": "2025"
+},
+{
+"srno": "45",
+"sclass": "VI-A",
+"subject": "English",
+"homeworkdate": "18/08/2025",
+"homework": "Exercise 45",
+"FinancialYear": "2025"
+},
+{
+"srno": "46",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "19/08/2025",
+"homework": "Exercise 46",
+"FinancialYear": "2025"
+},
+{
+"srno": "47",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "20/08/2025",
+"homework": "Exercise 47",
+"FinancialYear": "2025"
+},
+{
+"srno": "48",
+"sclass": "VI-A",
+"subject": "English",
+"homeworkdate": "21/08/2025",
+"homework": "Exercise 48",
+"FinancialYear": "2025"
+},
+{
+"srno": "49",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "22/08/2025",
+"homework": "Exercise 49",
+"FinancialYear": "2025"
+},
+{
+"srno": "50",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "23/08/2025",
+"homework": "Exercise 50",
+"FinancialYear": "2025"
+},
+{
+"srno": "51",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "24/08/2025",
+"homework": "Exercise 51",
+"FinancialYear": "2025"
+},
+{
+"srno": "52",
+"sclass": "VI-A",
+"subject": "English",
+"homeworkdate": "25/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "53",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "26/08/2025",
+"homework": "Exercise 53",
+"FinancialYear": "2025"
+},
+{
+"srno": "54",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "27/08/2025",
+"homework": "Exercise 54",
+"FinancialYear": "2025"
+},
+{
+"srno": "55",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "28/08/2025",
+"homework": "Exercise 55",
+"FinancialYear": "2025"
+},
+{
+"srno": "56",
+"sclass": "VII-A",
+"subject": "English",
+"homeworkdate": "01/08/2025",
+"homework": "Exercise 56",
+"FinancialYear": "2025"
+},
+{
+"srno": "57",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "02/08/2025",
+"homework": "Exercise 57",
+"FinancialYear": "2025"
+},
+{
+"srno": "58",
+"sclass": "VI-A",
+"subject": "English",
+"homeworkdate": "03/08/2025",
+"homework": "Exercise 58",
+"FinancialYear": "2025"
+},
+{
+"srno": "59",
+"sclass": "VI-B",
+"subject": "English",
+"homeworkdate": "04/08/2025",
+"homework": "Exercise 59",
+"FinancialYear": "2025"
+},
+{
+"srno": "60",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "05/08/2025",
+"homework": "Exercise 60",
+"FinancialYear": "2025"
+},
+{
+"srno": "61",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "06/08/2025",
+"homework": "Exercise 61",
+"FinancialYear": "2025"
+},
+{
+"srno": "62",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "07/08/2025",
+"homework": "Exercise 62",
+"FinancialYear": "2025"
+},
+{
+"srno": "63",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "08/08/2025",
+"homework": "Exercise 63",
+"FinancialYear": "2025"
+},
+{
+"srno": "64",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "09/08/2025",
+"homework": "Exercise 64",
+"FinancialYear": "2025"
+},
+{
+"srno": "65",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "10/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "66",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "11/08/2025",
+"homework": "Exercise 66",
+"FinancialYear": "2025"
+},
+{
+"srno": "67",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "12/08/2025",
+"homework": "Exercise 67",
+"FinancialYear": "2025"
+},
+{
+"srno": "68",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "13/08/2025",
+"homework": "Exercise 68",
+"FinancialYear": "2025"
+},
+{
+"srno": "69",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "14/08/2025",
+"homework": "Exercise 69",
+"FinancialYear": "2025"
+},
+{
+"srno": "70",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "15/08/2025",
+"homework": "Exercise 70",
+"FinancialYear": "2025"
+},
+{
+"srno": "71",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "16/08/2025",
+"homework": "Exercise 71",
+"FinancialYear": "2025"
+},
+{
+"srno": "72",
+"sclass": "VI-A",
+"subject": "Maths",
+"homeworkdate": "17/08/2025",
+"homework": "Exercise 72",
+"FinancialYear": "2025"
+},
+{
+"srno": "73",
+"sclass": "VI-A",
+"subject": "Maths",
+"homeworkdate": "18/08/2025",
+"homework": "Exercise 73",
+"FinancialYear": "2025"
+},
+{
+"srno": "74",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "19/08/2025",
+"homework": "Exercise 74",
+"FinancialYear": "2025"
+},
+{
+"srno": "75",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "20/08/2025",
+"homework": "Exercise 75",
+"FinancialYear": "2025"
+},
+{
+"srno": "76",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "21/08/2025",
+"homework": "Exercise 76",
+"FinancialYear": "2025"
+},
+{
+"srno": "77",
+"sclass": "VI-A",
+"subject": "Maths",
+"homeworkdate": "22/08/2025",
+"homework": "Exercise 77",
+"FinancialYear": "2025"
+},
+{
+"srno": "78",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "23/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "79",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "24/08/2025",
+"homework": "Exercise 79",
+"FinancialYear": "2025"
+},
+{
+"srno": "80",
+"sclass": "XII-Q",
+"subject": "Science",
+"homeworkdate": "25/08/2025",
+"homework": "Exercise 80",
+"FinancialYear": "2025"
+},
+{
+"srno": "81",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "26/08/2025",
+"homework": "Exercise 81",
+"FinancialYear": "2025"
+},
+{
+"srno": "82",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "27/08/2025",
+"homework": "Exercise 82",
+"FinancialYear": "2025"
+},
+{
+"srno": "83",
+"sclass": "VI-B",
+"subject": "English",
+"homeworkdate": "28/08/2025",
+"homework": "Exercise 83",
+"FinancialYear": "2025"
+},
+{
+"srno": "84",
+"sclass": "VI-B",
+"subject": "Maths",
+"homeworkdate": "01/08/2025",
+"homework": "Exercise 84",
+"FinancialYear": "2025"
+},
+{
+"srno": "85",
+"sclass": "XII-Q",
+"subject": "Science",
+"homeworkdate": "02/08/2025",
+"homework": "Exercise 85",
+"FinancialYear": "2025"
+},
+{
+"srno": "86",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "03/08/2025",
+"homework": "Exercise 86",
+"FinancialYear": "2025"
+},
+{
+"srno": "87",
+"sclass": "VI-A",
+"subject": "English",
+"homeworkdate": "04/08/2025",
+"homework": "Exercise 87",
+"FinancialYear": "2025"
+},
+{
+"srno": "88",
+"sclass": "XII-Q",
+"subject": "English",
+"homeworkdate": "05/08/2025",
+"homework": "Exercise 88",
+"FinancialYear": "2025"
+},
+{
+"srno": "89",
+"sclass": "VII-A",
+"subject": "Maths",
+"homeworkdate": "06/08/2025",
+"homework": "Exercise 89",
+"FinancialYear": "2025"
+},
+{
+"srno": "90",
+"sclass": "VI-A",
+"subject": "Science",
+"homeworkdate": "07/08/2025",
+"homework": "Exercise 90",
+"FinancialYear": "2025"
+},
+{
+"srno": "91",
+"sclass": "VII-A",
+"subject": "Maths",
+"homeworkdate": "08/08/2025",
+"homework": "",
+"FinancialYear": "2025"
+},
+{
+"srno": "92",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "09/08/2025",
+"homework": "Exercise 92",
+"FinancialYear": "2025"
+},
+{
+"srno": "93",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "10/08/2025",
+"homework": "Exercise 93",
+"FinancialYear": "2025"
+},
+{
+"srno": "94",
+"sclass": "XII-Q",
+"subject": "Maths",
+"homeworkdate": "11/08/2025",
+"homework": "Exercise 94",
+"FinancialYear": "2025"
+},
+{
+"srno": "95",
+"sclass": "VII-A",
+"subject": "Science",
+"homeworkdate": "12/08/2025",
+"homework": "Exercise 95",
+"FinancialYear": "2025"
+},
+{
+"srno": "96",
+"sclass": "VI-A",
+"subject": "English",
+"homeworkdate": "13/08/2025",
+"homework": "Exercise 96",
+"FinancialYear": "2025"
+},
+{
+"srno": "97",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "14/08/2025",
+"homework": "Exercise 97",
+"FinancialYear": "2025"
+},
+{
+"srno": "98",
+"sclass": "VII-A",
+"subject": "English",
+"homeworkdate": "15/08/2025",
+"homework": "Exercise 98",
+"FinancialYear": "2025"
+},
+{
+"srno": "99",
+"sclass": "VI-B",
+"subject": "Science",
+"homeworkdate": "16/08/2025",
+"homework": "Exercise 99",
+"FinancialYear": "2025"
+},
+{
+"srno": "100",
+"sclass": "VI-B",
+"subject": "English",
+"homeworkdate": "17/08/2025",
+"homework": "Exercise 100",
+"FinancialYear": "2025"
+}
+]

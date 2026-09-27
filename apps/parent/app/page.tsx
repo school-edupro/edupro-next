@@ -2,9 +2,16 @@ import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 /** Parent home (S5-08): sign-in round trip, school choice and the feature shell; content lands in Sprint 9. */
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
+  const sp = await searchParams;
+  const lang = await currentLang();
   let me;
   try {
     me = await bff.api.me();
@@ -12,6 +19,15 @@ export default async function HomePage() {
     if (error instanceof ApiError && (error.status === 401 || error.status === 403))
       redirect('/login?error=session-expired');
     throw error;
+  }
+  // DPDP onboarding (S11): a family reads the current privacy notice once per version before using the app
+  if (!sp.welcome && me.permissions.includes('engagement.family.view')) {
+    try {
+      const ob = await bff.api.fetch<{ required: boolean }>('/engagement/onboarding');
+      if (ob.required) redirect('/onboarding');
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+    }
   }
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
   const tiles: Array<[string, string, string?]> = [
@@ -33,15 +49,23 @@ export default async function HomePage() {
         title={`Namaste, ${me.user.displayName}`}
         description={
           me.memberships.length > 1
-            ? 'Choose the school to view.'
-            : 'Your child’s school, in your pocket.'
+            ? t(lang, 'Choose the school to view.')
+            : t(lang, 'Your child’s school, in your pocket.')
         }
         actions={
-          <form method="post" action="/api/auth/logout">
-            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-              Sign out
-            </button>
-          </form>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/api/lang?to=${lang === 'hi' ? 'en' : 'hi'}&back=/`}
+            >
+              {lang === 'hi' ? 'English' : 'हिन्दी'}
+            </a>
+            <form method="post" action="/api/auth/logout">
+              <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                {t(lang, 'Sign out')}
+              </button>
+            </form>
+          </span>
         }
       />
       {me.memberships.length > 1 ? (
@@ -84,9 +108,9 @@ export default async function HomePage() {
                   color: 'var(--text-heading)',
                 }}
               >
-                {title}
+                {t(lang, title)}
               </div>
-              <div className="ep-field__help">{help}</div>
+              <div className="ep-field__help">{t(lang, help)}</div>
             </Card>
           );
           return href ? (

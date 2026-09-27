@@ -64,6 +64,7 @@ const NAV: Array<{
       },
       { href: '/attendance/bus', label: 'busAttendance', permission: 'attendance.bus.view' },
       { href: '/attendance/punches', label: 'punches', permission: 'attendance.punch.view' },
+      { href: '/attendance/rules', label: 'attendanceRules', permission: 'attendance.rule.manage' },
     ],
   },
   {
@@ -89,6 +90,16 @@ const NAV: Array<{
         permission: 'academics.teacher_assignment.view',
       },
       { href: '/academics/timetable', label: 'timetable', permission: 'academics.timetable.view' },
+      {
+        href: '/academics/substitutions',
+        label: 'substitutions',
+        permission: 'academics.substitution.view',
+      },
+      {
+        href: '/academics/lesson-plans',
+        label: 'lessonPlans',
+        permission: 'academics.lesson_plan.view',
+      },
       {
         href: '/academics/daily-work',
         label: 'dailyWork',
@@ -145,6 +156,7 @@ const NAV: Array<{
       { href: '/system/school', label: 'schoolProfile', permission: 'platform.school.view' },
       { href: '/system/years', label: 'years', permission: 'platform.year.view' },
       { href: '/system/settings', label: 'settings', permission: 'platform.settings.view' },
+      { href: '/system/privacy', label: 'privacy', permission: 'platform.privacy.manage' },
       { href: '/system/templates', label: 'templates', permission: 'platform.template.view' },
       { href: '/system/audit', label: 'auditLog', permission: 'platform.audit.view' },
       { href: '/system/security', label: 'security', permission: 'platform.security.view' },
