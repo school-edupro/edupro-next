@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createExport } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -17,6 +18,7 @@ export default async function ExportsPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string; mine?: string }>;
 }) {
+  const t = await getTranslations('pages.reports_exports');
   const sp = await searchParams;
   const mine = sp.mine === 'false' ? 'false' : 'true';
   const [exports, datasets] = await Promise.all([
@@ -26,11 +28,7 @@ export default async function ExportsPage({
 
   return (
     <>
-      <PageHeader
-        kicker="Reports"
-        title="Export centre"
-        description="Files are generated in the background and kept for seven days. Reload to see progress."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form method="get" style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end' }}>

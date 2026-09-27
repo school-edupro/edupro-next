@@ -1,15 +1,16 @@
 import { Card, PageHeader } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { getMe } from '@/lib/api';
 
 export default async function DashboardPage() {
-  const me = await getMe();
+  const [t, me] = await Promise.all([getTranslations('dashboard'), getMe()]);
   const school = me.memberships.find((m) => m.schoolId === me.school?.id);
   return (
     <>
       <PageHeader
-        kicker="Overview"
-        title={`Welcome, ${me.user.displayName}`}
-        description={school ? school.schoolName : 'Select a school to begin'}
+        kicker={t('kicker')}
+        title={t('welcome', { name: me.user.displayName })}
+        description={school ? school.schoolName : t('selectSchool')}
       />
       <div
         style={{
@@ -21,28 +22,24 @@ export default async function DashboardPage() {
         <Card elevated>
           <div className="ep-kpi">
             <span className="ep-kpi__value">{me.memberships.length}</span>
-            <span className="ep-kpi__label">Schools</span>
+            <span className="ep-kpi__label">{t('schools')}</span>
           </div>
         </Card>
         <Card elevated>
           <div className="ep-kpi">
             <span className="ep-kpi__value">{me.permissions.length}</span>
-            <span className="ep-kpi__label">Permissions</span>
+            <span className="ep-kpi__label">{t('permissions')}</span>
           </div>
         </Card>
         <Card elevated>
           <div className="ep-kpi">
-            <span className="ep-kpi__value">{me.academicYear ? 'Active' : 'None'}</span>
-            <span className="ep-kpi__label">Academic year</span>
+            <span className="ep-kpi__value">{me.academicYear ? t('active') : t('none')}</span>
+            <span className="ep-kpi__label">{t('academicYear')}</span>
           </div>
         </Card>
       </div>
-      <Card title="Administration" style={{ marginTop: 'var(--sp-5)' }}>
-        <p>
-          Navigation on the left is generated from your effective permissions. Sprint 2 adds role
-          administration, assignments with data scopes, delegations, members, years, settings and
-          the school profile. Module screens follow sprint by sprint.
-        </p>
+      <Card title={t('adminTitle')} style={{ marginTop: 'var(--sp-5)' }}>
+        <p>{t('adminText')}</p>
       </Card>
     </>
   );

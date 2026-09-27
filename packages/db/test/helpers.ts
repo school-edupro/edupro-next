@@ -2,7 +2,8 @@ import { Client } from 'pg';
 import { Db } from '../src/index';
 
 export const MIGRATOR_URL =
-  process.env.DATABASE_MIGRATOR_URL ?? 'postgresql://edupro_migrator:edupro_migrator_dev@localhost:5432/edupro';
+  process.env.DATABASE_MIGRATOR_URL ??
+  'postgresql://edupro_migrator:edupro_migrator_dev@localhost:5432/edupro';
 export const APP_URL =
   process.env.DATABASE_URL ?? 'postgresql://edupro_app:edupro_app_dev@localhost:5432/edupro';
 
@@ -72,6 +73,16 @@ export function appDb(): Db {
 
 export function ctxFor(f: Fixture, which: 'A' | 'B') {
   return which === 'A'
-    ? { schoolId: f.schoolA, userId: f.userA, allowedSchoolIds: [f.schoolA], academicYearId: f.yearA }
-    : { schoolId: f.schoolB, userId: f.userB, allowedSchoolIds: [f.schoolB], academicYearId: f.yearB };
+    ? {
+        schoolId: f.schoolA,
+        userId: f.userA,
+        allowedSchoolIds: [f.schoolA],
+        academicYearId: f.yearA,
+      }
+    : {
+        schoolId: f.schoolB,
+        userId: f.userB,
+        allowedSchoolIds: [f.schoolB],
+        academicYearId: f.yearB,
+      };
 }

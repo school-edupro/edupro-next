@@ -8,6 +8,7 @@ import {
   PageHeader,
   SelectField,
 } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { updateTemplate } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -20,6 +21,7 @@ export default async function TemplatePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const tp = await getTranslations('pages.comms_templates_detail');
   const { id } = await params;
   const sp = await searchParams;
   const t = await apiFetch<Template>(`/comms/templates/${id}`);
@@ -33,7 +35,7 @@ export default async function TemplatePage({
         ]}
       />
       <PageHeader
-        kicker="Communication"
+        kicker={tp('kicker')}
         title={t.name}
         description={
           <>

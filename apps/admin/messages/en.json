@@ -1,0 +1,251 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "dashboard": "Dashboard",
+    "academics": "Academics",
+    "classes": "Classes and sections",
+    "people": "People",
+    "students": "Students",
+    "employees": "Employees",
+    "peopleSearch": "Find a person",
+    "access": "Access",
+    "roles": "Roles and permissions",
+    "assignments": "Assignments",
+    "members": "Members",
+    "delegations": "Delegations",
+    "communication": "Communication",
+    "templates": "Templates",
+    "deliveryLog": "Delivery log",
+    "reports": "Reports",
+    "exportCentre": "Export centre",
+    "system": "System",
+    "schoolProfile": "School profile",
+    "years": "Years",
+    "settings": "Settings",
+    "auditLog": "Audit log",
+    "jobs": "Background jobs"
+  },
+  "shell": {
+    "primaryNavigation": "Primary",
+    "school": "School",
+    "year": "Year",
+    "switch": "Switch",
+    "signOut": "Sign out",
+    "language": "Language",
+    "searchPlaceholder": "Find a student, guardian or employee",
+    "search": "Search"
+  },
+  "login": {
+    "kicker": "Mobilise",
+    "intro": "Sign in with your school account. Access is granted by your school administrator.",
+    "error": "Sign-in did not complete ({error}). Please try again.",
+    "continue": "Continue with One Auth",
+    "devNotice": "Development sign-in (AUTH_DEV_BYPASS). Not available in production.",
+    "devSubject": "Developer subject",
+    "devSubmit": "Sign in as developer"
+  },
+  "dashboard": {
+    "kicker": "Overview",
+    "welcome": "Welcome, {name}",
+    "selectSchool": "Select a school to begin",
+    "schools": "Schools",
+    "permissions": "Permissions",
+    "academicYear": "Academic year",
+    "active": "Active",
+    "none": "None",
+    "adminTitle": "Administration",
+    "adminText": "Navigation on the left is generated from your effective permissions. Module screens arrive sprint by sprint: access, communication, reports and people are available now."
+  },
+  "common": {
+    "saved": "Saved.",
+    "filter": "Filter",
+    "apply": "Apply",
+    "save": "Save",
+    "create": "Create",
+    "cancel": "Cancel",
+    "back": "Back",
+    "status": "Status",
+    "active": "active",
+    "inactive": "inactive",
+    "name": "Name",
+    "all": "All",
+    "none": "None",
+    "yes": "Yes",
+    "no": "No",
+    "actions": "Actions",
+    "loading": "Loading",
+    "notFound": "Not found."
+  },
+  "people": {
+    "kicker": "People",
+    "students": {
+      "title": "Students",
+      "description": "Students of the working year with their current section. Class teachers see their own sections.",
+      "new": "New student",
+      "search": "Search by name or admission number",
+      "section": "Section",
+      "admissionNo": "Admission no",
+      "rollNo": "Roll no",
+      "guardian": "Guardian",
+      "empty": "No students match",
+      "create": {
+        "title": "Admit a student",
+        "identity": "Identity",
+        "identityHelp": "The admission number is unique per school and cannot change later.",
+        "firstName": "First name",
+        "lastName": "Last name",
+        "dob": "Date of birth",
+        "gender": "Gender",
+        "category": "Category",
+        "bloodGroup": "Blood group",
+        "house": "House",
+        "admittedOn": "Admitted on",
+        "guardian": "Primary guardian",
+        "guardianHelp": "A guardian with the same mobile number is reused, so siblings share one guardian record.",
+        "guardianName": "Guardian name",
+        "guardianMobile": "Mobile",
+        "guardianEmail": "Email",
+        "relation": "Relation",
+        "enrolment": "Enrolment",
+        "enrolmentHelp": "Places the student in a section of the working year.",
+        "submit": "Admit student"
+      },
+      "profile": "Profile",
+      "guardians": "Guardians",
+      "enrolments": "Enrolment history",
+      "documents": "Documents",
+      "siblings": "Siblings",
+      "idCard": "ID card",
+      "requestIdCard": "Generate ID card",
+      "idCardHelp": "The card is rendered in the background and appears in the export centre.",
+      "moveSection": "Move to a section",
+      "linkGuardian": "Add a guardian",
+      "unlink": "Unlink",
+      "noGuardians": "No guardians linked",
+      "noDocuments": "No documents attached",
+      "photo": "Photo"
+    },
+    "employees": {
+      "title": "Employees",
+      "description": "Staff records with their posting in the working year: department, designation, campus and reporting line.",
+      "new": "New employee",
+      "code": "Employee code",
+      "type": "Type",
+      "designation": "Designation",
+      "department": "Department",
+      "reportsTo": "Reports to",
+      "campus": "Campus",
+      "posting": "Posting",
+      "postingHelp": "One posting per academic year. Saving again updates it.",
+      "directReports": "Direct reports",
+      "empty": "No employees match",
+      "submit": "Create employee",
+      "types": {
+        "teaching": "Teaching",
+        "non_teaching": "Non-teaching",
+        "contract": "Contract",
+        "visiting": "Visiting"
+      }
+    },
+    "search": {
+      "title": "Find a person",
+      "description": "Name, admission number, employee code or mobile number. Results respect your permissions and class scopes.",
+      "query": "Search for",
+      "results": "{count, plural, =0 {No matches} one {# match} other {# matches}}",
+      "kinds": {
+        "student": "Student",
+        "guardian": "Guardian",
+        "employee": "Employee"
+      }
+    },
+    "gender": {
+      "male": "Male",
+      "female": "Female",
+      "other": "Other",
+      "unspecified": "Not specified"
+    },
+    "relation": {
+      "father": "Father",
+      "mother": "Mother",
+      "guardian": "Guardian",
+      "grandparent": "Grandparent",
+      "sibling": "Sibling",
+      "other": "Other"
+    }
+  },
+  "pages": {
+    "academics_classes": {
+      "kicker": "Academics",
+      "title": "Classes and sections",
+      "description": "Master classes for this school. Sections are defined per academic year."
+    },
+    "access_assignments_detail": {
+      "kicker": "Access",
+      "description": "Scopes limit this assignment to specific sections. No scope means the role applies to every section."
+    },
+    "access_assignments": {
+      "kicker": "Access",
+      "title": "Role assignments",
+      "description": "Who holds which role, with validity and data scopes. Granting needs a recent multi-factor sign-in and is checked for segregation of duties."
+    },
+    "access_delegations": {
+      "kicker": "Access",
+      "title": "Delegations",
+      "description": "Hand a role you hold to a colleague for a fixed period, for example leave cover. Actions taken under a delegation record both people."
+    },
+    "access_memberships": {
+      "kicker": "Access",
+      "title": "Members",
+      "description": "People who can sign in to this school. Invite by mobile number or One Auth subject; the account is claimed on first sign-in."
+    },
+    "access_roles_detail": {
+      "kicker": "Access"
+    },
+    "access_roles": {
+      "kicker": "Access",
+      "title": "Roles and permissions",
+      "description": "System templates are read-only. School roles are yours to shape; every change is audited."
+    },
+    "comms_messages": {
+      "kicker": "Communication",
+      "title": "Delivery log",
+      "description": "Every message with its provider outcome. Failed deliveries retry automatically with backoff before they are marked failed."
+    },
+    "comms_templates_detail": {
+      "kicker": "Communication"
+    },
+    "comms_templates": {
+      "kicker": "Communication",
+      "title": "Notification templates"
+    },
+    "reports_exports": {
+      "kicker": "Reports",
+      "title": "Export centre",
+      "description": "Files are generated in the background and kept for seven days. Reload to see progress."
+    },
+    "system_audit": {
+      "kicker": "System",
+      "title": "Audit log",
+      "description": "Every mutation and privileged action, written in the same transaction as the change. Newest first; the grid holds the latest 200 rows for the filter."
+    },
+    "system_jobs": {
+      "kicker": "System",
+      "title": "Background jobs",
+      "description": "Jobs leave the transactional outbox for the worker queues. Failed rows stay here as the dead-letter list until retried."
+    },
+    "system_school": {
+      "kicker": "System",
+      "title": "School profile"
+    },
+    "system_settings": {
+      "kicker": "System",
+      "title": "School settings",
+      "description": "Typed settings with a validity date. Procedures such as the late-fee rule read these values directly."
+    },
+    "system_years": {
+      "kicker": "System",
+      "title": "Academic and financial years",
+      "description": "Years are dimensions: activate the next one, lock stages as they close, and never copy master data."
+    }
+  }
+}

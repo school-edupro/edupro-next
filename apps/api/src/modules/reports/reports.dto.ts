@@ -1,4 +1,4 @@
-import { DATASET_IDS } from '@edupro/db';
+import { DATASET_IDS, RENDERER_IDS } from '@edupro/db';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -6,7 +6,7 @@ export const ExportFormatSchema = z.enum(['xlsx', 'csv', 'pdf']);
 export type ExportFormat = z.infer<typeof ExportFormatSchema>;
 
 export const CreateExportSchema = z.object({
-  dataset: z.enum(DATASET_IDS),
+  dataset: z.enum([...DATASET_IDS, ...RENDERER_IDS] as [string, ...string[]]),
   format: ExportFormatSchema.default('xlsx'),
   params: z.record(z.string(), z.unknown()).default({}),
   title: z.string().trim().min(2).max(120).optional(),

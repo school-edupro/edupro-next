@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { cancelMessage, sendMessage } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -16,6 +17,7 @@ const TONE: Record<Message['status'], 'neutral' | 'info' | 'success' | 'danger' 
 type Search = { ok?: string; error?: string; detail?: string; status?: string; channel?: string };
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const t = await getTranslations('pages.comms_messages');
   const sp = await searchParams;
   const me = await getMe();
   const canSend = me.permissions.includes('comms.message.send');
@@ -34,11 +36,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader
-        kicker="Communication"
-        title="Delivery log"
-        description="Every message with its provider outcome. Failed deliveries retry automatically with backoff before they are marked failed."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form

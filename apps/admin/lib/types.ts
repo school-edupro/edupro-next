@@ -226,3 +226,120 @@ export interface OutboxRow {
   publishedAt: string | null;
   requestId: string | null;
 }
+
+// ---- Sprint 4: people ------------------------------------------------------------------------------
+export interface Enrolment {
+  id: string;
+  academicYearId: string;
+  academicYear: string;
+  classSectionId: string;
+  classCode: string;
+  className: string;
+  section: string;
+  rollNo: number | null;
+  status: string;
+  joinedOn: string;
+  endedOn: string | null;
+}
+
+export interface Student {
+  id: string;
+  admissionNo: string;
+  firstName: string;
+  lastName: string | null;
+  displayName: string;
+  dob: string | null;
+  gender: string;
+  category: string | null;
+  bloodGroup: string | null;
+  house: string | null;
+  admittedOn: string | null;
+  leftOn: string | null;
+  photoFileId: string | null;
+  address: Record<string, unknown>;
+  details: Record<string, unknown>;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+  enrolment: Enrolment | null;
+}
+
+export interface GuardianLink {
+  linkId: string;
+  guardianId: string;
+  displayName: string;
+  mobile: string | null;
+  email: string | null;
+  occupation: string | null;
+  relation: string;
+  isPrimary: boolean;
+  receivesNotifications: boolean;
+}
+
+export interface PersonDocument {
+  id: string;
+  kind: string;
+  fileId: string;
+  fileName: string | null;
+  contentType: string;
+  title: string | null;
+  number: string | null;
+  issuedOn: string | null;
+  expiresOn: string | null;
+  verifiedAt: string | null;
+}
+
+export interface Student360 extends Student {
+  guardians: GuardianLink[];
+  enrolments: Enrolment[];
+  documents: PersonDocument[];
+  siblings: Array<{ id: string; displayName: string; admissionNo: string }>;
+}
+
+export interface Posting {
+  id: string;
+  academicYearId: string;
+  academicYear: string;
+  campusId: string | null;
+  campus: string | null;
+  department: string | null;
+  designation: string | null;
+  reportsToEmployeeId: string | null;
+  reportsTo: string | null;
+  validFrom: string;
+  validTo: string | null;
+}
+
+export interface Employee {
+  id: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string | null;
+  displayName: string;
+  dob: string | null;
+  gender: string;
+  employeeType: 'teaching' | 'non_teaching' | 'contract' | 'visiting';
+  designation: string | null;
+  department: string | null;
+  joinedOn: string | null;
+  leftOn: string | null;
+  mobile: string | null;
+  email: string | null;
+  photoFileId: string | null;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+  posting: Posting | null;
+}
+
+export interface Employee360 extends Employee {
+  postings: Posting[];
+  documents: PersonDocument[];
+  directReports: Array<{ id: string; displayName: string; designation: string | null }>;
+}
+
+export interface SearchHit {
+  kind: 'student' | 'guardian' | 'employee';
+  id: string;
+  displayName: string;
+  subtitle: string;
+  rank: number;
+}

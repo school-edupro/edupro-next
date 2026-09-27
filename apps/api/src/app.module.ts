@@ -14,10 +14,12 @@ import { EnvModule } from './config/env.module';
 import { ClassesModule } from './modules/academics/classes/classes.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommsModule } from './modules/comms/comms.module';
+import { CompatModule } from './modules/compat/compat.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthController } from './modules/health/health.controller';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeController } from './modules/me/me.controller';
+import { PeopleModule } from './modules/people/people.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { ReportsModule } from './modules/reports/reports.module';
 
@@ -39,6 +41,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     PlatformModule,
     CommsModule,
     ClassesModule,
+    PeopleModule,
+    CompatModule,
   ],
   controllers: [HealthController, MeController],
   providers: [

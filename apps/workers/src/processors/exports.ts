@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { datasetOrNull, tenantForJob, type Db } from '@edupro/db';
+import { datasetOrNull, rendererOrNull, tenantForJob, type Db } from '@edupro/db';
 import { objectKeyFor, type StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import { toCsv, toHtml, toXlsx, type Row } from './generators';
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
+import { idCardHtml, loadIdCard } from '../renderers/id-card';
 
 interface ExportDbRow {
   id: string;
@@ -72,7 +73,50 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
       ),
     );
 
+    /** Writes the bytes through the storage driver, registers the file and marks the export ready. */
+    const store = async (bytes: Buffer, contentType: string, rowCount: number): Promise<void> => {
+      const objectKey = objectKeyFor(envelope.schoolId, row.format, `export-${exportId}`);
+      await storage.write(objectKey, bytes, contentType);
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const fileName = `${row.title.replace(/[^\w.-]+/g, '_')}-${exportId}.${row.format}`;
+      await db.withTenant(tenant, async (c) => {
+        const f = await c.query<{ id: string }>(
+          `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name, owner_entity_type, owner_entity_id,
+                              classification, storage_driver, status, scanned_at, scan_result, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, 'exports', $7, 'internal', $8, 'ready', now(), 'generated', $9, $9)
+           RETURNING id::text`,
+          [
+            storage.bucket,
+            objectKey,
+            contentType,
+            bytes.length,
+            sha256,
+            fileName,
+            exportId,
+            storage.name,
+            row.requested_by,
+          ],
+        );
+        await c.query(
+          `UPDATE exports SET status = 'ready', file_id = $2, row_count = $3, finished_at = now(),
+                  expires_at = now() + make_interval(days => $4) WHERE id = $1`,
+          [exportId, f.rows[0]!.id, rowCount, ttlDays],
+        );
+      });
+    };
+
     try {
+      const renderer = rendererOrNull(row.dataset);
+      if (renderer) {
+        const data = await loadIdCard(db, storage, envelope, renderer.id, row.params);
+        const bytes = await pdf.render(idCardHtml(data), {
+          width: renderer.page.width,
+          height: renderer.page.height,
+        });
+        await store(bytes, 'application/pdf', 1);
+        log.info({ exportId, renderer: renderer.id, bytes: bytes.length }, 'document rendered');
+        return;
+      }
       const dataset = datasetOrNull(row.dataset);
       if (!dataset) throw new Error(`unknown dataset ${row.dataset}`);
       const query = dataset.query(row.params);
@@ -99,36 +143,7 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
           landscape: dataset.columns.length > 6,
         });
 
-      const objectKey = objectKeyFor(envelope.schoolId, row.format, `export-${exportId}`);
-      const contentType = CONTENT_TYPES[row.format];
-      await storage.write(objectKey, bytes, contentType);
-      const sha256 = createHash('sha256').update(bytes).digest('hex');
-      const fileName = `${row.title.replace(/[^\w.-]+/g, '_')}-${exportId}.${row.format}`;
-
-      await db.withTenant(tenant, async (c) => {
-        const f = await c.query<{ id: string }>(
-          `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name, owner_entity_type, owner_entity_id,
-                              classification, storage_driver, status, scanned_at, scan_result, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, 'exports', $7, 'internal', $8, 'ready', now(), 'generated', $9, $9)
-           RETURNING id::text`,
-          [
-            storage.bucket,
-            objectKey,
-            contentType,
-            bytes.length,
-            sha256,
-            fileName,
-            exportId,
-            storage.name,
-            row.requested_by,
-          ],
-        );
-        await c.query(
-          `UPDATE exports SET status = 'ready', file_id = $2, row_count = $3, finished_at = now(),
-                  expires_at = now() + make_interval(days => $4) WHERE id = $1`,
-          [exportId, f.rows[0]!.id, rows.length, ttlDays],
-        );
-      });
+      await store(bytes, CONTENT_TYPES[row.format], rows.length);
       log.info(
         {
           exportId,

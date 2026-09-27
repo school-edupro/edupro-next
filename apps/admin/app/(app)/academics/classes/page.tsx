@@ -1,4 +1,5 @@
 import { Badge, Card, DataTable, PageHeader, toneForStatus } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { ApiError, apiFetch } from '@/lib/api';
 
 interface ClassRow {
@@ -21,6 +22,7 @@ export default async function ClassesPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  const t = await getTranslations('pages.academics_classes');
   const params = await searchParams;
   const page = Number(params.page ?? '1') || 1;
 
@@ -35,11 +37,7 @@ export default async function ClassesPage({
 
   return (
     <>
-      <PageHeader
-        kicker="Academics"
-        title="Classes and sections"
-        description="Master classes for this school. Sections are defined per academic year."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       {problem ? (
         <div className="ep-alert ep-alert--danger" role="alert">
           {problem.problem.type === 'permission-denied'

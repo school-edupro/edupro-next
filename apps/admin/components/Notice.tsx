@@ -23,6 +23,10 @@ const MESSAGES: Record<string, string> = {
   'comms.recipient.address_missing': 'The recipient has no mobile number or email address on file.',
   'comms.message.not_queued': 'Only queued messages can be cancelled.',
   'job.not_failed': 'Only failed jobs can be retried.',
+  'people.student.enrolled': 'End the active enrolment before removing the student.',
+  'enrolment.section_year_mismatch': 'That section belongs to another academic year.',
+  'enrolment.student_not_active': 'The student is not active.',
+  'file.not_ready': 'Upload the file before attaching it.',
 };
 
 /** Reads ?ok=1 or ?error=<type>&detail=... written by server actions and renders the matching alert. */

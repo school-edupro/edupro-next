@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { QUEUES, datasetOrNull, type PoolClient, type TenantContext } from '@edupro/db';
+import {
+  QUEUES,
+  datasetOrNull,
+  rendererOrNull,
+  type PoolClient,
+  type TenantContext,
+} from '@edupro/db';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -93,6 +99,8 @@ export class ReportsService {
     auditAction = 'reports.export.create',
   ): Promise<ExportRow> {
     const tenant = requireTenant(ctx);
+    const renderer = rendererOrNull(dto.dataset);
+    if (renderer) return this.createRendered(ctx, dto, renderer.id, auditAction);
     const dataset = datasetOrNull(dto.dataset);
     if (!dataset) throw new DomainError('not-found', 'Unknown dataset');
     if (!ctx.permissions?.has(dataset.permission)) {
@@ -122,6 +130,52 @@ export class ReportsService {
          VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, app.current_user_id(), app.current_request_id())
          RETURNING id::text`,
         [dataset.id, dto.format, JSON.stringify(params), dto.title ?? dataset.title],
+      );
+      const id = r.rows[0]!.id;
+      await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: id });
+      const row = await this.get(tenant, id, c);
+      await this.audit.stage(ctx, c, {
+        action: auditAction,
+        entityType: 'exports',
+        entityId: id,
+        after: { id, dataset: row.dataset, format: row.format, params: row.params },
+      });
+      return row;
+    });
+  }
+
+  /** Document renderers (ID cards, later receipts and report cards): always PDF, parameters name the entity. */
+  private async createRendered(
+    ctx: RequestContext,
+    dto: CreateExportDto,
+    rendererId: string,
+    auditAction: string,
+  ): Promise<ExportRow> {
+    const tenant = requireTenant(ctx);
+    const renderer = rendererOrNull(rendererId)!;
+    if (!ctx.permissions?.has(renderer.permission)) {
+      throw new DomainError(
+        'permission-denied',
+        `${renderer.title} requires ${renderer.permission}`,
+        {
+          status: 403,
+          extra: { permission: renderer.permission },
+        },
+      );
+    }
+    for (const key of renderer.requiredParams) {
+      if (!/^[0-9]{1,18}$/.test(String(dto.params[key] ?? ''))) {
+        throw new DomainError('validation-failed', `${key} is required for ${renderer.title}`, {
+          status: 400,
+        });
+      }
+    }
+    return this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id)
+         VALUES (app.current_school_id(), $1, 'pdf', $2::jsonb, $3, app.current_user_id(), app.current_request_id())
+         RETURNING id::text`,
+        [renderer.id, JSON.stringify(dto.params), dto.title ?? renderer.title],
       );
       const id = r.rows[0]!.id;
       await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: id });

@@ -4,8 +4,8 @@
    site's geometric-heading / humanist-body corporate style.
    Swap via fonts.css when official files arrive. */
 :root {
-  --font-heading: 'Poppins', 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Poppins', 'Noto Sans Devanagari', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', 'Noto Sans Devanagari', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Scale */

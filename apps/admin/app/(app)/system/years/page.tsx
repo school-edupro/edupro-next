@@ -8,6 +8,7 @@ import {
   SelectField,
   toneForStatus,
 } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createYear, yearAction } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -46,15 +47,12 @@ export default async function YearsPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.system_years');
   const sp = await searchParams;
   const years = await apiFetch<{ data: Year[] }>('/platform/years');
   return (
     <>
-      <PageHeader
-        kicker="System"
-        title="Academic and financial years"
-        description="Years are dimensions: activate the next one, lock stages as they close, and never copy master data."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <Card>
         <DataTable<Year>

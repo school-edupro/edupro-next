@@ -8,6 +8,7 @@ import {
   SelectField,
   toneForStatus,
 } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createCampus, updateSchool } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -18,13 +19,14 @@ export default async function SchoolPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.system_school');
   const sp = await searchParams;
   const school = await apiFetch<School>('/platform/school');
   return (
     <>
       <PageHeader
-        kicker="System"
-        title="School profile"
+        kicker={t('kicker')}
+        title={t('title')}
         description={`${school.code} · ${school.board}`}
       />
       <Notice params={sp} />

@@ -346,3 +346,197 @@ export async function retryJob(fd: FormData) {
     apiFetch(`/platform/jobs/outbox/${id}/retry`, { method: 'POST', body: '{}' }),
   );
 }
+
+// ---- people (Sprint 4) ---------------------------------------------------------------------------
+export async function createStudent(fd: FormData) {
+  const guardianName = str(fd, 'guardianName');
+  const [gFirst, ...gRest] = guardianName.split(/\s+/);
+  const guardians = guardianName
+    ? [
+        {
+          guardian: {
+            firstName: gFirst,
+            lastName: gRest.join(' ') || undefined,
+            mobile: opt(fd, 'guardianMobile'),
+            email: opt(fd, 'guardianEmail'),
+          },
+          relation: str(fd, 'relation') || 'father',
+          isPrimary: true,
+        },
+      ]
+    : [];
+  const sectionId = opt(fd, 'classSectionId');
+  let created: { id: string } | null = null;
+  try {
+    created = await apiFetch<{ id: string }>('/people/students', {
+      method: 'POST',
+      body: JSON.stringify({
+        admissionNo: str(fd, 'admissionNo'),
+        firstName: str(fd, 'firstName'),
+        lastName: opt(fd, 'lastName'),
+        dob: opt(fd, 'dob'),
+        gender: str(fd, 'gender') || 'unspecified',
+        category: opt(fd, 'category'),
+        bloodGroup: opt(fd, 'bloodGroup'),
+        house: opt(fd, 'house'),
+        admittedOn: opt(fd, 'admittedOn'),
+        guardians,
+        enrolment: sectionId
+          ? {
+              classSectionId: sectionId,
+              rollNo: opt(fd, 'rollNo') ? Number(str(fd, 'rollNo')) : undefined,
+            }
+          : undefined,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back('/people/students/new', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  revalidatePath('/people/students');
+  redirect(`/people/students/${created!.id}?ok=1`);
+}
+
+export async function updateStudent(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/students/${id}`, () =>
+    apiFetch(`/people/students/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        firstName: str(fd, 'firstName'),
+        lastName: opt(fd, 'lastName') ?? null,
+        dob: opt(fd, 'dob'),
+        gender: str(fd, 'gender') || 'unspecified',
+        category: opt(fd, 'category') ?? null,
+        bloodGroup: opt(fd, 'bloodGroup') ?? null,
+        house: opt(fd, 'house') ?? null,
+        status: str(fd, 'status') || 'active',
+      }),
+    }),
+  );
+}
+
+export async function linkGuardian(fd: FormData) {
+  const id = str(fd, 'id');
+  const [first, ...rest] = str(fd, 'guardianName').split(/\s+/);
+  return run(`/people/students/${id}`, () =>
+    apiFetch(`/people/students/${id}/guardians`, {
+      method: 'POST',
+      body: JSON.stringify({
+        guardian: {
+          firstName: first,
+          lastName: rest.join(' ') || undefined,
+          mobile: opt(fd, 'guardianMobile'),
+          email: opt(fd, 'guardianEmail'),
+        },
+        relation: str(fd, 'relation') || 'guardian',
+        isPrimary: fd.get('isPrimary') === 'on',
+      }),
+    }),
+  );
+}
+
+export async function unlinkGuardian(fd: FormData) {
+  const id = str(fd, 'id');
+  const guardianId = str(fd, 'guardianId');
+  return run(`/people/students/${id}`, () =>
+    apiFetch(`/people/students/${id}/guardians/${guardianId}`, { method: 'DELETE' }),
+  );
+}
+
+export async function enrolStudent(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/students/${id}`, () =>
+    apiFetch(`/people/students/${id}/enrolments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: str(fd, 'classSectionId'),
+        rollNo: opt(fd, 'rollNo') ? Number(str(fd, 'rollNo')) : undefined,
+        joinedOn: opt(fd, 'joinedOn'),
+      }),
+    }),
+  );
+}
+
+export async function requestStudentIdCard(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/reports/exports', () =>
+    apiFetch(`/people/students/${id}/id-card`, { method: 'POST', body: '{}' }),
+  );
+}
+
+export async function createEmployee(fd: FormData) {
+  let created: { id: string } | null = null;
+  try {
+    created = await apiFetch<{ id: string }>('/people/employees', {
+      method: 'POST',
+      body: JSON.stringify({
+        employeeCode: str(fd, 'employeeCode'),
+        firstName: str(fd, 'firstName'),
+        lastName: opt(fd, 'lastName'),
+        dob: opt(fd, 'dob'),
+        gender: str(fd, 'gender') || 'unspecified',
+        employeeType: str(fd, 'employeeType') || 'teaching',
+        designation: opt(fd, 'designation'),
+        department: opt(fd, 'department'),
+        joinedOn: opt(fd, 'joinedOn'),
+        mobile: opt(fd, 'mobile'),
+        email: opt(fd, 'email'),
+        posting: {
+          reportsToEmployeeId: opt(fd, 'reportsToEmployeeId') ?? null,
+          campusId: opt(fd, 'campusId') ?? null,
+        },
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back('/people/employees', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  revalidatePath('/people/employees');
+  redirect(`/people/employees/${created!.id}?ok=1`);
+}
+
+export async function updateEmployee(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/employees/${id}`, () =>
+    apiFetch(`/people/employees/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        firstName: str(fd, 'firstName'),
+        lastName: opt(fd, 'lastName') ?? null,
+        employeeType: str(fd, 'employeeType') || 'teaching',
+        designation: opt(fd, 'designation') ?? null,
+        department: opt(fd, 'department') ?? null,
+        mobile: opt(fd, 'mobile'),
+        email: opt(fd, 'email'),
+        status: str(fd, 'status') || 'active',
+      }),
+    }),
+  );
+}
+
+export async function upsertPosting(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/employees/${id}`, () =>
+    apiFetch(`/people/employees/${id}/postings`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        department: opt(fd, 'department'),
+        designation: opt(fd, 'designation'),
+        campusId: opt(fd, 'campusId') ?? null,
+        reportsToEmployeeId: opt(fd, 'reportsToEmployeeId') ?? null,
+        validFrom: opt(fd, 'validFrom'),
+        validTo: opt(fd, 'validTo') ?? null,
+      }),
+    }),
+  );
+}
+
+export async function requestEmployeeIdCard(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/reports/exports', () =>
+    apiFetch(`/people/employees/${id}/id-card`, { method: 'POST', body: '{}' }),
+  );
+}

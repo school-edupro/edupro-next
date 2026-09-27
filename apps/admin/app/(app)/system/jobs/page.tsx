@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { retryJob } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -7,6 +8,7 @@ import type { OutboxRow, Page } from '@/lib/types';
 type Search = { ok?: string; error?: string; detail?: string; status?: string; queue?: string };
 
 export default async function JobsPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const t = await getTranslations('pages.system_jobs');
   const sp = await searchParams;
   const me = await getMe();
   const canManage = me.permissions.includes('platform.jobs.manage');
@@ -16,11 +18,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const jobs = await apiFetch<Page<OutboxRow>>(`/platform/jobs/outbox?${q.toString()}`);
   return (
     <>
-      <PageHeader
-        kicker="System"
-        title="Background jobs"
-        description="Jobs leave the transactional outbox for the worker queues. Failed rows stay here as the dead-letter list until retried."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form

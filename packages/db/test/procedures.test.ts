@@ -22,7 +22,10 @@ describe('app.next_receipt_no', () => {
     const numbers = await Promise.all(
       Array.from({ length: N }, () =>
         db.withTenant(ctxFor(fixture, 'A'), async (c) => {
-          const r = await c.query<{ no: string }>(`SELECT app.next_receipt_no('school', $1) AS no`, [fixture.fyA]);
+          const r = await c.query<{ no: string }>(
+            `SELECT app.next_receipt_no('school', $1) AS no`,
+            [fixture.fyA],
+          );
           return r.rows[0]!.no;
         }),
       ),
@@ -36,13 +39,17 @@ describe('app.next_receipt_no', () => {
 
   it('keeps separate sequences per ledger and per school', async () => {
     const hostel = await db.withTenant(ctxFor(fixture, 'A'), async (c) => {
-      const r = await c.query<{ no: string }>(`SELECT app.next_receipt_no('hostel', $1) AS no`, [fixture.fyA]);
+      const r = await c.query<{ no: string }>(`SELECT app.next_receipt_no('hostel', $1) AS no`, [
+        fixture.fyA,
+      ]);
       return r.rows[0]!.no;
     });
     expect(hostel).toBe('HF/FY2026-27/000001');
 
     const schoolB = await db.withTenant(ctxFor(fixture, 'B'), async (c) => {
-      const r = await c.query<{ no: string }>(`SELECT app.next_receipt_no('school', $1) AS no`, [fixture.fyB]);
+      const r = await c.query<{ no: string }>(`SELECT app.next_receipt_no('school', $1) AS no`, [
+        fixture.fyB,
+      ]);
       return r.rows[0]!.no;
     });
     expect(schoolB).toBe('TF/FY2026-27/000001');
@@ -78,7 +85,9 @@ describe('app.assert_year_open', () => {
     const m = new Client({ connectionString: MIGRATOR_URL });
     await m.connect();
     try {
-      await m.query(`UPDATE academic_years SET locks = '{"fees": true}'::jsonb WHERE id = $1`, [fixture.yearA]);
+      await m.query(`UPDATE academic_years SET locks = '{"fees": true}'::jsonb WHERE id = $1`, [
+        fixture.yearA,
+      ]);
       await expect(
         db.withTenant(ctxFor(fixture, 'A'), async (c) => {
           await c.query(`SELECT app.assert_year_open($1, 'fees')`, [fixture.yearA]);
@@ -99,7 +108,10 @@ describe('app.assert_year_open', () => {
         }),
       ).rejects.toMatchObject({ message: 'year.closed' });
     } finally {
-      await m.query(`UPDATE academic_years SET status = 'active', locks = '{}'::jsonb WHERE id = $1`, [fixture.yearA]);
+      await m.query(
+        `UPDATE academic_years SET status = 'active', locks = '{}'::jsonb WHERE id = $1`,
+        [fixture.yearA],
+      );
       await m.end();
     }
   });
@@ -148,7 +160,13 @@ describe('app.audit_row_change trigger', () => {
          FROM audit_logs WHERE entity_type = 'audit_probe' AND entity_id = $1 ORDER BY id`,
         [ins.rows[0]!.id],
       );
-      return a.rows as Array<{ action: string; actor: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null; request_id: string }>;
+      return a.rows as Array<{
+        action: string;
+        actor: string;
+        before: Record<string, unknown> | null;
+        after: Record<string, unknown> | null;
+        request_id: string;
+      }>;
     });
 
     expect(rows.map((r) => r.action)).toEqual(['insert', 'update']);

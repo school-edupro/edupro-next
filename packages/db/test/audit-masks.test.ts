@@ -13,10 +13,20 @@ describe('audit masks', () => {
 
   it('masks at every depth and leaves personal fields readable', () => {
     const masked = maskSensitive(
-      { name: 'A', mobile: '9876543210', guardian: { name: 'B', pan_no: 'ABCDE1234F' }, docs: [{ aadhaar: '1234' }] },
+      {
+        name: 'A',
+        mobile: '9876543210',
+        guardian: { name: 'B', pan_no: 'ABCDE1234F' },
+        docs: [{ aadhaar: '1234' }],
+      },
       'students',
     );
-    expect(masked).toEqual({ name: 'A', mobile: '9876543210', guardian: { name: 'B', pan_no: '***' }, docs: [{ aadhaar: '***' }] });
+    expect(masked).toEqual({
+      name: 'A',
+      mobile: '9876543210',
+      guardian: { name: 'B', pan_no: '***' },
+      docs: [{ aadhaar: '***' }],
+    });
   });
 
   it('passes scalars and null through', () => {

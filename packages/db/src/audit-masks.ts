@@ -29,7 +29,9 @@ export const GLOBAL_SENSITIVE_KEYS = [
 
 /** Additional keys per entity type (table name) when a generic word is sensitive only in that context. */
 export const ENTITY_SENSITIVE_KEYS: Record<string, string[]> = {
-  employees: ['pfno', 'uanno', 'esino', 'basic', 'grosspay', 'netpay'],
+  employees: ['pfno', 'uanno', 'esino', 'basic', 'grosspay', 'netpay', 'details'],
+  students: ['details'],
+  person_documents: ['number'],
   guardians: ['income', 'occupationincome'],
   clinic_visits: ['notes', 'complaint', 'treatment'],
   payroll_records: ['gross', 'net', 'deductions', 'earnings'],

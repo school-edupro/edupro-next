@@ -1,4 +1,5 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { setSetting } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -23,16 +24,13 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.system_settings');
   const sp = await searchParams;
   const settings = await apiFetch<{ data: Setting[] }>('/platform/settings');
   const modules = [...new Set(settings.data.map((s) => s.module))];
   return (
     <>
-      <PageHeader
-        kicker="System"
-        title="School settings"
-        description="Typed settings with a validity date. Procedures such as the late-fee rule read these values directly."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       {modules.map((m) => (
         <Card key={m} title={m} style={{ marginBottom: 'var(--sp-4)' }}>

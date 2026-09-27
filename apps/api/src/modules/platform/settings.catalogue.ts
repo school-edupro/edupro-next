@@ -15,6 +15,26 @@ const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:MM');
 const money = z.string().regex(/^\d+(\.\d{1,2})?$/, 'amount with up to two decimals');
 
 export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
+  'compat.student_menu': {
+    schema: z
+      .array(
+        z.object({
+          menu_name: z.string().min(1).max(60),
+          menu_link: z.string().min(1).max(200),
+          link_order: z.number().int().min(0),
+          category: z.string().max(40).default(''),
+        }),
+      )
+      .max(60),
+    default: [
+      { menu_name: 'Attendance', menu_link: 'attendance', link_order: 1, category: 'Academics' },
+      { menu_name: 'Homework', menu_link: 'homework', link_order: 2, category: 'Academics' },
+      { menu_name: 'Fees', menu_link: 'fees', link_order: 3, category: 'Fees' },
+      { menu_name: 'Notices', menu_link: 'notices', link_order: 4, category: 'Communication' },
+    ],
+    description: 'Menu served to the current student app through the compatibility API',
+    module: 'compat',
+  },
   'school.locale': {
     schema: z.enum(['en', 'hi']),
     default: 'en',

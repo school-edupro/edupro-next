@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createDelegation, revokeDelegation } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -9,6 +10,7 @@ export default async function DelegationsPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.access_delegations');
   const sp = await searchParams;
   const me = await getMe();
   const canManage = me.permissions.includes('access.delegation.manage');
@@ -26,11 +28,7 @@ export default async function DelegationsPage({
 
   return (
     <>
-      <PageHeader
-        kicker="Access"
-        title="Delegations"
-        description="Hand a role you hold to a colleague for a fixed period, for example leave cover. Actions taken under a delegation record both people."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <Card>
         <DataTable<Delegation>

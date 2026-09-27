@@ -8,6 +8,7 @@ import {
   PageHeader,
   SelectField,
 } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { updateRole } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -20,6 +21,7 @@ export default async function RolePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.access_roles_detail');
   const { id } = await params;
   const sp = await searchParams;
   const [role, permissions] = await Promise.all([
@@ -39,7 +41,7 @@ export default async function RolePage({
         ]}
       />
       <PageHeader
-        kicker="Access"
+        kicker={t('kicker')}
         title={role.name}
         description={
           <>

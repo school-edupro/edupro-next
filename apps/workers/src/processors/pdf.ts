@@ -1,7 +1,14 @@
 import type { Browser } from 'playwright';
 
+export interface PdfOptions {
+  landscape?: boolean;
+  /** Explicit page size (for cards and receipts); A4 when omitted. */
+  width?: string;
+  height?: string;
+}
+
 export interface PdfEngine {
-  render(html: string, options?: { landscape?: boolean }): Promise<Buffer>;
+  render(html: string, options?: PdfOptions): Promise<Buffer>;
   close(): Promise<void>;
 }
 
@@ -20,14 +27,16 @@ export class PlaywrightPdfEngine implements PdfEngine {
     return this.browser;
   }
 
-  async render(html: string, options: { landscape?: boolean } = {}): Promise<Buffer> {
+  async render(html: string, options: PdfOptions = {}): Promise<Buffer> {
     const browser = await this.browserInstance();
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
       await page.setContent(html, { waitUntil: 'load' });
       const pdf = await page.pdf({
-        format: 'A4',
+        ...(options.width && options.height
+          ? { width: options.width, height: options.height }
+          : { format: 'A4' }),
         landscape: options.landscape ?? false,
         printBackground: true,
         preferCSSPageSize: true,

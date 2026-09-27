@@ -45,8 +45,13 @@ describe('structural guarantees', () => {
           AND cols.table_name NOT LIKE 'audit_logs_%'
       `);
       expect(rows.length).toBeGreaterThan(0);
-      const offenders = rows.filter((r) => !r.relrowsecurity || !r.relforcerowsecurity || r.policies === 0);
-      expect(offenders, `tables without forced RLS or policies: ${offenders.map((o) => o.table_name).join(', ')}`).toEqual([]);
+      const offenders = rows.filter(
+        (r) => !r.relrowsecurity || !r.relforcerowsecurity || r.policies === 0,
+      );
+      expect(
+        offenders,
+        `tables without forced RLS or policies: ${offenders.map((o) => o.table_name).join(', ')}`,
+      ).toEqual([]);
     } finally {
       await c.end();
     }
@@ -91,7 +96,9 @@ describe('tenant isolation on the reference module (classes)', () => {
     });
     expect(affected).toBe(0);
     const intact = await db.withTenant(ctxFor(fixture, 'A'), async (c) => {
-      const r = await c.query<{ name: string }>('SELECT name FROM classes WHERE id = $1', [classIdA]);
+      const r = await c.query<{ name: string }>('SELECT name FROM classes WHERE id = $1', [
+        classIdA,
+      ]);
       return r.rows[0]?.name;
     });
     expect(intact).toBe('Class VI');
@@ -100,7 +107,9 @@ describe('tenant isolation on the reference module (classes)', () => {
   it('a forged school_id in an insert is rejected by WITH CHECK', async () => {
     await expect(
       db.withTenant(ctxFor(fixture, 'A'), async (c) => {
-        await c.query(`INSERT INTO classes (school_id, code, name) VALUES ($1, 'VII', 'Forged')`, [fixture.schoolB]);
+        await c.query(`INSERT INTO classes (school_id, code, name) VALUES ($1, 'VII', 'Forged')`, [
+          fixture.schoolB,
+        ]);
       }),
     ).rejects.toMatchObject({ code: '42501' }); // insufficient_privilege: new row violates row-level security policy
   });
@@ -122,7 +131,10 @@ describe('tenant isolation on the reference module (classes)', () => {
     expect(seen).toBe(0);
     await expect(
       db.withoutTenant(async (c) => {
-        await c.query(`INSERT INTO classes (school_id, code, name) VALUES ($1, 'VIII', 'No context')`, [fixture.schoolA]);
+        await c.query(
+          `INSERT INTO classes (school_id, code, name) VALUES ($1, 'VIII', 'No context')`,
+          [fixture.schoolA],
+        );
       }),
     ).rejects.toMatchObject({ code: '42501' });
   });
@@ -143,12 +155,16 @@ describe('membership-filtered global tables', () => {
 
   it('system role templates are visible to every school but not writable', async () => {
     const templates = await db.withTenant(ctxFor(fixture, 'A'), async (c) => {
-      const r = await c.query<{ code: string }>(`SELECT code FROM roles WHERE school_id IS NULL ORDER BY code`);
+      const r = await c.query<{ code: string }>(
+        `SELECT code FROM roles WHERE school_id IS NULL ORDER BY code`,
+      );
       return r.rows.map((x) => x.code);
     });
     expect(templates).toContain('school_admin');
     const affected = await db.withTenant(ctxFor(fixture, 'A'), async (c) => {
-      const r = await c.query(`UPDATE roles SET name = 'x' WHERE school_id IS NULL AND code = 'school_admin'`);
+      const r = await c.query(
+        `UPDATE roles SET name = 'x' WHERE school_id IS NULL AND code = 'school_admin'`,
+      );
       return r.rowCount ?? 0;
     });
     expect(affected).toBe(0);

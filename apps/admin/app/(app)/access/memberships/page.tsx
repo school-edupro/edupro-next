@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { inviteMember, setMembershipStatus } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -15,6 +16,7 @@ export default async function MembershipsPage({
     personType?: string;
   }>;
 }) {
+  const t = await getTranslations('pages.access_memberships');
   const sp = await searchParams;
   const filter = new URLSearchParams({ size: '200' });
   if (sp.q) filter.set('q', sp.q);
@@ -26,11 +28,7 @@ export default async function MembershipsPage({
 
   return (
     <>
-      <PageHeader
-        kicker="Access"
-        title="Members"
-        description="People who can sign in to this school. Invite by mobile number or One Auth subject; the account is claimed on first sign-in."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form

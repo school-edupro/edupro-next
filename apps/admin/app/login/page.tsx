@@ -1,4 +1,5 @@
 import { Button, Card, InputField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { env } from '@/lib/env';
 
 export default async function LoginPage({
@@ -7,6 +8,7 @@ export default async function LoginPage({
   searchParams: Promise<{ returnTo?: string; error?: string }>;
 }) {
   const params = await searchParams;
+  const t = await getTranslations('login');
   const returnTo = params.returnTo && params.returnTo.startsWith('/') ? params.returnTo : '/';
   return (
     <main
@@ -19,20 +21,18 @@ export default async function LoginPage({
       }}
     >
       <Card elevated style={{ width: '100%', maxWidth: '420px' }}>
-        <div className="ep-kicker">Mobilise</div>
+        <div className="ep-kicker">{t('kicker')}</div>
         <h1 className="ep-page-title" style={{ marginBottom: 'var(--sp-2)' }}>
           Edu<b style={{ color: 'var(--mob-cyan-600)' }}>Pro</b> Next
         </h1>
-        <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--sp-5)' }}>
-          Sign in with your school account. Access is granted by your school administrator.
-        </p>
+        <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--sp-5)' }}>{t('intro')}</p>
         {params.error ? (
           <div
             className="ep-alert ep-alert--danger"
             role="alert"
             style={{ marginBottom: 'var(--sp-4)' }}
           >
-            Sign-in did not complete ({params.error}). Please try again.
+            {t('error', { error: params.error })}
           </div>
         ) : null}
         <a
@@ -40,7 +40,7 @@ export default async function LoginPage({
           href={`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`}
           style={{ width: '100%' }}
         >
-          Continue with One Auth
+          {t('continue')}
         </a>
         {env.devBypass ? (
           <form
@@ -48,18 +48,17 @@ export default async function LoginPage({
             action="/api/auth/dev"
             style={{ marginTop: 'var(--sp-5)', display: 'grid', gap: 'var(--sp-3)' }}
           >
-            <div className="ep-alert ep-alert--warning">
-              Development sign-in (AUTH_DEV_BYPASS). Not available in production.
-            </div>
+            <div className="ep-alert ep-alert--warning">{t('devNotice')}</div>
             <InputField
               id="sub"
               name="sub"
-              label="Developer subject"
+              label={t('devSubject')}
               defaultValue="dev-admin"
               required
             />
+            <input type="hidden" name="returnTo" value={returnTo} />
             <Button type="submit" variant="secondary">
-              Sign in as developer
+              {t('devSubmit')}
             </Button>
           </form>
         ) : null}

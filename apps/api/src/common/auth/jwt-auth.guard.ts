@@ -62,6 +62,12 @@ export class JwtAuthGuard implements CanActivate {
       mfa = true; // development identities are treated as MFA-verified to exercise step-up paths
       authTime = Math.floor(Date.now() / 1000);
       dev = true;
+    } else if (token.startsWith('compat.')) {
+      // Session token issued by the compatibility handshake (S4-05): HS256, short-lived, carries the school.
+      const payload = await this.verifyCompat(token.slice('compat.'.length));
+      sub = typeof payload.sub === 'string' ? payload.sub : '';
+      if (typeof payload.sid === 'string' && !req.headers['x-school-id'])
+        req.headers['x-school-id'] = payload.sid;
     } else {
       const payload = await this.verify(token);
       sub = payload.sub ?? '';
@@ -94,6 +100,26 @@ export class JwtAuthGuard implements CanActivate {
       userAgent: req.headers['user-agent'],
     };
     return true;
+  }
+
+  private async verifyCompat(token: string): Promise<JWTPayload> {
+    try {
+      const { payload } = await jwtVerify(
+        token,
+        new TextEncoder().encode(this.env.COMPAT_JWT_SECRET),
+        {
+          issuer: 'edupro-compat',
+          audience: 'edupro-compat',
+          clockTolerance: 30,
+        },
+      );
+      return payload;
+    } catch {
+      throw new UnauthorizedException({
+        type: 'unauthenticated',
+        detail: 'Invalid or expired app session',
+      });
+    }
   }
 
   private async verify(token: string): Promise<JWTPayload> {

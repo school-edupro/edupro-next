@@ -24,6 +24,10 @@ const EnvSchema = z.object({
   S3_REGION: z.string().optional(),
   S3_ENDPOINT: z.string().url().optional(),
   S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).optional(),
+  // Compatibility API for the current mobile apps (S4-05): legacy handshake signature and our session JWT.
+  COMPAT_HANDSHAKE_SECRET: z.string().min(16).default('dev-compat-handshake-secret'),
+  COMPAT_JWT_SECRET: z.string().min(32).default('dev-compat-jwt-secret-change-me-0123456789'),
+  COMPAT_TOKEN_HOURS: z.coerce.number().int().min(1).max(168).default(12),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -42,6 +46,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (env.NODE_ENV === 'production' && env.FILES_SIGNING_SECRET.startsWith('dev-')) {
     throw new Error('Refusing to start: FILES_SIGNING_SECRET must be set in production');
+  }
+  if (
+    env.NODE_ENV === 'production' &&
+    (env.COMPAT_JWT_SECRET.startsWith('dev-') || env.COMPAT_HANDSHAKE_SECRET.startsWith('dev-'))
+  ) {
+    throw new Error(
+      'Refusing to start: COMPAT_JWT_SECRET and COMPAT_HANDSHAKE_SECRET must be set in production',
+    );
   }
   if (env.STORAGE_DRIVER === 's3' && (!env.S3_BUCKET || !env.S3_REGION)) {
     throw new Error('S3_BUCKET and S3_REGION are required when STORAGE_DRIVER=s3');

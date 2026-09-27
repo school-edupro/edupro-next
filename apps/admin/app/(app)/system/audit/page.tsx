@@ -1,5 +1,6 @@
 import { Alert, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { AuditGrid } from '@/components/AuditGrid';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { exportAudit } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -18,6 +19,7 @@ type Search = {
 };
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const t = await getTranslations('pages.system_audit');
   const sp = await searchParams;
   const me = await getMe();
   const canExport = me.permissions.includes('platform.audit.export');
@@ -30,11 +32,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageHeader
-        kicker="System"
-        title="Audit log"
-        description="Every mutation and privileged action, written in the same transaction as the change. Newest first; the grid holds the latest 200 rows for the filter."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form

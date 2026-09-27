@@ -8,6 +8,7 @@ import {
   SelectField,
   toneForStatus,
 } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createRole, disableRole } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -18,6 +19,7 @@ export default async function RolesPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.access_roles');
   const params = await searchParams;
   const [roles, permissions] = await Promise.all([
     apiFetch<{ data: Role[] }>('/access/roles'),
@@ -28,11 +30,7 @@ export default async function RolesPage({
 
   return (
     <>
-      <PageHeader
-        kicker="Access"
-        title="Roles and permissions"
-        description="System templates are read-only. School roles are yours to shape; every change is audited."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={params} />
       <Card>
         <DataTable<Role>

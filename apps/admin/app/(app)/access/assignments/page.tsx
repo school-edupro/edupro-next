@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { grantRole, revokeAssignment } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -15,6 +16,7 @@ export default async function AssignmentsPage({
     userId?: string;
   }>;
 }) {
+  const t = await getTranslations('pages.access_assignments');
   const sp = await searchParams;
   const filter = new URLSearchParams();
   if (sp.active) filter.set('active', sp.active);
@@ -29,11 +31,7 @@ export default async function AssignmentsPage({
 
   return (
     <>
-      <PageHeader
-        kicker="Access"
-        title="Role assignments"
-        description="Who holds which role, with validity and data scopes. Granting needs a recent multi-factor sign-in and is checked for segregation of duties."
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form

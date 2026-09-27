@@ -1,4 +1,5 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { setAssignmentScopes } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
@@ -29,6 +30,7 @@ async function ScopeEditor({
   classes: ClassRow[];
   sp: { ok?: string; error?: string; detail?: string };
 }) {
+  const t = await getTranslations('pages.access_assignments_detail');
   const sections = await Promise.all(
     classes.map((c) =>
       apiFetch<{ data: SectionRow[] }>(`/academics/classes/${c.id}/sections`)
@@ -49,9 +51,9 @@ async function ScopeEditor({
         ]}
       />
       <PageHeader
-        kicker="Access"
+        kicker={t('kicker')}
         title={`${assignment.userName}: ${assignment.roleName}`}
-        description="Scopes limit this assignment to specific sections. No scope means the role applies to every section."
+        description={t('description')}
         actions={
           <Badge tone={assignment.active ? 'success' : 'danger'}>
             {assignment.active ? 'active' : 'inactive'}

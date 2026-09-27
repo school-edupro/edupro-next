@@ -11,6 +11,7 @@ import {
   SelectField,
   toneForStatus,
 } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createTemplate } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -21,6 +22,7 @@ export default async function TemplatesPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
+  const t = await getTranslations('pages.comms_templates');
   const sp = await searchParams;
   const [me, templates] = await Promise.all([
     getMe(),
@@ -30,8 +32,8 @@ export default async function TemplatesPage({
   return (
     <>
       <PageHeader
-        kicker="Communication"
-        title="Notification templates"
+        kicker={t('kicker')}
+        title={t('title')}
         description="One template per channel and code. SMS templates carry the DLT ids registered with the telecom operator; placeholders look like {{student_name}}."
       />
       <Notice params={sp} />

@@ -1,0 +1,109 @@
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import {
+  AddDocumentDto,
+  CreateStudentDto,
+  EnrolDto,
+  LinkGuardianDto,
+  ListStudentsQueryDto,
+  UpdateStudentDto,
+} from './people.dto';
+import { PEOPLE } from './people.permissions';
+import { StudentsService } from './students.service';
+
+@ApiTags('people')
+@ApiBearerAuth()
+@Controller('people/students')
+export class StudentsController {
+  constructor(private readonly students: StudentsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'List students of the working year (class teachers see their sections only)',
+  })
+  @RequirePermission(PEOPLE.studentView, { description: 'View students (scope: class_section)' })
+  async list(@ReqCtx() ctx: RequestContext, @Query() q: ListStudentsQueryDto) {
+    const { rows, total } = await this.students.list(ctx, q);
+    return { data: rows, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Student 360: record, guardians, enrolments, documents, siblings' })
+  @RequirePermission(PEOPLE.studentView)
+  get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.students.get(ctx, id);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create a student with optional guardians and enrolment' })
+  @RequirePermission(PEOPLE.studentCreate, { description: 'Admit or create students' })
+  create(@ReqCtx() ctx: RequestContext, @Body() body: CreateStudentDto) {
+    return this.students.create(ctx, body);
+  }
+
+  @Patch(':id')
+  @RequirePermission(PEOPLE.studentEdit, {
+    description: 'Edit student records, photos and documents',
+  })
+  update(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: UpdateStudentDto) {
+    return this.students.update(ctx, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermission(PEOPLE.studentDelete, { mfa: true, description: 'Remove a student record' })
+  async remove(@ReqCtx() ctx: RequestContext, @Param('id') id: string): Promise<void> {
+    await this.students.remove(ctx, id);
+  }
+
+  @Post(':id/guardians')
+  @RequirePermission(PEOPLE.guardianEdit, { description: 'Create, edit and link guardians' })
+  linkGuardian(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: LinkGuardianDto,
+  ) {
+    return this.students.linkGuardian(ctx, id, body);
+  }
+
+  @Delete(':id/guardians/:guardianId')
+  @HttpCode(200)
+  @RequirePermission(PEOPLE.guardianEdit)
+  unlinkGuardian(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('guardianId') guardianId: string,
+  ) {
+    return this.students.unlinkGuardian(ctx, id, guardianId);
+  }
+
+  @Post(':id/enrolments')
+  @ApiOperation({
+    summary: 'Enrol into a section of a year (one enrolment per year; moves on re-enrol)',
+  })
+  @RequirePermission(PEOPLE.enrolmentManage, {
+    description: 'Enrol students into sections; change sections and roll numbers',
+  })
+  enrol(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: EnrolDto) {
+    return this.students.enrol(ctx, id, body);
+  }
+
+  @Post(':id/documents')
+  @RequirePermission(PEOPLE.studentEdit)
+  addDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: AddDocumentDto,
+  ) {
+    return this.students.addDocument(ctx, id, body);
+  }
+
+  @Post(':id/id-card')
+  @ApiOperation({ summary: 'Render the ID card as a PDF export' })
+  @RequirePermission(PEOPLE.studentView)
+  idCard(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.students.requestIdCard(ctx, id);
+  }
+}
