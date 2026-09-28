@@ -2645,3 +2645,271 @@ export async function masterUploadCommit(fd: FormData) {
     }),
   );
 }
+
+// ---- Sprint 17: workflow GA ---------------------------------------------------------------------
+function levelsFrom(fd: FormData) {
+  const levels: Array<Record<string, unknown>> = [];
+  for (let i = 1; i <= 6; i += 1) {
+    const name = str(fd, `level${i}:name`);
+    if (!name) continue;
+    const kind = str(fd, `level${i}:kind`) || 'role';
+    const value = str(fd, `level${i}:value`);
+    const resolver =
+      kind === 'named_user'
+        ? { kind, userId: value }
+        : kind === 'position'
+          ? { kind, designation: value }
+          : kind === 'approver_chain'
+            ? { kind, depth: Number(value || 1) }
+            : { kind: 'role', roleCode: value || 'school_admin' };
+    const sla = Number(str(fd, `level${i}:sla`));
+    const esc = str(fd, `level${i}:escalate`);
+    levels.push({
+      level: levels.length + 1,
+      name,
+      resolver,
+      ...(sla > 0 ? { slaHours: sla } : {}),
+      ...(esc ? { escalateTo: { kind: 'role', roleCode: esc } } : {}),
+    });
+  }
+  return levels;
+}
+
+export async function saveWorkflowDefinition(fd: FormData) {
+  const id = opt(fd, 'id');
+  const levels = levelsFrom(fd);
+  if (levels.length === 0)
+    back_('/workflow/definitions', 'validation-failed', 'Add at least one level');
+  return run('/workflow/definitions', () =>
+    id
+      ? apiFetch(`/workflow/definitions/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: str(fd, 'name'), levels }),
+        })
+      : apiFetch('/workflow/definitions', {
+          method: 'POST',
+          body: JSON.stringify({
+            code: str(fd, 'code'),
+            name: str(fd, 'name'),
+            entityType: str(fd, 'entityType'),
+            levels,
+          }),
+        }),
+  );
+}
+
+export async function setWorkflowDefinitionStatus(fd: FormData) {
+  return run('/workflow/definitions', () =>
+    apiFetch(`/workflow/definitions/${str(fd, 'id')}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active' }),
+    }),
+  );
+}
+
+export async function cancelWorkflowInstance(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/workflow/instances/${id}`, () =>
+    apiFetch(`/workflow/instances/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
+export async function reassignWorkflowStep(fd: FormData) {
+  const instanceId = str(fd, 'instanceId');
+  const userIds = str(fd, 'userIds')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  return run(`/workflow/instances/${instanceId}`, () =>
+    apiFetch(`/workflow/steps/${str(fd, 'stepId')}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify({ userIds, note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function commentWorkflowInstance(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/workflow/instances/${id}`, () =>
+    apiFetch(`/workflow/instances/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ note: str(fd, 'note') }),
+    }),
+  );
+}
+
+// ---- Sprint 17: report cards ---------------------------------------------------------------------
+export async function rcInstallDefaults() {
+  return run('/exams/report-cards/templates', () =>
+    apiFetch('/exams/report-cards/templates/defaults', { method: 'POST' }),
+  );
+}
+
+export async function rcSaveTemplate(fd: FormData) {
+  const id = opt(fd, 'id');
+  const back = `/exams/report-cards/templates${id ? `?edit=${id}` : ''}`;
+  let layout: unknown;
+  const layoutText = str(fd, 'layout');
+  if (layoutText) {
+    try {
+      layout = JSON.parse(layoutText);
+    } catch {
+      back_(back, 'validation-failed', 'The layout is not valid JSON');
+    }
+  }
+  const body = {
+    name: str(fd, 'name'),
+    band: str(fd, 'band'),
+    ...(layout ? { layout } : {}),
+    bodyHtml: str(fd, 'bodyHtml') || null,
+    stylesCss: str(fd, 'stylesCss'),
+    pageWidth: str(fd, 'pageWidth') || '210mm',
+    pageHeight: str(fd, 'pageHeight') || '297mm',
+    ...(id
+      ? { status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active' }
+      : { code: str(fd, 'code') }),
+  };
+  return run(back, () =>
+    apiFetch(id ? `/exams/report-cards/templates/${id}` : '/exams/report-cards/templates', {
+      method: id ? 'PATCH' : 'POST',
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function rcCreateRelease(fd: FormData) {
+  const templates: Record<string, string> = {};
+  for (const band of ['primary', 'middle', 'secondary', 'senior']) {
+    const v = str(fd, `template:${band}`);
+    if (v) templates[band] = v;
+  }
+  return run('/exams/report-cards', () =>
+    apiFetch('/exams/report-cards/releases', {
+      method: 'POST',
+      body: JSON.stringify({
+        termCode: str(fd, 'termCode').toUpperCase(),
+        name: str(fd, 'name'),
+        examIds: fd.getAll('examIds').map(String).filter(Boolean),
+        templates,
+        hideDefaulters: fd.get('hideDefaulters') === 'on',
+        defaulterMin: Number(str(fd, 'defaulterMin') || 0),
+      }),
+    }),
+  );
+}
+
+export async function rcSetReleaseStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/exams/report-cards?release=${id}`, () =>
+    apiFetch(`/exams/report-cards/releases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: str(fd, 'status') }),
+    }),
+  );
+}
+
+export async function rcRenderBatch(fd: FormData) {
+  const id = str(fd, 'id');
+  const section = str(fd, 'classSectionId');
+  return run(`/exams/report-cards?release=${id}&section=${section}`, () =>
+    apiFetch(`/exams/report-cards/releases/${id}/render`, {
+      method: 'POST',
+      body: JSON.stringify({ classSectionId: section }),
+    }),
+  );
+}
+
+export async function rcRenderOne(fd: FormData) {
+  const id = str(fd, 'id');
+  const section = str(fd, 'classSectionId');
+  return run(`/exams/report-cards?release=${id}&section=${section}`, () =>
+    apiFetch(`/exams/report-cards/releases/${id}/students/${str(fd, 'studentId')}/render`, {
+      method: 'POST',
+    }),
+  );
+}
+
+// ---- Sprint 17: library --------------------------------------------------------------------------
+export async function libraryAccession(fd: FormData) {
+  const titleId = str(fd, 'titleId');
+  const nos = str(fd, 'accessionNos')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  const count = Number(str(fd, 'count'));
+  return run(`/library?title=${titleId}`, () =>
+    apiFetch('/library/copies', {
+      method: 'POST',
+      body: JSON.stringify({
+        titleId,
+        ...(nos.length ? { accessionNos: nos } : { count: count > 0 ? count : 1 }),
+        accessionedOn: opt(fd, 'accessionedOn'),
+        source: opt(fd, 'source'),
+      }),
+    }),
+  );
+}
+
+export async function libraryCopyStatus(fd: FormData) {
+  return run(`/library?title=${str(fd, 'titleId')}`, () =>
+    apiFetch(`/library/copies/${str(fd, 'copyId')}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: str(fd, 'status'), remarks: opt(fd, 'remarks') }),
+    }),
+  );
+}
+
+export async function libraryIssue(fd: FormData) {
+  return run('/library/circulation', () =>
+    apiFetch('/library/loans/issue', {
+      method: 'POST',
+      body: JSON.stringify({
+        accessionNo: str(fd, 'accessionNo'),
+        borrowerKind: str(fd, 'borrowerKind') === 'employee' ? 'employee' : 'student',
+        borrowerId: str(fd, 'borrowerId'),
+        dueOn: opt(fd, 'dueOn'),
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function libraryReturn(fd: FormData) {
+  return run('/library/circulation', () =>
+    apiFetch('/library/loans/return', {
+      method: 'POST',
+      body: JSON.stringify({
+        accessionNo: str(fd, 'accessionNo'),
+        returnedOn: opt(fd, 'returnedOn'),
+        condition: ['available', 'damaged', 'lost'].includes(str(fd, 'condition'))
+          ? str(fd, 'condition')
+          : 'available',
+        waiveFine: fd.get('waiveFine') === 'on',
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function libraryRenew(fd: FormData) {
+  return run('/library/circulation', () =>
+    apiFetch('/library/loans/renew', {
+      method: 'POST',
+      body: JSON.stringify({ accessionNo: str(fd, 'accessionNo') }),
+    }),
+  );
+}
+
+export async function libraryFine(fd: FormData) {
+  return run('/library/fines', () =>
+    apiFetch(`/library/loans/${str(fd, 'loanId')}/fine`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: str(fd, 'action') === 'waive' ? 'waive' : 'collect',
+        reference: opt(fd, 'reference'),
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}

@@ -7,6 +7,8 @@ export const WORKFLOW = {
   definitionManage: 'workflow.definition.manage',
   inboxAct: 'workflow.inbox.act',
   instanceView: 'workflow.instance.view',
+  /** Sprint 17 */
+  instanceCancel: 'workflow.instance.cancel',
 } as const;
 
 export const ResolverSchema = z.discriminatedUnion('kind', [
@@ -29,6 +31,8 @@ export const LevelSchema = z.object({
   name: z.string().trim().min(1).max(80),
   resolver: ResolverSchema,
   slaHours: z.number().int().min(1).max(720).optional(),
+  /** Sprint 17: who joins the step when it is overdue (default: the roles in workflow.escalate_roles). */
+  escalateTo: ResolverSchema.optional(),
 });
 
 export const CreateDefinitionSchema = z.object({
@@ -62,3 +66,16 @@ export const ListInstancesQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListInstancesQueryDto extends createZodDto(ListInstancesQuerySchema) {}
+
+// ---- Sprint 17: v1 GA ----------------------------------------------------------------------------
+export const CancelSchema = z.object({ reason: z.string().trim().min(3).max(500) });
+export class CancelDto extends createZodDto(CancelSchema) {}
+
+export const ReassignSchema = z.object({
+  userIds: z.array(IdSchema).min(1).max(20),
+  note: z.string().trim().max(500).optional(),
+});
+export class ReassignDto extends createZodDto(ReassignSchema) {}
+
+export const CommentSchema = z.object({ note: z.string().trim().min(1).max(1000) });
+export class CommentDto extends createZodDto(CommentSchema) {}

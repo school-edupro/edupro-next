@@ -57,6 +57,21 @@ const statusWord = {
   rejected: 'Rejected',
   cancelled: 'Cancelled',
 } as const;
+interface Track {
+  children: Array<{
+    student: { id: string; name: string };
+    route: { code: string; name: string; stop: string | null; pickup: string | null } | null;
+    vehicle: { id: string; regNo: string } | null;
+    position: {
+      recordedAt: string;
+      lat: string;
+      lng: string;
+      speedKmh: string | null;
+      ageSeconds: number;
+    } | null;
+  }>;
+}
+
 const kindWord = {
   join: 'Request a seat',
   change: 'Change stop or route',
@@ -73,9 +88,11 @@ export default async function TransportPage({
   const lang = await currentLang();
   let res: Res;
   let mine: Mine = { children: [], routes: [] };
+  let track: Track = { children: [] };
   try {
     res = await bff.api.fetch<Res>('/attendance/bus/mine');
     mine = await bff.api.fetch<Mine>('/transport/requests/mine').catch(() => mine);
+    track = await bff.api.fetch<Track>('/transport/gps/mine').catch(() => track);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -122,6 +139,39 @@ export default async function TransportPage({
           {sp.detail || sp.error}
         </div>
       ) : null}
+      {track.children
+        .filter((c) => c.route)
+        .map((c) => (
+          <Card
+            key={`bus-${c.student.id}`}
+            title={`${t(lang, 'Live bus')} · ${c.student.name}`}
+            style={{ marginBottom: 'var(--sp-3)' }}
+          >
+            <div className="ep-kicker">
+              {c.route!.code} · {c.route!.name}
+              {c.route!.stop ? ` · ${c.route!.stop}` : ''}
+              {c.route!.pickup ? ` · ${c.route!.pickup}` : ''}
+            </div>
+            {c.position ? (
+              <p style={{ margin: 'var(--sp-2) 0 0' }}>
+                <strong>{c.vehicle?.regNo}</strong> · {t(lang, 'seen')}{' '}
+                {Math.round(c.position.ageSeconds / 60)} {t(lang, 'min ago')}
+                {c.position.speedKmh ? ` · ${c.position.speedKmh} km/h` : ''} ·{' '}
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${c.position.lat}&mlon=${c.position.lng}#map=16/${c.position.lat}/${c.position.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t(lang, 'Open map')}
+                </a>
+              </p>
+            ) : (
+              <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
+                {t(lang, 'No position from the bus yet.')}
+              </p>
+            )}
+          </Card>
+        ))}
       {mine.children.map((c) => (
         <Card
           key={`req-${c.id}`}

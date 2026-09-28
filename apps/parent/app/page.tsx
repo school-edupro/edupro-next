@@ -41,7 +41,8 @@ export default async function HomePage({
     ['Profile', 'Your details, consents and change requests', '/profile'],
     ['Fees', 'Dues, receipts and online payment', '/fees'],
     ['Assistant', 'Ask about fees, attendance and homework', '/assistant'],
-    ['Results', 'Report cards and progress'],
+    ['Results', 'Report cards and progress', '/results'],
+    ['Library', 'Books on loan and fines', '/library'],
   ];
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>

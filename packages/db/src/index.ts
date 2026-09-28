@@ -208,6 +208,8 @@ export {
 export * from './jobs';
 export * from './datasets';
 export * from './masters';
+export * from './report-card-data';
+export * from './report-card-html';
 export * from './renderers';
 export * from './schema-version';
 export * from './template-engine';

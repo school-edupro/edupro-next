@@ -33,9 +33,25 @@ export default async function InboxPage({
             key={s.id}
             title={s.instance.subject}
             actions={
-              <Badge tone="info">
-                {w('level')} {s.level} · {s.name}
-              </Badge>
+              <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
+                <Badge tone="info">
+                  {w('level')} {s.level} · {s.name}
+                </Badge>
+                {s.dueAt ? (
+                  <Badge tone={s.overdue ? 'danger' : 'neutral'}>
+                    {new Date(s.dueAt).toLocaleString('en-IN', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </Badge>
+                ) : null}
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`/workflow/instances/${s.instance.id}`}
+                >
+                  #{s.instance.id}
+                </a>
+              </span>
             }
           >
             <p className="ep-field__help">

@@ -66,7 +66,7 @@ export default async function InstancesPage({
               header: w('subject'),
               render: (i) =>
                 i.entityType === 'application' ? (
-                  <a href={`/admissions/applications/${i.entityId}`}>{i.subject}</a>
+                  <a href={`/workflow/instances/${i.id}`}>{i.subject}</a>
                 ) : (
                   i.subject
                 ),

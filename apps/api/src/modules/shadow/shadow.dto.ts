@@ -52,7 +52,7 @@ export class DecideVarianceDto extends createZodDto(DecideVarianceSchema) {}
 export const CreateServiceKeySchema = z.object({
   name: z.string().trim().min(2).max(60),
   scopes: z
-    .array(z.enum(['shadow.feed']))
+    .array(z.enum(['shadow.feed', 'transport.gps']))
     .min(1)
     .max(5),
 });

@@ -10,6 +10,7 @@
  * Usage: DATABASE_MIGRATOR_URL=postgresql://... tsx src/seed-demo.ts
  * Sign in with the development bypass using the subjects printed at the end (dev-admin, dev-teacher, ...).
  */
+import { DEFAULT_LAYOUTS } from './report-card-html';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -4047,6 +4048,98 @@ async function main(): Promise<void> {
             // no reconciliation here: the seed runs RLS-blind as the migrator, so app.run_shadow_reconcile would
             // count every school's receipts; the workers job or Reconcile now on the workbench writes the run
           }
+        }
+      }
+      await clearCtx();
+
+      // ---- Sprint 17: report-card templates and the Term 1 release, library titles and copies with one
+      // loan, a GPS device id on the first bus with a position (the vendor push would keep it fresh) ----
+      await withCtx(alpha.id, 'dev-admin');
+      {
+        for (const band of ['primary', 'middle', 'secondary', 'senior'] as const) {
+          await c.query(
+            `INSERT INTO report_card_templates (school_id, code, name, band, layout)
+             VALUES ($1, $2, $3, $4::class_band, $5::jsonb) ON CONFLICT (school_id, code) DO NOTHING`,
+            [
+              alpha.id,
+              `${band}_default`,
+              `${band[0]!.toUpperCase()}${band.slice(1)} report card`,
+              band,
+              JSON.stringify(DEFAULT_LAYOUTS[band]),
+            ],
+          );
+        }
+        const pt1 = await c.query<{ id: string }>(
+          `SELECT id::text FROM exams WHERE school_id = $1 AND academic_year_id = $2 AND code = 'PT1-2026' AND deleted_at IS NULL`,
+          [alpha.id, yearId],
+        );
+        if (pt1.rows[0])
+          await c.query(
+            `INSERT INTO report_card_releases (school_id, academic_year_id, term_code, name, exam_ids, hide_defaulters, status, released_at, released_by, created_by)
+             VALUES ($1, $2, 'T1', 'Term 1 (2026-27)', ARRAY[$3::bigint], true, 'released', now(), $4, $4)
+             ON CONFLICT (academic_year_id, term_code) DO NOTHING`,
+            [alpha.id, yearId, pt1.rows[0].id, userIds['dev-admin']],
+          );
+        const titles: Array<[string, string, string, string, string]> = [
+          ['978-0140328721', 'Matilda', 'Roald Dahl', 'Fiction', '299'],
+          ['978-0141325293', 'Wonder', 'R. J. Palacio', 'Fiction', '350'],
+          ['978-8172234980', 'Malgudi Days', 'R. K. Narayan', 'Fiction', '250'],
+          ['978-0143333623', 'The Great Indian Nature Trail', 'Ranjit Lal', 'Science', '399'],
+          ['978-0199543205', 'Concise Oxford Dictionary', 'Oxford', 'Reference', '1450'],
+        ];
+        for (const [code, title, author, category, price] of titles)
+          await c.query(
+            `INSERT INTO library_titles (school_id, code, title, author, category, language, price, is_reference)
+             VALUES ($1, $2, $3, $4, $5, 'English', $6, $5 = 'Reference') ON CONFLICT (school_id, code) DO NOTHING`,
+            [alpha.id, code, title, author, category, price],
+          );
+        const noCopies = await c.query(
+          `SELECT 1 FROM library_copies WHERE school_id = $1 LIMIT 1`,
+          [alpha.id],
+        );
+        if (!noCopies.rows[0]) {
+          const ids = await c.query<{ id: string; code: string }>(
+            `SELECT id::text, code FROM library_titles WHERE school_id = $1 ORDER BY code`,
+            [alpha.id],
+          );
+          let n = 1001;
+          for (const t of ids.rows)
+            for (let k = 0; k < 2; k += 1, n += 1)
+              await c.query(
+                `INSERT INTO library_copies (school_id, title_id, accession_no, accessioned_on, source) VALUES ($1, $2, $3, '2026-04-05', 'purchase')`,
+                [alpha.id, t.id, String(n)],
+              );
+          const aarav = await c.query<{ id: string }>(
+            `SELECT id::text FROM students WHERE school_id = $1 AND admission_no = 'A2481'`,
+            [alpha.id],
+          );
+          if (aarav.rows[0]) {
+            await c.query(
+              `INSERT INTO library_loans (school_id, copy_id, borrower_kind, borrower_id, issued_on, due_on, issued_by)
+               SELECT $1, id, 'student', $2, CURRENT_DATE - 20, CURRENT_DATE - 6, $3 FROM library_copies WHERE school_id = $1 AND accession_no = '1001'`,
+              [alpha.id, aarav.rows[0].id, userIds['dev-admin']],
+            );
+            await c.query(
+              `UPDATE library_copies SET status = 'issued' WHERE school_id = $1 AND accession_no = '1001'`,
+              [alpha.id],
+            );
+          }
+        }
+        const bus = await c.query<{ id: string }>(
+          `SELECT id::text FROM transport_vehicles WHERE school_id = $1 AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+          [alpha.id],
+        );
+        if (bus.rows[0]) {
+          await c.query(
+            `UPDATE transport_vehicles SET gps_device_id = COALESCE(gps_device_id, 'IMEI-DEMO-0001') WHERE id = $1`,
+            [bus.rows[0].id],
+          );
+          await c.query(
+            `INSERT INTO vehicle_positions (school_id, vehicle_id, recorded_at, lat, lng, speed_kmh, heading, ignition, source)
+             SELECT $1, $2, now() - interval '4 minutes', 18.5074, 73.8077, 28, 135, true, 'seed'
+              WHERE NOT EXISTS (SELECT 1 FROM vehicle_positions WHERE vehicle_id = $2)`,
+            [alpha.id, bus.rows[0].id],
+          );
         }
       }
       await clearCtx();

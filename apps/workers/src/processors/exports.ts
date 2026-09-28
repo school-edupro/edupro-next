@@ -14,6 +14,7 @@ import {
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
 import { renderAiReport } from '../renderers/ai-report';
+import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
 import { idCardHtml, loadIdCard } from '../renderers/id-card';
 
@@ -126,6 +127,16 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
         } else if (renderer.id === 'ai_report') {
           const doc = await renderAiReport(db, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'report_card') {
+          const doc = await renderReportCard(db, storage, envelope, row.params, exportId);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'report_card_batch') {
+          const doc = await renderReportCardBatch(db, storage, envelope, row.params, exportId);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+          log.info(
+            { exportId, pupils: doc.pupils, withheld: doc.withheld },
+            'report cards rendered',
+          );
         } else {
           const data = await loadIdCard(db, storage, envelope, renderer.id, row.params);
           bytes = await pdf.render(idCardHtml(data), {

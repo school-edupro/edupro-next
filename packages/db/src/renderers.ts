@@ -46,6 +46,22 @@ export const RENDERERS: Record<string, RendererDefinition> = {
   },
 };
 
+// Sprint 17: report cards — one pupil, or a whole section in one PDF (page break per pupil)
+RENDERERS.report_card = {
+  id: 'report_card',
+  title: 'Report card',
+  permission: 'exams.report_card.view',
+  page: { width: '210mm', height: '297mm' },
+  requiredParams: ['releaseId', 'studentId'],
+};
+RENDERERS.report_card_batch = {
+  id: 'report_card_batch',
+  title: 'Report cards of a section',
+  permission: 'exams.report_card.manage',
+  page: { width: '210mm', height: '297mm' },
+  requiredParams: ['releaseId', 'classSectionId'],
+};
+
 export const RENDERER_IDS = Object.keys(RENDERERS) as [string, ...string[]];
 
 export function rendererOrNull(id: string): RendererDefinition | null {

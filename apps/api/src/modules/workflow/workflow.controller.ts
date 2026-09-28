@@ -10,6 +10,7 @@ import {
   WORKFLOW,
 } from './workflow.dto';
 import { WorkflowService } from './workflow.service';
+import { CancelDto, CommentDto, ReassignDto } from './workflow.dto';
 
 @ApiTags('workflow')
 @ApiBearerAuth()
@@ -82,5 +83,36 @@ export class WorkflowController {
   @RequirePermission(WORKFLOW.instanceView)
   get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.workflow.get(ctx, id);
+  }
+
+  // ---- Sprint 17: v1 GA ----
+  @Post('instances/:id/cancel')
+  @ApiOperation({ summary: 'Cancel a pending approval (the requester, or a workflow manager)' })
+  @RequirePermission(WORKFLOW.instanceView)
+  cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: CancelDto) {
+    return this.workflow.cancel(ctx, id, body);
+  }
+
+  @Post('steps/:id/reassign')
+  @ApiOperation({ summary: 'Hand a pending step to other members' })
+  @RequirePermission(WORKFLOW.definitionManage)
+  reassign(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReassignDto) {
+    return this.workflow.reassign(ctx, id, body);
+  }
+
+  @Post('instances/:id/comments')
+  @ApiOperation({ summary: 'Add a note to the history' })
+  @RequirePermission(WORKFLOW.instanceView)
+  async comment(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: CommentDto) {
+    return { data: await this.workflow.comment(ctx, id, body) };
+  }
+
+  @Get('instances/:id/history')
+  @ApiOperation({
+    summary: 'Started, decisions, reminders, escalations, reassignments and comments',
+  })
+  @RequirePermission(WORKFLOW.instanceView)
+  async history(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return { data: await this.workflow.history(ctx, id) };
   }
 }

@@ -47,6 +47,7 @@ export const SECTION_ICON: Record<string, IconName> = {
   engagement: 'heart',
   exams: 'clipboard',
   transport: 'bus',
+  library: 'book',
   insights: 'chart',
   reports: 'file',
   system: 'settings',

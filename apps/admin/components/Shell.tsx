@@ -166,6 +166,7 @@ const NAV: Array<{
       { href: '/exams', label: 'examList', permission: 'exams.master.view' },
       { href: '/exams/masters', label: 'examTypes', permission: 'exams.master.view' },
       { href: '/masters/exams', label: 'examsSetup', permission: 'exams.master.view' },
+      { href: '/exams/report-cards', label: 'reportCards', permission: 'exams.report_card.view' },
     ],
   },
   {
@@ -174,12 +175,22 @@ const NAV: Array<{
       { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
       { href: '/transport/vehicles', label: 'vehicles', permission: 'transport.fleet.view' },
       { href: '/masters/transport', label: 'transportSetup', permission: 'transport.route.view' },
+      { href: '/transport/gps', label: 'gps', permission: 'transport.gps.view' },
       { href: '/transport/drivers', label: 'drivers', permission: 'transport.fleet.view' },
       {
         href: '/transport/requests',
         label: 'transportRequests',
         permission: 'transport.request.view',
       },
+    ],
+  },
+  {
+    section: 'library',
+    items: [
+      { href: '/library', label: 'catalogue', permission: 'library.catalogue.view' },
+      { href: '/library/circulation', label: 'circulation', permission: 'library.loan.circulate' },
+      { href: '/library/fines', label: 'fines', permission: 'library.loan.circulate' },
+      { href: '/masters/library', label: 'librarySetup', permission: 'library.catalogue.manage' },
     ],
   },
   {

@@ -118,9 +118,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
     if (kind === 'shadow.reconcile') {
       // Sprint 16: the daily shadow-run reconciliation (yesterday to today) per school; a run with open
       // variances raises an insight alert and the usual notification.
-      const schools = await db.withoutTenant((c) =>
-        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
-      );
+      const schools = { rows: await schoolsFor(db, job) };
       let variance = 0;
       for (const { id } of schools.rows) {
         const tenant = { schoolId: id, userId: null, allowedSchoolIds: [id] };
@@ -168,9 +166,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
         NODE_ENV: process.env.NODE_ENV,
       });
-      const schools = await db.withoutTenant((c) =>
-        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
-      );
+      const schools = { rows: await schoolsFor(db, job) };
       const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
       ist.setUTCDate(ist.getUTCDate() - ((ist.getUTCDay() + 7) % 7 || 7));
       const to = ist.toISOString().slice(0, 10);
@@ -310,9 +306,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       // Sprint 15 (AI track): anomaly alerts v1 per school — attendance drop, collection dip, silent reader.
       // One row per kind, subject and day; new rows are pushed to the users of the roles named by the
       // setting insights.alert_roles through the insight_alert template (whatsapp to the user's mobile).
-      const schools = await db.withoutTenant((c) =>
-        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
-      );
+      const schools = { rows: await schoolsFor(db, job) };
       let created = 0;
       let notified = 0;
       for (const { id } of schools.rows) {
@@ -334,9 +328,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
     }
     if (kind === 'insights.refresh') {
       // Sprint 12 (AI track): rebuild the reporting marts of every active school under its own tenant context.
-      const schools = await db.withoutTenant((c) =>
-        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
-      );
+      const schools = { rows: await schoolsFor(db, job) };
       let refreshed = 0;
       for (const s of schools.rows) {
         try {
@@ -364,9 +356,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
     }
     if (kind === 'payments.reconcile') {
       // Sprint 14: reconcile online receipts against settlement lines for every active school (idempotent per day).
-      const schools = await db.withoutTenant((c) =>
-        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
-      );
+      const schools = { rows: await schoolsFor(db, job) };
       let ran = 0;
       let flagged = 0;
       for (const s of schools.rows) {
@@ -423,17 +413,79 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       }
       return;
     }
+    if (kind === 'workflow.sla') {
+      // Sprint 17: remind the assignees of overdue steps once, then escalate after the grace period
+      // (the level's own escalation, else the roles in workflow.escalate_roles).
+      const schools = { rows: await schoolsFor(db, job) };
+      let reminded = 0;
+      let escalated = 0;
+      for (const s of schools.rows) {
+        try {
+          const r = await db.withTenant(
+            { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+            (c) => runWorkflowSla(c, s.id),
+          );
+          reminded += r.reminded;
+          escalated += r.escalated;
+        } catch (error) {
+          log.error({ err: error, schoolId: s.id }, 'workflow sla failed for school');
+        }
+      }
+      log.info({ schools: schools.rows.length, reminded, escalated }, 'workflow sla run');
+      return;
+    }
+    if (kind === 'transport.positions.expire') {
+      // Sprint 17: keep only the configured days of GPS positions per school.
+      const schools = { rows: await schoolsFor(db, job) };
+      let deleted = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) =>
+            c.query(
+              `DELETE FROM vehicle_positions WHERE received_at < now() - make_interval(days => COALESCE((app.setting('transport.gps_retention_days') #>> '{}')::int, 30))`,
+            ),
+        );
+        deleted += r.rowCount ?? 0;
+      }
+      log.info({ deleted }, 'vehicle positions purge run');
+      return;
+    }
+    if (kind === 'insights.results_mart') {
+      const schools = { rows: await schoolsFor(db, job) };
+      let rows = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.refresh_exam_results_mart() AS n'),
+        );
+        rows += Number(r.rows[0]?.n ?? 0);
+      }
+      log.info({ schools: schools.rows.length, rows }, 'exam results mart run');
+      return;
+    }
     log.warn({ kind }, 'unknown maintenance job kind');
   };
 }
 
-export const SYSTEM_ENVELOPE = (kind: string): JobEnvelope => ({
+/** System jobs run for every school; `schoolIds` narrows a run to some (on-demand runs, tests). */
+export const SYSTEM_ENVELOPE = (kind: string, only?: { schoolIds: string[] }): JobEnvelope => ({
   schoolId: '0',
   userId: null,
   requestId: null,
   kind,
-  payload: {},
+  payload: only ?? {},
 });
+
+/** The schools a system job runs for: every school with data, or the envelope's own list. */
+async function schoolsFor(db: Db, job: JobLike<unknown>): Promise<Array<{ id: string }>> {
+  const only = (job.data as JobEnvelope<{ schoolIds?: string[] }>).payload?.schoolIds;
+  if (Array.isArray(only) && only.length > 0) return only.map((id) => ({ id: String(id) }));
+  const r = await db.withoutTenant((c) =>
+    c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
+  );
+  return r.rows;
+}
 
 /** Queues the insight_alert message to every recipient for alerts not yet notified; returns the count. */
 export async function notifyInsightAlerts(
@@ -492,4 +544,162 @@ export async function notifyInsightAlerts(
     await c.query('UPDATE insight_alerts SET notified_at = now() WHERE id = $1', [a.id]);
   }
   return n;
+}
+
+type Q = {
+  query: <T = Record<string, unknown>>(
+    text: string,
+    values?: unknown[],
+  ) => Promise<{ rows: T[]; rowCount: number | null }>;
+};
+
+/** WhatsApp to a set of users through the notifications queue (template body with {{subject}} and {{step}}). */
+async function notifyUsers(
+  c: Q,
+  schoolId: string,
+  userIds: string[],
+  body: string,
+): Promise<number> {
+  const users = await c.query<{ id: string; mobile: string }>(
+    `SELECT id::text, mobile FROM users WHERE id = ANY($1::bigint[]) AND mobile IS NOT NULL AND deleted_at IS NULL`,
+    [userIds],
+  );
+  let n = 0;
+  for (const u of users.rows) {
+    const m = await c.query<{ id: string }>(
+      `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, body, status)
+       VALUES (app.current_school_id(), 'whatsapp', $1, $2, $3, 'queued') RETURNING id::text`,
+      [u.id, u.mobile, body],
+    );
+    await c.query("SELECT app.enqueue_job('notifications', $1::jsonb)", [
+      JSON.stringify({
+        schoolId,
+        userId: null,
+        requestId: null,
+        kind: 'comms.message',
+        payload: { messageId: m.rows[0]!.id },
+      }),
+    ]);
+    n += 1;
+  }
+  return n;
+}
+
+/** Users of a resolver (role, named user, position); the approver chain has no requester here and falls back. */
+async function resolveEscalation(
+  c: Q,
+  resolver: Record<string, unknown> | null,
+): Promise<string[]> {
+  if (resolver?.kind === 'named_user') return [String(resolver.userId)];
+  if (resolver?.kind === 'position') {
+    const r = await c.query<{ id: string }>(
+      `SELECT DISTINCT user_id::text AS id FROM employees WHERE designation ILIKE $1 AND user_id IS NOT NULL AND status = 'active' AND deleted_at IS NULL`,
+      [String(resolver.designation)],
+    );
+    return r.rows.map((x) => x.id);
+  }
+  const roles =
+    resolver?.kind === 'role'
+      ? [String(resolver.roleCode)]
+      : String(
+          (
+            await c.query<{ v: string }>(
+              `SELECT COALESCE(app.setting('workflow.escalate_roles') #>> '{}', 'school_admin') AS v`,
+            )
+          ).rows[0]?.v ?? 'school_admin',
+        )
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean);
+  const r = await c.query<{ id: string }>(
+    `SELECT DISTINCT ur.user_id::text AS id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+      WHERE ur.school_id = app.current_school_id() AND r.code = ANY($1::text[]) AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)`,
+    [roles],
+  );
+  return r.rows.map((x) => x.id);
+}
+
+export async function runWorkflowSla(
+  c: Q,
+  schoolId: string,
+): Promise<{ reminded: number; escalated: number }> {
+  const grace = Number(
+    (
+      await c.query<{ v: string }>(
+        `SELECT COALESCE(app.setting('workflow.escalate_after_hours') #>> '{}', '24') AS v`,
+      )
+    ).rows[0]?.v ?? 24,
+  );
+  const due = await c.query<{
+    id: string;
+    instance_id: string;
+    level: number;
+    name: string;
+    subject: string;
+    assignees: string[];
+    reminded_at: Date | null;
+    escalated_at: Date | null;
+    overdue_hours: number;
+    escalate_to: Record<string, unknown> | null;
+  }>(
+    `SELECT s.id::text, s.instance_id::text, s.level, s.name, i.subject, s.assignee_user_ids::text[] AS assignees, s.reminded_at, s.escalated_at,
+            EXTRACT(EPOCH FROM (now() - s.due_at)) / 3600 AS overdue_hours,
+            (SELECT l.value->'escalateTo' FROM jsonb_array_elements(d.levels) AS l(value) WHERE (l.value->>'level')::int = s.level) AS escalate_to
+       FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id JOIN workflow_definitions d ON d.id = i.definition_id
+      WHERE s.status = 'pending' AND i.status = 'pending' AND i.current_level = s.level AND s.due_at IS NOT NULL AND s.due_at < now()
+        AND (s.reminded_at IS NULL OR s.escalated_at IS NULL)
+      ORDER BY s.due_at`,
+  );
+  let reminded = 0;
+  let escalated = 0;
+  for (const step of due.rows) {
+    if (!step.reminded_at) {
+      await notifyUsers(
+        c,
+        schoolId,
+        step.assignees,
+        `Approval pending: "${step.subject}" (${step.name}) is past its due time. Please act in your inbox.`,
+      );
+      await c.query(`UPDATE workflow_steps SET reminded_at = now() WHERE id = $1`, [step.id]);
+      await c.query(
+        `INSERT INTO workflow_events (school_id, instance_id, step_id, kind, note, detail) VALUES (app.current_school_id(), $1, $2, 'reminded', $3, $4::jsonb)`,
+        [
+          step.instance_id,
+          step.id,
+          `Reminder sent to ${step.assignees.length} assignee(s)`,
+          JSON.stringify({ assignees: step.assignees }),
+        ],
+      );
+      reminded += 1;
+    }
+    if (!step.escalated_at && Number(step.overdue_hours) >= grace) {
+      const extra = (await resolveEscalation(c, step.escalate_to)).filter(
+        (u) => !step.assignees.includes(u),
+      );
+      await c.query(
+        `UPDATE workflow_steps SET assignee_user_ids = assignee_user_ids || $2::bigint[], escalated_to = $2::bigint[], escalated_at = now() WHERE id = $1`,
+        [step.id, extra],
+      );
+      if (extra.length)
+        await notifyUsers(
+          c,
+          schoolId,
+          extra,
+          `Escalated to you: "${step.subject}" (${step.name}) has waited ${Math.round(Number(step.overdue_hours))} h past its due time.`,
+        );
+      await c.query(
+        `INSERT INTO workflow_events (school_id, instance_id, step_id, kind, note, detail) VALUES (app.current_school_id(), $1, $2, 'escalated', $3, $4::jsonb)`,
+        [
+          step.instance_id,
+          step.id,
+          extra.length
+            ? `Escalated to ${extra.length} member(s)`
+            : 'Escalation found nobody to add',
+          JSON.stringify({ added: extra }),
+        ],
+      );
+      escalated += 1;
+    }
+  }
+  return { reminded, escalated };
 }

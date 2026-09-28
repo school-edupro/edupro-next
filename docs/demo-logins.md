@@ -92,6 +92,24 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprint 17 walk-through (workflow GA, report cards, GPS, library)
+
+- **dev-admin**: **Approvals → Definitions** now has **＋ New definition** (levels with approver, SLA
+  hours and an escalation role) and **Edit** on each; open any approval from **Instances** or the
+  inbox link to see its steps with due times, the **History** (started, decisions, reminders,
+  escalations, reassignments, notes) and the **Cancel** / **Reassign** forms. **Exams → Report cards**:
+  the **T1 · Term 1 (2026-27)** release (PT1-2026, _withhold while dues pending_ on) — pick VI-A,
+  **Render the section (one PDF)** (the workers render it; PDF link appears per pupil), **Preview** any
+  pupil, or open the **Designer** to edit a band's layout JSON / CSS with a live preview. **Transport →
+  Live fleet** shows the first bus's last GPS fix (seeded; the vendor pushes to
+  `/api/v1/transport/gps/positions` with a `transport.gps` service key). **Library → Catalogue**
+  (five titles, two copies each, accession 1001–1010), **Circulation** (issue accession `1002` to
+  student id 12307, renew, return with a late date to see the fine), **Fines** (collect or waive),
+  **Library setup** (titles and copies as masters with Excel upload).
+- **dev-parent**: **Results** lists Term 1 for Aarav with the PT1 summary and a **Report card PDF**
+  button (refused with a clear message while fee dues stand); **School bus** shows the **Live bus**
+  card with the last position and a map link; **Library** lists the children's loans and fines.
+
 ### Master-data framework walk-through (all masters, one grid)
 
 - **dev-admin**: every module menu now has a "… setup" entry — **Fees → Fees setup**, **Academics →

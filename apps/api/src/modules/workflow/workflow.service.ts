@@ -6,8 +6,11 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type {
   ActDto,
+  CancelDto,
+  CommentDto,
   CreateDefinitionDto,
   ListInstancesQueryDto,
+  ReassignDto,
   Resolver,
   UpdateDefinitionDto,
 } from './workflow.dto';
@@ -17,6 +20,17 @@ export interface Level {
   name: string;
   resolver: Resolver;
   slaHours?: number;
+  escalateTo?: Resolver;
+}
+
+export interface EventRow {
+  id: string;
+  stepId: string | null;
+  kind: string;
+  actor: string | null;
+  note: string | null;
+  detail: Record<string, unknown>;
+  occurredAt: string;
 }
 
 export interface DefinitionRow {
@@ -40,6 +54,11 @@ export interface StepRow {
   actedBy: string | null;
   actedAt: string | null;
   note: string | null;
+  /** Sprint 17: SLA */
+  dueAt: string | null;
+  overdue: boolean;
+  remindedAt: string | null;
+  escalatedAt: string | null;
 }
 
 export interface InstanceRow {
@@ -129,29 +148,32 @@ export class WorkflowService {
 
   // ---- definitions ------------------------------------------------------------------------------
   async definitions(ctx: RequestContext): Promise<DefinitionRow[]> {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<{
-        id: string;
-        code: string;
-        name: string;
-        entity_type: string;
-        levels: Level[];
-        status: DefinitionRow['status'];
-        open: number;
-      }>(
-        `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
-           FROM workflow_definitions d WHERE d.deleted_at IS NULL ORDER BY d.entity_type, d.code`,
-      );
-      return r.rows.map((x) => ({
-        id: x.id,
-        code: x.code,
-        name: x.name,
-        entityType: x.entity_type,
-        levels: x.levels,
-        status: x.status,
-        open: x.open,
-      }));
-    });
+    return this.db.tenant(requireTenant(ctx), (c) => this.definitionsWith(c));
+  }
+
+  /** Reads through the caller's client so create/update can return the row inside their transaction. */
+  private async definitionsWith(c: PoolClient): Promise<DefinitionRow[]> {
+    const r = await c.query<{
+      id: string;
+      code: string;
+      name: string;
+      entity_type: string;
+      levels: Level[];
+      status: DefinitionRow['status'];
+      open: number;
+    }>(
+      `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
+         FROM workflow_definitions d WHERE d.deleted_at IS NULL ORDER BY d.entity_type, d.code`,
+    );
+    return r.rows.map((x) => ({
+      id: x.id,
+      code: x.code,
+      name: x.name,
+      entityType: x.entity_type,
+      levels: x.levels,
+      status: x.status,
+      open: x.open,
+    }));
   }
 
   async createDefinition(ctx: RequestContext, dto: CreateDefinitionDto): Promise<DefinitionRow> {
@@ -175,7 +197,7 @@ export class WorkflowService {
         entityId: id,
         after: dto,
       });
-      return (await this.definitions(ctx)).find((d) => d.id === id)!;
+      return (await this.definitionsWith(c)).find((d) => d.id === id)!;
     });
   }
 
@@ -207,7 +229,7 @@ export class WorkflowService {
         entityId: id,
         after: dto,
       });
-      return (await this.definitions(ctx)).find((d) => d.id === id)!;
+      return (await this.definitionsWith(c)).find((d) => d.id === id)!;
     });
   }
 
@@ -365,8 +387,12 @@ export class WorkflowService {
       acted_by: string | null;
       acted_at: Date | null;
       note: string | null;
+      due_at: Date | null;
+      reminded_at: Date | null;
+      escalated_at: Date | null;
     }>(
       `SELECT s.id::text, s.instance_id::text, s.level, s.name, s.resolver, s.status::text, ub.display_name AS acted_by, s.acted_at, s.note,
+              s.due_at, s.reminded_at, s.escalated_at,
               COALESCE((SELECT jsonb_agg(jsonb_build_object('id', u.id::text, 'name', u.display_name)) FROM users u WHERE u.id = ANY(s.assignee_user_ids)), '[]'::jsonb) AS assignees
          FROM workflow_steps s LEFT JOIN users ub ON ub.id = s.acted_by WHERE s.instance_id = $1 ORDER BY s.level`,
       [instanceId],
@@ -382,6 +408,10 @@ export class WorkflowService {
       actedBy: x.acted_by,
       actedAt: x.acted_at ? x.acted_at.toISOString() : null,
       note: x.note,
+      dueAt: x.due_at ? x.due_at.toISOString() : null,
+      overdue: x.status === 'pending' && x.due_at !== null && x.due_at.getTime() < Date.now(),
+      remindedAt: x.reminded_at ? x.reminded_at.toISOString() : null,
+      escalatedAt: x.escalated_at ? x.escalated_at.toISOString() : null,
     }));
   }
 
@@ -446,13 +476,57 @@ export class WorkflowService {
           `Nobody can approve level ${level.level} (${level.name}); check the workflow definition`,
           { status: 409 },
         );
+      // the first level's clock starts now; later levels start when they become current (act())
+      const first = level.level === Math.min(...def.rows[0].levels.map((l) => l.level));
       await c.query(
-        `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids) VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::bigint[])`,
-        [id, level.level, level.name, JSON.stringify(level.resolver), assignees],
+        `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, due_at)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::bigint[], CASE WHEN $6::boolean AND $7::int IS NOT NULL THEN now() + make_interval(hours => $7::int) END)`,
+        [
+          id,
+          level.level,
+          level.name,
+          JSON.stringify(level.resolver),
+          assignees,
+          first,
+          level.slaHours ?? null,
+        ],
       );
     }
+    await this.event(c, id, null, 'started', ctx.user.id, null, { subject: input.subject });
+    await this.audit.stage(ctx, c, {
+      action: 'workflow.instance.started',
+      entityType: 'workflow_instances',
+      entityId: id,
+      after: {
+        definition: input.definitionCode,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        subject: input.subject,
+      },
+    });
     return (await this.instanceWith(c, id))!;
   }
+
+  /** History line of an instance (Sprint 17). */
+  private async event(
+    c: PoolClient,
+    instanceId: string,
+    stepId: string | null,
+    kind: string,
+    actorId: string | null,
+    note: string | null,
+    detail: Record<string, unknown> = {},
+  ): Promise<void> {
+    await c.query(
+      `INSERT INTO workflow_events (school_id, instance_id, step_id, kind, actor_id, note, detail) VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6::jsonb)`,
+      [instanceId, stepId, kind, actorId, note, JSON.stringify(detail)],
+    );
+  }
+
+  /** Steps the user may act on: assigned, or delegated to them by an assignee (active delegation). */
+  static readonly MAY_ACT = `(app.current_user_id() = ANY(s.assignee_user_ids)
+       OR EXISTS (SELECT 1 FROM delegations d WHERE d.to_user_id = app.current_user_id() AND d.from_user_id = ANY(s.assignee_user_ids)
+                     AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at))`;
 
   async inbox(ctx: RequestContext): Promise<InboxItem[]> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -460,7 +534,7 @@ export class WorkflowService {
         // eslint-disable-next-line no-restricted-syntax -- INSTANCE_SELECT is a constant; values are bound parameters
         `${INSTANCE_SELECT.replace('SELECT i.id::text', 'SELECT s.id::text AS step_id, i.id::text')}
            JOIN workflow_steps s ON s.instance_id = i.id AND s.level = i.current_level AND s.status = 'pending'
-          WHERE i.status = 'pending' AND app.current_user_id() = ANY(s.assignee_user_ids) ORDER BY i.requested_at`,
+          WHERE i.status = 'pending' AND ${WorkflowService.MAY_ACT} ORDER BY s.due_at NULLS LAST, i.requested_at`,
       );
       const items: InboxItem[] = [];
       for (const row of r.rows) {
@@ -541,10 +615,19 @@ export class WorkflowService {
         throw new DomainError('workflow.step_closed', 'This step has already been decided', {
           status: 409,
         });
-      if (!step.assignees.includes(ctx.user.id))
-        throw new DomainError('workflow.not_assignee', 'This step is not assigned to you', {
-          status: 403,
-        });
+      let delegatedFrom: string | null = null;
+      if (!step.assignees.includes(ctx.user.id)) {
+        const d = await c.query<{ from_user_id: string }>(
+          `SELECT d.from_user_id::text FROM delegations d WHERE d.to_user_id = app.current_user_id() AND d.from_user_id = ANY($1::bigint[])
+             AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at LIMIT 1`,
+          [step.assignees],
+        );
+        if (!d.rows[0])
+          throw new DomainError('workflow.not_assignee', 'This step is not assigned to you', {
+            status: 403,
+          });
+        delegatedFrom = d.rows[0].from_user_id;
+      }
       const inst = await c.query<{ status: string; current_level: number }>(
         `SELECT status::text, current_level FROM workflow_instances WHERE id = $1 FOR UPDATE`,
         [step.instance_id],
@@ -573,12 +656,20 @@ export class WorkflowService {
           `SELECT level FROM workflow_steps WHERE instance_id = $1 AND status = 'pending' ORDER BY level LIMIT 1`,
           [step.instance_id],
         );
-        if (next.rows[0])
+        if (next.rows[0]) {
           await c.query(
             `UPDATE workflow_instances SET current_level = $2, updated_at = now() WHERE id = $1`,
             [step.instance_id, next.rows[0].level],
           );
-        else {
+          // the next level's SLA clock starts now
+          await c.query(
+            `UPDATE workflow_steps s SET due_at = now() + make_interval(hours => (l.value->>'slaHours')::int)
+               FROM workflow_instances i JOIN workflow_definitions d ON d.id = i.definition_id
+               CROSS JOIN LATERAL jsonb_array_elements(d.levels) AS l(value)
+              WHERE s.instance_id = i.id AND i.id = $1 AND s.level = $2 AND (l.value->>'level')::int = s.level AND l.value ? 'slaHours'`,
+            [step.instance_id, next.rows[0].level],
+          );
+        } else {
           await c.query(
             `UPDATE workflow_instances SET status = 'approved', completed_at = now(), completed_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
             [step.instance_id],
@@ -586,6 +677,14 @@ export class WorkflowService {
           completed = 'approved';
         }
       }
+      await this.event(c, step.instance_id, stepId, outcome, ctx.user.id, dto.note ?? null, {
+        level: step.level,
+        ...(delegatedFrom ? { delegatedFrom } : {}),
+      });
+      if (delegatedFrom)
+        await this.event(c, step.instance_id, stepId, 'delegated', ctx.user.id, null, {
+          from: delegatedFrom,
+        });
       const instance = (await this.instanceWith(c, step.instance_id))!;
       await this.audit.stage(ctx, c, {
         action: `workflow.step.${outcome}`,
@@ -605,5 +704,136 @@ export class WorkflowService {
       }
       return instance;
     });
+  }
+
+  // ---- Sprint 17: cancel, reassign, comment, history --------------------------------------------
+  async cancel(ctx: RequestContext, instanceId: string, dto: CancelDto): Promise<InstanceRow> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const cur = await c.query<{
+        status: string;
+        requested_by: string | null;
+        entity_type: string;
+      }>(
+        `SELECT status::text, requested_by::text, entity_type FROM workflow_instances WHERE id = $1 FOR UPDATE`,
+        [instanceId],
+      );
+      const row = cur.rows[0];
+      if (!row) throw new DomainError('not-found', 'Instance not found', { status: 404 });
+      if (row.status !== 'pending')
+        throw new DomainError('workflow.not_pending', `The approval is already ${row.status}`, {
+          status: 409,
+        });
+      const mayManage = ctx.permissions?.has('workflow.instance.cancel') === true;
+      if (row.requested_by !== ctx.user.id && !mayManage)
+        throw new DomainError(
+          'permission-denied',
+          'Only the requester or a workflow manager may cancel',
+          {
+            status: 403,
+          },
+        );
+      await c.query(
+        `UPDATE workflow_steps SET status = 'skipped' WHERE instance_id = $1 AND status = 'pending'`,
+        [instanceId],
+      );
+      await c.query(
+        `UPDATE workflow_instances SET status = 'cancelled', cancel_reason = $2, completed_at = now(), completed_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
+        [instanceId, dto.reason],
+      );
+      await this.event(c, instanceId, null, 'cancelled', ctx.user.id, dto.reason);
+      const instance = (await this.instanceWith(c, instanceId))!;
+      await this.audit.stage(ctx, c, {
+        action: 'workflow.instance.cancelled',
+        entityType: 'workflow_instances',
+        entityId: instanceId,
+        after: { reason: dto.reason },
+      });
+      // the owning module treats a cancellation like a rejection (the entity goes back to its author)
+      const handler = this.handlers.get(instance.entityType);
+      if (handler) await handler(c, ctx, instance, 'rejected');
+      return instance;
+    });
+  }
+
+  async reassign(ctx: RequestContext, stepId: string, dto: ReassignDto): Promise<InstanceRow> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const s = await c.query<{ instance_id: string; status: string; assignees: string[] }>(
+        `SELECT instance_id::text, status::text, assignee_user_ids::text[] AS assignees FROM workflow_steps WHERE id = $1 FOR UPDATE`,
+        [stepId],
+      );
+      const step = s.rows[0];
+      if (!step) throw new DomainError('not-found', 'Step not found', { status: 404 });
+      if (step.status !== 'pending')
+        throw new DomainError('workflow.step_closed', 'This step has already been decided', {
+          status: 409,
+        });
+      const members = await c.query<{ id: string }>(
+        `SELECT user_id::text AS id FROM user_school_memberships WHERE user_id = ANY($1::bigint[]) AND status = 'active' AND deleted_at IS NULL`,
+        [dto.userIds],
+      );
+      if (members.rows.length !== new Set(dto.userIds).size)
+        throw new DomainError(
+          'validation-failed',
+          'Every assignee must be an active member of this school',
+          {
+            status: 400,
+          },
+        );
+      await c.query(`UPDATE workflow_steps SET assignee_user_ids = $2::bigint[] WHERE id = $1`, [
+        stepId,
+        dto.userIds,
+      ]);
+      await this.event(c, step.instance_id, stepId, 'reassigned', ctx.user.id, dto.note ?? null, {
+        from: step.assignees,
+        to: dto.userIds,
+      });
+      await this.audit.stage(ctx, c, {
+        action: 'workflow.step.reassigned',
+        entityType: 'workflow_instances',
+        entityId: step.instance_id,
+        before: { assignees: step.assignees },
+        after: { assignees: dto.userIds, note: dto.note ?? null },
+      });
+      return (await this.instanceWith(c, step.instance_id))!;
+    });
+  }
+
+  async comment(ctx: RequestContext, instanceId: string, dto: CommentDto): Promise<EventRow[]> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const exists = await c.query('SELECT 1 FROM workflow_instances WHERE id = $1', [instanceId]);
+      if (!exists.rows[0])
+        throw new DomainError('not-found', 'Instance not found', { status: 404 });
+      await this.event(c, instanceId, null, 'comment', ctx.user.id, dto.note);
+      return this.historyOf(c, instanceId);
+    });
+  }
+
+  async history(ctx: RequestContext, instanceId: string): Promise<EventRow[]> {
+    return this.db.tenant(requireTenant(ctx), (c) => this.historyOf(c, instanceId));
+  }
+
+  private async historyOf(c: PoolClient, instanceId: string): Promise<EventRow[]> {
+    const r = await c.query<{
+      id: string;
+      step_id: string | null;
+      kind: string;
+      actor: string | null;
+      note: string | null;
+      detail: Record<string, unknown>;
+      occurred_at: Date;
+    }>(
+      `SELECT e.id::text, e.step_id::text, e.kind, u.display_name AS actor, e.note, e.detail, e.occurred_at
+         FROM workflow_events e LEFT JOIN users u ON u.id = e.actor_id WHERE e.instance_id = $1 ORDER BY e.id`,
+      [instanceId],
+    );
+    return r.rows.map((x) => ({
+      id: x.id,
+      stepId: x.step_id,
+      kind: x.kind,
+      actor: x.actor,
+      note: x.note,
+      detail: x.detail,
+      occurredAt: x.occurred_at.toISOString(),
+    }));
   }
 }

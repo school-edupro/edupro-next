@@ -31,7 +31,7 @@ describe('maintenance: shadow reconcile and AI reports (Sprint 16)', () => {
       log,
       migratorUrl: undefined,
     })({
-      data: SYSTEM_ENVELOPE(kind),
+      data: SYSTEM_ENVELOPE(kind, { schoolIds: [school.id] }),
       attemptsMade: 0,
       opts: { attempts: 1 },
     });

@@ -62,6 +62,7 @@ describe('permission coverage', () => {
       'CompatController.handshake (compat/v1)',
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
+      'GpsController.ingest (transport/gps)',
       'HealthController.health (health)',
       'MetricsController.metricsText (metrics)',
       'PaymentsController.ccavenueReturned (payments)',

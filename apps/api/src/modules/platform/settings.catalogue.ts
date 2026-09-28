@@ -124,6 +124,43 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Tally ledger debited for cheque, DD, bank, UPI, card and online receipts',
     module: 'fees',
   },
+  'workflow.escalate_roles': {
+    schema: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/),
+    default: 'school_admin',
+    description:
+      'Role codes added to an overdue approval step when its level has no escalation of its own (Sprint 17)',
+    module: 'workflow',
+  },
+  'workflow.escalate_after_hours': {
+    schema: z.coerce.number().int().min(1).max(720),
+    default: 24,
+    description: 'Hours after the SLA due time before an overdue step escalates (Sprint 17)',
+    module: 'workflow',
+  },
+  'library.loan_days': {
+    schema: z.coerce.number().int().min(1).max(90),
+    default: 14,
+    description: 'Days a copy may be kept before it is overdue (Sprint 17)',
+    module: 'library',
+  },
+  'library.max_loans': {
+    schema: z.coerce.number().int().min(1).max(20),
+    default: 2,
+    description: 'Copies a borrower may hold at once (Sprint 17)',
+    module: 'library',
+  },
+  'library.fine_per_day': {
+    schema: money,
+    default: '2.00',
+    description: 'Fine per overdue day per copy (Sprint 17)',
+    module: 'library',
+  },
+  'transport.gps_retention_days': {
+    schema: z.coerce.number().int().min(1).max(365),
+    default: 30,
+    description: 'Days of vehicle positions kept before the nightly purge (Sprint 17)',
+    module: 'transport',
+  },
   'insights.alert_roles': {
     schema: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/),
     default: 'school_admin',

@@ -124,6 +124,21 @@ async function main(): Promise<void> {
     { name: 'insights.alerts', data: SYSTEM_ENVELOPE('insights.alerts') },
   );
   await maintenance.upsertJobScheduler(
+    'workflow.sla',
+    { every: 60 * 60 * 1000 },
+    { name: 'workflow.sla', data: SYSTEM_ENVELOPE('workflow.sla') },
+  );
+  await maintenance.upsertJobScheduler(
+    'transport.positions.expire',
+    { every: 24 * 60 * 60 * 1000 },
+    { name: 'transport.positions.expire', data: SYSTEM_ENVELOPE('transport.positions.expire') },
+  );
+  await maintenance.upsertJobScheduler(
+    'insights.results_mart',
+    { every: 60 * 60 * 1000 },
+    { name: 'insights.results_mart', data: SYSTEM_ENVELOPE('insights.results_mart') },
+  );
+  await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },
     { name: 'break_glass.expire', data: SYSTEM_ENVELOPE('break_glass.expire') },

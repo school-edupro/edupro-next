@@ -41,7 +41,14 @@ export interface MasterField {
 }
 
 export type MasterGroup =
-  'fees' | 'academics' | 'attendance' | 'transport' | 'exams' | 'communication' | 'system';
+  | 'fees'
+  | 'academics'
+  | 'attendance'
+  | 'transport'
+  | 'exams'
+  | 'communication'
+  | 'library'
+  | 'system';
 
 export interface MasterDefinition {
   id: string;
@@ -84,6 +91,7 @@ export const MASTER_GROUPS: Record<MasterGroup, { title: string; kicker: string 
   transport: { title: 'Transport setup', kicker: 'Transport' },
   exams: { title: 'Exams setup', kicker: 'Exams' },
   communication: { title: 'Communication setup', kicker: 'Communication' },
+  library: { title: 'Library catalogue', kicker: 'Library' },
   system: { title: 'System setup', kicker: 'System' },
 };
 
@@ -806,7 +814,14 @@ export const MASTERS: MasterDefinition[] = [
       { key: 'insurance_expiry', header: 'Insurance expiry', type: 'date', width: 12 },
       { key: 'fitness_expiry', header: 'Fitness expiry', type: 'date', width: 12 },
       { key: 'permit_expiry', header: 'Permit expiry', type: 'date', width: 12 },
-      { key: 'gps_device_id', header: 'GPS device', type: 'text', maxLength: 60, width: 12 },
+      {
+        key: 'gps_device_id',
+        header: 'GPS device',
+        type: 'text',
+        maxLength: 60,
+        width: 12,
+        bulk: true,
+      },
     ],
     status: STATUS,
     search: ['t.reg_no', 't.make'],
@@ -1095,6 +1110,77 @@ export const MASTERS: MasterDefinition[] = [
     status: STATUS,
     search: ['t.code', 't.name'],
     orderBy: 't.code',
+  }),
+  // ---- library (Sprint 17) ----
+  master({
+    id: 'library_titles',
+    title: 'Titles',
+    group: 'library',
+    table: 'library_titles',
+    permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    fields: [
+      code('Catalogue code'),
+      { key: 'title', header: 'Title', type: 'text', required: true, maxLength: 200, width: 32 },
+      { key: 'author', header: 'Author', type: 'text', maxLength: 120, width: 20 },
+      { key: 'publisher', header: 'Publisher', type: 'text', maxLength: 120, width: 18 },
+      { key: 'edition', header: 'Edition', type: 'text', maxLength: 40, width: 10 },
+      { key: 'year', header: 'Year', type: 'number', scale: 0, min: 1500, max: 2100, width: 8 },
+      { key: 'isbn', header: 'ISBN', type: 'text', maxLength: 20, width: 14 },
+      { key: 'category', header: 'Category', type: 'text', maxLength: 60, width: 14, bulk: true },
+      { key: 'language', header: 'Language', type: 'text', maxLength: 30, width: 10, bulk: true },
+      { key: 'price', header: 'Price', type: 'number', scale: 2, min: 0, width: 10 },
+      { key: 'pages', header: 'Pages', type: 'number', scale: 0, min: 1, max: 5000, width: 8 },
+      {
+        key: 'location',
+        header: 'Rack / shelf',
+        type: 'text',
+        maxLength: 40,
+        width: 12,
+        bulk: true,
+      },
+      { key: 'is_reference', header: 'Reference only', type: 'boolean', width: 8, bulk: true },
+    ],
+    status: STATUS,
+    search: ['t.code', 't.title', 't.author', 't.isbn'],
+    orderBy: 't.title',
+    uploadHelp:
+      'One row per title; copies are accessioned under Library → Circulation or uploaded on the Copies tab.',
+  }),
+  master({
+    id: 'library_copies',
+    title: 'Copies (accession register)',
+    group: 'library',
+    table: 'library_copies',
+    permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
+    naturalKey: ['accession_no'],
+    conflict: '(school_id, accession_no)',
+    fields: [
+      {
+        key: 'accession_no',
+        header: 'Accession no',
+        type: 'text',
+        required: true,
+        identity: true,
+        maxLength: 30,
+        width: 12,
+      },
+      {
+        key: 'title_id',
+        header: 'Catalogue code',
+        type: 'ref',
+        lookup: { table: 'library_titles', column: 'code' },
+        required: true,
+        width: 14,
+      },
+      { key: 'accessioned_on', header: 'Accessioned on', type: 'date', width: 12 },
+      { key: 'source', header: 'Source', type: 'text', maxLength: 60, width: 12, bulk: true },
+      { key: 'price', header: 'Price', type: 'number', scale: 2, min: 0, width: 10 },
+      { key: 'remarks', header: 'Remarks', type: 'text', maxLength: 200, width: 20 },
+    ],
+    search: ['t.accession_no', 'r2.code'],
+    orderBy: 't.accession_no',
   }),
 ];
 

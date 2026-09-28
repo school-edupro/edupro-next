@@ -871,6 +871,8 @@ export interface WorkflowLevel {
   name: string;
   resolver: WorkflowResolver;
   slaHours?: number;
+  /** Sprint 17: who joins the step when it is overdue */
+  escalateTo?: WorkflowResolver;
 }
 export interface WorkflowDefinition {
   id: string;
@@ -892,6 +894,20 @@ export interface WorkflowStep {
   actedBy: string | null;
   actedAt: string | null;
   note: string | null;
+  /** Sprint 17 */
+  dueAt?: string | null;
+  overdue?: boolean;
+  remindedAt?: string | null;
+  escalatedAt?: string | null;
+}
+export interface WorkflowEvent {
+  id: string;
+  stepId: string | null;
+  kind: string;
+  actor: string | null;
+  note: string | null;
+  detail: Record<string, unknown>;
+  occurredAt: string;
 }
 export interface WorkflowInstance {
   id: string;
@@ -2128,4 +2144,102 @@ export interface AssistantCosts {
   }>;
   byUser: Array<{ user: string | null; prompts: number; costPaise: number; tokens: number }>;
   byModel: Array<{ provider: string; model: string; prompts: number; costPaise: number }>;
+}
+
+// ---- Sprint 17 ----
+export type ClassBand = 'primary' | 'middle' | 'secondary' | 'senior';
+export interface ReportCardTemplate {
+  id: string;
+  code: string;
+  name: string;
+  band: ClassBand;
+  layout: Record<string, unknown>;
+  bodyHtml: string | null;
+  stylesCss: string;
+  pageWidth: string;
+  pageHeight: string;
+  version: number;
+  status: 'active' | 'inactive';
+  updatedAt: string;
+}
+export interface ReportCardRelease {
+  id: string;
+  termCode: string;
+  name: string;
+  examIds: string[];
+  exams: Array<{ id: string; code: string; name: string }>;
+  templates: Record<string, string>;
+  hideDefaulters: boolean;
+  defaulterMin: string;
+  status: 'draft' | 'released' | 'withdrawn';
+  releasedAt: string | null;
+  createdAt: string;
+  cards: { rendered: number; withheld: number };
+}
+export interface ReportCardStatus {
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  rollNo: number | null;
+  exportId: string | null;
+  exportStatus: string | null;
+  withheld: boolean;
+  withheldReason: string | null;
+  renderedAt: string | null;
+}
+export interface VehiclePosition {
+  vehicleId: string;
+  regNo: string;
+  recordedAt: string;
+  lat: string;
+  lng: string;
+  speedKmh: string | null;
+  heading: string | null;
+  ignition: boolean | null;
+  source: string;
+  ageSeconds: number;
+}
+export interface LibraryTitle {
+  id: string;
+  code: string;
+  title: string;
+  author: string | null;
+  publisher: string | null;
+  category: string | null;
+  language: string | null;
+  location: string | null;
+  isReference: boolean;
+  price: string | null;
+  copies: number;
+  available: number;
+}
+export interface LibraryCopy {
+  id: string;
+  accessionNo: string;
+  accessionedOn: string;
+  source: string | null;
+  price: string | null;
+  status: string;
+  remarks: string | null;
+  lastVerifiedOn: string | null;
+  loan: { dueOn: string; borrower: string; kind: string } | null;
+}
+export interface LibraryLoan {
+  id: string;
+  accessionNo: string;
+  title: string;
+  author: string | null;
+  borrowerKind: 'student' | 'employee';
+  borrowerId: string;
+  borrower: string;
+  borrowerRef: string;
+  issuedOn: string;
+  dueOn: string;
+  returnedOn: string | null;
+  renewed: number;
+  daysOverdue: number;
+  fineAmount: string;
+  fineWaived: string;
+  finePaidOn: string | null;
+  note: string | null;
 }
