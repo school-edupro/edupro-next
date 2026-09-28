@@ -1,3 +1,4 @@
+import { MASTERS, masterToDataset } from './masters';
 /**
  * Export datasets (S3-03). The API validates the request (dataset exists, caller holds the permission,
  * scope filters applied) and the worker runs the query under the requester's tenant context, so
@@ -726,6 +727,12 @@ export const DATASETS: Record<string, DatasetDefinition> = {
     }),
   },
 };
+
+// every master is a dataset too (Excel, CSV and PDF exports of the grid)
+for (const m of MASTERS) {
+  const d = masterToDataset(m);
+  DATASETS[d.id] = d;
+}
 
 export const DATASET_IDS = Object.keys(DATASETS) as [string, ...string[]];
 

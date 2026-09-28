@@ -68,3 +68,16 @@ decide → alert); the three zero days themselves happen on the pilot's data dur
 ETL rehearsal against the legacy dump (needs the MySQL dump); the seven eval misses (keyword collisions in
 the mock router; the real provider does not have them); report cards and results marts (Sprint 17); the
 seeded hostel demand rows at ₹0 (Sprint 15 note).
+
+## 6. Follow-up delivered with Sprint 16: the master-data framework
+
+Asked after the sprint review: every master built from Sprint 0 to 16 must offer CRUD, Excel / PDF
+export and bulk upload by Excel in one consistent screen (the legacy "Fees Setup" shape), in Mobilise
+tokens, always per school. Delivered as `docs/design/13-master-data-framework.md`: migration `0028`
+(`master_imports`, `banks`, natural-key indexes), the registry `packages/db/src/masters.ts` (24
+masters, each also a dataset `master_<id>`), the `masters` API module (rows, template, upload
+validate / commit, row save, status, bulk, clone; `@AuthenticatedOnly` with the entry's own
+permission checked by the service — the guard now loads effective permissions on such routes),
+the admin page `/masters/[group]` with the six "… setup" menu entries, `masters.e2e-spec.ts` (7
+cases including cross-school isolation) and three a11y screens. The inventory that drove it: only
+`classes` and `class_sections` had exports, no master had an upload, several had no edit or paging.

@@ -34,6 +34,7 @@ import { HealthController } from './modules/health/health.controller';
 import { MetricsController } from './modules/health/metrics.controller';
 import { IdentityModule } from './modules/identity/identity.module';
 import { MeController } from './modules/me/me.controller';
+import { MastersModule } from './modules/masters/masters.module';
 import { ShadowModule } from './modules/shadow/shadow.module';
 import { ExamsModule } from './modules/exams/exams.module';
 import { PeopleModule } from './modules/people/people.module';
@@ -74,6 +75,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     InsightsModule,
     ExamsModule,
     ShadowModule,
+    MastersModule,
     PeopleModule,
     CompatModule,
   ],

@@ -45,6 +45,7 @@ const NAV: Array<{
     section: 'fees',
     items: [
       { href: '/fees/masters', label: 'feeMasters', permission: 'fees.master.view' },
+      { href: '/masters/fees', label: 'feesSetup', permission: 'fees.master.view' },
       { href: '/fees/structures', label: 'feeStructures', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
       { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },
@@ -95,6 +96,7 @@ const NAV: Array<{
     items: [
       { href: '/academics/classes', label: 'classes', permission: 'academics.class.view' },
       { href: '/academics/subjects', label: 'subjects', permission: 'academics.subject.view' },
+      { href: '/masters/academics', label: 'academicsSetup', permission: 'academics.class.view' },
       {
         href: '/academics/teacher-assignments',
         label: 'teacherAssignments',
@@ -138,6 +140,11 @@ const NAV: Array<{
       { href: '/comms/groups', label: 'groups', permission: 'comms.group.view' },
       { href: '/comms/consents', label: 'consents', permission: 'comms.consent.view' },
       { href: '/comms/templates', label: 'templates', permission: 'comms.template.view' },
+      {
+        href: '/masters/communication',
+        label: 'communicationSetup',
+        permission: 'comms.template.view',
+      },
       { href: '/comms/messages', label: 'deliveryLog', permission: 'comms.message.view' },
     ],
   },
@@ -158,6 +165,7 @@ const NAV: Array<{
     items: [
       { href: '/exams', label: 'examList', permission: 'exams.master.view' },
       { href: '/exams/masters', label: 'examTypes', permission: 'exams.master.view' },
+      { href: '/masters/exams', label: 'examsSetup', permission: 'exams.master.view' },
     ],
   },
   {
@@ -165,6 +173,7 @@ const NAV: Array<{
     items: [
       { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
       { href: '/transport/vehicles', label: 'vehicles', permission: 'transport.fleet.view' },
+      { href: '/masters/transport', label: 'transportSetup', permission: 'transport.route.view' },
       { href: '/transport/drivers', label: 'drivers', permission: 'transport.fleet.view' },
       {
         href: '/transport/requests',
@@ -209,6 +218,7 @@ const NAV: Array<{
     section: 'system',
     items: [
       { href: '/system/school', label: 'schoolProfile', permission: 'platform.school.view' },
+      { href: '/masters/system', label: 'systemSetup', permission: 'platform.school.view' },
       { href: '/system/years', label: 'years', permission: 'platform.year.view' },
       { href: '/system/settings', label: 'settings', permission: 'platform.settings.view' },
       { href: '/system/privacy', label: 'privacy', permission: 'platform.privacy.manage' },

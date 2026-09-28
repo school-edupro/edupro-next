@@ -207,6 +207,7 @@ export {
 } from './audit-masks';
 export * from './jobs';
 export * from './datasets';
+export * from './masters';
 export * from './renderers';
 export * from './schema-version';
 export * from './template-engine';

@@ -92,6 +92,22 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Master-data framework walk-through (all masters, one grid)
+
+- **dev-admin**: every module menu now has a "… setup" entry — **Fees → Fees setup**, **Academics →
+  Academics setup**, **Transport → Transport setup**, **Exams → Exams setup**, **Communication →
+  Communication setup**, **System → Campuses**. Each opens tabs of that module's masters (Fee heads,
+  Month–instalment mapping, Transport slabs, Discounts, Banks; Classes, Sections, Subjects, Timetable
+  periods, Holidays; Routes, Stops, Vehicles, Drivers; Exam types, Grade scales, Grade bands, Indicator
+  sets, Indicators, Remark bank; Message templates, Groups, Query categories; Campuses) with the same
+  toolbar: **Records per page**, **＋ Add** (generic form from the field rules), **Clone from year**
+  (year-bound masters: try Month–instalment mapping 2026-27 → 2027-28), **Bulk update** (tick rows,
+  pick a column, apply), **Filter**, **Excel** / **PDF** (queued to the export centre, link shown on the
+  page), **Upload Excel** (download the template, upload it back: the report lists rejects by row and
+  column; a clean file shows an **Import N rows** button). Every row has an edit icon and an
+  activate / deactivate icon. Masters are always the working school's (RLS) and, where year-bound, the
+  header's year.
+
 ### Sprint 16 walk-through (shadow run, results, AI reports)
 
 - **dev-accounts**: **Fees → Variance workbench** opens with the seeded legacy feed (`fees_legacy.csv`, 3

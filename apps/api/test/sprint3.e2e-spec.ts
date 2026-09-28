@@ -226,6 +226,8 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         adminSets
           .json()
           .data.map((d: { id: string }) => d.id)
+          // every master is a dataset too (master_<id>); masters.e2e-spec covers those
+          .filter((id: string) => !id.startsWith('master_'))
           .sort(),
       ).toEqual([
         // Sprint 13 added the department report-centre datasets; the admin holds every permission
@@ -263,6 +265,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         teacherSets
           .json()
           .data.map((d: { id: string }) => d.id)
+          .filter((id: string) => !id.startsWith('master_'))
           .sort(),
       ).toEqual([
         'attendance_daily',

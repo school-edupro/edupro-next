@@ -35,7 +35,12 @@ export class PermissionGuard implements CanActivate {
     const ctx = req.ctx;
     if (!ctx) throw new ForbiddenException({ type: 'unauthenticated' });
 
-    if (this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY, targets)) return true;
+    if (this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY, targets)) {
+      // services behind these routes decide per entity (the master-data framework checks the
+      // registry entry's own permission), so they get the effective set to consult
+      if (ctx.tenant) ctx.permissions = await this.access.effectivePermissions(ctx.tenant);
+      return true;
+    }
 
     const requirement = this.reflector.getAllAndOverride<PermissionRequirement | undefined>(
       REQUIRE_PERMISSION,

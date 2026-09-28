@@ -15,6 +15,21 @@ export class ApiError extends Error {
  * Server-side call to the NestJS API with the user's token and the working school and year (ADR-007).
  * Client components never call this; they go through /api/proxy (Sprint 2), which uses the same helper.
  */
+/** Same headers as apiFetch, but the raw Response (binary downloads such as upload templates). */
+export async function apiFetchRaw(path: string): Promise<Response> {
+  const session = await readSession();
+  if (!session) throw new ApiError(401, { type: 'unauthenticated' });
+  const ctx = await readContext();
+  const headers = new Headers();
+  headers.set('Authorization', `Bearer ${session.accessToken}`);
+  const schoolId = ctx.schoolId ?? session.schoolId;
+  const yearId = ctx.academicYearId ?? session.academicYearId;
+  if (schoolId) headers.set('X-School-Id', schoolId);
+  if (yearId) headers.set('X-Academic-Year-Id', yearId);
+  headers.set('X-Request-Id', crypto.randomUUID());
+  return fetch(`${env.apiBaseUrl}/api/v1${path}`, { headers, cache: 'no-store' });
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},

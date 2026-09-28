@@ -2543,3 +2543,105 @@ export async function runAiReport(fd: FormData) {
     }),
   );
 }
+
+// ---- Master-data framework -----------------------------------------------------------------------
+const masterBack = (fd: FormData) => str(fd, 'back') || '/masters/fees';
+
+export async function masterSave(fd: FormData) {
+  const master = str(fd, 'master');
+  const id = opt(fd, 'id');
+  const values: Record<string, string | null> = {};
+  for (const key of fd.getAll('fields').map(String)) {
+    const v = fd.get(`f:${key}`);
+    values[key] = v === null || String(v).trim() === '' ? null : String(v);
+  }
+  return run(masterBack(fd), () =>
+    apiFetch(`/masters/${master}/rows`, {
+      method: 'POST',
+      body: JSON.stringify({ id: id ?? undefined, values }),
+    }),
+  );
+}
+
+export async function masterStatus(fd: FormData) {
+  // the row's toggle button carries "<id>:<next status>" (it sits inside the bulk form with the ticks)
+  const [id, status] = str(fd, 'toggle').split(':');
+  return run(masterBack(fd), () =>
+    apiFetch(`/masters/${str(fd, 'master')}/rows/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: status === 'inactive' ? 'inactive' : 'active' }),
+    }),
+  );
+}
+
+export async function masterBulk(fd: FormData) {
+  const back = masterBack(fd);
+  const ids = fd.getAll('ids').map(String).filter(Boolean);
+  if (ids.length === 0) back_(back, 'validation-failed', 'Tick at least one row');
+  return run(back, () =>
+    apiFetch(`/masters/${str(fd, 'master')}/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ ids, field: str(fd, 'field'), value: str(fd, 'value') }),
+    }),
+  );
+}
+
+export async function masterClone(fd: FormData) {
+  return run(masterBack(fd), () =>
+    apiFetch(`/masters/${str(fd, 'master')}/clone`, {
+      method: 'POST',
+      body: JSON.stringify({ fromYearId: str(fd, 'fromYearId'), toYearId: str(fd, 'toYearId') }),
+    }),
+  );
+}
+
+export async function masterExport(fd: FormData) {
+  const back = masterBack(fd);
+  const format = ['xlsx', 'csv', 'pdf'].includes(str(fd, 'format')) ? str(fd, 'format') : 'xlsx';
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>('/reports/exports', {
+      method: 'POST',
+      body: JSON.stringify({
+        dataset: `master_${str(fd, 'master')}`,
+        format,
+        title: opt(fd, 'title'),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}${back.includes('?') ? '&' : '?'}ok=1&export=${out!.id}`);
+}
+
+export async function masterUploadValidate(fd: FormData) {
+  const back = masterBack(fd);
+  const master = str(fd, 'master');
+  const file = fd.get('file');
+  if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || (file as File).size === 0)
+    back_(back, 'validation-failed', 'Choose an .xlsx or .csv file');
+  const f = file as File;
+  const body: Record<string, string> = { fileName: f.name };
+  if (/\.csv$/i.test(f.name)) body.csv = await f.text();
+  else body.contentBase64 = Buffer.from(await f.arrayBuffer()).toString('base64');
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>(`/masters/${master}/imports/validate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}${back.includes('?') ? '&' : '?'}upload=1&import=${out!.id}`);
+}
+
+export async function masterUploadCommit(fd: FormData) {
+  return run(masterBack(fd), () =>
+    apiFetch(`/masters/${str(fd, 'master')}/imports/${str(fd, 'importId')}/commit`, {
+      method: 'POST',
+    }),
+  );
+}

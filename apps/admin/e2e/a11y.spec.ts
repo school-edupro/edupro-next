@@ -55,6 +55,10 @@ const PAGES = [
   '/system/service-keys',
   '/insights/reports',
   '/insights/assistant/costs',
+  // master-data framework
+  '/masters/fees?tab=fee_periods',
+  '/masters/academics?tab=class_sections&add=1',
+  '/masters/exams?tab=grade_bands&upload=1',
 ];
 
 test.describe('accessibility (axe)', () => {

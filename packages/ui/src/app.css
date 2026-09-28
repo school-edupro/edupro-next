@@ -1225,3 +1225,114 @@
   border-top: 1px solid var(--border);
   padding: var(--sp-3) 0;
 }
+
+/* ---- Master-data grid (masters/[group]) ------------------------------------------- */
+.ep-master__toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.ep-master__perpage {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+
+.ep-master__perpage .ep-field {
+  margin: 0;
+}
+
+.ep-master__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.ep-master__filter {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.ep-master__filter .ep-field {
+  margin: 0;
+  min-width: 200px;
+}
+
+.ep-master__panel {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  background: var(--surface-subtle);
+}
+
+.ep-master__panel-title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  margin: 0 0 var(--sp-3);
+}
+
+.ep-master__report {
+  margin-top: var(--sp-3);
+}
+
+.ep-master__count {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  margin: var(--sp-2) 0;
+}
+
+.ep-master__table th {
+  background: var(--mob-navy-50);
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+
+.ep-master__table td.num,
+.ep-master__table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ep-master__rowactions {
+  white-space: nowrap;
+}
+
+.ep-master__iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mob-cyan-700);
+  cursor: pointer;
+}
+
+.ep-master__iconbtn:hover {
+  background: var(--mob-cyan-50);
+}
+
+.ep-master__pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--sp-3);
+}
+
+a.ep-tabs__tab {
+  text-decoration: none;
+}
