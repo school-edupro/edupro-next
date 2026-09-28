@@ -74,6 +74,10 @@ jobs:
         run: pnpm test
       - name: Permission coverage
         run: pnpm --filter @edupro/api test:permissions
+      - name: Assistant red team (Sprint 16)
+        run: pnpm --filter @edupro/api test:redteam
+      - name: Assistant evaluation set (Sprint 16, ≥95 % correct-or-declined, zero leaks)
+        run: pnpm --filter @edupro/api test:eval
       - name: Repository scripts (schema diff report, SQL lint rule fixture)
         run: pnpm test:scripts
       - name: Design token lint

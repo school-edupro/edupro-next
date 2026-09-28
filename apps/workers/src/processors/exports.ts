@@ -13,6 +13,7 @@ import {
 } from './generators';
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
+import { renderAiReport } from '../renderers/ai-report';
 import { renderDocument } from '../renderers/document';
 import { idCardHtml, loadIdCard } from '../renderers/id-card';
 
@@ -121,6 +122,9 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
         let bytes: Buffer;
         if (renderer.id === 'document') {
           const doc = await renderDocument(db, envelope, row.params);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'ai_report') {
+          const doc = await renderAiReport(db, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
         } else {
           const data = await loadIdCard(db, storage, envelope, renderer.id, row.params);

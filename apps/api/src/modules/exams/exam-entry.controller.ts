@@ -1,11 +1,15 @@
-import { Body, Controller, Get, Param, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { ExamEntryService } from './exam-entry.service';
+import { ExamResultsService } from './exam-results.service';
 import {
+  AnalysisQueryDto,
   EntryQueryDto,
   EXAMS,
+  PromotionProposalsQueryDto,
+  RegisterSheetQueryDto,
   PutExamAttendanceDto,
   PutHealthDto,
   PutIndicatorsDto,
@@ -21,7 +25,10 @@ import {
 @ApiBearerAuth()
 @Controller('exams')
 export class ExamEntryController {
-  constructor(private readonly entry: ExamEntryService) {}
+  constructor(
+    private readonly entry: ExamEntryService,
+    private readonly results: ExamResultsService,
+  ) {}
 
   // ---- masters -----------------------------------------------------------------------------------
   @Get('indicator-sets')
@@ -130,5 +137,44 @@ export class ExamEntryController {
   })
   putHealth(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PutHealthDto) {
     return this.entry.putHealth(ctx, id, dto);
+  }
+
+  // ---- Sprint 16: results, register sheet, analysis, promotion proposals -------------------------
+  @Post(':id/results/compute')
+  @ApiOperation({ summary: 'Compute the results of the exam (totals, %, grade, rank, pass/fail)' })
+  @RequirePermission(EXAMS.masterManage)
+  compute(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.results.compute(ctx, id);
+  }
+
+  @Get(':id/register-sheet')
+  @ApiOperation({
+    summary: 'Mark register of a section: pupils × subjects with totals, grade and rank',
+  })
+  @RequirePermission(EXAMS.marksView)
+  registerSheet(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: RegisterSheetQueryDto,
+  ) {
+    return this.results.registerSheet(ctx, id, q.classSectionId);
+  }
+
+  @Get(':id/analysis')
+  @ApiOperation({ summary: 'Result analysis: subjects, grades, sections, toppers' })
+  @RequirePermission(EXAMS.marksView)
+  analysis(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: AnalysisQueryDto) {
+    return this.results.analysis(ctx, id, q.classId);
+  }
+
+  @Get(':id/promotion-proposals')
+  @ApiOperation({ summary: 'Promote / retain proposals from the results under a pass rule' })
+  @RequirePermission(EXAMS.masterManage)
+  proposals(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: PromotionProposalsQueryDto,
+  ) {
+    return this.results.promotionProposals(ctx, id, q);
   }
 }

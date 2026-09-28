@@ -23,6 +23,8 @@ interface Payment {
   refunded: string;
   mode: string;
   status: string;
+  settled: boolean;
+  clearedOn: string | null;
 }
 interface Child {
   student: { id: string; name: string; admissionNo: string; section: string | null };
@@ -63,13 +65,18 @@ export default async function FeesPage({
   const lang = await currentLang();
   let children: Child[];
   let intents: Intent[];
+  let permissions: string[] = [];
   try {
-    [children, intents] = await Promise.all([
+    [children, intents, permissions] = await Promise.all([
       bff.api.fetch<{ children: Child[] }>('/fees/mine').then((r) => r.children),
       bff.api
         .fetch<{ data: Intent[] }>('/payments/intents/mine')
         .then((r) => r.data)
         .catch(() => [] as Intent[]),
+      bff.api
+        .me()
+        .then((m) => m.permissions)
+        .catch(() => [] as string[]),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -87,7 +94,8 @@ export default async function FeesPage({
       );
     throw error;
   }
-  const canPay = intents !== null;
+  // Sprint 16: the Pay button follows the permission, not whether the intents call answered
+  const canPay = permissions.includes('payments.family.pay');
   // Sprint 14: a queued receipt PDF; the worker renders it and the link appears when ready
   const exportStatus = sp.export
     ? await bff.api
@@ -309,7 +317,19 @@ export default async function FeesPage({
                         </small>
                       ) : null}
                     </td>
-                    <td>{p.mode.toUpperCase()}</td>
+                    <td>
+                      {p.mode.toUpperCase()}
+                      {p.status === 'bounced' ? (
+                        <small> · {t(lang, 'Bounced')}</small>
+                      ) : p.clearedOn ? (
+                        <small>
+                          {' '}
+                          · {t(lang, 'Cleared')} {p.clearedOn}
+                        </small>
+                      ) : p.settled ? (
+                        <small> · {t(lang, 'Settled')}</small>
+                      ) : null}
+                    </td>
                     <td>
                       {p.status === 'posted' || p.status === 'partly_refunded' ? (
                         <form action={queueMyReceiptPdf}>

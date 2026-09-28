@@ -29,8 +29,11 @@ export default async function AlertsPage({
     ),
   ]);
   const canAck = me.permissions.includes('insights.alert.ack');
+  // alert kinds are dotted (`attendance.drop`); the message keys use underscores because next-intl nests on "."
   const kindLabel = (k: string) =>
-    ['attendance.drop', 'fees.collection_dip', 'reader.silent'].includes(k) ? a(k) : k;
+    ['attendance.drop', 'fees.collection_dip', 'reader.silent', 'shadow.variance'].includes(k)
+      ? a(k.replace('.', '_'))
+      : k;
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />

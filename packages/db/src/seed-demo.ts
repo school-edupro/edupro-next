@@ -3960,6 +3960,97 @@ async function main(): Promise<void> {
       }
       await clearCtx();
 
+      // ---- Sprint 16: PT1-2026 results, a development service key and a legacy receipts feed so the
+      // variance workbench has something to reconcile (one matched receipt, one amount variance, one
+      // legacy receipt the new ledger never saw) ----
+      await withCtx(alpha.id, 'dev-admin');
+      {
+        const pt1 = await c.query<{ id: string }>(
+          `SELECT id::text FROM exams WHERE school_id = $1 AND academic_year_id = $2 AND code = 'PT1-2026' AND deleted_at IS NULL`,
+          [alpha.id, yearId],
+        );
+        if (pt1.rows[0]) await c.query(`SELECT app.compute_exam_results($1)`, [pt1.rows[0].id]);
+        // development-only machine credential for the legacy cron (the key is the sha256 preimage below;
+        // production keys are issued under System → Service keys and shown once)
+        await c.query(
+          `INSERT INTO service_keys (school_id, name, key_hash, scopes, created_by)
+           VALUES ($1, 'legacy-cron', encode(sha256('dev-service-key-legacy-cron'::bytea), 'hex'), '{shadow.feed}', $2)
+           ON CONFLICT (school_id, name) DO NOTHING`,
+          [alpha.id, userIds['dev-admin']],
+        );
+        const already = await c.query(
+          `SELECT 1 FROM shadow_feeds WHERE school_id = $1 AND source = 'seed:legacy-april'`,
+          [alpha.id],
+        );
+        if (!already.rows[0]) {
+          const pays = await c.query<{
+            id: string;
+            receipt_no: string;
+            admission_no: string;
+            student_id: string;
+            received_on: string;
+            amount: string;
+            mode: string;
+          }>(
+            `SELECT p.id::text, p.receipt_no, s.admission_no, s.id::text AS student_id, p.received_on::text, p.amount::text, p.mode
+               FROM fee_payments p JOIN students s ON s.id = p.student_id
+              WHERE p.school_id = $1 AND p.ledger = 'school' AND p.status = 'posted' AND p.receipt_no IS NOT NULL
+                AND p.received_on >= '2026-04-01'
+              ORDER BY p.received_on, p.id LIMIT 2`,
+            [alpha.id],
+          );
+          if (pays.rows.length === 2) {
+            const feed = await c.query<{ id: string }>(
+              `INSERT INTO shadow_feeds (school_id, kind, source, file_name, rows, accepted, posted, skipped, rejected, received_by)
+               VALUES ($1, 'receipts', 'seed:legacy-april', 'fees_legacy.csv', 3, 3, 2, 0, 0, $2) RETURNING id::text`,
+              [alpha.id, userIds['dev-accounts']],
+            );
+            const [a, b] = pays.rows as [(typeof pays.rows)[0], (typeof pays.rows)[0]];
+            // matched to the rupee
+            await c.query(
+              `INSERT INTO shadow_legacy_receipts (school_id, feed_id, legacy_receipt_no, admission_no, student_id, received_on, amount, mode, legacy_year, payment_id, posted_at)
+               VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, '2026-2027', $9, now())`,
+              [
+                alpha.id,
+                feed.rows[0]!.id,
+                `L-${a.receipt_no}`,
+                a.admission_no,
+                a.student_id,
+                a.received_on,
+                a.amount,
+                a.mode,
+                a.id,
+              ],
+            );
+            // legacy shows ₹100 more than the new ledger (a manual correction made only in legacy)
+            await c.query(
+              `INSERT INTO shadow_legacy_receipts (school_id, feed_id, legacy_receipt_no, admission_no, student_id, received_on, amount, mode, legacy_year, payment_id, posted_at)
+               VALUES ($1, $2, $3, $4, $5, $6::date, $7::numeric + 100, $8, '2026-2027', $9, now())`,
+              [
+                alpha.id,
+                feed.rows[0]!.id,
+                `L-${b.receipt_no}`,
+                b.admission_no,
+                b.student_id,
+                b.received_on,
+                b.amount,
+                b.mode,
+                b.id,
+              ],
+            );
+            // a legacy receipt for an admission number the new ledger does not know (never posted)
+            await c.query(
+              `INSERT INTO shadow_legacy_receipts (school_id, feed_id, legacy_receipt_no, admission_no, received_on, amount, mode, legacy_year, post_error)
+               VALUES ($1, $2, 'L-TF/OLD/0417', 'ALPHA/2019/0042', $3::date, 5400, 'cash', '2026-2027', 'student not found: ALPHA/2019/0042')`,
+              [alpha.id, feed.rows[0]!.id, a.received_on],
+            );
+            // no reconciliation here: the seed runs RLS-blind as the migrator, so app.run_shadow_reconcile would
+            // count every school's receipts; the workers job or Reconcile now on the workbench writes the run
+          }
+        }
+      }
+      await clearCtx();
+
       // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
       for (const school of Object.values(schools)) {
         await withCtx(school.id, 'dev-admin');

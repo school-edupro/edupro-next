@@ -189,6 +189,13 @@ export function catalogueMockResponder(
       return `${head}\n${lines.join('\n')}${o.output.truncated ? '\n…' : ''}`;
     }
     const q = last.toLowerCase();
+    // the offline router answers questions about data only: writes, creative requests and the outside world are refused
+    if (
+      /\b(delete|remove|drop|truncate|update|change|set|reset|send|poem|joke|story|weather|news|song)\b/i.test(
+        q,
+      )
+    )
+      return '';
     const available = new Set((req.tools ?? []).map((t) => t.name));
     let best: CatalogueEntry | null = null;
     let score = 0;
@@ -332,12 +339,14 @@ export class AssistantService {
     const entries = buildCatalogue({ academicYearId: yearId, today, ...scope });
     const mine = this.allowed(ctx, entries, scope.kind);
     const language = dto.language ?? detectLanguage(dto.question);
+    // the surface follows the caller: families are parents, scoped teachers are teachers; unscoped staff
+    // may say which staff app asked (admin or teacher) but can never pose as a parent
     const surface: 'admin' | 'teacher' | 'parent' =
       scope.kind === 'family'
         ? 'parent'
-        : scope.kind === 'teacher'
+        : scope.kind === 'teacher' || dto.surface === 'teacher'
           ? 'teacher'
-          : (dto.surface ?? 'admin');
+          : 'admin';
     if (scope.kind === 'family' && scope.studentIds!.length === 0)
       throw new DomainError('family.not_linked', 'No child is linked to this account', {
         status: 403,
@@ -530,6 +539,95 @@ export class AssistantService {
   }
 
   /** Audit and cost for the school (permission insights.assistant.audit). */
+  /** Sprint 16: the cost dashboard — spend and tokens by day, surface, user and model, with refusal rate. */
+  async costs(ctx: RequestContext, days = 30) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const byDay = await c.query(
+        `SELECT (at AT TIME ZONE 'Asia/Kolkata')::date::text AS day, count(*) FILTER (WHERE kind = 'prompt')::int AS prompts,
+                count(*) FILTER (WHERE kind = 'refusal')::int AS refusals, COALESCE(sum(input_tokens), 0)::bigint AS input_tokens,
+                COALESCE(sum(output_tokens), 0)::bigint AS output_tokens, COALESCE(sum(cost_paise), 0)::bigint AS cost_paise
+           FROM ai_audit WHERE at >= now() - make_interval(days => $1) GROUP BY 1 ORDER BY 1`,
+        [days],
+      );
+      const bySurface = await c.query(
+        `SELECT COALESCE(cv.surface, 'admin') AS surface, count(*) FILTER (WHERE a.kind = 'prompt')::int AS prompts,
+                count(*) FILTER (WHERE a.kind = 'refusal')::int AS refusals, COALESCE(sum(a.cost_paise), 0)::bigint AS cost_paise,
+                count(DISTINCT a.user_id)::int AS users
+           FROM ai_audit a LEFT JOIN ai_conversations cv ON cv.id = a.conversation_id
+          WHERE a.at >= now() - make_interval(days => $1) GROUP BY 1 ORDER BY 3 DESC`,
+        [days],
+      );
+      const byUser = await c.query(
+        `SELECT u.display_name AS "user", count(*) FILTER (WHERE a.kind = 'prompt')::int AS prompts, COALESCE(sum(a.cost_paise), 0)::bigint AS cost_paise,
+                COALESCE(sum(a.input_tokens + a.output_tokens), 0)::bigint AS tokens
+           FROM ai_audit a LEFT JOIN users u ON u.id = a.user_id WHERE a.at >= now() - make_interval(days => $1)
+          GROUP BY 1 ORDER BY 3 DESC, 2 DESC LIMIT 10`,
+        [days],
+      );
+      const byModel = await c.query(
+        `SELECT provider, model, count(*) FILTER (WHERE kind = 'prompt')::int AS prompts, COALESCE(sum(cost_paise), 0)::bigint AS cost_paise
+           FROM ai_audit WHERE at >= now() - make_interval(days => $1) GROUP BY 1, 2 ORDER BY 4 DESC`,
+        [days],
+      );
+      const reports = await c.query(
+        `SELECT count(*)::int AS reports, COALESCE(sum(cost_paise), 0)::bigint AS cost_paise FROM ai_reports WHERE created_at >= now() - make_interval(days => $1)`,
+        [days],
+      );
+      const n = (v: unknown) => Number(v ?? 0);
+      const totals = byDay.rows.reduce(
+        (a, r) => ({
+          prompts: a.prompts + n(r.prompts),
+          refusals: a.refusals + n(r.refusals),
+          inputTokens: a.inputTokens + n(r.input_tokens),
+          outputTokens: a.outputTokens + n(r.output_tokens),
+          costPaise: a.costPaise + n(r.cost_paise),
+        }),
+        { prompts: 0, refusals: 0, inputTokens: 0, outputTokens: 0, costPaise: 0 },
+      );
+      return {
+        days,
+        budget: {
+          perUserDailyTokens: this.env.AI_USER_DAILY_TOKENS,
+          perSchoolMonthlyTokens: this.env.AI_SCHOOL_MONTHLY_TOKENS,
+        },
+        totals: {
+          ...totals,
+          refusalRatePct: totals.prompts
+            ? Math.round((totals.refusals * 1000) / totals.prompts) / 10
+            : null,
+        },
+        reports: { count: n(reports.rows[0]?.reports), costPaise: n(reports.rows[0]?.cost_paise) },
+        byDay: byDay.rows.map((r) => ({
+          day: r.day,
+          prompts: n(r.prompts),
+          refusals: n(r.refusals),
+          inputTokens: n(r.input_tokens),
+          outputTokens: n(r.output_tokens),
+          costPaise: n(r.cost_paise),
+        })),
+        bySurface: bySurface.rows.map((r) => ({
+          surface: r.surface,
+          prompts: n(r.prompts),
+          refusals: n(r.refusals),
+          costPaise: n(r.cost_paise),
+          users: n(r.users),
+        })),
+        byUser: byUser.rows.map((r) => ({
+          user: r.user,
+          prompts: n(r.prompts),
+          costPaise: n(r.cost_paise),
+          tokens: n(r.tokens),
+        })),
+        byModel: byModel.rows.map((r) => ({
+          provider: r.provider,
+          model: r.model,
+          prompts: n(r.prompts),
+          costPaise: n(r.cost_paise),
+        })),
+      };
+    });
+  }
+
   async audit(ctx: RequestContext, days = 30) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const totals = await c.query(

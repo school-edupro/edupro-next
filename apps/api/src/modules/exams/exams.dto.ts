@@ -230,3 +230,15 @@ export const UpsertRemarkBankSchema = z.object({
     .max(200),
 });
 export class UpsertRemarkBankDto extends createZodDto(UpsertRemarkBankSchema) {}
+
+// ---- Sprint 16: results, analysis, promotion proposals ------------------------------------------
+export const RegisterSheetQuerySchema = z.object({ classSectionId: IdSchema });
+export class RegisterSheetQueryDto extends createZodDto(RegisterSheetQuerySchema) {}
+export const AnalysisQuerySchema = z.object({ classId: IdSchema.optional() });
+export class AnalysisQueryDto extends createZodDto(AnalysisQuerySchema) {}
+export const PromotionProposalsQuerySchema = z.object({
+  classId: IdSchema.optional(),
+  minPct: z.coerce.number().min(0).max(100).default(33),
+  maxFailed: z.coerce.number().int().min(0).max(10).default(0),
+});
+export class PromotionProposalsQueryDto extends createZodDto(PromotionProposalsQuerySchema) {}

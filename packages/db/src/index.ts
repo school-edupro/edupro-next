@@ -211,5 +211,6 @@ export * from './renderers';
 export * from './schema-version';
 export * from './template-engine';
 export * from './document-data';
+export * from './report-facts';
 export * from './document-defaults';
 export * from './admission-form';

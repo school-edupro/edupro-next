@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { AiReportsService } from './ai-reports.service';
 import { AlertsService } from './alerts.service';
 import { AssistantService } from './assistant.service';
 import { DEPARTMENTS, DepartmentsService, type Department } from './departments.service';
@@ -21,6 +22,9 @@ export const INSIGHTS = {
   /** Sprint 15: anomaly alerts */
   alertView: 'insights.alert.view',
   alertAck: 'insights.alert.ack',
+  /** Sprint 16: AI reports */
+  reportView: 'insights.report.view',
+  reportRun: 'insights.report.run',
 } as const;
 
 const AskSchema = z.object({
@@ -36,6 +40,18 @@ const AlertsQuerySchema = z.object({
   days: z.coerce.number().int().min(1).max(365).default(30),
 });
 export class AlertsQueryDto extends createZodDto(AlertsQuerySchema) {}
+const RunReportSchema = z.object({
+  kind: z.enum(['principal_brief', 'department_weekly']),
+  department: z.enum(['academics', 'attendance', 'fees', 'communication']).optional(),
+  periodTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  language: z.enum(['en', 'hi']).optional(),
+});
+export class RunReportDto extends createZodDto(RunReportSchema) {}
+const CostsQuerySchema = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) });
+export class CostsQueryDto extends createZodDto(CostsQuerySchema) {}
 export class AssistantAuditQueryDto extends createZodDto(AuditQuerySchema) {}
 
 const DashboardQuerySchema = z.object({
@@ -67,6 +83,7 @@ export class InsightsController {
     private readonly departments: DepartmentsService,
     private readonly assistant: AssistantService,
     private readonly alerts: AlertsService,
+    private readonly aiReports: AiReportsService,
   ) {}
 
   // ---- Sprint 14: the assistant ----
@@ -106,6 +123,34 @@ export class InsightsController {
   })
   audit(@ReqCtx() ctx: RequestContext, @Query() q: AssistantAuditQueryDto) {
     return this.assistant.audit(ctx, q.days);
+  }
+
+  // ---- Sprint 16: AI reports and the cost dashboard ----
+  @Get('reports')
+  @ApiOperation({ summary: 'AI reports: weekly department narratives and the Monday brief' })
+  @RequirePermission(INSIGHTS.reportView, { description: 'Read AI reports' })
+  async reportsList(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.aiReports.list(ctx) };
+  }
+
+  @Post('reports/run')
+  @ApiOperation({ summary: 'Generate an AI report now (facts → narrative → PDF export)' })
+  @RequirePermission(INSIGHTS.reportRun, { description: 'Generate AI reports on demand' })
+  reportRun(@ReqCtx() ctx: RequestContext, @Body() body: RunReportDto) {
+    return this.aiReports.run(ctx, body);
+  }
+
+  @Get('reports/:id')
+  @RequirePermission(INSIGHTS.reportView)
+  report(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.aiReports.get(ctx, id);
+  }
+
+  @Get('assistant/costs')
+  @ApiOperation({ summary: 'Assistant cost dashboard: by day, surface, user and model' })
+  @RequirePermission(INSIGHTS.assistantAudit)
+  costs(@ReqCtx() ctx: RequestContext, @Query() q: CostsQueryDto) {
+    return this.assistant.costs(ctx, q.days);
   }
 
   // ---- Sprint 15: anomaly alerts ----

@@ -61,12 +61,13 @@ async function main(): Promise<void> {
         'rfid batch received (rules pending)',
       );
     },
-    async [QUEUES.reconciliation](job) {
-      log.info(
-        { jobId: job.id, schoolId: job.data.schoolId },
-        'reconciliation job received (Sprint 15)',
-      );
-    },
+    // Sprint 16: the reconciliation queue carries the shadow-run job (dispatched by kind like maintenance)
+    [QUEUES.reconciliation]: maintenanceProcessor({
+      db,
+      storage,
+      log,
+      migratorUrl: env.DATABASE_MIGRATOR_URL,
+    }) as unknown as Processor,
   };
 
   const workers = Object.entries(processors).map(([name, processor]) =>
@@ -104,6 +105,18 @@ async function main(): Promise<void> {
     'payments.reconcile',
     { every: 24 * 60 * 60 * 1000 },
     { name: 'payments.reconcile', data: SYSTEM_ENVELOPE('payments.reconcile') },
+  );
+  const reconciliation = new Queue(QUEUES.reconciliation, { connection });
+  await reconciliation.upsertJobScheduler(
+    'shadow.reconcile',
+    { every: 24 * 60 * 60 * 1000 },
+    { name: 'shadow.reconcile', data: SYSTEM_ENVELOPE('shadow.reconcile') },
+  );
+  // Mondays 06:00 IST (00:30 UTC): the previous week's brief and department weeklies
+  await maintenance.upsertJobScheduler(
+    'insights.reports',
+    { pattern: '30 0 * * 1' },
+    { name: 'insights.reports', data: SYSTEM_ENVELOPE('insights.reports') },
   );
   await maintenance.upsertJobScheduler(
     'insights.alerts',

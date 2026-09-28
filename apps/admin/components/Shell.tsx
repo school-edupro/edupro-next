@@ -52,6 +52,7 @@ const NAV: Array<{
       { href: '/fees/misc', label: 'miscReceipts', permission: 'fees.misc.view' },
       { href: '/fees/reports', label: 'feeReports', permission: 'fees.ledger.view' },
       { href: '/fees/bank', label: 'bankStatements', permission: 'payments.settlement.view' },
+      { href: '/fees/shadow', label: 'shadowRun', permission: 'fees.shadow.view' },
     ],
   },
   {
@@ -183,10 +184,16 @@ const NAV: Array<{
         permission: 'insights.department.view',
       },
       { href: '/insights/alerts', label: 'alerts', permission: 'insights.alert.view' },
+      { href: '/insights/reports', label: 'aiReports', permission: 'insights.report.view' },
       { href: '/insights/assistant', label: 'assistant', permission: 'insights.assistant.use' },
       {
         href: '/insights/assistant/audit',
         label: 'assistantAudit',
+        permission: 'insights.assistant.audit',
+      },
+      {
+        href: '/insights/assistant/costs',
+        label: 'assistantCosts',
         permission: 'insights.assistant.audit',
       },
     ],
@@ -205,6 +212,11 @@ const NAV: Array<{
       { href: '/system/templates', label: 'templates', permission: 'platform.template.view' },
       { href: '/system/audit', label: 'auditLog', permission: 'platform.audit.view' },
       { href: '/system/security', label: 'security', permission: 'platform.security.view' },
+      {
+        href: '/system/service-keys',
+        label: 'serviceKeys',
+        permission: 'platform.service_key.manage',
+      },
       { href: '/system/jobs', label: 'jobs', permission: 'platform.jobs.view' },
     ],
   },

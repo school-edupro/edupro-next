@@ -50,6 +50,11 @@ const PAGES = [
   '/exams/masters',
   '/insights/assistant',
   '/insights/alerts',
+  // Sprint 16
+  '/fees/shadow',
+  '/system/service-keys',
+  '/insights/reports',
+  '/insights/assistant/costs',
 ];
 
 test.describe('accessibility (axe)', () => {

@@ -109,6 +109,22 @@ export class ReportsService {
       );
     }
     const params: Record<string, unknown> = { ...input };
+    // parameters are data: no control characters, and date-named keys must look like dates
+    for (const [k, v] of Object.entries(params)) {
+      if (typeof v === 'string' && /[\u0000-\u001f]/.test(v))
+        throw new DomainError('validation-failed', `Parameter ${k} carries control characters`, {
+          status: 400,
+        });
+      if (
+        typeof v === 'string' &&
+        /^(from|to|asOf|date|onDate)$/.test(k) &&
+        v !== '' &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(v)
+      )
+        throw new DomainError('validation-failed', `Parameter ${k} must be YYYY-MM-DD`, {
+          status: 400,
+        });
+    }
     if (dataset.scope === 'class_section') {
       const allowed = await this.scopes.filter(tenant, dataset.permission, 'class_section');
       if (allowed !== null) {

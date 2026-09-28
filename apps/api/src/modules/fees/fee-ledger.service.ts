@@ -58,6 +58,8 @@ export interface LedgerPayment {
   instrumentNo: string | null;
   bankName: string | null;
   settled: boolean;
+  /** Sprint 16: the day the cheque/DD cleared (bank statement match), when known. */
+  clearedOn: string | null;
 }
 
 export interface LedgerRefund {
@@ -461,8 +463,9 @@ export class FeeLedgerService {
       instrument_no: string | null;
       bank_name: string | null;
       settled: boolean;
+      cleared_on: string | null;
     }>(
-      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, p.mode, p.reference, p.remarks, u.display_name AS received_by, p.intent_id::text,
+      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, p.mode, p.reference, p.remarks, u.display_name AS received_by, p.intent_id::text, p.cleared_on::text,
               COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated,
               p.late_fee::text, p.refunded::text, p.status, p.instrument_no, p.bank_name, (p.settlement_line_id IS NOT NULL) AS settled
          FROM fee_payments p LEFT JOIN users u ON u.id = p.received_by
@@ -493,6 +496,7 @@ export class FeeLedgerService {
       instrumentNo: x.instrument_no,
       bankName: x.bank_name,
       settled: x.settled,
+      clearedOn: x.cleared_on,
     }));
   }
 

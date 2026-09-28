@@ -116,6 +116,9 @@ const DICT: Record<string, string> = {
   Receipt: 'रसीद',
   Mode: 'माध्यम',
   Refunded: 'लौटाया',
+  Bounced: 'बाउंस',
+  Cleared: 'क्लियर',
+  Settled: 'सेटल',
   'Online payments': 'ऑनलाइन भुगतान',
   Transaction: 'लेन-देन',
   'Your account is not linked to a student yet. Please contact the school office.':

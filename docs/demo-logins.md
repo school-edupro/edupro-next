@@ -92,6 +92,27 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprint 16 walk-through (shadow run, results, AI reports)
+
+- **dev-accounts**: **Fees → Variance workbench** opens with the seeded legacy feed (`fees_legacy.csv`, 3
+  rows, 2 posted). **Reconcile now** for 25–27 September 2026 (the dates of the seeded rows) writes the run:
+  one receipt matched to the rupee, one **Amount differs** (legacy shows ₹100 more) and one **Missing in new
+  ledger** (`L-TF/OLD/0417`, unknown admission), plus **Missing in legacy feed** for receipts posted only
+  here. **Explain** one with a sentence, **Resolve** another, **Reopen** it.
+  Upload a CSV with the legacy headers (or a JSON array) to feed more rows; the cron feeds
+  `POST /api/v1/shadow/feeds/ingest` with the header `x-service-key` (development key preimage
+  `dev-service-key-legacy-cron`, seeded as `legacy-cron`).
+- **dev-admin**: **System → Service keys** lists `legacy-cron`; **Issue a key** shows the new key once (MFA
+  step-up when the session is stale); **Revoke** ends it. **Exams → PT1-2026 → Register** shows VI-A with
+  totals, %, grade, rank and result (roll 5 absent in the first subject fails it); **Analysis** shows pass
+  rate, means, grade distribution, sections and toppers; **Compute results** recomputes after new marks.
+  **Promotion**: proposals under the pass rule (33 %, no subject below pass) with the reason; tick pupils,
+  pick the next year and section and **Record decisions** — they land in **People → Promotions** for that
+  year. **Insights → AI reports**: **Generate** the principal's brief for a week; the narrative cites facts
+  by id (development template offline; Claude with `ANTHROPIC_API_KEY`); the PDF appears once the workers
+  render it. **Insights → Assistant costs**: spend by day, app, user and model, refusal rate, budgets.
+- **dev-parent**: **Fees** receipts show **Cleared** with the date when the bank statement matched them.
+
 ### Sprint 15 walk-through (exam entry, fee reports centre, assistant everywhere)
 
 - **dev-subject** (Suresh Nair, Mathematics in VI-A and VI-B, teacher app `:3002`): **Marks** opens PT1-2026 ·

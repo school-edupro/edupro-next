@@ -1930,3 +1930,202 @@ export interface InsightAlert {
   ackedBy: string | null;
   ackedAt: string | null;
 }
+
+// ---- Sprint 16 ----
+export interface ShadowFeed {
+  id: string;
+  kind: 'receipts' | 'balances';
+  source: string;
+  fileName: string | null;
+  rows: number;
+  accepted: number;
+  posted: number;
+  skipped: number;
+  rejected: number;
+  receivedBy: string;
+  receivedAt: string;
+}
+export interface ShadowRun {
+  id: string;
+  runDate: string;
+  fromDate: string;
+  toDate: string;
+  legacyReceipts: number;
+  legacyAmount: string;
+  newReceipts: number;
+  newAmount: string;
+  matched: number;
+  variances: number;
+  openVariances: number;
+  varianceAmount: string;
+  balancesCompared: number;
+  balanceVariances: number;
+  status: 'zero' | 'variance';
+  ranAt: string;
+}
+export interface ShadowVariance {
+  id: string;
+  runId: string;
+  runDate: string;
+  kind: string;
+  ref: string;
+  legacy: Record<string, unknown>;
+  current: Record<string, unknown>;
+  delta: string;
+  status: 'open' | 'explained' | 'resolved';
+  explanation: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+export interface ServiceKeyRow {
+  id: string;
+  name: string;
+  scopes: string[];
+  status: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+export interface RegisterSheet {
+  exam: { id: string; code: string; name: string; marksLocked: boolean; computedAt: string | null };
+  section: { id: string; code: string };
+  subjects: Array<{
+    id: string;
+    code: string;
+    name: string;
+    maxMarks: string;
+    passMarks: string | null;
+  }>;
+  rows: Array<{
+    studentId: string;
+    name: string;
+    admissionNo: string;
+    rollNo: number | null;
+    marks: Record<string, { marks: string | null; absent: boolean; exempt: boolean }>;
+    total: string | null;
+    maxTotal: string | null;
+    pct: string | null;
+    grade: string | null;
+    result: string | null;
+    rankInSection: number | null;
+    rankInClass: number | null;
+    failedSubjects: number | null;
+  }>;
+}
+export interface ExamAnalysis {
+  exam: { id: string; code: string; name: string; computedAt: string | null };
+  classId: string | null;
+  totals: {
+    pupils: number;
+    complete: number;
+    pass: number;
+    fail: number;
+    incomplete: number;
+    passPct: number | null;
+    meanPct: number | null;
+  };
+  subjects: Array<{
+    classCode: string;
+    code: string;
+    name: string;
+    maxMarks: string;
+    passMarks: string | null;
+    pupils: number;
+    entered: number;
+    absent: number;
+    exempt: number;
+    mean: string | null;
+    highest: string | null;
+    lowest: string | null;
+    passPct: number | null;
+  }>;
+  grades: Array<{ grade: string; pupils: number }>;
+  sections: Array<{
+    section: string;
+    pupils: number;
+    complete: number;
+    meanPct: number | null;
+    passPct: number | null;
+  }>;
+  toppers: Array<{
+    section: string;
+    name: string;
+    admissionNo: string;
+    pct: string;
+    grade: string | null;
+    rankInClass: number | null;
+  }>;
+}
+export interface PromotionProposals {
+  exam: { id: string; code: string; name: string; computedAt: string | null };
+  rule: { minPct: number; maxFailed: number };
+  totals: { promote: number; retain: number; review: number };
+  proposals: Array<{
+    studentId: string;
+    name: string;
+    admissionNo: string;
+    section: string;
+    classSectionId: string;
+    classId: string;
+    pct: string | null;
+    grade: string | null;
+    result: string;
+    failedSubjects: number;
+    decision: 'promote' | 'retain' | 'review';
+    reason: string;
+  }>;
+}
+export interface AiReport {
+  id: string;
+  kind: 'principal_brief' | 'department_weekly';
+  department: string | null;
+  periodFrom: string;
+  periodTo: string;
+  language: string;
+  title: string;
+  narrative: string;
+  facts: Array<{
+    id: string;
+    label: string;
+    value: string | number | null;
+    unit?: string;
+    detail?: Record<string, unknown>;
+  }>;
+  citations: string[];
+  provider: string;
+  model: string;
+  costPaise: number;
+  exportId: string | null;
+  exportStatus: string | null;
+  createdAt: string;
+}
+export interface AssistantCosts {
+  days: number;
+  budget: { perUserDailyTokens: number; perSchoolMonthlyTokens: number };
+  totals: {
+    prompts: number;
+    refusals: number;
+    inputTokens: number;
+    outputTokens: number;
+    costPaise: number;
+    refusalRatePct: number | null;
+  };
+  reports: { count: number; costPaise: number };
+  byDay: Array<{
+    day: string;
+    prompts: number;
+    refusals: number;
+    inputTokens: number;
+    outputTokens: number;
+    costPaise: number;
+  }>;
+  bySurface: Array<{
+    surface: string;
+    prompts: number;
+    refusals: number;
+    costPaise: number;
+    users: number;
+  }>;
+  byUser: Array<{ user: string | null; prompts: number; costPaise: number; tokens: number }>;
+  byModel: Array<{ provider: string; model: string; prompts: number; costPaise: number }>;
+}

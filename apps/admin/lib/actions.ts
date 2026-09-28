@@ -2433,3 +2433,113 @@ export async function ackAlert(fd: FormData) {
     apiFetch(`/insights/alerts/${str(fd, 'id')}/ack`, { method: 'POST' }),
   );
 }
+
+// ---- Sprint 16: shadow run, service keys, exam results, AI reports -------------------------------
+export async function shadowFeed(fd: FormData) {
+  const file = fd.get('file');
+  let csv = str(fd, 'csv');
+  let fileName: string | undefined;
+  if (file && typeof file === 'object' && 'text' in file && (file as File).size > 0) {
+    csv = await (file as File).text();
+    fileName = (file as File).name;
+  }
+  const kind = str(fd, 'kind') === 'balances' ? 'balances' : 'receipts';
+  let rows: unknown[] | undefined;
+  if (csv.trim().startsWith('[') || csv.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(csv) as unknown;
+      rows = Array.isArray(parsed) ? parsed : (parsed as { rows?: unknown[] }).rows;
+      csv = '';
+    } catch {
+      back_('/fees/shadow', 'validation-failed', 'The file is neither CSV nor JSON');
+    }
+  }
+  return run('/fees/shadow', () =>
+    apiFetch('/shadow/feeds', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind,
+        source: `upload:${fileName ?? 'paste'}`,
+        fileName,
+        rows,
+        csv: csv || undefined,
+      }),
+    }),
+  );
+}
+
+export async function shadowReconcile(fd: FormData) {
+  return run('/fees/shadow', () =>
+    apiFetch('/shadow/reconcile', {
+      method: 'POST',
+      body: JSON.stringify({ from: opt(fd, 'from'), to: opt(fd, 'to') }),
+    }),
+  );
+}
+
+export async function decideVariance(fd: FormData) {
+  const runId = str(fd, 'runId');
+  return run(`/fees/shadow${runId ? `?runId=${runId}` : ''}`, () =>
+    apiFetch(`/shadow/variances/${str(fd, 'id')}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: str(fd, 'status') || 'explained',
+        explanation: opt(fd, 'explanation'),
+      }),
+    }),
+  );
+}
+
+export async function createServiceKey(fd: FormData) {
+  const { cookies } = await import('next/headers');
+  let out: { key: string; name: string } | undefined;
+  try {
+    out = await apiFetch('/platform/service-keys', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        scopes: fd.getAll('scopes').map(String).filter(Boolean),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent('/system/service-keys')}`);
+    if (error instanceof ApiError)
+      back_('/system/service-keys', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  // the key is shown once: it travels in a short-lived httpOnly cookie, never in a URL
+  (await cookies()).set('edupro_new_service_key', `${out!.name}|${out!.key}`, {
+    httpOnly: true,
+    sameSite: 'strict',
+    maxAge: 120,
+    path: '/system/service-keys',
+  });
+  redirect('/system/service-keys?ok=1');
+}
+
+export async function revokeServiceKey(fd: FormData) {
+  return run('/system/service-keys', () =>
+    apiFetch(`/platform/service-keys/${str(fd, 'id')}/revoke`, { method: 'POST' }),
+  );
+}
+
+export async function computeExamResults(fd: FormData) {
+  const id = str(fd, 'examId');
+  const back = str(fd, 'back') || `/exams/${id}/analysis`;
+  return run(back, () => apiFetch(`/exams/${id}/results/compute`, { method: 'POST' }));
+}
+
+export async function runAiReport(fd: FormData) {
+  return run('/insights/reports', () =>
+    apiFetch('/insights/reports/run', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: str(fd, 'kind') === 'department_weekly' ? 'department_weekly' : 'principal_brief',
+        department: opt(fd, 'department'),
+        periodTo: opt(fd, 'periodTo'),
+        language: str(fd, 'language') === 'hi' ? 'hi' : 'en',
+      }),
+    }),
+  );
+}

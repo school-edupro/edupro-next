@@ -238,6 +238,12 @@ export class FeeDemandsService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
+      // a pupil outside the tenant (or deleted) is a 404, never an empty 200 (Sprint 16 VAPT retest)
+      const known = await c.query(`SELECT 1 FROM students WHERE id = $1 AND deleted_at IS NULL`, [
+        studentId,
+      ]);
+      if (known.rowCount === 0)
+        throw new DomainError('not-found', 'Student not found', { status: 404 });
       const params: unknown[] = [studentId, yearId];
       let where = 'd.student_id = $1 AND d.academic_year_id = $2';
       if (q.status) {

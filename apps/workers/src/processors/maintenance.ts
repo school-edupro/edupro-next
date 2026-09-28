@@ -1,5 +1,12 @@
 import { Client } from 'pg';
-import type { Db, JobEnvelope } from '@edupro/db';
+import { providerFromEnv, writeNarrative } from '@edupro/ai';
+import {
+  collectReportFacts,
+  REPORT_DEPARTMENTS,
+  type Db,
+  type JobEnvelope,
+  type ReportDepartment,
+} from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import type { JobLike } from './notifications';
@@ -106,6 +113,197 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
           'break-glass window closed',
         );
       }
+      return;
+    }
+    if (kind === 'shadow.reconcile') {
+      // Sprint 16: the daily shadow-run reconciliation (yesterday to today) per school; a run with open
+      // variances raises an insight alert and the usual notification.
+      const schools = await db.withoutTenant((c) =>
+        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
+      );
+      let variance = 0;
+      for (const { id } of schools.rows) {
+        const tenant = { schoolId: id, userId: null, allowedSchoolIds: [id] };
+        try {
+          await db.withTenant(tenant, async (c) => {
+            const fed = await c.query('SELECT 1 FROM shadow_legacy_receipts LIMIT 1');
+            if (fed.rowCount === 0) return; // no shadow run for this school
+            const r = await c.query<{
+              id: string;
+              status: string;
+              open_variances: number;
+              variance_amount: string;
+              to_date: Date;
+            }>(
+              'SELECT id::text, status, open_variances, variance_amount::text, to_date FROM app.run_shadow_reconcile(CURRENT_DATE - 1, CURRENT_DATE)',
+            );
+            const run = r.rows[0]!;
+            if (run.status === 'variance') {
+              variance += 1;
+              await c.query(
+                `INSERT INTO insight_alerts (school_id, kind, severity, subject_type, subject_id, title, message, data)
+                 VALUES (app.current_school_id(), 'shadow.variance', 'danger', 'shadow_run', $1::bigint, 'Shadow run variance',
+                         format('%s open variance(s) worth ₹%s between the legacy and the new ledger', $2::int, $3::text),
+                         jsonb_build_object('runId', $1::bigint, 'openVariances', $2::int, 'varianceAmount', $3::text))
+                 ON CONFLICT DO NOTHING`,
+                [run.id, run.open_variances, run.variance_amount],
+              );
+              await notifyInsightAlerts(c, id);
+            }
+          });
+        } catch (error) {
+          log.error({ err: error, schoolId: id }, 'shadow reconcile failed for a school');
+        }
+      }
+      log.info({ schools: schools.rows.length, variance }, 'shadow reconcile run');
+      return;
+    }
+    if (kind === 'insights.reports') {
+      // Sprint 16 (AI track): the Monday brief and the department weeklies for the previous week (Mon-Sun),
+      // as ai_reports rows, PDF exports and a WhatsApp summary to the alert roles.
+      const provider = providerFromEnv({
+        AI_PROVIDER: process.env.AI_PROVIDER,
+        AI_MODEL: process.env.AI_MODEL,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+        NODE_ENV: process.env.NODE_ENV,
+      });
+      const schools = await db.withoutTenant((c) =>
+        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
+      );
+      const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
+      ist.setUTCDate(ist.getUTCDate() - ((ist.getUTCDay() + 7) % 7 || 7));
+      const to = ist.toISOString().slice(0, 10);
+      const fromD = new Date(`${to}T00:00:00Z`);
+      fromD.setUTCDate(fromD.getUTCDate() - 6);
+      const from = fromD.toISOString().slice(0, 10);
+      let written = 0;
+      for (const { id } of schools.rows) {
+        const tenant = { schoolId: id, userId: null, allowedSchoolIds: [id] };
+        try {
+          await db.withTenant(tenant, async (c) => {
+            const school = await c.query<{ name: string }>(
+              'SELECT name FROM schools WHERE id = app.current_school_id()',
+            );
+            const scopes: Array<{
+              kind: 'principal_brief' | 'department_weekly';
+              department?: ReportDepartment;
+              title: string;
+            }> = [
+              { kind: 'principal_brief', title: "Principal's Monday brief" },
+              ...REPORT_DEPARTMENTS.map((d) => ({
+                kind: 'department_weekly' as const,
+                department: d,
+                title: `${d[0]!.toUpperCase()}${d.slice(1)} weekly`,
+              })),
+            ];
+            const summaries: string[] = [];
+            for (const sc of scopes) {
+              const facts = await collectReportFacts(c, {
+                kind: sc.kind,
+                department: sc.department,
+                from,
+                to,
+              });
+              const out = await writeNarrative(provider, {
+                title: sc.title,
+                period: `${from} to ${to}`,
+                school: school.rows[0]?.name ?? '',
+                audience: sc.kind === 'principal_brief' ? 'principal' : 'department',
+                facts,
+                language: 'en',
+              });
+              if (out.unknownCitations.length) {
+                log.warn(
+                  { schoolId: id, kind: sc.kind, unknown: out.unknownCitations },
+                  'ai report cited unknown facts; not published',
+                );
+                continue;
+              }
+              const rep = await c.query<{ id: string }>(
+                `INSERT INTO ai_reports (school_id, kind, department, period_from, period_to, language, title, narrative, facts, citations, provider, model, cost_paise)
+                 VALUES (app.current_school_id(), $1, $2, $3::date, $4::date, 'en', $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11)
+                 ON CONFLICT (school_id, kind, COALESCE(department, ''), period_to) DO UPDATE
+                   SET narrative = EXCLUDED.narrative, facts = EXCLUDED.facts, citations = EXCLUDED.citations, provider = EXCLUDED.provider, model = EXCLUDED.model, cost_paise = EXCLUDED.cost_paise, created_at = now()
+                 RETURNING id::text`,
+                [
+                  sc.kind,
+                  sc.department ?? null,
+                  from,
+                  to,
+                  sc.title,
+                  out.narrative,
+                  JSON.stringify(facts),
+                  JSON.stringify(out.citations),
+                  out.provider,
+                  out.model,
+                  out.costPaise,
+                ],
+              );
+              const exp = await c.query<{ id: string }>(
+                `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id)
+                 VALUES (app.current_school_id(), 'ai_report', 'pdf', $1::jsonb, $2, NULL, NULL) RETURNING id::text`,
+                [JSON.stringify({ reportId: rep.rows[0]!.id }), sc.title],
+              );
+              await c.query("SELECT app.enqueue_job('exports', $1::jsonb)", [
+                JSON.stringify({
+                  schoolId: id,
+                  userId: null,
+                  requestId: null,
+                  kind: 'export.generate',
+                  payload: { exportId: exp.rows[0]!.id },
+                }),
+              ]);
+              await c.query('UPDATE ai_reports SET export_id = $2 WHERE id = $1', [
+                rep.rows[0]!.id,
+                exp.rows[0]!.id,
+              ]);
+              written += 1;
+              if (sc.kind === 'principal_brief')
+                summaries.push(out.narrative.split('\n').slice(0, 4).join('\n').slice(0, 600));
+            }
+            if (summaries.length) {
+              // the WhatsApp summary goes to the alert roles; the PDF waits in Reports → Export centre
+              const roles = await c.query(
+                `SELECT COALESCE(app.setting('insights.alert_roles') #>> '{}', 'school_admin') AS roles`,
+              );
+              const codes = String(roles.rows[0]?.roles ?? 'school_admin')
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean);
+              const recipients = await c.query<{ id: string; mobile: string }>(
+                `SELECT DISTINCT u.id::text, u.mobile FROM user_roles ur JOIN roles r ON r.id = ur.role_id JOIN users u ON u.id = ur.user_id
+                  WHERE ur.school_id = app.current_school_id() AND r.code = ANY($1::text[]) AND ur.revoked_at IS NULL AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
+                    AND u.mobile IS NOT NULL AND u.deleted_at IS NULL`,
+                [codes],
+              );
+              const body = `${school.rows[0]?.name ?? ''} — Monday brief (${from} to ${to})\n${summaries[0]}\nThe PDF and the department weeklies are under Insights → Reports.`;
+              for (const u of recipients.rows) {
+                const m = await c.query<{ id: string }>(
+                  `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, body, status) VALUES (app.current_school_id(), 'whatsapp', $1, $2, $3, 'queued') RETURNING id::text`,
+                  [u.id, u.mobile, body],
+                );
+                await c.query("SELECT app.enqueue_job('notifications', $1::jsonb)", [
+                  JSON.stringify({
+                    schoolId: id,
+                    userId: null,
+                    requestId: null,
+                    kind: 'comms.message',
+                    payload: { messageId: m.rows[0]!.id },
+                  }),
+                ]);
+                await c.query(
+                  `UPDATE ai_reports SET message_ids = array_append(message_ids, $2::bigint) WHERE kind = 'principal_brief' AND period_to = $1::date`,
+                  [to, m.rows[0]!.id],
+                );
+              }
+            }
+          });
+        } catch (error) {
+          log.error({ err: error, schoolId: id }, 'ai reports failed for a school');
+        }
+      }
+      log.info({ schools: schools.rows.length, written, from, to }, 'ai reports run');
       return;
     }
     if (kind === 'insights.alerts') {

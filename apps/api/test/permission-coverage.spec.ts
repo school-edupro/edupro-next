@@ -83,6 +83,7 @@ describe('permission coverage', () => {
       'PublicAdmissionsController.verifyOtp (public/admissions)',
       'PunchController.ingest (attendance/punch)',
       'RfidController.ingest (attendance/rfid)',
+      'ShadowController.ingest (shadow)',
     ]);
     if (unprotected.length > 0) {
       throw new Error(`handlers without a permission: ${unprotected.join(', ')}`);

@@ -36,6 +36,14 @@ export const RENDERERS: Record<string, RendererDefinition> = {
     page: { width: '210mm', height: '297mm' },
     requiredParams: ['templateId', 'entity', 'entityId'],
   },
+  /** Sprint 16: an AI report (weekly narrative or the Monday brief) rendered from ai_reports. */
+  ai_report: {
+    id: 'ai_report',
+    title: 'AI report',
+    permission: 'insights.report.view',
+    page: { width: '210mm', height: '297mm' },
+    requiredParams: ['reportId'],
+  },
 };
 
 export const RENDERER_IDS = Object.keys(RENDERERS) as [string, ...string[]];
