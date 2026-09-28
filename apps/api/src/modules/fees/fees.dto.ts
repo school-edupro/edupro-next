@@ -15,6 +15,14 @@ export const FEES = {
   ledgerView: 'fees.ledger.view',
   /** Sprint 13: a family reads its own children's ledgers */
   familyView: 'fees.family.view',
+  /** Sprint 14 */
+  adjustmentRequest: 'fees.adjustment.request',
+  adjustmentApprove: 'fees.adjustment.approve',
+  profileChangeRequest: 'fees.profile_change.request',
+  miscPost: 'fees.misc.post',
+  miscView: 'fees.misc.view',
+  reconcileView: 'payments.reconcile.view',
+  reconcileRun: 'payments.reconcile.run',
 } as const;
 
 export const HeadKindSchema = z.enum([
@@ -137,6 +145,8 @@ export const SetProfileSchema = z.object({
     .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(6), z.literal(12)])
     .nullable()
     .optional(),
+  /** Sprint 14: hostel-ledger heads of the class structure apply to hostellers */
+  hosteller: z.boolean().default(false),
 });
 export class SetProfileDto extends createZodDto(SetProfileSchema) {}
 
@@ -187,3 +197,111 @@ export const SetReceiptSequenceSchema = z.object({
 export class SetReceiptSequenceDto extends createZodDto(SetReceiptSequenceSchema) {}
 
 export { DateSchema as FeeDateSchema };
+
+// ---- Sprint 14: adjustments, profile changes, misc receipts, reconciliation --------------------------
+export const RequestAdjustmentSchema = z
+  .object({
+    kind: z.enum(['waiver', 'reversal', 'bounce']),
+    /** waiver: the demand row */
+    demandId: IdSchema.optional(),
+    /** reversal, bounce: the receipt */
+    paymentId: IdSchema.optional(),
+    /** waiver: amount waived (bounded by the row's balance); reversal and bounce use the receipt amount */
+    amount: Money.optional(),
+    /** bounce: the charge added to the demand; defaults to the school setting fees.bounce_charge */
+    charge: Money.optional(),
+    reason: z.string().trim().min(3).max(300),
+  })
+  .refine(
+    (v) =>
+      v.kind === 'waiver'
+        ? v.demandId !== undefined && v.amount !== undefined
+        : v.paymentId !== undefined,
+    {
+      message: 'waiver needs demandId and amount; reversal and bounce need paymentId',
+    },
+  );
+export class RequestAdjustmentDto extends createZodDto(RequestAdjustmentSchema) {}
+
+export const DecideAdjustmentSchema = z.object({
+  outcome: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(300).optional(),
+});
+export class DecideAdjustmentDto extends createZodDto(DecideAdjustmentSchema) {}
+
+export const ListAdjustmentsQuerySchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
+  studentId: IdSchema.optional(),
+  kind: z.enum(['waiver', 'reversal', 'bounce']).optional(),
+});
+export class ListAdjustmentsQueryDto extends createZodDto(ListAdjustmentsQuerySchema) {}
+
+export const RequestProfileChangeSchema = z
+  .object({
+    feeGroup: z
+      .string()
+      .trim()
+      .regex(/^[a-z_]{1,30}$/)
+      .optional(),
+    studentType: z.enum(['new', 'old']).optional(),
+    discountId: IdSchema.nullable().optional(),
+    hosteller: z.boolean().optional(),
+    transportSlabId: IdSchema.nullable().optional(),
+    transportDisabled: z.boolean().optional(),
+    reason: z.string().trim().min(3).max(300),
+  })
+  .refine(
+    (v) =>
+      v.feeGroup !== undefined ||
+      v.studentType !== undefined ||
+      v.discountId !== undefined ||
+      v.hosteller !== undefined ||
+      v.transportSlabId !== undefined ||
+      v.transportDisabled !== undefined,
+    { message: 'nothing to change' },
+  );
+export class RequestProfileChangeDto extends createZodDto(RequestProfileChangeSchema) {}
+
+export const ListProfileChangesQuerySchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
+  studentId: IdSchema.optional(),
+});
+export class ListProfileChangesQueryDto extends createZodDto(ListProfileChangesQuerySchema) {}
+
+export const PostMiscReceiptSchema = z
+  .object({
+    payerKind: z.enum(['student', 'employee', 'vendor', 'other']),
+    studentId: IdSchema.optional(),
+    employeeId: IdSchema.optional(),
+    payerName: z.string().trim().max(120).optional(),
+    payerMobile: z
+      .string()
+      .trim()
+      .regex(/^[6-9]\d{9}$/)
+      .optional(),
+    headId: IdSchema,
+    amount: z.number().min(1).max(10_000_000),
+    receivedOn: DateSchema.optional(),
+    mode: z.enum(['cash', 'cheque', 'dd', 'upi', 'bank', 'card']),
+    reference: z.string().trim().max(80).optional(),
+    instrumentNo: z.string().trim().max(40).optional(),
+    bankName: z.string().trim().max(80).optional(),
+    remarks: z.string().trim().max(300).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.payerKind === 'student' && v.studentId !== undefined) ||
+      (v.payerKind === 'employee' && v.employeeId !== undefined) ||
+      ((v.payerKind === 'vendor' || v.payerKind === 'other') && !!v.payerName),
+    { message: 'name the student, the employee, or the payer' },
+  );
+export class PostMiscReceiptDto extends createZodDto(PostMiscReceiptSchema) {}
+
+export const ListMiscReceiptsQuerySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  payerKind: z.enum(['student', 'employee', 'vendor', 'other']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class ListMiscReceiptsQueryDto extends createZodDto(ListMiscReceiptsQuerySchema) {}

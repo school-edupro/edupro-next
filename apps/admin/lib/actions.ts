@@ -1343,6 +1343,7 @@ export async function setFeeProfile(fd: FormData) {
         instalmentsOverride: opt(fd, 'instalmentsOverride')
           ? Number(str(fd, 'instalmentsOverride'))
           : null,
+        hosteller: fd.get('hosteller') !== null,
       }),
     }),
   );
@@ -2112,4 +2113,231 @@ export async function requestDepartmentExport(fd: FormData) {
       }),
     }),
   );
+}
+
+// ---- Sprint 14: adjustments, profile changes, misc receipts, reconciliation, exams, assistant ------
+export async function requestAdjustment(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = studentId ? `/fees/ledger/${studentId}` : '/fees/adjustments';
+  const kind = str(fd, 'kind') || 'waiver';
+  return run(back, () =>
+    apiFetch('/fees/adjustments', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind,
+        demandId: kind === 'waiver' ? opt(fd, 'demandId') : undefined,
+        paymentId: kind === 'waiver' ? undefined : opt(fd, 'paymentId'),
+        amount: kind === 'waiver' ? Number(str(fd, 'amount')) : undefined,
+        charge: opt(fd, 'charge') ? Number(str(fd, 'charge')) : undefined,
+        reason: str(fd, 'reason'),
+      }),
+    }),
+  );
+}
+
+export async function decideAdjustment(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/fees/adjustments', () =>
+    apiFetch(`/fees/adjustments/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({
+        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function requestProfileChange(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const body: Record<string, unknown> = { reason: str(fd, 'reason') };
+  if (opt(fd, 'feeGroup')) body.feeGroup = str(fd, 'feeGroup');
+  if (opt(fd, 'studentType')) body.studentType = str(fd, 'studentType');
+  const discount = str(fd, 'discountId');
+  if (discount === 'none') body.discountId = null;
+  else if (discount) body.discountId = discount;
+  const hosteller = str(fd, 'hosteller');
+  if (hosteller === 'yes') body.hosteller = true;
+  if (hosteller === 'no') body.hosteller = false;
+  return run(`/people/students/${studentId}`, () =>
+    apiFetch(`/fees/students/${studentId}/profile-changes`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function decideProfileChange(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/fees/adjustments', () =>
+    apiFetch(`/fees/profile-changes/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({
+        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function postMiscReceipt(fd: FormData) {
+  const payerKind = str(fd, 'payerKind') || 'other';
+  return run('/fees/misc', () =>
+    apiFetch('/fees/misc/receipts', {
+      method: 'POST',
+      body: JSON.stringify({
+        payerKind,
+        studentId: payerKind === 'student' ? opt(fd, 'studentId') : undefined,
+        employeeId: payerKind === 'employee' ? opt(fd, 'employeeId') : undefined,
+        payerName: opt(fd, 'payerName'),
+        payerMobile: opt(fd, 'payerMobile'),
+        headId: str(fd, 'headId'),
+        amount: Number(str(fd, 'amount')),
+        receivedOn: opt(fd, 'receivedOn'),
+        mode: str(fd, 'mode') || 'cash',
+        reference: opt(fd, 'reference'),
+        instrumentNo: opt(fd, 'instrumentNo'),
+        bankName: opt(fd, 'bankName'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    }),
+  );
+}
+
+export async function reconcileNow() {
+  return run('/fees/misc', () => apiFetch('/fees/reconciliations/run', { method: 'POST' }));
+}
+
+export async function createExamType(fd: FormData) {
+  return run('/exams/masters', () =>
+    apiFetch('/exams/types', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        weightage: opt(fd, 'weightage') ? Number(str(fd, 'weightage')) : null,
+        sortOrder: opt(fd, 'sortOrder') ? Number(str(fd, 'sortOrder')) : 0,
+      }),
+    }),
+  );
+}
+
+export async function saveGradeScale(fd: FormData) {
+  const grades = fd.getAll('grade').map(String);
+  const mins = fd.getAll('minPct').map(String);
+  const maxs = fd.getAll('maxPct').map(String);
+  const points = fd.getAll('points').map(String);
+  const remarks = fd.getAll('remark').map(String);
+  const bands = grades
+    .map((grade, i) => ({
+      grade: grade.trim(),
+      minPct: Number(mins[i]),
+      maxPct: Number(maxs[i]),
+      points: points[i]?.trim() ? Number(points[i]) : null,
+      remark: remarks[i]?.trim() || undefined,
+    }))
+    .filter((b) => b.grade && Number.isFinite(b.minPct) && Number.isFinite(b.maxPct));
+  return run('/exams/masters', () =>
+    apiFetch('/exams/grade-scales', {
+      method: 'PUT',
+      body: JSON.stringify({
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        description: opt(fd, 'description'),
+        bands,
+      }),
+    }),
+  );
+}
+
+export async function createExam(fd: FormData) {
+  const classes = fd.getAll('classId').map(String).filter(Boolean);
+  const scaleId = opt(fd, 'gradeScaleId') ?? null;
+  return run('/exams', () =>
+    apiFetch('/exams', {
+      method: 'POST',
+      body: JSON.stringify({
+        examTypeId: str(fd, 'examTypeId'),
+        code: str(fd, 'code').toUpperCase(),
+        name: str(fd, 'name'),
+        startsOn: opt(fd, 'startsOn'),
+        endsOn: opt(fd, 'endsOn'),
+        showOnPortal: str(fd, 'showOnPortal') === 'on',
+        classes: classes.map((classId) => ({ classId, gradeScaleId: scaleId })),
+      }),
+    }),
+  );
+}
+
+export async function updateExam(fd: FormData) {
+  const id = str(fd, 'id');
+  const body: Record<string, unknown> = {};
+  if (opt(fd, 'marksLocked')) body.marksLocked = str(fd, 'marksLocked') === 'yes';
+  if (opt(fd, 'status')) body.status = str(fd, 'status');
+  if (opt(fd, 'showOnPortal')) body.showOnPortal = str(fd, 'showOnPortal') === 'yes';
+  return run(`/exams/${id}`, () =>
+    apiFetch(`/exams/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  );
+}
+
+export async function setExamSubjects(fd: FormData) {
+  const id = str(fd, 'id');
+  const classId = str(fd, 'classId');
+  const subjectIds = fd.getAll('subjectId').map(String);
+  const maxs = fd.getAll('maxMarks').map(String);
+  const passes = fd.getAll('passMarks').map(String);
+  const dates = fd.getAll('examOn').map(String);
+  const electives = new Set(fd.getAll('elective').map(String));
+  const subjects = subjectIds
+    .map((subjectId, i) => ({
+      subjectId,
+      maxMarks: Number(maxs[i]),
+      passMarks: passes[i]?.trim() ? Number(passes[i]) : null,
+      examOn: dates[i]?.trim() || null,
+      isElective: electives.has(subjectId),
+    }))
+    .filter((s) => Number.isFinite(s.maxMarks) && s.maxMarks > 0);
+  return run(`/exams/${id}?classId=${classId}`, () =>
+    apiFetch(`/exams/${id}/subjects`, {
+      method: 'PUT',
+      body: JSON.stringify({ classId, subjects }),
+    }),
+  );
+}
+
+export async function lockExamSubjects(fd: FormData) {
+  const id = str(fd, 'id');
+  const classId = str(fd, 'classId');
+  return run(`/exams/${id}?classId=${classId}`, () =>
+    apiFetch(`/exams/${id}/subjects/lock`, {
+      method: 'POST',
+      body: JSON.stringify({ classId, locked: str(fd, 'locked') === 'yes' }),
+    }),
+  );
+}
+
+export async function askAssistant(fd: FormData) {
+  const question = str(fd, 'question');
+  const conversationId = opt(fd, 'conversationId');
+  const language = opt(fd, 'language');
+  let out: { conversationId: string } | null = null;
+  try {
+    out = await apiFetch<{ conversationId: string }>('/insights/assistant', {
+      method: 'POST',
+      body: JSON.stringify({
+        question,
+        conversationId,
+        language: language && language !== 'auto' ? language : undefined,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back_(
+        conversationId ? `/insights/assistant?c=${conversationId}` : '/insights/assistant',
+        error.problem.type,
+        error.problem.detail,
+      );
+    throw error;
+  }
+  redirect(`/insights/assistant?c=${out!.conversationId}`);
 }

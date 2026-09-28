@@ -95,6 +95,9 @@ importers:
       '@azure/keyvault-secrets':
         specifier: ^4.11.2
         version: 4.11.2
+      '@edupro/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@edupro/db':
         specifier: workspace:*
         version: link:../../packages/db

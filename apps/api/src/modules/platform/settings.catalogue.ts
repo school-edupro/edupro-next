@@ -112,6 +112,18 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Online payment gateway of the school (Sprint 13): PayU, Razorpay or CCAvenue; mock is the development gateway',
     module: 'payments',
   },
+  'fees.bounce_charge': {
+    schema: money,
+    default: '500.00',
+    description: 'Charge added to the demand when a cheque or DD bounces (Sprint 14)',
+    module: 'fees',
+  },
+  'fees.bounce_charge_head': {
+    schema: z.string().regex(/^[A-Z0-9_]{2,20}$/),
+    default: 'BOUNCE',
+    description: 'Code of the misc fee head that carries the bounce charge (created if missing)',
+    module: 'fees',
+  },
   'fees.late_fee_mode': {
     schema: z.enum(['daywise', 'slab']),
     default: 'daywise',

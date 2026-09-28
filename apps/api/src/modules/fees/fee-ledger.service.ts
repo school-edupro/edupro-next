@@ -24,6 +24,8 @@ export interface LateFee {
 
 export interface LedgerInstalment {
   dueOn: string;
+  /** Sprint 14: school or hostel; receipts settle one ledger at a time */
+  ledger: string;
   label: string;
   instalment: number;
   sequences: number[];
@@ -240,16 +242,17 @@ export class FeeLedgerService {
       const bySeq = new Map(periods.rows.map((p) => [p.sequence, p]));
       const groups = await c.query<{
         due_on: string;
+        ledger: string;
         sequences: number[];
         instalment: number;
         net: string;
         paid: string;
       }>(
-        `SELECT d.due_on::text, array_agg(DISTINCT p.sequence ORDER BY p.sequence) AS sequences, min(p.instalment)::int AS instalment,
+        `SELECT d.due_on::text, d.ledger::text AS ledger, array_agg(DISTINCT p.sequence ORDER BY p.sequence) AS sequences, min(p.instalment)::int AS instalment,
                 sum(d.net)::text AS net, sum(d.paid)::text AS paid
            FROM fee_demands d JOIN fee_periods p ON p.id = d.period_id
           WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.status IN ('pending', 'partial', 'paid')
-          GROUP BY d.due_on ORDER BY d.due_on`,
+          GROUP BY d.due_on, d.ledger ORDER BY d.due_on, d.ledger`,
         [studentId, yearId],
       );
       const instalments: LedgerInstalment[] = [];
@@ -273,6 +276,13 @@ export class FeeLedgerService {
           [studentId, yearId, g.due_on, asOfDate],
         );
         const l = lf.rows[0]!;
+        if (g.ledger !== 'school') {
+          // the late fee rule belongs to the school ledger; hostel instalments carry none (Sprint 14)
+          l.o_amount = '0';
+          l.o_mode = 'none';
+          l.o_days = 0;
+          l.posted = '0';
+        }
         const first = bySeq.get(g.sequences[0]!);
         const last = bySeq.get(g.sequences[g.sequences.length - 1]!);
         const anchor =
@@ -297,6 +307,7 @@ export class FeeLedgerService {
           balance <= 0 ? 'paid' : asOfDate > g.due_on ? 'overdue' : visible ? 'due' : 'upcoming';
         instalments.push({
           dueOn: g.due_on,
+          ledger: g.ledger,
           label:
             first && last && first.sequence !== last.sequence
               ? `${short(first.name)} – ${short(last.name)}`
@@ -384,6 +395,55 @@ export class FeeLedgerService {
           : null,
       };
     });
+  }
+
+  /** Sprint 14: a family queues the PDF of one of its own receipts (own export, no template permission needed). */
+  async myReceiptPdf(ctx: RequestContext, paymentId: string) {
+    const tenant = requireTenant(ctx);
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family')
+      throw new DomainError('permission-denied', 'Families only', { status: 403 });
+    const info = await this.db.tenant(tenant, async (c) => {
+      const p = await c.query<{ receipt_no: string | null; student_id: string; student: string }>(
+        `SELECT p.receipt_no, p.student_id::text, s.display_name AS student FROM fee_payments p JOIN students s ON s.id = p.student_id WHERE p.id = $1`,
+        [paymentId],
+      );
+      if (!p.rows[0] || !v.students.some((s) => s.id === p.rows[0]!.student_id))
+        throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+      const template = await this.templates.activeOfKind(c, 'fee_receipt');
+      if (!template)
+        throw new DomainError(
+          'fees.no_receipt_template',
+          'The school has not set up a receipt template yet',
+          {
+            status: 409,
+          },
+        );
+      return { receiptNo: p.rows[0].receipt_no, student: p.rows[0].student, template };
+    });
+    const exp = await this.reports.createRenderedForOwner(
+      ctx,
+      {
+        dataset: 'document',
+        format: 'pdf',
+        params: { templateId: info.template.id, entity: 'fee_receipt', entityId: paymentId },
+        title: `Receipt ${info.receiptNo ?? paymentId} · ${info.student}`,
+      },
+      'fees.receipt.render_family',
+    );
+    return { exportId: exp.id, receiptNo: info.receiptNo, status: exp.status };
+  }
+
+  /** Status and download link of one of the caller's own exports. */
+  async myExportStatus(ctx: RequestContext, exportId: string) {
+    const tenant = requireTenant(ctx);
+    const own = await this.db.tenant(tenant, (c) =>
+      c.query(`SELECT 1 FROM exports WHERE id = $1 AND requested_by = app.current_user_id()`, [
+        exportId,
+      ]),
+    );
+    if (!own.rowCount) throw new DomainError('not-found', 'Export not found', { status: 404 });
+    return this.reports.status(ctx, exportId);
   }
 
   private async paymentsWith(

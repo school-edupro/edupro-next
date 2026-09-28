@@ -816,6 +816,7 @@ export interface FeeProfile {
   notes: string | null;
   isDefault: boolean;
   instalmentsOverride: number | null;
+  hosteller: boolean;
 }
 export interface FeeDemandRow {
   id: string;
@@ -1319,6 +1320,7 @@ export interface FeeLateFee {
 }
 export interface FeeLedgerInstalment {
   dueOn: string;
+  ledger: string;
   label: string;
   instalment: number;
   sequences: number[];
@@ -1669,4 +1671,207 @@ export interface DepartmentDashboard {
   year: { id: string; code: string; status: string };
   classId: string | null;
   [k: string]: unknown;
+}
+
+// ---- Sprint 14: adjustments, misc, exams, assistant ------------------------------------------------
+export interface FeeAdjustment {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  kind: 'waiver' | 'reversal' | 'bounce';
+  demandId: string | null;
+  demandLabel: string | null;
+  paymentId: string | null;
+  receiptNo: string | null;
+  receiptAmount: string | null;
+  amount: string;
+  charge: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedBy: string | null;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
+export interface FeeProfileChange {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  changes: Record<string, unknown>;
+  before: Record<string, unknown>;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedBy: string | null;
+  requestedAt: string;
+  workflowInstanceId: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
+export interface MiscReceipt {
+  id: string;
+  receiptNo: string;
+  payerKind: 'student' | 'employee' | 'vendor' | 'other';
+  studentId: string | null;
+  employeeId: string | null;
+  payerName: string;
+  payerMobile: string | null;
+  headId: string;
+  headCode: string;
+  headName: string;
+  amount: string;
+  receivedOn: string;
+  mode: string;
+  reference: string | null;
+  instrumentNo: string | null;
+  bankName: string | null;
+  remarks: string | null;
+  status: string;
+  receivedBy: string | null;
+}
+export interface ReconciliationRun {
+  id: string;
+  runDate: string;
+  asOf: string;
+  onlineReceipts: number;
+  onlineAmount: string;
+  settledReceipts: number;
+  settledAmount: string;
+  unsettledReceipts: number;
+  unsettledAmount: string;
+  agedUnsettled: number;
+  unmatchedLines: number;
+  mismatchedLines: number;
+  succeededWithoutReceipt: number;
+  variance: string;
+  ranAt: string;
+}
+export interface ExamType {
+  id: string;
+  code: string;
+  name: string;
+  weightage: string | null;
+  sortOrder: number;
+  status: 'active' | 'inactive';
+  exams: number;
+}
+export interface GradeBand {
+  id: string;
+  minPct: string;
+  maxPct: string;
+  grade: string;
+  points: string | null;
+  remark: string | null;
+}
+export interface GradeScale {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  status: 'active' | 'inactive';
+  bands: GradeBand[];
+}
+export interface ExamClass {
+  classId: string;
+  classCode: string;
+  gradeScaleId: string | null;
+  gradeScaleCode: string | null;
+  subjects: number;
+  locked: number;
+}
+export interface ExamSubject {
+  id: string;
+  classId: string;
+  subjectId: string;
+  subjectCode: string;
+  subjectName: string;
+  maxMarks: string;
+  passMarks: string | null;
+  weightage: string | null;
+  isElective: boolean;
+  examOn: string | null;
+  entryLocked: boolean;
+  lockedBy: string | null;
+  lockedAt: string | null;
+}
+export interface Exam {
+  id: string;
+  code: string;
+  name: string;
+  examTypeId: string;
+  examTypeCode: string;
+  examTypeName: string;
+  startsOn: string | null;
+  endsOn: string | null;
+  showOnPortal: boolean;
+  marksLocked: boolean;
+  status: 'active' | 'inactive';
+  classes: ExamClass[];
+  subjects?: ExamSubject[];
+}
+export interface SubjectRow {
+  id: string;
+  code: string;
+  name: string;
+}
+export interface CatalogueEntryView {
+  id: string;
+  department: string;
+  title: string;
+  titleHi: string;
+  description: string;
+  params: Array<{ name: string; type: string; description: string; required?: boolean }>;
+  allowed: boolean;
+}
+export interface AssistantCitation {
+  query: string;
+  title: string;
+  params: Record<string, unknown>;
+  rows: number;
+}
+export interface AssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  refused: boolean;
+  citations: AssistantCitation[];
+  usage: { inputTokens: number; outputTokens: number } | null;
+  createdAt: string;
+}
+export interface AssistantConversation {
+  id: string;
+  title: string | null;
+  language: string;
+  turns: number;
+  tokens: number;
+  costPaise: number;
+  updatedAt: string;
+  messages?: AssistantMessage[];
+}
+export interface AssistantAudit {
+  days: number;
+  provider: string;
+  model: string;
+  totals: {
+    prompts: number;
+    refusals: number;
+    tool_calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    cost_paise: number;
+    users: number;
+  };
+  recent: Array<{
+    id: string;
+    at: string;
+    kind: string;
+    user: string | null;
+    text: string;
+    redactions: number;
+    citations: string[] | null;
+    costPaise: number | null;
+  }>;
 }

@@ -20,6 +20,8 @@ export interface ProfileRow {
   notes: string | null;
   /** 1, 2, 3, 4, 6 or 12 instalments for this student instead of the school's periods (S11). */
   instalmentsOverride: number | null;
+  /** Sprint 14: hostel-ledger heads apply to hostellers */
+  hosteller: boolean;
   /** True when no row exists yet and the defaults above would apply. */
   isDefault: boolean;
 }
@@ -57,7 +59,7 @@ export interface DemandSummary {
 
 const PROFILE_SELECT = `SELECT p.student_id::text AS "studentId", p.academic_year_id::text AS "academicYearId", p.fee_group AS "feeGroup", p.student_type AS "studentType",
         p.transport_slab_id::text AS "transportSlabId", ts.name AS "transportSlab", p.transport_disabled AS "transportDisabled",
-        p.discount_id::text AS "discountId", d.name AS discount, p.opening_balance::text AS "openingBalance", p.notes, p.instalments_override AS "instalmentsOverride", false AS "isDefault"
+        p.discount_id::text AS "discountId", d.name AS discount, p.opening_balance::text AS "openingBalance", p.notes, p.instalments_override AS "instalmentsOverride", p.hosteller, false AS "isDefault"
    FROM student_fee_profiles p LEFT JOIN transport_slabs ts ON ts.id = p.transport_slab_id LEFT JOIN fee_discounts d ON d.id = p.discount_id`;
 
 /** Student fee profiles and demand generation (S8-06): app.generate_fee_demand does the arithmetic. */
@@ -100,6 +102,7 @@ export class FeeDemandsService {
       discount: null,
       openingBalance: '0.00',
       instalmentsOverride: null,
+      hosteller: false,
       notes: null,
       isDefault: true,
     };
@@ -121,11 +124,11 @@ export class FeeDemandsService {
     return this.db.tenant(tenant, async (c) => {
       const before = await this.findProfile(c, studentId, yearId);
       await c.query(
-        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, transport_slab_id, transport_disabled, discount_id, opening_balance, notes, instalments_override, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, app.current_user_id(), app.current_user_id())
+        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, transport_slab_id, transport_disabled, discount_id, opening_balance, notes, instalments_override, hosteller, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, app.current_user_id(), app.current_user_id())
          ON CONFLICT (student_id, academic_year_id) DO UPDATE SET fee_group = EXCLUDED.fee_group, student_type = EXCLUDED.student_type, transport_slab_id = EXCLUDED.transport_slab_id,
            transport_disabled = EXCLUDED.transport_disabled, discount_id = EXCLUDED.discount_id, opening_balance = EXCLUDED.opening_balance, notes = EXCLUDED.notes,
-           instalments_override = EXCLUDED.instalments_override, updated_at = now(), updated_by = app.current_user_id()`,
+           instalments_override = EXCLUDED.instalments_override, hosteller = EXCLUDED.hosteller, updated_at = now(), updated_by = app.current_user_id()`,
         [
           studentId,
           yearId,
@@ -137,6 +140,7 @@ export class FeeDemandsService {
           dto.openingBalance,
           dto.notes ?? null,
           dto.instalmentsOverride ?? null,
+          dto.hosteller,
         ],
       );
       const after = await this.findProfile(c, studentId, yearId);

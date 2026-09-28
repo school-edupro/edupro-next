@@ -33,7 +33,12 @@ export class ReportsController {
   @Get('exports')
   @RequirePermission(REPORTS.exportView)
   async list(@ReqCtx() ctx: RequestContext, @Query() q: ListExportsQueryDto) {
-    const { rows, total } = await this.reports.list(requireTenant(ctx), q);
+    // Sprint 14: families (no export.create) see their own exports only
+    const { rows, total } = await this.reports.list(
+      requireTenant(ctx),
+      q,
+      !ctx.permissions?.has(REPORTS.exportCreate),
+    );
     return { data: rows, page: { number: q.page, size: q.size, total } };
   }
 

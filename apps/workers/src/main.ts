@@ -101,6 +101,11 @@ async function main(): Promise<void> {
     { name: 'insights.refresh', data: SYSTEM_ENVELOPE('insights.refresh') },
   );
   await maintenance.upsertJobScheduler(
+    'payments.reconcile',
+    { every: 24 * 60 * 60 * 1000 },
+    { name: 'payments.reconcile', data: SYSTEM_ENVELOPE('payments.reconcile') },
+  );
+  await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },
     { name: 'break_glass.expire', data: SYSTEM_ENVELOPE('break_glass.expire') },

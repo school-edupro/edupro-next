@@ -138,6 +138,49 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       log.info({ schools: schools.rows.length, refreshed }, 'insights refresh run');
       return;
     }
+    if (kind === 'payments.reconcile') {
+      // Sprint 14: reconcile online receipts against settlement lines for every active school (idempotent per day).
+      const schools = await db.withoutTenant((c) =>
+        c.query<{ id: string }>('SELECT o_school_id::text AS id FROM app.mart_schools()'),
+      );
+      let ran = 0;
+      let flagged = 0;
+      for (const s of schools.rows) {
+        try {
+          const r = await db.withTenant(
+            { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+            (c) =>
+              c.query<{
+                aged_unsettled: number;
+                mismatched_lines: number;
+                succeeded_without_receipt: number;
+                variance: string;
+              }>(
+                'SELECT aged_unsettled, mismatched_lines, succeeded_without_receipt, variance::text FROM app.reconcile_payments(CURRENT_DATE)',
+              ),
+          );
+          ran += 1;
+          const row = r.rows[0];
+          if (
+            row &&
+            (row.aged_unsettled > 0 ||
+              row.mismatched_lines > 0 ||
+              row.succeeded_without_receipt > 0 ||
+              Number(row.variance) !== 0)
+          ) {
+            flagged += 1;
+            log.warn({ schoolId: s.id, ...row }, 'reconciliation variance');
+          }
+        } catch (error) {
+          log.error(
+            { schoolId: s.id, err: error instanceof Error ? error.message : String(error) },
+            'reconciliation failed',
+          );
+        }
+      }
+      log.info({ schools: schools.rows.length, ran, flagged }, 'payments reconciliation run');
+      return;
+    }
     if (kind === 'audit.partitions') {
       if (!migratorUrl) {
         log.warn('audit.partitions needs DATABASE_MIGRATOR_URL; skipped');

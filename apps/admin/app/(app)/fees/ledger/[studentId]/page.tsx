@@ -16,12 +16,18 @@ import {
   queueReceiptPdf,
   recordLedgerPayment,
   regenerateStudentDemand,
+  requestAdjustment,
   requestRefund,
   revokeLateFeeOverride,
   setLateFeeOverride,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { FeeLedger, FeeLedgerInstalment, FeeLedgerPayment } from '@/lib/types';
+import type {
+  FeeDemandSummary,
+  FeeLedger,
+  FeeLedgerInstalment,
+  FeeLedgerPayment,
+} from '@/lib/types';
 
 const toneFor = (s: FeeLedgerInstalment['status']) =>
   s === 'paid' ? 'success' : s === 'overdue' ? 'danger' : s === 'due' ? 'warning' : 'neutral';
@@ -46,6 +52,11 @@ export default async function FeeLedgerPage({
   const ledger = await apiFetch<FeeLedger>(
     `/fees/students/${studentId}/ledger${sp.asOf ? `?asOf=${sp.asOf}` : ''}`,
   );
+  const demandRows = can('fees.adjustment.request')
+    ? await apiFetch<FeeDemandSummary>(`/fees/students/${studentId}/demands`)
+        .then((d) => d.rows.filter((r) => Number(r.net) - Number(r.paid) > 0))
+        .catch(() => [])
+    : [];
   const yearOpen = ledger.year.status === 'active';
   const diff = ledger.lastRun?.diff ?? null;
   return (
@@ -127,6 +138,7 @@ export default async function FeeLedgerPage({
             columns={[
               { key: 'label', header: f('instalment'), render: (x) => <strong>{x.label}</strong> },
               { key: 'due', header: f('dueOn'), render: (x) => x.dueOn },
+              { key: 'ledger', header: f('ledgerCol'), render: (x) => f(`ledgers.${x.ledger}`) },
               { key: 'net', header: f('net'), numeric: true, render: (x) => x.net },
               { key: 'paid', header: f('paid'), numeric: true, render: (x) => x.paid },
               { key: 'bal', header: f('balance'), numeric: true, render: (x) => x.balance },
@@ -160,7 +172,7 @@ export default async function FeeLedgerPage({
               { key: 'vis', header: f('visibleFrom'), render: (x) => x.visibleFrom },
             ]}
             rows={ledger.instalments}
-            rowKey={(x) => x.dueOn}
+            rowKey={(x) => `${x.ledger}-${x.dueOn}`}
             emptyTitle={f('noInstalments')}
           />
           {can('fees.demand.generate') && yearOpen ? (
@@ -306,6 +318,99 @@ export default async function FeeLedgerPage({
                 {f('openCashier')}
               </a>
             </p>
+          ) : null}
+          {can('fees.adjustment.request') && yearOpen ? (
+            <div style={{ marginTop: 'var(--sp-4)', display: 'grid', gap: 'var(--sp-3)' }}>
+              {demandRows.length ? (
+                <form action={requestAdjustment}>
+                  <input type="hidden" name="studentId" value={studentId} />
+                  <input type="hidden" name="kind" value="waiver" />
+                  <p className="ep-field__help">{f('requestWaiver')}</p>
+                  <FormRow columns={3}>
+                    <SelectField
+                      id="waiverDemand"
+                      name="demandId"
+                      label={f('head')}
+                      options={demandRows.map((r) => ({
+                        value: r.id,
+                        label: `${r.periodName} · ${r.headName} · ₹${(Number(r.net) - Number(r.paid)).toFixed(2)}`,
+                      }))}
+                    />
+                    <InputField
+                      id="waiverAmount"
+                      name="amount"
+                      label={f('amount')}
+                      type="number"
+                      min={1}
+                      step="0.01"
+                      required
+                    />
+                    <InputField
+                      id="waiverReason"
+                      name="reason"
+                      label={f('reason')}
+                      required
+                      minLength={3}
+                      maxLength={300}
+                    />
+                  </FormRow>
+                  <FormActions>
+                    <Button type="submit" variant="secondary">
+                      {f('requestWaiver')}
+                    </Button>
+                  </FormActions>
+                </form>
+              ) : null}
+              {ledger.payments.some((p) => p.status === 'posted') ? (
+                <form action={requestAdjustment}>
+                  <input type="hidden" name="studentId" value={studentId} />
+                  <p className="ep-field__help">{f('requestReversal')}</p>
+                  <FormRow columns={4}>
+                    <SelectField
+                      id="revPayment"
+                      name="paymentId"
+                      label={f('receiptNo')}
+                      options={ledger.payments
+                        .filter((p) => p.status === 'posted')
+                        .map((p) => ({
+                          value: p.id,
+                          label: `${p.receiptNo ?? p.id} · ₹${p.amount} · ${p.mode}`,
+                        }))}
+                    />
+                    <SelectField
+                      id="revKind"
+                      name="kind"
+                      label={f('mode')}
+                      options={[
+                        { value: 'reversal', label: f('requestReversal') },
+                        { value: 'bounce', label: f('requestBounce') },
+                      ]}
+                    />
+                    <InputField
+                      id="revCharge"
+                      name="charge"
+                      label={f('lateFee')}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                    />
+                    <InputField
+                      id="revReason"
+                      name="reason"
+                      label={f('reason')}
+                      required
+                      minLength={3}
+                      maxLength={300}
+                    />
+                  </FormRow>
+                  <FormActions>
+                    <Button type="submit" variant="secondary">
+                      {f('requestReversal')}
+                    </Button>
+                  </FormActions>
+                </form>
+              ) : null}
+            </div>
           ) : null}
           {can('fees.refund.request') && yearOpen && ledger.payments.length ? (
             <form action={requestRefund} style={{ marginTop: 'var(--sp-4)' }}>

@@ -3649,6 +3649,192 @@ async function main(): Promise<void> {
       }
       await clearCtx();
 
+      // ---- Sprint 14: hostel ledger, misc receipts, a pending waiver, exam masters ----
+      await withCtx(alpha.id, 'dev-admin');
+      {
+        // hostel head and structure (₹3,000 a month for Class VI); VI-A roll 4 is a hosteller
+        const hos = await c.query<{ id: string }>(
+          `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
+           VALUES ($1, 'HOS', 'Hostel fee', 'regular', 'hostel', 20, $2, $2)
+           ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now() RETURNING id::text`,
+          [alpha.id, userIds['dev-admin']],
+        );
+        await c.query(
+          `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
+           VALUES ($1, 'IDCARD', 'ID card and lanyard', 'misc', 'misc', 30, $2, $2)
+           ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now()`,
+          [alpha.id, userIds['dev-admin']],
+        );
+        const vi = await c.query<{ id: string }>(
+          `SELECT id::text FROM classes WHERE school_id = $1 AND code = 'VI' AND deleted_at IS NULL`,
+          [alpha.id],
+        );
+        if (vi.rows[0])
+          await c.query(
+            `INSERT INTO fee_structures (school_id, academic_year_id, class_id, head_id, fee_group, student_type, amount, frequency)
+             SELECT $1, $2, $3, $4, 'general', 'all', 3000, 'monthly'
+              WHERE NOT EXISTS (SELECT 1 FROM fee_structures WHERE academic_year_id = $2 AND class_id = $3 AND head_id = $4)`,
+            [alpha.id, yearId, vi.rows[0].id, hos.rows[0]!.id],
+          );
+        const viA4 = await c.query<{ id: string }>(
+          `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' AND e.roll_no = 4 LIMIT 1`,
+          [sections.ALPHA!['VI-A'], yearId],
+        );
+        if (viA4.rows[0]) {
+          const already = await c.query(
+            `SELECT 1 FROM student_fee_profiles WHERE student_id = $1 AND academic_year_id = $2 AND hosteller`,
+            [viA4.rows[0].id, yearId],
+          );
+          if (!already.rowCount) {
+            await c.query(
+              `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, hosteller, created_by, updated_by)
+               VALUES ($1, $2, $3, true, $4, $4) ON CONFLICT (student_id, academic_year_id) DO UPDATE SET hosteller = true, updated_at = now()`,
+              [alpha.id, viA4.rows[0].id, yearId, userIds['dev-admin']],
+            );
+            const run = await c.query<{ run_id: string }>(
+              `SELECT o_run_id::text AS run_id FROM app.generate_fee_demand($1, $2)`,
+              [viA4.rows[0].id, yearId],
+            );
+            await c.query(`SELECT app.apply_instalment_override($1, $2, $3)`, [
+              viA4.rows[0].id,
+              yearId,
+              run.rows[0]!.run_id,
+            ]);
+            // the hostel's April instalment paid at the counter on the hostel ledger
+            await c.query(
+              `SELECT app.post_receipt($1, $2, 9000, '2026-04-08'::date, 'bank', 'NEFT-HOS-0408', 'Sprint 14 demo: hostel April', NULL, NULL, NULL, NULL, 'hostel', true, true)`,
+              [viA4.rows[0].id, yearId],
+            );
+          }
+        }
+        // exam masters: two types, the CBSE eight-point scale, PT1 for Classes VI and VII with three subjects
+        for (const [code, name, w, i] of [
+          ['PT1', 'Periodic Test 1', 10, 1],
+          ['HY', 'Half Yearly', 30, 2],
+        ] as const)
+          await c.query(
+            `INSERT INTO exam_types (school_id, code, name, weightage, sort_order, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $6, $6)
+             ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO NOTHING`,
+            [alpha.id, code, name, w, i, userIds['dev-admin']],
+          );
+        const scale = await c.query<{ id: string }>(
+          `INSERT INTO grade_scales (school_id, code, name, description, created_by, updated_by) VALUES ($1, 'CBSE8', 'CBSE eight-point scale', 'Grades A1 to E by percentage', $2, $2)
+           ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now() RETURNING id::text`,
+          [alpha.id, userIds['dev-admin']],
+        );
+        const bands: Array<[number, number, string, number]> = [
+          [91, 100, 'A1', 10],
+          [81, 90.99, 'A2', 9],
+          [71, 80.99, 'B1', 8],
+          [61, 70.99, 'B2', 7],
+          [51, 60.99, 'C1', 6],
+          [41, 50.99, 'C2', 5],
+          [33, 40.99, 'D', 4],
+          [0, 32.99, 'E', 0],
+        ];
+        const hasBands = await c.query(`SELECT 1 FROM grade_bands WHERE scale_id = $1 LIMIT 1`, [
+          scale.rows[0]!.id,
+        ]);
+        if (!hasBands.rowCount)
+          for (const [i, [lo, hi, g, pts]] of bands.entries())
+            await c.query(
+              `INSERT INTO grade_bands (school_id, scale_id, min_pct, max_pct, grade, points, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [alpha.id, scale.rows[0]!.id, lo, hi, g, pts, i],
+            );
+        const pt1 = await c.query<{ id: string }>(
+          `SELECT id::text FROM exam_types WHERE school_id = $1 AND code = 'PT1' AND deleted_at IS NULL`,
+          [alpha.id],
+        );
+        const examExists = await c.query(
+          `SELECT 1 FROM exams WHERE academic_year_id = $1 AND code = 'PT1-2026' AND deleted_at IS NULL`,
+          [yearId],
+        );
+        if (pt1.rows[0] && !examExists.rowCount) {
+          const exam = await c.query<{ id: string }>(
+            `INSERT INTO exams (school_id, academic_year_id, exam_type_id, code, name, starts_on, ends_on, show_on_portal, created_by, updated_by)
+             VALUES ($1, $2, $3, 'PT1-2026', 'Periodic Test 1 (July 2026)', '2026-07-20', '2026-07-24', true, $4, $4) RETURNING id::text`,
+            [alpha.id, yearId, pt1.rows[0].id, userIds['dev-admin']],
+          );
+          const classes = await c.query<{ id: string; code: string }>(
+            `SELECT id::text, code FROM classes WHERE school_id = $1 AND code IN ('VI', 'VII') AND deleted_at IS NULL`,
+            [alpha.id],
+          );
+          for (const k of classes.rows) {
+            await c.query(
+              `INSERT INTO exam_classes (school_id, exam_id, class_id, grade_scale_id) VALUES ($1, $2, $3, $4)`,
+              [alpha.id, exam.rows[0]!.id, k.id, scale.rows[0]!.id],
+            );
+            const subjects = await c.query<{ id: string; code: string }>(
+              `SELECT id::text, code FROM subjects WHERE school_id = $1 AND deleted_at IS NULL ORDER BY display_order LIMIT 3`,
+              [alpha.id],
+            );
+            for (const [i, sub] of subjects.rows.entries())
+              await c.query(
+                `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, exam_on, entry_locked) VALUES ($1, $2, $3, $4, 40, 13, ('2026-07-20'::date + $5::int), $6)`,
+                [alpha.id, exam.rows[0]!.id, k.id, sub.id, i, k.code === 'VII' && i === 0],
+              );
+          }
+        }
+      }
+      await clearCtx();
+      await withCtx(alpha.id, 'dev-accounts');
+      {
+        // misc receipts: an ID card for VI-A roll 1 and a book stall vendor; a waiver waiting for approval
+        const idc = await c.query<{ id: string }>(
+          `SELECT id::text FROM fee_heads WHERE school_id = $1 AND code = 'IDCARD' AND deleted_at IS NULL`,
+          [alpha.id],
+        );
+        const fy = await c.query<{ id: string }>(
+          `SELECT app.financial_year_for('2026-07-06'::date)::text AS id`,
+        );
+        const misc = await c.query(`SELECT 1 FROM misc_receipts WHERE school_id = $1 LIMIT 1`, [
+          alpha.id,
+        ]);
+        if (idc.rows[0] && fy.rows[0]?.id && !misc.rowCount) {
+          const viA1 = await c.query<{ id: string; name: string }>(
+            `SELECT s.id::text, s.display_name AS name FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' AND e.roll_no = 1 LIMIT 1`,
+            [sections.ALPHA!['VI-A'], yearId],
+          );
+          if (viA1.rows[0])
+            await c.query(
+              `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, payer_name, head_id, amount, received_on, mode, received_by)
+               VALUES ($1, $2, $3, app.next_receipt_no('misc', $3), 'student', $4, $5, $6, 150, '2026-07-06', 'cash', $7)`,
+              [
+                alpha.id,
+                yearId,
+                fy.rows[0].id,
+                viA1.rows[0].id,
+                viA1.rows[0].name,
+                idc.rows[0].id,
+                userIds['dev-accounts'],
+              ],
+            );
+          await c.query(
+            `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, payer_name, payer_mobile, head_id, amount, received_on, mode, reference, received_by)
+             VALUES ($1, $2, $3, app.next_receipt_no('misc', $3), 'vendor', 'Pustak Bhandar (book stall)', '9822011223', $4, 5000, '2026-07-11', 'upi', 'UPI-STALL-0711', $5)`,
+            [alpha.id, yearId, fy.rows[0].id, idc.rows[0].id, userIds['dev-accounts']],
+          );
+        }
+        const viA5 = await c.query<{ id: string }>(
+          `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' AND e.roll_no = 5 LIMIT 1`,
+          [sections.ALPHA!['VI-A'], yearId],
+        );
+        if (viA5.rows[0]) {
+          const row = await c.query<{ id: string }>(
+            `SELECT d.id::text FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.status = 'pending' AND h.kind = 'regular' ORDER BY d.due_on, d.id LIMIT 1`,
+            [viA5.rows[0].id, yearId],
+          );
+          if (row.rows[0])
+            await c.query(
+              `INSERT INTO fee_adjustments (school_id, student_id, academic_year_id, kind, demand_id, amount, reason, requested_by)
+               SELECT $1, $2, $3, 'waiver', $4, 1000, 'Single-parent family; principal recommended a partial waiver', $5
+                WHERE NOT EXISTS (SELECT 1 FROM fee_adjustments WHERE demand_id = $4)`,
+              [alpha.id, viA5.rows[0].id, yearId, row.rows[0].id, userIds['dev-accounts']],
+            );
+        }
+      }
+      await clearCtx();
+
       // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
       for (const school of Object.values(schools)) {
         await withCtx(school.id, 'dev-admin');

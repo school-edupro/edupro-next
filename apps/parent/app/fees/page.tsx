@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { queueMyReceiptPdf } from './actions';
 
 interface Instalment {
   dueOn: string;
@@ -50,7 +51,13 @@ const tone = (s: Instalment['status']) =>
 export default async function FeesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ paid?: string; error?: string; detail?: string; student?: string }>;
+  searchParams: Promise<{
+    paid?: string;
+    error?: string;
+    detail?: string;
+    student?: string;
+    export?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
@@ -81,6 +88,15 @@ export default async function FeesPage({
     throw error;
   }
   const canPay = intents !== null;
+  // Sprint 14: a queued receipt PDF; the worker renders it and the link appears when ready
+  const exportStatus = sp.export
+    ? await bff.api
+        .fetch<{
+          export: { id: string; status: string; title: string };
+          download: { url: string } | null;
+        }>(`/fees/mine/exports/${sp.export}`)
+        .catch(() => null)
+    : null;
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
@@ -120,6 +136,26 @@ export default async function FeesPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {sp.detail || sp.error}
+        </div>
+      ) : null}
+      {exportStatus ? (
+        <div
+          className="ep-alert ep-alert--info"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {exportStatus.download ? (
+            <a href={exportStatus.download.url}>{t(lang, 'Download the receipt PDF')}</a>
+          ) : (
+            <>
+              {t(lang, 'The receipt PDF is being prepared.')}{' '}
+              <a
+                href={`/fees?student=${encodeURIComponent(sp.student ?? '')}&export=${exportStatus.export.id}`}
+              >
+                {t(lang, 'Refresh')}
+              </a>
+            </>
+          )}
         </div>
       ) : null}
       {children.length === 0 ? <Card>{t(lang, 'No fee demand has been raised yet.')}</Card> : null}
@@ -248,6 +284,7 @@ export default async function FeesPage({
                   <th>{t(lang, 'Date')}</th>
                   <th style={{ textAlign: 'right' }}>{t(lang, 'Amount')}</th>
                   <th>{t(lang, 'Mode')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -273,6 +310,17 @@ export default async function FeesPage({
                       ) : null}
                     </td>
                     <td>{p.mode.toUpperCase()}</td>
+                    <td>
+                      {p.status === 'posted' || p.status === 'partly_refunded' ? (
+                        <form action={queueMyReceiptPdf}>
+                          <input type="hidden" name="paymentId" value={p.id} />
+                          <input type="hidden" name="student" value={c.student.id} />
+                          <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                            {t(lang, 'PDF')}
+                          </button>
+                        </form>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>

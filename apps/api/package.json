@@ -19,6 +19,7 @@
     "@aws-sdk/s3-request-presigner": "^3.670.0",
     "@azure/identity": "^4.13.3",
     "@azure/keyvault-secrets": "^4.11.2",
+    "@edupro/ai": "workspace:*",
     "@edupro/db": "workspace:*",
     "@edupro/storage": "workspace:*",
     "@fastify/cors": "^10.0.1",

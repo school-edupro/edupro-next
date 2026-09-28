@@ -272,6 +272,20 @@ export class WorkflowService {
         ],
       },
       {
+        // Sprint 14: a fee category, discount or hostel change requested by the accounts desk
+        code: 'fee_profile_change',
+        name: 'Fee category and discount change',
+        entityType: 'fee_profile_change',
+        levels: [
+          {
+            level: 1,
+            name: 'Principal approval',
+            resolver: { kind: 'role', roleCode: 'school_admin' },
+            slaHours: 48,
+          },
+        ],
+      },
+      {
         // Sprint 13: a family's bus request (join, change stop, leave) is approved by the office
         code: 'transport_request',
         name: 'Transport request',

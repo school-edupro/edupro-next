@@ -78,7 +78,14 @@
     "refunds": "Refunds",
     "settlements": "Gateway settlements",
     "transportRequests": "Bus requests",
-    "departments": "Department dashboards"
+    "departments": "Department dashboards",
+    "adjustments": "Adjustments",
+    "miscReceipts": "Misc receipts",
+    "exams": "Exams",
+    "examTypes": "Types and grade scales",
+    "examList": "Exams of the session",
+    "assistant": "Assistant",
+    "assistantAudit": "Assistant audit"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -570,6 +577,41 @@
       "kicker": "Insights",
       "title": "Department dashboard",
       "description": "Numbers from the reporting marts and the module tables for the working session."
+    },
+    "fees_adjustments": {
+      "kicker": "Fees",
+      "title": "Adjustments",
+      "description": "Waivers, receipt reversals and cheque bounces requested by the desk; an administrator approves with a fresh sign-in."
+    },
+    "fees_misc": {
+      "kicker": "Fees",
+      "title": "Misc receipts",
+      "description": "Receipts on the misc ledger for students, employees, vendors and others."
+    },
+    "exams_masters": {
+      "kicker": "Exams",
+      "title": "Types and grade scales",
+      "description": "Exam types with weightage and the grade scales with their bands."
+    },
+    "exams_list": {
+      "kicker": "Exams",
+      "title": "Exams of the session",
+      "description": "Exams per class with dates, subjects, max marks and entry locks."
+    },
+    "exams_detail": {
+      "kicker": "Exams",
+      "title": "Exam",
+      "description": "Classes, subjects with max and pass marks, and locks."
+    },
+    "insights_assistant": {
+      "kicker": "Insights",
+      "title": "Assistant",
+      "description": "Ask about the school in English or Hindi; every answer comes from a catalogue query you are allowed to run, and names it."
+    },
+    "insights_assistant_audit": {
+      "kicker": "Insights",
+      "title": "Assistant audit",
+      "description": "Prompts, tool calls, answers and cost, with personal data masked."
     }
   },
   "stepUp": {
@@ -1196,11 +1238,26 @@
       "posted": "Posted",
       "partly_refunded": "Partly refunded",
       "refunded": "Refunded",
-      "bounced": "Bounced"
+      "bounced": "Bounced",
+      "reversed": "Reversed"
     },
     "refunds": "Refunds",
     "noRefunds": "No refunds",
-    "openCashier": "Open cashier"
+    "openCashier": "Open cashier",
+    "hosteller": "Hosteller",
+    "ledgerCol": "Ledger",
+    "ledgers": {
+      "school": "School",
+      "hostel": "Hostel",
+      "misc": "Misc",
+      "admission": "Admission"
+    },
+    "requestChange": "Request category / discount change",
+    "requestWaiver": "Request waiver",
+    "requestReversal": "Request reversal",
+    "requestBounce": "Cheque bounced",
+    "reversed": "Reversed",
+    "bounced": "Bounced"
   },
   "workflow": {
     "step": "Step",
@@ -1939,7 +1996,8 @@
       "upi": "UPI",
       "bank": "Bank transfer",
       "card": "Card"
-    }
+    },
+    "ledgerHint": "Hostel receipts settle hostel instalments only."
   },
   "refunds": {
     "request": "Request refund",
@@ -2014,5 +2072,178 @@
     "noSettlements": "No settlement files yet",
     "open": "Open",
     "settlements": "Settlement files"
+  },
+  "adjustments": {
+    "request": "Request adjustment",
+    "kind": "Kind",
+    "kinds": {
+      "waiver": "Waiver",
+      "reversal": "Reversal",
+      "bounce": "Cheque bounce"
+    },
+    "demand": "Demand row",
+    "receipt": "Receipt",
+    "amount": "Amount",
+    "charge": "Bounce charge",
+    "reason": "Reason",
+    "status": "Status",
+    "statuses": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "requestedBy": "Requested by",
+    "requestedAt": "Requested",
+    "decidedBy": "Decided by",
+    "decide": "Decide",
+    "approve": "Approve (MFA)",
+    "reject": "Reject",
+    "note": "Note",
+    "student": "Student",
+    "noAdjustments": "No adjustments",
+    "filter": "Show",
+    "all": "All",
+    "help": "A waiver lowers one demand row; a reversal or bounce takes the receipt out of the ledger and reopens the rows. Approval needs a recent multi-factor sign-in.",
+    "profileChanges": "Category and discount changes",
+    "changes": "Changes",
+    "requestChange": "Request change",
+    "noChanges": "No changes",
+    "inWorkflow": "In the approval inbox",
+    "feeGroup": "Fee group",
+    "studentType": "Student type",
+    "discount": "Discount",
+    "hosteller": "Hosteller",
+    "keep": "— keep —",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "misc": {
+    "post": "Post misc receipt",
+    "payerKind": "Payer",
+    "payerKinds": {
+      "student": "Student",
+      "employee": "Employee",
+      "vendor": "Vendor",
+      "other": "Other"
+    },
+    "payerName": "Payer name",
+    "payerMobile": "Mobile",
+    "head": "Head",
+    "amount": "Amount",
+    "receivedOn": "Received on",
+    "mode": "Mode",
+    "reference": "Reference",
+    "instrumentNo": "Cheque / DD number",
+    "bankName": "Bank",
+    "remarks": "Remarks",
+    "receiptNo": "Receipt no.",
+    "receivedBy": "Received by",
+    "noReceipts": "No misc receipts",
+    "student": "Student",
+    "employee": "Employee",
+    "section": "Section",
+    "filter": "Show",
+    "from": "From",
+    "to": "To",
+    "help": "Misc heads (ledger misc) carry ID cards, certificates, stalls and other collections; the number comes from the misc sequence of the financial year.",
+    "reconciliation": "Reconciliation",
+    "runNow": "Reconcile now",
+    "runDate": "Run",
+    "onlineReceipts": "Online receipts",
+    "settled": "Settled",
+    "unsettled": "Unsettled",
+    "agedUnsettled": "Unsettled > 3 days",
+    "unmatchedLines": "Unmatched lines",
+    "mismatchedLines": "Mismatched lines",
+    "withoutReceipt": "Succeeded without receipt",
+    "variance": "Variance",
+    "noRuns": "No reconciliation yet"
+  },
+  "exams": {
+    "types": "Exam types",
+    "code": "Code",
+    "name": "Name",
+    "weightage": "Weightage %",
+    "order": "Order",
+    "examsCount": "Exams",
+    "addType": "Add type",
+    "noTypes": "No exam types yet",
+    "scales": "Grade scales",
+    "bands": "Bands",
+    "minPct": "From %",
+    "maxPct": "To %",
+    "grade": "Grade",
+    "points": "Points",
+    "remark": "Remark",
+    "saveScale": "Save scale",
+    "noScales": "No grade scales yet",
+    "scaleHelp": "Bands are percentages of max marks, highest first; they must not overlap.",
+    "exam": "Exam",
+    "type": "Type",
+    "startsOn": "From",
+    "endsOn": "To",
+    "classes": "Classes",
+    "portal": "On portal",
+    "locked": "Locked",
+    "addExam": "Create exam",
+    "noExams": "No exams yet",
+    "gradeScale": "Grade scale",
+    "subjects": "Subjects",
+    "subject": "Subject",
+    "maxMarks": "Max marks",
+    "passMarks": "Pass marks",
+    "elective": "Elective",
+    "examOn": "Date",
+    "entryLocked": "Entry locked",
+    "saveSubjects": "Save subjects",
+    "lockAll": "Lock entry",
+    "unlockAll": "Unlock entry",
+    "lockExam": "Lock the whole exam",
+    "unlockExam": "Unlock the exam",
+    "open": "Open",
+    "status": "Status",
+    "noSubjects": "No subjects yet for this class",
+    "chooseClass": "Class",
+    "subjectsHelp": "One row per subject of the class; blank max marks drop the row. Locked rows keep their lock."
+  },
+  "assistant": {
+    "ask": "Ask",
+    "question": "Your question",
+    "placeholder": "e.g. Class VI fee defaulters above 5,000 · attendance today · कक्षा VI के बकायादार",
+    "newConversation": "New conversation",
+    "conversations": "Recent conversations",
+    "sources": "Sources",
+    "rows": "rows",
+    "refused": "The assistant could not answer from school data.",
+    "suggestions": "Nearest catalogue queries",
+    "catalogue": "What you can ask",
+    "notAllowed": "needs a permission you do not hold",
+    "usage": "Tokens",
+    "cost": "Cost (₹)",
+    "provider": "Model",
+    "language": "Language",
+    "auto": "Auto (from the question)",
+    "english": "English",
+    "hindi": "Hindi",
+    "you": "You",
+    "assistantName": "Assistant",
+    "noConversations": "No conversations yet",
+    "budgetExceeded": "The assistant budget for today or this month is used up.",
+    "audit": {
+      "prompts": "Prompts",
+      "refusals": "Refusals",
+      "toolCalls": "Tool calls",
+      "users": "Users",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "costPaise": "Cost (₹)",
+      "when": "When",
+      "kind": "Kind",
+      "user": "User",
+      "text": "Text (redacted)",
+      "redactions": "Masked",
+      "days": "Days"
+    }
   }
 }

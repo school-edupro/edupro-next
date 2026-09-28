@@ -41,6 +41,13 @@ const EnvSchema = z.object({
   CCAVENUE_ACCESS_CODE: z.string().default('dev-access-code'),
   CCAVENUE_WORKING_KEY: z.string().min(8).default('dev-ccavenue-working-key'),
   CCAVENUE_BASE_URL: z.string().url().default('https://test.ccavenue.com'),
+  /** Sprint 14: the assistant's model provider (packages/ai). mock is refused in production. */
+  AI_PROVIDER: z.enum(['mock', 'claude']).default('mock'),
+  AI_MODEL: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_BASE_URL: z.string().url().optional(),
+  AI_USER_DAILY_TOKENS: z.coerce.number().int().min(1000).default(200_000),
+  AI_SCHOOL_MONTHLY_TOKENS: z.coerce.number().int().min(10_000).default(20_000_000),
   /** Shared secret for provider delivery receipts (S10): header x-webhook-token. */
   COMMS_WEBHOOK_TOKEN: z.string().min(8).default('dev-comms-webhook-token'),
   /** Public base URL of this API, used to build local-driver file URLs. */
@@ -107,6 +114,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(
       'Refusing to start: PAYU_MODE must be test or live with real PAYU_KEY and PAYU_SALT in production',
     );
+  }
+  if (env.NODE_ENV === 'production' && env.AI_PROVIDER === 'mock') {
+    throw new Error(
+      'Refusing to start: AI_PROVIDER must be claude (with ANTHROPIC_API_KEY) in production',
+    );
+  }
+  if (env.AI_PROVIDER === 'claude' && !env.ANTHROPIC_API_KEY) {
+    throw new Error('AI_PROVIDER=claude needs ANTHROPIC_API_KEY');
   }
   if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'mock') {
     throw new Error('Refusing to start: PAYMENT_PROVIDER must name a real gateway in production');

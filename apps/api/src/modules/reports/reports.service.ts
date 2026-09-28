@@ -145,15 +145,30 @@ export class ReportsService {
   }
 
   /** Document renderers (ID cards, later receipts and report cards): always PDF, parameters name the entity. */
+  /**
+   * Sprint 14: a rendered export the caller owns (a family's own receipt). The ownership check is the
+   * caller's; the renderer permission is not required because the document is theirs by construction.
+   */
+  async createRenderedForOwner(
+    ctx: RequestContext,
+    dto: CreateExportDto,
+    auditAction: string,
+  ): Promise<ExportRow> {
+    const renderer = rendererOrNull(dto.dataset);
+    if (!renderer) throw new DomainError('not-found', 'Unknown renderer');
+    return this.createRendered(ctx, dto, renderer.id, auditAction, true);
+  }
+
   private async createRendered(
     ctx: RequestContext,
     dto: CreateExportDto,
     rendererId: string,
     auditAction: string,
+    owned = false,
   ): Promise<ExportRow> {
     const tenant = requireTenant(ctx);
     const renderer = rendererOrNull(rendererId)!;
-    if (!ctx.permissions?.has(renderer.permission)) {
+    if (!owned && !ctx.permissions?.has(renderer.permission)) {
       throw new DomainError(
         'permission-denied',
         `${renderer.title} requires ${renderer.permission}`,
@@ -195,12 +210,13 @@ export class ReportsService {
   list(
     tenant: TenantContext,
     q: ListExportsQueryDto,
+    mineOnly = false,
   ): Promise<{ rows: ExportRow[]; total: number }> {
     return this.db.tenant(tenant, async (c) => {
       const where =
         ' WHERE ($1::export_status IS NULL OR e.status = $1::export_status)' +
         ' AND ($2::boolean = false OR e.requested_by = app.current_user_id())';
-      const params: unknown[] = [q.status ?? null, q.mine === 'true'];
+      const params: unknown[] = [q.status ?? null, q.mine === 'true' || mineOnly];
       const total = await c.query<{ n: string }>(
         'SELECT count(*)::text AS n FROM exports e' + where,
         params,

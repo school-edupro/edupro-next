@@ -2,12 +2,20 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { FeeAdjustmentsService } from './fee-adjustments.service';
 import { FeeDemandsService } from './fee-demands.service';
 import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
 import {
   ClassSummaryQueryDto,
   CreateDiscountDto,
+  DecideAdjustmentDto,
+  ListAdjustmentsQueryDto,
+  ListMiscReceiptsQueryDto,
+  ListProfileChangesQueryDto,
+  PostMiscReceiptDto,
+  RequestAdjustmentDto,
+  RequestProfileChangeDto,
   CreateHeadDto,
   CreateSlabDto,
   FEES,
@@ -31,6 +39,7 @@ export class FeesController {
     private readonly masters: FeeMastersService,
     private readonly demands: FeeDemandsService,
     private readonly ledger: FeeLedgerService,
+    private readonly adj: FeeAdjustmentsService,
   ) {}
 
   // ---- masters ------------------------------------------------------------------------------------
@@ -257,5 +266,120 @@ export class FeesController {
   @RequirePermission(FEES.ledgerView)
   receipt(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.ledger.receiptPdf(ctx, id);
+  }
+
+  // ---- Sprint 14: family receipt PDF ------------------------------------------------------------
+  @Post('mine/receipts/:paymentId/pdf')
+  @ApiOperation({ summary: "Queue the PDF of one of the family's own receipts" })
+  @RequirePermission(FEES.familyView)
+  myReceiptPdf(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
+    return this.ledger.myReceiptPdf(ctx, paymentId);
+  }
+
+  @Get('mine/exports/:id')
+  @ApiOperation({ summary: 'Status and download link of one of my own exports' })
+  @RequirePermission(FEES.familyView)
+  myExport(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.ledger.myExportStatus(ctx, id);
+  }
+
+  // ---- Sprint 14: adjustments (waiver, reversal, bounce) ------------------------------------------
+  @Get('adjustments')
+  @RequirePermission(FEES.adjustmentRequest, {
+    description: 'Request a waiver, a receipt reversal or a cheque bounce',
+  })
+  async adjustments(@ReqCtx() ctx: RequestContext, @Query() q: ListAdjustmentsQueryDto) {
+    return { data: await this.adj.adjustments(ctx, q) };
+  }
+
+  @Post('adjustments')
+  @ApiOperation({
+    summary: 'Request a waiver of a demand row, a receipt reversal or a cheque bounce',
+  })
+  @RequirePermission(FEES.adjustmentRequest)
+  requestAdjustment(@ReqCtx() ctx: RequestContext, @Body() body: RequestAdjustmentDto) {
+    return this.adj.requestAdjustment(ctx, body);
+  }
+
+  @Post('adjustments/:id/decide')
+  @ApiOperation({
+    summary: 'Approve (applies the adjustment) or reject; needs a recent MFA sign-in',
+  })
+  @RequirePermission(FEES.adjustmentApprove, {
+    description: 'Approve or reject fee adjustments (step-up MFA)',
+    mfa: true,
+  })
+  decideAdjustment(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: DecideAdjustmentDto,
+  ) {
+    return this.adj.decideAdjustment(ctx, id, body);
+  }
+
+  // ---- Sprint 14: category, discount and hostel changes through the workflow -----------------------
+  @Get('profile-changes')
+  @RequirePermission(FEES.profileChangeRequest, {
+    description: 'Request a category, discount or hostel change for a student',
+  })
+  async profileChanges(@ReqCtx() ctx: RequestContext, @Query() q: ListProfileChangesQueryDto) {
+    return { data: await this.adj.profileChanges(ctx, q) };
+  }
+
+  @Post('students/:id/profile-changes')
+  @ApiOperation({
+    summary: 'Request a fee category, discount, transport or hostel change (workflow)',
+  })
+  @RequirePermission(FEES.profileChangeRequest)
+  requestProfileChange(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: RequestProfileChangeDto,
+  ) {
+    return this.adj.requestProfileChange(ctx, id, body);
+  }
+
+  @Post('profile-changes/:id/decide')
+  @ApiOperation({ summary: 'Decide a change that is not in a workflow' })
+  @RequirePermission(FEES.profileManage)
+  decideProfileChange(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: DecideAdjustmentDto,
+  ) {
+    return this.adj.decideProfileChange(ctx, id, body);
+  }
+
+  // ---- Sprint 14: misc receipts and reconciliation ------------------------------------------------
+  @Get('misc/receipts')
+  @RequirePermission(FEES.miscView, { description: 'View misc receipts' })
+  async miscReceipts(@ReqCtx() ctx: RequestContext, @Query() q: ListMiscReceiptsQueryDto) {
+    const { rows, total } = await this.adj.miscReceipts(ctx, q);
+    return { data: rows, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Post('misc/receipts')
+  @ApiOperation({
+    summary: 'Post a misc receipt (student, employee, vendor or other) on the misc ledger',
+  })
+  @RequirePermission(FEES.miscPost, {
+    description: 'Post a misc receipt (students, employees, vendors, others)',
+  })
+  postMisc(@ReqCtx() ctx: RequestContext, @Body() body: PostMiscReceiptDto) {
+    return this.adj.postMiscReceipt(ctx, body);
+  }
+
+  @Get('reconciliations')
+  @RequirePermission(FEES.reconcileView, {
+    description: 'View the daily reconciliation of online receipts against settlements',
+  })
+  async reconciliations(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.adj.reconciliations(ctx) };
+  }
+
+  @Post('reconciliations/run')
+  @RequirePermission(FEES.reconcileRun, { description: 'Run the reconciliation now' })
+  reconcile(@ReqCtx() ctx: RequestContext) {
+    return this.adj.reconcileNow(ctx);
   }
 }

@@ -78,7 +78,14 @@
     "refunds": "धनवापसी",
     "settlements": "गेटवे सेटलमेंट",
     "transportRequests": "बस अनुरोध",
-    "departments": "विभागीय डैशबोर्ड"
+    "departments": "विभागीय डैशबोर्ड",
+    "adjustments": "समायोजन",
+    "miscReceipts": "विविध रसीदें",
+    "exams": "परीक्षाएँ",
+    "examTypes": "प्रकार और ग्रेड स्केल",
+    "examList": "सत्र की परीक्षाएँ",
+    "assistant": "सहायक",
+    "assistantAudit": "सहायक ऑडिट"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
@@ -570,6 +577,41 @@
       "kicker": "इनसाइट्स",
       "title": "विभागीय डैशबोर्ड",
       "description": "कार्यरत सत्र के लिए रिपोर्टिंग मार्ट और मॉड्यूल तालिकाओं से आँकड़े।"
+    },
+    "fees_adjustments": {
+      "kicker": "शुल्क",
+      "title": "समायोजन",
+      "description": "डेस्क द्वारा अनुरोधित छूट, रसीद उलटाव और चेक बाउंस; प्रशासक हाल के साइन-इन से स्वीकृत करता है।"
+    },
+    "fees_misc": {
+      "kicker": "शुल्क",
+      "title": "विविध रसीदें",
+      "description": "विद्यार्थियों, कर्मचारियों, विक्रेताओं और अन्य के लिए विविध खाते की रसीदें।"
+    },
+    "exams_masters": {
+      "kicker": "परीक्षाएँ",
+      "title": "प्रकार और ग्रेड स्केल",
+      "description": "भार सहित परीक्षा प्रकार और बैंड सहित ग्रेड स्केल।"
+    },
+    "exams_list": {
+      "kicker": "परीक्षाएँ",
+      "title": "सत्र की परीक्षाएँ",
+      "description": "कक्षा अनुसार परीक्षाएँ, तिथियाँ, विषय, अधिकतम अंक और प्रविष्टि लॉक।"
+    },
+    "exams_detail": {
+      "kicker": "परीक्षाएँ",
+      "title": "परीक्षा",
+      "description": "कक्षाएँ, अधिकतम और उत्तीर्ण अंक सहित विषय, और लॉक।"
+    },
+    "insights_assistant": {
+      "kicker": "इनसाइट्स",
+      "title": "सहायक",
+      "description": "अंग्रेज़ी या हिन्दी में विद्यालय के बारे में पूछें; हर उत्तर आपके अधिकार वाली कैटलॉग क्वेरी से आता है और उसका नाम बताता है।"
+    },
+    "insights_assistant_audit": {
+      "kicker": "इनसाइट्स",
+      "title": "सहायक ऑडिट",
+      "description": "प्रॉम्प्ट, टूल कॉल, उत्तर और लागत, व्यक्तिगत डेटा छिपाकर।"
     }
   },
   "stepUp": {
@@ -1196,11 +1238,26 @@
       "posted": "दर्ज",
       "partly_refunded": "आंशिक लौटाया",
       "refunded": "लौटाया",
-      "bounced": "बाउंस"
+      "bounced": "बाउंस",
+      "reversed": "उलटा गया"
     },
     "refunds": "धनवापसी",
     "noRefunds": "कोई धनवापसी नहीं",
-    "openCashier": "कैशियर खोलें"
+    "openCashier": "कैशियर खोलें",
+    "hosteller": "छात्रावासी",
+    "ledgerCol": "खाता",
+    "ledgers": {
+      "school": "विद्यालय",
+      "hostel": "छात्रावास",
+      "misc": "विविध",
+      "admission": "प्रवेश"
+    },
+    "requestChange": "श्रेणी / छूट बदलाव अनुरोध",
+    "requestWaiver": "छूट अनुरोध",
+    "requestReversal": "उलटाव अनुरोध",
+    "requestBounce": "चेक बाउंस",
+    "reversed": "उलटा गया",
+    "bounced": "बाउंस"
   },
   "workflow": {
     "step": "चरण",
@@ -1939,7 +1996,8 @@
       "upi": "UPI",
       "bank": "बैंक अंतरण",
       "card": "कार्ड"
-    }
+    },
+    "ledgerHint": "छात्रावास रसीदें केवल छात्रावास किस्तें चुकाती हैं।"
   },
   "refunds": {
     "request": "धनवापसी अनुरोध",
@@ -2014,5 +2072,178 @@
     "noSettlements": "अभी कोई सेटलमेंट फ़ाइल नहीं",
     "open": "खोलें",
     "settlements": "सेटलमेंट फ़ाइलें"
+  },
+  "adjustments": {
+    "request": "समायोजन अनुरोध",
+    "kind": "प्रकार",
+    "kinds": {
+      "waiver": "छूट",
+      "reversal": "उलटाव",
+      "bounce": "चेक बाउंस"
+    },
+    "demand": "माँग पंक्ति",
+    "receipt": "रसीद",
+    "amount": "राशि",
+    "charge": "बाउंस शुल्क",
+    "reason": "कारण",
+    "status": "स्थिति",
+    "statuses": {
+      "pending": "लंबित",
+      "approved": "स्वीकृत",
+      "rejected": "अस्वीकृत",
+      "cancelled": "रद्द"
+    },
+    "requestedBy": "अनुरोधकर्ता",
+    "requestedAt": "अनुरोध तिथि",
+    "decidedBy": "निर्णयकर्ता",
+    "decide": "निर्णय",
+    "approve": "स्वीकृत करें (MFA)",
+    "reject": "अस्वीकार करें",
+    "note": "टिप्पणी",
+    "student": "विद्यार्थी",
+    "noAdjustments": "कोई समायोजन नहीं",
+    "filter": "दिखाएँ",
+    "all": "सभी",
+    "help": "छूट एक माँग पंक्ति घटाती है; उलटाव या बाउंस रसीद को खाते से हटाकर पंक्तियाँ फिर खोलता है। स्वीकृति के लिए हाल का बहु-कारक साइन-इन चाहिए।",
+    "profileChanges": "श्रेणी और छूट बदलाव",
+    "changes": "बदलाव",
+    "requestChange": "बदलाव अनुरोध",
+    "noChanges": "कोई बदलाव नहीं",
+    "inWorkflow": "स्वीकृति इनबॉक्स में",
+    "feeGroup": "शुल्क समूह",
+    "studentType": "विद्यार्थी प्रकार",
+    "discount": "छूट",
+    "hosteller": "छात्रावासी",
+    "keep": "— यथावत —",
+    "yes": "हाँ",
+    "no": "नहीं"
+  },
+  "misc": {
+    "post": "विविध रसीद दर्ज करें",
+    "payerKind": "भुगतानकर्ता",
+    "payerKinds": {
+      "student": "विद्यार्थी",
+      "employee": "कर्मचारी",
+      "vendor": "विक्रेता",
+      "other": "अन्य"
+    },
+    "payerName": "भुगतानकर्ता का नाम",
+    "payerMobile": "मोबाइल",
+    "head": "शीर्ष",
+    "amount": "राशि",
+    "receivedOn": "प्राप्ति तिथि",
+    "mode": "माध्यम",
+    "reference": "संदर्भ",
+    "instrumentNo": "चेक / डीडी संख्या",
+    "bankName": "बैंक",
+    "remarks": "टिप्पणी",
+    "receiptNo": "रसीद सं.",
+    "receivedBy": "प्राप्तकर्ता",
+    "noReceipts": "कोई विविध रसीद नहीं",
+    "student": "विद्यार्थी",
+    "employee": "कर्मचारी",
+    "section": "अनुभाग",
+    "filter": "दिखाएँ",
+    "from": "से",
+    "to": "तक",
+    "help": "विविध शीर्ष (विविध खाता) आईडी कार्ड, प्रमाणपत्र, स्टॉल और अन्य संग्रह रखते हैं; संख्या वित्तीय वर्ष के विविध क्रम से आती है।",
+    "reconciliation": "मिलान",
+    "runNow": "अभी मिलान करें",
+    "runDate": "चलाया",
+    "onlineReceipts": "ऑनलाइन रसीदें",
+    "settled": "सेटल",
+    "unsettled": "असेटल",
+    "agedUnsettled": "3 दिन से अधिक असेटल",
+    "unmatchedLines": "अमेल पंक्तियाँ",
+    "mismatchedLines": "बेमेल पंक्तियाँ",
+    "withoutReceipt": "रसीद रहित सफल",
+    "variance": "अंतर",
+    "noRuns": "अभी कोई मिलान नहीं"
+  },
+  "exams": {
+    "types": "परीक्षा प्रकार",
+    "code": "कोड",
+    "name": "नाम",
+    "weightage": "भार %",
+    "order": "क्रम",
+    "examsCount": "परीक्षाएँ",
+    "addType": "प्रकार जोड़ें",
+    "noTypes": "अभी कोई परीक्षा प्रकार नहीं",
+    "scales": "ग्रेड स्केल",
+    "bands": "बैंड",
+    "minPct": "से %",
+    "maxPct": "तक %",
+    "grade": "ग्रेड",
+    "points": "अंक",
+    "remark": "टिप्पणी",
+    "saveScale": "स्केल सहेजें",
+    "noScales": "अभी कोई ग्रेड स्केल नहीं",
+    "scaleHelp": "बैंड अधिकतम अंकों के प्रतिशत हैं, उच्चतम पहले; वे ओवरलैप न करें।",
+    "exam": "परीक्षा",
+    "type": "प्रकार",
+    "startsOn": "से",
+    "endsOn": "तक",
+    "classes": "कक्षाएँ",
+    "portal": "पोर्टल पर",
+    "locked": "लॉक",
+    "addExam": "परीक्षा बनाएँ",
+    "noExams": "अभी कोई परीक्षा नहीं",
+    "gradeScale": "ग्रेड स्केल",
+    "subjects": "विषय",
+    "subject": "विषय",
+    "maxMarks": "अधिकतम अंक",
+    "passMarks": "उत्तीर्ण अंक",
+    "elective": "वैकल्पिक",
+    "examOn": "तिथि",
+    "entryLocked": "प्रविष्टि लॉक",
+    "saveSubjects": "विषय सहेजें",
+    "lockAll": "प्रविष्टि लॉक करें",
+    "unlockAll": "प्रविष्टि खोलें",
+    "lockExam": "पूरी परीक्षा लॉक करें",
+    "unlockExam": "परीक्षा खोलें",
+    "open": "खोलें",
+    "status": "स्थिति",
+    "noSubjects": "इस कक्षा के लिए अभी कोई विषय नहीं",
+    "chooseClass": "कक्षा",
+    "subjectsHelp": "कक्षा के प्रति विषय एक पंक्ति; खाली अधिकतम अंक पंक्ति हटाते हैं। लॉक पंक्तियाँ लॉक रहती हैं।"
+  },
+  "assistant": {
+    "ask": "पूछें",
+    "question": "आपका प्रश्न",
+    "placeholder": "जैसे: कक्षा VI के बकायादार · आज की उपस्थिति",
+    "newConversation": "नई बातचीत",
+    "conversations": "हाल की बातचीत",
+    "sources": "स्रोत",
+    "rows": "पंक्तियाँ",
+    "refused": "सहायक विद्यालय डेटा से उत्तर नहीं दे सका।",
+    "suggestions": "निकटतम कैटलॉग क्वेरी",
+    "catalogue": "आप क्या पूछ सकते हैं",
+    "notAllowed": "आपके पास अनुमति नहीं",
+    "usage": "टोकन",
+    "cost": "लागत (₹)",
+    "provider": "मॉडल",
+    "language": "भाषा",
+    "auto": "स्वतः (प्रश्न से)",
+    "english": "अंग्रेज़ी",
+    "hindi": "हिन्दी",
+    "you": "आप",
+    "assistantName": "सहायक",
+    "noConversations": "अभी कोई बातचीत नहीं",
+    "budgetExceeded": "आज या इस माह का सहायक बजट समाप्त।",
+    "audit": {
+      "prompts": "प्रॉम्प्ट",
+      "refusals": "इनकार",
+      "toolCalls": "टूल कॉल",
+      "users": "उपयोगकर्ता",
+      "inputTokens": "इनपुट टोकन",
+      "outputTokens": "आउटपुट टोकन",
+      "costPaise": "लागत (₹)",
+      "when": "कब",
+      "kind": "प्रकार",
+      "user": "उपयोगकर्ता",
+      "text": "पाठ (छिपाया)",
+      "redactions": "छिपाया गया",
+      "days": "दिन"
+    }
   }
 }

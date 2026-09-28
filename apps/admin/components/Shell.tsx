@@ -48,6 +48,8 @@ const NAV: Array<{
       { href: '/fees/cashier', label: 'cashier', permission: 'fees.receipt.post' },
       { href: '/fees/refunds', label: 'refunds', permission: 'fees.refund.request' },
       { href: '/fees/settlements', label: 'settlements', permission: 'payments.settlement.view' },
+      { href: '/fees/adjustments', label: 'adjustments', permission: 'fees.adjustment.request' },
+      { href: '/fees/misc', label: 'miscReceipts', permission: 'fees.misc.view' },
     ],
   },
   {
@@ -146,6 +148,13 @@ const NAV: Array<{
     ],
   },
   {
+    section: 'exams',
+    items: [
+      { href: '/exams', label: 'examList', permission: 'exams.master.view' },
+      { href: '/exams/masters', label: 'examTypes', permission: 'exams.master.view' },
+    ],
+  },
+  {
     section: 'transport',
     items: [
       { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
@@ -170,6 +179,12 @@ const NAV: Array<{
         href: '/insights/departments',
         label: 'departments',
         permission: 'insights.department.view',
+      },
+      { href: '/insights/assistant', label: 'assistant', permission: 'insights.assistant.use' },
+      {
+        href: '/insights/assistant/audit',
+        label: 'assistantAudit',
+        permission: 'insights.assistant.audit',
       },
     ],
   },

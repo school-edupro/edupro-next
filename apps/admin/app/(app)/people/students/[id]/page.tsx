@@ -4,6 +4,7 @@ import {
   Breadcrumbs,
   Button,
   Card,
+  Checkbox,
   DataTable,
   FormActions,
   FormRow,
@@ -20,6 +21,7 @@ import {
   generateStudentDemand,
   issueTc,
   renderTemplateFor,
+  requestProfileChange,
   setFeeProfile,
   requestStudentIdCard,
   requestWithdrawal,
@@ -86,7 +88,7 @@ export default async function StudentPage({
   const openWithdrawal = withdrawals.find(
     (w) => w.status === 'requested' || w.status === 'cleared',
   );
-  const [feeProfile, feeDemands, slabs, feeDiscounts, f] = await Promise.all([
+  const [feeProfile, feeDemands, slabs, feeDiscounts, f, a] = await Promise.all([
     can('fees.demand.view')
       ? apiFetch<FeeProfile>(`/fees/students/${id}/profile`).catch(() => null)
       : Promise.resolve<FeeProfile | null>(null),
@@ -104,6 +106,7 @@ export default async function StudentPage({
           .catch(() => [] as FeeDiscount[])
       : Promise.resolve<FeeDiscount[]>([]),
     getTranslations('fees'),
+    getTranslations('adjustments'),
   ]);
   const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
@@ -690,9 +693,68 @@ export default async function StudentPage({
                     defaultValue={Number(feeProfile.openingBalance)}
                   />
                 </FormRow>
+                <FormRow columns={1}>
+                  <Checkbox
+                    id="feeHosteller"
+                    name="hosteller"
+                    label={f('hosteller')}
+                    defaultChecked={feeProfile.hosteller}
+                  />
+                </FormRow>
                 <FormActions>
                   <Button type="submit" variant="secondary">
                     {f('saveProfile')}
+                  </Button>
+                </FormActions>
+              </form>
+            ) : null}
+            {feeProfile && can('fees.profile_change.request') ? (
+              <form action={requestProfileChange} style={{ marginTop: 'var(--sp-3)' }}>
+                <input type="hidden" name="studentId" value={student.id} />
+                <p className="ep-field__help">{f('requestChange')}</p>
+                <FormRow columns={4}>
+                  <SelectField
+                    id="chgType"
+                    name="studentType"
+                    label={f('studentType')}
+                    options={[
+                      { value: '', label: a('keep') },
+                      { value: 'new', label: f('studentTypes.new') },
+                      { value: 'old', label: f('studentTypes.old') },
+                    ]}
+                  />
+                  <SelectField
+                    id="chgDiscount"
+                    name="discountId"
+                    label={f('discount')}
+                    options={[
+                      { value: '', label: a('keep') },
+                      { value: 'none', label: f('none') },
+                      ...feeDiscounts.map((d) => ({ value: d.id, label: d.name })),
+                    ]}
+                  />
+                  <SelectField
+                    id="chgHostel"
+                    name="hosteller"
+                    label={f('hosteller')}
+                    options={[
+                      { value: '', label: a('keep') },
+                      { value: 'yes', label: a('yes') },
+                      { value: 'no', label: a('no') },
+                    ]}
+                  />
+                  <InputField
+                    id="chgReason"
+                    name="reason"
+                    label={a('reason')}
+                    required
+                    minLength={3}
+                    maxLength={300}
+                  />
+                </FormRow>
+                <FormActions>
+                  <Button type="submit" variant="secondary">
+                    {a('requestChange')}
                   </Button>
                 </FormActions>
               </form>

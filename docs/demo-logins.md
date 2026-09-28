@@ -92,6 +92,31 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprint 14 walk-through (adjustments, hostel, misc, exams, assistant)
+
+- **dev-accounts** (Accountant): VI-A roll 4 is now a **hosteller**: the ledger shows hostel instalments
+  (₹9,000 a quarter) beside the school ones, with the hostel April instalment paid by NEFT (`HF/FY2026-27/…`);
+  the cashier's **Ledger** select posts hostel receipts that settle hostel rows only. On any ledger the desk
+  can **request a waiver** of a demand row, a **reversal** or a **cheque bounce** of a receipt (the bounce
+  charge, ₹500 by default, comes from System → Settings); requests wait under **Fees → Adjustments**, where
+  VI-A roll 5 already has a ₹1,000 waiver waiting. On the student page the desk can **request a category /
+  discount / hostel change** (approved in the inbox because the default `fee_profile_change` workflow is
+  installed there, or directly under Adjustments otherwise). **Fees → Misc receipts** lists the ID card and
+  the book-stall vendor receipts (`MF/FY2026-27/…`) and posts new ones for students, employees, vendors or
+  others; the **Reconciliation** card runs the online-vs-settlement check now (the workers run it nightly).
+- **dev-admin**: approve the waiver under **Fees → Adjustments** — approval needs a recent MFA sign-in
+  (development identities count as fresh; a stale session is sent to step-up). **Exams → Types and grade
+  scales** shows PT1 and Half Yearly with the CBSE eight-point scale; **Exams → Exams of the session** opens
+  **PT1-2026** for Classes VI and VII with three subjects (max 40, pass 13); Class VII's first subject is
+  locked. **Insights → Assistant**: ask "Class VI fee defaulters above 5,000", "attendance today by class",
+  "collection by mode in the last 30 days" or "कक्षा VI के बकायादार"; every answer names the catalogue query
+  it used with the row count, and **Assistant audit** shows prompts, refusals, tool calls and cost. The
+  development mock answers offline; set `AI_PROVIDER=claude` and `ANTHROPIC_API_KEY` for the real model.
+- **dev-coordinator**: the assistant answers academics and attendance questions and refuses fee questions it
+  is not allowed to run ("vendor receipts" → refused, nearest queries listed).
+- **dev-parent**: **Fees** now offers **PDF** beside each receipt; the link appears once the workers have
+  rendered it (own exports only).
+
 ### Sprint 13 walk-through (collect and pay)
 
 - **dev-accounts** (Accountant): **Fees → Cashier**. Pick VI-A and a student: the card shows balance, the late

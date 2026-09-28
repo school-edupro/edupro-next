@@ -369,3 +369,117 @@ export function feeReceiptLoader(lookups: {
     },
   };
 }
+
+// ---- Sprint 14: the hostel mirror and the misc collections share the transforms -----------------------
+
+/** `hostel_fees` mirrors `fees` column for column; receipts load on the hostel ledger. */
+export const hostelFeeReceiptStep: Step<RawFeeReceipt, FeeReceiptRecord> = {
+  ...feeReceiptStep,
+  legacyTable: 'hostel_fees',
+};
+export const hostelFeeReceiptLineStep: Step<RawFeeReceiptLine, FeeReceiptLineRecord> = {
+  ...feeReceiptLineStep,
+  legacyTable: 'hostel_fees_transaction',
+};
+
+/** `fees_misc_collection`: one row per misc receipt with the payer (student, employee or vendor) and the head. */
+export interface RawMiscCollection {
+  receipt_no?: unknown;
+  receipt_date?: unknown;
+  sadmission?: unknown;
+  emp_code?: unknown;
+  payer_name?: unknown;
+  head?: unknown;
+  amount?: unknown;
+  payment_mode?: unknown;
+  txn_id?: unknown;
+  FinancialYear?: unknown;
+}
+export interface MiscReceiptRecord {
+  receiptNo: string;
+  receivedOn: string;
+  payerKind: 'student' | 'employee' | 'vendor' | 'other';
+  admissionNo: string | null;
+  employeeCode: string | null;
+  payerName: string;
+  headCode: string;
+  amount: string;
+  mode: string;
+  reference: string | null;
+  legacyYear: string | null;
+}
+
+export const miscReceiptStep: Step<RawMiscCollection, MiscReceiptRecord> = {
+  legacyTable: 'fees_misc_collection',
+  transform(raw) {
+    const rejects: Rejects = [];
+    const receiptNo = text(raw.receipt_no)?.toUpperCase() ?? null;
+    if (!receiptNo)
+      rejects.push({
+        ...reject('misc_receipt.number_missing', raw.receipt_no, true),
+        column: 'receipt_no',
+      });
+    const on = normaliseDate(raw.receipt_date);
+    if (on.kind !== 'ok') rejects.push({ ...on, column: 'receipt_date' });
+    else if (on.value === null)
+      rejects.push({
+        ...reject('misc_receipt.date_missing', raw.receipt_date, true),
+        column: 'receipt_date',
+      });
+    const amount = toMoney(raw.amount);
+    if (amount.kind !== 'ok') rejects.push({ ...amount, column: 'amount' });
+    else if (amount.value === null || Number(amount.value) <= 0)
+      rejects.push({
+        ...reject('misc_receipt.amount_invalid', raw.amount, true),
+        column: 'amount',
+      });
+    const head =
+      text(raw.head)
+        ?.toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_') ?? null;
+    if (!head)
+      rejects.push({ ...reject('misc_receipt.head_missing', raw.head, true), column: 'head' });
+    const mode = normaliseMode(raw.payment_mode);
+    if (typeof mode !== 'string') rejects.push({ ...mode, column: 'payment_mode' });
+    const year =
+      raw.FinancialYear === undefined || raw.FinancialYear === null || raw.FinancialYear === ''
+        ? null
+        : normaliseYearCode(raw.FinancialYear);
+    if (year && year.kind !== 'ok') rejects.push({ ...year, column: 'FinancialYear' });
+    if (
+      rejects.length ||
+      !receiptNo ||
+      on.kind !== 'ok' ||
+      amount.kind !== 'ok' ||
+      !head ||
+      typeof mode !== 'string'
+    )
+      return rejects;
+    const admissionNo = text(raw.sadmission)?.toUpperCase() ?? null;
+    const employeeCode = text(raw.emp_code)?.toUpperCase() ?? null;
+    const payerName = text(raw.payer_name) ?? admissionNo ?? employeeCode ?? 'Unknown payer';
+    return {
+      legacyKey: receiptNo,
+      legacyYear: year && year.kind === 'ok' ? year.value : undefined,
+      row: {
+        receiptNo,
+        receivedOn: on.value!,
+        payerKind: admissionNo
+          ? 'student'
+          : employeeCode
+            ? 'employee'
+            : text(raw.payer_name)
+              ? 'vendor'
+              : 'other',
+        admissionNo,
+        employeeCode,
+        payerName,
+        headCode: head,
+        amount: money2(amount.value),
+        mode,
+        reference: text(raw.txn_id),
+        legacyYear: year && year.kind === 'ok' ? year.value : null,
+      },
+    };
+  },
+};
