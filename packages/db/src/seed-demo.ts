@@ -611,13 +611,15 @@ async function main(): Promise<void> {
     await scopeFor('dev-teacher', 'class_teacher', ['VI-A']);
     await scopeFor('dev-subject', 'subject_teacher', ['VI-A', 'VI-B']);
 
-    // ---- delegation: the coordinator covers for the class teacher for a week --------------------
+    // ---- delegation: the class teacher covered for the coordinator last week (history) ----------------
+    // Kept in the past since Sprint 15: an active coordinator delegation would give the class teacher
+    // exams.marks.unlock, and the segregation-of-duties rule then refuses her own mark entry.
     const coordRole = await c.query<{ id: string }>(
       `SELECT id::text FROM roles WHERE code = 'academic_coordinator' AND school_id IS NULL`,
     );
     await c.query(
       `INSERT INTO delegations (school_id, from_user_id, to_user_id, role_id, starts_at, ends_at, reason)
-       SELECT $1, $2, $3, $4, now() - interval '1 day', now() + interval '6 days', 'Leave cover during the sports week'
+       SELECT $1, $2, $3, $4, now() - interval '9 days', now() - interval '2 days', 'Leave cover during the sports week'
        WHERE NOT EXISTS (SELECT 1 FROM delegations WHERE school_id = $1 AND from_user_id = $2 AND to_user_id = $3 AND revoked_at IS NULL)`,
       [
         schools.ALPHA!.id,
@@ -3773,6 +3775,129 @@ async function main(): Promise<void> {
                 `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, exam_on, entry_locked) VALUES ($1, $2, $3, $4, 40, 13, ('2026-07-20'::date + $5::int), $6)`,
                 [alpha.id, exam.rows[0]!.id, k.id, sub.id, i, k.code === 'VII' && i === 0],
               );
+          }
+        }
+      }
+      {
+        // Sprint 15: entry for PT1-2026 in VI-A (marks through app.enter_marks, an indicator set, remark bank,
+        // remarks, exam attendance and height/weight), idempotent on the mark_entries of the first subject
+        const pt1 = await c.query<{ id: string }>(
+          `SELECT id::text FROM exams WHERE school_id = $1 AND academic_year_id = $2 AND code = 'PT1-2026' AND deleted_at IS NULL`,
+          [alpha.id, yearId],
+        );
+        const viA = sections.ALPHA!['VI-A'];
+        if (pt1.rows[0] && viA) {
+          const examId = pt1.rows[0].id;
+          const subs = await c.query<{
+            id: string;
+            subject_id: string;
+            code: string;
+            class_id: string;
+          }>(
+            `SELECT es.id::text, es.subject_id::text, sub.code, es.class_id::text FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
+              JOIN class_sections cs ON cs.class_id = es.class_id AND cs.id = $2
+             WHERE es.exam_id = $1 ORDER BY sub.display_order`,
+            [examId, viA],
+          );
+          const roster = await c.query<{ id: string; roll: number }>(
+            `SELECT e.student_id::text AS id, e.roll_no AS roll FROM enrolments e WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' ORDER BY e.roll_no`,
+            [viA, yearId],
+          );
+          const done = subs.rows[0]
+            ? await c.query(`SELECT 1 FROM mark_entries WHERE exam_subject_id = $1 LIMIT 1`, [
+                subs.rows[0].id,
+              ])
+            : { rowCount: 1 };
+          if (subs.rows.length && roster.rows.length && done.rowCount === 0) {
+            const marksFor = (roll: number, i: number) =>
+              roll === 5 && i === 0 ? null : Math.min(40, 18 + ((roll * 7 + i * 5) % 22)); // roll 5 absent in the first subject
+            for (const [i, sub] of subs.rows.entries()) {
+              const rows = roster.rows.map((r) => {
+                const m = marksFor(r.roll ?? 1, i);
+                return m === null
+                  ? { studentId: r.id, absent: true }
+                  : { studentId: r.id, marks: m };
+              });
+              await c.query(`SELECT app.enter_marks($1, $2::jsonb)`, [
+                sub.id,
+                JSON.stringify(rows),
+              ]);
+            }
+            const set = await c.query<{ id: string }>(
+              `INSERT INTO indicator_sets (school_id, code, name, grades, created_by, updated_by) VALUES ($1, 'COSCH', 'Co-scholastic (VI-VIII)', '{A,B,C}', $2, $2)
+               ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+              [alpha.id, userIds['dev-admin']],
+            );
+            const indicators: Array<[string, string, string]> = [
+              ['WORK', 'Work education', 'Co-scholastic'],
+              ['ART', 'Art education', 'Co-scholastic'],
+              ['HEALTH', 'Health and physical education', 'Co-scholastic'],
+              ['DISC', 'Discipline', 'Discipline'],
+            ];
+            const indIds: string[] = [];
+            for (const [j, [code, name, area]] of indicators.entries()) {
+              const r = await c.query<{ id: string }>(
+                `INSERT INTO indicators (school_id, set_id, code, name, area, sort_order) VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (set_id, code) DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+                [alpha.id, set.rows[0]!.id, code, name, area, j + 1],
+              );
+              indIds.push(r.rows[0]!.id);
+            }
+            await c.query(
+              `INSERT INTO exam_indicator_sets (school_id, exam_id, class_id, set_id)
+               SELECT $1, $2, ec.class_id, $3 FROM exam_classes ec WHERE ec.exam_id = $2 ON CONFLICT (exam_id, class_id) DO NOTHING`,
+              [alpha.id, examId, set.rows[0]!.id],
+            );
+            const grades = ['A', 'B', 'A', 'C'];
+            for (const r of roster.rows)
+              for (const [j, ind] of indIds.entries())
+                await c.query(
+                  `INSERT INTO indicator_entries (school_id, exam_id, indicator_id, student_id, grade, entered_by) VALUES ($1, $2, $3, $4, $5, $6)
+                   ON CONFLICT (exam_id, indicator_id, student_id) DO NOTHING`,
+                  [
+                    alpha.id,
+                    examId,
+                    ind,
+                    r.id,
+                    grades[((r.roll ?? 1) + j) % grades.length],
+                    userIds['dev-teacher'],
+                  ],
+                );
+            const bank: Array<[string, string]> = [
+              ['R1', 'Shows steady progress and participates well in class.'],
+              ['R2', 'Needs regular practice in written work; reads well.'],
+              ['R3', 'Punctual and disciplined; can take more initiative in group work.'],
+              ['R4', 'Has improved this term; keep up the effort in Mathematics.'],
+            ];
+            for (const [j, [code, textv]] of bank.entries())
+              await c.query(
+                `INSERT INTO remark_bank (school_id, code, text, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT (school_id, code) DO UPDATE SET text = EXCLUDED.text`,
+                [alpha.id, code, textv, j + 1],
+              );
+            for (const r of roster.rows) {
+              const [code, textv] = bank[(r.roll ?? 1) % bank.length]!;
+              await c.query(
+                `INSERT INTO exam_remarks (school_id, exam_id, student_id, remark, bank_code, entered_by) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (exam_id, student_id) DO NOTHING`,
+                [alpha.id, examId, r.id, textv, code, userIds['dev-teacher']],
+              );
+              await c.query(
+                `INSERT INTO exam_attendance (school_id, exam_id, student_id, days_present, days_total, entered_by) VALUES ($1, $2, $3, $4, 62, $5) ON CONFLICT (exam_id, student_id) DO NOTHING`,
+                [alpha.id, examId, r.id, 62 - ((r.roll ?? 1) % 4), userIds['dev-teacher']],
+              );
+              await c.query(
+                `INSERT INTO health_records (school_id, student_id, recorded_on, exam_id, height_cm, weight_kg, blood_group, recorded_by)
+                 VALUES ($1, $2, '2026-07-18', $3, $4, $5, $6, $7) ON CONFLICT (student_id, recorded_on, COALESCE(exam_id, 0)) DO NOTHING`,
+                [
+                  alpha.id,
+                  r.id,
+                  examId,
+                  (138 + (((r.roll ?? 1) * 3) % 14)).toFixed(1),
+                  (32 + (((r.roll ?? 1) * 5) % 12) + 0.4).toFixed(2),
+                  ['A+', 'B+', 'O+', 'AB+', 'O-'][(r.roll ?? 1) % 5],
+                  userIds['dev-teacher'],
+                ],
+              );
+            }
           }
         }
       }

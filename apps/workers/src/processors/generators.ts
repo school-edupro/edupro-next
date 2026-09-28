@@ -108,3 +108,95 @@ ${body}
   </tbody></table>
 </body></html>`;
 }
+
+const xmlEscape = (v: unknown): string =>
+  String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/** Generic XML: one <row> per record with the dataset's column keys as elements. */
+export function toXml(title: string, columns: DatasetColumn[], rows: Row[]): Buffer {
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', `<report title="${xmlEscape(title)}">`];
+  for (const r of rows) {
+    lines.push('  <row>');
+    for (const c of columns) {
+      const v = formatCell(r[c.key], c.type);
+      lines.push(`    <${c.key}>${xmlEscape(v instanceof Date ? v.toISOString() : v)}</${c.key}>`);
+    }
+    lines.push('  </row>');
+  }
+  lines.push('</report>');
+  return Buffer.from(lines.join('\n'), 'utf8');
+}
+
+export interface TallyOptions {
+  company: string;
+  cashLedger: string;
+  bankLedger: string;
+}
+
+const tallyDate = (v: unknown): string => {
+  const d = v instanceof Date ? v : new Date(String(v));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
+};
+
+/**
+ * Sprint 15: Tally XML import file (ENVELOPE › TALLYMESSAGE › VOUCHER). Rows of the fee_tally_vouchers
+ * dataset are grouped by voucher_no: one Receipt voucher debiting the cash or bank ledger for the total
+ * and crediting one ledger per fee head line. Party and narration come from the rows.
+ */
+export function toTallyXml(rows: Row[], options: TallyOptions): Buffer {
+  const byVoucher = new Map<string, Row[]>();
+  for (const r of rows) {
+    const key = String(r.voucher_no ?? '');
+    const list = byVoucher.get(key) ?? [];
+    list.push(r);
+    byVoucher.set(key, list);
+  }
+  const out: string[] = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<ENVELOPE>',
+    '  <HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>',
+    '  <BODY><IMPORTDATA><REQUESTDESC><REPORTNAME>Vouchers</REPORTNAME>',
+    `    <STATICVARIABLES><SVCURRENTCOMPANY>${xmlEscape(options.company)}</SVCURRENTCOMPANY></STATICVARIABLES>`,
+    '  </REQUESTDESC><REQUESTDATA>',
+  ];
+  for (const [voucherNo, lines] of byVoucher) {
+    const first = lines[0]!;
+    const total = lines.reduce((acc, l) => acc + Number(l.amount ?? 0), 0);
+    const mode = String(first.mode ?? 'cash').toLowerCase();
+    const debit = mode === 'cash' ? options.cashLedger : options.bankLedger;
+    const date = tallyDate(first.date);
+    const narration = [first.narration, first.party, first.bank_name, first.instrument_no]
+      .filter((x) => x !== null && x !== undefined && String(x) !== '')
+      .join(' | ');
+    out.push('    <TALLYMESSAGE xmlns:UDF="TallyUDF">');
+    out.push(`      <VOUCHER VCHTYPE="Receipt" ACTION="Create" OBJVIEW="Accounting Voucher View">`);
+    out.push(`        <DATE>${date}</DATE>`);
+    out.push('        <VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>');
+    out.push(`        <VOUCHERNUMBER>${xmlEscape(voucherNo)}</VOUCHERNUMBER>`);
+    out.push(`        <PARTYLEDGERNAME>${xmlEscape(first.party)}</PARTYLEDGERNAME>`);
+    out.push(`        <NARRATION>${xmlEscape(narration)}</NARRATION>`);
+    out.push('        <ALLLEDGERENTRIES.LIST>');
+    out.push(`          <LEDGERNAME>${xmlEscape(debit)}</LEDGERNAME>`);
+    out.push('          <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
+    out.push(`          <AMOUNT>-${total.toFixed(2)}</AMOUNT>`);
+    out.push('        </ALLLEDGERENTRIES.LIST>');
+    for (const l of lines) {
+      out.push('        <ALLLEDGERENTRIES.LIST>');
+      out.push(`          <LEDGERNAME>${xmlEscape(l.ledger_name)}</LEDGERNAME>`);
+      out.push('          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+      out.push(`          <AMOUNT>${Number(l.amount ?? 0).toFixed(2)}</AMOUNT>`);
+      out.push('        </ALLLEDGERENTRIES.LIST>');
+    }
+    out.push('      </VOUCHER>');
+    out.push('    </TALLYMESSAGE>');
+  }
+  out.push('  </REQUESTDATA></IMPORTDATA></BODY>', '</ENVELOPE>');
+  return Buffer.from(out.join('\n'), 'utf8');
+}

@@ -50,6 +50,8 @@ const NAV: Array<{
       { href: '/fees/settlements', label: 'settlements', permission: 'payments.settlement.view' },
       { href: '/fees/adjustments', label: 'adjustments', permission: 'fees.adjustment.request' },
       { href: '/fees/misc', label: 'miscReceipts', permission: 'fees.misc.view' },
+      { href: '/fees/reports', label: 'feeReports', permission: 'fees.ledger.view' },
+      { href: '/fees/bank', label: 'bankStatements', permission: 'payments.settlement.view' },
     ],
   },
   {
@@ -180,6 +182,7 @@ const NAV: Array<{
         label: 'departments',
         permission: 'insights.department.view',
       },
+      { href: '/insights/alerts', label: 'alerts', permission: 'insights.alert.view' },
       { href: '/insights/assistant', label: 'assistant', permission: 'insights.assistant.use' },
       {
         href: '/insights/assistant/audit',

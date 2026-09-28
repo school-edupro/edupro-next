@@ -6,6 +6,7 @@ import { FeeAdjustmentsService } from './fee-adjustments.service';
 import { FeeDemandsService } from './fee-demands.service';
 import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
+import { FeeReportsService } from './fee-reports.service';
 import {
   ClassSummaryQueryDto,
   CreateDiscountDto,
@@ -13,6 +14,7 @@ import {
   ListAdjustmentsQueryDto,
   ListMiscReceiptsQueryDto,
   MiscEmployeeLookupQueryDto,
+  NotifyDefaultersDto,
   ListProfileChangesQueryDto,
   PostMiscReceiptDto,
   RequestAdjustmentDto,
@@ -41,6 +43,7 @@ export class FeesController {
     private readonly demands: FeeDemandsService,
     private readonly ledger: FeeLedgerService,
     private readonly adj: FeeAdjustmentsService,
+    private readonly feeReports: FeeReportsService,
   ) {}
 
   // ---- masters ------------------------------------------------------------------------------------
@@ -368,6 +371,17 @@ export class FeesController {
   })
   postMisc(@ReqCtx() ctx: RequestContext, @Body() body: PostMiscReceiptDto) {
     return this.adj.postMiscReceipt(ctx, body);
+  }
+
+  @Post('reports/defaulters/notify')
+  @ApiOperation({
+    summary: 'Send the fee_due reminder to the guardians of the selected defaulters',
+  })
+  @RequirePermission(FEES.defaulterNotify, {
+    description: 'Send fee reminders to defaulters from the reports centre',
+  })
+  notifyDefaulters(@ReqCtx() ctx: RequestContext, @Body() body: NotifyDefaultersDto) {
+    return this.feeReports.notifyDefaulters(ctx, body);
   }
 
   @Get('misc/employees')

@@ -436,6 +436,14 @@ export class ExamsService {
   ): Promise<ExamRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
+    if (!dto.locked && !ctx.permissions?.has('exams.marks.unlock'))
+      throw new DomainError(
+        'permission-denied',
+        'Reopening a locked subject needs exams.marks.unlock',
+        {
+          status: 403,
+        },
+      );
     return this.db.tenant(tenant, async (c) => {
       await this.findExam(c, examId, yearId);
       await c.query(

@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
+import { ExamEntryController } from './exam-entry.controller';
+import { ExamEntryService } from './exam-entry.service';
 import { ExamsController } from './exams.controller';
 import { ExamsService } from './exams.service';
 
-/** Sprint 14: exam masters. Marks entry, registers and report cards follow in Sprints 15 to 18. */
+/** Sprint 14: exam masters. Sprint 15: entry (marks, indicators, remarks, attendance, health). */
 @Module({
-  controllers: [ExamsController],
-  providers: [ExamsService, AuditService],
-  exports: [ExamsService],
+  controllers: [ExamsController, ExamEntryController],
+  providers: [ExamsService, ExamEntryService, AuditService],
+  exports: [ExamsService, ExamEntryService],
 })
 export class ExamsModule {}

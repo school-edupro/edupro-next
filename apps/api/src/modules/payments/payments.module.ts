@@ -2,6 +2,8 @@ import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
 import { FeesModule } from '../fees/fees.module';
+import { BankStatementsController } from './bank-statements.controller';
+import { BankStatementsService } from './bank-statements.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { RefundsService } from './refunds.service';
@@ -14,9 +16,15 @@ import { SettlementsService } from './settlements.service';
  */
 @Module({
   imports: [FeesModule, DailyAcademicsModule],
-  controllers: [PaymentsController],
-  providers: [PaymentsService, RefundsService, SettlementsService, AuditService],
-  exports: [PaymentsService, RefundsService, SettlementsService],
+  controllers: [PaymentsController, BankStatementsController],
+  providers: [
+    PaymentsService,
+    RefundsService,
+    SettlementsService,
+    BankStatementsService,
+    AuditService,
+  ],
+  exports: [PaymentsService, RefundsService, SettlementsService, BankStatementsService],
 })
 export class PaymentsModule implements OnModuleInit {
   constructor(

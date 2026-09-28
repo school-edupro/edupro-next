@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
+import { DailyAcademicsModule } from '../academics/daily/daily.module';
+import { AlertsService } from './alerts.service';
 import { AssistantService } from './assistant.service';
 import { DepartmentsService } from './departments.service';
 import { InsightsController } from './insights.controller';
@@ -7,8 +9,9 @@ import { InsightsService } from './insights.service';
 
 /** Sprint 12 (AI track): marts v1 and the principal dashboard; the query catalogue and assistant arrive in Sprint 14. */
 @Module({
+  imports: [DailyAcademicsModule],
   controllers: [InsightsController],
-  providers: [InsightsService, DepartmentsService, AssistantService, AuditService],
-  exports: [InsightsService, DepartmentsService, AssistantService],
+  providers: [InsightsService, DepartmentsService, AssistantService, AlertsService, AuditService],
+  exports: [InsightsService, DepartmentsService, AssistantService, AlertsService],
 })
 export class InsightsModule {}

@@ -13,6 +13,26 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  Assistant: 'सहायक',
+  'Ask about fees, attendance and homework': 'शुल्क, उपस्थिति और गृहकार्य के बारे में पूछें',
+  'Ask about your children': 'अपने बच्चों के बारे में पूछें',
+  'Fees due, attendance, homework and notices of your own children, in English, Hindi or Hinglish. Answers come only from school records and name their source.':
+    'अपने बच्चों का बकाया शुल्क, उपस्थिति, गृहकार्य और सूचनाएँ, अंग्रेज़ी, हिन्दी या हिंग्लिश में। उत्तर केवल विद्यालय के अभिलेखों से आते हैं और अपना स्रोत बताते हैं।',
+  'The assistant is not enabled for families in this school yet.':
+    'इस विद्यालय में अभिभावकों के लिए सहायक अभी चालू नहीं है।',
+  'The assistant needs your consent (AI assistant) first. Turn it on under Profile → Your consents; you can withdraw it at any time.':
+    'सहायक के लिए पहले आपकी सहमति (AI सहायक) चाहिए। प्रोफ़ाइल → आपकी सहमतियाँ में इसे चालू करें; आप इसे कभी भी वापस ले सकते हैं।',
+  'Open profile': 'प्रोफ़ाइल खोलें',
+  You: 'आप',
+  'Your question': 'आपका प्रश्न',
+  Language: 'भाषा',
+  Auto: 'स्वतः',
+  Ask: 'पूछें',
+  'New conversation': 'नई बातचीत',
+  'What you can ask': 'आप क्या पूछ सकते हैं',
+  'Your questions are stored with personal details masked and can be withdrawn with the consent.':
+    'आपके प्रश्न व्यक्तिगत विवरण छिपाकर संग्रहीत होते हैं और सहमति वापस लेने पर हटाए जा सकते हैं।',
+  'Recent conversations': 'हाल की बातचीत',
   Home: 'होम',
   'Sign out': 'साइन आउट',
   Homework: 'गृहकार्य',
@@ -70,7 +90,6 @@ const DICT: Record<string, string> = {
   'The page you asked for is not saved on this device. Check your connection and try again.':
     'यह पृष्ठ इस डिवाइस पर सहेजा नहीं है। कनेक्शन जाँचें और फिर कोशिश करें।',
   'Try again': 'फिर कोशिश करें',
-  Language: 'भाषा',
   'Dues and receipts': 'बकाया और रसीदें',
   'Instalments the school has opened, what is payable today, and every receipt of this session.':
     'विद्यालय द्वारा खोली गई किस्तें, आज देय राशि और इस सत्र की हर रसीद।',

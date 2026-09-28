@@ -875,14 +875,15 @@ describe('adjustments, hostel, misc, exams and the assistant (e2e, Sprint 14)', 
     expect(conv.json().messages).toHaveLength(4);
     expect(conv.json().turns).toBe(2);
 
-    // a teacher cannot ask at all; a coordinator cannot see misc receipts (no fees.misc.view): refused, no leak
+    // a coordinator cannot see misc receipts (no fees.misc.view): refused, no leak
     const teacherAsk = await inject({
       method: 'POST',
       url: '/insights/assistant',
       headers: h(teacher),
       json: { question: 'fee defaulters of class VI' },
     });
-    expect(teacherAsk.statusCode).toBe(403); // class teachers do not hold insights.assistant.use
+    // Sprint 15: teachers hold insights.assistant.use; this one has no assignment, so it is unscoped staff
+    expect(teacherAsk.statusCode).toBe(201);
     const coordAsk = await inject({
       method: 'POST',
       url: '/insights/assistant',

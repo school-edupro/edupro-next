@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DATASETS } from '@edupro/db';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, requireTenant, type RequestContext } from '../../common/http/request-context';
-import { CreateExportDto, ListExportsQueryDto } from './reports.dto';
+import { CreateExportDto, ListExportsQueryDto, RowsQueryDto } from './reports.dto';
 import { REPORTS } from './reports.permissions';
 import { ReportsService } from './reports.service';
 
@@ -28,6 +28,14 @@ export class ReportsController {
           maxRows: d.maxRows,
         })),
     };
+  }
+
+  @Get('datasets/:id/rows')
+  @ApiOperation({ summary: 'Run a dataset live for a screen (Sprint 15 report framework)' })
+  @RequirePermission(REPORTS.exportView)
+  rows(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: RowsQueryDto) {
+    const { limit, ...params } = q;
+    return this.reports.rows(ctx, id, params, limit);
   }
 
   @Get('exports')

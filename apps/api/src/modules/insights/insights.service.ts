@@ -98,6 +98,7 @@ const MARTS = [
   'fee_collection_daily',
   'admissions_funnel',
   'comms_delivery_daily',
+  'fee_forecast',
 ] as const;
 
 const pct = (present: number, strength: number): number | null =>

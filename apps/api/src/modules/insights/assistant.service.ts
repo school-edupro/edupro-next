@@ -17,6 +17,7 @@ import {
 } from '@edupro/ai';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import IORedis, { type Redis } from 'ioredis';
+import { ViewerService } from '../academics/daily/viewer.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -27,6 +28,8 @@ export interface AskDto {
   question: string;
   conversationId?: string;
   language?: 'en' | 'hi' | 'hinglish';
+  /** Sprint 15: which app asked (validated against the caller's kind). */
+  surface?: 'admin' | 'teacher' | 'parent';
 }
 
 export interface Citation {
@@ -120,7 +123,28 @@ question (use list_classes or find_student first when you need an id), then answ
 numbers from the results. Name the source query in your answer. Keep answers short; use a compact table when
 there are several rows. Never invent data; if no tool fits, say so and name the closest tools.`;
 
+const SYSTEM_TEACHER = `You are EduPro's assistant for a teacher. You answer only about the sections this teacher holds,
+through the query catalogue tools (they are already limited to those sections). Fill parameters from the
+question, then answer briefly in plain words with the numbers from the results and name the source query.
+Never invent data; if no tool fits, say so and name the closest tools.`;
+
+const SYSTEM_PARENT = `You are EduPro's assistant for a parent. You answer only about this parent's own children,
+through the query catalogue tools (they are already limited to those children). Be warm and brief, in the
+parent's language, with the figures from the results; name the source query. Never invent data, never
+speculate about other children or staff; if no tool fits, say so kindly.`;
+
 const HI = /[ऀ-ॿ]/;
+/** Hinglish: Latin script with Hindi function words; two hits or one strong marker. */
+const HINGLISH_WORDS =
+  /\b(kya|kitna|kitni|kitne|kaun|kab|kaise|kyun|hai|hain|tha|the|ka|ki|ke|mera|mere|meri|bachcha|bachche|bachchi|bakaya|baki|hazri|haziri|chhutti|aaj|kal|abhi|nahi|nahin|dikhao|batao|bataiye|dijiye|kar|karo|wala|wale)\b/gi;
+export function detectLanguage(question: string): 'en' | 'hi' | 'hinglish' {
+  if (HI.test(question)) return 'hi';
+  const hits = question.match(HINGLISH_WORDS)?.length ?? 0;
+  const strong = /\b(kitna|kitni|bakaya|hazri|haziri|batao|dikhao|bachche|bachcha)\b/i.test(
+    question,
+  );
+  return hits >= 2 || (hits >= 1 && strong) ? 'hinglish' : 'en';
+}
 
 /**
  * Offline responder for the mock provider: a keyword router over the catalogue so the assistant works in
@@ -143,17 +167,25 @@ export function catalogueMockResponder(
       if (!o || !o.ok)
         return `The query ${o?.name ?? ''} could not run: ${o?.output?.error ?? 'unknown error'}.`;
       const rows = o.output.rows ?? [];
+      const hinglish = /Answer in Hinglish/.test(req.system ?? '');
       const hindi =
-        HI.test(req.messages[0]?.content ?? '') || /Answer in Hindi/.test(req.system ?? '');
+        !hinglish &&
+        (HI.test(req.messages[0]?.content ?? '') || /Answer in Hindi/.test(req.system ?? ''));
       if (rows.length === 0)
-        return hindi ? `${o.name} से कोई पंक्ति नहीं मिली।` : `No rows came back from ${o.name}.`;
+        return hinglish
+          ? `${o.name} se koi row nahi mili.`
+          : hindi
+            ? `${o.name} से कोई पंक्ति नहीं मिली।`
+            : `No rows came back from ${o.name}.`;
       const cols = Object.keys(rows[0]!);
       const lines = rows
         .slice(0, 15)
         .map((r) => cols.map((k) => `${k}: ${String(r[k] ?? '—')}`).join(', '));
-      const head = hindi
-        ? `${o.name} से ${rows.length} पंक्तियाँ:`
-        : `${rows.length} row(s) from ${o.name}:`;
+      const head = hinglish
+        ? `${o.name} se ${rows.length} row(s) mili:`
+        : hindi
+          ? `${o.name} से ${rows.length} पंक्तियाँ:`
+          : `${rows.length} row(s) from ${o.name}:`;
       return `${head}\n${lines.join('\n')}${o.output.truncated ? '\n…' : ''}`;
     }
     const q = last.toLowerCase();
@@ -185,7 +217,10 @@ export function catalogueMockResponder(
       input.minAmount = Number(amt[1]!.replace(/,/g, ''));
     const days = /last\s+(\d+)\s+days|(\d+)\s+दिन/.exec(q);
     if (days && best.params.some((p) => p.name === 'days')) input.days = Number(days[1] ?? days[2]);
-    else if (/this week|इस सप्ताह/.test(q) && best.params.some((p) => p.name === 'days'))
+    else if (
+      /this week|is hafte|is week|इस सप्ताह/.test(q) &&
+      best.params.some((p) => p.name === 'days')
+    )
       input.days = 7;
     const qm = /(?:find|about|of)\s+([a-z]+ [a-z]+)/.exec(q);
     if (best.id === 'find_student' && qm) input.q = qm[1];
@@ -209,6 +244,7 @@ export class AssistantService {
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly db: DbService,
+    private readonly viewer: ViewerService,
   ) {
     this.provider = providerFromEnv({
       AI_PROVIDER: env.AI_PROVIDER,
@@ -237,19 +273,46 @@ export class AssistantService {
     return tenant.academicYearId;
   }
 
-  /** The catalogue entries the caller may run (permission `anyOf`), for the tools and the page's hints. */
-  allowed(ctx: RequestContext, entries: CatalogueEntry[]): CatalogueEntry[] {
+  /**
+   * Sprint 15: who is asking. Families get their children (student scope); teachers with section scopes get
+   * those sections; everyone else is unrestricted staff and keeps the Sprint 14 catalogue.
+   */
+  private async scope(ctx: RequestContext): Promise<{
+    kind: 'staff' | 'teacher' | 'family';
+    sectionIds: string[] | null;
+    studentIds: string[] | null;
+  }> {
+    const v = await this.viewer.resolve(ctx, 'insights.assistant.use');
+    if (v.kind === 'family')
+      return { kind: 'family', sectionIds: null, studentIds: v.students.map((s) => s.id) };
+    if (v.sectionIds !== null)
+      return { kind: 'teacher', sectionIds: v.sectionIds, studentIds: null };
+    return { kind: 'staff', sectionIds: null, studentIds: null };
+  }
+
+  /** The catalogue entries the caller may run (permission `anyOf` and the caller's scope kind). */
+  allowed(
+    ctx: RequestContext,
+    entries: CatalogueEntry[],
+    kind: 'staff' | 'teacher' | 'family' = 'staff',
+  ): CatalogueEntry[] {
     const p = ctx.permissions;
     if (!p) return [];
-    return entries.filter((e) => e.anyOf.some((code) => p.has(code)));
+    const scopeOf = kind === 'family' ? 'student' : kind === 'teacher' ? 'section' : undefined;
+    return entries.filter((e) => e.scope === scopeOf && e.anyOf.some((code) => p.has(code)));
   }
 
   async catalogue(ctx: RequestContext) {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
-    const entries = buildCatalogue({ academicYearId: yearId, today });
-    const allowed = new Set(this.allowed(ctx, entries).map((e) => e.id));
+    const scope = await this.scope(ctx);
+    const entries = buildCatalogue({ academicYearId: yearId, today, ...scope }).filter(
+      (e) =>
+        e.scope ===
+        (scope.kind === 'family' ? 'student' : scope.kind === 'teacher' ? 'section' : undefined),
+    );
+    const allowed = new Set(this.allowed(ctx, entries, scope.kind).map((e) => e.id));
     return entries.map((e) => ({
       id: e.id,
       department: e.department,
@@ -265,11 +328,34 @@ export class AssistantService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
-    const entries = buildCatalogue({ academicYearId: yearId, today });
-    const mine = this.allowed(ctx, entries);
-    const language = dto.language ?? (HI.test(dto.question) ? 'hi' : 'en');
+    const scope = await this.scope(ctx);
+    const entries = buildCatalogue({ academicYearId: yearId, today, ...scope });
+    const mine = this.allowed(ctx, entries, scope.kind);
+    const language = dto.language ?? detectLanguage(dto.question);
+    const surface: 'admin' | 'teacher' | 'parent' =
+      scope.kind === 'family'
+        ? 'parent'
+        : scope.kind === 'teacher'
+          ? 'teacher'
+          : (dto.surface ?? 'admin');
+    if (scope.kind === 'family' && scope.studentIds!.length === 0)
+      throw new DomainError('family.not_linked', 'No child is linked to this account', {
+        status: 403,
+      });
     return this.db.tenant(tenant, async (c) => {
-      const conversationId = await this.openConversation(c, dto.conversationId, language);
+      if (scope.kind === 'family') {
+        // DPDP: the AI purpose is opt-in for families; the parent app links to the consent screen
+        const consent = await c.query<{ status: string | null }>(
+          `SELECT app.consent_status(app.current_user_id(), 'ai.assistant')::text AS status`,
+        );
+        if (consent.rows[0]?.status !== 'granted')
+          throw new DomainError(
+            'consent-required',
+            'Turn on the AI assistant consent in your profile to ask questions',
+            { status: 403, extra: { purpose: 'ai.assistant' } },
+          );
+      }
+      const conversationId = await this.openConversation(c, dto.conversationId, language, surface);
       const history = await this.history(c, conversationId);
       const citations: Citation[] = [];
       const tools: AssistantTool[] = mine.map((e) => ({
@@ -319,7 +405,8 @@ export class AssistantService {
         result = await assistant.ask({
           caller: { schoolId: tenant.schoolId, userId: ctx.user.id, requestId: ctx.requestId },
           question: dto.question,
-          system: SYSTEM,
+          system:
+            surface === 'parent' ? SYSTEM_PARENT : surface === 'teacher' ? SYSTEM_TEACHER : SYSTEM,
           history,
           tools,
           conversationId,
@@ -391,6 +478,7 @@ export class AssistantService {
     c: PoolClient,
     id: string | undefined,
     language: string,
+    surface: 'admin' | 'teacher' | 'parent' = 'admin',
   ): Promise<string> {
     if (id) {
       const r = await c.query(
@@ -402,8 +490,8 @@ export class AssistantService {
     const fresh = randomUUID();
     await c.query(
       `INSERT INTO ai_conversations (id, school_id, user_id, academic_year_id, surface, language)
-       VALUES ($1, app.current_school_id(), app.current_user_id(), NULLIF(current_setting('app.academic_year_id', true), '')::bigint, 'admin', $2)`,
-      [fresh, language],
+       VALUES ($1, app.current_school_id(), app.current_user_id(), NULLIF(current_setting('app.academic_year_id', true), '')::bigint, $3, $2)`,
+      [fresh, language, surface],
     );
     return fresh;
   }
@@ -419,7 +507,7 @@ export class AssistantService {
   async conversations(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query(
-        `SELECT id, title, language, turns, tokens, cost_paise AS "costPaise", updated_at AS "updatedAt" FROM ai_conversations WHERE user_id = app.current_user_id() ORDER BY updated_at DESC LIMIT 30`,
+        `SELECT id, title, language, surface, turns, tokens, cost_paise AS "costPaise", updated_at AS "updatedAt" FROM ai_conversations WHERE user_id = app.current_user_id() ORDER BY updated_at DESC LIMIT 30`,
       );
       return r.rows;
     });

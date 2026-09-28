@@ -20,6 +20,8 @@ export const FEES = {
   adjustmentApprove: 'fees.adjustment.approve',
   profileChangeRequest: 'fees.profile_change.request',
   miscPost: 'fees.misc.post',
+  /** Sprint 15 */
+  defaulterNotify: 'fees.defaulter.notify',
   miscView: 'fees.misc.view',
   reconcileView: 'payments.reconcile.view',
   reconcileRun: 'payments.reconcile.run',
@@ -314,3 +316,11 @@ export const MiscEmployeeLookupQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export class MiscEmployeeLookupQueryDto extends createZodDto(MiscEmployeeLookupQuerySchema) {}
+
+/** Sprint 15: fee reminders from the reports centre. */
+export const NotifyDefaultersSchema = z.object({
+  studentIds: z.array(IdSchema).min(1).max(500),
+  channel: z.enum(['whatsapp', 'sms']).default('whatsapp'),
+  asOf: DateSchema.optional(),
+});
+export class NotifyDefaultersDto extends createZodDto(NotifyDefaultersSchema) {}

@@ -2341,3 +2341,95 @@ export async function askAssistant(fd: FormData) {
   }
   redirect(`/insights/assistant?c=${out!.conversationId}`);
 }
+
+// ---- Sprint 15: fee reports centre, bank statements, anomaly alerts ---------------------------------
+function reportBack(fd: FormData): string {
+  const q = new URLSearchParams();
+  for (const k of [
+    'report',
+    'from',
+    'to',
+    'ledger',
+    'mode',
+    'month',
+    'classId',
+    'minBalance',
+    'asOf',
+  ])
+    if (opt(fd, k)) q.set(k, str(fd, k));
+  return `/fees/reports?${q.toString()}`;
+}
+
+export async function requestFeeReportExport(fd: FormData) {
+  const params: Record<string, unknown> = {};
+  for (const k of ['from', 'to', 'ledger', 'mode', 'classId', 'minBalance', 'asOf'] as const)
+    if (opt(fd, k)) params[k] = str(fd, k);
+  const format = str(fd, 'format');
+  return run(reportBack(fd), () =>
+    apiFetch('/reports/exports', {
+      method: 'POST',
+      body: JSON.stringify({
+        dataset: str(fd, 'dataset'),
+        format: ['csv', 'xlsx', 'pdf', 'xml'].includes(format) ? format : 'xlsx',
+        params,
+      }),
+    }),
+  );
+}
+
+export async function notifyDefaulters(fd: FormData) {
+  const studentIds = fd.getAll('studentId').map(String).filter(Boolean);
+  const back = reportBack(fd);
+  if (studentIds.length === 0) back_(back, 'validation-failed', 'Pick at least one student');
+  let out: { sent: number; skippedToday: number; noMobile: number; failed: number } | undefined;
+  try {
+    out = await apiFetch('/fees/reports/defaulters/notify', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentIds,
+        channel: str(fd, 'channel') === 'sms' ? 'sms' : 'whatsapp',
+        asOf: opt(fd, 'asOf'),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(back)}`);
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(
+    `${back}&ok=1&sent=${out!.sent}&skipped=${out!.skippedToday}&noMobile=${out!.noMobile}&failed=${out!.failed}`,
+  );
+}
+
+export async function uploadBankStatement(fd: FormData) {
+  const file = fd.get('file');
+  let csv = str(fd, 'csv');
+  let fileName: string | undefined;
+  if (file && typeof file === 'object' && 'text' in file && (file as File).size > 0) {
+    csv = await (file as File).text();
+    fileName = (file as File).name;
+  }
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch('/payments/bank-statements', {
+      method: 'POST',
+      body: JSON.stringify({
+        bankName: str(fd, 'bankName'),
+        accountRef: opt(fd, 'accountRef'),
+        fileName,
+        csv,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_('/fees/bank', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`/fees/bank?id=${out!.id}&ok=1`);
+}
+
+export async function ackAlert(fd: FormData) {
+  return run('/insights/alerts', () =>
+    apiFetch(`/insights/alerts/${str(fd, 'id')}/ack`, { method: 'POST' }),
+  );
+}

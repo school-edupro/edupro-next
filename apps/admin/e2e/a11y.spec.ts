@@ -43,9 +43,13 @@ const PAGES = [
   '/insights/departments/fees',
   '/fees/adjustments',
   '/fees/misc',
+  '/fees/reports',
+  '/fees/reports?report=defaulters',
+  '/fees/bank',
   '/exams',
   '/exams/masters',
   '/insights/assistant',
+  '/insights/alerts',
 ];
 
 test.describe('accessibility (axe)', () => {

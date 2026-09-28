@@ -684,6 +684,7 @@ describe('fee ledger, fleet and insights (e2e, Sprint 12)', () => {
       'comms_delivery_daily',
       'fee_collection_daily',
       'fee_dues',
+      'fee_forecast',
     ]);
     expect(marts.find((m) => m.mart === 'fee_dues')!.rows).toBe(20); // 5 students x 4 due dates
     const dash = await inject({
@@ -732,7 +733,7 @@ describe('fee ledger, fleet and insights (e2e, Sprint 12)', () => {
     expect(d.alerts.some((a: { code: string }) => a.code === 'fees.overdue_90')).toBe(true);
     expect(d.marts.every((m: { stale: boolean }) => !m.stale)).toBe(true);
     const status = await inject({ method: 'GET', url: '/insights/marts', headers: h() });
-    expect(status.json().data).toHaveLength(5);
+    expect(status.json().data).toHaveLength(6);
   });
 
   it('adds the AI assistant consent purpose to the catalogue', () => {

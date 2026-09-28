@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   collapseGradeScales,
+  examAttendanceStep,
+  examRemarkStep,
+  healthStatisticStep,
+  indicatorEntryStep,
+  markEntryStep,
   examMasterStep,
   examSubjectStep,
   examTypeStep,
@@ -185,5 +190,148 @@ describe('exam masters (Sprint 14)', () => {
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ reason: 'misc_receipt.number_missing' })]),
     );
+  });
+});
+
+describe('exam entry (Sprint 15)', () => {
+  it('maps marks with AB/EX flags and blocks bad figures', () => {
+    const m = ok(
+      markEntryStep.transform({
+        sadmission: 'A2483',
+        sclass: 'VI',
+        exam_code: 'pt1',
+        subject_code: 'mat',
+        marks_obt: '35.5',
+        max_marks: '40',
+      }),
+    );
+    expect(m.legacyKey).toBe('A2483|PT1|VI|MAT');
+    expect(m.row).toMatchObject({
+      marks: '35.50',
+      absent: false,
+      exempt: false,
+      maxMarks: '40.00',
+    });
+    expect(
+      ok(
+        markEntryStep.transform({
+          sadmission: 'A1',
+          sclass: 'VI',
+          exam_code: 'PT1',
+          subject_code: 'ENG',
+          marks_obt: 'AB',
+          max_marks: '40',
+        }),
+      ).row,
+    ).toMatchObject({ marks: null, absent: true });
+    expect(
+      ok(
+        markEntryStep.transform({
+          sadmission: 'A1',
+          sclass: 'VI',
+          exam_code: 'PT1',
+          subject_code: 'ENG',
+          marks_obt: 'EX',
+          max_marks: '40',
+        }),
+      ).row,
+    ).toMatchObject({ marks: null, exempt: true });
+    const bad = markEntryStep.transform({
+      sadmission: 'A1',
+      sclass: 'VI',
+      exam_code: 'PT1',
+      subject_code: 'ENG',
+      marks_obt: 'forty',
+      max_marks: '40',
+    });
+    expect(Array.isArray(bad) && bad[0]).toMatchObject({ reason: 'marks_invalid', blocking: true });
+    const above = markEntryStep.transform({
+      sadmission: 'A1',
+      sclass: 'VI',
+      exam_code: 'PT1',
+      subject_code: 'ENG',
+      marks_obt: '41',
+      max_marks: '40',
+    });
+    expect(Array.isArray(above) && above[0]).toMatchObject({
+      reason: 'marks_above_max',
+      blocking: true,
+    });
+  });
+
+  it('maps indicators, remarks, exam attendance and health statistics', () => {
+    expect(
+      ok(
+        indicatorEntryStep.transform({
+          sadmission: 'A1',
+          sclass: 'VI',
+          exam_code: 'PT1',
+          indicatortype: 'Work Education',
+          subindicator: 'Participation',
+          grade: 'a',
+        }),
+      ).row,
+    ).toMatchObject({ indicatorType: 'Work Education', subIndicator: 'Participation', grade: 'A' });
+    const r = ok(
+      examRemarkStep.transform({
+        sadmission: 'A1',
+        sclass: 'VI',
+        exam_code: 'PT1',
+        remarks: 'Shows steady progress.',
+        remark2: '',
+        any_other: 'Talks in class.',
+        remark_id: 'A101',
+      }),
+    );
+    expect(r.row).toMatchObject({
+      remark: 'Shows steady progress. Talks in class.',
+      bankCode: 'A101',
+    });
+    expect(
+      Array.isArray(
+        examRemarkStep.transform({ sadmission: 'A1', sclass: 'VI', exam_code: 'PT1', remarks: '' }),
+      ),
+    ).toBe(true);
+    expect(
+      ok(
+        examAttendanceStep.transform({
+          sadmission: 'A1',
+          sclass: 'VI',
+          exam_type: 'PT1',
+          attendance: '58',
+          total_days: '60',
+        }),
+      ).row,
+    ).toMatchObject({ daysPresent: 58, daysTotal: 60 });
+    const over = examAttendanceStep.transform({
+      sadmission: 'A1',
+      sclass: 'VI',
+      exam_type: 'PT1',
+      attendance: '61',
+      total_days: '60',
+    });
+    expect(Array.isArray(over) && over[0]).toMatchObject({ reason: 'attendance_above_total' });
+    expect(
+      ok(
+        healthStatisticStep.transform({
+          sadmission: 'A1',
+          sclass: 'VI',
+          exam_type: 'PT1',
+          height: '1.42',
+          weight: '36.2',
+        }),
+      ).row,
+    ).toMatchObject({ heightCm: '142.0', weightKg: '36.20' });
+    expect(
+      ok(
+        healthStatisticStep.transform({
+          sadmission: 'A1',
+          sclass: 'VI',
+          exam_type: 'PT1',
+          height: '142 cm',
+          weight: '',
+        }),
+      ).row,
+    ).toMatchObject({ heightCm: '142.0', weightKg: null });
   });
 });

@@ -5,6 +5,15 @@ import { IdSchema } from '../academics/classes/classes.dto';
 export const EXAMS = {
   masterView: 'exams.master.view',
   masterManage: 'exams.master.manage',
+  /** Sprint 15: entry */
+  marksEnter: 'exams.marks.enter',
+  marksView: 'exams.marks.view',
+  marksUnlock: 'exams.marks.unlock',
+  indicatorEnter: 'exams.indicator.enter',
+  remarkEnter: 'exams.remark.enter',
+  attendanceEnter: 'exams.attendance.enter',
+  healthEnter: 'exams.health.enter',
+  healthView: 'exams.health.view',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -87,3 +96,137 @@ export const LockExamSubjectsSchema = z.object({
   locked: z.boolean(),
 });
 export class LockExamSubjectsDto extends createZodDto(LockExamSubjectsSchema) {}
+
+// ---- Sprint 15: entry ----------------------------------------------------------------------------
+export const EntryQuerySchema = z.object({
+  classSectionId: IdSchema,
+  subjectId: IdSchema.optional(),
+});
+export class EntryQueryDto extends createZodDto(EntryQuerySchema) {}
+
+const Marks = z.number().min(0).max(1000).nullable().optional();
+export const PutMarksSchema = z.object({
+  classSectionId: IdSchema,
+  subjectId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        marks: Marks,
+        absent: z.boolean().default(false),
+        exempt: z.boolean().default(false),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutMarksDto extends createZodDto(PutMarksSchema) {}
+
+export const PutIndicatorsSchema = z.object({
+  classSectionId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        indicatorId: IdSchema,
+        grade: z.string().trim().min(1).max(5),
+        note: z.string().trim().max(200).optional(),
+      }),
+    )
+    .min(1)
+    .max(3000),
+});
+export class PutIndicatorsDto extends createZodDto(PutIndicatorsSchema) {}
+
+export const PutRemarksSchema = z.object({
+  classSectionId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        remark: z.string().trim().min(1).max(600),
+        bankCode: z.string().trim().max(20).optional(),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutRemarksDto extends createZodDto(PutRemarksSchema) {}
+
+export const PutExamAttendanceSchema = z.object({
+  classSectionId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        daysPresent: z.number().int().min(0).max(400),
+        daysTotal: z.number().int().min(1).max(400),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutExamAttendanceDto extends createZodDto(PutExamAttendanceSchema) {}
+
+export const PutHealthSchema = z.object({
+  classSectionId: IdSchema,
+  recordedOn: DateSchema.optional(),
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        heightCm: z.number().min(40).max(250).nullable().optional(),
+        weightKg: z.number().min(3).max(200).nullable().optional(),
+        bloodGroup: z
+          .enum(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
+          .nullable()
+          .optional(),
+        visionLeft: z.string().trim().max(20).nullable().optional(),
+        visionRight: z.string().trim().max(20).nullable().optional(),
+        dental: z.string().trim().max(200).nullable().optional(),
+        notes: z.string().trim().max(600).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutHealthDto extends createZodDto(PutHealthSchema) {}
+
+export const UpsertIndicatorSetSchema = z.object({
+  code: Code,
+  name: z.string().trim().min(2).max(80),
+  grades: z.array(z.string().trim().min(1).max(5)).min(2).max(10),
+  indicators: z
+    .array(
+      z.object({
+        code: Code,
+        name: z.string().trim().min(2).max(120),
+        area: z.string().trim().max(60).optional(),
+        sortOrder: z.number().int().min(0).max(1000).default(0),
+      }),
+    )
+    .min(1)
+    .max(60),
+});
+export class UpsertIndicatorSetDto extends createZodDto(UpsertIndicatorSetSchema) {}
+
+export const SetExamIndicatorSetSchema = z.object({
+  classId: IdSchema,
+  setId: IdSchema.nullable(),
+});
+export class SetExamIndicatorSetDto extends createZodDto(SetExamIndicatorSetSchema) {}
+
+export const UpsertRemarkBankSchema = z.object({
+  entries: z
+    .array(
+      z.object({
+        code: Code,
+        text: z.string().trim().min(3).max(600),
+        classId: IdSchema.nullable().optional(),
+        sortOrder: z.number().int().min(0).max(1000).default(0),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+export class UpsertRemarkBankDto extends createZodDto(UpsertRemarkBankSchema) {}

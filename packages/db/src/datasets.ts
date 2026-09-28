@@ -520,6 +520,211 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [str(p.status)],
     }),
   },
+  // ---- Sprint 15: the fee reports centre (screen and file share these definitions) -----------------
+  fee_day_book: {
+    id: 'fee_day_book',
+    title: 'Fee day book',
+    permission: 'fees.ledger.view',
+    maxRows: 50_000,
+    columns: [
+      { key: 'received_on', header: 'Date', type: 'date', width: 12 },
+      { key: 'kind', header: 'Kind', width: 8 },
+      { key: 'ledger', header: 'Ledger', width: 8 },
+      { key: 'receipt_no', header: 'Receipt no.', width: 20 },
+      { key: 'admission_no', header: 'Admission no.', width: 14 },
+      { key: 'payer', header: 'Payer', width: 28 },
+      { key: 'section', header: 'Section', width: 8 },
+      { key: 'mode', header: 'Mode', width: 8 },
+      { key: 'instrument_no', header: 'Cheque / DD', width: 14 },
+      { key: 'bank_name', header: 'Bank', width: 16 },
+      { key: 'reference', header: 'Reference', width: 18 },
+      { key: 'principal', header: 'Fee', type: 'number', width: 12 },
+      { key: 'late_fee', header: 'Late fee', type: 'number', width: 10 },
+      { key: 'amount', header: 'Amount', type: 'number', width: 12 },
+      { key: 'status', header: 'Status', width: 12 },
+      { key: 'received_by', header: 'Received by', width: 18 },
+      { key: 'cleared_on', header: 'Bank cleared', type: 'date', width: 12 },
+    ],
+    query: (p) => ({
+      // reversed receipts never appear (legacy Cancel/reversed); bounced ones stay with their status; paid
+      // refunds are negative lines on the day they were paid out
+      text: `SELECT * FROM (
+               SELECT 'receipt' AS kind, p.ledger::text AS ledger, p.receipt_no, p.received_on, s.admission_no, s.display_name AS payer,
+                      k.code || '-' || cs.name AS section, p.mode, p.instrument_no, p.bank_name, p.reference,
+                      (p.amount - p.late_fee) AS principal, p.late_fee, p.amount, p.status, COALESCE(u.display_name, 'Online') AS received_by, p.cleared_on
+                 FROM fee_payments p JOIN students s ON s.id = p.student_id LEFT JOIN users u ON u.id = p.received_by
+                 LEFT JOIN enrolments e ON e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id AND e.status = 'active'
+                 LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status <> 'reversed'
+               UNION ALL
+               SELECT 'misc', 'misc', m.receipt_no, m.received_on, s.admission_no, m.payer_name, k.code || '-' || cs.name, m.mode, m.instrument_no, m.bank_name, m.reference,
+                      m.amount, 0, m.amount, m.status, u.display_name, m.cleared_on
+                 FROM misc_receipts m LEFT JOIN students s ON s.id = m.student_id LEFT JOIN users u ON u.id = m.received_by
+                 LEFT JOIN enrolments e ON e.student_id = m.student_id AND e.academic_year_id = m.academic_year_id AND e.status = 'active'
+                 LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+                WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status = 'posted'
+               UNION ALL
+               SELECT 'refund', p.ledger::text, p.receipt_no, r.paid_on, s.admission_no, s.display_name, k.code || '-' || cs.name, r.mode, NULL, NULL, r.reference,
+                      -r.amount, 0, -r.amount, 'refund', u.display_name, NULL
+                 FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id JOIN students s ON s.id = p.student_id LEFT JOIN users u ON u.id = r.decided_by
+                 LEFT JOIN enrolments e ON e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id AND e.status = 'active'
+                 LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+                WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
+             ) x
+             WHERE ($3::text IS NULL OR x.ledger = $3) AND ($4::text IS NULL OR x.mode = $4)
+             ORDER BY x.received_on, x.kind, x.receipt_no`,
+      values: [str(p.from) ?? str(p.to), str(p.to) ?? str(p.from), str(p.ledger), str(p.mode)],
+    }),
+  },
+  fee_head_tally: {
+    id: 'fee_head_tally',
+    title: 'Head-wise tally',
+    permission: 'fees.ledger.view',
+    maxRows: 50_000,
+    columns: [
+      { key: 'on_date', header: 'Date', type: 'date', width: 12 },
+      { key: 'ledger', header: 'Ledger', width: 8 },
+      { key: 'head_code', header: 'Head', width: 12 },
+      { key: 'head_name', header: 'Head name', width: 28 },
+      { key: 'receipts', header: 'Receipts', type: 'number', width: 10 },
+      { key: 'amount', header: 'Amount', type: 'number', width: 14 },
+    ],
+    query: (p) => ({
+      // long form (one row per day, ledger and head); the screen pivots days x heads. Refunds reverse
+      // allocations, so they net out of the head they came from; reversed and bounced receipts are out.
+      text: `SELECT * FROM (
+               SELECT p.received_on AS on_date, h.ledger::text AS ledger, h.code AS head_code, h.name AS head_name, count(DISTINCT p.id)::int AS receipts, sum(a.amount) AS amount
+                 FROM fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced')
+                GROUP BY p.received_on, h.ledger, h.code, h.name
+               UNION ALL
+               SELECT p.received_on, p.ledger::text, 'LATE_FEE', 'Late fee', count(DISTINCT p.id)::int, sum(lf.amount)
+                 FROM fee_late_fee_postings lf JOIN fee_payments p ON p.id = lf.payment_id
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced')
+                GROUP BY p.received_on, p.ledger
+               UNION ALL
+               SELECT p.received_on, p.ledger::text, 'ADVANCE', 'Advance / unallocated', count(*)::int, sum(p.amount - p.late_fee - COALESCE(al.total, 0))
+                 FROM fee_payments p LEFT JOIN LATERAL (SELECT sum(amount) AS total FROM fee_payment_allocations WHERE payment_id = p.id) al ON true
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced') AND p.amount - p.late_fee - COALESCE(al.total, 0) > 0.005
+                GROUP BY p.received_on, p.ledger
+               UNION ALL
+               SELECT m.received_on, 'misc', h.code, h.name, count(*)::int, sum(m.amount)
+                 FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+                WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status = 'posted'
+                GROUP BY m.received_on, h.code, h.name
+             ) x
+             WHERE ($3::text IS NULL OR x.ledger = $3)
+             ORDER BY x.on_date, x.ledger, x.head_code`,
+      values: [str(p.from), str(p.to), str(p.ledger)],
+    }),
+  },
+  fee_defaulters: {
+    id: 'fee_defaulters',
+    title: 'Fee defaulters',
+    permission: 'fees.ledger.view',
+    scope: 'class_section',
+    maxRows: 20_000,
+    columns: [
+      { key: 'admission_no', header: 'Admission no.', width: 14 },
+      { key: 'student', header: 'Student', width: 28 },
+      { key: 'section', header: 'Section', width: 8 },
+      { key: 'oldest_due', header: 'Oldest due', type: 'date', width: 12 },
+      { key: 'days_overdue', header: 'Days overdue', type: 'number', width: 10 },
+      { key: 'balance', header: 'Balance', type: 'number', width: 12 },
+      { key: 'guardian_mobile', header: 'Guardian mobile', width: 14 },
+      { key: 'last_reminded_on', header: 'Last reminded', type: 'date', width: 12 },
+    ],
+    query: (p) => ({
+      text: `SELECT d.student_id::text, d.admission_no, d.student_name AS student, d.section, d.class_section_id::text,
+                    min(d.due_on) AS oldest_due, max(d.days_overdue)::int AS days_overdue, sum(d.balance) AS balance,
+                    (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                      WHERE sg.student_id = d.student_id AND sg.receives_notifications AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS guardian_mobile,
+                    (SELECT max(r.sent_on) FROM fee_reminders r WHERE r.student_id = d.student_id) AS last_reminded_on
+               FROM mart.fee_dues d
+              WHERE d.academic_year_id = $1::bigint AND d.balance > 0 AND d.due_on < COALESCE($2::date, CURRENT_DATE)
+                AND ($3::bigint IS NULL OR d.class_id = $3::bigint)
+                AND ($4::bigint[] IS NULL OR d.class_section_id = ANY($4::bigint[]))
+              GROUP BY d.student_id, d.admission_no, d.student_name, d.section, d.class_section_id
+             HAVING sum(d.balance) >= COALESCE($5::numeric, 0)
+              ORDER BY sum(d.balance) DESC, d.student_name`,
+      values: [
+        str(p.academicYearId),
+        str(p.asOf),
+        str(p.classId),
+        idList(p.sectionIds) ?? (str(p.sectionId) ? [str(p.sectionId)] : null),
+        str(p.minBalance),
+      ],
+    }),
+  },
+  fee_forecast: {
+    id: 'fee_forecast',
+    title: 'Fee forecast (expected vs collected by class and month)',
+    permission: 'fees.ledger.view',
+    maxRows: 5_000,
+    columns: [
+      { key: 'month', header: 'Due month', width: 10 },
+      { key: 'class_code', header: 'Class', width: 8 },
+      { key: 'ledger', header: 'Ledger', width: 8 },
+      { key: 'students', header: 'Students', type: 'number', width: 10 },
+      { key: 'expected', header: 'Expected', type: 'number', width: 14 },
+      { key: 'collected', header: 'Collected', type: 'number', width: 14 },
+      { key: 'balance', header: 'Balance', type: 'number', width: 14 },
+    ],
+    query: (p) => ({
+      text: `SELECT to_char(due_month, 'YYYY-MM') AS month, class_code, ledger, students, expected, collected, balance
+               FROM mart.fee_forecast WHERE academic_year_id = $1::bigint AND ($2::text IS NULL OR ledger = $2)
+              ORDER BY due_month, class_code, ledger`,
+      values: [str(p.academicYearId), str(p.ledger)],
+    }),
+  },
+  fee_tally_vouchers: {
+    id: 'fee_tally_vouchers',
+    title: 'Ledger export (Tally vouchers)',
+    permission: 'fees.ledger.view',
+    maxRows: 100_000,
+    columns: [
+      { key: 'date', header: 'Date', type: 'date', width: 12 },
+      { key: 'voucher_type', header: 'Voucher type', width: 10 },
+      { key: 'voucher_no', header: 'Voucher no.', width: 20 },
+      { key: 'party', header: 'Party', width: 30 },
+      { key: 'ledger_name', header: 'Ledger', width: 24 },
+      { key: 'amount', header: 'Amount', type: 'number', width: 12 },
+      { key: 'mode', header: 'Mode', width: 8 },
+      { key: 'instrument_no', header: 'Cheque / DD', width: 14 },
+      { key: 'bank_name', header: 'Bank', width: 16 },
+      { key: 'narration', header: 'Narration', width: 40 },
+    ],
+    query: (p) => ({
+      // one line per voucher and credit ledger; the XML generator groups lines by voucher_no
+      text: `SELECT * FROM (
+               SELECT p.received_on AS date, 'Receipt' AS voucher_type, p.receipt_no AS voucher_no, s.admission_no || ' - ' || s.display_name AS party,
+                      h.name AS ledger_name, sum(a.amount) AS amount, p.mode, p.instrument_no, p.bank_name,
+                      'Fee receipt ' || p.receipt_no || CASE WHEN p.instrument_no IS NOT NULL THEN ' ' || p.mode || ' ' || p.instrument_no ELSE '' END AS narration
+                 FROM fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id
+                 JOIN students s ON s.id = p.student_id
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced') AND ($3::text IS NULL OR p.ledger::text = $3)
+                GROUP BY p.id, p.received_on, p.receipt_no, s.admission_no, s.display_name, h.name, p.mode, p.instrument_no, p.bank_name
+               UNION ALL
+               SELECT p.received_on, 'Receipt', p.receipt_no, s.admission_no || ' - ' || s.display_name, 'Late fee', sum(lf.amount), p.mode, p.instrument_no, p.bank_name,
+                      'Late fee on ' || p.receipt_no
+                 FROM fee_late_fee_postings lf JOIN fee_payments p ON p.id = lf.payment_id JOIN students s ON s.id = p.student_id
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced') AND ($3::text IS NULL OR p.ledger::text = $3)
+                GROUP BY p.id, p.received_on, p.receipt_no, s.admission_no, s.display_name, p.mode, p.instrument_no, p.bank_name
+               UNION ALL
+               SELECT p.received_on, 'Receipt', p.receipt_no, s.admission_no || ' - ' || s.display_name, 'Fee advance', p.amount - p.late_fee - COALESCE(al.total, 0), p.mode, p.instrument_no, p.bank_name,
+                      'Advance on ' || p.receipt_no
+                 FROM fee_payments p JOIN students s ON s.id = p.student_id
+                 LEFT JOIN LATERAL (SELECT sum(amount) AS total FROM fee_payment_allocations WHERE payment_id = p.id) al ON true
+                WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced') AND ($3::text IS NULL OR p.ledger::text = $3)
+                  AND p.amount - p.late_fee - COALESCE(al.total, 0) > 0.005
+               UNION ALL
+               SELECT m.received_on, 'Receipt', m.receipt_no, m.payer_name, h.name, m.amount, m.mode, m.instrument_no, m.bank_name, 'Misc receipt ' || m.receipt_no
+                 FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+                WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status = 'posted' AND ($3::text IS NULL OR $3 = 'misc')
+             ) x ORDER BY x.date, x.voucher_no, x.ledger_name`,
+      values: [str(p.from), str(p.to), str(p.ledger)],
+    }),
+  },
 };
 
 export const DATASET_IDS = Object.keys(DATASETS) as [string, ...string[]];

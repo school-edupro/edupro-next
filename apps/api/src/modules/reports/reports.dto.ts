@@ -2,7 +2,7 @@ import { DATASET_IDS, RENDERER_IDS } from '@edupro/db';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-export const ExportFormatSchema = z.enum(['xlsx', 'csv', 'pdf']);
+export const ExportFormatSchema = z.enum(['xlsx', 'csv', 'pdf', 'xml']);
 export type ExportFormat = z.infer<typeof ExportFormatSchema>;
 
 export const CreateExportSchema = z.object({
@@ -21,3 +21,9 @@ export const ListExportsQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListExportsQueryDto extends createZodDto(ListExportsQuerySchema) {}
+
+/** Sprint 15: a dataset run live for a screen; every other query key is a dataset parameter. */
+export const RowsQuerySchema = z
+  .object({ limit: z.coerce.number().int().min(1).max(5000).default(2000) })
+  .catchall(z.string());
+export class RowsQueryDto extends createZodDto(RowsQuerySchema) {}

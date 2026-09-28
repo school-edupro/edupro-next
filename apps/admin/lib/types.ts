@@ -1875,3 +1875,58 @@ export interface AssistantAudit {
     costPaise: number | null;
   }>;
 }
+
+// ---- Sprint 15 ----
+export interface DatasetRows {
+  dataset: string;
+  title: string;
+  columns: Array<{ key: string; header: string; type?: string; width?: number }>;
+  params: Record<string, unknown>;
+  rows: Array<Record<string, unknown>>;
+  truncated: boolean;
+}
+export interface BankStatement {
+  id: string;
+  bankName: string;
+  accountRef: string | null;
+  fromDate: string | null;
+  toDate: string | null;
+  fileName: string | null;
+  rows: number;
+  matched: number;
+  unmatched: number;
+  returned: number;
+  credits: string;
+  debits: string;
+  uploadedBy: string | null;
+  createdAt: string;
+  lines?: Array<{
+    id: string;
+    lineNo: number;
+    txnDate: string;
+    valueDate: string | null;
+    narration: string | null;
+    reference: string | null;
+    debit: string;
+    credit: string;
+    balance: string | null;
+    status: 'matched' | 'unmatched' | 'ambiguous' | 'returned' | 'ignored';
+    matchedBy: string | null;
+    receiptNo: string | null;
+    note: string | null;
+  }>;
+}
+export interface InsightAlert {
+  id: string;
+  kind: string;
+  severity: 'info' | 'warning' | 'danger';
+  subjectType: string | null;
+  subjectId: string | null;
+  title: string;
+  message: string;
+  data: Record<string, unknown>;
+  detectedOn: string;
+  notifiedAt: string | null;
+  ackedBy: string | null;
+  ackedAt: string | null;
+}

@@ -40,6 +40,7 @@ export default async function HomePage({
     ['School bus', 'Boarding and alighting alerts', '/transport'],
     ['Profile', 'Your details, consents and change requests', '/profile'],
     ['Fees', 'Dues, receipts and online payment', '/fees'],
+    ['Assistant', 'Ask about fees, attendance and homework', '/assistant'],
     ['Results', 'Report cards and progress'],
   ];
   return (

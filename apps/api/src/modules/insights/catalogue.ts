@@ -37,6 +37,8 @@ export interface CatalogueEntry {
   params: CatalogueParam[];
   /** words that hint this entry (the offline mock router and the "nearest entries" refusal use them) */
   keywords: string[];
+  /** Sprint 15: entries for scoped callers; the ids come from the context, never from the model. */
+  scope?: 'section' | 'student';
   sql: (p: Record<string, unknown>) => { text: string; values: unknown[] };
   maxRows?: number;
 }
@@ -44,6 +46,10 @@ export interface CatalogueEntry {
 export interface CatalogueContext {
   academicYearId: string;
   today: string;
+  /** Sprint 15: a scoped teacher's sections (null = unrestricted staff). */
+  sectionIds?: string[] | null;
+  /** Sprint 15: a family's children (null for staff). */
+  studentIds?: string[] | null;
 }
 
 const s = (v: unknown, fallback: string | null = null): string | null =>
@@ -85,6 +91,8 @@ const LIMIT = {
 export function buildCatalogue(ctx: CatalogueContext): CatalogueEntry[] {
   const Y = ctx.academicYearId;
   const T = ctx.today;
+  const S = ctx.sectionIds ?? null;
+  const ST = ctx.studentIds ?? null;
   return [
     // ---- school -----------------------------------------------------------------------------------
     {
@@ -727,6 +735,368 @@ export function buildCatalogue(ctx: CatalogueContext): CatalogueEntry[] {
                       (SELECT string_agg(k.code, ', ' ORDER BY k.display_order) FROM exam_classes ec JOIN classes k ON k.id = ec.class_id WHERE ec.exam_id = e.id) AS classes
                  FROM exams e JOIN exam_types t ON t.id = e.exam_type_id WHERE e.academic_year_id = $1 AND e.deleted_at IS NULL ORDER BY e.starts_on NULLS LAST, e.code`,
         values: [Y],
+      }),
+    },
+    // ---- Sprint 15: scoped entries for teachers (own sections) ------------------------------------
+    {
+      id: 'my_sections',
+      department: 'school',
+      title: 'My sections',
+      titleHi: 'मेरे अनुभाग',
+      description: 'The sections you hold this year with their strength.',
+      anyOf: ['attendance.session.view', 'academics.daily_work.view', 'academics.timetable.view'],
+      params: [],
+      keywords: [
+        'my sections',
+        'my classes',
+        'which sections',
+        'meri class',
+        'meri kaksha',
+        'मेरी कक्षा',
+        'मेरे अनुभाग',
+      ],
+      scope: 'section',
+      sql: () => ({
+        text: `SELECT k.code || '-' || cs.name AS section, cs.id::text AS section_id, count(e.id)::int AS students
+                 FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+                 LEFT JOIN enrolments e ON e.class_section_id = cs.id AND e.academic_year_id = $1 AND e.status = 'active'
+                WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[]))
+                GROUP BY cs.id, k.code, cs.name, k.display_order ORDER BY k.display_order, cs.name`,
+        values: [Y, S],
+      }),
+    },
+    {
+      id: 'my_attendance_today',
+      department: 'attendance',
+      title: 'Attendance of my sections on a day',
+      titleHi: 'मेरे अनुभागों की उपस्थिति',
+      description: 'Strength, present, absent and late for each of your sections on one day.',
+      anyOf: ['attendance.session.view'],
+      params: [DATE],
+      keywords: [
+        'attendance today',
+        'attendance',
+        'present',
+        'absent today',
+        'hazri',
+        'haziri',
+        'aaj ki hazri',
+        'उपस्थिति',
+      ],
+      scope: 'section',
+      sql: (p) => ({
+        text: `SELECT a.section, a.strength, a.present, a.absent, a.late, a.marked,
+                      CASE WHEN a.marked AND a.strength > 0 THEN round(a.present::numeric * 100 / a.strength, 1) END AS pct
+                 FROM mart.attendance_daily a
+                WHERE a.academic_year_id = $1 AND a.on_date = $2::date AND ($3::bigint[] IS NULL OR a.class_section_id = ANY($3::bigint[]))
+                ORDER BY a.section`,
+        values: [Y, date(p.date, T), S],
+      }),
+    },
+    {
+      id: 'my_absentees',
+      department: 'attendance',
+      title: 'Who was absent in my sections',
+      titleHi: 'मेरे अनुभागों में कौन अनुपस्थित था',
+      description: 'Names marked absent on one day in your sections (day attendance).',
+      anyOf: ['attendance.session.view'],
+      params: [DATE],
+      keywords: [
+        'who was absent',
+        'who is absent',
+        'absentees',
+        'absent',
+        'kaun absent',
+        'gair hazir',
+        'gairhazir',
+        'kaun nahi aaya',
+        'अनुपस्थित',
+        'कौन अनुपस्थित',
+      ],
+      scope: 'section',
+      sql: (p) => ({
+        text: `SELECT k.code || '-' || cs.name AS section, st.display_name AS student, st.admission_no, e.roll_no
+                 FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id
+                 JOIN class_sections cs ON cs.id = a.class_section_id JOIN classes k ON k.id = cs.class_id
+                 JOIN students st ON st.id = m.student_id
+                 LEFT JOIN enrolments e ON e.student_id = st.id AND e.class_section_id = cs.id AND e.academic_year_id = $1 AND e.status = 'active'
+                WHERE a.academic_year_id = $1 AND a.kind = 'day' AND a.on_date = $2::date AND m.code = 'A'
+                  AND ($3::bigint[] IS NULL OR a.class_section_id = ANY($3::bigint[]))
+                ORDER BY k.display_order, cs.name, e.roll_no NULLS LAST, st.display_name`,
+        values: [Y, date(p.date, T), S],
+      }),
+    },
+    {
+      id: 'my_frequent_absentees',
+      department: 'attendance',
+      title: 'Frequent absentees in my sections',
+      titleHi: 'मेरे अनुभागों में बार-बार अनुपस्थित',
+      description: 'Pupils of your sections with the most absent days over the period.',
+      anyOf: ['attendance.session.view'],
+      params: [DAYS, LIMIT],
+      keywords: [
+        'absent this week',
+        'absent in the last',
+        'frequently absent',
+        'often absent',
+        'chronic',
+        'is hafte absent',
+        'pichle hafte',
+        'baar baar absent',
+        'बार-बार अनुपस्थित',
+        'इस सप्ताह अनुपस्थित',
+      ],
+      scope: 'section',
+      sql: (p) => ({
+        text: `SELECT k.code || '-' || cs.name AS section, st.display_name AS student, st.admission_no,
+                      count(*) FILTER (WHERE m.code = 'A')::int AS absent_days, count(*)::int AS marked_days
+                 FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id
+                 JOIN class_sections cs ON cs.id = a.class_section_id JOIN classes k ON k.id = cs.class_id JOIN students st ON st.id = m.student_id
+                WHERE a.academic_year_id = $1 AND a.kind = 'day' AND a.on_date BETWEEN $2::date - $3::int AND $2::date
+                  AND ($4::bigint[] IS NULL OR a.class_section_id = ANY($4::bigint[]))
+                GROUP BY k.code, cs.name, st.display_name, st.admission_no
+               HAVING count(*) FILTER (WHERE m.code = 'A') > 0
+                ORDER BY absent_days DESC, st.display_name LIMIT $5`,
+        values: [Y, T, n(p.days, 7), S, n(p.limit, 20)],
+      }),
+    },
+    {
+      id: 'my_homework',
+      department: 'academics',
+      title: 'Work posted in my sections',
+      titleHi: 'मेरे अनुभागों में दिया गया कार्य',
+      description: 'Homework, classwork and assignments posted in your sections over the period.',
+      anyOf: ['academics.daily_work.view'],
+      params: [DAYS],
+      keywords: [
+        'homework',
+        'daily work',
+        'classwork',
+        'assignment',
+        'homework diya',
+        'kaam diya',
+        'गृहकार्य',
+      ],
+      scope: 'section',
+      sql: (p) => ({
+        text: `SELECT w.assigned_on::text AS assigned_on, k.code || '-' || cs.name AS section, sub.name AS subject, w.kind::text, w.title, w.due_on::text AS due_on
+                 FROM daily_work w JOIN class_sections cs ON cs.id = w.class_section_id JOIN classes k ON k.id = cs.class_id LEFT JOIN subjects sub ON sub.id = w.subject_id
+                WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.assigned_on BETWEEN $2::date - $3::int AND $2::date
+                  AND ($4::bigint[] IS NULL OR w.class_section_id = ANY($4::bigint[]))
+                ORDER BY w.assigned_on DESC, k.display_order, cs.name LIMIT 60`,
+        values: [Y, T, n(p.days, 7), S],
+      }),
+    },
+    {
+      id: 'my_open_queries',
+      department: 'communication',
+      title: 'Open queries from my sections',
+      titleHi: 'मेरे अनुभागों के खुले प्रश्न',
+      description: 'Family queries of pupils in your sections that are not closed, oldest first.',
+      anyOf: ['engagement.query.view'],
+      params: [LIMIT],
+      keywords: [
+        'queries',
+        'query',
+        'complaint',
+        'open queries',
+        'unanswered',
+        'sawal',
+        'shikayat',
+        'प्रश्न',
+        'शिकायत',
+      ],
+      scope: 'section',
+      sql: (p) => ({
+        text: `SELECT q.number, q.category_code AS category, st.display_name AS student, k.code || '-' || cs.name AS section, q.subject,
+                      q.opened_at::text AS opened_at, (CURRENT_DATE - q.opened_at::date)::int AS days_open, q.first_response_at IS NOT NULL AS answered
+                 FROM parent_queries q JOIN students st ON st.id = q.student_id
+                 JOIN enrolments e ON e.student_id = st.id AND e.academic_year_id = $1 AND e.status = 'active'
+                 JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                WHERE q.academic_year_id = $1 AND q.closed_at IS NULL AND ($2::bigint[] IS NULL OR e.class_section_id = ANY($2::bigint[]))
+                ORDER BY q.opened_at LIMIT $3`,
+        values: [Y, S, n(p.limit, 30)],
+      }),
+    },
+    {
+      id: 'my_marks_status',
+      department: 'exams',
+      title: 'Mark entry status of my sections',
+      titleHi: 'मेरे अनुभागों की अंक प्रविष्टि',
+      description: 'For each exam and subject of your sections: pupils, marks entered, lock state.',
+      anyOf: ['exams.marks.view'],
+      params: [],
+      keywords: [
+        'marks entered',
+        'mark entry',
+        'pending marks',
+        'marks',
+        'exam',
+        'number dale',
+        'ank',
+        'अंक',
+        'परीक्षा',
+      ],
+      scope: 'section',
+      sql: () => ({
+        text: `SELECT ex.code AS exam, k.code || '-' || cs.name AS section, sub.code AS subject, es.max_marks::text AS max_marks, es.entry_locked,
+                      count(DISTINCT e.student_id)::int AS pupils, count(DISTINCT me.student_id)::int AS entered
+                 FROM exam_subjects es JOIN exams ex ON ex.id = es.exam_id JOIN subjects sub ON sub.id = es.subject_id
+                 JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = $1 AND cs.deleted_at IS NULL
+                 JOIN classes k ON k.id = cs.class_id
+                 LEFT JOIN enrolments e ON e.class_section_id = cs.id AND e.academic_year_id = $1 AND e.status = 'active'
+                 LEFT JOIN mark_entries me ON me.exam_subject_id = es.id AND me.student_id = e.student_id
+                WHERE ex.academic_year_id = $1 AND ex.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[]))
+                GROUP BY ex.code, ex.starts_on, k.display_order, k.code, cs.name, sub.code, sub.display_order, es.max_marks, es.entry_locked
+                ORDER BY ex.starts_on DESC NULLS LAST, k.display_order, cs.name, sub.display_order`,
+        values: [Y, S],
+      }),
+    },
+    // ---- Sprint 15: scoped entries for families (own children) -----------------------------------
+    {
+      id: 'my_children',
+      department: 'school',
+      title: 'My children',
+      titleHi: 'मेरे बच्चे',
+      description: 'Your children with class, section and the fee balance due today.',
+      anyOf: ['fees.family.view', 'attendance.session.view', 'engagement.family.view'],
+      params: [],
+      keywords: [
+        'my children',
+        'my child',
+        'children',
+        'mera bachcha',
+        'mere bachche',
+        'bachche',
+        'बच्चे',
+        'मेरा बच्चा',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT s.display_name AS child, s.admission_no, k.code || '-' || cs.name AS section,
+                      COALESCE((SELECT sum(d.net - d.paid) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1 AND d.status IN ('pending', 'partial') AND d.due_on <= $3::date), 0)::text AS balance_due
+                 FROM students s
+                 LEFT JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = $1 AND e.status = 'active'
+                 LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+                WHERE s.id = ANY($2::bigint[]) AND s.deleted_at IS NULL ORDER BY s.display_name`,
+        values: [Y, ST ?? [], T],
+      }),
+    },
+    {
+      id: 'child_dues',
+      department: 'fees',
+      title: 'Fees due for my children',
+      titleHi: 'मेरे बच्चों का बकाया शुल्क',
+      description:
+        'Open instalments of your children (overdue or due within 30 days) with the balance.',
+      anyOf: ['fees.family.view'],
+      params: [],
+      keywords: [
+        'fee',
+        'fees',
+        'due',
+        'dues',
+        'how much to pay',
+        'balance',
+        'kitna baki',
+        'kitni fees',
+        'fees baki',
+        'bakaya',
+        'shulk',
+        'kitna dena',
+        'शुल्क',
+        'बकाया',
+        'कितना',
+      ],
+      scope: 'student',
+      sql: () => ({
+        text: `SELECT s.display_name AS child, d.due_on::text AS due_on, d.ledger::text, sum(d.net)::text AS net, sum(d.paid)::text AS paid, sum(d.net - d.paid)::text AS balance,
+                      CASE WHEN d.due_on < $3::date THEN 'overdue' ELSE 'due' END AS state
+                 FROM fee_demands d JOIN students s ON s.id = d.student_id
+                WHERE d.student_id = ANY($2::bigint[]) AND d.academic_year_id = $1 AND d.status IN ('pending', 'partial') AND d.due_on <= $3::date + 30
+                GROUP BY s.display_name, d.due_on, d.ledger ORDER BY s.display_name, d.due_on`,
+        values: [Y, ST ?? [], T],
+      }),
+    },
+    {
+      id: 'child_attendance',
+      department: 'attendance',
+      title: 'Attendance of my children',
+      titleHi: 'मेरे बच्चों की उपस्थिति',
+      description: 'Attendance of your children over the period, with the absent days.',
+      anyOf: ['attendance.session.view'],
+      params: [DAYS],
+      keywords: [
+        'attendance',
+        'absent this week',
+        'was absent',
+        'child absent',
+        'absent',
+        'present',
+        'hazri',
+        'haziri',
+        'chhutti',
+        'school gaya',
+        'kitne din absent',
+        'उपस्थिति',
+        'अनुपस्थित',
+      ],
+      scope: 'student',
+      sql: (p) => ({
+        text: `SELECT s.display_name AS child, count(*)::int AS marked_days, count(*) FILTER (WHERE m.code = 'A')::int AS absent_days,
+                      string_agg(a.on_date::text, ', ' ORDER BY a.on_date) FILTER (WHERE m.code = 'A') AS absent_on
+                 FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id JOIN students s ON s.id = m.student_id
+                WHERE m.student_id = ANY($2::bigint[]) AND a.academic_year_id = $1 AND a.kind = 'day' AND a.on_date BETWEEN $3::date - $4::int AND $3::date
+                GROUP BY s.display_name ORDER BY s.display_name`,
+        values: [Y, ST ?? [], T, n(p.days, 30)],
+      }),
+    },
+    {
+      id: 'child_homework',
+      department: 'academics',
+      title: 'Homework for my children',
+      titleHi: 'मेरे बच्चों का गृहकार्य',
+      description:
+        "Homework, classwork and assignments posted for your children's sections over the period.",
+      anyOf: ['academics.daily_work.view'],
+      params: [DAYS],
+      keywords: ['homework', 'classwork', 'assignment', 'homework kya', 'kya kaam', 'गृहकार्य'],
+      scope: 'student',
+      sql: (p) => ({
+        text: `SELECT s.display_name AS child, w.assigned_on::text AS assigned_on, sub.name AS subject, w.kind::text, w.title, w.due_on::text AS due_on
+                 FROM enrolments e JOIN students s ON s.id = e.student_id
+                 JOIN daily_work w ON w.class_section_id = e.class_section_id AND w.academic_year_id = $1 AND w.deleted_at IS NULL
+                 LEFT JOIN subjects sub ON sub.id = w.subject_id
+                WHERE e.student_id = ANY($2::bigint[]) AND e.academic_year_id = $1 AND e.status = 'active'
+                  AND w.assigned_on BETWEEN $3::date - $4::int AND $3::date
+                ORDER BY w.assigned_on DESC, s.display_name LIMIT 60`,
+        values: [Y, ST ?? [], T, n(p.days, 7)],
+      }),
+    },
+    {
+      id: 'child_notices',
+      department: 'communication',
+      title: 'Notices for my children',
+      titleHi: 'मेरे बच्चों के लिए सूचनाएँ',
+      description:
+        "Published notices addressed to everyone or to your children's class or section.",
+      anyOf: ['academics.notice.view'],
+      params: [DAYS],
+      keywords: ['notice', 'notices', 'circular', 'announcement', 'suchna', 'सूचना', 'परिपत्र'],
+      scope: 'student',
+      sql: (p) => ({
+        text: `SELECT n.publish_from::text AS published, n.kind::text, n.title, n.is_pinned
+                 FROM notices n
+                WHERE n.academic_year_id = $1 AND n.deleted_at IS NULL AND n.published_at IS NOT NULL
+                  AND n.publish_from BETWEEN $3::date - $4::int AND $3::date AND (n.publish_until IS NULL OR n.publish_until >= $3::date)
+                  AND n.audience::text <> 'employees'
+                  AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id)
+                       OR EXISTS (SELECT 1 FROM notice_targets t
+                                    JOIN enrolments e ON e.student_id = ANY($2::bigint[]) AND e.academic_year_id = $1 AND e.status = 'active'
+                                    JOIN class_sections cs ON cs.id = e.class_section_id
+                                   WHERE t.notice_id = n.id AND ((t.target_type::text = 'class_section' AND t.target_id = cs.id) OR (t.target_type::text = 'class' AND t.target_id = cs.class_id))))
+                ORDER BY n.is_pinned DESC, n.publish_from DESC LIMIT 30`,
+        values: [Y, ST ?? [], T, n(p.days, 30)],
       }),
     },
   ];

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { AlertsService } from './alerts.service';
 import { AssistantService } from './assistant.service';
 import { DEPARTMENTS, DepartmentsService, type Department } from './departments.service';
 import { InsightsService } from './insights.service';
@@ -17,15 +18,24 @@ export const INSIGHTS = {
   /** Sprint 14: the assistant */
   assistantUse: 'insights.assistant.use',
   assistantAudit: 'insights.assistant.audit',
+  /** Sprint 15: anomaly alerts */
+  alertView: 'insights.alert.view',
+  alertAck: 'insights.alert.ack',
 } as const;
 
 const AskSchema = z.object({
   question: z.string().trim().min(2).max(1000),
   conversationId: z.string().uuid().optional(),
   language: z.enum(['en', 'hi', 'hinglish']).optional(),
+  surface: z.enum(['admin', 'teacher', 'parent']).optional(),
 });
 export class AskAssistantDto extends createZodDto(AskSchema) {}
 const AuditQuerySchema = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) });
+const AlertsQuerySchema = z.object({
+  open: z.enum(['true', 'false']).default('true'),
+  days: z.coerce.number().int().min(1).max(365).default(30),
+});
+export class AlertsQueryDto extends createZodDto(AlertsQuerySchema) {}
 export class AssistantAuditQueryDto extends createZodDto(AuditQuerySchema) {}
 
 const DashboardQuerySchema = z.object({
@@ -56,6 +66,7 @@ export class InsightsController {
     private readonly insights: InsightsService,
     private readonly departments: DepartmentsService,
     private readonly assistant: AssistantService,
+    private readonly alerts: AlertsService,
   ) {}
 
   // ---- Sprint 14: the assistant ----
@@ -95,6 +106,20 @@ export class InsightsController {
   })
   audit(@ReqCtx() ctx: RequestContext, @Query() q: AssistantAuditQueryDto) {
     return this.assistant.audit(ctx, q.days);
+  }
+
+  // ---- Sprint 15: anomaly alerts ----
+  @Get('alerts')
+  @ApiOperation({ summary: 'Anomaly alerts (attendance drop, collection dip, silent reader)' })
+  @RequirePermission(INSIGHTS.alertView, { description: 'View anomaly alerts' })
+  async alertsList(@ReqCtx() ctx: RequestContext, @Query() q: AlertsQueryDto) {
+    return { data: await this.alerts.list(ctx, q.open === 'true', q.days) };
+  }
+
+  @Post('alerts/:id/ack')
+  @RequirePermission(INSIGHTS.alertAck, { description: 'Acknowledge anomaly alerts' })
+  ack(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.alerts.ack(ctx, id);
   }
 
   // ---- Sprint 13: department dashboards and report centres ----

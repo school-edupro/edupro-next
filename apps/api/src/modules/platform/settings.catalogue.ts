@@ -112,6 +112,24 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Online payment gateway of the school (Sprint 13): PayU, Razorpay or CCAvenue; mock is the development gateway',
     module: 'payments',
   },
+  'fees.tally.cash_ledger': {
+    schema: z.string().trim().min(1).max(80),
+    default: 'Cash',
+    description: 'Tally ledger debited for cash receipts in the ledger export (Sprint 15)',
+    module: 'fees',
+  },
+  'fees.tally.bank_ledger': {
+    schema: z.string().trim().min(1).max(80),
+    default: 'Bank',
+    description: 'Tally ledger debited for cheque, DD, bank, UPI, card and online receipts',
+    module: 'fees',
+  },
+  'insights.alert_roles': {
+    schema: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/),
+    default: 'school_admin',
+    description: 'Role codes whose members receive anomaly alerts (comma separated, Sprint 15)',
+    module: 'insights',
+  },
   'fees.bounce_charge': {
     schema: money,
     default: '500.00',

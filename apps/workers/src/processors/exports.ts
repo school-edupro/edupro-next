@@ -2,7 +2,15 @@ import { createHash } from 'node:crypto';
 import { datasetOrNull, rendererOrNull, tenantForJob, type Db } from '@edupro/db';
 import { objectKeyFor, type StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
-import { toCsv, toHtml, toXlsx, type Row } from './generators';
+import {
+  type Row,
+  type TallyOptions,
+  toCsv,
+  toHtml,
+  toTallyXml,
+  toXlsx,
+  toXml,
+} from './generators';
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
 import { renderDocument } from '../renderers/document';
@@ -11,7 +19,7 @@ import { idCardHtml, loadIdCard } from '../renderers/id-card';
 interface ExportDbRow {
   id: string;
   dataset: string;
-  format: 'xlsx' | 'csv' | 'pdf';
+  format: 'xlsx' | 'csv' | 'pdf' | 'xml';
   params: Record<string, unknown>;
   title: string;
   status: string;
@@ -24,6 +32,7 @@ const CONTENT_TYPES = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   csv: 'text/csv',
   pdf: 'application/pdf',
+  xml: 'application/xml',
 } as const;
 
 export interface ExportDeps {
@@ -129,11 +138,22 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
       const query = dataset.query(row.params);
       const academicYearId =
         typeof row.params.academicYearId === 'string' ? row.params.academicYearId : null;
+      let tally: TallyOptions | null = null;
       const rows = await db.withTenant(tenantForJob(envelope, academicYearId), async (c) => {
         const r = await c.query<Row>(
           query.text + ' LIMIT ' + String(dataset.maxRows),
           query.values,
         );
+        if (row.format === 'xml' && dataset.id === 'fee_tally_vouchers') {
+          const st = await c.query<{ cash: string | null; bank: string | null }>(
+            "SELECT app.setting('fees.tally.cash_ledger') #>> '{}' AS cash, app.setting('fees.tally.bank_ledger') #>> '{}' AS bank",
+          );
+          tally = {
+            company: row.school_name,
+            cashLedger: st.rows[0]?.cash ?? 'Cash',
+            bankLedger: st.rows[0]?.bank ?? 'Bank',
+          };
+        }
         return r.rows;
       });
 
@@ -145,6 +165,8 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
       let bytes: Buffer;
       if (row.format === 'xlsx') bytes = await toXlsx(row.title, dataset.columns, rows, meta);
       else if (row.format === 'csv') bytes = toCsv(dataset.columns, rows);
+      else if (row.format === 'xml')
+        bytes = tally ? toTallyXml(rows, tally) : toXml(row.title, dataset.columns, rows);
       else
         bytes = await pdf.render(toHtml(row.title, dataset.columns, rows, meta), {
           landscape: dataset.columns.length > 6,

@@ -1,6 +1,7 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
+import { CommsModule } from '../comms/comms.module';
 import { TemplatesModule } from '../platform/templates/templates.module';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
@@ -9,6 +10,7 @@ import { FeeAdjustmentsService } from './fee-adjustments.service';
 import { FeeDemandsService } from './fee-demands.service';
 import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
+import { FeeReportsService } from './fee-reports.service';
 import { FeesController } from './fees.controller';
 
 /**
@@ -17,13 +19,14 @@ import { FeesController } from './fees.controller';
  * hostel ledger, reconciliation.
  */
 @Module({
-  imports: [ReportsModule, TemplatesModule, DailyAcademicsModule, WorkflowModule],
+  imports: [ReportsModule, TemplatesModule, DailyAcademicsModule, WorkflowModule, CommsModule],
   controllers: [FeesController],
   providers: [
     FeeMastersService,
     FeeDemandsService,
     FeeLedgerService,
     FeeAdjustmentsService,
+    FeeReportsService,
     AuditService,
   ],
   exports: [FeeMastersService, FeeDemandsService, FeeLedgerService, FeeAdjustmentsService],

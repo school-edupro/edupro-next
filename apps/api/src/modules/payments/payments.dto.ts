@@ -158,3 +158,12 @@ export const UploadSettlementSchema = z.object({
   csv: z.string().min(1).max(2_000_000),
 });
 export class UploadSettlementDto extends createZodDto(UploadSettlementSchema) {}
+
+/** Sprint 15: a bank account statement (CSV) to match against cheque, DD, NEFT and UPI receipts. */
+export const UploadBankStatementSchema = z.object({
+  bankName: z.string().trim().min(2).max(80),
+  accountRef: z.string().trim().max(40).optional(),
+  fileName: z.string().trim().max(160).optional(),
+  csv: z.string().min(1).max(2_000_000),
+});
+export class UploadBankStatementDto extends createZodDto(UploadBankStatementSchema) {}

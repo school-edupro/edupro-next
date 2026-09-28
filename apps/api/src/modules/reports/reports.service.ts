@@ -93,15 +93,10 @@ export class ReportsService {
     private readonly audit: AuditService,
   ) {}
 
-  async create(
-    ctx: RequestContext,
-    dto: CreateExportDto,
-    auditAction = 'reports.export.create',
-  ): Promise<ExportRow> {
+  /** Permission and scope narrowing shared by exports and live rows. */
+  private async prepare(ctx: RequestContext, datasetId: string, input: Record<string, unknown>) {
     const tenant = requireTenant(ctx);
-    const renderer = rendererOrNull(dto.dataset);
-    if (renderer) return this.createRendered(ctx, dto, renderer.id, auditAction);
-    const dataset = datasetOrNull(dto.dataset);
+    const dataset = datasetOrNull(datasetId);
     if (!dataset) throw new DomainError('not-found', 'Unknown dataset');
     if (!ctx.permissions?.has(dataset.permission)) {
       throw new DomainError(
@@ -113,7 +108,7 @@ export class ReportsService {
         },
       );
     }
-    const params: Record<string, unknown> = { ...dto.params };
+    const params: Record<string, unknown> = { ...input };
     if (dataset.scope === 'class_section') {
       const allowed = await this.scopes.filter(tenant, dataset.permission, 'class_section');
       if (allowed !== null) {
@@ -121,9 +116,58 @@ export class ReportsService {
         params.sectionIds = requested ? requested.filter((id) => allowed.includes(id)) : allowed;
         if ((params.sectionIds as string[]).length === 0) params.sectionIds = ['-1'];
       }
-      if (params.academicYearId === undefined && tenant.academicYearId)
-        params.academicYearId = tenant.academicYearId;
     }
+    if (params.academicYearId === undefined && tenant.academicYearId)
+      params.academicYearId = tenant.academicYearId;
+    return { tenant, dataset, params };
+  }
+
+  /** Sprint 15: run a dataset live for a screen, capped; the same definition the export renders. */
+  async rows(
+    ctx: RequestContext,
+    datasetId: string,
+    input: Record<string, unknown>,
+    limit: number,
+  ) {
+    const { tenant, dataset, params } = await this.prepare(ctx, datasetId, input);
+    const cap = Math.min(limit, dataset.maxRows);
+    const q = dataset.query(params);
+    return this.db.tenant(tenant, async (c) => {
+      const r = await c.query<Record<string, unknown>>(
+        // eslint-disable-next-line no-restricted-syntax -- the dataset text is a constant of the registry; values are bound
+        `${q.text} LIMIT ${String(cap + 1)}`,
+        q.values,
+      );
+      // DATE columns arrive as local-midnight Date objects; hand the screen plain YYYY-MM-DD strings
+      const dateKeys = dataset.columns.filter((c) => c.type === 'date').map((c) => c.key);
+      const rows = r.rows.slice(0, cap).map((row) => {
+        for (const k of dateKeys) {
+          const v = row[k];
+          if (v instanceof Date)
+            row[k] =
+              `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+        }
+        return row;
+      });
+      return {
+        dataset: dataset.id,
+        title: dataset.title,
+        columns: dataset.columns,
+        params,
+        rows,
+        truncated: r.rows.length > cap,
+      };
+    });
+  }
+
+  async create(
+    ctx: RequestContext,
+    dto: CreateExportDto,
+    auditAction = 'reports.export.create',
+  ): Promise<ExportRow> {
+    const renderer = rendererOrNull(dto.dataset);
+    if (renderer) return this.createRendered(ctx, dto, renderer.id, auditAction);
+    const { tenant, dataset, params } = await this.prepare(ctx, dto.dataset, dto.params);
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<{ id: string }>(
         `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id)
