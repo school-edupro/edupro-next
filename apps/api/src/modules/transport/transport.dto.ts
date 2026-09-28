@@ -7,6 +7,12 @@ export const TRANSPORT = {
   routeManage: 'transport.route.manage',
   fleetView: 'transport.fleet.view',
   fleetManage: 'transport.fleet.manage',
+  /** Sprint 13 */
+  requestCreate: 'transport.request.create',
+  requestView: 'transport.request.view',
+  requestDecide: 'transport.request.decide',
+  logView: 'transport.log.view',
+  logManage: 'transport.log.manage',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -122,3 +128,58 @@ export const SetStopsSchema = z.object({
     .max(60),
 });
 export class SetStopsDto extends createZodDto(SetStopsSchema) {}
+
+// ---- Sprint 13: family requests and vehicle logs ----------------------------------------------------
+export const CreateTransportRequestSchema = z
+  .object({
+    studentId: IdSchema,
+    kind: z.enum(['join', 'change', 'leave']),
+    routeId: IdSchema.optional(),
+    stopId: IdSchema.optional(),
+    effectiveFrom: DateSchema.optional(),
+    note: z.string().trim().max(300).optional(),
+  })
+  .refine((v) => v.kind === 'leave' || v.routeId !== undefined, {
+    message: 'routeId is required unless leaving the bus',
+    path: ['routeId'],
+  });
+export class CreateTransportRequestDto extends createZodDto(CreateTransportRequestSchema) {}
+
+export const DecideTransportRequestSchema = z.object({
+  outcome: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(300).optional(),
+});
+export class DecideTransportRequestDto extends createZodDto(DecideTransportRequestSchema) {}
+
+export const ListTransportRequestsQuerySchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
+});
+export class ListTransportRequestsQueryDto extends createZodDto(ListTransportRequestsQuerySchema) {}
+
+export const UpsertVehicleLogSchema = z
+  .object({
+    logDate: DateSchema,
+    routeId: IdSchema.optional(),
+    driverId: IdSchema.optional(),
+    odometerStart: z.number().int().min(0).max(10_000_000).optional(),
+    odometerEnd: z.number().int().min(0).max(10_000_000).optional(),
+    fuelLitres: z.number().min(0).max(10_000).optional(),
+    fuelCost: z.number().min(0).max(10_000_000).optional(),
+    trips: z.number().int().min(0).max(50).optional(),
+    incident: z.string().trim().max(500).optional(),
+    remarks: z.string().trim().max(500).optional(),
+  })
+  .refine(
+    (v) =>
+      v.odometerStart === undefined ||
+      v.odometerEnd === undefined ||
+      v.odometerEnd >= v.odometerStart,
+    { message: 'odometer end must not be below start', path: ['odometerEnd'] },
+  );
+export class UpsertVehicleLogDto extends createZodDto(UpsertVehicleLogSchema) {}
+
+export const VehicleLogsQuerySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+});
+export class VehicleLogsQueryDto extends createZodDto(VehicleLogsQuerySchema) {}

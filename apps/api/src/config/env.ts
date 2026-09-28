@@ -27,6 +27,20 @@ const EnvSchema = z.object({
   PAYU_BASE_URL: z.string().url().default('https://test.payu.in/_payment'),
   PUBLIC_APP_URL: z.string().url().default('http://localhost:3003'),
   ADMIN_APP_URL: z.string().url().default('http://localhost:3000'),
+  PARENT_APP_URL: z.string().url().default('http://localhost:3001'),
+  /**
+   * Sprint 13: the gateway a school uses unless its setting payments.gateway says otherwise. "mock" is the
+   * development gateway (every provider's flow is simulated by /payments/payu/mock); refused in production.
+   */
+  PAYMENT_PROVIDER: z.enum(['mock', 'payu', 'razorpay', 'ccavenue']).default('mock'),
+  RAZORPAY_KEY_ID: z.string().default('rzp_test_devkey'),
+  RAZORPAY_KEY_SECRET: z.string().min(8).default('dev-razorpay-secret'),
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(8).default('dev-razorpay-webhook-secret'),
+  RAZORPAY_BASE_URL: z.string().url().default('https://api.razorpay.com'),
+  CCAVENUE_MERCHANT_ID: z.string().default('dev-merchant'),
+  CCAVENUE_ACCESS_CODE: z.string().default('dev-access-code'),
+  CCAVENUE_WORKING_KEY: z.string().min(8).default('dev-ccavenue-working-key'),
+  CCAVENUE_BASE_URL: z.string().url().default('https://test.ccavenue.com'),
   /** Shared secret for provider delivery receipts (S10): header x-webhook-token. */
   COMMS_WEBHOOK_TOKEN: z.string().min(8).default('dev-comms-webhook-token'),
   /** Public base URL of this API, used to build local-driver file URLs. */
@@ -92,6 +106,19 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   ) {
     throw new Error(
       'Refusing to start: PAYU_MODE must be test or live with real PAYU_KEY and PAYU_SALT in production',
+    );
+  }
+  if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'mock') {
+    throw new Error('Refusing to start: PAYMENT_PROVIDER must name a real gateway in production');
+  }
+  if (
+    env.NODE_ENV === 'production' &&
+    (env.RAZORPAY_KEY_SECRET.startsWith('dev-') ||
+      env.RAZORPAY_WEBHOOK_SECRET.startsWith('dev-') ||
+      env.CCAVENUE_WORKING_KEY.startsWith('dev-'))
+  ) {
+    throw new Error(
+      'Refusing to start: RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET and CCAVENUE_WORKING_KEY must be set in production',
     );
   }
   if (env.NODE_ENV === 'production' && env.APPLICANT_JWT_SECRET.startsWith('dev-')) {

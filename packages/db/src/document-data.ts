@@ -125,18 +125,33 @@ async function feeReceipt(c: PoolClient, id: string): Promise<Row | null> {
   );
   const row = r.rows[0];
   if (!row) return null;
+  // Sprint 13: the late fee collected on the receipt prints as its own line per instalment
   const lines = await c.query<Row>(
-    `SELECT h.name AS head, fp.name AS period, a.amount::text
-       FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
-      WHERE a.payment_id = $1 ORDER BY fp.sequence, h.sort_order`,
+    `SELECT head, period, amount::text FROM (
+       SELECT h.name AS head, fp.name AS period, a.amount, fp.sequence, h.sort_order AS ord
+         FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
+        WHERE a.payment_id = $1
+       UNION ALL
+       SELECT 'Late fee', COALESCE(fp.name, to_char(l.due_on, 'DD Mon YYYY')), l.amount, COALESCE(fp.sequence, 99), 1000
+         FROM fee_late_fee_postings l LEFT JOIN fee_periods fp ON fp.id = l.period_id WHERE l.payment_id = $1
+     ) x ORDER BY sequence, ord`,
     [id],
   );
-  const unallocated = Number(row.unallocated);
+  const extra = await c.query<{ late_fee: string; refunded: string; status: string }>(
+    `SELECT late_fee::text, refunded::text, status FROM fee_payments WHERE id = $1`,
+    [id],
+  );
+  const lateFee = Number(extra.rows[0]?.late_fee ?? 0);
+  const refunded = Number(extra.rows[0]?.refunded ?? 0);
+  const unallocated = Number(row.unallocated) - lateFee - refunded;
   return {
     ...row,
     mode: String(row.mode ?? '').toUpperCase(),
     amountWords: amountInWords(String(row.amount)),
     unallocated: unallocated > 0 ? unallocated.toFixed(2) : null,
+    lateFee: lateFee > 0 ? lateFee.toFixed(2) : null,
+    refunded: refunded > 0 ? refunded.toFixed(2) : null,
+    status: extra.rows[0]?.status ?? 'posted',
     lines: lines.rows,
   };
 }

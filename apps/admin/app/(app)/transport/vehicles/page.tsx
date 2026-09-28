@@ -72,6 +72,15 @@ export default async function VehiclesPage({
             },
             { key: 'routes', header: tr('routesUsing'), render: (v) => v.routes.join(', ') },
             {
+              key: 'log',
+              header: tr('logs'),
+              render: (v) => (
+                <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/transport/vehicles/${v.id}`}>
+                  {tr('openLog')}
+                </a>
+              ),
+            },
+            {
               key: 'status',
               header: c('status'),
               render: (v) => <Badge tone={toneForStatus(v.status)}>{c(v.status)}</Badge>,

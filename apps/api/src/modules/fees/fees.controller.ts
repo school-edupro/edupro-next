@@ -195,6 +195,18 @@ export class FeesController {
     return this.ledger.setReceiptSequence(ctx, body);
   }
 
+  @Get('mine')
+  @ApiOperation({
+    summary:
+      "The family's fee ledgers: visible instalments, receipts, refunds and what is payable now",
+  })
+  @RequirePermission(FEES.familyView, {
+    description: "View the fee ledger and receipts of one's own children",
+  })
+  mine(@ReqCtx() ctx: RequestContext) {
+    return this.ledger.mine(ctx);
+  }
+
   @Get('students/:id/ledger')
   @ApiOperation({
     summary: 'Instalment ledger with late fee, visibility, receipts and the last regeneration diff',

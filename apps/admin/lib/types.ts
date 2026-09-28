@@ -1314,6 +1314,8 @@ export interface FeeLateFee {
   overridden: boolean;
   reason: string | null;
   periodId: string | null;
+  posted: string;
+  outstanding: string;
 }
 export interface FeeLedgerInstalment {
   dueOn: string;
@@ -1340,6 +1342,23 @@ export interface FeeLedgerPayment {
   allocated: string;
   unallocated: string;
   intentId: string | null;
+  lateFee: string;
+  refunded: string;
+  status: 'posted' | 'partly_refunded' | 'refunded' | 'bounced';
+  instrumentNo: string | null;
+  bankName: string | null;
+  settled: boolean;
+}
+export interface FeeLedgerRefund {
+  id: string;
+  paymentId: string;
+  receiptNo: string | null;
+  amount: string;
+  reason: string;
+  mode: string;
+  status: string;
+  requestedAt: string;
+  paidOn: string | null;
 }
 export interface FeeDemandDiff {
   added: Array<{ period: string; head: string; net: string; dueOn: string }>;
@@ -1360,8 +1379,17 @@ export interface FeeLedger {
   asOf: string;
   lateFeeMode: string;
   instalments: FeeLedgerInstalment[];
-  totals: { net: string; paid: string; balance: string; lateFee: string; payable: string };
+  totals: {
+    net: string;
+    paid: string;
+    balance: string;
+    lateFee: string;
+    lateFeePosted: string;
+    lateFeeOutstanding: string;
+    payable: string;
+  };
   payments: FeeLedgerPayment[];
+  refunds: FeeLedgerRefund[];
   overrides: Array<{
     id: string;
     periodId: string;
@@ -1509,4 +1537,136 @@ export interface PrincipalDashboard {
   }>;
   alerts: DashboardAlert[];
   marts: MartStatus[];
+}
+
+// ---- Sprint 13: collect and pay ------------------------------------------------------------------
+export interface ReceiptResult {
+  paymentId: string;
+  receiptNo: string | null;
+  amount: string;
+  principal: string;
+  lateFee: string;
+  advance: string;
+  instalments: number;
+}
+export interface FeeRefund {
+  id: string;
+  paymentId: string;
+  receiptNo: string | null;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  receiptAmount: string;
+  amount: string;
+  reason: string;
+  mode: 'cash' | 'bank' | 'cheque' | 'gateway';
+  reference: string | null;
+  status: 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
+  requestedBy: string | null;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  provider: string | null;
+  providerRef: string | null;
+  paidOn: string | null;
+}
+export interface SettlementLine {
+  id: string;
+  lineNo: number;
+  providerRef: string | null;
+  txnId: string | null;
+  amount: string;
+  charges: string;
+  tax: string;
+  net: string | null;
+  status: 'matched' | 'unmatched' | 'amount_mismatch' | 'duplicate' | 'refund';
+  intentId: string | null;
+  paymentId: string | null;
+  receiptNo: string | null;
+  studentName: string | null;
+  note: string | null;
+}
+export interface PaymentSettlement {
+  id: string;
+  provider: string;
+  settlementRef: string;
+  settledOn: string;
+  utr: string | null;
+  gross: string;
+  charges: string;
+  tax: string;
+  net: string;
+  rows: number;
+  matched: number;
+  unmatched: number;
+  mismatched: number;
+  fileName: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+  lines?: SettlementLine[];
+}
+export interface TransportRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  section: string | null;
+  kind: 'join' | 'change' | 'leave';
+  routeId: string | null;
+  routeCode: string | null;
+  routeName: string | null;
+  stopId: string | null;
+  stopName: string | null;
+  effectiveFrom: string | null;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedBy: string | null;
+  requestedAt: string;
+  workflowInstanceId: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  current: { routeCode: string; routeName: string; stopName: string | null } | null;
+}
+export interface VehicleLog {
+  id: string;
+  vehicleId: string;
+  regNo: string;
+  routeId: string | null;
+  routeCode: string | null;
+  driverId: string | null;
+  driverName: string | null;
+  logDate: string;
+  odometerStart: number | null;
+  odometerEnd: number | null;
+  km: number | null;
+  fuelLitres: string | null;
+  fuelCost: string | null;
+  trips: number | null;
+  incident: string | null;
+  remarks: string | null;
+  createdBy: string | null;
+}
+export type Department =
+  'academics' | 'attendance' | 'fees' | 'admissions' | 'transport' | 'communication' | 'hr';
+export interface DepartmentCard {
+  department: Department;
+  allowed: boolean;
+  reports: number;
+}
+export interface DepartmentReport {
+  id: string;
+  title: string;
+  permission: string;
+  allowed: boolean;
+  columns: string[];
+}
+/** The department dashboards share the envelope; the body differs per department (see the API). */
+export interface DepartmentDashboard {
+  department: Department;
+  date: string;
+  year: { id: string; code: string; status: string };
+  classId: string | null;
+  [k: string]: unknown;
 }

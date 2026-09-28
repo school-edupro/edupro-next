@@ -92,6 +92,31 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprint 13 walk-through (collect and pay)
+
+- **dev-accounts** (Accountant): **Fees → Cashier**. Pick VI-A and a student: the card shows balance, the late
+  fee still to collect and the payable amount; the receipt form is prefilled with it. Post a cash receipt: the
+  banner shows the number `TF/FY2026-27/…`, the late fee collected and any advance, with **Print receipt**
+  queuing the PDF (the receipt now lists a **Late fee** line per instalment). Post less than an instalment
+  and the late fee waits; post the rest and it is collected. VI-A roll 3 already carries a seeded late July
+  receipt (cash, 20 July) and a **refund request** of ₹500 (bank) waiting under **Fees → Refunds**. **Fees →
+  Gateway settlements**: upload `docs/data/sample-settlement-razorpay.csv` (or paste CSV) to see matched,
+  unmatched and mismatched lines. The ledger page gained **Open cashier**, the late fee collected and
+  outstanding cards, receipt status (posted, partly refunded, settled) and a refund request form.
+- **dev-admin**: approve the refund under **Fees → Refunds** (enter a payout reference); the ledger of VI-A
+  roll 3 shows the receipt partly refunded and the demand reopened by ₹500. **Transport → Bus requests**: the
+  dev parent's request to move Diya to R2 waits for a decision (no workflow installed by default; install the
+  defaults under Approvals → Workflows and new requests go to the inbox instead). **Transport → Vehicles →
+  Log**: a week of odometer, fuel and trips per bus, with one puncture incident on the second bus.
+  **Insights → Department dashboards**: all seven open for the admin; the accountant sees Fees only, the
+  coordinator Academics and Attendance. Each has a **Report centre** that queues CSV or Excel exports of the
+  department's datasets to the export centre. **System → Settings → payments.gateway** picks the gateway
+  (`mock` here; `razorpay`, `ccavenue`, `payu` need credentials in the environment).
+- **dev-parent**: the **Fees** tile now opens dues and receipts per child with **Pay online**; with the mock
+  gateway a development page offers "Pay (success)" and "Fail the payment", and the fees page shows the
+  result and the new receipt. **School bus** shows the current bus per child, a request form (seat, stop or
+  route change, leave) and the status of earlier requests.
+
 ### Switching the academic year (added after the Phase 2 review)
 
 Every request carries the working year (`X-Academic-Year-Id`); when the header is absent the API uses the

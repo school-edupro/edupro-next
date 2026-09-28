@@ -4,25 +4,25 @@ Blocked until the production schema dumps arrive (Sprint 0 task S0-08). Run `scr
 
 ## Header
 
-| | |
-|---|---|
-| Reference school | |
-| Compared school | |
-| Dump dates | |
-| Tables in reference | |
-| Tables in compared | |
-| Tables only in reference | |
-| Tables only in compared | |
+|                          |     |
+| ------------------------ | --- |
+| Reference school         |     |
+| Compared school          |     |
+| Dump dates               |     |
+| Tables in reference      |     |
+| Tables in compared       |     |
+| Tables only in reference |     |
+| Tables only in compared  |     |
 
 ## Column differences (tables present in both)
 
 | Table | Column | Reference type | Compared type | Nullability | Default | Impact on ETL |
-|---|---|---|---|---|---|---|
+| ----- | ------ | -------------- | ------------- | ----------- | ------- | ------------- |
 
 ## Tables only in one school
 
 | Table | School | Rows | Used by legacy code (yes/no, file) | Decision (migrate, archive, drop) |
-|---|---|---|---|---|
+| ----- | ------ | ---- | ---------------------------------- | --------------------------------- |
 
 ## Known drift to expect (from the blueprint)
 
@@ -34,7 +34,7 @@ Blocked until the production schema dumps arrive (Sprint 0 task S0-08). Run `scr
 
 ## Sign-off
 
-| Role | Name | Date |
-|---|---|---|
-| Data engineer | | |
-| Architect | | |
+| Role          | Name | Date |
+| ------------- | ---- | ---- |
+| Data engineer |      |      |
+| Architect     |      |      |

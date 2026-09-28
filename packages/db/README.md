@@ -4,23 +4,23 @@ PostgreSQL 16 schema, row-level security, procedures and tenant-aware access for
 
 ## Layout
 
-| Path | Purpose |
-|---|---|
-| `init/01_roles.sql` | Creates `edupro_app` and `edupro_readonly` (docker init and CI) |
-| `migrations/0001_foundation.sql` | Tenancy, years, identity, RBAC, sequences, files, outbox |
-| `migrations/0002_rls.sql` | Context functions, policies, grants |
-| `migrations/0003_audit.sql` | Partitioned append-only audit log, row-change trigger |
-| `migrations/0004_procedures_and_seed.sql` | `assert_year_open`, `next_receipt_no`, `setting`, role templates, permissions, SoD |
-| `migrations/0005_reference_module_classes.sql` | Reference module tables |
-| `migrations/0006_schools_self_membership_policy.sql` | Users can read the schools they belong to before a school is selected (login) |
-| `migrations/0007_permissions_declared_in_code.sql` | `declared_in_code` so only code-declared permissions can be flagged orphaned |
-| `src/index.ts` | `Db.withTenant()`, `Db.withoutTenant()`, `Db.withAuthLookup()`, `Db.assertApplicationRole()` |
-| `src/local-setup.ts` | Creates the database and roles on a user-space cluster without `psql` |
-| `src/prisma.ts` | `prismaWithTenant()` for typed CRUD inside a tenant transaction |
-| `src/migrate.ts` | Migration runner with checksums and an advisory lock |
-| `src/seed-dev.ts` | Local development seed (two schools, dev admin) |
-| `prisma/schema.prisma` | Prisma model mirror of the SQL schema |
-| `test/` | RLS proof and procedure tests (require a live database) |
+| Path                                                 | Purpose                                                                                      |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `init/01_roles.sql`                                  | Creates `edupro_app` and `edupro_readonly` (docker init and CI)                              |
+| `migrations/0001_foundation.sql`                     | Tenancy, years, identity, RBAC, sequences, files, outbox                                     |
+| `migrations/0002_rls.sql`                            | Context functions, policies, grants                                                          |
+| `migrations/0003_audit.sql`                          | Partitioned append-only audit log, row-change trigger                                        |
+| `migrations/0004_procedures_and_seed.sql`            | `assert_year_open`, `next_receipt_no`, `setting`, role templates, permissions, SoD           |
+| `migrations/0005_reference_module_classes.sql`       | Reference module tables                                                                      |
+| `migrations/0006_schools_self_membership_policy.sql` | Users can read the schools they belong to before a school is selected (login)                |
+| `migrations/0007_permissions_declared_in_code.sql`   | `declared_in_code` so only code-declared permissions can be flagged orphaned                 |
+| `src/index.ts`                                       | `Db.withTenant()`, `Db.withoutTenant()`, `Db.withAuthLookup()`, `Db.assertApplicationRole()` |
+| `src/local-setup.ts`                                 | Creates the database and roles on a user-space cluster without `psql`                        |
+| `src/prisma.ts`                                      | `prismaWithTenant()` for typed CRUD inside a tenant transaction                              |
+| `src/migrate.ts`                                     | Migration runner with checksums and an advisory lock                                         |
+| `src/seed-dev.ts`                                    | Local development seed (two schools, dev admin)                                              |
+| `prisma/schema.prisma`                               | Prisma model mirror of the SQL schema                                                        |
+| `test/`                                              | RLS proof and procedure tests (require a live database)                                      |
 
 ## Rules
 

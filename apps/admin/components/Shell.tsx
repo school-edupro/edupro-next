@@ -45,6 +45,9 @@ const NAV: Array<{
       { href: '/fees/structures', label: 'feeStructures', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
       { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },
+      { href: '/fees/cashier', label: 'cashier', permission: 'fees.receipt.post' },
+      { href: '/fees/refunds', label: 'refunds', permission: 'fees.refund.request' },
+      { href: '/fees/settlements', label: 'settlements', permission: 'payments.settlement.view' },
     ],
   },
   {
@@ -148,6 +151,11 @@ const NAV: Array<{
       { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
       { href: '/transport/vehicles', label: 'vehicles', permission: 'transport.fleet.view' },
       { href: '/transport/drivers', label: 'drivers', permission: 'transport.fleet.view' },
+      {
+        href: '/transport/requests',
+        label: 'transportRequests',
+        permission: 'transport.request.view',
+      },
     ],
   },
   {
@@ -157,6 +165,11 @@ const NAV: Array<{
         href: '/insights/principal',
         label: 'principalDashboard',
         permission: 'insights.dashboard.view',
+      },
+      {
+        href: '/insights/departments',
+        label: 'departments',
+        permission: 'insights.department.view',
       },
     ],
   },

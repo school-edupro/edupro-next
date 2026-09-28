@@ -39,7 +39,9 @@ function activeStatus(status: unknown, isTrash: unknown): 'active' | 'inactive' 
 }
 
 function gender(v: unknown): 'male' | 'female' | 'other' | 'unspecified' {
-  const s = String(v ?? '').trim().toLowerCase();
+  const s = String(v ?? '')
+    .trim()
+    .toLowerCase();
   if (s === 'm' || s === 'male' || s === 'boy') return 'male';
   if (s === 'f' || s === 'female' || s === 'girl') return 'female';
   if (s === '') return 'unspecified';
@@ -57,7 +59,13 @@ export interface StudentRecord {
   status: 'active' | 'inactive';
   legacyYear: string | null;
   /** Guardian to link (father, mother or named guardian, first with a mobile). */
-  guardian: { firstName: string; lastName: string | null; mobile: string | null; email: string | null; relation: 'father' | 'mother' | 'guardian' } | null;
+  guardian: {
+    firstName: string;
+    lastName: string | null;
+    mobile: string | null;
+    email: string | null;
+    relation: 'father' | 'mother' | 'guardian';
+  } | null;
   /** Legacy section label such as 'VI-A' for the enrolment of the legacy year. */
   section: { classCode: string; section: string | null } | null;
   rollNo: number | null;
@@ -75,16 +83,21 @@ export const studentRecordStep: Step<RawStudentFull, StudentRecord> = {
   legacyTable: 'student_master',
   transform(raw): Transformed<StudentRecord> | Rejects {
     const key = text(raw.sadmission);
-    if (!key) return [{ ...reject('student.admission_missing', raw.sadmission, true), column: 'sadmission' }];
+    if (!key)
+      return [
+        { ...reject('student.admission_missing', raw.sadmission, true), column: 'sadmission' },
+      ];
     const legacyKey = `sadmission=${key}`;
     const full = name(raw.sname);
-    if (!full) return [{ ...reject('student.name_missing', raw.sname, true), column: 'sname', legacyKey }];
+    if (!full)
+      return [{ ...reject('student.name_missing', raw.sname, true), column: 'sname', legacyKey }];
     const { first, last } = splitName(full);
     const dob = normaliseDate(raw.DOB);
     const rejects: Rejects = [];
     if (dob.kind === 'reject') rejects.push({ ...dob, column: 'DOB', legacyKey });
     const section = splitLegacySection(raw.sclass);
-    if (section.kind === 'reject' && raw.sclass) rejects.push({ ...section, column: 'sclass', legacyKey });
+    if (section.kind === 'reject' && raw.sclass)
+      rejects.push({ ...section, column: 'sclass', legacyKey });
     if (rejects.some((r) => r.blocking)) return rejects;
 
     const candidates: Array<[unknown, unknown, 'father' | 'mother' | 'guardian']> = [
@@ -100,7 +113,13 @@ export const studentRecordStep: Step<RawStudentFull, StudentRecord> = {
       if ((mobile.kind === 'ok' && mobile.value) || gname) {
         const split = gname ? splitName(gname) : { first: `Guardian of ${full}`, last: null };
         const email = normaliseEmail(raw.email);
-        guardian = { firstName: split.first, lastName: split.last, mobile: mobile.kind === 'ok' ? mobile.value : null, email: email.kind === 'ok' ? email.value : null, relation };
+        guardian = {
+          firstName: split.first,
+          lastName: split.last,
+          mobile: mobile.kind === 'ok' ? mobile.value : null,
+          email: email.kind === 'ok' ? email.value : null,
+          relation,
+        };
         break;
       }
     }
@@ -146,7 +165,16 @@ export class StudentsLoader implements Loader<StudentRecord> {
            SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, dob = COALESCE(EXCLUDED.dob, students.dob),
                gender = EXCLUDED.gender, category = COALESCE(EXCLUDED.category, students.category), status = EXCLUDED.status, updated_at = now()
          RETURNING id::text`,
-        [row.admissionNo, row.firstName, row.lastName, row.dob, row.gender, row.category, row.status, row.admissionNo],
+        [
+          row.admissionNo,
+          row.firstName,
+          row.lastName,
+          row.dob,
+          row.gender,
+          row.category,
+          row.status,
+          row.admissionNo,
+        ],
       );
       const studentId = s.rows[0]!.id;
       ids.push(studentId);
@@ -154,7 +182,10 @@ export class StudentsLoader implements Loader<StudentRecord> {
       if (row.guardian) {
         const g = row.guardian;
         const existing = g.mobile
-          ? await client.query<{ id: string }>('SELECT id::text FROM guardians WHERE mobile = $1 AND deleted_at IS NULL AND school_id = app.current_school_id() ORDER BY id LIMIT 1', [g.mobile])
+          ? await client.query<{ id: string }>(
+              'SELECT id::text FROM guardians WHERE mobile = $1 AND deleted_at IS NULL AND school_id = app.current_school_id() ORDER BY id LIMIT 1',
+              [g.mobile],
+            )
           : { rows: [] as Array<{ id: string }> };
         let guardianId = existing.rows[0]?.id;
         if (!guardianId) {
@@ -234,7 +265,9 @@ function employeeType(v: unknown, designation: string | null): EmployeeRecord['e
   if (s.includes('visit') || s.includes('guest')) return 'visiting';
   if (s.includes('non') || s.includes('admin') || s.includes('support')) return 'non_teaching';
   if (s.includes('teach')) return 'teaching';
-  return designation && /teacher|pgt|tgt|prt|lecturer/i.test(designation) ? 'teaching' : 'non_teaching';
+  return designation && /teacher|pgt|tgt|prt|lecturer/i.test(designation)
+    ? 'teaching'
+    : 'non_teaching';
 }
 
 export const employeeRecordStep: Step<RawEmployeeFull, EmployeeRecord> = {
@@ -244,7 +277,8 @@ export const employeeRecordStep: Step<RawEmployeeFull, EmployeeRecord> = {
     if (!key) return [{ ...reject('employee.empid_missing', raw.EmpId, true), column: 'EmpId' }];
     const legacyKey = `EmpId=${key}`;
     const full = name(raw.Name);
-    if (!full) return [{ ...reject('employee.name_missing', raw.Name, true), column: 'Name', legacyKey }];
+    if (!full)
+      return [{ ...reject('employee.name_missing', raw.Name, true), column: 'Name', legacyKey }];
     const { first, last } = splitName(full);
     const mobile = normaliseMobile(raw.MobileNo);
     const email = normaliseEmail(raw.Email_Id);
@@ -289,7 +323,18 @@ export class EmployeesLoader implements Loader<EmployeeRecord> {
                department = COALESCE(EXCLUDED.department, employees.department), joined_on = COALESCE(employees.joined_on, EXCLUDED.joined_on),
                mobile = COALESCE(EXCLUDED.mobile, employees.mobile), email = COALESCE(EXCLUDED.email, employees.email), status = EXCLUDED.status, updated_at = now()
          RETURNING id::text`,
-        [row.employeeCode, row.firstName, row.lastName, row.employeeType, row.designation, row.department, row.joinedOn, row.mobile, row.email, row.status],
+        [
+          row.employeeCode,
+          row.firstName,
+          row.lastName,
+          row.employeeType,
+          row.designation,
+          row.department,
+          row.joinedOn,
+          row.mobile,
+          row.email,
+          row.status,
+        ],
       );
       const employeeId = e.rows[0]!.id;
       ids.push(employeeId);

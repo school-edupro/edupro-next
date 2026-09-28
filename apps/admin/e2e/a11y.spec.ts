@@ -35,6 +35,12 @@ const PAGES = [
   '/transport/vehicles',
   '/transport/drivers',
   '/insights/principal',
+  '/fees/cashier',
+  '/fees/refunds',
+  '/fees/settlements',
+  '/transport/requests',
+  '/insights/departments',
+  '/insights/departments/fees',
 ];
 
 test.describe('accessibility (axe)', () => {

@@ -16,6 +16,7 @@ import {
   queueReceiptPdf,
   recordLedgerPayment,
   regenerateStudentDemand,
+  requestRefund,
   revokeLateFeeOverride,
   setLateFeeOverride,
 } from '@/lib/actions';
@@ -93,6 +94,8 @@ export default async function FeeLedgerPage({
             ['paid', ledger.totals.paid],
             ['balance', ledger.totals.balance],
             ['lateFee', ledger.totals.lateFee],
+            ['lateFeePosted', ledger.totals.lateFeePosted],
+            ['lateFeeOutstanding', ledger.totals.lateFeeOutstanding],
             ['payable', ledger.totals.payable],
           ] as const
         ).map(([k, v]) => (
@@ -239,9 +242,35 @@ export default async function FeeLedgerPage({
               { key: 'on', header: f('receivedOn'), render: (p) => p.receivedOn },
               { key: 'amount', header: f('amount'), numeric: true, render: (p) => p.amount },
               {
+                key: 'lf',
+                header: f('receiptLateFee'),
+                numeric: true,
+                render: (p) => (Number(p.lateFee) > 0 ? p.lateFee : '—'),
+              },
+              {
                 key: 'mode',
                 header: f('mode'),
-                render: (p) => `${p.mode}${p.reference ? ` · ${p.reference}` : ''}`,
+                render: (p) =>
+                  `${p.mode}${p.instrumentNo ? ` · ${p.instrumentNo}` : ''}${p.bankName ? ` · ${p.bankName}` : ''}${p.reference ? ` · ${p.reference}` : ''}`,
+              },
+              {
+                key: 'st',
+                header: f('receiptStatus'),
+                render: (p) => (
+                  <Badge
+                    tone={
+                      p.status === 'posted'
+                        ? 'success'
+                        : p.status === 'bounced'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                  >
+                    {f(`receiptStatuses.${p.status}`)}
+                    {Number(p.refunded) > 0 ? ` · ${p.refunded}` : ''}
+                    {p.settled ? ` · ${f('settled')}` : ''}
+                  </Badge>
+                ),
               },
               {
                 key: 'adv',
@@ -268,6 +297,95 @@ export default async function FeeLedgerPage({
             rowKey={(p) => p.id}
             emptyTitle={f('noPayments')}
           />
+          {can('fees.receipt.post') && yearOpen ? (
+            <p style={{ marginTop: 'var(--sp-3)' }}>
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/fees/cashier?studentId=${studentId}`}
+              >
+                {f('openCashier')}
+              </a>
+            </p>
+          ) : null}
+          {can('fees.refund.request') && yearOpen && ledger.payments.length ? (
+            <form action={requestRefund} style={{ marginTop: 'var(--sp-4)' }}>
+              <input type="hidden" name="studentId" value={studentId} />
+              <p className="ep-field__help">{f('refunds')}</p>
+              <FormRow columns={4}>
+                <SelectField
+                  id="refundPayment"
+                  name="paymentId"
+                  label={f('receiptNo')}
+                  options={ledger.payments
+                    .filter((p) => Number(p.amount) - Number(p.refunded) > 0)
+                    .map((p) => ({ value: p.id, label: `${p.receiptNo ?? p.id} · ₹${p.amount}` }))}
+                />
+                <InputField
+                  id="refundAmount"
+                  name="amount"
+                  label={f('amount')}
+                  type="number"
+                  min={1}
+                  step="0.01"
+                  required
+                />
+                <SelectField
+                  id="refundMode"
+                  name="mode"
+                  label={f('mode')}
+                  options={['bank', 'cash', 'cheque', 'gateway'].map((m) => ({
+                    value: m,
+                    label: m.toUpperCase(),
+                  }))}
+                />
+                <InputField
+                  id="refundReason"
+                  name="reason"
+                  label={f('reason')}
+                  required
+                  minLength={3}
+                  maxLength={300}
+                />
+              </FormRow>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  {f('refunds')}
+                </Button>
+              </FormActions>
+            </form>
+          ) : null}
+          {ledger.refunds.length ? (
+            <DataTable<FeeLedger['refunds'][number]>
+              caption={f('refunds')}
+              density="dense"
+              columns={[
+                { key: 'no', header: f('receiptNo'), render: (r) => r.receiptNo ?? '—' },
+                { key: 'amount', header: f('amount'), numeric: true, render: (r) => r.amount },
+                { key: 'mode', header: f('mode'), render: (r) => r.mode },
+                { key: 'reason', header: f('reason'), render: (r) => r.reason },
+                {
+                  key: 'status',
+                  header: f('receiptStatus'),
+                  render: (r) => (
+                    <Badge
+                      tone={
+                        r.status === 'paid'
+                          ? 'success'
+                          : r.status === 'rejected' || r.status === 'failed'
+                            ? 'danger'
+                            : 'warning'
+                      }
+                    >
+                      {r.status}
+                    </Badge>
+                  ),
+                },
+              ]}
+              rows={ledger.refunds}
+              rowKey={(r) => r.id}
+              emptyTitle={f('noRefunds')}
+            />
+          ) : null}
           {can('payments.offline.record') && yearOpen ? (
             <form action={recordLedgerPayment} style={{ marginTop: 'var(--sp-4)' }}>
               <input type="hidden" name="studentId" value={studentId} />

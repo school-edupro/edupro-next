@@ -1,422 +1,422 @@
 [
-{
-"RFID_Tag": "TAG-001",
-"LogDate": "14/07/2025",
-"LogTime": "08:11:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-002",
-"LogDate": "14/07/2025",
-"LogTime": "07:12:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-003",
-"LogDate": "14/07/2025",
-"LogTime": "08:13:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-004",
-"LogDate": "14/07/2025",
-"LogTime": "07:14:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-005",
-"LogDate": "14/07/2025",
-"LogTime": "08:15:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-006",
-"LogDate": "14/07/2025",
-"LogTime": "07:16:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-007",
-"LogDate": "14/07/2025",
-"LogTime": "08:17:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-008",
-"LogDate": "14/07/2025",
-"LogTime": "07:18:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-009",
-"LogDate": "14/07/2025",
-"LogTime": "08:19:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-010",
-"LogDate": "14/07/2025",
-"LogTime": "07:20:00",
-"Direction": "sideways",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-011",
-"LogDate": "14/07/2025",
-"LogTime": "08:21:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-012",
-"LogDate": "14/07/2025",
-"LogTime": "07:22:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-013",
-"LogDate": "14/07/2025",
-"LogTime": "08:23:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-014",
-"LogDate": "14/07/2025",
-"LogTime": "07:24:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-015",
-"LogDate": "14/07/2025",
-"LogTime": "08:25:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-016",
-"LogDate": "14/07/2025",
-"LogTime": "07:26:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-017",
-"LogDate": "14/07/2025",
-"LogTime": "08:27:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-018",
-"LogDate": "14/07/2025",
-"LogTime": "07:28:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-019",
-"LogDate": "14/07/2025",
-"LogTime": "08:29:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-020",
-"LogDate": "14/07/2025",
-"LogTime": "07:30:00",
-"Direction": "sideways",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-021",
-"LogDate": "14/07/2025",
-"LogTime": "08:31:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-022",
-"LogDate": "14/07/2025",
-"LogTime": "07:32:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-023",
-"LogDate": "14/07/2025",
-"LogTime": "08:33:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-024",
-"LogDate": "14/07/2025",
-"LogTime": "07:34:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-025",
-"LogDate": "14/07/2025",
-"LogTime": "08:35:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-026",
-"LogDate": "14/07/2025",
-"LogTime": "07:36:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-027",
-"LogDate": "14/07/2025",
-"LogTime": "08:37:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-028",
-"LogDate": "14/07/2025",
-"LogTime": "07:38:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-029",
-"LogDate": "14/07/2025",
-"LogTime": "08:39:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-030",
-"LogDate": "14/07/2025",
-"LogTime": "07:40:00",
-"Direction": "sideways",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-031",
-"LogDate": "14/07/2025",
-"LogTime": "08:41:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-032",
-"LogDate": "14/07/2025",
-"LogTime": "07:42:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-033",
-"LogDate": "14/07/2025",
-"LogTime": "08:43:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-034",
-"LogDate": "14/07/2025",
-"LogTime": "07:44:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-035",
-"LogDate": "14/07/2025",
-"LogTime": "08:45:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-036",
-"LogDate": "14/07/2025",
-"LogTime": "07:46:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-037",
-"LogDate": "14/07/2025",
-"LogTime": "08:47:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-038",
-"LogDate": "14/07/2025",
-"LogTime": "07:48:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-039",
-"LogDate": "14/07/2025",
-"LogTime": "08:49:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-040",
-"LogDate": "14/07/2025",
-"LogTime": "07:50:00",
-"Direction": "sideways",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-041",
-"LogDate": "14/07/2025",
-"LogTime": "08:51:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-042",
-"LogDate": "14/07/2025",
-"LogTime": "07:52:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-043",
-"LogDate": "14/07/2025",
-"LogTime": "08:53:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-044",
-"LogDate": "14/07/2025",
-"LogTime": "07:54:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-045",
-"LogDate": "14/07/2025",
-"LogTime": "08:10:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-046",
-"LogDate": "14/07/2025",
-"LogTime": "07:11:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-047",
-"LogDate": "14/07/2025",
-"LogTime": "08:12:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-048",
-"LogDate": "14/07/2025",
-"LogTime": "07:13:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-049",
-"LogDate": "14/07/2025",
-"LogTime": "08:14:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-050",
-"LogDate": "14/07/2025",
-"LogTime": "07:15:00",
-"Direction": "sideways",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-051",
-"LogDate": "14/07/2025",
-"LogTime": "08:16:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-052",
-"LogDate": "14/07/2025",
-"LogTime": "07:17:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-053",
-"LogDate": "14/07/2025",
-"LogTime": "08:18:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-054",
-"LogDate": "14/07/2025",
-"LogTime": "07:19:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-055",
-"LogDate": "14/07/2025",
-"LogTime": "08:20:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-056",
-"LogDate": "14/07/2025",
-"LogTime": "07:21:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-057",
-"LogDate": "14/07/2025",
-"LogTime": "08:22:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-058",
-"LogDate": "14/07/2025",
-"LogTime": "07:23:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-059",
-"LogDate": "14/07/2025",
-"LogTime": "08:24:00",
-"Direction": "IN",
-"DeviceId": "GATE1"
-},
-{
-"RFID_Tag": "TAG-060",
-"LogDate": "14/07/2025",
-"LogTime": "07:25:00",
-"Direction": "sideways",
-"DeviceId": "GATE1"
-}
+  {
+    "RFID_Tag": "TAG-001",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:11:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-002",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:12:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-003",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:13:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-004",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:14:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-005",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:15:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-006",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:16:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-007",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:17:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-008",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:18:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-009",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:19:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-010",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:20:00",
+    "Direction": "sideways",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-011",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:21:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-012",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:22:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-013",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:23:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-014",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:24:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-015",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:25:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-016",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:26:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-017",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:27:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-018",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:28:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-019",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:29:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-020",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:30:00",
+    "Direction": "sideways",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-021",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:31:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-022",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:32:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-023",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:33:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-024",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:34:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-025",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:35:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-026",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:36:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-027",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:37:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-028",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:38:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-029",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:39:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-030",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:40:00",
+    "Direction": "sideways",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-031",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:41:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-032",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:42:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-033",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:43:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-034",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:44:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-035",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:45:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-036",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:46:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-037",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:47:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-038",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:48:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-039",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:49:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-040",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:50:00",
+    "Direction": "sideways",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-041",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:51:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-042",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:52:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-043",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:53:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-044",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:54:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-045",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:10:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-046",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:11:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-047",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:12:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-048",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:13:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-049",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:14:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-050",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:15:00",
+    "Direction": "sideways",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-051",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:16:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-052",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:17:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-053",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:18:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-054",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:19:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-055",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:20:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-056",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:21:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-057",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:22:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-058",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:23:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-059",
+    "LogDate": "14/07/2025",
+    "LogTime": "08:24:00",
+    "Direction": "IN",
+    "DeviceId": "GATE1"
+  },
+  {
+    "RFID_Tag": "TAG-060",
+    "LogDate": "14/07/2025",
+    "LogTime": "07:25:00",
+    "Direction": "sideways",
+    "DeviceId": "GATE1"
+  }
 ]

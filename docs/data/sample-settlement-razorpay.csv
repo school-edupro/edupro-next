@@ -1,0 +1,4 @@
+payment_id,order_id,amount,fee,tax,type
+pay_DEMO000000001,order_DEMO0001,7200.00,141.60,25.49,payment
+pay_DEMO000000002,order_DEMO0002,2400.00,47.20,8.50,payment
+rfnd_DEMO00000001,,500.00,0,0,refund

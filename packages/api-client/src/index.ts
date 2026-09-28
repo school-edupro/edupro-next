@@ -6,7 +6,9 @@ export interface ClientOptions {
   /** Returns the bearer token for the current caller (server side: from the session). */
   getToken: () => Promise<string | null> | string | null;
   /** Returns the working school and year, sent as X-School-Id and X-Academic-Year-Id. */
-  getContext?: () => Promise<{ schoolId?: string; academicYearId?: string }> | { schoolId?: string; academicYearId?: string };
+  getContext?: () =>
+    | Promise<{ schoolId?: string; academicYearId?: string }>
+    | { schoolId?: string; academicYearId?: string };
 }
 
 /**
@@ -23,7 +25,8 @@ export function createApiClient(options: ClientOptions) {
       const ctx = options.getContext ? await options.getContext() : {};
       if (ctx.schoolId) request.headers.set('X-School-Id', ctx.schoolId);
       if (ctx.academicYearId) request.headers.set('X-Academic-Year-Id', ctx.academicYearId);
-      if (!request.headers.has('X-Request-Id')) request.headers.set('X-Request-Id', crypto.randomUUID());
+      if (!request.headers.has('X-Request-Id'))
+        request.headers.set('X-Request-Id', crypto.randomUUID());
       return request;
     },
   };

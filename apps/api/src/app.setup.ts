@@ -26,6 +26,8 @@ export async function setupApp(app: NestFastifyApplication, env: Env): Promise<v
     'application/json',
     { bodyLimit: JSON_BODY_LIMIT },
     (req, body, done) => {
+      // Sprint 13: gateway webhooks (Razorpay) sign the raw body; keep it beside the parsed JSON.
+      (req as unknown as { rawBody?: Buffer }).rawBody = body;
       jsonParser(req, body.toString('utf8'), done);
     },
   );

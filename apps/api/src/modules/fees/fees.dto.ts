@@ -13,6 +13,8 @@ export const FEES = {
   demandGenerate: 'fees.demand.generate',
   lateFeeManage: 'fees.late_fee.manage',
   ledgerView: 'fees.ledger.view',
+  /** Sprint 13: a family reads its own children's ledgers */
+  familyView: 'fees.family.view',
 } as const;
 
 export const HeadKindSchema = z.enum([

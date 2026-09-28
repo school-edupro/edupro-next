@@ -227,7 +227,28 @@ describe('comms, reports, audit and jobs (e2e)', () => {
           .json()
           .data.map((d: { id: string }) => d.id)
           .sort(),
-      ).toEqual(['assignments', 'audit_logs', 'class_sections', 'classes', 'members']);
+      ).toEqual([
+        // Sprint 13 added the department report-centre datasets; the admin holds every permission
+        'admissions_funnel',
+        'assignments',
+        'attendance_daily',
+        'audit_logs',
+        'class_sections',
+        'classes',
+        'comms_delivery',
+        'employees',
+        'fee_dues',
+        'fee_receipts',
+        'fee_refunds',
+        'lesson_plans',
+        'members',
+        'parent_queries',
+        'settlement_lines',
+        'substitutions',
+        'transport_requests',
+        'transport_riders',
+        'transport_vehicle_logs',
+      ]);
       const teacherSets = await inject({
         method: 'GET',
         url: '/reports/datasets',
@@ -238,7 +259,14 @@ describe('comms, reports, audit and jobs (e2e)', () => {
           .json()
           .data.map((d: { id: string }) => d.id)
           .sort(),
-      ).toEqual(['class_sections', 'classes']);
+      ).toEqual([
+        'attendance_daily',
+        'class_sections',
+        'classes',
+        'lesson_plans',
+        'parent_queries',
+        'substitutions',
+      ]);
       const refused = await inject({
         method: 'POST',
         url: '/reports/exports',

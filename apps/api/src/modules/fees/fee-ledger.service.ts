@@ -4,6 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { ViewerService } from '../academics/daily/viewer.service';
 import { ReportsService } from '../reports/reports.service';
 import { TemplatesService } from '../platform/templates/templates.service';
 import type { SetLateFeeOverrideDto, SetPeriodLateFeeDto, SetReceiptSequenceDto } from './fees.dto';
@@ -16,6 +17,9 @@ export interface LateFee {
   overridden: boolean;
   reason: string | null;
   periodId: string | null;
+  /** Sprint 13: what receipts have already charged for this instalment, and what is still to collect. */
+  posted: string;
+  outstanding: string;
 }
 
 export interface LedgerInstalment {
@@ -45,6 +49,25 @@ export interface LedgerPayment {
   allocated: string;
   unallocated: string;
   intentId: string | null;
+  /** Sprint 13 */
+  lateFee: string;
+  refunded: string;
+  status: 'posted' | 'partly_refunded' | 'refunded' | 'bounced';
+  instrumentNo: string | null;
+  bankName: string | null;
+  settled: boolean;
+}
+
+export interface LedgerRefund {
+  id: string;
+  paymentId: string;
+  receiptNo: string | null;
+  amount: string;
+  reason: string;
+  mode: string;
+  status: string;
+  requestedAt: string;
+  paidOn: string | null;
 }
 
 export interface LedgerOverride {
@@ -77,8 +100,18 @@ export interface Ledger {
   asOf: string;
   lateFeeMode: string;
   instalments: LedgerInstalment[];
-  totals: { net: string; paid: string; balance: string; lateFee: string; payable: string };
+  totals: {
+    net: string;
+    paid: string;
+    balance: string;
+    lateFee: string;
+    lateFeePosted: string;
+    lateFeeOutstanding: string;
+    /** balance plus the late fee not yet collected */
+    payable: string;
+  };
   payments: LedgerPayment[];
+  refunds: LedgerRefund[];
   overrides: LedgerOverride[];
   lastRun: {
     id: string;
@@ -114,7 +147,48 @@ export class FeeLedgerService {
     private readonly audit: AuditService,
     private readonly reports: ReportsService,
     private readonly templates: TemplatesService,
+    private readonly viewer: ViewerService,
   ) {}
+
+  /**
+   * Sprint 13: the family's view. Each child's ledger with only the instalments the school has made
+   * visible, receipts and refunds, and the payable amount an online payment may cover.
+   */
+  async mine(ctx: RequestContext): Promise<{
+    children: Array<
+      Ledger & {
+        payableNow: string;
+        hidden: number;
+      }
+    >;
+  }> {
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family') return { children: [] };
+    const children = [];
+    for (const s of v.students) {
+      let ledger: Ledger;
+      try {
+        ledger = await this.ledger(ctx, s.id);
+      } catch (error) {
+        if (error instanceof DomainError && error.status === 404) continue;
+        throw error;
+      }
+      const visible = ledger.instalments.filter((i) => i.visible);
+      const payableNow = visible.reduce(
+        (sum, i) => sum + Number(i.balance) + Number(i.lateFee.outstanding),
+        0,
+      );
+      children.push({
+        ...ledger,
+        instalments: visible,
+        hidden: ledger.instalments.length - visible.length,
+        payableNow: fmt(Math.max(payableNow, 0)),
+        lastRun: null,
+        overrides: [],
+      });
+    }
+    return { children };
+  }
 
   private year(tenant: TenantContext): string {
     if (!tenant.academicYearId)
@@ -182,6 +256,8 @@ export class FeeLedgerService {
       let totNet = 0;
       let totPaid = 0;
       let totLate = 0;
+      let totPosted = 0;
+      let totOutstanding = 0;
       for (const g of groups.rows) {
         const lf = await c.query<{
           o_amount: string;
@@ -190,8 +266,10 @@ export class FeeLedgerService {
           o_overridden: boolean;
           o_reason: string | null;
           o_period_id: string | null;
+          posted: string;
         }>(
-          `SELECT o_amount::text, o_mode, o_days, o_overridden, o_reason, o_period_id::text FROM app.late_fee($1, $2, $3::date, $4::date)`,
+          `SELECT o_amount::text, o_mode, o_days, o_overridden, o_reason, o_period_id::text, app.late_fee_posted($1, $2, $3::date)::text AS posted
+             FROM app.late_fee($1, $2, $3::date, $4::date)`,
           [studentId, yearId, g.due_on, asOfDate],
         );
         const l = lf.rows[0]!;
@@ -207,9 +285,13 @@ export class FeeLedgerService {
         const paid = Number(g.paid);
         const balance = net - paid;
         const late = Number(l.o_amount);
+        const posted = Number(l.posted);
+        const outstanding = Math.max(late - posted, 0);
         totNet += net;
         totPaid += paid;
         totLate += late;
+        totPosted += posted;
+        totOutstanding += outstanding;
         const visible = visibleFrom <= asOfDate;
         const status: LedgerInstalment['status'] =
           balance <= 0 ? 'paid' : asOfDate > g.due_on ? 'overdue' : visible ? 'due' : 'upcoming';
@@ -231,6 +313,8 @@ export class FeeLedgerService {
             overridden: l.o_overridden,
             reason: l.o_reason,
             periodId: l.o_period_id,
+            posted: fmt(posted),
+            outstanding: fmt(outstanding),
           },
           visibleFrom,
           visible,
@@ -238,6 +322,12 @@ export class FeeLedgerService {
         });
       }
       const payments = await this.paymentsWith(c, studentId, yearId);
+      const refunds = await c.query<Record<string, unknown>>(
+        `SELECT r.id::text, r.payment_id::text AS "paymentId", p.receipt_no AS "receiptNo", r.amount::text, r.reason, r.mode, r.status::text, r.requested_at AS "requestedAt", r.paid_on::text AS "paidOn"
+           FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id
+          WHERE p.student_id = $1 AND p.academic_year_id = $2 ORDER BY r.requested_at DESC`,
+        [studentId, yearId],
+      );
       const overrides = await c.query<LedgerOverride>(
         `SELECT o.id::text, o.period_id::text AS "periodId", p.name AS "periodName", o.amount::text, o.reason, u.display_name AS "createdBy", o.created_at::text AS "createdAt"
            FROM fee_late_fee_overrides o JOIN fee_periods p ON p.id = o.period_id LEFT JOIN users u ON u.id = o.created_by
@@ -272,9 +362,15 @@ export class FeeLedgerService {
           paid: fmt(totPaid),
           balance: fmt(totNet - totPaid),
           lateFee: fmt(totLate),
-          payable: fmt(totNet - totPaid + totLate),
+          lateFeePosted: fmt(totPosted),
+          lateFeeOutstanding: fmt(totOutstanding),
+          payable: fmt(totNet - totPaid + totOutstanding),
         },
         payments,
+        refunds: refunds.rows.map((r) => ({
+          ...r,
+          requestedAt: (r.requestedAt as Date).toISOString(),
+        })) as unknown as LedgerRefund[],
         overrides: overrides.rows,
         lastRun: run.rows[0]
           ? {
@@ -306,9 +402,16 @@ export class FeeLedgerService {
       received_by: string | null;
       allocated: string;
       intent_id: string | null;
+      late_fee: string;
+      refunded: string;
+      status: LedgerPayment['status'];
+      instrument_no: string | null;
+      bank_name: string | null;
+      settled: boolean;
     }>(
       `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, p.mode, p.reference, p.remarks, u.display_name AS received_by, p.intent_id::text,
-              COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated
+              COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated,
+              p.late_fee::text, p.refunded::text, p.status, p.instrument_no, p.bank_name, (p.settlement_line_id IS NOT NULL) AS settled
          FROM fee_payments p LEFT JOIN users u ON u.id = p.received_by
         WHERE p.student_id = $1 AND p.academic_year_id = $2 ORDER BY p.received_on DESC, p.id DESC`,
       [studentId, yearId],
@@ -323,8 +426,20 @@ export class FeeLedgerService {
       remarks: x.remarks,
       receivedBy: x.received_by,
       allocated: x.allocated,
-      unallocated: fmt(Number(x.amount) - Number(x.allocated)),
+      // the advance: what neither the instalments nor the late fee nor a refund took
+      unallocated: fmt(
+        Math.max(
+          Number(x.amount) - Number(x.allocated) - Number(x.late_fee) - Number(x.refunded),
+          0,
+        ),
+      ),
       intentId: x.intent_id,
+      lateFee: x.late_fee,
+      refunded: x.refunded,
+      status: x.status,
+      instrumentNo: x.instrument_no,
+      bankName: x.bank_name,
+      settled: x.settled,
     }));
   }
 

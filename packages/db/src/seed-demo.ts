@@ -3537,6 +3537,118 @@ async function main(): Promise<void> {
       );
       await clearCtx();
 
+      // ---- Sprint 13: gateway setting, a cashier receipt with late fee, a refund waiting for approval,
+      // a bus change request from the dev parent, a week of vehicle logs ----
+      for (const school of Object.values(schools))
+        await setting(school.id, 'payments.gateway', '"mock"');
+      await withCtx(alpha.id, 'dev-accounts');
+      {
+        // VI-A roll 3 paid the April and July instalments late on 20 July (cash, ₹10 a day) through app.post_receipt
+        const viA3 = await c.query<{ id: string }>(
+          `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' AND e.roll_no = 3 LIMIT 1`,
+          [sections.ALPHA!['VI-A'], yearId],
+        );
+        if (viA3.rows[0]) {
+          const already = await c.query(
+            `SELECT 1 FROM fee_payments WHERE student_id = $1 AND academic_year_id = $2 AND remarks = 'Sprint 13 demo: late July payment'`,
+            [viA3.rows[0].id, yearId],
+          );
+          if (!already.rowCount) {
+            const due = await c.query<{ payable: string }>(
+              `SELECT (COALESCE(sum(net - paid), 0) + COALESCE((SELECT sum(o_amount) FROM (SELECT DISTINCT due_on FROM fee_demands WHERE student_id = $1 AND academic_year_id = $2 AND due_on <= '2026-07-20' AND status IN ('pending','partial')) g, LATERAL app.late_fee($1, $2, g.due_on, '2026-07-20'::date)), 0))::text AS payable
+                 FROM fee_demands WHERE student_id = $1 AND academic_year_id = $2 AND due_on <= '2026-07-20' AND status IN ('pending', 'partial')`,
+              [viA3.rows[0].id, yearId],
+            );
+            const payable = Number(due.rows[0]?.payable ?? 0);
+            if (payable > 0) {
+              const posted = await c.query<{ o_payment_id: string }>(
+                `SELECT o_payment_id::text FROM app.post_receipt($1, $2, $3, '2026-07-20'::date, 'cash', NULL, 'Sprint 13 demo: late July payment', NULL, NULL, NULL, NULL, 'school', true, true)`,
+                [viA3.rows[0].id, yearId, payable.toFixed(2)],
+              );
+              // the family asked for ₹500 back (transport charged for a month the child did not ride)
+              await c.query(
+                `INSERT INTO fee_refunds (school_id, payment_id, amount, reason, mode, requested_by)
+                 SELECT $1, $2, 500, 'Transport charged for June while the child did not ride', 'bank', $3
+                  WHERE NOT EXISTS (SELECT 1 FROM fee_refunds WHERE payment_id = $2)`,
+                [alpha.id, posted.rows[0]!.o_payment_id, userIds['dev-accounts']],
+              );
+            }
+          }
+        }
+      }
+      await clearCtx();
+      await withCtx(alpha.id, 'dev-parent');
+      {
+        // Diya (IV-A) rides R1; her father asks to move her to R2's first stop from August
+        const diya = await c.query<{ id: string }>(
+          `SELECT s.id::text FROM students s JOIN student_guardians sg ON sg.student_id = s.id JOIN guardians g ON g.id = sg.guardian_id
+            WHERE g.user_id = $1 AND s.school_id = $2 AND s.first_name = 'Diya' LIMIT 1`,
+          [userIds['dev-parent'], alpha.id],
+        );
+        const r2 = await c.query<{ id: string; stop: string | null }>(
+          `SELECT r.id::text, (SELECT s.id::text FROM transport_stops s WHERE s.route_id = r.id ORDER BY s.sequence LIMIT 1) AS stop
+             FROM transport_routes r WHERE r.school_id = $1 AND r.code = 'R2' AND r.deleted_at IS NULL`,
+          [alpha.id],
+        );
+        if (diya.rows[0] && r2.rows[0])
+          await c.query(
+            `INSERT INTO transport_requests (school_id, student_id, academic_year_id, kind, route_id, stop_id, effective_from, note, requested_by)
+             SELECT $1, $2, $3, 'change', $4, $5, '2026-08-01', 'We are moving to Baner in August.', $6
+              WHERE NOT EXISTS (SELECT 1 FROM transport_requests WHERE student_id = $2 AND academic_year_id = $3)`,
+            [
+              alpha.id,
+              diya.rows[0].id,
+              yearId,
+              r2.rows[0].id,
+              r2.rows[0].stop,
+              userIds['dev-parent'],
+            ],
+          );
+      }
+      await clearCtx();
+      await withCtx(alpha.id, 'dev-admin');
+      {
+        // seven school days of vehicle logs for every bus: 40 to 60 km a day, fuel every third day
+        const buses = await c.query<{
+          id: string;
+          route_id: string | null;
+          driver_id: string | null;
+          n: number;
+        }>(
+          `SELECT v.id::text, r.id::text AS route_id, r.driver_id::text, row_number() OVER (ORDER BY v.reg_no)::int AS n
+             FROM transport_vehicles v LEFT JOIN transport_routes r ON r.vehicle_id = v.id AND r.deleted_at IS NULL WHERE v.school_id = $1 AND v.deleted_at IS NULL`,
+          [alpha.id],
+        );
+        for (const b of buses.rows) {
+          let odo = 48_000 + b.n * 7_000;
+          for (let d = 9; d >= 1; d -= 1) {
+            const km = 40 + ((b.n * 7 + d * 3) % 21);
+            await c.query(
+              `INSERT INTO transport_vehicle_logs (school_id, vehicle_id, route_id, driver_id, log_date, odometer_start, odometer_end, fuel_litres, fuel_cost, trips, incident, created_by)
+               SELECT $1, $2, $3, $4, (CURRENT_DATE - $5::int), $6, $7, $8, $9, 2, $10, $11
+                WHERE EXTRACT(isodow FROM (CURRENT_DATE - $5::int)) < 7 AND NOT EXISTS (SELECT 1 FROM transport_vehicle_logs WHERE vehicle_id = $2 AND log_date = CURRENT_DATE - $5::int)`,
+              [
+                alpha.id,
+                b.id,
+                b.route_id,
+                b.driver_id,
+                d,
+                odo,
+                odo + km,
+                d % 3 === 0 ? (km * 0.28).toFixed(2) : null,
+                d % 3 === 0 ? (km * 0.28 * 96).toFixed(2) : null,
+                b.n === 2 && d === 4
+                  ? 'Puncture near Baner phata; changed the spare, 20 minutes late'
+                  : null,
+                userIds['dev-admin'],
+              ],
+            );
+            odo += km;
+          }
+        }
+      }
+      await clearCtx();
+
       // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
       for (const school of Object.values(schools)) {
         await withCtx(school.id, 'dev-admin');

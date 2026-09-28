@@ -15,11 +15,11 @@ Email security@mobilise.co.in with a description, reproduction steps and impact.
 
 ## Controls enforced by this repository
 
-| Control | Where |
-|---|---|
-| Deny-by-default authorisation | `apps/api/src/common/access/permission.guard.ts` and the CI test that every handler declares a permission |
-| Tenant isolation in the database | `packages/db/migrations/0002_rls.sql`, `packages/db/test/rls.test.ts` |
-| Append-only audit | `packages/db/migrations/0003_audit.sql` |
-| Secret scanning, SAST, dependency scanning | `.github/workflows/ci.yml` |
-| Development auth bypass refused in production | `apps/api/src/common/auth/jwt.guard.ts` |
-| Security headers and strict CORS | `apps/api/src/main.ts`, `apps/admin/next.config.ts` |
+| Control                                       | Where                                                                                                     |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Deny-by-default authorisation                 | `apps/api/src/common/access/permission.guard.ts` and the CI test that every handler declares a permission |
+| Tenant isolation in the database              | `packages/db/migrations/0002_rls.sql`, `packages/db/test/rls.test.ts`                                     |
+| Append-only audit                             | `packages/db/migrations/0003_audit.sql`                                                                   |
+| Secret scanning, SAST, dependency scanning    | `.github/workflows/ci.yml`                                                                                |
+| Development auth bypass refused in production | `apps/api/src/common/auth/jwt.guard.ts`                                                                   |
+| Security headers and strict CORS              | `apps/api/src/main.ts`, `apps/admin/next.config.ts`                                                       |

@@ -1,11 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { FleetService } from './fleet.service';
+import { TransportRequestsService } from './transport-requests.service';
 import {
   AssignStudentsDto,
   CreateRouteDto,
+  CreateTransportRequestDto,
+  DecideTransportRequestDto,
+  ListTransportRequestsQueryDto,
   SetStopsDto,
   TRANSPORT,
   UpdateRouteDto,
@@ -13,6 +17,8 @@ import {
   UpdateVehicleDto,
   UpsertDriverDto,
   UpsertVehicleDto,
+  UpsertVehicleLogDto,
+  VehicleLogsQueryDto,
 } from './transport.dto';
 import { TransportService } from './transport.service';
 
@@ -92,7 +98,31 @@ export class TransportController {
 @ApiBearerAuth()
 @Controller('transport')
 export class FleetController {
-  constructor(private readonly fleet: FleetService) {}
+  constructor(
+    private readonly fleet: FleetService,
+    private readonly requests: TransportRequestsService,
+  ) {}
+
+  // ---- Sprint 13: vehicle logs ----
+  @Get('vehicles/:id/logs')
+  @ApiOperation({ summary: 'Daily logs of a vehicle (odometer, fuel, trips, incidents)' })
+  @RequirePermission(TRANSPORT.logView, {
+    description: 'View vehicle logs (odometer, fuel, incidents)',
+  })
+  async logs(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: VehicleLogsQueryDto,
+  ) {
+    return { data: await this.requests.logs(ctx, id, q) };
+  }
+
+  @Put('vehicles/:id/logs')
+  @ApiOperation({ summary: 'Record or correct the log of one day' })
+  @RequirePermission(TRANSPORT.logManage, { description: 'Record vehicle logs' })
+  addLog(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: UpsertVehicleLogDto) {
+    return this.requests.addLog(ctx, id, dto);
+  }
 
   @Get('vehicles')
   @RequirePermission(TRANSPORT.fleetView)
@@ -136,5 +166,49 @@ export class FleetController {
     @Body() dto: UpdateDriverDto,
   ) {
     return this.fleet.updateDriver(ctx, id, dto);
+  }
+}
+
+/** Sprint 13: a family's bus requests and the office's decisions. */
+@ApiTags('transport')
+@ApiBearerAuth()
+@Controller('transport/requests')
+export class TransportRequestsController {
+  constructor(private readonly requests: TransportRequestsService) {}
+
+  @Get('mine')
+  @ApiOperation({ summary: "My children's bus assignment, requests and the routes to choose from" })
+  @RequirePermission(TRANSPORT.requestView, { description: 'View transport requests' })
+  mine(@ReqCtx() ctx: RequestContext) {
+    return this.requests.mine(ctx);
+  }
+
+  @Post('mine')
+  @ApiOperation({ summary: 'Ask for a seat, a stop or route change, or to leave the bus' })
+  @RequirePermission(TRANSPORT.requestCreate, {
+    description: "Request a bus seat, a stop change or leaving the bus for one's own children",
+  })
+  create(@ReqCtx() ctx: RequestContext, @Body() dto: CreateTransportRequestDto) {
+    return this.requests.create(ctx, dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Transport requests of the working year (pending first)' })
+  @RequirePermission(TRANSPORT.requestView)
+  async list(@ReqCtx() ctx: RequestContext, @Query() q: ListTransportRequestsQueryDto) {
+    return { data: await this.requests.list(ctx, q) };
+  }
+
+  @Post(':id/decide')
+  @ApiOperation({ summary: 'Approve or reject a request that is not in a workflow' })
+  @RequirePermission(TRANSPORT.requestDecide, {
+    description: 'Approve or reject transport requests',
+  })
+  decide(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: DecideTransportRequestDto,
+  ) {
+    return this.requests.decide(ctx, id, dto);
   }
 }

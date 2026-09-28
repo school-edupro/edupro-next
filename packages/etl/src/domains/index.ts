@@ -5,3 +5,4 @@ export * from './people';
 export * from './fees';
 export * from './attendance';
 export * from './engagement';
+export * from './fee-receipts';

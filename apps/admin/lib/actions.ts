@@ -1951,3 +1951,165 @@ export async function setRouteStops(fd: FormData) {
 export async function refreshMarts() {
   return run('/insights/principal', () => apiFetch('/insights/marts/refresh', { method: 'POST' }));
 }
+
+// ---- Sprint 13: cashier, refunds, settlements, transport requests, vehicle logs --------------------
+export async function postCashierReceipt(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/fees/cashier?studentId=${studentId}`;
+  let out: { paymentId: string; receiptNo: string | null } | null = null;
+  try {
+    out = await apiFetch<{ paymentId: string; receiptNo: string | null }>('/payments/receipts', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        amount: Number(str(fd, 'amount')),
+        mode: str(fd, 'mode') || 'cash',
+        reference: opt(fd, 'reference'),
+        receivedOn: opt(fd, 'receivedOn'),
+        remarks: opt(fd, 'remarks'),
+        instrumentNo: opt(fd, 'instrumentNo'),
+        instrumentDate: opt(fd, 'instrumentDate'),
+        bankName: opt(fd, 'bankName'),
+        ledger: str(fd, 'ledger') || 'school',
+        collectLateFee: str(fd, 'collectLateFee') !== 'no',
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(back)}`);
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(
+    `${back}&ok=1&paymentId=${out!.paymentId}&receiptNo=${encodeURIComponent(out!.receiptNo ?? '')}`,
+  );
+}
+
+function back_(path: string, type: string, detail?: string): never {
+  const sep = path.includes('?') ? '&' : '?';
+  redirect(
+    `${path}${sep}error=${encodeURIComponent(type)}${detail ? `&detail=${encodeURIComponent(String(detail).slice(0, 200))}` : ''}`,
+  );
+}
+
+export async function queueCashierReceiptPdf(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const id = str(fd, 'paymentId');
+  const back = `/fees/cashier?studentId=${studentId}`;
+  try {
+    await apiFetch(`/fees/payments/${id}/receipt`, { method: 'POST' });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(back)}`);
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}&ok=1`);
+}
+
+export async function requestRefund(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const paymentId = str(fd, 'paymentId');
+  return run(`/fees/ledger/${studentId}`, () =>
+    apiFetch(`/payments/receipts/${paymentId}/refunds`, {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: Number(str(fd, 'amount')),
+        reason: str(fd, 'reason'),
+        mode: str(fd, 'mode') || 'bank',
+        reference: opt(fd, 'reference'),
+      }),
+    }),
+  );
+}
+
+export async function decideRefund(fd: FormData) {
+  const id = str(fd, 'id');
+  const back = str(fd, 'back') || '/fees/refunds';
+  return run(back, () =>
+    apiFetch(`/payments/refunds/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({
+        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        note: opt(fd, 'note'),
+        reference: opt(fd, 'reference'),
+      }),
+    }),
+  );
+}
+
+export async function uploadSettlement(fd: FormData) {
+  const file = fd.get('file');
+  let csv = str(fd, 'csv');
+  let fileName: string | undefined;
+  if (file && typeof file === 'object' && 'text' in file && (file as File).size > 0) {
+    csv = await (file as File).text();
+    fileName = (file as File).name;
+  }
+  return run('/fees/settlements', () =>
+    apiFetch('/payments/settlements', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider: str(fd, 'provider') || 'razorpay',
+        settlementRef: str(fd, 'settlementRef'),
+        settledOn: str(fd, 'settledOn'),
+        utr: opt(fd, 'utr'),
+        fileName,
+        csv,
+      }),
+    }),
+  );
+}
+
+export async function decideTransportRequest(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/transport/requests', () =>
+    apiFetch(`/transport/requests/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({
+        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function addVehicleLog(fd: FormData) {
+  const vehicleId = str(fd, 'vehicleId');
+  const num = (k: string) => (opt(fd, k) ? Number(str(fd, k)) : undefined);
+  return run(`/transport/vehicles/${vehicleId}`, () =>
+    apiFetch(`/transport/vehicles/${vehicleId}/logs`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        logDate: str(fd, 'logDate'),
+        routeId: opt(fd, 'routeId'),
+        driverId: opt(fd, 'driverId'),
+        odometerStart: num('odometerStart'),
+        odometerEnd: num('odometerEnd'),
+        fuelLitres: num('fuelLitres'),
+        fuelCost: num('fuelCost'),
+        trips: num('trips'),
+        incident: opt(fd, 'incident'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    }),
+  );
+}
+
+export async function requestDepartmentExport(fd: FormData) {
+  const dept = str(fd, 'department');
+  const params: Record<string, unknown> = {};
+  for (const k of ['from', 'to', 'status'] as const) if (opt(fd, k)) params[k] = str(fd, k);
+  if (opt(fd, 'academicYearId')) params.academicYearId = str(fd, 'academicYearId');
+  if (str(fd, 'onlyOpen') === 'yes') params.onlyOpen = true;
+  return run(`/insights/departments/${dept}`, () =>
+    apiFetch('/reports/exports', {
+      method: 'POST',
+      body: JSON.stringify({
+        dataset: str(fd, 'dataset'),
+        format: str(fd, 'format') === 'xlsx' ? 'xlsx' : 'csv',
+        params,
+      }),
+    }),
+  );
+}

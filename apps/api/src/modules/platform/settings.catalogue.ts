@@ -105,6 +105,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Maximum alert messages (absence, bus, query updates) to one mobile in a rolling hour (Sprint 11)',
     module: 'comms',
   },
+  'payments.gateway': {
+    schema: z.enum(['mock', 'payu', 'razorpay', 'ccavenue']),
+    default: 'mock',
+    description:
+      'Online payment gateway of the school (Sprint 13): PayU, Razorpay or CCAvenue; mock is the development gateway',
+    module: 'payments',
+  },
   'fees.late_fee_mode': {
     schema: z.enum(['daywise', 'slab']),
     default: 'daywise',

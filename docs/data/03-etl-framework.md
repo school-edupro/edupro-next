@@ -33,12 +33,12 @@ legacy dump (.sql) --restore--> MySQL 8 (local or CI service)
 
 ## 3. Bookkeeping schema (`etl`, migration 0008)
 
-| Table | Purpose |
-|---|---|
-| `etl.runs` | one row per run: school, domain, source dump hash, started, finished, status, counts |
-| `etl.legacy_map` | `(school_id, legacy_table, legacy_key, legacy_year) -> (target_table, target_id)`; the identity resolution memory |
-| `etl.rejects` | rejected values with reason and raw value |
-| `etl.reconciliations` | measure name, legacy value, target value, delta, status per run |
+| Table                 | Purpose                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `etl.runs`            | one row per run: school, domain, source dump hash, started, finished, status, counts                              |
+| `etl.legacy_map`      | `(school_id, legacy_table, legacy_key, legacy_year) -> (target_table, target_id)`; the identity resolution memory |
+| `etl.rejects`         | rejected values with reason and raw value                                                                         |
+| `etl.reconciliations` | measure name, legacy value, target value, delta, status per run                                                   |
 
 ## 4. Order of domains per school
 
@@ -55,12 +55,12 @@ Each domain is a separate script with its own reconciliation measures, so a fail
 
 ## 5. Rehearsal and cutover protocol
 
-| Step | Rehearsal 1 | Rehearsal 2 | Rehearsal 3 | Cutover |
-|---|---|---|---|---|
-| Dump | any recent | recent | 48 h old | final, after legacy is set read-only |
-| Run all domains | yes | yes | yes, timed | yes, timed |
-| Reconcile | fix transforms | zero unexplained delta on identity | zero unexplained delta everywhere | signed off by the school |
-| UAT on the result | no | module owners | school super-users | smoke tests |
+| Step              | Rehearsal 1    | Rehearsal 2                        | Rehearsal 3                       | Cutover                              |
+| ----------------- | -------------- | ---------------------------------- | --------------------------------- | ------------------------------------ |
+| Dump              | any recent     | recent                             | 48 h old                          | final, after legacy is set read-only |
+| Run all domains   | yes            | yes                                | yes, timed                        | yes, timed                           |
+| Reconcile         | fix transforms | zero unexplained delta on identity | zero unexplained delta everywhere | signed off by the school             |
+| UAT on the result | no             | module owners                      | school super-users                | smoke tests                          |
 
 ## 6. `packages/etl` skeleton (Sprint 1)
 

@@ -17,7 +17,12 @@ import {
   UsersLoader,
   type PersonRow,
 } from './domains/identity';
-import { EmployeesLoader, StudentsLoader, employeeRecordStep, studentRecordStep } from './domains/people';
+import {
+  EmployeesLoader,
+  StudentsLoader,
+  employeeRecordStep,
+  studentRecordStep,
+} from './domains/people';
 import { provisioningRows, toProvisioningCsv } from './domains/provisioning';
 import { tenancyStep, YearsLoader } from './domains/tenancy';
 import { recordMeasures, runStep, type ReconcileMeasure, type Source } from './pipeline';
@@ -163,7 +168,11 @@ async function main(): Promise<void> {
     const students = new StudentsLoader();
     const studentRun = await runStep(source, studentRecordStep, students, opts);
     const employeeRun = await runStep(source, employeeRecordStep, new EmployeesLoader(), opts);
-    reports.push({ students: studentRun, employees: employeeRun, unresolvedSections: Object.fromEntries(students.unresolvedSections) });
+    reports.push({
+      students: studentRun,
+      employees: employeeRun,
+      unresolvedSections: Object.fromEntries(students.unresolvedSections),
+    });
     // Reconciliation per class and year: legacy rows with a section versus enrolments loaded.
     const legacyPerSection = new Map<string, number>();
     for await (const raw of source.rows('student_master')) {
@@ -172,21 +181,50 @@ async function main(): Promise<void> {
       const key = `${out.legacyYear}:${out.row.section.classCode}-${out.row.section.section}`;
       legacyPerSection.set(key, (legacyPerSection.get(key) ?? 0) + 1);
     }
-    const target = await withTenant(async (c) =>
-      (
-        await c.query<{ key: string; n: string }>(
-          `SELECT y.legacy_ref || ':' || c.code || '-' || cs.name AS key, count(*)::text AS n
+    const target = await withTenant(
+      async (c) =>
+        (
+          await c.query<{ key: string; n: string }>(
+            `SELECT y.legacy_ref || ':' || c.code || '-' || cs.name AS key, count(*)::text AS n
              FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c ON c.id = cs.class_id JOIN academic_years y ON y.id = e.academic_year_id
             GROUP BY 1`,
-        )
-      ).rows,
+          )
+        ).rows,
     );
     for (const [key, legacy] of legacyPerSection) {
-      measures.push({ measure: `enrolments.${key}`, legacyValue: legacy, targetValue: Number(target.find((t) => t.key === key)?.n ?? 0) });
+      measures.push({
+        measure: `enrolments.${key}`,
+        legacyValue: legacy,
+        targetValue: Number(target.find((t) => t.key === key)?.n ?? 0),
+      });
     }
     measures.push(
-      { measure: 'students.count', legacyValue: studentRun.extracted - studentRun.rejected, targetValue: await withTenant(async (c) => Number((await c.query<{ n: string }>('SELECT count(*)::text AS n FROM students WHERE deleted_at IS NULL')).rows[0]!.n)) },
-      { measure: 'employees.count', legacyValue: employeeRun.extracted - employeeRun.rejected, targetValue: await withTenant(async (c) => Number((await c.query<{ n: string }>('SELECT count(*)::text AS n FROM employees WHERE deleted_at IS NULL')).rows[0]!.n)) },
+      {
+        measure: 'students.count',
+        legacyValue: studentRun.extracted - studentRun.rejected,
+        targetValue: await withTenant(async (c) =>
+          Number(
+            (
+              await c.query<{ n: string }>(
+                'SELECT count(*)::text AS n FROM students WHERE deleted_at IS NULL',
+              )
+            ).rows[0]!.n,
+          ),
+        ),
+      },
+      {
+        measure: 'employees.count',
+        legacyValue: employeeRun.extracted - employeeRun.rejected,
+        targetValue: await withTenant(async (c) =>
+          Number(
+            (
+              await c.query<{ n: string }>(
+                'SELECT count(*)::text AS n FROM employees WHERE deleted_at IS NULL',
+              )
+            ).rows[0]!.n,
+          ),
+        ),
+      },
     );
     await withBookkeeping((c) => recordMeasures(c, employeeRun.runId, schoolId, measures));
   } else {

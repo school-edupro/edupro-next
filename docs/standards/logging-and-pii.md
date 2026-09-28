@@ -4,12 +4,12 @@ Applies to the API, workers, Next.js apps, jobs and database procedures. Enforce
 
 ## 1. Classification
 
-| Class | Examples | Log | Audit payload | Export |
-|---|---|---|---|---|
-| Public | school name, class code, notice title | yes | yes | yes |
-| Internal | ids, timestamps, status, request ids, permission codes | yes | yes | yes |
-| Personal | names, email, mobile, address, DOB, photos, guardian details, employee code | never in logs; ids only | yes, unmasked (needed for audit) | only with `*.export` permissions, audited |
-| Sensitive | Aadhaar and other government ids, bank account and IFSC, PAN, health and clinic notes, disability, caste category, religion, salary, passwords and OTPs, tokens and secrets | never | masked as `***` | never in bulk; field-level permission |
+| Class     | Examples                                                                                                                                                                    | Log                     | Audit payload                    | Export                                    |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------- | ----------------------------------------- |
+| Public    | school name, class code, notice title                                                                                                                                       | yes                     | yes                              | yes                                       |
+| Internal  | ids, timestamps, status, request ids, permission codes                                                                                                                      | yes                     | yes                              | yes                                       |
+| Personal  | names, email, mobile, address, DOB, photos, guardian details, employee code                                                                                                 | never in logs; ids only | yes, unmasked (needed for audit) | only with `*.export` permissions, audited |
+| Sensitive | Aadhaar and other government ids, bank account and IFSC, PAN, health and clinic notes, disability, caste category, religion, salary, passwords and OTPs, tokens and secrets | never                   | masked as `***`                  | never in bulk; field-level permission     |
 
 Children's data is Personal or Sensitive by default. Parental consent records are Internal but reference Personal data.
 

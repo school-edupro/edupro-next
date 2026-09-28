@@ -271,6 +271,20 @@ export class WorkflowService {
           },
         ],
       },
+      {
+        // Sprint 13: a family's bus request (join, change stop, leave) is approved by the office
+        code: 'transport_request',
+        name: 'Transport request',
+        entityType: 'transport_request',
+        levels: [
+          {
+            level: 1,
+            name: 'Transport in-charge approval',
+            resolver: { kind: 'role', roleCode: 'school_admin' },
+            slaHours: 72,
+          },
+        ],
+      },
     ];
     await this.db.tenant(requireTenant(ctx), async (c) => {
       for (const d of defaults)

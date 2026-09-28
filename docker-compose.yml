@@ -7,12 +7,12 @@ services:
       POSTGRES_USER: edupro_migrator
       POSTGRES_PASSWORD: edupro_migrator_dev
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./packages/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U edupro_migrator -d edupro"]
+      test: ['CMD-SHELL', 'pg_isready -U edupro_migrator -d edupro']
       interval: 5s
       timeout: 3s
       retries: 20
@@ -21,8 +21,8 @@ services:
     image: redis:7-alpine
     container_name: edupro-redis
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+      - '6379:6379'
+    command: ['redis-server', '--appendonly', 'yes']
     volumes:
       - redis-data:/data
 
@@ -30,8 +30,8 @@ services:
     image: axllent/mailpit:latest
     container_name: edupro-mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - '1025:1025'
+      - '8025:8025'
 
 volumes:
   postgres-data:

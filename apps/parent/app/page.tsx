@@ -39,7 +39,7 @@ export default async function HomePage({
     ['Queries', 'Ask, complain or apply for leave', '/queries'],
     ['School bus', 'Boarding and alighting alerts', '/transport'],
     ['Profile', 'Your details, consents and change requests', '/profile'],
-    ['Fees', 'Dues, receipts and online payment'],
+    ['Fees', 'Dues, receipts and online payment', '/fees'],
     ['Results', 'Report cards and progress'],
   ];
   return (
