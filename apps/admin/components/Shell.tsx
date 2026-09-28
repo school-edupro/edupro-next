@@ -2,7 +2,10 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { endImpersonation } from '@/lib/actions';
 import type { Me } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
+import { Icon, SECTION_ICON } from './nav-icons';
 import { SchoolYearSwitcher } from './SchoolYearSwitcher';
+import { SidebarToggle } from './SidebarToggle';
 
 /** Navigation is projected from permissions (ADR-004 point 10). Labels come from the message catalogue (S4-01). */
 const NAV: Array<{
@@ -242,69 +245,117 @@ export async function Shell({
   const isCurrent = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
   const canSearch = allowed.has('people.person.search');
+  // open alerts feed the bell; the count is best effort and never blocks the page
+  const openAlerts = allowed.has('insights.alert.view')
+    ? await apiFetch<{ data: unknown[] }>('/insights/alerts?open=true&size=100')
+        .then((r) => r.data.length)
+        .catch(() => 0)
+    : 0;
+  const groups = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((i) => i.permission === null || allowed.has(i.permission)),
+  })).filter((g) => g.items.length > 0);
+  const portal =
+    me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??
+    me.memberships[0]?.schoolName ??
+    'EduPro Next';
   return (
     <div className="ep-shell">
       <aside className="ep-sidebar" aria-label="Sidebar">
         <div className="ep-sidebar__brand">
-          Edu<b>Pro</b>&nbsp;Next
+          <span className="ep-sidebar__logo" aria-hidden="true">
+            <Icon name="book" size={22} />
+          </span>
+          <span className="ep-sidebar__brand-text">
+            <small>EduPro Next</small>
+            <b>{t('portal')}</b>
+          </span>
         </div>
-        <nav aria-label={t('primaryNavigation')}>
-          {NAV.map((group) => {
-            const items = group.items.filter(
-              (i) => i.permission === null || allowed.has(i.permission),
-            );
-            if (items.length === 0) return null;
+        <nav className="ep-nav" aria-label={t('primaryNavigation')}>
+          {groups.map((group) => {
+            const icon = SECTION_ICON[group.section] ?? 'grid';
+            // a single-link section (the dashboard) is a top-level row; the others fold like a tree
+            if (group.items.length === 1 && group.items[0]!.href === '/') {
+              const item = group.items[0]!;
+              return (
+                <a
+                  key={group.section}
+                  className="ep-nav__link ep-nav__link--top"
+                  href={item.href}
+                  aria-current={isCurrent(item.href) ? 'page' : undefined}
+                  title={nav(item.label)}
+                >
+                  <Icon name={icon} />
+                  <span className="ep-nav__text">{nav(item.label)}</span>
+                </a>
+              );
+            }
+            const active = group.items.some((i) => isCurrent(i.href));
             return (
-              <div key={group.section}>
-                <div className="ep-nav__section">{nav(group.section)}</div>
-                {items.map((item) => (
-                  <a
-                    key={item.href}
-                    className="ep-nav__link"
-                    href={item.href}
-                    aria-current={isCurrent(item.href) ? 'page' : undefined}
-                  >
-                    {nav(item.label)}
-                  </a>
-                ))}
-              </div>
+              <details key={group.section} className="ep-nav__group" open={active}>
+                <summary
+                  className="ep-nav__link ep-nav__link--top"
+                  data-active={active ? 'true' : undefined}
+                  title={nav(group.section)}
+                >
+                  <Icon name={icon} />
+                  <span className="ep-nav__text">{nav(group.section)}</span>
+                  <span className="ep-nav__chevron" aria-hidden="true">
+                    <Icon name="chevron" size={16} />
+                  </span>
+                </summary>
+                <div className="ep-nav__children">
+                  {group.items.map((item) => (
+                    <a
+                      key={item.href}
+                      className="ep-nav__link"
+                      href={item.href}
+                      aria-current={isCurrent(item.href) ? 'page' : undefined}
+                      title={nav(item.label)}
+                    >
+                      <span className="ep-nav__dot" aria-hidden="true" />
+                      <span className="ep-nav__text">{nav(item.label)}</span>
+                    </a>
+                  ))}
+                </div>
+              </details>
             );
           })}
         </nav>
+        <div className="ep-sidebar__foot">
+          <SidebarToggle className="ep-sidebar__collapse" label={t('collapse')}>
+            <Icon name="back" size={18} />
+            <span className="ep-nav__text">{t('collapse')}</span>
+          </SidebarToggle>
+        </div>
       </aside>
       <header className="ep-header">
         <div className="ep-header__context">
-          <SchoolYearSwitcher me={me} />
+          <SidebarToggle className="ep-header__icon-btn" label={t('toggleSidebar')}>
+            <Icon name="menu" size={22} />
+          </SidebarToggle>
+          <div className="ep-header__module">
+            <SchoolYearSwitcher me={me} />
+          </div>
+          <span className="ep-header__crumb">{portal}</span>
           {canSearch ? (
-            <form
-              method="get"
-              action="/people/search"
-              role="search"
-              style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}
-            >
+            <form method="get" action="/people/search" role="search" className="ep-header__search">
+              <Icon name="search" size={18} />
               <input
-                className="ep-input"
+                className="ep-header__search-input"
                 type="search"
                 name="q"
                 placeholder={t('searchPlaceholder')}
                 aria-label={t('search')}
                 minLength={2}
                 required
-                style={{ minWidth: 240 }}
               />
-              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                {t('search')}
-              </button>
             </form>
           ) : null}
         </div>
         <div className="ep-header__context">
-          <form
-            method="post"
-            action="/api/locale"
-            style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}
-          >
-            <label className="ep-field__label" htmlFor="locale" style={{ margin: 0 }}>
+          <form method="post" action="/api/locale" className="ep-header__locale">
+            <label className="ep-sr-only" htmlFor="locale">
               {t('language')}
             </label>
             <select id="locale" name="locale" className="ep-select" defaultValue={locale}>
@@ -315,12 +366,31 @@ export async function Shell({
               {common('apply')}
             </button>
           </form>
-          <span style={{ fontSize: 'var(--fs-small)', color: 'var(--text-muted)' }}>
-            {me.user.displayName}
-          </span>
+          {allowed.has('insights.alert.view') ? (
+            <a
+              className="ep-header__icon-btn ep-header__bell"
+              href="/insights/alerts"
+              aria-label={t('notifications', { count: openAlerts })}
+              title={t('notifications', { count: openAlerts })}
+            >
+              <Icon name="bell" size={22} />
+              {openAlerts > 0 ? (
+                <span className="ep-header__badge">{openAlerts > 99 ? '99+' : openAlerts}</span>
+              ) : null}
+            </a>
+          ) : null}
+          <a className="ep-header__user" href="/system/security" title={me.user.displayName}>
+            <Icon name="user" size={20} />
+            <span className="ep-header__user-name">{me.user.displayName}</span>
+          </a>
           <form method="post" action="/api/auth/logout">
-            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-              {t('signOut')}
+            <button
+              type="submit"
+              className="ep-header__icon-btn"
+              aria-label={t('signOut')}
+              title={t('signOut')}
+            >
+              <Icon name="logout" size={22} />
             </button>
           </form>
         </div>

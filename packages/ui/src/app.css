@@ -38,7 +38,9 @@
   }
 }
 
-/* ---- App shell ------------------------------------------------------------------ */
+/* ---- App shell ------------------------------------------------------------------
+   Light sidebar with a dark brand block, folding sections, an icon rail when collapsed; the header
+   carries the module switcher, search, alerts and the account. */
 .ep-shell {
   display: grid;
   grid-template-columns: var(--shell-sidebar-width) 1fr;
@@ -56,36 +58,73 @@
 
 .ep-sidebar {
   grid-area: sidebar;
-  background: var(--surface-dark);
-  color: var(--text-inverse);
+  background: var(--surface-page);
+  color: var(--text-body);
+  border-right: 1px solid var(--border-default);
   display: flex;
   flex-direction: column;
-  padding: var(--sp-4) var(--sp-3);
-  gap: var(--sp-2);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .ep-sidebar__brand {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3) var(--sp-4);
+  gap: var(--sp-3);
+  min-height: var(--shell-header-height);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-dark);
+  color: var(--text-inverse);
+  flex: none;
+}
+
+.ep-sidebar__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--mob-navy-700);
+  flex: none;
+}
+
+.ep-sidebar__brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ep-sidebar__brand-text small {
+  font-size: var(--fs-caption);
+  color: var(--mob-navy-100);
+}
+
+.ep-sidebar__brand-text b {
   font-family: var(--font-heading);
   font-weight: var(--fw-semibold);
-  font-size: var(--fs-h4);
-  letter-spacing: var(--ls-heading);
+  font-size: var(--fs-body-lg);
 }
 
-.ep-sidebar__brand b {
-  color: var(--mob-cyan-500);
+.ep-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.ep-nav__section {
-  font-size: var(--fs-caption);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-overline);
-  color: var(--mob-navy-100);
-  opacity: 0.7;
-  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+.ep-nav__group > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.ep-nav__group > summary::-webkit-details-marker {
+  display: none;
 }
 
 .ep-nav__link {
@@ -93,22 +132,140 @@
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-sm);
-  color: var(--text-inverse);
+  border-radius: var(--radius-md);
+  color: var(--text-body);
   text-decoration: none;
-  font-size: var(--fs-small);
-  border-left: 3px solid transparent;
-  transition: background-color var(--dur-fast) var(--ease-out);
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.ep-nav__link--top {
+  min-height: 44px;
+  font-weight: var(--fw-medium);
+}
+
+.ep-nav__link .ep-icon {
+  flex: none;
+  color: var(--mob-navy-600);
 }
 
 .ep-nav__link:hover {
-  background: var(--mob-navy-700);
-  color: var(--text-inverse);
+  background: var(--surface-subtle);
+  color: var(--text-heading);
 }
 
-.ep-nav__link[aria-current='page'] {
-  background: var(--mob-navy-700);
-  border-left-color: var(--mob-cyan-500);
+.ep-nav__link[aria-current='page'],
+.ep-nav__link[data-active='true'] {
+  background: var(--mob-cyan-50);
+  color: var(--mob-cyan-700);
+}
+
+.ep-nav__link[aria-current='page'] .ep-icon,
+.ep-nav__link[data-active='true'] .ep-icon {
+  color: var(--mob-cyan-700);
+}
+
+.ep-nav__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-nav__chevron {
+  display: inline-flex;
+  color: var(--text-muted);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.ep-nav__group[open] > summary .ep-nav__chevron {
+  transform: rotate(180deg);
+}
+
+.ep-nav__children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 var(--sp-2) var(--sp-4);
+}
+
+.ep-nav__children .ep-nav__link {
+  padding: 6px var(--sp-3);
+  font-size: var(--fs-small);
+}
+
+.ep-nav__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  flex: none;
+  margin: 0 7px;
+}
+
+.ep-nav__link[aria-current='page'] .ep-nav__dot {
+  background: var(--mob-cyan-700);
+}
+
+.ep-nav__section {
+  font-size: var(--fs-caption);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-overline);
+  color: var(--text-muted);
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+}
+
+.ep-sidebar__foot {
+  flex: none;
+  border-top: 1px solid var(--border-default);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.ep-sidebar__collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-small);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.ep-sidebar__collapse:hover {
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+}
+
+/* the icon rail */
+.ep-shell[data-collapsed='true'] .ep-nav__text,
+.ep-shell[data-collapsed='true'] .ep-nav__chevron,
+.ep-shell[data-collapsed='true'] .ep-sidebar__brand-text,
+.ep-shell[data-collapsed='true'] .ep-nav__children {
+  display: none;
+}
+
+.ep-shell[data-collapsed='true'] .ep-nav__link {
+  justify-content: center;
+  padding: var(--sp-2);
+}
+
+.ep-shell[data-collapsed='true'] .ep-sidebar__brand {
+  justify-content: center;
+  padding: var(--sp-3) var(--sp-2);
+}
+
+.ep-shell[data-collapsed='true'] .ep-sidebar__collapse .ep-icon {
+  transform: rotate(180deg);
 }
 
 .ep-header {
@@ -129,6 +286,150 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  min-width: 0;
+}
+
+.ep-header__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-body);
+  cursor: pointer;
+  position: relative;
+  text-decoration: none;
+  flex: none;
+}
+
+.ep-header__icon-btn:hover {
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+}
+
+.ep-header__module {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 2px var(--sp-3);
+  min-height: 40px;
+  background: var(--surface-page);
+}
+
+.ep-header__module form {
+  flex-wrap: nowrap !important;
+}
+
+/* the switcher's labels stay for screen readers; the header shows the values as a compact control */
+.ep-header__module .ep-field__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.ep-header__module .ep-select {
+  border: 0;
+  background: transparent;
+  min-height: 32px;
+  font-weight: var(--fw-medium);
+  color: var(--text-heading);
+}
+
+.ep-header__crumb {
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ep-header__search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--sp-3);
+  min-height: 40px;
+  min-width: 260px;
+  background: var(--surface-subtle);
+}
+
+.ep-header__search:focus-within {
+  border-color: var(--border-accent);
+  background: var(--surface-page);
+}
+
+.ep-header__search-input {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-small);
+  color: var(--text-body);
+  width: 100%;
+  outline: none;
+}
+
+.ep-header__locale {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.ep-header__badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--status-danger);
+  color: var(--text-inverse);
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  line-height: 18px;
+  text-align: center;
+}
+
+.ep-header__user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-heading);
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: var(--fs-small);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+}
+
+.ep-header__user:hover {
+  background: var(--surface-subtle);
+}
+
+.ep-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .ep-main {
@@ -136,6 +437,17 @@
   padding: var(--sp-5);
   max-width: 1600px;
   width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .ep-header__crumb,
+  .ep-header__user-name,
+  .ep-header__locale {
+    display: none;
+  }
+  .ep-header__search {
+    min-width: 180px;
+  }
 }
 
 @media (max-width: 900px) {

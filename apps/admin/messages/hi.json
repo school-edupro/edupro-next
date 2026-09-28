@@ -102,7 +102,11 @@
     "signOut": "साइन आउट",
     "language": "भाषा",
     "searchPlaceholder": "विद्यार्थी, अभिभावक या कर्मचारी खोजें",
-    "search": "खोजें"
+    "search": "खोजें",
+    "portal": "प्रशासन पोर्टल",
+    "collapse": "संकुचित करें",
+    "toggleSidebar": "मेनू दिखाएँ या छिपाएँ",
+    "notifications": "{count, plural, =0 {कोई खुली चेतावनी नहीं} one {# खुली चेतावनी} other {# खुली चेतावनियाँ}}"
   },
   "login": {
     "kicker": "मोबिलाइज़",
