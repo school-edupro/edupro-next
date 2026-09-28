@@ -90,7 +90,7 @@ limited to their own rows (the list filters by requester for anyone without `rep
 
 ## 9. Decisions
 
-- **Hostel is a ledger, not a module**: the same demand, receipt, late fee and refund code serves it.
+- **Hostel is a ledger, not a module**: the same demand, receipt, late fee and refund code serves it. Since the Sprint 14 close-out the late fee is computed, posted and overridden per ledger (`app.late_fee(..., p_ledger)`, `fee_late_fee_postings.ledger`, `fee_late_fee_overrides.ledger`), so a hostel instalment carries the school's late-fee rule on its own balance.
 - **MFA on the approval, not the request**: the desk keeps working; the money-moving step needs the
   fresh sign-in, enforced by the permission catalogue (`requires_mfa`) rather than a per-route flag.
 - **Bounce charges are demand rows** on a misc head so they appear in dues, ageing and the dashboard.

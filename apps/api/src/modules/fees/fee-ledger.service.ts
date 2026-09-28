@@ -271,18 +271,11 @@ export class FeeLedgerService {
           o_period_id: string | null;
           posted: string;
         }>(
-          `SELECT o_amount::text, o_mode, o_days, o_overridden, o_reason, o_period_id::text, app.late_fee_posted($1, $2, $3::date)::text AS posted
-             FROM app.late_fee($1, $2, $3::date, $4::date)`,
-          [studentId, yearId, g.due_on, asOfDate],
+          `SELECT o_amount::text, o_mode, o_days, o_overridden, o_reason, o_period_id::text, app.late_fee_posted($1, $2, $3::date, $5::ledger_type)::text AS posted
+             FROM app.late_fee($1, $2, $3::date, $4::date, $5::ledger_type)`,
+          [studentId, yearId, g.due_on, asOfDate, g.ledger],
         );
-        const l = lf.rows[0]!;
-        if (g.ledger !== 'school') {
-          // the late fee rule belongs to the school ledger; hostel instalments carry none (Sprint 14)
-          l.o_amount = '0';
-          l.o_mode = 'none';
-          l.o_days = 0;
-          l.posted = '0';
-        }
+        const l = lf.rows[0]!; // per ledger since the Sprint 14 close-out: hostel instalments carry the school's rule
         const first = bySeq.get(g.sequences[0]!);
         const last = bySeq.get(g.sequences[g.sequences.length - 1]!);
         const anchor =
@@ -522,20 +515,26 @@ export class FeeLedgerService {
         throw new DomainError('not-found', 'Student not found', { status: 404 });
       const before = await c.query<{ id: string; amount: string; reason: string }>(
         `UPDATE fee_late_fee_overrides SET revoked_at = now(), revoked_by = app.current_user_id()
-          WHERE student_id = $1 AND academic_year_id = $2 AND period_id = $3 AND revoked_at IS NULL RETURNING id::text, amount::text, reason`,
-        [studentId, yearId, dto.periodId],
+          WHERE student_id = $1 AND academic_year_id = $2 AND period_id = $3 AND ledger = $4 AND revoked_at IS NULL RETURNING id::text, amount::text, reason`,
+        [studentId, yearId, dto.periodId, dto.ledger],
       );
       const r = await c.query<{ id: string }>(
-        `INSERT INTO fee_late_fee_overrides (school_id, student_id, academic_year_id, period_id, amount, reason, created_by, request_id)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id(), app.current_request_id()) RETURNING id::text`,
-        [studentId, yearId, dto.periodId, dto.amount.toFixed(2), dto.reason],
+        `INSERT INTO fee_late_fee_overrides (school_id, student_id, academic_year_id, period_id, ledger, amount, reason, created_by, request_id)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id(), app.current_request_id()) RETURNING id::text`,
+        [studentId, yearId, dto.periodId, dto.ledger, dto.amount.toFixed(2), dto.reason],
       );
       await this.audit.stage(ctx, c, {
         action: 'fees.late_fee.override',
         entityType: 'fee_late_fee_overrides',
         entityId: r.rows[0]!.id,
         before: before.rows[0] ?? null,
-        after: { studentId, period: p.rows[0].name, amount: dto.amount, reason: dto.reason },
+        after: {
+          studentId,
+          period: p.rows[0].name,
+          ledger: dto.ledger,
+          amount: dto.amount,
+          reason: dto.reason,
+        },
       });
       return { id: r.rows[0]!.id, replaced: before.rows[0]?.id ?? null };
     });

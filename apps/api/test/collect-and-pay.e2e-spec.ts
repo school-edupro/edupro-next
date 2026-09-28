@@ -416,6 +416,15 @@ describe('collect and pay (e2e, Sprint 13)', () => {
       json: { outcome: 'approved' },
     });
     expect(notAllowed.statusCode).toBe(403);
+    // Sprint 14 close-out: approval is a step-up action; a session without a recent MFA is refused
+    const stale = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${req.json().id}/decide`,
+      headers: headersFor(`${admin.sub};mfa=false`, school.id),
+      json: { outcome: 'approved', reference: 'UTR-77', note: 'verified' },
+    });
+    expect(stale.statusCode).toBe(403);
+    expect(stale.json().type).toBe('mfa-required');
     const approved = await inject({
       method: 'POST',
       url: `/payments/refunds/${req.json().id}/decide`,

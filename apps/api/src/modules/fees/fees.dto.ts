@@ -168,6 +168,8 @@ export class LedgerQueryDto extends createZodDto(LedgerQuerySchema) {}
 export const SetLateFeeOverrideSchema = z.object({
   /** The instalment's anchor period (from the ledger row). */
   periodId: IdSchema,
+  /** The instalment's ledger: the school and hostel rows of one period are overridden separately. */
+  ledger: z.enum(['school', 'hostel']).default('school'),
   /** 0 waives the late fee. */
   amount: Money,
   reason: z.string().trim().min(3).max(300),
@@ -305,3 +307,10 @@ export const ListMiscReceiptsQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListMiscReceiptsQueryDto extends createZodDto(ListMiscReceiptsQuerySchema) {}
+
+/** Sprint 14 close-out: the misc form finds an employee by name, code or mobile instead of typing an id. */
+export const MiscEmployeeLookupQuerySchema = z.object({
+  q: z.string().trim().min(2).max(60),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+export class MiscEmployeeLookupQueryDto extends createZodDto(MiscEmployeeLookupQuerySchema) {}

@@ -25,6 +25,7 @@ export default async function MiscReceiptsPage({
     detail?: string;
     payerKind?: string;
     classSectionId?: string;
+    employeeQ?: string;
     from?: string;
     to?: string;
   }>;
@@ -54,6 +55,19 @@ export default async function MiscReceiptsPage({
         `/people/students?classSectionId=${sp.classSectionId}&size=200`,
       ).then((r) => r.data)
     : [];
+  const employees =
+    canPost && sp.employeeQ && sp.employeeQ.trim().length >= 2
+      ? await apiFetch<{
+          data: Array<{
+            id: string;
+            employeeCode: string;
+            displayName: string;
+            designation: string | null;
+          }>;
+        }>(`/fees/misc/employees?q=${encodeURIComponent(sp.employeeQ.trim())}&limit=30`).then(
+          (r) => r.data,
+        )
+      : [];
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
@@ -147,8 +161,15 @@ export default async function MiscReceiptsPage({
                 defaultValue={sp.classSectionId ?? ''}
                 options={[{ value: '', label: '—' }, ...sections]}
               />
+              <InputField
+                id="employeeQ"
+                name="employeeQ"
+                label={m('employeeSearch')}
+                defaultValue={sp.employeeQ ?? ''}
+                maxLength={60}
+              />
               <Button type="submit" variant="secondary">
-                {m('student')}
+                {m('find')}
               </Button>
             </form>
             <form action={postMiscReceipt}>
@@ -175,11 +196,17 @@ export default async function MiscReceiptsPage({
                     })),
                   ]}
                 />
-                <InputField
+                <SelectField
                   id="employeeId"
                   name="employeeId"
-                  label={`${m('employee')} (id)`}
-                  pattern="[0-9]*"
+                  label={m('employee')}
+                  options={[
+                    { value: '', label: employees.length ? '—' : m('employeeNone') },
+                    ...employees.map((e) => ({
+                      value: e.id,
+                      label: `${e.displayName} · ${e.employeeCode}${e.designation ? ` · ${e.designation}` : ''}`,
+                    })),
+                  ]}
                 />
               </FormRow>
               <FormRow columns={3}>

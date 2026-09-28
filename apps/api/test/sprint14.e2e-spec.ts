@@ -208,6 +208,51 @@ describe('adjustments, hostel, misc, exams and the assistant (e2e, Sprint 14)', 
     ).toMatchObject({ balance: '6000.00' });
   });
 
+  it('a late hostel receipt collects the hostel late fee only; the school instalment keeps its own', async () => {
+    // school April settled on time (the hostel April was, above); July instalments due 10 Jul, both paid
+    // 20 Jul = 10 days x 10 per day on each ledger, computed and posted per ledger
+    const onTime = await receipt({
+      studentId: students.host,
+      amount: 6000,
+      mode: 'cash',
+      receivedOn: '2026-04-05',
+    });
+    expect(onTime.statusCode).toBe(201);
+    expect(onTime.json()).toMatchObject({ principal: '6000.00', lateFee: '0.00' });
+    const hostel = await receipt({
+      studentId: students.host,
+      amount: 9100,
+      mode: 'cash',
+      receivedOn: '2026-07-20',
+      ledger: 'hostel',
+    });
+    expect(hostel.statusCode).toBe(201);
+    expect(hostel.json()).toMatchObject({
+      principal: '9000.00',
+      lateFee: '100.00',
+      advance: '0.00',
+    });
+    const mid = await ledgerOf(students.host);
+    expect(
+      mid.instalments.find((i) => i.ledger === 'hostel' && i.dueOn === '2026-07-10'),
+    ).toMatchObject({ balance: '0.00', status: 'paid' });
+    expect(
+      mid.instalments.find((i) => i.ledger === 'school' && i.dueOn === '2026-07-10'),
+    ).toMatchObject({ balance: '6000.00' });
+    const school = await receipt({
+      studentId: students.host,
+      amount: 6100,
+      mode: 'cash',
+      receivedOn: '2026-07-20',
+    });
+    expect(school.statusCode).toBe(201);
+    expect(school.json()).toMatchObject({ principal: '6000.00', lateFee: '100.00' });
+    const after = await ledgerOf(students.host);
+    expect(
+      after.instalments.find((i) => i.ledger === 'school' && i.dueOn === '2026-07-10'),
+    ).toMatchObject({ balance: '0.00', status: 'paid' });
+  });
+
   // ---- adjustments -------------------------------------------------------------------------------
   it('a waiver reduces a demand row after approval with a fresh MFA sign-in', async () => {
     const demands = (
@@ -526,6 +571,60 @@ describe('adjustments, hostel, misc, exams and the assistant (e2e, Sprint 14)', 
     });
     const runs = await inject({ method: 'GET', url: '/fees/reconciliations', headers: h() });
     expect((runs.json().data as unknown[]).length).toBe(1);
+  });
+
+  it('the misc form finds an employee payer by name or code; only the desk may look up', async () => {
+    const code = `EMP${Date.now() % 1_000_000}`;
+    const created = await inject({
+      method: 'POST',
+      url: '/people/employees',
+      headers: h(),
+      json: {
+        employeeCode: code,
+        firstName: 'Meera',
+        lastName: 'Fourteen',
+        employeeType: 'non_teaching',
+        designation: 'Clerk',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const byName = await inject({
+      method: 'GET',
+      url: '/fees/misc/employees?q=meera',
+      headers: h(accountant),
+    });
+    expect(byName.statusCode).toBe(200);
+    expect(byName.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ employeeCode: code, displayName: 'Meera Fourteen' }),
+      ]),
+    );
+    const byCode = await inject({
+      method: 'GET',
+      url: `/fees/misc/employees?q=${code.toLowerCase()}`,
+      headers: h(accountant),
+    });
+    expect(byCode.json().data).toHaveLength(1);
+    const denied = await inject({
+      method: 'GET',
+      url: '/fees/misc/employees?q=meera',
+      headers: h(teacher),
+    });
+    expect(denied.statusCode).toBe(403);
+    const paid = await inject({
+      method: 'POST',
+      url: '/fees/misc/receipts',
+      headers: h(accountant),
+      json: {
+        payerKind: 'employee',
+        employeeId: created.json().id,
+        headId: heads.IDC,
+        amount: 100,
+        mode: 'cash',
+      },
+    });
+    expect(paid.statusCode).toBe(201);
+    expect(paid.json()).toMatchObject({ payerName: 'Meera Fourteen', payerKind: 'employee' });
   });
 
   // ---- exams -------------------------------------------------------------------------------------

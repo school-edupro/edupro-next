@@ -12,6 +12,7 @@ import {
   DecideAdjustmentDto,
   ListAdjustmentsQueryDto,
   ListMiscReceiptsQueryDto,
+  MiscEmployeeLookupQueryDto,
   ListProfileChangesQueryDto,
   PostMiscReceiptDto,
   RequestAdjustmentDto,
@@ -367,6 +368,13 @@ export class FeesController {
   })
   postMisc(@ReqCtx() ctx: RequestContext, @Body() body: PostMiscReceiptDto) {
     return this.adj.postMiscReceipt(ctx, body);
+  }
+
+  @Get('misc/employees')
+  @ApiOperation({ summary: 'Find an employee payer for a misc receipt by name, code or mobile' })
+  @RequirePermission(FEES.miscPost)
+  async miscEmployees(@ReqCtx() ctx: RequestContext, @Query() q: MiscEmployeeLookupQueryDto) {
+    return { data: await this.adj.lookupEmployees(ctx, q.q, q.limit) };
   }
 
   @Get('reconciliations')

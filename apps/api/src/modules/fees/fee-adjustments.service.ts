@@ -622,6 +622,36 @@ export class FeeAdjustmentsService {
     });
   }
 
+  /** Active employees matching a name, code or mobile, for the payer picker of the misc form. */
+  async lookupEmployees(ctx: RequestContext, q: string, limit: number) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        employee_code: string;
+        display_name: string;
+        designation: string | null;
+      }>(
+        `WITH q AS (SELECT app.search_text($1) AS text, regexp_replace($1, '\\D', '', 'g') AS digits)
+         SELECT e.id::text, e.employee_code, e.display_name, e.designation
+           FROM employees e
+          WHERE e.deleted_at IS NULL AND e.status = 'active'
+            AND (lower(e.employee_code) = (SELECT text FROM q)
+                 OR ((SELECT digits FROM q) <> '' AND e.mobile = (SELECT digits FROM q))
+                 OR e.search_text LIKE (SELECT text FROM q) || '%'
+                 OR e.search_text LIKE '% ' || (SELECT text FROM q) || '%')
+          ORDER BY e.display_name, e.id
+          LIMIT $2`,
+        [q, limit],
+      );
+      return r.rows.map((e) => ({
+        id: e.id,
+        employeeCode: e.employee_code,
+        displayName: e.display_name,
+        designation: e.designation,
+      }));
+    });
+  }
+
   async postMiscReceipt(ctx: RequestContext, dto: PostMiscReceiptDto): Promise<MiscReceiptRow> {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
