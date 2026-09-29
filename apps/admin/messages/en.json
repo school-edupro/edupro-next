@@ -2839,7 +2839,9 @@
     "recentUploads": "Recent uploads",
     "exportQueued": "Export queued",
     "exportReady": "Download",
-    "exportPending": "Rendering… refresh in a moment",
+    "exportPending": "Rendering… the download starts automatically",
+    "exportFailed": "Export failed",
+    "exportStuck": "Still queued after a minute: the workers service renders exports; check that it is running",
     "year": "Year",
     "yearHint": "Rows of the working year {year} (switch the year in the header)."
   },

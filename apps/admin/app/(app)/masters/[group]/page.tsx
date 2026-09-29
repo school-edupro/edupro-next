@@ -1,6 +1,7 @@
 import { Badge, Button, Card, FormRow, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { RefDatalist } from '@/components/RefDatalist';
 import { Icon } from '@/components/nav-icons';
@@ -129,18 +130,17 @@ export default async function MasterGroupPage({
       />
       <Notice params={sp} />
       {exportRow ? (
-        <div
-          className="ep-alert ep-alert--info"
-          role="status"
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {t('exportQueued')} · {exportRow.export.format.toUpperCase()} ·{' '}
-          {exportRow.download ? (
-            <a href={`/reports/exports/${exportRow.export.id}/download`}>{t('exportReady')}</a>
-          ) : (
-            <span>{t('exportPending')}</span>
-          )}
-        </div>
+        <ExportWatcher
+          id={exportRow.export.id}
+          format={exportRow.export.format}
+          labels={{
+            queued: t('exportQueued'),
+            ready: t('exportReady'),
+            pending: t('exportPending'),
+            failed: t('exportFailed'),
+            stuck: t('exportStuck'),
+          }}
+        />
       ) : null}
 
       <div className="ep-tabs">
