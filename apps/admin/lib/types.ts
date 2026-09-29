@@ -107,6 +107,9 @@ export interface School {
   board: string;
   timezone: string;
   locale: string;
+  address?: Record<string, unknown>;
+  contact?: Record<string, unknown>;
+  branding?: Record<string, unknown>;
   campuses: Campus[];
 }
 

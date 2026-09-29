@@ -16,7 +16,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     // A stale working-school cookie (school removed, membership ended, database rebuilt): drop it and
     // let the context route pick a valid membership again.
     if (error instanceof ApiError && error.status === 403) {
-      redirect(`/api/context?reset=1&returnTo=${encodeURIComponent(currentPath)}`);
+      const year = error.problem.type === 'year-forbidden';
+      redirect(
+        `/api/context?${year ? 'resetYear' : 'reset'}=1&returnTo=${encodeURIComponent(currentPath)}`,
+      );
     }
     throw error;
   }

@@ -221,6 +221,61 @@ export async function setSetting(fd: FormData) {
 
 // ---- school --------------------------------------------------------------------------------------
 export async function updateSchool(fd: FormData) {
+  // The legacy school-setup form's sections map onto the address, contact and branding JSON columns.
+  const pick = (keys: string[]) =>
+    Object.fromEntries(keys.map((k) => [k, str(fd, k)]).filter(([, v]) => v !== ''));
+  type Json = Record<string, unknown>;
+  const current = await apiFetch<{ address?: Json; contact?: Json; branding?: Json }>(
+    '/platform/school',
+  ).catch(() => ({}) as { address?: Json; contact?: Json; branding?: Json });
+  let logoFileId: string | undefined;
+  try {
+    [logoFileId] = await uploadAll(fd, 'logo', 'public');
+  } catch (error) {
+    if (error instanceof ApiError)
+      back_('/system/school', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  const address = {
+    line1: str(fd, 'address1'),
+    line2: str(fd, 'address2'),
+    line3: str(fd, 'address3'),
+    ...pick(['city', 'state', 'pincode']),
+  };
+  const contact = {
+    ...(current.contact ?? {}),
+    ...pick([
+      'phone',
+      'whatsapp',
+      'email',
+      'website',
+      'facebook',
+      'twitter',
+      'instagram',
+      'linkedin',
+      'youtube',
+      'help',
+      'adminEmail',
+      'principalEmail',
+      'accountsEmail',
+      'communicationEmail',
+      'transportEmail',
+    ]),
+  };
+  const branding = {
+    ...(current.branding ?? {}),
+    ...pick(['name2', 'name3', 'prefix', 'schoolNo', 'appName', 'classLabel']),
+    urls: {
+      ...((current.branding?.urls as Record<string, unknown> | undefined) ?? {}),
+      webBase: str(fd, 'webBaseUrl'),
+      app: str(fd, 'appUrl'),
+      headerBase: str(fd, 'headerBaseUrl'),
+      sms: str(fd, 'smsUrl'),
+      gcm: str(fd, 'gcmUrl'),
+    },
+    bankAccounts: [str(fd, 'bank1'), str(fd, 'bank2'), str(fd, 'bank3')],
+    ...(logoFileId ? { logoFileId } : {}),
+  };
   return run('/system/school', () =>
     apiFetch('/platform/school', {
       method: 'PATCH',
@@ -231,6 +286,9 @@ export async function updateSchool(fd: FormData) {
         board: str(fd, 'board'),
         timezone: str(fd, 'timezone'),
         locale: str(fd, 'locale'),
+        address,
+        contact,
+        branding,
       }),
     }),
   );

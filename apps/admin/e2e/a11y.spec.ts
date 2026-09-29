@@ -83,6 +83,7 @@ const PAGES = [
   '/reports/schedules',
   '/reports/mis',
   // Sprints 22-23
+  '/system/school',
   '/system/cutover',
   '/system/hypercare',
   '/fees/month-end',

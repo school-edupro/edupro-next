@@ -10,7 +10,13 @@ export async function GET(req: NextRequest) {
   const returnTo = req.nextUrl.searchParams.get('returnTo') ?? '/';
   const safeReturn = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
   const reset = req.nextUrl.searchParams.get('reset') === '1';
+  const resetYear = req.nextUrl.searchParams.get('resetYear') === '1';
   const current = reset ? {} : await readContext();
+  if (resetYear && current.schoolId) {
+    // a stale or closed working year: keep the school, let the API fall back to the active year
+    await writeContext({ schoolId: current.schoolId });
+    return NextResponse.redirect(new URL(safeReturn, req.url), { status: 303 });
+  }
   if (!current.schoolId) {
     if (reset) await writeContext({}); // clear the stale school before calling the API
     const me = await getMe();
@@ -35,15 +41,19 @@ export async function POST(req: NextRequest) {
   const current = await readContext();
   const next = { ...current };
 
+  let schoolChanged = false;
   if (typeof schoolId === 'string' && id.test(schoolId)) {
     const me = await getMe();
     if (!me.memberships.some((m) => m.schoolId === schoolId)) {
       return NextResponse.json({ type: 'tenant-forbidden' }, { status: 403 });
     }
+    schoolChanged = schoolId !== current.schoolId;
     next.schoolId = schoolId;
-    next.academicYearId = undefined; // year is school-specific; the API falls back to the active year
+    if (schoolChanged) next.academicYearId = undefined; // years are school-specific; the API falls back to the active year
   }
-  if (typeof academicYearId === 'string' && id.test(academicYearId)) {
+  // The switcher posts both selects; the year it carries belongs to the previous school when the school
+  // changed, so it is ignored then (otherwise the API answers year-forbidden and the shell resets the school).
+  if (!schoolChanged && typeof academicYearId === 'string' && id.test(academicYearId)) {
     next.academicYearId = academicYearId;
   }
   await writeContext(next);
