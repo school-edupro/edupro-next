@@ -82,6 +82,15 @@ describe('school setup masters (e2e)', () => {
     const rows = await inject({ method: 'GET', url: '/masters/cities/rows', headers: h() });
     expect(rows.json().data).toHaveLength(1);
     expect(rows.json().data[0]).toMatchObject({ state_id: 'UP', name: 'Noida', pincode: '201301' });
+    // datalist options: states carry their country so the city form can narrow by it
+    const lookups = await inject({ method: 'GET', url: '/masters/cities/lookups', headers: h() });
+    expect(lookups.statusCode).toBe(200);
+    expect(lookups.json().state_id).toEqual([
+      { id: String(up.json().id), value: 'UP', parent: 'IN', label: 'Uttar Pradesh' },
+    ]);
+    expect(lookups.json().state_id__parent).toEqual([
+      { id: String(india.json().id), value: 'IN', parent: null, label: 'India' },
+    ]);
     // the clerk may read the geography masters through the school-profile permission but not write
     const denied = await save('cities', { state_id: 'UP', name: 'Ghaziabad' }, clerk);
     expect([403, 201]).toContain(denied.statusCode);

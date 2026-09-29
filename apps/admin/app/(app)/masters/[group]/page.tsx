@@ -2,6 +2,7 @@ import { Badge, Button, Card, FormRow, InputField, PageHeader, SelectField } fro
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
+import { RefDatalist } from '@/components/RefDatalist';
 import { Icon } from '@/components/nav-icons';
 import {
   masterBulk,
@@ -18,6 +19,7 @@ import {
   masterRegistry,
   type MasterField,
   type MasterImport,
+  type MasterLookupOption,
   type MasterMeta,
   type MasterRow,
 } from '@/lib/masters';
@@ -78,7 +80,8 @@ export default async function MasterGroupPage({
   const base = `/masters/${group}?tab=${master.id}&size=${size}${q ? `&q=${encodeURIComponent(q)}` : ''}${status ? `&status=${status}` : ''}`;
   const pageUrl = (n: number) => `${base}&page=${n}`;
   const back = `${base}&page=${page}`;
-  const [rows, imports, editRow, exportRow] = await Promise.all([
+  const wantsForm = Boolean(sp.add) || Boolean(sp.edit && /^\d+$/.test(sp.edit));
+  const [rows, imports, editRow, exportRow, lookups] = await Promise.all([
     apiFetch<Page<MasterRow>>(`/masters/${master.id}/rows?${query.toString()}`),
     sp.upload
       ? apiFetch<{ data: MasterImport[] }>(`/masters/${master.id}/imports`).then((r) => r.data)
@@ -94,6 +97,11 @@ export default async function MasterGroupPage({
           download: { url: string } | null;
         }>(`/reports/exports/${sp.export}`).catch(() => null)
       : Promise.resolve(null),
+    wantsForm && master.fields.some((f) => f.type === 'ref')
+      ? apiFetch<Record<string, MasterLookupOption[]>>(`/masters/${master.id}/lookups`).catch(
+          () => ({}) as Record<string, MasterLookupOption[]>,
+        )
+      : Promise.resolve({} as Record<string, MasterLookupOption[]>),
   ]);
   const total = rows.page.total;
   const pages = Math.max(1, Math.ceil(total / size));
@@ -254,7 +262,7 @@ export default async function MasterGroupPage({
 
         {/* ---- add / edit ---- */}
         {canManage && (sp.add || editRow) ? (
-          <RowForm master={master} row={editRow} back={back} t={t} />
+          <RowForm master={master} row={editRow} back={back} t={t} lookups={lookups} />
         ) : null}
 
         {/* ---- clone ---- */}
@@ -580,7 +588,9 @@ function RowForm({
   row,
   back,
   t,
+  lookups,
 }: {
+  lookups: Record<string, MasterLookupOption[]>;
   master: MasterMeta;
   row: MasterRow | null;
   back: string;
@@ -609,6 +619,7 @@ function RowForm({
             <FieldInput
               key={f.key}
               f={f}
+              lookups={lookups}
               value={row ? (row[f.key] ?? '') : ''}
               locked={Boolean(row && f.identity)}
               lockedHelp={t('identityLocked')}
@@ -635,7 +646,9 @@ function FieldInput({
   lockedHelp,
   yes,
   no,
+  lookups,
 }: {
+  lookups: Record<string, MasterLookupOption[]>;
   f: MasterField;
   value: string;
   locked: boolean;
@@ -660,21 +673,45 @@ function FieldInput({
       </div>
     );
   }
+  // every drop-down is a typeahead: type to filter, pick from the list
   if (f.type === 'select' && f.options)
     return (
-      <SelectField
+      <RefDatalist
         id={id}
         name={name}
         label={f.header}
         required={f.required}
         defaultValue={value}
         help={help}
-        options={[
-          ...(f.required ? [] : [{ value: '', label: '—' }]),
-          ...f.options.map((o) => ({ value: o, label: o })),
-        ]}
+        options={f.options.map((o) => ({ value: o }))}
       />
     );
+  if (f.type === 'ref' && f.lookup) {
+    const parentOptions = lookups[`${f.key}__parent`];
+    return (
+      <RefDatalist
+        id={id}
+        name={name}
+        label={f.header}
+        required={f.required}
+        defaultValue={value}
+        help={help ?? f.patternHelp ?? `${f.lookup.column} of ${f.lookup.table}`}
+        options={(lookups[f.key] ?? []).map((o) => ({
+          value: o.value,
+          label: o.label,
+          parent: o.parent,
+        }))}
+        parent={
+          f.lookup.parent && parentOptions
+            ? {
+                label: f.lookup.parent.label,
+                options: parentOptions.map((o) => ({ value: o.value, label: o.label })),
+              }
+            : undefined
+        }
+      />
+    );
+  }
   if (f.type === 'boolean')
     return (
       <SelectField

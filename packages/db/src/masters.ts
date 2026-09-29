@@ -26,7 +26,13 @@ export interface MasterField {
   /** Allowed values for `select`. */
   options?: readonly string[];
   /** For `ref`: the value in files and on screen is `lookup.column` of `lookup.table` (e.g. a class code); the stored value is its id. */
-  lookup?: { table: string; column: string; yearScoped?: boolean };
+  lookup?: {
+    table: string;
+    column: string;
+    yearScoped?: boolean;
+    /** The option list is narrowed by a parent lookup (cities by state → country): `column` on the lookup table, `valueColumn` on the parent table. */
+    parent?: { table: string; column: string; valueColumn: string; label: string };
+  };
   /** Digits after the decimal point for `number` (0 = integer). */
   scale?: number;
   min?: number;
@@ -716,7 +722,16 @@ export const MASTERS: MasterDefinition[] = [
         key: 'state_id',
         header: 'State code',
         type: 'ref',
-        lookup: { table: 'states', column: 'code' },
+        lookup: {
+          table: 'states',
+          column: 'code',
+          parent: {
+            table: 'countries',
+            column: 'country_id',
+            valueColumn: 'code',
+            label: 'Country',
+          },
+        },
         required: true,
         identity: true,
         width: 8,

@@ -9,11 +9,20 @@ import { ApiError, apiFetch } from './api';
 import { readSession, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
-  const params = new URLSearchParams();
-  params.set(status === 'ok' ? 'ok' : 'error', status === 'ok' ? '1' : status);
-  if (detail) params.set('detail', detail.slice(0, 200));
-  revalidatePath(path);
-  redirect(`${path}?${params.toString()}`);
+  // the back path may already carry a query string (masters tabs, filters, paging): merge, never append a second '?'
+  const url = new URL(path, 'http://edupro.local');
+  url.searchParams.delete('ok');
+  url.searchParams.delete('error');
+  url.searchParams.delete('detail');
+  url.searchParams.delete('add');
+  url.searchParams.delete('edit');
+  url.searchParams.set(status === 'ok' ? 'ok' : 'error', status === 'ok' ? '1' : status);
+  if (detail) url.searchParams.set('detail', detail.slice(0, 200));
+  // a redirect to the URL the page already shows is a no-op navigation in Next and the stale render
+  // stays on screen (a status toggle looked ignored); a per-action nonce makes every target distinct
+  url.searchParams.set('r', Date.now().toString(36));
+  revalidatePath(url.pathname);
+  redirect(`${url.pathname}${url.search}`);
 }
 
 async function run(path: string, fn: () => Promise<unknown>): Promise<never> {

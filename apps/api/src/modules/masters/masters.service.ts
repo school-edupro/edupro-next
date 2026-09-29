@@ -55,6 +55,13 @@ const norm = (s: string) =>
  * gives each of them the same grid, upload, bulk update and clone. Everything runs under the caller's
  * tenant, so masters never cross schools.
  */
+type MasterLookupOption = {
+  id: string;
+  value: string;
+  parent: string | null;
+  label: string | null;
+};
+
 @Injectable()
 export class MastersService {
   constructor(
@@ -457,6 +464,52 @@ export class MastersService {
       [id],
     );
     return r.rows[0] ? toImport(r.rows[0]) : null;
+  }
+
+  /** Datalist options per ref field: value, id and the parent's value when the lookup declares one. */
+  async lookups(ctx: RequestContext, id: string): Promise<Record<string, MasterLookupOption[]>> {
+    const def = this.def(id);
+    this.assertPermission(ctx, def, false);
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      const out: Record<string, MasterLookupOption[]> = {};
+      for (const f of def.fields) {
+        if (f.type !== 'ref' || !f.lookup) continue;
+        const l = f.lookup;
+        const parentJoin = l.parent
+          ? `LEFT JOIN ${l.parent.table} p ON p.id = t.${l.parent.column}`
+          : '';
+        const parentCol = l.parent ? `p.${l.parent.valueColumn}::text` : 'NULL';
+        const r = await c.query<{
+          id: string;
+          value: string;
+          parent: string | null;
+          label: string | null;
+        }>(
+          // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry; the year is bound
+          `SELECT t.id::text, t.${l.column}::text AS value, ${parentCol} AS parent, to_jsonb(t) ->> 'name' AS label
+            FROM ${l.table} t ${parentJoin}
+            WHERE 1 = 1${hasSoftDelete(l.table) ? ' AND t.deleted_at IS NULL' : ''}${l.yearScoped ? ' AND t.academic_year_id = $1' : ''}
+            ORDER BY 2 LIMIT 2000`,
+          l.yearScoped ? [tenant.academicYearId] : [],
+        );
+        out[f.key] = r.rows;
+        if (l.parent) {
+          const pr = await c.query<{
+            id: string;
+            value: string;
+            parent: string | null;
+            label: string | null;
+          }>(
+            // eslint-disable-next-line no-restricted-syntax -- names come from the registry
+            `SELECT p.id::text, p.${l.parent.valueColumn}::text AS value, NULL AS parent, to_jsonb(p) ->> 'name' AS label
+              FROM ${l.parent.table} p${hasSoftDelete(l.parent.table) ? ' WHERE p.deleted_at IS NULL' : ''} ORDER BY 2 LIMIT 2000`,
+          );
+          out[`${f.key}__parent`] = pr.rows;
+        }
+      }
+      return out;
+    });
   }
 
   /** For every ref field, the map lookup value → id within the tenant (and year, when scoped). */

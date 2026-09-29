@@ -41,6 +41,15 @@ export class MastersController {
     return this.masters.rows(ctx, master, query);
   }
 
+  @Get(':master/lookups')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary: 'Datalist options of every ref field (value, id, parent value for dependent lists)',
+  })
+  lookups(@ReqCtx() ctx: RequestContext, @Param('master') master: string) {
+    return this.masters.lookups(ctx, master);
+  }
+
   @Get(':master/template')
   @AuthenticatedOnly()
   @ApiOperation({ summary: 'Excel upload template (headers, a sample row, the rules)' })

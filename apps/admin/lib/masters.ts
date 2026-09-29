@@ -9,7 +9,12 @@ export interface MasterField {
   identity?: boolean;
   readOnly?: boolean;
   options?: string[];
-  lookup?: { table: string; column: string; yearScoped?: boolean };
+  lookup?: {
+    table: string;
+    column: string;
+    yearScoped?: boolean;
+    parent?: { table: string; column: string; valueColumn: string; label: string };
+  };
   scale?: number;
   min?: number;
   max?: number;
@@ -70,4 +75,12 @@ export const MASTER_GROUP_IDS = [
 
 export async function masterRegistry(): Promise<MasterMeta[]> {
   return apiFetch<{ data: MasterMeta[] }>('/masters').then((r) => r.data);
+}
+
+/** One option of a ref field's datalist (`/masters/:id/lookups`). */
+export interface MasterLookupOption {
+  id: string;
+  value: string;
+  parent: string | null;
+  label: string | null;
 }

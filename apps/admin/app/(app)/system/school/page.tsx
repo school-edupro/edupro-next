@@ -11,6 +11,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
+import { CascadeAddress } from '@/components/CascadeAddress';
 import { Notice } from '@/components/Notice';
 import { createCampus, updateSchool } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -252,44 +253,23 @@ export default async function SchoolPage({
                 defaultValue={str(address, 'line3')}
                 maxLength={160}
               />
-              <SelectField
-                id="a-country"
-                name="country"
-                label="Country"
-                defaultValue={str(address, 'country') || 'India'}
-                options={[
-                  ...(countries.length ? [] : [{ value: 'India', label: 'India' }]),
-                  ...countries.map((c) => ({
-                    value: String(c.name),
-                    label: `${String(c.name)} (${String(c.code)})`,
-                  })),
-                ]}
-              />
-              <SelectField
-                id="a-state"
-                name="state"
-                label="State"
-                defaultValue={str(address, 'state')}
-                options={[
-                  { value: '', label: '—' },
-                  ...states.map((x) => ({
-                    value: String(x.name),
-                    label: `${String(x.name)} (${String(x.code)})`,
-                  })),
-                ]}
-              />
-              <SelectField
-                id="a-city"
-                name="city"
-                label="City"
-                defaultValue={str(address, 'city')}
-                options={[
-                  { value: '', label: '—' },
-                  ...cities.map((x) => ({
-                    value: String(x.name),
-                    label: `${String(x.name)} · ${String(x.state_id)}`,
-                  })),
-                ]}
+              <CascadeAddress
+                countries={countries.map((c) => ({ code: String(c.code), name: String(c.name) }))}
+                states={states.map((x) => ({
+                  code: String(x.code),
+                  name: String(x.name),
+                  country: String(x.country_id ?? ''),
+                }))}
+                cities={cities.map((x) => ({
+                  name: String(x.name),
+                  state: String(x.state_id ?? ''),
+                  pincode: x.pincode ? String(x.pincode) : null,
+                }))}
+                defaults={{
+                  country: str(address, 'country') || 'India',
+                  state: str(address, 'state'),
+                  city: str(address, 'city'),
+                }}
               />
               <InputField
                 id="a-pin"
