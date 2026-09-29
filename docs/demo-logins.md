@@ -92,6 +92,11 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### School setup masters walk-through (2026-09-29)
+
+1. As `dev-admin`: **System → School**: country, state and city are drop-downs from the masters; the time zone list is the runtime's IANA zones; PIN and phone are validated. **Bank account details** lists the school's accounts (bank, account name and number, IFSC, branch, address, purpose, default) from the master with a link to manage them.
+2. **Masters → System setup**: _Countries_, _States_ (with GST codes) and _Cities_ have the grid, add/edit, status, Excel export and bulk upload like every master; a wrong PIN or GST code is refused with the reason. **Masters → Fees setup → School bank accounts**: add an account (the IFSC must look like `HDFC0000123`, the account number 9 to 18 digits); _Banks_ now carry the branch address.
+
 ### Sprints 22-23 walk-through (pilot cut-over, hypercare, month-end)
 
 1. As `dev-admin`: **System → Cut-over** shows _Rehearsal 2 (timed)_ signed off and _Pilot cut-over weekend_ running; open the running one: tick the remaining hypercare steps with a note (each tick records who, when and the duration since the previous step), **Take live snapshot**, edit a legacy count to differ and **Sign off** → refused with the measure; restore it and sign off → the run is done with the sign-off recorded. **New run** installs the 27 steps of the go-live runbook.

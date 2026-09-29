@@ -14,6 +14,8 @@ export interface MasterField {
   min?: number;
   max?: number;
   maxLength?: number;
+  pattern?: string;
+  patternHelp?: string;
   width?: number;
   bulk?: boolean;
   array?: boolean;

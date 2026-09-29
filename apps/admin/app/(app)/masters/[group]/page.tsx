@@ -725,8 +725,10 @@ function FieldInput({
       required={f.required}
       defaultValue={value}
       maxLength={f.maxLength}
+      pattern={f.pattern}
       help={
         help ??
+        f.patternHelp ??
         (f.type === 'ref' && f.lookup ? `${f.lookup.column} of ${f.lookup.table}` : undefined)
       }
     />

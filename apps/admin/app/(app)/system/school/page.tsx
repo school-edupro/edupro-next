@@ -13,9 +13,41 @@ import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { Notice } from '@/components/Notice';
 import { createCampus, updateSchool } from '@/lib/actions';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
 import type { Campus, School } from '@/lib/types';
 
+interface MasterRow {
+  id: string;
+  [k: string]: unknown;
+}
+interface BankAccount extends MasterRow {
+  bank_id: string;
+  account_name: string;
+  account_no: string;
+  ifsc: string;
+  branch: string | null;
+  address: string | null;
+  purpose: string;
+  is_default: boolean;
+  status: string;
+}
+const rowsOf = <T extends MasterRow>(master: string) =>
+  apiFetch<{ data: T[] }>(`/masters/${master}/rows?size=500&status=active`)
+    .then((r) => r.data)
+    .catch(() => [] as T[]);
+const TIMEZONES: string[] = (() => {
+  try {
+    return (Intl as unknown as { supportedValuesOf: (k: string) => string[] }).supportedValuesOf(
+      'timeZone',
+    );
+  } catch {
+    return ['Asia/Kolkata', 'Asia/Dubai', 'Asia/Kathmandu', 'UTC'];
+  }
+})();
+const LOCALES = [
+  { value: 'en', label: 'English (en)' },
+  { value: 'hi', label: 'हिन्दी (hi)' },
+];
 const str = (o: Record<string, unknown> | undefined, k: string) =>
   o && typeof o[k] === 'string' ? (o[k] as string) : '';
 
@@ -50,8 +82,9 @@ function Section({
 
 /**
  * School profile (S1, extended 2026-09-29 to the legacy school-setup form): identifiers and names,
- * address and contact, website and URLs, bank accounts, department emails, the logo, and campuses.
- * The extra fields live in the school's address, contact and branding JSON columns.
+ * address and contact (country, state and city from the masters), website and URLs, bank accounts
+ * (the school bank accounts master), department emails, the logo, and campuses. The extra fields live
+ * in the school's address, contact and branding JSON columns.
  */
 export default async function SchoolPage({
   searchParams,
@@ -60,12 +93,19 @@ export default async function SchoolPage({
 }) {
   const t = await getTranslations('pages.system_school');
   const sp = await searchParams;
-  const school = await apiFetch<School>('/platform/school');
+  const [school, me, countries, states, cities, accounts] = await Promise.all([
+    apiFetch<School>('/platform/school'),
+    getMe(),
+    rowsOf<MasterRow>('countries'),
+    rowsOf<MasterRow>('states'),
+    rowsOf<MasterRow>('cities'),
+    rowsOf<BankAccount>('bank_accounts'),
+  ]);
+  const canMasters = me.permissions.includes('fees.master.manage');
   const address = school.address ?? {};
   const contact = school.contact ?? {};
   const branding = school.branding ?? {};
   const urls = (branding.urls as Record<string, unknown> | undefined) ?? {};
-  const bank = Array.isArray(branding.bankAccounts) ? (branding.bankAccounts as string[]) : [];
   return (
     <>
       <PageHeader
@@ -118,6 +158,7 @@ export default async function SchoolPage({
                 label="Prefix"
                 defaultValue={str(branding, 'prefix')}
                 maxLength={10}
+                pattern="[A-Za-z0-9]{1,10}"
               />
               <InputField
                 id="s-no"
@@ -131,6 +172,7 @@ export default async function SchoolPage({
                 name="affiliationNo"
                 label="Affiliation number"
                 defaultValue={school.affiliationNo ?? ''}
+                maxLength={40}
               />
               <SelectField
                 id="s-board"
@@ -156,13 +198,20 @@ export default async function SchoolPage({
                 defaultValue={str(branding, 'classLabel')}
                 maxLength={40}
               />
-              <InputField
+              <SelectField
                 id="s-tz"
                 name="timezone"
                 label="Timezone"
                 defaultValue={school.timezone}
+                options={TIMEZONES.map((z) => ({ value: z, label: z }))}
               />
-              <InputField id="s-locale" name="locale" label="Locale" defaultValue={school.locale} />
+              <SelectField
+                id="s-locale"
+                name="locale"
+                label="Locale"
+                defaultValue={school.locale}
+                options={LOCALES}
+              />
               <label className="ep-field" htmlFor="s-logo">
                 <span className="ep-field__label">School logo (PNG, JPG or SVG)</span>
                 <input
@@ -203,40 +252,68 @@ export default async function SchoolPage({
                 defaultValue={str(address, 'line3')}
                 maxLength={160}
               />
-              <InputField
-                id="a-city"
-                name="city"
-                label="City"
-                defaultValue={str(address, 'city')}
-                maxLength={80}
+              <SelectField
+                id="a-country"
+                name="country"
+                label="Country"
+                defaultValue={str(address, 'country') || 'India'}
+                options={[
+                  ...(countries.length ? [] : [{ value: 'India', label: 'India' }]),
+                  ...countries.map((c) => ({
+                    value: String(c.name),
+                    label: `${String(c.name)} (${String(c.code)})`,
+                  })),
+                ]}
               />
-              <InputField
+              <SelectField
                 id="a-state"
                 name="state"
                 label="State"
                 defaultValue={str(address, 'state')}
-                maxLength={80}
+                options={[
+                  { value: '', label: '—' },
+                  ...states.map((x) => ({
+                    value: String(x.name),
+                    label: `${String(x.name)} (${String(x.code)})`,
+                  })),
+                ]}
+              />
+              <SelectField
+                id="a-city"
+                name="city"
+                label="City"
+                defaultValue={str(address, 'city')}
+                options={[
+                  { value: '', label: '—' },
+                  ...cities.map((x) => ({
+                    value: String(x.name),
+                    label: `${String(x.name)} · ${String(x.state_id)}`,
+                  })),
+                ]}
               />
               <InputField
                 id="a-pin"
                 name="pincode"
                 label="PIN code"
                 defaultValue={str(address, 'pincode')}
-                pattern="\\d{6}"
+                pattern="[1-9][0-9]{5}"
+                maxLength={6}
               />
               <InputField
                 id="c-phone"
                 name="phone"
                 label="School phone no."
                 defaultValue={str(contact, 'phone')}
-                maxLength={40}
+                maxLength={20}
+                pattern="[0-9+()\- ]{6,20}"
               />
               <InputField
                 id="c-wa"
                 name="whatsapp"
                 label="WhatsApp number"
                 defaultValue={str(contact, 'whatsapp')}
-                maxLength={15}
+                maxLength={12}
+                pattern="[0-9]{10,12}"
               />
               <InputField
                 id="c-mail"
@@ -335,19 +412,65 @@ export default async function SchoolPage({
               />
             </FormRow>
           </Section>
-          <Section title="Bank account details">
-            <FormRow columns={3}>
-              {[0, 1, 2].map((i) => (
-                <InputField
-                  key={i}
-                  id={`b-${i}`}
-                  name={`bank${i + 1}`}
-                  label={`School bank A/C ${i + 1}`}
-                  defaultValue={bank[i] ?? ''}
-                  maxLength={120}
-                />
-              ))}
-            </FormRow>
+          <Section title="Bank account details" open>
+            <DataTable<BankAccount>
+              caption="School bank accounts"
+              density="dense"
+              columns={[
+                { key: 'b', header: 'Bank', render: (a) => <strong>{a.bank_id}</strong> },
+                { key: 'n', header: 'Account name', render: (a) => a.account_name },
+                { key: 'no', header: 'Account number', render: (a) => a.account_no },
+                { key: 'i', header: 'IFSC', render: (a) => a.ifsc },
+                {
+                  key: 'br',
+                  header: 'Branch',
+                  render: (a) => `${a.branch ?? ''}${a.address ? ` · ${a.address}` : ''}`,
+                },
+                {
+                  key: 'p',
+                  header: 'Purpose',
+                  render: (a) => (
+                    <>
+                      {a.purpose}
+                      {a.is_default ? (
+                        <>
+                          {' '}
+                          <Badge tone="success">default</Badge>
+                        </>
+                      ) : null}
+                    </>
+                  ),
+                },
+              ]}
+              rows={accounts}
+              rowKey={(a) => a.id}
+              emptyTitle="No bank account on file yet."
+            />
+            {canMasters ? (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-2)',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  marginTop: 'var(--sp-2)',
+                }}
+              >
+                <span className="ep-field__help">
+                  Accounts and banks are masters with grid, Excel export and bulk upload; IFSC and
+                  account numbers are validated.
+                </span>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href="/masters/fees?tab=bank_accounts"
+                >
+                  Manage bank accounts
+                </a>
+                <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/masters/fees?tab=banks">
+                  Banks
+                </a>
+              </div>
+            ) : null}
           </Section>
           <Section title="Email configuration">
             <FormRow columns={3}>

@@ -84,6 +84,8 @@ const PAGES = [
   '/reports/mis',
   // Sprints 22-23
   '/system/school',
+  '/masters/system?tab=countries',
+  '/masters/fees?tab=bank_accounts&add=1',
   '/system/cutover',
   '/system/hypercare',
   '/fees/month-end',

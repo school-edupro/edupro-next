@@ -4421,6 +4421,114 @@ async function main(): Promise<void> {
       }
       await clearCtx();
 
+      // ---- school setup masters (2026-09-29): countries, states, cities, banks with addresses, bank accounts ----
+      for (const school of Object.values(schools)) {
+        await withCtx(school.id, 'dev-admin');
+        await c.query(
+          `INSERT INTO countries (school_id, code, name, dial_code) VALUES ($1, 'IN', 'India', '+91'), ($1, 'NP', 'Nepal', '+977'), ($1, 'AE', 'United Arab Emirates', '+971')
+           ON CONFLICT (school_id, code) DO NOTHING`,
+          [school.id],
+        );
+        const india = await c.query<{ id: string }>(
+          `SELECT id::text FROM countries WHERE school_id = $1 AND code = 'IN'`,
+          [school.id],
+        );
+        const states: Array<[string, string, string]> = [
+          ['AP', 'Andhra Pradesh', '37'],
+          ['AR', 'Arunachal Pradesh', '12'],
+          ['AS', 'Assam', '18'],
+          ['BR', 'Bihar', '10'],
+          ['CG', 'Chhattisgarh', '22'],
+          ['GA', 'Goa', '30'],
+          ['GJ', 'Gujarat', '24'],
+          ['HR', 'Haryana', '06'],
+          ['HP', 'Himachal Pradesh', '02'],
+          ['JH', 'Jharkhand', '20'],
+          ['KA', 'Karnataka', '29'],
+          ['KL', 'Kerala', '32'],
+          ['MP', 'Madhya Pradesh', '23'],
+          ['MH', 'Maharashtra', '27'],
+          ['MN', 'Manipur', '14'],
+          ['ML', 'Meghalaya', '17'],
+          ['MZ', 'Mizoram', '15'],
+          ['NL', 'Nagaland', '13'],
+          ['OD', 'Odisha', '21'],
+          ['PB', 'Punjab', '03'],
+          ['RJ', 'Rajasthan', '08'],
+          ['SK', 'Sikkim', '11'],
+          ['TN', 'Tamil Nadu', '33'],
+          ['TS', 'Telangana', '36'],
+          ['TR', 'Tripura', '16'],
+          ['UP', 'Uttar Pradesh', '09'],
+          ['UK', 'Uttarakhand', '05'],
+          ['WB', 'West Bengal', '19'],
+          ['DL', 'Delhi', '07'],
+          ['CH', 'Chandigarh', '04'],
+          ['JK', 'Jammu and Kashmir', '01'],
+          ['LA', 'Ladakh', '38'],
+          ['PY', 'Puducherry', '34'],
+          ['AN', 'Andaman and Nicobar Islands', '35'],
+          ['LD', 'Lakshadweep', '31'],
+          ['DH', 'Dadra and Nagar Haveli and Daman and Diu', '26'],
+        ];
+        for (const [code, name, gst] of states)
+          await c.query(
+            `INSERT INTO states (school_id, country_id, code, name, gst_code) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (school_id, code) DO NOTHING`,
+            [school.id, india.rows[0]!.id, code, name, gst],
+          );
+        const cities: Array<[string, string, string]> = [
+          ['UP', 'Noida', '201301'],
+          ['UP', 'Ghaziabad', '201001'],
+          ['UP', 'Greater Noida', '201310'],
+          ['UP', 'Lucknow', '226001'],
+          ['DL', 'New Delhi', '110001'],
+          ['HR', 'Gurugram', '122001'],
+          ['HR', 'Faridabad', '121001'],
+          ['MH', 'Pune', '411001'],
+          ['MH', 'Mumbai', '400001'],
+          ['KA', 'Bengaluru', '560001'],
+          ['TN', 'Chennai', '600001'],
+          ['WB', 'Kolkata', '700001'],
+        ];
+        for (const [st, name, pin] of cities)
+          await c.query(
+            `INSERT INTO cities (school_id, state_id, name, pincode) SELECT $1, s.id, $3, $4 FROM states s WHERE s.school_id = $1 AND s.code = $2
+             ON CONFLICT (state_id, name) DO NOTHING`,
+            [school.id, st, name, pin],
+          );
+        await c.query(
+          `INSERT INTO banks (school_id, code, name, branch, ifsc, account_label, address) VALUES
+             ($1, 'HDFC', 'HDFC Bank', 'Sector 18, Noida', 'HDFC0000123', 'School fees', 'K-1, Sector 18, Noida 201301'),
+             ($1, 'SBI', 'State Bank of India', 'Sector 30, Noida', 'SBIN0001234', 'Hostel', 'Sector 30, Noida 201303')
+           ON CONFLICT (school_id, code) DO UPDATE SET address = EXCLUDED.address, ifsc = EXCLUDED.ifsc, branch = EXCLUDED.branch`,
+          [school.id],
+        );
+        await c.query(
+          `INSERT INTO school_bank_accounts (school_id, bank_id, account_name, account_no, ifsc, branch, address, purpose, is_default)
+           SELECT $1, b.id, $2, $3, b.ifsc, b.branch, b.address, $4, $5 FROM banks b WHERE b.school_id = $1 AND b.code = $6
+           ON CONFLICT (school_id, account_no) DO NOTHING`,
+          [
+            school.id,
+            `${school === alpha ? 'Alpha' : 'Beta'} Public School Fee Account`,
+            school === alpha ? '50100012345678' : '50100087654321',
+            'school',
+            true,
+            'HDFC',
+          ],
+        );
+        await c.query(
+          `INSERT INTO school_bank_accounts (school_id, bank_id, account_name, account_no, ifsc, branch, address, purpose, is_default)
+           SELECT $1, b.id, $2, $3, b.ifsc, b.branch, b.address, 'hostel', false FROM banks b WHERE b.school_id = $1 AND b.code = 'SBI'
+           ON CONFLICT (school_id, account_no) DO NOTHING`,
+          [
+            school.id,
+            `${school === alpha ? 'Alpha' : 'Beta'} Public School Hostel Account`,
+            school === alpha ? '31234567890' : '39876543210',
+          ],
+        );
+        await clearCtx();
+      }
+
       // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
       for (const school of Object.values(schools)) {
         await withCtx(school.id, 'dev-admin');

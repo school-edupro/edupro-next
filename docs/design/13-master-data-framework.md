@@ -70,3 +70,20 @@ class, period generation, grade scale editing with bands, route stops with stude
 Payment modes are an enum on receipts (cash, cheque, DD, online, bank), not a master; houses and
 categories are free text on students (the student import carries them); RFID devices, workflow
 definitions, roles, settings and years keep their own screens; Hindi column headers for masters.
+
+## Addendum (2026-09-29): school setup masters and pattern validation
+
+The school profile's drop-downs are backed by masters, each per school, with the framework's grid,
+Excel/CSV/PDF export and bulk upload:
+
+| Master          | Group  | Fields                                                                        | Validation                                |
+| --------------- | ------ | ----------------------------------------------------------------------------- | ----------------------------------------- |
+| `countries`     | system | code (ISO-2), name, dial code                                                 | `^[A-Z]{2}$`, dial `^\+[0-9]{1,4}$`       |
+| `states`        | system | country (ref), code, name, GST code                                           | code `^[A-Z]{2,3}$`, GST `^[0-9]{2}$`     |
+| `cities`        | system | state (ref), name, PIN                                                        | PIN `^[1-9][0-9]{5}$`                     |
+| `banks`         | fees   | code, name, branch, IFSC, account label, branch address (new)                 | IFSC `^[A-Z]{4}0[A-Z0-9]{6}$`             |
+| `bank_accounts` | fees   | bank (ref), account name, account no, IFSC, branch, address, purpose, default | account no `^[0-9]{9,18}$`, IFSC as above |
+
+`MasterField.pattern` (with `patternHelp`) is enforced by the API on grid saves and uploads and
+rendered as the input's `pattern` attribute with its help text. Time zones and locales are not
+masters: the profile offers the IANA zone list of the runtime and the two supported locales.

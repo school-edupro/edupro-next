@@ -589,6 +589,10 @@ function coerce(
         if (!hit) return { error: `Must be one of ${f.options.join(', ')}` };
         return { value: hit };
       }
+      if (f.pattern && !new RegExp(f.pattern).test(s))
+        return {
+          error: f.patternHelp ? `Must be ${f.patternHelp}` : `Does not match ${f.pattern}`,
+        };
       return { value: s };
     }
     case 'number': {

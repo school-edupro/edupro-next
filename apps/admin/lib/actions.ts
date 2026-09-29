@@ -240,7 +240,7 @@ export async function updateSchool(fd: FormData) {
     line1: str(fd, 'address1'),
     line2: str(fd, 'address2'),
     line3: str(fd, 'address3'),
-    ...pick(['city', 'state', 'pincode']),
+    ...pick(['city', 'state', 'pincode', 'country']),
   };
   const contact = {
     ...(current.contact ?? {}),
@@ -273,7 +273,6 @@ export async function updateSchool(fd: FormData) {
       sms: str(fd, 'smsUrl'),
       gcm: str(fd, 'gcmUrl'),
     },
-    bankAccounts: [str(fd, 'bank1'), str(fd, 'bank2'), str(fd, 'bank3')],
     ...(logoFileId ? { logoFileId } : {}),
   };
   return run('/system/school', () =>
