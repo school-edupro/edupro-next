@@ -254,4 +254,48 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
   },
 };
 
+// ---- Sprint 20: DPDP retention, data-principal requests, compatibility app versions ----
+const retention = (def: number, min: number, what: string, module = 'platform') => ({
+  schema: z.coerce.number().int().min(min).max(3650),
+  default: def,
+  description: `Days of ${what} kept before the nightly retention purge (Sprint 20)`,
+  module,
+});
+SETTINGS_CATALOGUE['privacy.dsr_days'] = {
+  schema: z.coerce.number().int().min(7).max(90),
+  default: 30,
+  description: 'Days allowed to answer a data-principal request (Sprint 20)',
+  module: 'platform',
+};
+SETTINGS_CATALOGUE['privacy.retention.comms_body_days'] = retention(
+  180,
+  30,
+  'message bodies (metadata is kept)',
+);
+SETTINGS_CATALOGUE['privacy.retention.login_events_days'] = retention(365, 90, 'sign-in events');
+SETTINGS_CATALOGUE['privacy.retention.visitor_log_days'] = retention(365, 90, 'visitor log rows');
+SETTINGS_CATALOGUE['privacy.retention.ai_messages_days'] = retention(
+  180,
+  30,
+  'assistant conversations',
+);
+SETTINGS_CATALOGUE['compat.app_version_android'] = {
+  schema: z.string().regex(/^\d+(\.\d+){0,3}$/),
+  default: '1.0.0',
+  description: 'Current Android build of the school apps (compat app_version)',
+  module: 'platform',
+};
+SETTINGS_CATALOGUE['compat.app_version_ios'] = {
+  schema: z.string().regex(/^\d+(\.\d+){0,3}$/),
+  default: '1.0.0',
+  description: 'Current iOS build of the school apps (compat app_version)',
+  module: 'platform',
+};
+SETTINGS_CATALOGUE['compat.app_force_below'] = {
+  schema: z.string().regex(/^\d+(\.\d+){0,3}$/),
+  default: '0.0.0',
+  description: 'Builds below this version must update before use (compat app_version)',
+  module: 'platform',
+};
+
 export const SETTING_KEYS = Object.keys(SETTINGS_CATALOGUE);

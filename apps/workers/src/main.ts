@@ -149,6 +149,12 @@ async function main(): Promise<void> {
     { every: 60 * 60 * 1000 },
     { name: 'reports.scheduled', data: SYSTEM_ENVELOPE('reports.scheduled') },
   );
+  // nightly 03:00 IST (21:30 UTC)
+  await maintenance.upsertJobScheduler(
+    'retention.purge',
+    { pattern: '30 21 * * *' },
+    { name: 'retention.purge', data: SYSTEM_ENVELOPE('retention.purge') },
+  );
   await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },

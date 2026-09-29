@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { requestProfileChange, setConsent } from '../queries/actions';
 
 interface Child {
@@ -57,6 +58,7 @@ export default async function ProfilePage({
   searchParams: Promise<{ ok?: string; error?: string; detail?: string; edit?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let fam: Family;
   try {
     fam = await bff.api.fetch<Family>('/engagement/family');
@@ -65,9 +67,12 @@ export default async function ProfilePage({
     if (error instanceof ApiError && (error.status === 403 || error.status === 409))
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Profile" />
+          <PageHeader kicker="EduPro" title={t(lang, 'Profile')} />
           <Card>
-            Your account is not linked to a student yet. Please contact the school office.
+            {t(
+              lang,
+              'Your account is not linked to a student yet. Please contact the school office.',
+            )}
           </Card>
         </main>
       );
@@ -77,12 +82,12 @@ export default async function ProfilePage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
-        kicker="Profile"
-        title={me?.name ?? 'Family'}
-        description={`${fam.children.length} ${fam.children.length === 1 ? 'child' : 'children'}${fam.pendingChangeRequests ? ` · ${fam.pendingChangeRequests} change request(s) awaiting the office` : ''}`}
+        kicker={t(lang, 'Profile')}
+        title={me?.name ?? t(lang, 'Family')}
+        description={`${fam.children.length} ${fam.children.length === 1 ? t(lang, 'child') : t(lang, 'children')}${fam.pendingChangeRequests ? ` · ${fam.pendingChangeRequests} ${t(lang, 'change request(s) awaiting the office')}` : ''}`}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
@@ -92,7 +97,7 @@ export default async function ProfilePage({
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          Your choice has been recorded.
+          {t(lang, 'Your choice has been recorded.')}
         </div>
       ) : sp.ok ? (
         <div
@@ -100,7 +105,7 @@ export default async function ProfilePage({
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          Change request sent to the school office.
+          {t(lang, 'Change request sent to the school office.')}
         </div>
       ) : null}
       {sp.error ? (
@@ -126,30 +131,31 @@ export default async function ProfilePage({
               margin: 0,
             }}
           >
-            <dt className="ep-kicker">Admission no</dt>
+            <dt className="ep-kicker">{t(lang, 'Admission no')}</dt>
             <dd style={{ margin: 0 }}>{c.admissionNo}</dd>
-            <dt className="ep-kicker">Roll no</dt>
+            <dt className="ep-kicker">{t(lang, 'Roll no')}</dt>
             <dd style={{ margin: 0 }}>{c.rollNo ?? '—'}</dd>
-            <dt className="ep-kicker">Date of birth</dt>
+            <dt className="ep-kicker">{t(lang, 'Date of birth')}</dt>
             <dd style={{ margin: 0 }}>{c.dob ?? '—'}</dd>
-            <dt className="ep-kicker">Blood group</dt>
+            <dt className="ep-kicker">{t(lang, 'Blood group')}</dt>
             <dd style={{ margin: 0 }}>{c.bloodGroup ?? '—'}</dd>
-            <dt className="ep-kicker">House</dt>
+            <dt className="ep-kicker">{t(lang, 'House')}</dt>
             <dd style={{ margin: 0 }}>{c.house ?? '—'}</dd>
-            <dt className="ep-kicker">Class teacher</dt>
+            <dt className="ep-kicker">{t(lang, 'Class teacher')}</dt>
             <dd style={{ margin: 0 }}>{c.classTeacher ?? '—'}</dd>
-            <dt className="ep-kicker">Bus</dt>
+            <dt className="ep-kicker">{t(lang, 'Bus')}</dt>
             <dd style={{ margin: 0 }}>
               {c.route
-                ? `${c.route.code} · ${c.route.name}${c.route.stopName ? ` · ${c.route.stopName}` : ''}${c.route.pickupTime ? ` · pickup ${c.route.pickupTime.slice(0, 5)}` : ''}`
-                : 'Not using the school bus'}
+                ? `${c.route.code} · ${c.route.name}${c.route.stopName ? ` · ${c.route.stopName}` : ''}${c.route.pickupTime ? ` · ${t(lang, 'pickup')} ${c.route.pickupTime.slice(0, 5)}` : ''}`
+                : t(lang, 'Not using the school bus')}
             </dd>
-            <dt className="ep-kicker">Emergency contact</dt>
+            <dt className="ep-kicker">{t(lang, 'Emergency contact')}</dt>
             <dd style={{ margin: 0 }}>{c.emergencyContact ?? '—'}</dd>
           </dl>
           <details style={{ marginTop: 'var(--sp-3)' }} open={sp.edit === `student-${c.id}`}>
             <summary className="ep-btn ep-btn--ghost ep-btn--sm">
-              Request a change to {c.name.split(' ')[0]}’s details
+              {t(lang, 'Request a change to')} {c.name.split(' ')[0]}
+              {t(lang, '’s details')}
             </summary>
             <form
               action={requestProfileChange}
@@ -158,12 +164,12 @@ export default async function ProfilePage({
               <input type="hidden" name="studentId" value={c.id} />
               <input type="hidden" name="entity" value="student" />
               {[
-                ['blood_group', 'Blood group', c.bloodGroup],
-                ['house', 'House', c.house],
-                ['address.line1', 'Address line 1', c.address.line1],
-                ['address.city', 'City', c.address.city],
-                ['address.pin', 'PIN code', c.address.pin],
-                ['details.emergency_contact', 'Emergency contact', c.emergencyContact],
+                ['blood_group', t(lang, 'Blood group'), c.bloodGroup],
+                ['house', t(lang, 'House'), c.house],
+                ['address.line1', t(lang, 'Address line 1'), c.address.line1],
+                ['address.city', t(lang, 'City'), c.address.city],
+                ['address.pin', t(lang, 'PIN code'), c.address.pin],
+                ['details.emergency_contact', t(lang, 'Emergency contact'), c.emergencyContact],
               ].map(([k, label, current]) => (
                 <label key={k as string} className="ep-field">
                   <span className="ep-field__label">{label}</span>
@@ -178,22 +184,23 @@ export default async function ProfilePage({
               <input
                 className="ep-input"
                 name="reason"
-                placeholder="Reason (optional)"
+                placeholder={t(lang, 'Reason (optional)')}
                 maxLength={500}
-                aria-label="Reason"
+                aria-label={t(lang, 'Reason')}
               />
               <div>
                 <Button type="submit" variant="secondary">
-                  Send to the office
+                  {t(lang, 'Send to the office')}
                 </Button>
               </div>
             </form>
           </details>
-          <h4 style={{ marginTop: 'var(--sp-4)' }}>Guardians</h4>
+          <h4 style={{ marginTop: 'var(--sp-4)' }}>{t(lang, 'Guardians')}</h4>
           {c.guardians.map((g) => (
             <div key={g.id} style={{ marginBottom: 'var(--sp-2)' }}>
-              <strong>{g.name}</strong> {g.isMe ? <Badge tone="info">you</Badge> : null}{' '}
-              {g.isPrimary ? <Badge tone="neutral">primary</Badge> : null}
+              <strong>{g.name}</strong>{' '}
+              {g.isMe ? <Badge tone="info">{t(lang, 'you')}</Badge> : null}{' '}
+              {g.isPrimary ? <Badge tone="neutral">{t(lang, 'primary')}</Badge> : null}
               <div className="ep-kicker">
                 {g.relation} · {g.mobile ?? '—'} · {g.email ?? '—'}
                 {g.occupation ? ` · ${g.occupation}` : ''}
@@ -201,7 +208,7 @@ export default async function ProfilePage({
               {g.isMe ? (
                 <details style={{ marginTop: 'var(--sp-1)' }}>
                   <summary className="ep-btn ep-btn--ghost ep-btn--sm">
-                    Request a change to my details
+                    {t(lang, 'Request a change to my details')}
                   </summary>
                   <form
                     action={requestProfileChange}
@@ -211,12 +218,12 @@ export default async function ProfilePage({
                     <input type="hidden" name="entity" value="guardian" />
                     <input type="hidden" name="entityId" value={g.id} />
                     {[
-                      ['mobile', 'Mobile', g.mobile],
-                      ['email', 'Email', g.email],
-                      ['occupation', 'Occupation', g.occupation],
-                      ['address.line1', 'Address line 1', g.address.line1],
-                      ['address.city', 'City', g.address.city],
-                      ['address.pin', 'PIN code', g.address.pin],
+                      ['mobile', t(lang, 'Mobile'), g.mobile],
+                      ['email', t(lang, 'Email'), g.email],
+                      ['occupation', t(lang, 'Occupation'), g.occupation],
+                      ['address.line1', t(lang, 'Address line 1'), g.address.line1],
+                      ['address.city', t(lang, 'City'), g.address.city],
+                      ['address.pin', t(lang, 'PIN code'), g.address.pin],
                     ].map(([k, label, current]) => (
                       <label key={k as string} className="ep-field">
                         <span className="ep-field__label">{label}</span>
@@ -231,13 +238,13 @@ export default async function ProfilePage({
                     <input
                       className="ep-input"
                       name="reason"
-                      placeholder="Reason (optional)"
+                      placeholder={t(lang, 'Reason (optional)')}
                       maxLength={500}
-                      aria-label="Reason"
+                      aria-label={t(lang, 'Reason')}
                     />
                     <div>
                       <Button type="submit" variant="secondary">
-                        Send to the office
+                        {t(lang, 'Send to the office')}
                       </Button>
                     </div>
                   </form>
@@ -247,10 +254,28 @@ export default async function ProfilePage({
           ))}
         </Card>
       ))}
-      <Card title="Your consents" style={{ marginBottom: 'var(--sp-3)' }}>
+      <Card
+        title={t(lang, 'Your data')}
+        style={{ marginBottom: 'var(--sp-3)' }}
+        actions={
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/profile/data">
+            {t(lang, 'Open your data')}
+          </a>
+        }
+      >
+        <p className="ep-field__help" style={{ margin: 0 }}>
+          {t(
+            lang,
+            'Ask for a copy of the data the school holds, a correction, or raise a grievance.',
+          )}
+        </p>
+      </Card>
+      <Card title={t(lang, 'Your consents')} style={{ marginBottom: 'var(--sp-3)' }}>
         <p className="ep-field__help">
-          Under the Digital Personal Data Protection Act you choose what the school may send you.
-          Fee, attendance and safety messages are always sent.
+          {t(
+            lang,
+            'Under the Digital Personal Data Protection Act you choose what the school may send you. Fee, attendance and safety messages are always sent.',
+          )}
         </p>
         {fam.consents.map((p) => (
           <div
@@ -276,7 +301,7 @@ export default async function ProfilePage({
                         : 'neutral'
                   }
                 >
-                  {p.status ?? 'not recorded'}
+                  {p.status ? t(lang, p.status) : t(lang, 'not recorded')}
                 </Badge>
               </div>
               <div className="ep-kicker">{p.description}</div>
@@ -294,7 +319,7 @@ export default async function ProfilePage({
                 size="sm"
                 disabled={p.isRequired && p.status === 'granted'}
               >
-                {p.status === 'granted' ? 'Withdraw' : 'Allow'}
+                {p.status === 'granted' ? t(lang, 'Withdraw') : t(lang, 'Allow')}
               </Button>
             </form>
           </div>

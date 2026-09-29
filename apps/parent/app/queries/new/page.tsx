@@ -2,6 +2,7 @@ import { Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { raiseQuery } from '../actions';
 
 interface Viewer {
@@ -14,6 +15,7 @@ export default async function NewQueryPage({
   searchParams: Promise<{ error?: string; detail?: string; kind?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let viewer: Viewer;
   let categories: Array<{ code: string; name: string }>;
   try {
@@ -31,12 +33,12 @@ export default async function NewQueryPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
-        kicker="Queries"
-        title="New request"
-        description="A query, a complaint or a leave application for your child."
+        kicker={t(lang, 'Queries')}
+        title={t(lang, 'New request')}
+        description={t(lang, 'A query, a complaint or a leave application for your child.')}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/queries">
-            Back
+            {t(lang, 'Back')}
           </a>
         }
       />
@@ -57,14 +59,18 @@ export default async function NewQueryPage({
               className={`ep-btn ep-btn--sm ${kind === k ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
               href={`/queries/new?kind=${k}`}
             >
-              {k === 'query' ? 'Query' : k === 'complaint' ? 'Complaint' : 'Leave request'}
+              {k === 'query'
+                ? t(lang, 'Query')
+                : k === 'complaint'
+                  ? t(lang, 'Complaint')
+                  : t(lang, 'Leave request')}
             </a>
           ))}
         </div>
         <form action={raiseQuery} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
           <input type="hidden" name="kind" value={kind} />
           <label className="ep-field">
-            <span className="ep-field__label">Child</span>
+            <span className="ep-field__label">{t(lang, 'Child')}</span>
             <select className="ep-input" name="studentId" required>
               {viewer.students.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -76,7 +82,7 @@ export default async function NewQueryPage({
           </label>
           {kind !== 'leave' ? (
             <label className="ep-field">
-              <span className="ep-field__label">About</span>
+              <span className="ep-field__label">{t(lang, 'About')}</span>
               <select className="ep-input" name="categoryCode" defaultValue="other">
                 {categories.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -89,27 +95,31 @@ export default async function NewQueryPage({
             <input type="hidden" name="categoryCode" value="attendance" />
           )}
           <label className="ep-field">
-            <span className="ep-field__label">Subject</span>
+            <span className="ep-field__label">{t(lang, 'Subject')}</span>
             <input className="ep-input" name="subject" required minLength={3} maxLength={160} />
           </label>
           {kind === 'leave' ? (
             <div style={{ display: 'grid', gap: 'var(--sp-3)', gridTemplateColumns: '1fr 1fr' }}>
               <label className="ep-field">
-                <span className="ep-field__label">From</span>
+                <span className="ep-field__label">{t(lang, 'From')}</span>
                 <input className="ep-input" type="date" name="leaveFrom" required />
               </label>
               <label className="ep-field">
-                <span className="ep-field__label">To</span>
+                <span className="ep-field__label">{t(lang, 'To')}</span>
                 <input className="ep-input" type="date" name="leaveTo" required />
               </label>
             </div>
           ) : null}
           <label className="ep-field">
-            <span className="ep-field__label">{kind === 'leave' ? 'Reason' : 'Details'}</span>
+            <span className="ep-field__label">
+              {kind === 'leave' ? t(lang, 'Reason') : t(lang, 'Details')}
+            </span>
             <textarea className="ep-input" name="body" rows={5} required maxLength={4000} />
           </label>
           <div>
-            <Button type="submit">{kind === 'leave' ? 'Apply for leave' : 'Send'}</Button>
+            <Button type="submit">
+              {kind === 'leave' ? t(lang, 'Apply for leave') : t(lang, 'Send')}
+            </Button>
           </div>
         </form>
       </Card>

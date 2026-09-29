@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { saveMarks } from './actions';
 
 interface Exam {
@@ -69,6 +70,7 @@ export default async function MarksPage({
   }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let exams: Exam[];
   try {
     exams = await bff.api.fetch<{ data: Exam[] }>('/exams').then((r) => r.data);
@@ -77,8 +79,8 @@ export default async function MarksPage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Marks" />
-          <Card>You are not allowed to enter marks in this school.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Marks')} />
+          <Card>{t(lang, 'You are not allowed to enter marks in this school.')}</Card>
         </main>
       );
     throw error;
@@ -92,7 +94,7 @@ export default async function MarksPage({
   const options = sections.flatMap((s) =>
     s.subjects.map((sub) => ({
       value: `${s.classSectionId}|${sub.subjectId}`,
-      label: `${s.code} · ${sub.name}${sub.entryLocked ? ' (locked)' : ''} · ${sub.entered} entered`,
+      label: `${s.code} · ${sub.name}${sub.entryLocked ? ` (${t(lang, 'locked')})` : ''} · ${sub.entered} ${t(lang, 'entered')}`,
       classSectionId: s.classSectionId,
       subjectId: sub.subjectId,
     })),
@@ -117,18 +119,18 @@ export default async function MarksPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
-        kicker="Marks"
-        title={exam ? `${exam.name} (${exam.code})` : 'Marks'}
+        kicker={t(lang, 'Marks')}
+        title={exam ? `${exam.name} (${exam.code})` : t(lang, 'Marks')}
         description={
           sheet
-            ? `${sheet.section.code} · ${sheet.examSubject.name} out of ${sheet.examSubject.maxMarks}${sheet.examSubject.passMarks ? ` (pass ${sheet.examSubject.passMarks})` : ''} · ${entered} of ${sheet.rows.length} entered`
+            ? `${sheet.section.code} · ${sheet.examSubject.name} ${t(lang, 'out of')} ${sheet.examSubject.maxMarks}${sheet.examSubject.passMarks ? ` (${t(lang, 'pass')} ${sheet.examSubject.passMarks})` : ''} · ${entered} ${t(lang, 'of')} ${sheet.rows.length} ${t(lang, 'entered')}`
             : exams.length
-              ? 'Choose the section and subject.'
-              : 'No exam is set up for this year yet.'
+              ? t(lang, 'Choose the section and subject.')
+              : t(lang, 'No exam is set up for this year yet.')
         }
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
@@ -138,7 +140,8 @@ export default async function MarksPage({
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          Marks saved{sp.detail ? ` (${sp.detail})` : ''}.
+          {t(lang, 'Marks saved')}
+          {sp.detail ? ` (${sp.detail})` : ''}.
         </div>
       ) : null}
       {sp.error ? (
@@ -147,7 +150,7 @@ export default async function MarksPage({
           role="alert"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          {ERRORS[sp.error] ?? sp.error}
+          {t(lang, ERRORS[sp.error] ?? sp.error)}
           {sp.detail ? ` — ${sp.detail}` : ''}
         </div>
       ) : null}
@@ -157,7 +160,7 @@ export default async function MarksPage({
           style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
         >
           <label className="ep-field" style={{ minWidth: 220 }}>
-            <span className="ep-field__label">Exam</span>
+            <span className="ep-field__label">{t(lang, 'Exam')}</span>
             <select className="ep-input" name="exam" defaultValue={exam?.id ?? ''}>
               {exams.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -167,7 +170,7 @@ export default async function MarksPage({
             </select>
           </label>
           <label className="ep-field" style={{ minWidth: 280 }}>
-            <span className="ep-field__label">Section · subject</span>
+            <span className="ep-field__label">{t(lang, 'Section · subject')}</span>
             <select className="ep-input" name="pick" defaultValue={chosen?.value ?? ''}>
               {options.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -177,23 +180,27 @@ export default async function MarksPage({
             </select>
           </label>
           <Button type="submit" variant="secondary">
-            Open sheet
+            {t(lang, 'Open sheet')}
           </Button>
         </form>
         <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
-          Leave a mark empty to skip a pupil; tick AB for absent or EX for exempt. Marks are checked
-          against the maximum and the lock before they are saved.
+          {t(
+            lang,
+            'Leave a mark empty to skip a pupil; tick AB for absent or EX for exempt. Marks are checked against the maximum and the lock before they are saved.',
+          )}
         </p>
       </Card>
-      {loadError ? <Card>{loadError}</Card> : null}
+      {loadError ? <Card>{t(lang, loadError)}</Card> : null}
       {sheet && exam && chosen ? (
         <Card
           title={`${sheet.section.code} · ${sheet.examSubject.name}`}
           actions={
             locked ? (
-              <Badge tone="warning">Locked</Badge>
+              <Badge tone="warning">{t(lang, 'Locked')}</Badge>
             ) : (
-              <Badge tone="neutral">{sheet.rows.length} pupils</Badge>
+              <Badge tone="neutral">
+                {sheet.rows.length} {t(lang, 'pupils')}
+              </Badge>
             )
           }
         >
@@ -206,8 +213,10 @@ export default async function MarksPage({
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Pupil</th>
-                  <th>Marks / {sheet.examSubject.maxMarks}</th>
+                  <th>{t(lang, 'Pupil')}</th>
+                  <th>
+                    {t(lang, 'Marks')} / {sheet.examSubject.maxMarks}
+                  </th>
                   <th>AB</th>
                   <th>EX</th>
                 </tr>
@@ -226,7 +235,7 @@ export default async function MarksPage({
                         type="number"
                         inputMode="decimal"
                         name={`marks-${r.studentId}`}
-                        aria-label={`Marks · ${r.name}`}
+                        aria-label={`${t(lang, 'Marks')} · ${r.name}`}
                         min={0}
                         max={Number(sheet!.examSubject.maxMarks)}
                         step="0.5"
@@ -239,7 +248,7 @@ export default async function MarksPage({
                       <input
                         type="checkbox"
                         name={`absent-${r.studentId}`}
-                        aria-label={`Absent · ${r.name}`}
+                        aria-label={`${t(lang, 'Absent')} · ${r.name}`}
                         defaultChecked={r.absent}
                         disabled={locked}
                       />
@@ -248,7 +257,7 @@ export default async function MarksPage({
                       <input
                         type="checkbox"
                         name={`exempt-${r.studentId}`}
-                        aria-label={`Exempt · ${r.name}`}
+                        aria-label={`${t(lang, 'Exempt')} · ${r.name}`}
                         defaultChecked={r.exempt}
                         disabled={locked}
                       />
@@ -261,11 +270,11 @@ export default async function MarksPage({
               <div
                 style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--sp-3)' }}
               >
-                <Button type="submit">Save marks</Button>
+                <Button type="submit">{t(lang, 'Save marks')}</Button>
               </div>
             ) : (
               <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
-                This sheet is locked; the coordinator can reopen it.
+                {t(lang, 'This sheet is locked; the coordinator can reopen it.')}
               </p>
             )}
           </form>

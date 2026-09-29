@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import { endImpersonation } from '@/lib/actions';
 import type { Me } from '@/lib/api';
 import { apiFetch } from '@/lib/api';
+import { tourFor } from '@/lib/tours';
 import { Icon, SECTION_ICON } from './nav-icons';
+import { Tour } from './Tour';
 import { SchoolYearSwitcher } from './SchoolYearSwitcher';
 import { SidebarToggle } from './SidebarToggle';
 
@@ -302,6 +304,14 @@ export async function Shell({
     getTranslations('impersonationBanner'),
     getLocale(),
   ]);
+  const tours = await getTranslations('tours');
+  const tour = tourFor(currentPath);
+  const tourSteps = tour
+    ? Array.from({ length: tour.steps }, (_, n) => ({
+        title: tours(`${tour.id}.${n + 1}_title`),
+        body: tours(`${tour.id}.${n + 1}_body`),
+      }))
+    : [];
   const allowed = new Set(me.permissions);
   const isCurrent = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
@@ -427,6 +437,20 @@ export async function Shell({
               {common('apply')}
             </button>
           </form>
+          {tour ? (
+            <Tour
+              id={tour.id}
+              steps={tourSteps}
+              labels={{
+                show: tours('show'),
+                next: tours('next'),
+                back: tours('back'),
+                done: tours('done'),
+                skip: tours('skip'),
+                stepOfTemplate: tours('stepOf'),
+              }}
+            />
+          ) : null}
           {allowed.has('insights.alert.view') ? (
             <a
               className="ep-header__icon-btn ep-header__bell"

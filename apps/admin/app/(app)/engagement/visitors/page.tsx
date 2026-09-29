@@ -18,15 +18,22 @@ interface Visitor {
   loggedBy: string | null;
 }
 
-const hm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '');
+const hm = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
 
 /** Sprint 19: the visitor log. */
-export default async function VisitorsPage({ searchParams }: { searchParams: Promise<{ onDate?: string; ok?: string; error?: string; detail?: string }> }) {
+export default async function VisitorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ onDate?: string; ok?: string; error?: string; detail?: string }>;
+}) {
   const sp = await searchParams;
   const [t, e, rows] = await Promise.all([
     getTranslations('pages.engagement_visitors'),
     getTranslations('eng19'),
-    apiFetch<{ data: Visitor[] }>(`/engagement/visitors${sp.onDate ? `?onDate=${sp.onDate}` : ''}`).then((x) => x.data),
+    apiFetch<{ data: Visitor[] }>(
+      `/engagement/visitors${sp.onDate ? `?onDate=${sp.onDate}` : ''}`,
+    ).then((x) => x.data),
   ]);
   return (
     <>
@@ -35,9 +42,20 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
         title={t('title')}
         description={t('description')}
         actions={
-          <form method="get" style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
-            <InputField id="onDate" name="onDate" label={e('onDate')} type="date" defaultValue={sp.onDate ?? ''} />
-            <Button type="submit" variant="secondary" size="sm">{e('show')}</Button>
+          <form
+            method="get"
+            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
+          >
+            <InputField
+              id="onDate"
+              name="onDate"
+              label={e('onDate')}
+              type="date"
+              defaultValue={sp.onDate ?? ''}
+            />
+            <Button type="submit" variant="secondary" size="sm">
+              {e('show')}
+            </Button>
           </form>
         }
       />
@@ -45,14 +63,33 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
       <Card title={e('signIn')} style={{ marginBottom: 'var(--sp-4)' }}>
         <form action={visitorIn}>
           <FormRow columns={4}>
-            <InputField id="visitorName" name="visitorName" label={e('visitorName')} required minLength={2} maxLength={120} />
+            <InputField
+              id="visitorName"
+              name="visitorName"
+              label={e('visitorName')}
+              required
+              minLength={2}
+              maxLength={120}
+            />
             <InputField id="mobile" name="mobile" label={e('mobile')} pattern="\\d{10}" />
-            <InputField id="organisation" name="organisation" label={e('organisation')} maxLength={120} />
+            <InputField
+              id="organisation"
+              name="organisation"
+              label={e('organisation')}
+              maxLength={120}
+            />
             <InputField id="purpose" name="purpose" label={e('purpose')} required maxLength={300} />
             <InputField id="toMeet" name="toMeet" label={e('toMeet')} maxLength={120} />
-            <InputField id="idProofKind" name="idProofKind" label={e('idProofKind')} maxLength={40} />
+            <InputField
+              id="idProofKind"
+              name="idProofKind"
+              label={e('idProofKind')}
+              maxLength={40}
+            />
             <InputField id="badgeNo" name="badgeNo" label={e('badgeNo')} maxLength={20} />
-            <div style={{ alignSelf: 'end' }}><Button type="submit">{e('signIn')}</Button></div>
+            <div style={{ alignSelf: 'end' }}>
+              <Button type="submit">{e('signIn')}</Button>
+            </div>
           </FormRow>
         </form>
       </Card>
@@ -61,11 +98,40 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
           caption={`${t('title')} · ${rows.length}`}
           density="dense"
           columns={[
-            { key: 'n', header: e('visitorName'), render: (v) => <><strong>{v.visitorName}</strong><div className="ep-kicker">{v.organisation ?? ''}{v.mobile ? ` · ${v.mobile}` : ''}</div></> },
-            { key: 'p', header: e('purpose'), render: (v) => <>{v.purpose}{v.toMeet ? <div className="ep-kicker">{e('toMeet')}: {v.toMeet}</div> : null}</> },
+            {
+              key: 'n',
+              header: e('visitorName'),
+              render: (v) => (
+                <>
+                  <strong>{v.visitorName}</strong>
+                  <div className="ep-kicker">
+                    {v.organisation ?? ''}
+                    {v.mobile ? ` · ${v.mobile}` : ''}
+                  </div>
+                </>
+              ),
+            },
+            {
+              key: 'p',
+              header: e('purpose'),
+              render: (v) => (
+                <>
+                  {v.purpose}
+                  {v.toMeet ? (
+                    <div className="ep-kicker">
+                      {e('toMeet')}: {v.toMeet}
+                    </div>
+                  ) : null}
+                </>
+              ),
+            },
             { key: 'b', header: e('badgeNo'), render: (v) => v.badgeNo ?? '' },
             { key: 'i', header: e('inAt'), render: (v) => hm(v.inAt) },
-            { key: 'o', header: e('outAt'), render: (v) => (v.outAt ? hm(v.outAt) : <Badge tone="warning">in</Badge>) },
+            {
+              key: 'o',
+              header: e('outAt'),
+              render: (v) => (v.outAt ? hm(v.outAt) : <Badge tone="warning">in</Badge>),
+            },
             {
               key: 'a',
               header: '',
@@ -73,7 +139,9 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
                 v.outAt ? null : (
                   <form action={visitorOut}>
                     <input type="hidden" name="id" value={v.id} />
-                    <Button type="submit" size="sm" variant="secondary">{e('signOut')}</Button>
+                    <Button type="submit" size="sm" variant="secondary">
+                      {e('signOut')}
+                    </Button>
                   </form>
                 ),
             },

@@ -2,6 +2,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Notice {
   id: string;
@@ -16,6 +17,7 @@ interface Notice {
 
 /** S7-08: notices visible to the family (audience and targets are applied by the API). */
 export default async function NoticesPage() {
+  const lang = await currentLang();
   let notices: Notice[];
   try {
     notices = await bff.api
@@ -26,8 +28,8 @@ export default async function NoticesPage() {
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Notices" />
-          <Card>Notices are not available for this account.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Notices')} />
+          <Card>{t(lang, 'Notices are not available for this account.')}</Card>
         </main>
       );
     throw error;
@@ -35,26 +37,26 @@ export default async function NoticesPage() {
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
-        kicker="Notices"
-        title="Notices and circulars"
-        description={`${notices.length} current`}
+        kicker={t(lang, 'Notices')}
+        title={t(lang, 'Notices and circulars')}
+        description={`${notices.length} ${t(lang, 'current')}`}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
-      {notices.length === 0 ? <Card>No notices right now.</Card> : null}
+      {notices.length === 0 ? <Card>{t(lang, 'No notices right now.')}</Card> : null}
       {notices.map((n) => (
         <Card key={n.id} elevated style={{ marginBottom: 'var(--sp-3)' }}>
           <div
             style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap' }}
           >
-            {n.isPinned ? <Badge tone="warning">Pinned</Badge> : null}
-            <Badge tone={n.kind === 'circular' ? 'info' : 'neutral'}>{n.kind}</Badge>
+            {n.isPinned ? <Badge tone="warning">{t(lang, 'Pinned')}</Badge> : null}
+            <Badge tone={n.kind === 'circular' ? 'info' : 'neutral'}>{t(lang, n.kind)}</Badge>
             <span className="ep-kicker">{n.publishFrom}</span>
             {n.targets.length ? (
-              <span className="ep-kicker">· {n.targets.map((t) => t.label).join(', ')}</span>
+              <span className="ep-kicker">· {n.targets.map((x) => x.label).join(', ')}</span>
             ) : null}
           </div>
           <div
@@ -69,7 +71,9 @@ export default async function NoticesPage() {
           </div>
           <p style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--sp-1)' }}>{n.body}</p>
           {n.files.length ? (
-            <div className="ep-kicker">{n.files.map((f) => f.name ?? 'file').join(', ')}</div>
+            <div className="ep-kicker">
+              {n.files.map((f) => f.name ?? t(lang, 'file')).join(', ')}
+            </div>
           ) : null}
         </Card>
       ))}

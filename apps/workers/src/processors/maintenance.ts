@@ -452,6 +452,62 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       log.info({ deleted }, 'vehicle positions purge run');
       return;
     }
+    if (kind === 'retention.purge') {
+      // Sprint 20: DPDP storage limitation. Per school, each policy reads its setting (legal minimums are
+      // enforced by the settings catalogue) and writes one retention_runs row; financial and academic
+      // records are never touched (ADR-014 archive covers those).
+      const schools = { rows: await schoolsFor(db, job) };
+      const policies: Array<{ policy: string; setting: string; def: number; sql: string }> = [
+        {
+          policy: 'comms_body',
+          setting: 'privacy.retention.comms_body_days',
+          def: 180,
+          sql: `WITH d AS (UPDATE comms_messages SET body = '[retained metadata]', variables = '{}'::jsonb WHERE created_at < now() - make_interval(days => $1) AND body <> '[retained metadata]' AND body <> '[erased]' RETURNING 1) SELECT count(*)::int AS n FROM d`,
+        },
+        {
+          policy: 'login_events',
+          setting: 'privacy.retention.login_events_days',
+          def: 365,
+          sql: `SELECT app.purge_login_events($1::int) AS n`,
+        },
+        {
+          policy: 'visitor_log',
+          setting: 'privacy.retention.visitor_log_days',
+          def: 365,
+          sql: `WITH d AS (DELETE FROM visitor_log WHERE in_at < now() - make_interval(days => $1) RETURNING 1) SELECT count(*)::int AS n FROM d`,
+        },
+        {
+          policy: 'ai_messages',
+          setting: 'privacy.retention.ai_messages_days',
+          def: 180,
+          sql: `WITH d AS (DELETE FROM ai_messages WHERE created_at < now() - make_interval(days => $1) RETURNING 1) SELECT count(*)::int AS n FROM d`,
+        },
+      ];
+      let total = 0;
+      for (const s of schools.rows) {
+        await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          async (c) => {
+            for (const p of policies) {
+              const setting = await c.query<{ v: string | null }>(
+                `SELECT app.setting($1) #>> '{}' AS v`,
+                [p.setting],
+              );
+              const days = Number(setting.rows[0]?.v ?? p.def) || p.def;
+              const r = await c.query<{ n: number }>(p.sql, [days]);
+              const affected = Number(r.rows[0]?.n ?? 0);
+              await c.query(
+                `INSERT INTO retention_runs (school_id, policy, keep_days, affected) VALUES (app.current_school_id(), $1, $2, $3)`,
+                [p.policy, days, affected],
+              );
+              total += affected;
+            }
+          },
+        );
+      }
+      log.info({ schools: schools.rows.length, affected: total }, 'retention purge run');
+      return;
+    }
     if (kind === 'insights.results_mart') {
       const schools = { rows: await schoolsFor(db, job) };
       let rows = 0;

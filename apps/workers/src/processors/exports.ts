@@ -17,6 +17,7 @@ import { renderAiReport } from '../renderers/ai-report';
 import { renderCertificate, renderCertificateBatch } from '../renderers/certificate';
 import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
+import { renderDsrAccess } from '../renderers/dsr-access';
 import { idCardHtml, loadIdCard } from '../renderers/id-card';
 
 interface ExportDbRow {
@@ -130,6 +131,9 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
         } else if (renderer.id === 'report_card') {
           const doc = await renderReportCard(db, storage, envelope, row.params, exportId);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'dsr_access') {
+          const doc = await renderDsrAccess(db, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
         } else if (renderer.id === 'certificate') {
           const doc = await renderCertificate(db, envelope, row.params);

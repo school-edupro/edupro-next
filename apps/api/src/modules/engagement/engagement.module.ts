@@ -2,11 +2,14 @@ import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
 import { CommsModule } from '../comms/comms.module';
+import { PlatformModule } from '../platform/platform.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PaymentsService } from '../payments/payments.service';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WorkflowService } from '../workflow/workflow.service';
+import { DsrController } from './dsr.controller';
+import { DsrService } from './dsr.service';
 import { EngagementController } from './engagement.controller';
 import { FamilyService } from './family.service';
 import { EngagementPlusController } from './plus.controller';
@@ -20,10 +23,24 @@ import { QueriesService } from './queries.service';
  * employee queries (the last approvals on the workflow engine).
  */
 @Module({
-  imports: [DailyAcademicsModule, CommsModule, WorkflowModule, PaymentsModule, ReportsModule],
-  controllers: [EngagementController, EngagementPlusController],
-  providers: [QueriesService, FamilyService, PrivacyService, EngagementPlusService, AuditService],
-  exports: [QueriesService, FamilyService, PrivacyService, EngagementPlusService],
+  imports: [
+    DailyAcademicsModule,
+    CommsModule,
+    WorkflowModule,
+    PaymentsModule,
+    ReportsModule,
+    PlatformModule,
+  ],
+  controllers: [EngagementController, EngagementPlusController, DsrController],
+  providers: [
+    QueriesService,
+    FamilyService,
+    PrivacyService,
+    EngagementPlusService,
+    DsrService,
+    AuditService,
+  ],
+  exports: [QueriesService, FamilyService, PrivacyService, EngagementPlusService, DsrService],
 })
 export class EngagementModule implements OnModuleInit {
   constructor(

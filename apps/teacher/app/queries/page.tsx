@@ -2,6 +2,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Query {
   id: string;
@@ -35,6 +36,7 @@ export default async function QueriesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let queries: Query[];
   try {
     queries = await bff.api
@@ -47,8 +49,8 @@ export default async function QueriesPage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Queries" />
-          <Card>You have no sections assigned, so no family queries reach you.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Queries')} />
+          <Card>{t(lang, 'You have no sections assigned, so no family queries reach you.')}</Card>
         </main>
       );
     throw error;
@@ -56,9 +58,9 @@ export default async function QueriesPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
-        kicker="Queries"
-        title="Family queries"
-        description={`${queries.filter((q) => q.status === 'open' || q.status === 'in_progress').length} waiting for a reply`}
+        kicker={t(lang, 'Queries')}
+        title={t(lang, 'Family queries')}
+        description={`${queries.filter((q) => q.status === 'open' || q.status === 'in_progress').length} ${t(lang, 'waiting for a reply')}`}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             {(['', 'open', 'answered', 'closed'] as const).map((s) => (
@@ -67,16 +69,16 @@ export default async function QueriesPage({
                 className={`ep-btn ep-btn--sm ${(sp.status ?? '') === s ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
                 href={s ? `/queries?status=${s}` : '/queries'}
               >
-                {s ? LABEL[s] : 'All'}
+                {s ? t(lang, LABEL[s]) : t(lang, 'All')}
               </a>
             ))}
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-              Home
+              {t(lang, 'Home')}
             </a>
           </span>
         }
       />
-      {queries.length === 0 ? <Card>No queries.</Card> : null}
+      {queries.length === 0 ? <Card>{t(lang, 'No queries.')}</Card> : null}
       {queries.map((q) => (
         <a key={q.id} href={`/queries/${q.id}`} style={{ textDecoration: 'none' }}>
           <Card elevated style={{ marginBottom: 'var(--sp-3)' }}>
@@ -99,12 +101,12 @@ export default async function QueriesPage({
                   {q.subject}
                 </div>
                 <div className="ep-kicker">
-                  {q.number} · {q.kind} · {q.categoryName} · {q.studentName}
+                  {q.number} · {t(lang, q.kind)} · {q.categoryName} · {q.studentName}
                   {q.section ? ` (${q.section})` : ''} · {q.raisedBy ?? ''} ·{' '}
                   {new Date(q.openedAt).toLocaleDateString('en-IN')}
                 </div>
               </div>
-              <Badge tone={TONE[q.status]}>{LABEL[q.status]}</Badge>
+              <Badge tone={TONE[q.status]}>{t(lang, LABEL[q.status])}</Badge>
             </div>
           </Card>
         </a>

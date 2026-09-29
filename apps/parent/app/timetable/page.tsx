@@ -2,6 +2,7 @@ import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Viewer {
   students: Array<{
@@ -35,6 +36,7 @@ export default async function TimetablePage({
   searchParams: Promise<{ child?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let viewer: Viewer;
   try {
     viewer = await bff.api.fetch<Viewer>('/academics/daily-work/viewer');
@@ -43,9 +45,12 @@ export default async function TimetablePage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 900, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Timetable" />
+          <PageHeader kicker="EduPro" title={t(lang, 'Timetable')} />
           <Card>
-            Your account is not linked to a student yet. Please contact the school office.
+            {t(
+              lang,
+              'Your account is not linked to a student yet. Please contact the school office.',
+            )}
           </Card>
         </main>
       );
@@ -69,9 +74,13 @@ export default async function TimetablePage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 900, margin: '0 auto' }}>
       <PageHeader
-        kicker="Timetable"
-        title={child ? `${child.name} · ${child.section}` : 'Timetable'}
-        description={child ? `${days.length} school days a week` : 'No enrolled child found'}
+        kicker={t(lang, 'Timetable')}
+        title={child ? `${child.name} · ${child.section}` : t(lang, 'Timetable')}
+        description={
+          child
+            ? `${days.length} ${t(lang, 'school days a week')}`
+            : t(lang, 'No enrolled child found')
+        }
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             {kids.length > 1
@@ -86,22 +95,22 @@ export default async function TimetablePage({
                 ))
               : null}
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-              Home
+              {t(lang, 'Home')}
             </a>
           </span>
         }
       />
       <Card>
         {slots.length === 0 ? (
-          <p className="ep-field__help">The timetable has not been published yet.</p>
+          <p className="ep-field__help">{t(lang, 'The timetable has not been published yet.')}</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="ep-table ep-table--dense">
               <thead>
                 <tr>
-                  <th>Period</th>
+                  <th>{t(lang, 'Period')}</th>
                   {days.map((d) => (
-                    <th key={d}>{DAYS[d]}</th>
+                    <th key={d}>{t(lang, DAYS[d] ?? '')}</th>
                   ))}
                 </tr>
               </thead>

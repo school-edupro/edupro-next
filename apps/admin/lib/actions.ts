@@ -3245,3 +3245,75 @@ export async function closeShadowRun(fd: FormData) {
   }
   redirect(`${back}?ok=1`);
 }
+
+// ---- Sprint 20: DPDP tooling -------------------------------------------------------------------------
+export async function dsrCreateOffice(fd: FormData) {
+  return run('/system/privacy', () =>
+    apiFetch('/privacy/requests', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: str(fd, 'kind'),
+        principalKind: str(fd, 'principalKind'),
+        principalId: str(fd, 'principalId'),
+        channel: str(fd, 'channel') || 'office',
+        detail: opt(fd, 'detail'),
+      }),
+    }),
+  );
+}
+
+export async function dsrSetStatus(fd: FormData) {
+  return run('/system/privacy', () =>
+    apiFetch(`/privacy/requests/${str(fd, 'id')}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: str(fd, 'status'), outcome: opt(fd, 'outcome') }),
+    }),
+  );
+}
+
+export async function dsrErase(fd: FormData) {
+  const back = '/system/privacy';
+  try {
+    await apiFetch(`/privacy/requests/${str(fd, 'id')}/erase`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(back)}`);
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}?ok=1`);
+}
+
+export async function breachRecord(fd: FormData) {
+  return run('/system/privacy', () =>
+    apiFetch('/privacy/breaches', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: str(fd, 'title'),
+        detectedAt: str(fd, 'detectedAt'),
+        description: str(fd, 'description'),
+        dataClasses: str(fd, 'dataClasses')
+          .split(/[,\s]+/)
+          .filter(Boolean),
+        principalsAffected: Number(str(fd, 'principalsAffected') || 0),
+      }),
+    }),
+  );
+}
+
+export async function breachUpdate(fd: FormData) {
+  return run('/system/privacy', () =>
+    apiFetch(`/privacy/breaches/${str(fd, 'id')}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: opt(fd, 'status'),
+        actions: opt(fd, 'actions'),
+        boardNotified: fd.get('boardNotified') === 'on',
+        principalsNotified: fd.get('principalsNotified') === 'on',
+      }),
+    }),
+  );
+}

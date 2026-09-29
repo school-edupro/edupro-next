@@ -2,6 +2,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Child {
   id: string;
@@ -39,6 +40,7 @@ export default async function AttendancePage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   // Sprint 12: a previous session (chosen on the home page) opens on its last month, not on today's
   let yearHint = '';
   let defaultMonth: string | undefined;
@@ -48,7 +50,7 @@ export default async function AttendancePage({
       const y = me.academicYears?.find((x) => x.id === me.academicYear?.id);
       if (y && y.status !== 'active') {
         defaultMonth = y.endDate.slice(0, 7);
-        yearHint = ` · Session ${y.code} (read-only)`;
+        yearHint = ` · ${t(lang, 'Session')} ${y.code} (${t(lang, 'read-only')})`;
       }
     } catch {
       /* the fetch below reports session problems */
@@ -65,9 +67,12 @@ export default async function AttendancePage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Attendance" />
+          <PageHeader kicker="EduPro" title={t(lang, 'Attendance')} />
           <Card>
-            Your account is not linked to a student yet. Please contact the school office.
+            {t(
+              lang,
+              'Your account is not linked to a student yet. Please contact the school office.',
+            )}
           </Card>
         </main>
       );
@@ -81,25 +86,25 @@ export default async function AttendancePage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
-        kicker="Attendance"
+        kicker={t(lang, 'Attendance')}
         title={title}
-        description={`${data.children.length} ${data.children.length === 1 ? 'child' : 'children'}${yearHint}`}
+        description={`${data.children.length} ${data.children.length === 1 ? t(lang, 'child') : t(lang, 'children')}${yearHint}`}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             <a
               className="ep-btn ep-btn--ghost ep-btn--sm"
               href={`/attendance?month=${shift(month, -1)}`}
             >
-              ‹ Previous
+              ‹ {t(lang, 'Previous')}
             </a>
             <a
               className="ep-btn ep-btn--ghost ep-btn--sm"
               href={`/attendance?month=${shift(month, 1)}`}
             >
-              Next ›
+              {t(lang, 'Next')} ›
             </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-              Home
+              {t(lang, 'Home')}
             </a>
           </span>
         }
@@ -123,22 +128,22 @@ export default async function AttendancePage({
                 }
               >
                 {pct === null
-                  ? 'No school days yet'
-                  : `${pct}% · ${c.summary.present}/${c.summary.days} days`}
+                  ? t(lang, 'No school days yet')
+                  : `${pct}% · ${c.summary.present}/${c.summary.days} ${t(lang, 'days')}`}
               </Badge>
             }
             style={{ marginBottom: 'var(--sp-3)' }}
           >
             {c.days.length === 0 ? (
-              <p className="ep-field__help">No attendance marked in this month.</p>
+              <p className="ep-field__help">{t(lang, 'No attendance marked in this month.')}</p>
             ) : (
               <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Status</th>
-                    <th>In</th>
-                    <th>Out</th>
+                    <th>{t(lang, 'Date')}</th>
+                    <th>{t(lang, 'Status')}</th>
+                    <th>{t(lang, 'In')}</th>
+                    <th>{t(lang, 'Out')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -155,7 +160,7 @@ export default async function AttendancePage({
                           })}
                         </td>
                         <td>
-                          <Badge tone={tone}>{label}</Badge>
+                          <Badge tone={tone}>{t(lang, label)}</Badge>
                         </td>
                         <td>{time(d.inAt)}</td>
                         <td>{time(d.outAt)}</td>

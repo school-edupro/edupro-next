@@ -78,6 +78,14 @@ RENDERERS.certificate_batch = {
   requiredParams: ['templateId'],
 };
 
+RENDERERS.dsr_access = {
+  id: 'dsr_access',
+  title: 'Data-principal access report',
+  permission: 'platform.privacy.manage',
+  page: { width: '210mm', height: '297mm' },
+  requiredParams: ['requestId'],
+};
+
 export const RENDERER_IDS = Object.keys(RENDERERS) as [string, ...string[]];
 
 export function rendererOrNull(id: string): RendererDefinition | null {

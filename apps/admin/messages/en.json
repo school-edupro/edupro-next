@@ -559,7 +559,7 @@
     "system_privacy": {
       "kicker": "System",
       "title": "Privacy notice",
-      "description": "The DPDP notice families read and acknowledge in the parent app; publishing a new version asks everyone again."
+      "description": "The DPDP notice families acknowledge in the parent app, the data-principal request queue, the nightly retention purge and the breach log."
     },
     "fees_ledger": {
       "kicker": "Fees",
@@ -3155,5 +3155,189 @@
     "passPct": "Pass %",
     "approvals": "Open approvals",
     "overdueLoans": "Overdue loans"
+  },
+  "dsr": {
+    "requests": "Data-principal requests",
+    "openCount": "{count} open",
+    "kind": "Kind",
+    "kind_access": "Access",
+    "kind_correction": "Correction",
+    "kind_erasure": "Erasure",
+    "kind_grievance": "Grievance",
+    "principal": "Person",
+    "principalKind": "Person type",
+    "principalId": "Person id",
+    "channel": "Channel",
+    "detail": "Detail",
+    "due": "Due by",
+    "overdue": "Overdue",
+    "status": "Status",
+    "status_received": "Received",
+    "status_in_progress": "In progress",
+    "status_completed": "Completed",
+    "status_refused": "Refused",
+    "report": "Access report",
+    "outcome": "Outcome / note",
+    "start": "Start",
+    "complete": "Complete",
+    "completeAccess": "Complete and generate the report",
+    "refuse": "Refuse",
+    "erase": "Erase the person",
+    "eraseReason": "Reason (audited)",
+    "noRequests": "No requests.",
+    "record": "Record a request received at the office",
+    "retention": "Retention purge",
+    "retentionHelp": "Nightly at 03:00 IST per school: message bodies, sign-in events, visitor log rows and assistant conversations older than the settings (System → Settings → privacy.retention.*) are removed; financial and academic records are never touched.",
+    "policy": "Policy",
+    "keepDays": "Keep (days)",
+    "lastRun": "Last run",
+    "lastAffected": "Affected",
+    "last30": "Last 30 days",
+    "noRuns": "No run yet.",
+    "breaches": "Breach log",
+    "breachHelp": "Every suspected breach is recorded here and worked with the runbook (docs/runbooks/incident-breach.md): contain, assess, notify the Board and the principals, close.",
+    "detected": "Detected",
+    "principals": "people affected",
+    "boardClock": "{hours} h to the Board notice",
+    "actions": "Actions taken",
+    "boardNotified": "Board notified",
+    "principalsNotified": "People notified",
+    "update": "Update",
+    "recordBreach": "Record a breach",
+    "title": "Title",
+    "dataClasses": "Data classes (comma separated)",
+    "description": "What happened"
+  },
+  "tours": {
+    "show": "Show me around",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "skip": "Skip",
+    "stepOf": "Step {current} of {total}",
+    "home": {
+      "1_title": "Welcome to EduPro Next",
+      "1_body": "The menu on the left shows only what your role may do. Groups fold; the pin collapses the menu to icons.",
+      "2_title": "School and session",
+      "2_body": "The header shows the school and the academic session you are working in; switch them there when you hold more than one.",
+      "3_title": "Search and alerts",
+      "3_body": "Search finds pupils, guardians and staff by name, admission number or mobile. The bell lists insight alerts.",
+      "4_title": "Help at hand",
+      "4_body": "Every screen has this tour behind the question mark; the training pages in docs/training explain the routines."
+    },
+    "students": {
+      "1_title": "Pupils",
+      "1_body": "Every pupil of the school with their current section. Filters narrow by class, status and more; the grid exports to Excel.",
+      "2_title": "Open a pupil",
+      "2_body": "The profile carries guardians, documents, enrolment history, fees, attendance and status history in one place.",
+      "3_title": "Changes",
+      "3_body": "Families request corrections from the parent app; you approve them here and the audit log records both.",
+      "4_title": "Bulk work",
+      "4_body": "People → Bulk import validates a spreadsheet row by row before anything is written."
+    },
+    "admissions": {
+      "1_title": "Cycles",
+      "1_body": "A cycle is one intake: classes, seats, dates, the form, the scoring rule and the fee.",
+      "2_title": "Applications",
+      "2_body": "Verify, score and shortlist; duplicates and seats against applications show on the dashboard.",
+      "3_title": "Approvals",
+      "3_body": "Offers go through the coordinator and the principal in the approvals inbox.",
+      "4_title": "Admission",
+      "4_body": "Once the fee is paid the application becomes an enrolled pupil with guardians and documents carried over."
+    },
+    "academics": {
+      "1_title": "Structure",
+      "1_body": "Classes, sections and subjects for the session; teacher assignments grant the scoped roles.",
+      "2_title": "Timetable",
+      "2_body": "Periods and slots per section; a teacher cannot be in two places in one period.",
+      "3_title": "Daily work",
+      "3_body": "Homework, classwork and assignments posted by teachers appear here and in the parent app at once.",
+      "4_title": "Notices and calendar",
+      "4_body": "Notices target a class, a wing or the school; the almanac and holidays drive attendance and the apps."
+    },
+    "attendance": {
+      "1_title": "Sessions",
+      "1_body": "One session per section per day, marked by the class teacher with taps from gates and buses pre-filled.",
+      "2_title": "Rules and devices",
+      "2_body": "Late cut-offs, half days and per-pupil rules live under Rules; readers and their keys under Devices.",
+      "3_title": "Alerts",
+      "3_body": "Absence alerts go once a day per pupil; the dashboard shows chronic absence and device health."
+    },
+    "communication": {
+      "1_title": "Templates",
+      "1_body": "SMS templates carry their DLT id; WhatsApp templates their approved name.",
+      "2_title": "Requests",
+      "2_body": "Draft to a group, preview who receives it and who is skipped, submit for the principal's approval.",
+      "3_title": "Consent",
+      "3_body": "General messages respect each family's consent per channel; service messages always go.",
+      "4_title": "Outbox",
+      "4_body": "Every message with its delivery status from the provider's receipts."
+    },
+    "engagement": {
+      "1_title": "Queries",
+      "1_body": "Family queries, complaints and leave requests routed by category with an SLA.",
+      "2_title": "Appointments and gate passes",
+      "2_body": "Requests from families reach the class teacher's inbox; approved passes get a number and a WhatsApp.",
+      "3_title": "Visitors and clinic",
+      "3_body": "Sign visitors in and out (id kind only, never the number); record clinic visits with a family message.",
+      "4_title": "Consent forms and certificates",
+      "4_body": "Build a form with an optional fee; issue certificates from a template to a section."
+    },
+    "fees": {
+      "1_title": "Masters and demand",
+      "1_body": "Heads, structures and concessions per session; demand per class; a profile change regenerates one pupil.",
+      "2_title": "Cashier",
+      "2_body": "Post receipts against the ledger; numbering and allocation are automatic; print at once.",
+      "3_title": "Adjustments",
+      "3_body": "Waivers, reversals and bounces are requests with a reason; the admin approves with a second factor.",
+      "4_title": "Reports",
+      "4_body": "Day book, head-wise tally, defaulters, forecast and the Tally export; every export lands in Reports → Exports.",
+      "5_title": "Shadow run",
+      "5_body": "While the legacy system runs in parallel the workbench compares both ledgers daily and closes the run at M3."
+    },
+    "exams": {
+      "1_title": "Masters",
+      "1_body": "Exam types and grade scales per class band.",
+      "2_title": "Exams and entry",
+      "2_body": "Create the exam with classes and subjects; teachers enter marks; the coordinator locks and reopens.",
+      "3_title": "Results",
+      "3_body": "Compute results per exam; ranks, analysis and promotion proposals follow.",
+      "4_title": "Report cards",
+      "4_body": "Templates per band, releases per term, batch PDFs; families download their own."
+    },
+    "workflow": {
+      "1_title": "Inbox",
+      "1_body": "Everything waiting for you: admissions, messages, lesson plans, fee changes, transport, appointments, gate passes, CCTV, employee queries.",
+      "2_title": "Definitions",
+      "2_body": "Levels, resolvers and SLAs per flow; escalation after the SLA; delegations count.",
+      "3_title": "History",
+      "3_body": "Every instance keeps its steps, comments and events for the audit."
+    },
+    "reports": {
+      "1_title": "Export centre",
+      "1_body": "Every Excel, CSV, PDF and XML you asked for, with its status and download link.",
+      "2_title": "Scheduled reports",
+      "2_body": "A dataset on a cron schedule, run as you, delivered to roles or addresses.",
+      "3_title": "MIS centre",
+      "3_body": "The dashboards mapped to your roles with live numbers and their exports."
+    },
+    "masters": {
+      "1_title": "One pattern",
+      "1_body": "Every master has the same screen: list, search, add, edit, status, Excel export and bulk upload.",
+      "2_title": "Upload",
+      "2_body": "Download the template, fill it, validate; the report lists problems per row; commit only when clean.",
+      "3_title": "Per school",
+      "3_body": "Masters belong to the school you are working in; a group can clone a master to another school."
+    },
+    "privacy": {
+      "1_title": "Notice",
+      "1_body": "The DPDP notice families acknowledge; a new version asks everyone again.",
+      "2_title": "Requests",
+      "2_body": "Access, correction, erasure and grievance requests with their due dates; completing an access request generates the report.",
+      "3_title": "Retention",
+      "3_body": "The nightly purge per policy and what it removed; limits are settings within legal minimums.",
+      "4_title": "Breach log",
+      "4_body": "Record, contain, notify the Board and the principals, close; the clock to the Board notice is shown."
+    }
   }
 }

@@ -1,10 +1,10 @@
 # Runbook: backups, restore and disaster recovery
 
-|            |                                                                                                                        |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Owner      | Platform engineering                                                                                                   |
-| Targets    | RPO 15 minutes (WAL archiving on the managed server), RTO 60 minutes for the database, 30 minutes for the applications |
-| Last drill | 2026-09-27 on the local stack with `scripts/restore-drill.sh` (see the Sprint 5 record for the measured duration)      |
+|            |                                                                                                                                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner      | Platform engineering                                                                                                                                                                                                                                                                                                                        |
+| Targets    | RPO 15 minutes (WAL archiving on the managed server), RTO 60 minutes for the database, 30 minutes for the applications                                                                                                                                                                                                                      |
+| Last drill | 2026-09-27 on the local stack with `scripts/restore-drill.sh` (Sprint 5 record). Sprint 20 (2026-09-29): the drill could not be re-run on this laptop because the user-space PostgreSQL bundle ships without `pg_dump`/`pg_restore`; the script is unchanged and runs on staging where the client binaries exist (go-live runbook step 1.2) |
 
 ## 1. What is backed up
 

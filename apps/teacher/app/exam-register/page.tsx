@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { saveAttendance, saveHealth, saveRemarks } from './actions';
 
 interface Exam {
@@ -59,6 +60,7 @@ export default async function ExamRegisterPage({
   }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let exams: Exam[];
   try {
     exams = await bff.api.fetch<{ data: Exam[] }>('/exams').then((r) => r.data);
@@ -67,8 +69,8 @@ export default async function ExamRegisterPage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Exam register" />
-          <Card>You are not allowed to open exam registers in this school.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Exam register')} />
+          <Card>{t(lang, 'You are not allowed to open exam registers in this school.')}</Card>
         </main>
       );
     throw error;
@@ -96,16 +98,20 @@ export default async function ExamRegisterPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 960, margin: '0 auto' }}>
       <PageHeader
-        kicker="Exam register"
-        title={exam ? `${exam.name} (${exam.code})` : 'Exam register'}
+        kicker={t(lang, 'Exam register')}
+        title={exam ? `${exam.name} (${exam.code})` : t(lang, 'Exam register')}
         description={
           reg
-            ? `${reg.section.code} · remarks, exam attendance${reg.healthVisible ? ', height and weight' : ''}`
-            : 'Class teachers fill the register for their section.'
+            ? `${reg.section.code} · ${
+                reg.healthVisible
+                  ? t(lang, 'remarks, exam attendance, height and weight')
+                  : t(lang, 'remarks, exam attendance')
+              }`
+            : t(lang, 'Class teachers fill the register for their section.')
         }
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
@@ -115,7 +121,8 @@ export default async function ExamRegisterPage({
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          Saved{sp.detail ? ` (${sp.detail})` : ''}.
+          {t(lang, 'Saved')}
+          {sp.detail ? ` (${sp.detail})` : ''}.
         </div>
       ) : null}
       {sp.error ? (
@@ -124,7 +131,7 @@ export default async function ExamRegisterPage({
           role="alert"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          {ERRORS[sp.error] ?? sp.error}
+          {t(lang, ERRORS[sp.error] ?? sp.error)}
           {sp.detail ? ` — ${sp.detail}` : ''}
         </div>
       ) : null}
@@ -134,7 +141,7 @@ export default async function ExamRegisterPage({
           style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
         >
           <label className="ep-field" style={{ minWidth: 220 }}>
-            <span className="ep-field__label">Exam</span>
+            <span className="ep-field__label">{t(lang, 'Exam')}</span>
             <select className="ep-input" name="exam" defaultValue={exam?.id ?? ''}>
               {exams.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -144,7 +151,7 @@ export default async function ExamRegisterPage({
             </select>
           </label>
           <label className="ep-field" style={{ minWidth: 160 }}>
-            <span className="ep-field__label">Section</span>
+            <span className="ep-field__label">{t(lang, 'Section')}</span>
             <select className="ep-input" name="section" defaultValue={chosen?.classSectionId ?? ''}>
               {sections.map((s) => (
                 <option key={s.classSectionId} value={s.classSectionId}>
@@ -154,22 +161,24 @@ export default async function ExamRegisterPage({
             </select>
           </label>
           <Button type="submit" variant="secondary">
-            Open register
+            {t(lang, 'Open register')}
           </Button>
         </form>
       </Card>
-      {loadError ? <Card>{loadError}</Card> : null}
+      {loadError ? <Card>{t(lang, loadError)}</Card> : null}
       {!loadError && exam && sections.length === 0 ? (
-        <Card>You are not the class teacher of a section in this exam.</Card>
+        <Card>{t(lang, 'You are not the class teacher of a section in this exam.')}</Card>
       ) : null}
       {reg && exam && chosen ? (
         <Card
-          title={`Register · ${reg.section.code}`}
+          title={`${t(lang, 'Register')} · ${reg.section.code}`}
           actions={
             locked ? (
-              <Badge tone="warning">Locked</Badge>
+              <Badge tone="warning">{t(lang, 'Locked')}</Badge>
             ) : (
-              <Badge tone="neutral">{reg.rows.length} pupils</Badge>
+              <Badge tone="neutral">
+                {reg.rows.length} {t(lang, 'pupils')}
+              </Badge>
             )
           }
         >
@@ -189,14 +198,14 @@ export default async function ExamRegisterPage({
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>Pupil</th>
-                    <th>Remark</th>
-                    <th>Present / total days</th>
+                    <th>{t(lang, 'Pupil')}</th>
+                    <th>{t(lang, 'Remark')}</th>
+                    <th>{t(lang, 'Present / total days')}</th>
                     {reg.healthVisible ? (
                       <>
-                        <th>Height cm</th>
-                        <th>Weight kg</th>
-                        <th>Blood</th>
+                        <th>{t(lang, 'Height cm')}</th>
+                        <th>{t(lang, 'Weight kg')}</th>
+                        <th>{t(lang, 'Blood')}</th>
                       </>
                     ) : null}
                   </tr>
@@ -210,7 +219,7 @@ export default async function ExamRegisterPage({
                         <div className="ep-kicker">
                           {r.admissionNo}
                           {r.health?.recordedOn
-                            ? ` · last health ${r.health.recordedOn}${r.health.bmi ? ` · BMI ${r.health.bmi}` : ''}`
+                            ? ` · ${t(lang, 'last health')} ${r.health.recordedOn}${r.health.bmi ? ` · BMI ${r.health.bmi}` : ''}`
                             : ''}
                         </div>
                       </td>
@@ -219,7 +228,7 @@ export default async function ExamRegisterPage({
                           className="ep-input"
                           name={`remark-${r.studentId}`}
                           list="remark-bank"
-                          aria-label={`Remark · ${r.name}`}
+                          aria-label={`${t(lang, 'Remark')} · ${r.name}`}
                           defaultValue={r.remark ?? ''}
                           maxLength={600}
                           disabled={locked}
@@ -231,7 +240,7 @@ export default async function ExamRegisterPage({
                           className="ep-input"
                           type="number"
                           name={`present-${r.studentId}`}
-                          aria-label={`Days present · ${r.name}`}
+                          aria-label={`${t(lang, 'Days present')} · ${r.name}`}
                           min={0}
                           max={400}
                           defaultValue={r.daysPresent ?? ''}
@@ -243,7 +252,7 @@ export default async function ExamRegisterPage({
                           className="ep-input"
                           type="number"
                           name={`total-${r.studentId}`}
-                          aria-label={`Total days · ${r.name}`}
+                          aria-label={`${t(lang, 'Total days')} · ${r.name}`}
                           min={1}
                           max={400}
                           defaultValue={r.daysTotal ?? ''}
@@ -261,7 +270,7 @@ export default async function ExamRegisterPage({
                               min={40}
                               max={250}
                               name={`height-${r.studentId}`}
-                              aria-label={`Height · ${r.name}`}
+                              aria-label={`${t(lang, 'Height')} · ${r.name}`}
                               defaultValue={r.health?.heightCm ?? ''}
                               disabled={locked}
                               style={{ width: 84 }}
@@ -275,7 +284,7 @@ export default async function ExamRegisterPage({
                               min={3}
                               max={200}
                               name={`weight-${r.studentId}`}
-                              aria-label={`Weight · ${r.name}`}
+                              aria-label={`${t(lang, 'Weight')} · ${r.name}`}
                               defaultValue={r.health?.weightKg ?? ''}
                               disabled={locked}
                               style={{ width: 84 }}
@@ -285,7 +294,7 @@ export default async function ExamRegisterPage({
                             <select
                               className="ep-input"
                               name={`blood-${r.studentId}`}
-                              aria-label={`Blood group · ${r.name}`}
+                              aria-label={`${t(lang, 'Blood group')} · ${r.name}`}
                               defaultValue={r.health?.bloodGroup ?? ''}
                               disabled={locked}
                             >
@@ -315,20 +324,20 @@ export default async function ExamRegisterPage({
                 }}
               >
                 <Button type="submit" formAction={saveRemarks} variant="secondary">
-                  Save remarks
+                  {t(lang, 'Save remarks')}
                 </Button>
                 <Button type="submit" formAction={saveAttendance} variant="secondary">
-                  Save exam attendance
+                  {t(lang, 'Save exam attendance')}
                 </Button>
                 {reg.healthVisible ? (
                   <Button type="submit" formAction={saveHealth}>
-                    Save height and weight
+                    {t(lang, 'Save height and weight')}
                   </Button>
                 ) : null}
               </div>
             ) : (
               <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
-                The exam is locked; the coordinator can reopen it.
+                {t(lang, 'The exam is locked; the coordinator can reopen it.')}
               </p>
             )}
           </form>

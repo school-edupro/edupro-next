@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { askTeacherAssistant } from './actions';
 
 interface Entry {
@@ -32,6 +33,7 @@ export default async function TeacherAssistantPage({
   searchParams: Promise<{ c?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let entries: Entry[];
   let conversations: Conversation[];
   try {
@@ -46,8 +48,8 @@ export default async function TeacherAssistantPage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Assistant" />
-          <Card>The assistant is not enabled for your role in this school.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Assistant')} />
+          <Card>{t(lang, 'The assistant is not enabled for your role in this school.')}</Card>
         </main>
       );
     throw error;
@@ -60,12 +62,15 @@ export default async function TeacherAssistantPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
-        kicker="Assistant"
-        title="Ask about your sections"
-        description="Attendance, absentees, homework, queries and mark entry of the sections you hold. Every answer names the query it came from."
+        kicker={t(lang, 'Assistant')}
+        title={t(lang, 'Ask about your sections')}
+        description={t(
+          lang,
+          'Attendance, absentees, homework, queries and mark entry of the sections you hold. Every answer names the query it came from.',
+        )}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
@@ -90,7 +95,9 @@ export default async function TeacherAssistantPage({
                   paddingLeft: 'var(--sp-3)',
                 }}
               >
-                <div className="ep-kicker">{m.role === 'user' ? 'You' : 'Assistant'}</div>
+                <div className="ep-kicker">
+                  {m.role === 'user' ? t(lang, 'You') : t(lang, 'Assistant')}
+                </div>
                 <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
                 {m.citations?.length ? (
                   <div
@@ -98,7 +105,7 @@ export default async function TeacherAssistantPage({
                   >
                     {m.citations.map((c) => (
                       <Badge key={c.query} tone="neutral">
-                        {c.title} · {c.rows} rows
+                        {c.title} · {c.rows} {t(lang, 'rows')}
                       </Badge>
                     ))}
                   </div>
@@ -110,7 +117,7 @@ export default async function TeacherAssistantPage({
         <form action={askTeacherAssistant}>
           <input type="hidden" name="conversationId" value={current?.id ?? ''} />
           <label className="ep-field">
-            <span className="ep-field__label">Your question</span>
+            <span className="ep-field__label">{t(lang, 'Your question')}</span>
             <textarea
               className="ep-input"
               name="question"
@@ -118,7 +125,10 @@ export default async function TeacherAssistantPage({
               minLength={2}
               maxLength={1000}
               required
-              placeholder="Who was absent today? · Aaj kaun absent hai? · मेरे अनुभाग की उपस्थिति"
+              placeholder={t(
+                lang,
+                'Who was absent today? · Aaj kaun absent hai? · मेरे अनुभाग की उपस्थिति',
+              )}
             />
           </label>
           <div
@@ -131,18 +141,18 @@ export default async function TeacherAssistantPage({
             }}
           >
             <label className="ep-field">
-              <span className="ep-field__label">Language</span>
+              <span className="ep-field__label">{t(lang, 'Language')}</span>
               <select className="ep-input" name="language" defaultValue="">
-                <option value="">Auto</option>
+                <option value="">{t(lang, 'Auto')}</option>
                 <option value="en">English</option>
                 <option value="hi">हिन्दी</option>
                 <option value="hinglish">Hinglish</option>
               </select>
             </label>
-            <Button type="submit">Ask</Button>
+            <Button type="submit">{t(lang, 'Ask')}</Button>
             {current ? (
               <a className="ep-btn ep-btn--ghost" href="/assistant">
-                New conversation
+                {t(lang, 'New conversation')}
               </a>
             ) : null}
           </div>
@@ -155,7 +165,7 @@ export default async function TeacherAssistantPage({
           gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
         }}
       >
-        <Card title="What you can ask">
+        <Card title={t(lang, 'What you can ask')}>
           <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
             {entries
               .filter((e) => e.allowed)
@@ -167,7 +177,7 @@ export default async function TeacherAssistantPage({
               ))}
           </ul>
         </Card>
-        <Card title="Recent conversations">
+        <Card title={t(lang, 'Recent conversations')}>
           {conversations.length ? (
             <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
               {conversations.slice(0, 10).map((c) => (
@@ -175,13 +185,13 @@ export default async function TeacherAssistantPage({
                   <a href={`/assistant?c=${c.id}`}>{c.title ?? c.id.slice(0, 8)}</a>
                   <span className="ep-field__help">
                     {' '}
-                    · {c.turns} turns · {c.updatedAt.slice(0, 10)}
+                    · {c.turns} {t(lang, 'turns')} · {c.updatedAt.slice(0, 10)}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="ep-field__help">No conversations yet.</p>
+            <p className="ep-field__help">{t(lang, 'No conversations yet.')}</p>
           )}
         </Card>
       </div>

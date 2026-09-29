@@ -55,11 +55,13 @@ describe('permission coverage', () => {
     // The public admissions surface (S8-01) authenticates applicants with OTP-issued tokens inside ApplicantGuard.
     // Gateway notifications verify a PayU signature; device ingestion verifies a per-device key (S9).
     // Delivery receipts carry a shared webhook token; punch devices use the device key (S10).
+    // app_version answers the store build numbers before sign-in; it reads three public settings only (S20).
     // Razorpay returns verify the checkout HMAC and webhooks the raw-body HMAC; CCAvenue returns must decrypt
     // with the working key and match order id and amount (S13, docs/design/09 section 3).
     expect(publicRoutes.sort()).toEqual([
       'CommsDeliveryController.webhook (comms/delivery)',
       'CompatController.handshake (compat/v1)',
+      'CompatParityController.appVersion (compat/v1)',
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
       'GpsController.ingest (transport/gps)',

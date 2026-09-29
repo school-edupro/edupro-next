@@ -2,6 +2,7 @@ import { Badge, Card, DataTable, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Holiday {
   id: string;
@@ -37,6 +38,7 @@ type Entry = {
 
 /** S7-08: holidays and almanac in one list, upcoming first. */
 export default async function CalendarPage() {
+  const lang = await currentLang();
   let cal: Calendar;
   try {
     cal = await bff.api.fetch<Calendar>('/academics/calendar');
@@ -45,8 +47,8 @@ export default async function CalendarPage() {
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Calendar" />
-          <Card>The calendar is not available for this account.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Calendar')} />
+          <Card>{t(lang, 'The calendar is not available for this account.')}</Card>
         </main>
       );
     throw error;
@@ -82,13 +84,13 @@ export default async function CalendarPage() {
       columns={[
         {
           key: 'date',
-          header: 'Date',
+          header: t(lang, 'Date'),
           render: (e) => `${span(e.date, e.end)}${e.at ? ` ${e.at}` : ''}`,
         },
-        { key: 'label', header: 'What', render: (e) => <strong>{e.label}</strong> },
+        { key: 'label', header: t(lang, 'What'), render: (e) => <strong>{e.label}</strong> },
         {
           key: 'kind',
-          header: 'Kind',
+          header: t(lang, 'Kind'),
           render: (e) => (
             <Badge tone={e.holiday ? 'success' : e.kind === 'exam' ? 'danger' : 'neutral'}>
               {e.kind.replace('_', ' ')}
@@ -98,25 +100,25 @@ export default async function CalendarPage() {
       ]}
       rows={rows}
       rowKey={(e) => e.key}
-      emptyTitle="Nothing scheduled"
+      emptyTitle={t(lang, 'Nothing scheduled')}
     />
   );
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
-        kicker="Calendar"
-        title="Holidays and almanac"
+        kicker={t(lang, 'Calendar')}
+        title={t(lang, 'Holidays and almanac')}
         description={`${cal.from} → ${cal.to}`}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
-      <Card title="Upcoming" style={{ marginBottom: 'var(--sp-4)' }}>
-        {table(upcoming, 'Upcoming')}
+      <Card title={t(lang, 'Upcoming')} style={{ marginBottom: 'var(--sp-4)' }}>
+        {table(upcoming, t(lang, 'Upcoming'))}
       </Card>
-      <Card title="Earlier this year">{table(past, 'Earlier this year')}</Card>
+      <Card title={t(lang, 'Earlier this year')}>{table(past, t(lang, 'Earlier this year'))}</Card>
     </main>
   );
 }

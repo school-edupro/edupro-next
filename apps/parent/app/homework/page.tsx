@@ -2,6 +2,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Work {
   id: string;
@@ -33,6 +34,7 @@ export default async function HomeworkPage({
   searchParams: Promise<{ child?: string }>;
 }) {
   const sp = await searchParams;
+  const lang = await currentLang();
   let viewer: Viewer;
   try {
     viewer = await bff.api.fetch<Viewer>('/academics/daily-work/viewer');
@@ -41,9 +43,12 @@ export default async function HomeworkPage({
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Homework" />
+          <PageHeader kicker="EduPro" title={t(lang, 'Homework')} />
           <Card>
-            Your account is not linked to a student yet. Please contact the school office.
+            {t(
+              lang,
+              'Your account is not linked to a student yet. Please contact the school office.',
+            )}
           </Card>
         </main>
       );
@@ -63,12 +68,16 @@ export default async function HomeworkPage({
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
-        kicker="Homework"
-        title={child ? `${child.name} · ${child.section}` : 'Homework'}
-        description={child ? `${work.length} items this term` : 'No enrolled child found'}
+        kicker={t(lang, 'Homework')}
+        title={child ? `${child.name} · ${child.section}` : t(lang, 'Homework')}
+        description={
+          child
+            ? `${work.length} ${t(lang, 'items this term')}`
+            : t(lang, 'No enrolled child found')
+        }
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
+            {t(lang, 'Home')}
           </a>
         }
       />
@@ -120,10 +129,14 @@ export default async function HomeworkPage({
                     w.kind === 'homework' ? 'info' : w.kind === 'assignment' ? 'warning' : 'neutral'
                   }
                 >
-                  {w.kind}
+                  {t(lang, w.kind)}
                 </Badge>
                 <strong>{w.subjectName ?? ''}</strong>
-                {w.dueOn ? <span className="ep-kicker">due {w.dueOn}</span> : null}
+                {w.dueOn ? (
+                  <span className="ep-kicker">
+                    {t(lang, 'due')} {w.dueOn}
+                  </span>
+                ) : null}
               </div>
               <div style={{ marginTop: 'var(--sp-1)' }}>{w.title}</div>
               {w.body ? (
@@ -132,14 +145,16 @@ export default async function HomeworkPage({
                 </div>
               ) : null}
               {w.files.length ? (
-                <div className="ep-kicker">{w.files.map((f) => f.name ?? 'file').join(', ')}</div>
+                <div className="ep-kicker">
+                  {w.files.map((f) => f.name ?? t(lang, 'file')).join(', ')}
+                </div>
               ) : null}
               {w.postedBy ? <div className="ep-kicker">{w.postedBy}</div> : null}
             </div>
           ))}
         </Card>
       ))}
-      {child && work.length === 0 ? <Card>No homework posted yet.</Card> : null}
+      {child && work.length === 0 ? <Card>{t(lang, 'No homework posted yet.')}</Card> : null}
     </main>
   );
 }

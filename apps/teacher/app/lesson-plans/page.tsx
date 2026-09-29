@@ -2,6 +2,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 
 interface Plan {
   id: string;
@@ -29,6 +30,7 @@ const TONE: Record<Plan['status'], 'neutral' | 'warning' | 'success' | 'danger'>
 
 /** S11: the teacher's weekly lesson plans and their approval state. */
 export default async function LessonPlansPage() {
+  const lang = await currentLang();
   let plans: Plan[];
   try {
     plans = await bff.api
@@ -39,8 +41,10 @@ export default async function LessonPlansPage() {
     if (error instanceof ApiError && error.status === 403)
       return (
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title="Lesson plans" />
-          <Card>Lesson plans are written by teaching staff with an employee record.</Card>
+          <PageHeader kicker="EduPro" title={t(lang, 'Lesson plans')} />
+          <Card>
+            {t(lang, 'Lesson plans are written by teaching staff with an employee record.')}
+          </Card>
         </main>
       );
     throw error;
@@ -48,21 +52,24 @@ export default async function LessonPlansPage() {
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
-        kicker="Lesson plans"
-        title="My weekly plans"
-        description="Plans go to the coordinator, the vice principal and the principal for approval."
+        kicker={t(lang, 'Lesson plans')}
+        title={t(lang, 'My weekly plans')}
+        description={t(
+          lang,
+          'Plans go to the coordinator, the vice principal and the principal for approval.',
+        )}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             <a className="ep-btn ep-btn--primary ep-btn--sm" href="/lesson-plans/new">
-              New plan
+              {t(lang, 'New plan')}
             </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-              Home
+              {t(lang, 'Home')}
             </a>
           </span>
         }
       />
-      {plans.length === 0 ? <Card>No plans yet. Start with next week.</Card> : null}
+      {plans.length === 0 ? <Card>{t(lang, 'No plans yet. Start with next week.')}</Card> : null}
       {plans.map((p) => (
         <a key={p.id} href={`/lesson-plans/${p.id}`} style={{ textDecoration: 'none' }}>
           <Card elevated style={{ marginBottom: 'var(--sp-3)' }}>
@@ -85,11 +92,11 @@ export default async function LessonPlansPage() {
                   {p.title}
                 </div>
                 <div className="ep-kicker">
-                  Week of {p.weekStart} · {p.section} · {p.subject}
+                  {t(lang, 'Week of')} {p.weekStart} · {p.section} · {p.subject}
                   {p.decisionNote ? ` · ${p.decisionNote}` : ''}
                 </div>
               </div>
-              <Badge tone={TONE[p.status]}>{LABEL[p.status]}</Badge>
+              <Badge tone={TONE[p.status]}>{t(lang, LABEL[p.status])}</Badge>
             </div>
           </Card>
         </a>

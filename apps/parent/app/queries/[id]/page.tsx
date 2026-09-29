@@ -2,6 +2,7 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
 import { rateQuery, replyToQuery } from '../actions';
 
 interface Query {
@@ -44,6 +45,7 @@ export default async function QueryPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
+  const lang = await currentLang();
   let q: Query;
   try {
     q = await bff.api.fetch<Query>(`/engagement/mine/queries/${id}`);
@@ -57,7 +59,7 @@ export default async function QueryPage({
       <PageHeader
         kicker={`${q.number} · ${q.categoryName}`}
         title={q.subject}
-        description={`${q.studentName} · opened ${new Date(q.openedAt).toLocaleDateString('en-IN')}${q.assignedTo ? ` · handled by ${q.assignedTo}` : ''}`}
+        description={`${q.studentName} · ${t(lang, 'opened')} ${new Date(q.openedAt).toLocaleDateString('en-IN')}${q.assignedTo ? ` · ${t(lang, 'handled by')} ${q.assignedTo}` : ''}`}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
             <Badge
@@ -71,15 +73,15 @@ export default async function QueryPage({
                       : 'warning'
               }
             >
-              {LABEL[q.status]}
+              {t(lang, LABEL[q.status])}
             </Badge>
             {q.decision ? (
               <Badge tone={q.decision === 'approved' ? 'success' : 'danger'}>
-                Leave {q.decision}
+                {t(lang, 'Leave')} {t(lang, q.decision)}
               </Badge>
             ) : null}
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/queries">
-              Back
+              {t(lang, 'Back')}
             </a>
           </span>
         }
@@ -90,7 +92,7 @@ export default async function QueryPage({
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          Saved.
+          {t(lang, 'Saved.')}
         </div>
       ) : null}
       {sp.error ? (
@@ -106,7 +108,7 @@ export default async function QueryPage({
         <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{q.body}</p>
         {q.kind === 'leave' ? (
           <p className="ep-kicker" style={{ marginTop: 'var(--sp-2)' }}>
-            Leave {q.leaveFrom} → {q.leaveTo}
+            {t(lang, 'Leave')} {q.leaveFrom} → {q.leaveTo}
           </p>
         ) : null}
       </Card>
@@ -120,14 +122,14 @@ export default async function QueryPage({
           }}
         >
           <div className="ep-kicker">
-            {r.authorKind === 'staff' ? (r.author ?? 'School') : 'You'} ·{' '}
+            {r.authorKind === 'staff' ? (r.author ?? t(lang, 'School')) : t(lang, 'You')} ·{' '}
             {new Date(r.createdAt).toLocaleString('en-IN')}
           </div>
           <div style={{ whiteSpace: 'pre-wrap' }}>{r.body}</div>
         </Card>
       ))}
       {q.status !== 'closed' ? (
-        <Card title="Reply" style={{ marginTop: 'var(--sp-3)' }}>
+        <Card title={t(lang, 'Reply')} style={{ marginTop: 'var(--sp-3)' }}>
           <form action={replyToQuery} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
             <input type="hidden" name="id" value={q.id} />
             <textarea
@@ -136,16 +138,16 @@ export default async function QueryPage({
               rows={3}
               required
               maxLength={4000}
-              aria-label="Reply"
+              aria-label={t(lang, 'Reply')}
             />
             <div>
-              <Button type="submit">Send</Button>
+              <Button type="submit">{t(lang, 'Send')}</Button>
             </div>
           </form>
         </Card>
       ) : null}
       {['answered', 'closed'].includes(q.status) && !q.rating ? (
-        <Card title="How was this handled?" style={{ marginTop: 'var(--sp-3)' }}>
+        <Card title={t(lang, 'How was this handled?')} style={{ marginTop: 'var(--sp-3)' }}>
           <form action={rateQuery} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
             <input type="hidden" name="id" value={q.id} />
             <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
@@ -158,20 +160,21 @@ export default async function QueryPage({
             <input
               className="ep-input"
               name="comment"
-              placeholder="Comment (optional)"
+              placeholder={t(lang, 'Comment (optional)')}
               maxLength={500}
-              aria-label="Comment"
+              aria-label={t(lang, 'Comment')}
             />
             <div>
               <Button type="submit" variant="secondary">
-                Rate
+                {t(lang, 'Rate')}
               </Button>
             </div>
           </form>
         </Card>
       ) : q.rating ? (
         <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
-          You rated this {q.rating}/5{q.ratingComment ? ` · ${q.ratingComment}` : ''}.
+          {t(lang, 'You rated this')} {q.rating}/5
+          {q.ratingComment ? ` · ${q.ratingComment}` : ''}.
         </p>
       ) : null}
     </main>
