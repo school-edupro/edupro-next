@@ -76,3 +76,33 @@ export const LoansQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class LoansQueryDto extends createZodDto(LoansQuerySchema) {}
+
+// ---- Sprint 18 ----
+export const SaleSchema = z.object({
+  accessionNo: z.string().trim().min(1).max(30),
+  buyerKind: z.enum(['student', 'employee', 'other']),
+  buyerId: IdSchema.optional(),
+  buyerName: z.string().trim().max(120).optional(),
+  price: z.number().min(0),
+  receiptRef: z.string().trim().max(60).optional(),
+  note: z.string().trim().max(300).optional(),
+});
+export class SaleDto extends createZodDto(SaleSchema) {}
+
+export const StockCheckStartSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  note: z.string().trim().max(300).optional(),
+});
+export class StockCheckStartDto extends createZodDto(StockCheckStartSchema) {}
+
+export const StockCheckScanSchema = z.object({
+  /** scanned or pasted accession numbers */
+  accessionNos: z.array(z.string().trim().min(1).max(30)).min(1).max(5000),
+});
+export class StockCheckScanDto extends createZodDto(StockCheckScanSchema) {}
+
+export const StockCheckCloseSchema = z.object({
+  markMissingLost: z.boolean().default(false),
+  note: z.string().trim().max(300).optional(),
+});
+export class StockCheckCloseDto extends createZodDto(StockCheckCloseSchema) {}

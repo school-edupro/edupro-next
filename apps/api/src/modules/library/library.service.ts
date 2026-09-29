@@ -14,6 +14,10 @@ import type {
   LoansQueryDto,
   RenewDto,
   ReturnDto,
+  SaleDto,
+  StockCheckCloseDto,
+  StockCheckScanDto,
+  StockCheckStartDto,
 } from './library.dto';
 
 export interface LoanRow {
@@ -213,6 +217,17 @@ export class LibraryService {
           'library.copy_on_loan',
           'Return the copy before changing its status',
           { status: 409 },
+        );
+      const sold = await c.query(`SELECT 1 FROM library_copies WHERE id = $1 AND status = 'sold'`, [
+        copyId,
+      ]);
+      if (sold.rowCount)
+        throw new DomainError(
+          'library.copy_sold',
+          'A sold copy leaves the register; accession a new one instead',
+          {
+            status: 409,
+          },
         );
       const r = await c.query(
         `UPDATE library_copies SET status = $2::library_copy_status, remarks = COALESCE($3, remarks), updated_at = now() WHERE id = $1`,
@@ -453,5 +468,246 @@ export class LibraryService {
     // eslint-disable-next-line no-restricted-syntax -- LOAN_SELECT is a constant; values are bound
     const r = await c.query<Record<string, unknown>>(`${LOAN_SELECT} WHERE l.id = $1`, [id]);
     return r.rows[0] ? toLoan(r.rows[0]) : null;
+  }
+
+  // ---- Sprint 18: sale --------------------------------------------------------------------------
+  /** Sells a withdrawn or damaged copy (old stock, duplicates): the copy becomes `sold`. */
+  async sell(ctx: RequestContext, dto: SaleDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const copy = await this.copyByAccession(c, dto.accessionNo);
+      if (!['withdrawn', 'damaged', 'available'].includes(copy.status))
+        throw new DomainError('library.copy_unavailable', `The copy is ${copy.status}`, {
+          status: 409,
+        });
+      if (copy.status === 'available' && copy.is_reference)
+        throw new DomainError('library.reference_only', 'Reference copies are not sold', {
+          status: 409,
+        });
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO library_sales (school_id, copy_id, buyer_kind, buyer_id, buyer_name, price, receipt_ref, sold_by, note)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id(), $7) RETURNING id::text`,
+        [
+          copy.id,
+          dto.buyerKind,
+          dto.buyerId ?? null,
+          dto.buyerName ?? null,
+          dto.price,
+          dto.receiptRef ?? null,
+          dto.note ?? null,
+        ],
+      );
+      await c.query(`UPDATE library_copies SET status = 'sold', updated_at = now() WHERE id = $1`, [
+        copy.id,
+      ]);
+      await this.audit.stage(ctx, c, {
+        action: 'library.sale',
+        entityType: 'library_sales',
+        entityId: r.rows[0]!.id,
+        after: dto,
+      });
+      return {
+        id: r.rows[0]!.id,
+        accessionNo: dto.accessionNo,
+        title: copy.title,
+        price: dto.price,
+      };
+    });
+  }
+
+  async sales(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Record<string, unknown>>(
+        `SELECT s.id::text, c.accession_no, t.title, s.buyer_kind, COALESCE(s.buyer_name, st.display_name, e.display_name) AS buyer, s.price::text, s.receipt_ref, s.sold_on::text, u.display_name AS sold_by
+           FROM library_sales s JOIN library_copies c ON c.id = s.copy_id JOIN library_titles t ON t.id = c.title_id
+           LEFT JOIN students st ON s.buyer_kind = 'student' AND st.id = s.buyer_id
+           LEFT JOIN employees e ON s.buyer_kind = 'employee' AND e.id = s.buyer_id
+           LEFT JOIN users u ON u.id = s.sold_by
+          ORDER BY s.sold_on DESC, s.id DESC LIMIT 200`,
+      );
+      return r.rows.map((x) => ({
+        id: String(x.id),
+        accessionNo: String(x.accession_no),
+        title: String(x.title),
+        buyerKind: String(x.buyer_kind),
+        buyer: (x.buyer as string | null) ?? null,
+        price: String(x.price),
+        receiptRef: (x.receipt_ref as string | null) ?? null,
+        soldOn: String(x.sold_on),
+        soldBy: (x.sold_by as string | null) ?? null,
+      }));
+    });
+  }
+
+  // ---- Sprint 18: digital library --------------------------------------------------------------
+  /** Items the caller may open: staff see everything active; families see 'everyone' and 'students'. */
+  async digital(ctx: RequestContext, permission: string) {
+    const v = await this.viewer.resolve(ctx, permission);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Record<string, unknown>>(
+        `SELECT d.id::text, d.code, d.title, d.author, d.kind, d.url, d.file_id::text, d.category, d.audience, d.band::text, d.description
+           FROM library_digital_items d
+          WHERE d.status = 'active' AND ($1::boolean OR d.audience IN ('everyone', 'students'))
+          ORDER BY d.category NULLS LAST, d.title`,
+        [v.kind === 'staff'],
+      );
+      return r.rows.map((x) => ({
+        id: String(x.id),
+        code: String(x.code),
+        title: String(x.title),
+        author: (x.author as string | null) ?? null,
+        kind: String(x.kind),
+        url: (x.url as string | null) ?? null,
+        fileId: (x.file_id as string | null) ?? null,
+        category: (x.category as string | null) ?? null,
+        audience: String(x.audience),
+        band: (x.band as string | null) ?? null,
+        description: (x.description as string | null) ?? null,
+      }));
+    });
+  }
+
+  // ---- Sprint 18: stock verification -------------------------------------------------------------
+  async startStockCheck(ctx: RequestContext, dto: StockCheckStartDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const open = await c.query(`SELECT 1 FROM library_stock_checks WHERE status = 'open'`);
+      if (open.rowCount)
+        throw new DomainError(
+          'library.check_open',
+          'A stock check is already open; close it first',
+          { status: 409 },
+        );
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO library_stock_checks (school_id, name, started_by, note) VALUES (app.current_school_id(), $1, app.current_user_id(), $2) RETURNING id::text`,
+        [dto.name, dto.note ?? null],
+      );
+      const id = r.rows[0]!.id;
+      // every copy that should be on the shelves (issued copies count as accounted for)
+      await c.query(
+        `INSERT INTO library_stock_check_items (school_id, check_id, copy_id, outcome)
+         SELECT app.current_school_id(), $1, c.id, CASE WHEN c.status = 'issued' THEN 'on_loan' ELSE 'pending' END
+           FROM library_copies c WHERE c.status IN ('available', 'issued', 'damaged')`,
+        [id],
+      );
+      await c.query(
+        `UPDATE library_stock_checks SET expected = (SELECT count(*) FROM library_stock_check_items WHERE check_id = $1) WHERE id = $1`,
+        [id],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'library.stock.start',
+        entityType: 'library_stock_checks',
+        entityId: id,
+        after: dto,
+      });
+      return this.stockCheck(c, id);
+    });
+  }
+
+  async scanStockCheck(ctx: RequestContext, id: string, dto: StockCheckScanDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const chk = await c.query<{ status: string }>(
+        `SELECT status FROM library_stock_checks WHERE id = $1`,
+        [id],
+      );
+      if (!chk.rows[0])
+        throw new DomainError('not-found', 'Stock check not found', { status: 404 });
+      if (chk.rows[0].status !== 'open')
+        throw new DomainError('conflict', 'The stock check is closed', { status: 409 });
+      const r = await c.query<{ n: string }>(
+        `WITH hit AS (
+           UPDATE library_stock_check_items i SET outcome = 'found', found_on = CURRENT_DATE
+             FROM library_copies c WHERE i.copy_id = c.id AND i.check_id = $1 AND c.accession_no = ANY($2::text[]) AND i.outcome <> 'found'
+           RETURNING i.copy_id)
+         UPDATE library_copies c SET last_verified_on = CURRENT_DATE, updated_at = now() FROM hit WHERE c.id = hit.copy_id
+         RETURNING 1 AS n`,
+        [id, dto.accessionNos],
+      );
+      const unknown = await c.query<{ no: string }>(
+        `SELECT x.no FROM unnest($1::text[]) AS x(no) WHERE NOT EXISTS (SELECT 1 FROM library_copies c WHERE c.accession_no = x.no)`,
+        [dto.accessionNos],
+      );
+      await c.query(
+        `UPDATE library_stock_checks SET found = (SELECT count(*) FROM library_stock_check_items WHERE check_id = $1 AND outcome = 'found') WHERE id = $1`,
+        [id],
+      );
+      return {
+        ...(await this.stockCheck(c, id)),
+        scanned: dto.accessionNos.length,
+        marked: r.rowCount ?? 0,
+        unknown: unknown.rows.map((x) => x.no),
+      };
+    });
+  }
+
+  async closeStockCheck(ctx: RequestContext, id: string, dto: StockCheckCloseDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const chk = await c.query<{ status: string }>(
+        `SELECT status FROM library_stock_checks WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      if (!chk.rows[0])
+        throw new DomainError('not-found', 'Stock check not found', { status: 404 });
+      if (chk.rows[0].status !== 'open')
+        throw new DomainError('conflict', 'The stock check is closed', { status: 409 });
+      await c.query(
+        `UPDATE library_stock_check_items SET outcome = 'missing' WHERE check_id = $1 AND outcome = 'pending'`,
+        [id],
+      );
+      if (dto.markMissingLost)
+        await c.query(
+          `UPDATE library_copies c SET status = 'lost', remarks = COALESCE(c.remarks || ' · ', '') || 'missing at stock check', updated_at = now()
+             FROM library_stock_check_items i WHERE i.copy_id = c.id AND i.check_id = $1 AND i.outcome = 'missing'`,
+          [id],
+        );
+      await c.query(
+        `UPDATE library_stock_checks SET status = 'closed', finished_on = CURRENT_DATE, closed_by = app.current_user_id(), note = COALESCE($2, note),
+                found = (SELECT count(*) FROM library_stock_check_items WHERE check_id = $1 AND outcome = 'found'),
+                missing = (SELECT count(*) FROM library_stock_check_items WHERE check_id = $1 AND outcome = 'missing')
+          WHERE id = $1`,
+        [id, dto.note ?? null],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'library.stock.close',
+        entityType: 'library_stock_checks',
+        entityId: id,
+        after: dto,
+      });
+      return this.stockCheck(c, id);
+    });
+  }
+
+  async stockChecks(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT id::text FROM library_stock_checks ORDER BY started_on DESC, id DESC LIMIT 20`,
+      );
+      const out = [];
+      for (const x of r.rows) out.push(await this.stockCheck(c, x.id));
+      return out;
+    });
+  }
+
+  private async stockCheck(c: PoolClient, id: string) {
+    const r = await c.query<Record<string, unknown>>(
+      `SELECT s.id::text, s.name, s.started_on::text, s.finished_on::text, s.status, s.expected, s.found, s.missing, s.note,
+              (SELECT jsonb_agg(jsonb_build_object('accessionNo', c.accession_no, 'title', t.title, 'outcome', i.outcome) ORDER BY c.accession_no)
+                 FROM library_stock_check_items i JOIN library_copies c ON c.id = i.copy_id JOIN library_titles t ON t.id = c.title_id
+                WHERE i.check_id = s.id AND i.outcome IN ('pending', 'missing')) AS open_items
+         FROM library_stock_checks s WHERE s.id = $1`,
+      [id],
+    );
+    const x = r.rows[0]!;
+    return {
+      id: String(x.id),
+      name: String(x.name),
+      startedOn: String(x.started_on),
+      finishedOn: (x.finished_on as string | null) ?? null,
+      status: String(x.status),
+      expected: Number(x.expected),
+      found: Number(x.found),
+      missing: Number(x.missing),
+      note: (x.note as string | null) ?? null,
+      openItems:
+        (x.open_items as Array<{ accessionNo: string; title: string; outcome: string }>) ?? [],
+    };
   }
 }

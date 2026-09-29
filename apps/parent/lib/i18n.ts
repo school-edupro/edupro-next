@@ -116,6 +116,7 @@ const DICT: Record<string, string> = {
   Receipt: 'रसीद',
   Mode: 'माध्यम',
   Refunded: 'लौटाया',
+  'Digital library': 'डिजिटल पुस्तकालय',
   'Terms the school has released. The report card PDF is prepared on request.':
     'विद्यालय द्वारा जारी टर्म। रिपोर्ट कार्ड PDF अनुरोध पर बनती है।',
   'The report card is available once the fee dues are cleared.':

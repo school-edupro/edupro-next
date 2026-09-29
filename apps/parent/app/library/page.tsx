@@ -20,13 +20,26 @@ interface Loan {
 interface Res {
   children: Array<{ student: { id: string; name: string }; loans: Loan[] }>;
 }
+interface Digital {
+  id: string;
+  title: string;
+  author: string | null;
+  url: string | null;
+  category: string | null;
+  description: string | null;
+}
 
 /** Sprint 17: the children's library loans. */
 export default async function LibraryPage() {
   const lang = await currentLang();
   let res: Res;
+  let digital: Digital[] = [];
   try {
     res = await bff.api.fetch<Res>('/library/mine');
+    digital = await bff.api
+      .fetch<{ data: Digital[] }>('/library/mine/digital')
+      .then((r) => r.data)
+      .catch(() => []);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -106,6 +119,25 @@ export default async function LibraryPage() {
           )}
         </Card>
       ))}
+      {digital.length ? (
+        <Card title={t(lang, 'Digital library')} style={{ marginBottom: 'var(--sp-3)' }}>
+          <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
+            {digital.map((d) => (
+              <li key={d.id}>
+                {d.url ? (
+                  <a href={d.url} target="_blank" rel="noreferrer">
+                    {d.title}
+                  </a>
+                ) : (
+                  d.title
+                )}
+                {d.author ? ` · ${d.author}` : ''}
+                {d.category ? <span className="ep-kicker"> · {d.category}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </main>
   );
 }

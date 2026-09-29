@@ -92,6 +92,20 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprint 18 walk-through (all bands and boards, library completion)
+
+- **dev-admin**: **Exams → Report cards → Designer**: the four default layouts now differ per band —
+  preview _primary_ (holistic progress card with descriptors), _middle_ (CCE), _secondary_ (periodic
+  test / portfolio / enrichment / annual scaled to 100) and _senior_ (theory 70 / practical 30).
+  **Exams → Board results**: import a CBSE file (try a CSV with `ROLL NO,NAME,SUB CODE,SUB NAME,THEORY,
+PRACTICAL,TOTAL,GRADE,RESULT` or the compact `SUB1,MRK1,GRD1…`); the report lists unmatched roll
+  numbers; the analysis table gives candidates, mean, highest, lowest, passed, 90+ per subject; Excel /
+  PDF export. **Library → Stock and sales**: open a stock check, paste `1001, 1003, 1004`, record,
+  close (optionally marking missing copies lost); sell a withdrawn copy with a receipt reference.
+  **Library setup → Digital library** (masters grid) adds links for students; **Insights → Results
+  analytics** shows pass % and means per exam, class and section with the weakest subjects.
+- **dev-parent**: **Library** shows the digital-library links open to students under the loans.
+
 ### Sprint 17 walk-through (workflow GA, report cards, GPS, library)
 
 - **dev-admin**: **Approvals → Definitions** now has **＋ New definition** (levels with approver, SLA

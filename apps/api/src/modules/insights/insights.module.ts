@@ -8,6 +8,7 @@ import { AssistantService } from './assistant.service';
 import { DepartmentsService } from './departments.service';
 import { InsightsController } from './insights.controller';
 import { InsightsService } from './insights.service';
+import { ResultsAnalyticsService } from './results-analytics.service';
 
 /** Sprint 12 (AI track): marts v1 and the principal dashboard; the query catalogue and assistant arrive in Sprint 14. */
 @Module({
@@ -19,6 +20,7 @@ import { InsightsService } from './insights.service';
     AssistantService,
     AlertsService,
     AiReportsService,
+    ResultsAnalyticsService,
     AuditService,
   ],
   exports: [InsightsService, DepartmentsService, AssistantService, AlertsService, AiReportsService],

@@ -10,6 +10,7 @@ import { AlertsService } from './alerts.service';
 import { AssistantService } from './assistant.service';
 import { DEPARTMENTS, DepartmentsService, type Department } from './departments.service';
 import { InsightsService } from './insights.service';
+import { ResultsAnalyticsService } from './results-analytics.service';
 
 export const INSIGHTS = {
   dashboardView: 'insights.dashboard.view',
@@ -24,6 +25,8 @@ export const INSIGHTS = {
   alertAck: 'insights.alert.ack',
   /** Sprint 16: AI reports */
   reportView: 'insights.report.view',
+  /** Sprint 18: results analytics */
+  resultsView: 'insights.results.view',
   reportRun: 'insights.report.run',
 } as const;
 
@@ -84,6 +87,7 @@ export class InsightsController {
     private readonly assistant: AssistantService,
     private readonly alerts: AlertsService,
     private readonly aiReports: AiReportsService,
+    private readonly results: ResultsAnalyticsService,
   ) {}
 
   // ---- Sprint 14: the assistant ----
@@ -222,5 +226,15 @@ export class InsightsController {
   @RequirePermission(INSIGHTS.martRefresh, { description: 'Refresh the reporting marts on demand' })
   refresh(@ReqCtx() ctx: RequestContext) {
     return this.insights.refresh(ctx);
+  }
+
+  // ---- Sprint 18: results analytics ----
+  @Get('results')
+  @ApiOperation({
+    summary: 'Results analytics: pass rates and means by exam, class and section; weakest subjects',
+  })
+  @RequirePermission(INSIGHTS.resultsView, { description: 'Results analytics for the principal' })
+  resultsAnalytics(@ReqCtx() ctx: RequestContext, @Query('examId') examId?: string) {
+    return this.results.summary(ctx, examId && /^\d+$/.test(examId) ? examId : null);
   }
 }

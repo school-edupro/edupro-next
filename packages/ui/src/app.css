@@ -453,12 +453,29 @@
 @media (max-width: 900px) {
   .ep-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
     grid-template-areas:
       'header'
       'main';
   }
   .ep-sidebar {
     display: none;
+  }
+  /* the header wraps on narrow screens instead of overlapping its two groups */
+  .ep-header {
+    flex-wrap: wrap;
+    position: static;
+    padding: var(--sp-2) var(--sp-3);
+    gap: var(--sp-2);
+  }
+  .ep-header__context {
+    flex-wrap: wrap;
+  }
+  .ep-header__module {
+    flex: 1 1 100%;
+  }
+  .ep-header__module form {
+    flex-wrap: wrap !important;
   }
 }
 

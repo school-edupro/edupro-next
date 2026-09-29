@@ -2603,7 +2603,7 @@ export async function masterExport(fd: FormData) {
     out = await apiFetch<{ id: string }>('/reports/exports', {
       method: 'POST',
       body: JSON.stringify({
-        dataset: `master_${str(fd, 'master')}`,
+        dataset: opt(fd, 'dataset') ?? `master_${str(fd, 'master')}`,
         format,
         title: opt(fd, 'title'),
       }),
@@ -2908,6 +2908,93 @@ export async function libraryFine(fd: FormData) {
       body: JSON.stringify({
         action: str(fd, 'action') === 'waive' ? 'waive' : 'collect',
         reference: opt(fd, 'reference'),
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+// ---- Sprint 18 ----------------------------------------------------------------------------------
+export async function boardImportValidate(fd: FormData) {
+  const back = '/exams/board-results';
+  const file = fd.get('file');
+  if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || (file as File).size === 0)
+    back_(back, 'validation-failed', 'Choose a .csv or .xlsx file');
+  const f = file as File;
+  const body: Record<string, string> = {
+    fileName: f.name,
+    board: str(fd, 'board') || 'CBSE',
+    classLabel: str(fd, 'classLabel'),
+  };
+  if (/\.csv$/i.test(f.name)) body.csv = await f.text();
+  else body.contentBase64 = Buffer.from(await f.arrayBuffer()).toString('base64');
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>('/exams/board-results/imports/validate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}?import=${out!.id}`);
+}
+
+export async function boardImportCommit(fd: FormData) {
+  return run('/exams/board-results', () =>
+    apiFetch(`/exams/board-results/imports/${str(fd, 'importId')}/commit`, { method: 'POST' }),
+  );
+}
+
+export async function libraryStartStockCheck(fd: FormData) {
+  return run('/library/stock', () =>
+    apiFetch('/library/stock-checks', {
+      method: 'POST',
+      body: JSON.stringify({ name: str(fd, 'name'), note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function libraryScanStockCheck(fd: FormData) {
+  const nos = str(fd, 'accessionNos')
+    .split(/[\s,;]+/)
+    .filter(Boolean);
+  if (nos.length === 0)
+    back_('/library/stock', 'validation-failed', 'Paste at least one accession number');
+  return run('/library/stock', () =>
+    apiFetch(`/library/stock-checks/${str(fd, 'checkId')}/scan`, {
+      method: 'POST',
+      body: JSON.stringify({ accessionNos: nos }),
+    }),
+  );
+}
+
+export async function libraryCloseStockCheck(fd: FormData) {
+  return run('/library/stock', () =>
+    apiFetch(`/library/stock-checks/${str(fd, 'checkId')}/close`, {
+      method: 'POST',
+      body: JSON.stringify({
+        markMissingLost: fd.get('markMissingLost') === 'on',
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}
+
+export async function librarySell(fd: FormData) {
+  return run('/library/stock', () =>
+    apiFetch('/library/sales', {
+      method: 'POST',
+      body: JSON.stringify({
+        accessionNo: str(fd, 'accessionNo'),
+        buyerKind: ['student', 'employee', 'other'].includes(str(fd, 'buyerKind'))
+          ? str(fd, 'buyerKind')
+          : 'other',
+        buyerId: opt(fd, 'buyerId'),
+        buyerName: opt(fd, 'buyerName'),
+        price: Number(str(fd, 'price') || 0),
+        receiptRef: opt(fd, 'receiptRef'),
         note: opt(fd, 'note'),
       }),
     }),

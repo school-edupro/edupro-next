@@ -17,7 +17,8 @@ export type ReportCardSectionType =
   | 'remarks'
   | 'result'
   | 'grade_scale'
-  | 'signatures';
+  | 'signatures'
+  | 'hpc_descriptors';
 
 export interface ReportCardSection {
   type: ReportCardSectionType;
@@ -32,6 +33,20 @@ export interface ReportCardSection {
   showPhoto?: boolean;
   /** signatures: labels */
   labels?: string[];
+  /**
+   * scholastic (Sprint 18): 'marks' = one column per exam (default); 'cce' = marks and grade per exam
+   * with the term total; 'components' = columns built from exams and scaled (internal assessment +
+   * annual, or theory / practical), totalled and graded.
+   */
+  mode?: 'marks' | 'cce' | 'components';
+  columns?: Array<{
+    label: string;
+    examCodes: string[];
+    agg?: 'sum' | 'avg' | 'best';
+    scale: number;
+  }>;
+  /** hpc_descriptors: grade → descriptor text */
+  descriptors?: Record<string, string>;
 }
 
 export interface ReportCardLayout {
@@ -42,12 +57,12 @@ export interface ReportCardLayout {
 
 export const DEFAULT_LAYOUTS: Record<ReportCardData['student']['band'], ReportCardLayout> = {
   primary: {
-    subtitle: 'Progress report',
+    subtitle: 'Holistic progress card',
     sections: [
       { type: 'header' },
       { type: 'student', showPhoto: true },
       { type: 'scholastic', showGrades: true, showTotals: false, title: 'Scholastic areas' },
-      { type: 'co_scholastic', title: 'Co-scholastic areas and personal qualities' },
+      { type: 'hpc_descriptors', title: 'Co-scholastic areas and personal qualities' },
       { type: 'attendance' },
       { type: 'health' },
       { type: 'remarks', title: "Class teacher's remarks" },
@@ -57,11 +72,17 @@ export const DEFAULT_LAYOUTS: Record<ReportCardData['student']['band'], ReportCa
     ],
   },
   middle: {
-    subtitle: 'Report card',
+    subtitle: 'Report card (CCE)',
     sections: [
       { type: 'header' },
       { type: 'student', showPhoto: true },
-      { type: 'scholastic', showGrades: true, showTotals: true, title: 'Scholastic areas' },
+      {
+        type: 'scholastic',
+        mode: 'cce',
+        showGrades: true,
+        showTotals: true,
+        title: 'Scholastic areas',
+      },
       { type: 'co_scholastic', title: 'Co-scholastic areas' },
       { type: 'attendance' },
       { type: 'health' },
@@ -72,11 +93,26 @@ export const DEFAULT_LAYOUTS: Record<ReportCardData['student']['band'], ReportCa
     ],
   },
   secondary: {
-    subtitle: 'Report card',
+    subtitle: 'Report card (Secondary)',
     sections: [
       { type: 'header' },
       { type: 'student', showPhoto: true },
-      { type: 'scholastic', showGrades: true, showTotals: true, title: 'Scholastic areas' },
+      {
+        type: 'scholastic',
+        mode: 'components',
+        title: 'Scholastic areas',
+        columns: [
+          { label: 'Periodic test (10)', examCodes: ['PT1', 'PT2', 'PT3'], agg: 'best', scale: 10 },
+          { label: 'Portfolio (5)', examCodes: ['NB', 'PORTFOLIO'], scale: 5 },
+          { label: 'Subject enrichment (5)', examCodes: ['SE'], scale: 5 },
+          {
+            label: 'Annual exam (80)',
+            examCodes: ['ANNUAL', 'FINAL', 'HY'],
+            agg: 'best',
+            scale: 80,
+          },
+        ],
+      },
       { type: 'co_scholastic', title: 'Co-scholastic areas' },
       { type: 'attendance' },
       { type: 'remarks' },
@@ -86,11 +122,29 @@ export const DEFAULT_LAYOUTS: Record<ReportCardData['student']['band'], ReportCa
     ],
   },
   senior: {
-    subtitle: 'Report card',
+    subtitle: 'Report card (Senior Secondary)',
     sections: [
       { type: 'header' },
       { type: 'student', showPhoto: false },
-      { type: 'scholastic', showGrades: true, showTotals: true, title: 'Scholastic areas' },
+      {
+        type: 'scholastic',
+        mode: 'components',
+        title: 'Scholastic areas',
+        columns: [
+          {
+            label: 'Theory (70)',
+            examCodes: ['ANNUAL', 'FINAL', 'HY', 'THEORY'],
+            agg: 'best',
+            scale: 70,
+          },
+          {
+            label: 'Practical / IA (30)',
+            examCodes: ['PRACTICAL', 'IA', 'PT1', 'PT2'],
+            agg: 'best',
+            scale: 30,
+          },
+        ],
+      },
       { type: 'attendance' },
       { type: 'remarks' },
       { type: 'result', showRank: true },
@@ -194,6 +248,86 @@ function scholastic(d: ReportCardData, s: ReportCardSection): string {
   return `<h2>${esc(s.title ?? 'Scholastic areas')}</h2><table><thead><tr><th>Subject</th>${head}${totals ? '<th class="num">Term total</th><th class="num">%</th><th class="ctr">Grade</th>' : ''}</tr></thead><tbody>${rows}${totRow}</tbody></table>`;
 }
 
+/** Sprint 18: scaled component columns (PT best-of, portfolio, annual; or theory / practical). */
+function scholasticComponents(d: ReportCardData, s: ReportCardSection): string {
+  const cols = s.columns ?? [];
+  const idx = (code: string) => d.exams.findIndex((e) => e.code === code);
+  const scaled = (
+    r: ReportCardData['subjects'][number],
+    col: (typeof cols)[number],
+  ): number | null => {
+    const vals: number[] = [];
+    for (const code of col.examCodes) {
+      const i = idx(code);
+      const c = i >= 0 ? r.cells[i] : undefined;
+      if (!c || c.exempt || c.marks === null || Number(c.max) === 0) continue;
+      vals.push((Number(c.marks) / Number(c.max)) * col.scale);
+    }
+    if (vals.length === 0) return null;
+    const agg = col.agg ?? 'sum';
+    const v =
+      agg === 'best'
+        ? Math.max(...vals)
+        : agg === 'avg'
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : Math.min(
+              col.scale,
+              vals.reduce((a, b) => a + b, 0),
+            );
+    return Math.round(v * 100) / 100;
+  };
+  const head = cols.map((c) => `<th class="num">${esc(c.label)}</th>`).join('');
+  const rows = d.subjects
+    .map((r) => {
+      const values = cols.map((c) => scaled(r, c));
+      const present = values
+        .map((v, i) => (v === null ? null : { v, max: cols[i]!.scale }))
+        .filter((x): x is { v: number; max: number } => x !== null);
+      const total = present.reduce((a, x) => a + x.v, 0);
+      const max = present.reduce((a, x) => a + x.max, 0);
+      const pct = max > 0 && present.length ? (total / max) * 100 : null;
+      const grade =
+        pct === null
+          ? null
+          : (d.gradeScale.find((b) => pct >= Number(b.minPct) && pct <= Number(b.maxPct))?.grade ??
+            null);
+      return `<tr><td>${esc(r.name)}</td>${values.map((v) => `<td class="num">${v === null ? '' : esc(v.toFixed(v % 1 ? 1 : 0))}</td>`).join('')}<td class="num">${present.length ? `${esc(total.toFixed(1))} / ${max}` : ''}</td><td class="ctr">${esc(grade ?? '')}</td></tr>`;
+    })
+    .join('');
+  return `<h2>${esc(s.title ?? 'Scholastic areas')}</h2><table><thead><tr><th>Subject</th>${head}<th class="num">Total</th><th class="ctr">Grade</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+const DEFAULT_DESCRIPTORS: Record<string, string> = {
+  A: 'Exceeds expectations',
+  B: 'Meets expectations',
+  C: 'Approaching expectations',
+  D: 'Needs support',
+  E: 'Needs support',
+};
+
+/** Sprint 18 (HPC): indicator grades read as descriptors, per area. */
+function hpcDescriptors(d: ReportCardData, s: ReportCardSection): string {
+  if (d.indicators.length === 0) return '';
+  const map = { ...DEFAULT_DESCRIPTORS, ...(s.descriptors ?? {}) };
+  const last = d.exams.length - 1;
+  const rows = d.indicators
+    .map((a) => {
+      const items = a.items
+        .map((i) => {
+          const g = i.grades[last] ?? i.grades.find((x) => x !== null) ?? null;
+          return `<tr><td>${esc(i.name)}</td><td class="ctr">${esc(g ?? '')}</td><td>${esc(g ? (map[g] ?? '') : '')}</td></tr>`;
+        })
+        .join('');
+      return `<tr><td colspan="3" style="font-weight:600;background:#E6EEF8">${esc(a.area)}</td></tr>${items}`;
+    })
+    .join('');
+  const legend = Object.entries(map)
+    .filter(([g]) => d.indicators.some((a) => a.items.some((i) => i.grades.includes(g))))
+    .map(([g, t]) => `<span><strong>${esc(g)}</strong> ${esc(t)}</span>`)
+    .join('');
+  return `<h2>${esc(s.title ?? 'Holistic progress')}</h2><table><thead><tr><th>Area</th><th class="ctr">Grade</th><th>What it means</th></tr></thead><tbody>${rows}</tbody></table><div class="scale">${legend}</div>`;
+}
+
 function coScholastic(d: ReportCardData, s: ReportCardSection): string {
   if (d.indicators.length === 0) return '';
   const head = d.exams.map((e) => `<th class="ctr">${esc(e.code)}</th>`).join('');
@@ -273,7 +407,9 @@ export function reportCardBody(
       case 'student':
         return student(d, s);
       case 'scholastic':
-        return scholastic(d, s);
+        return s.mode === 'components' ? scholasticComponents(d, s) : scholastic(d, s);
+      case 'hpc_descriptors':
+        return hpcDescriptors(d, s);
       case 'co_scholastic':
         return coScholastic(d, s);
       case 'attendance':

@@ -4094,7 +4094,7 @@ async function main(): Promise<void> {
             [alpha.id, code, title, author, category, price],
           );
         const noCopies = await c.query(
-          `SELECT 1 FROM library_copies WHERE school_id = $1 LIMIT 1`,
+          `SELECT 1 FROM library_copies WHERE school_id = $1 AND accession_no = '1001' LIMIT 1`,
           [alpha.id],
         );
         if (!noCopies.rows[0]) {

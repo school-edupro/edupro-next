@@ -464,6 +464,20 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       log.info({ schools: schools.rows.length, rows }, 'exam results mart run');
       return;
     }
+    if (kind === 'archive.closed_years') {
+      // Sprint 18 (ADR-014): move closed years' attendance marks (beyond the two most recent) to the archive schema.
+      const schools = { rows: await schoolsFor(db, job) };
+      let moved = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.archive_closed_years() AS n'),
+        );
+        moved += Number(r.rows[0]?.n ?? 0);
+      }
+      log.info({ schools: schools.rows.length, moved }, 'archive closed years run');
+      return;
+    }
     log.warn({ kind }, 'unknown maintenance job kind');
   };
 }

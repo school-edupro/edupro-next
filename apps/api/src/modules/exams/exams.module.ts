@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
 import { ReportsModule } from '../reports/reports.module';
+import { BoardResultsController } from './board-results.controller';
+import { BoardResultsService } from './board-results.service';
 import { ExamEntryController } from './exam-entry.controller';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
@@ -21,8 +23,16 @@ import { ReportCardsService } from './report-cards.service';
     ExamEntryController,
     ReportCardsController,
     FamilyResultsController,
+    BoardResultsController,
   ],
-  providers: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService, AuditService],
+  providers: [
+    ExamsService,
+    ExamEntryService,
+    ExamResultsService,
+    ReportCardsService,
+    BoardResultsService,
+    AuditService,
+  ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],
 })
 export class ExamsModule {}

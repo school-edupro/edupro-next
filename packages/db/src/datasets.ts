@@ -726,6 +726,33 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [str(p.from), str(p.to), str(p.ledger)],
     }),
   },
+  board_results: {
+    id: 'board_results',
+    title: 'Board results',
+    permission: 'exams.board_result.view',
+    maxRows: 50_000,
+    columns: [
+      { key: 'board', header: 'Board', width: 8 },
+      { key: 'class_label', header: 'Class', width: 6 },
+      { key: 'roll_no', header: 'Roll no', width: 12 },
+      { key: 'candidate_name', header: 'Candidate', width: 26 },
+      { key: 'admission_no', header: 'Admission no', width: 12 },
+      { key: 'subject_code', header: 'Subject code', width: 8 },
+      { key: 'subject_name', header: 'Subject', width: 22 },
+      { key: 'theory', header: 'Theory', type: 'number', width: 8 },
+      { key: 'practical', header: 'Practical', type: 'number', width: 8 },
+      { key: 'total', header: 'Total', type: 'number', width: 8 },
+      { key: 'grade', header: 'Grade', width: 6 },
+      { key: 'result', header: 'Result', width: 10 },
+    ],
+    query: (p) => ({
+      text: `SELECT r.board, r.class_label, r.roll_no, r.candidate_name, s.admission_no, r.subject_code, r.subject_name, r.theory, r.practical, r.total, r.grade, r.result
+               FROM board_results r LEFT JOIN students s ON s.id = r.student_id
+              WHERE ($1::bigint IS NULL OR r.academic_year_id = $1::bigint) AND ($2::text IS NULL OR r.class_label = $2)
+              ORDER BY r.class_label, r.roll_no, r.subject_code`,
+      values: [str(p.academicYearId), str(p.classLabel)],
+    }),
+  },
 };
 
 // every master is a dataset too (Excel, CSV and PDF exports of the grid)

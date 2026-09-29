@@ -167,6 +167,11 @@ const NAV: Array<{
       { href: '/exams/masters', label: 'examTypes', permission: 'exams.master.view' },
       { href: '/masters/exams', label: 'examsSetup', permission: 'exams.master.view' },
       { href: '/exams/report-cards', label: 'reportCards', permission: 'exams.report_card.view' },
+      {
+        href: '/exams/board-results',
+        label: 'boardResults',
+        permission: 'exams.board_result.view',
+      },
     ],
   },
   {
@@ -190,6 +195,7 @@ const NAV: Array<{
       { href: '/library', label: 'catalogue', permission: 'library.catalogue.view' },
       { href: '/library/circulation', label: 'circulation', permission: 'library.loan.circulate' },
       { href: '/library/fines', label: 'fines', permission: 'library.loan.circulate' },
+      { href: '/library/stock', label: 'stock', permission: 'library.stock.verify' },
       { href: '/masters/library', label: 'librarySetup', permission: 'library.catalogue.manage' },
     ],
   },
@@ -208,6 +214,7 @@ const NAV: Array<{
       },
       { href: '/insights/alerts', label: 'alerts', permission: 'insights.alert.view' },
       { href: '/insights/reports', label: 'aiReports', permission: 'insights.report.view' },
+      { href: '/insights/results', label: 'resultsAnalytics', permission: 'insights.results.view' },
       { href: '/insights/assistant', label: 'assistant', permission: 'insights.assistant.use' },
       {
         href: '/insights/assistant/audit',

@@ -138,6 +138,12 @@ async function main(): Promise<void> {
     { every: 60 * 60 * 1000 },
     { name: 'insights.results_mart', data: SYSTEM_ENVELOPE('insights.results_mart') },
   );
+  // first day of the month, 02:00 IST (20:30 UTC the day before)
+  await maintenance.upsertJobScheduler(
+    'archive.closed_years',
+    { pattern: '30 20 * * *' },
+    { name: 'archive.closed_years', data: SYSTEM_ENVELOPE('archive.closed_years') },
+  );
   await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },

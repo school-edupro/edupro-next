@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import {
+  hasSoftDelete,
   MASTERS,
   masterOrNull,
   masterColumns,
@@ -482,7 +483,7 @@ export class MastersService {
         const r = await c.query<{ id: string; v: string }>(
           // eslint-disable-next-line no-restricted-syntax -- table and column come from the registry; values bound
           `SELECT id::text, ${f.lookup.column}::text AS v FROM ${f.lookup.table}
-            WHERE ${f.lookup.column}::text = ANY($1::text[]) AND deleted_at IS NULL
+            WHERE ${f.lookup.column}::text = ANY($1::text[])${hasSoftDelete(f.lookup.table) ? ' AND deleted_at IS NULL' : ''}
               ${f.lookup.yearScoped ? 'AND academic_year_id = $2' : ''}`,
           f.lookup.yearScoped ? [[...wanted], tenant.academicYearId] : [[...wanted]],
         );

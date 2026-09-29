@@ -235,6 +235,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'assignments',
         'attendance_daily',
         'audit_logs',
+        'board_results',
         'class_sections',
         'classes',
         'comms_delivery',
@@ -269,6 +270,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
           .sort(),
       ).toEqual([
         'attendance_daily',
+        'board_results',
         'class_sections',
         'classes',
         'lesson_plans',

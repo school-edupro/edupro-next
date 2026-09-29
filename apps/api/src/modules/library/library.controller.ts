@@ -12,6 +12,10 @@ import {
   LoansQueryDto,
   RenewDto,
   ReturnDto,
+  SaleDto,
+  StockCheckCloseDto,
+  StockCheckScanDto,
+  StockCheckStartDto,
 } from './library.dto';
 import { LibraryService } from './library.service';
 
@@ -86,5 +90,67 @@ export class LibraryController {
   })
   mine(@ReqCtx() ctx: RequestContext) {
     return this.library.mine(ctx);
+  }
+
+  // ---- Sprint 18 ----
+  @Post('sales')
+  @ApiOperation({ summary: 'Sell a withdrawn or damaged copy' })
+  @RequirePermission('library.stock.verify', {
+    description: 'Run stock verification and record sales',
+  })
+  sell(@ReqCtx() ctx: RequestContext, @Body() body: SaleDto) {
+    return this.library.sell(ctx, body);
+  }
+
+  @Get('sales')
+  @RequirePermission(LIBRARY.view)
+  async sales(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.library.sales(ctx) };
+  }
+
+  @Get('digital')
+  @ApiOperation({ summary: 'Digital library items the caller may open' })
+  @RequirePermission(LIBRARY.view)
+  async digital(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.library.digital(ctx, LIBRARY.view) };
+  }
+
+  @Get('mine/digital')
+  @RequirePermission(LIBRARY.familyView)
+  async myDigital(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.library.digital(ctx, LIBRARY.familyView) };
+  }
+
+  @Get('stock-checks')
+  @RequirePermission(LIBRARY.view)
+  async stockChecks(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.library.stockChecks(ctx) };
+  }
+
+  @Post('stock-checks')
+  @RequirePermission('library.stock.verify')
+  startStockCheck(@ReqCtx() ctx: RequestContext, @Body() body: StockCheckStartDto) {
+    return this.library.startStockCheck(ctx, body);
+  }
+
+  @Post('stock-checks/:id/scan')
+  @ApiOperation({ summary: 'Record scanned accession numbers as found' })
+  @RequirePermission('library.stock.verify')
+  scanStockCheck(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StockCheckScanDto,
+  ) {
+    return this.library.scanStockCheck(ctx, id, body);
+  }
+
+  @Post('stock-checks/:id/close')
+  @RequirePermission('library.stock.verify')
+  closeStockCheck(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StockCheckCloseDto,
+  ) {
+    return this.library.closeStockCheck(ctx, id, body);
   }
 }

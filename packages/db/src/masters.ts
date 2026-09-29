@@ -303,7 +303,7 @@ const master = (
 });
 
 /** Tables with deleted_at (their unique indexes are partial, so the conflict target says so too). */
-const SOFT_DELETE = new Set([
+export const SOFT_DELETE = new Set([
   'fee_heads',
   'classes',
   'class_sections',
@@ -1182,7 +1182,56 @@ export const MASTERS: MasterDefinition[] = [
     search: ['t.accession_no', 'r2.code'],
     orderBy: 't.accession_no',
   }),
+  master({
+    id: 'library_digital_items',
+    title: 'Digital library',
+    group: 'library',
+    table: 'library_digital_items',
+    permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    fields: [
+      code(),
+      { key: 'title', header: 'Title', type: 'text', required: true, maxLength: 200, width: 30 },
+      { key: 'author', header: 'Author', type: 'text', maxLength: 120, width: 18 },
+      {
+        key: 'kind',
+        header: 'Kind',
+        type: 'select',
+        required: true,
+        options: ['link', 'file'],
+        width: 8,
+      },
+      { key: 'url', header: 'URL', type: 'text', maxLength: 500, width: 30, help: 'for links' },
+      { key: 'category', header: 'Category', type: 'text', maxLength: 60, width: 14, bulk: true },
+      {
+        key: 'audience',
+        header: 'Audience',
+        type: 'select',
+        required: true,
+        options: ['everyone', 'students', 'employees'],
+        width: 10,
+        bulk: true,
+      },
+      {
+        key: 'band',
+        header: 'Class band',
+        type: 'select',
+        options: ['primary', 'middle', 'secondary', 'senior'],
+        width: 10,
+        bulk: true,
+        help: 'blank = every class',
+      },
+      { key: 'description', header: 'Description', type: 'text', maxLength: 300, width: 30 },
+    ],
+    status: STATUS,
+    search: ['t.code', 't.title', 't.author', 't.category'],
+    orderBy: 't.category NULLS LAST, t.title',
+  }),
 ];
+
+/** Whether a lookup table carries deleted_at (ref resolution filters on it only then). */
+export const hasSoftDelete = (table: string): boolean => SOFT_DELETE.has(table);
 
 export const MASTER_IDS = MASTERS.map((m) => m.id) as [string, ...string[]];
 

@@ -67,6 +67,10 @@ const PAGES = [
   '/library',
   '/library/circulation',
   '/library/fines',
+  // Sprint 18
+  '/exams/board-results',
+  '/library/stock',
+  '/insights/results',
 ];
 
 test.describe('accessibility (axe)', () => {
