@@ -71,6 +71,17 @@ const PAGES = [
   '/exams/board-results',
   '/library/stock',
   '/insights/results',
+  // Sprint 19
+  '/engagement/appointments',
+  '/engagement/visitors',
+  '/engagement/gate-passes',
+  '/engagement/consent-forms?new=1',
+  '/engagement/certificates',
+  '/engagement/clinic',
+  '/engagement/cctv',
+  '/engagement/employee-queries',
+  '/reports/schedules',
+  '/reports/mis',
 ];
 
 test.describe('accessibility (axe)', () => {

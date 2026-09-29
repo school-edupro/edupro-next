@@ -111,6 +111,16 @@ export class PaymentsController {
     return this.payments.createFamilyIntent(ctx, body);
   }
 
+  @Post('intents/mine/:id/checkout')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reopen the checkout of one of my own pending payments (Sprint 19: consent-form fees)',
+  })
+  @RequirePermission(PAYMENTS.familyPay)
+  familyCheckout(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.payments.familyCheckout(ctx, id);
+  }
+
   @Get('intents/:id')
   @ApiBearerAuth()
   @RequirePermission(PAYMENTS.intentView)

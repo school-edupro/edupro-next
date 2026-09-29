@@ -7,6 +7,8 @@ export const TemplateKindSchema = z.enum([
   'transfer_certificate',
   'bonafide',
   'letter',
+  'certificate',
+  'gate_pass',
   'fee_receipt',
 ]);
 const SizeSchema = z.string().regex(/^\d+(\.\d+)?(mm|cm|in)$/, 'must be a length such as 210mm');

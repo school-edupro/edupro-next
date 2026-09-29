@@ -152,6 +152,34 @@ const NAV: Array<{
     section: 'engagement',
     items: [
       { href: '/engagement/queries', label: 'queries', permission: 'engagement.query.view' },
+      {
+        href: '/engagement/appointments',
+        label: 'appointments',
+        permission: 'engagement.appointment.view',
+      },
+      { href: '/engagement/visitors', label: 'visitors', permission: 'engagement.visitor.manage' },
+      {
+        href: '/engagement/gate-passes',
+        label: 'gatePasses',
+        permission: 'engagement.gate_pass.view',
+      },
+      {
+        href: '/engagement/consent-forms',
+        label: 'consentForms',
+        permission: 'engagement.consent_form.manage',
+      },
+      {
+        href: '/engagement/certificates',
+        label: 'certificates',
+        permission: 'engagement.certificate.issue',
+      },
+      { href: '/engagement/clinic', label: 'clinic', permission: 'engagement.clinic.manage' },
+      { href: '/engagement/cctv', label: 'cctv', permission: 'engagement.cctv.decide' },
+      {
+        href: '/engagement/employee-queries',
+        label: 'employeeQueries',
+        permission: 'engagement.employee_query.answer',
+      },
       { href: '/engagement/feedback', label: 'feedback', permission: 'engagement.feedback.view' },
       {
         href: '/engagement/change-requests',
@@ -215,6 +243,7 @@ const NAV: Array<{
       { href: '/insights/alerts', label: 'alerts', permission: 'insights.alert.view' },
       { href: '/insights/reports', label: 'aiReports', permission: 'insights.report.view' },
       { href: '/insights/results', label: 'resultsAnalytics', permission: 'insights.results.view' },
+      { href: '/insights/group', label: 'groupView', permission: 'insights.group.view' },
       { href: '/insights/assistant', label: 'assistant', permission: 'insights.assistant.use' },
       {
         href: '/insights/assistant/audit',
@@ -230,7 +259,11 @@ const NAV: Array<{
   },
   {
     section: 'reports',
-    items: [{ href: '/reports/exports', label: 'exportCentre', permission: 'reports.export.view' }],
+    items: [
+      { href: '/reports/exports', label: 'exportCentre', permission: 'reports.export.view' },
+      { href: '/reports/schedules', label: 'schedules', permission: 'reports.schedule.manage' },
+      { href: '/reports/mis', label: 'misCentre', permission: 'insights.mis.view' },
+    ],
   },
   {
     section: 'system',

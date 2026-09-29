@@ -4144,6 +4144,131 @@ async function main(): Promise<void> {
       }
       await clearCtx();
 
+      // ---- Sprint 19: MIS dashboards by role, the last approval flows, one open consent form, a visitor
+      // and a clinic visit so the engagement screens are not empty ----
+      for (const school of Object.values(schools)) {
+        await withCtx(school.id, 'dev-admin');
+        const dashboards: Array<[string, string, string[], number]> = [
+          ['principal', 'Principal dashboard', ['school_admin', 'group_admin'], 1],
+          ['academics', 'Academics', ['school_admin', 'group_admin', 'academic_coordinator'], 2],
+          [
+            'attendance',
+            'Attendance',
+            ['school_admin', 'group_admin', 'academic_coordinator', 'class_teacher'],
+            3,
+          ],
+          ['fees', 'Fees', ['school_admin', 'group_admin', 'accountant', 'auditor'], 4],
+          [
+            'communication',
+            'Communication',
+            ['school_admin', 'group_admin', 'academic_coordinator'],
+            5,
+          ],
+          ['transport', 'Transport', ['school_admin', 'group_admin'], 6],
+          ['library', 'Library', ['school_admin', 'group_admin', 'academic_coordinator'], 7],
+          [
+            'results',
+            'Results analytics',
+            ['school_admin', 'group_admin', 'academic_coordinator', 'class_teacher'],
+            8,
+          ],
+          ['group', 'Group view', ['group_admin'], 9],
+        ];
+        for (const [code, name, roles, order] of dashboards)
+          await c.query(
+            `INSERT INTO mis_dashboards (school_id, code, name, roles, sort_order) VALUES ($1, $2, $3, $4::text[], $5) ON CONFLICT (school_id, code) DO NOTHING`,
+            [school.id, code, name, roles, order],
+          );
+        const flows: Array<[string, string, string, string, number, string | null]> = [
+          [
+            'appointment_request',
+            'Appointment request',
+            'appointment_request',
+            'class_teacher',
+            48,
+            'academic_coordinator',
+          ],
+          ['gate_pass', 'Gate pass', 'gate_pass', 'class_teacher', 2, 'school_admin'],
+          ['cctv_request', 'CCTV footage request', 'cctv_request', 'school_admin', 72, null],
+          [
+            'employee_query',
+            'Employee query',
+            'employee_query',
+            'academic_coordinator',
+            72,
+            'school_admin',
+          ],
+        ];
+        for (const [code, name, entityType, role, sla, escalate] of flows)
+          await c.query(
+            `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by)
+             SELECT $1, $2, $3, $4, $5::jsonb, (SELECT id FROM users WHERE oneauth_sub = 'dev-admin')
+              WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE school_id = $1 AND code = $2 AND deleted_at IS NULL)`,
+            [
+              school.id,
+              code,
+              name,
+              entityType,
+              JSON.stringify([
+                {
+                  level: 1,
+                  name: `${name} decision`,
+                  resolver: { kind: 'role', roleCode: role },
+                  slaHours: sla,
+                  ...(escalate ? { escalateTo: { kind: 'role', roleCode: escalate } } : {}),
+                },
+              ]),
+            ],
+          );
+        await clearCtx();
+      }
+      await withCtx(alpha.id, 'dev-admin');
+      {
+        await c.query(
+          `INSERT INTO consent_forms (school_id, code, title, description, fields, fee_amount, status, created_by)
+           SELECT $1, 'science_city_2026', 'Science City educational trip', 'One-day trip on 18 October 2026 with the class teachers. Lunch is included.',
+                  $2::jsonb, 350, 'open', (SELECT id FROM users WHERE oneauth_sub = 'dev-admin')
+            WHERE NOT EXISTS (SELECT 1 FROM consent_forms WHERE school_id = $1 AND code = 'science_city_2026')`,
+          [
+            alpha.id,
+            JSON.stringify([
+              {
+                key: 'allow',
+                label: 'I allow my child to join the trip',
+                type: 'yesno',
+                required: true,
+              },
+              {
+                key: 'allergies',
+                label: 'Allergies or medication the teachers should know of',
+                type: 'text',
+              },
+              {
+                key: 'pickup',
+                label: 'Pick-up after the trip',
+                type: 'choice',
+                options: ['School bus', 'Parent at school gate'],
+                required: true,
+              },
+            ]),
+          ],
+        );
+        await c.query(
+          `INSERT INTO visitor_log (school_id, visitor_name, mobile, organisation, purpose, to_meet, id_proof_kind, badge_no, in_at, logged_by)
+           SELECT $1, 'Meera Iyer', '9812345678', 'Pearson India', 'Textbook samples', 'Academic Coordinator', 'Aadhaar', 'V-07', now() - interval '2 hours', (SELECT id FROM users WHERE oneauth_sub = 'dev-admin')
+            WHERE NOT EXISTS (SELECT 1 FROM visitor_log WHERE school_id = $1 AND badge_no = 'V-07' AND in_at::date = CURRENT_DATE)`,
+          [alpha.id],
+        );
+        await c.query(
+          `INSERT INTO clinic_visits (school_id, student_id, in_at, out_at, complaint, treatment, temperature_c, attended_by)
+           SELECT $1, s.id, now() - interval '3 hours', now() - interval '2 hours 30 minutes', 'Mild headache after PE', 'Rest, water, paracetamol 250 mg', 37.2, (SELECT id FROM users WHERE oneauth_sub = 'dev-admin')
+             FROM students s WHERE s.school_id = $1 AND s.admission_no = 'A2481'
+              AND NOT EXISTS (SELECT 1 FROM clinic_visits WHERE school_id = $1 AND complaint = 'Mild headache after PE')`,
+          [alpha.id],
+        );
+      }
+      await clearCtx();
+
       // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
       for (const school of Object.values(schools)) {
         await withCtx(school.id, 'dev-admin');

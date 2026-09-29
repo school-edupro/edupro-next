@@ -446,6 +446,67 @@ export class ShadowService {
   tenantOf(ctx: RequestContext): TenantContext {
     return requireTenant(ctx);
   }
+
+  // ---- Sprint 19: closure (M3) -------------------------------------------------------------------
+  /** Closes the shadow term when the last three daily runs read zero; otherwise an override with a reason. */
+  async close(ctx: RequestContext, reason?: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const already = await c.query(`SELECT 1 FROM shadow_closures LIMIT 1`);
+      if (already.rowCount)
+        throw new DomainError('conflict', 'The shadow run is already closed', { status: 409 });
+      const last = await c.query<{ id: string; status: string; run_date: string }>(
+        `SELECT id::text, status, run_date::text FROM shadow_runs ORDER BY run_date DESC LIMIT 3`,
+      );
+      const zero = last.rows.filter((r) => r.status === 'zero').length;
+      const allZero = last.rows.length === 3 && zero === 3;
+      if (!allZero && !reason)
+        throw new DomainError(
+          'shadow.not_zero',
+          `Only ${zero} of the last ${last.rows.length} runs read zero; three consecutive zero runs close the term, or give a reason to override`,
+          { status: 409, extra: { zeroRuns: zero } },
+        );
+      const summary = await c.query<Record<string, unknown>>(
+        `SELECT count(*)::int AS runs, count(*) FILTER (WHERE status = 'zero')::int AS zero_runs,
+                COALESCE(sum(legacy_receipts), 0)::int AS legacy_receipts, COALESCE(sum(legacy_amount), 0)::text AS legacy_amount,
+                COALESCE(sum(new_receipts), 0)::int AS new_receipts, COALESCE(sum(new_amount), 0)::text AS new_amount,
+                (SELECT count(*) FROM shadow_variances WHERE status = 'open')::int AS open_variances,
+                min(from_date)::text AS from_date, max(to_date)::text AS to_date
+           FROM shadow_runs`,
+      );
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO shadow_closures (school_id, closed_by, zero_runs, last_run_id, overridden, reason, summary)
+         VALUES (app.current_school_id(), app.current_user_id(), $1, $2, $3, $4, $5::jsonb) RETURNING id::text`,
+        [
+          zero,
+          last.rows[0]?.id ?? null,
+          !allZero,
+          reason ?? null,
+          JSON.stringify(summary.rows[0] ?? {}),
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'fees.shadow.close',
+        entityType: 'shadow_closures',
+        entityId: r.rows[0]!.id,
+        after: {
+          zeroRuns: zero,
+          overridden: !allZero,
+          reason: reason ?? null,
+          summary: summary.rows[0],
+        },
+      });
+      return { id: r.rows[0]!.id, zeroRuns: zero, overridden: !allZero, summary: summary.rows[0] };
+    });
+  }
+
+  async closure(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Record<string, unknown>>(
+        `SELECT s.id::text, s.closed_at, u.display_name AS closed_by, s.zero_runs, s.overridden, s.reason, s.summary FROM shadow_closures s LEFT JOIN users u ON u.id = s.closed_by ORDER BY s.id DESC LIMIT 1`,
+      );
+      return r.rows[0] ?? null;
+    });
+  }
 }
 
 function toRun(x: Record<string, unknown>): ShadowRun {

@@ -3000,3 +3000,248 @@ export async function librarySell(fd: FormData) {
     }),
   );
 }
+
+// ---- Sprint 19 ----------------------------------------------------------------------------------
+const decideBody = (fd: FormData) => ({
+  outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+  note: opt(fd, 'note'),
+});
+
+export async function decideAppointment(fd: FormData) {
+  return run('/engagement/appointments', () =>
+    apiFetch(`/engagement/appointments/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...decideBody(fd),
+        confirmedAt: opt(fd, 'confirmedAt'),
+        location: opt(fd, 'location'),
+      }),
+    }),
+  );
+}
+
+export async function visitorIn(fd: FormData) {
+  return run('/engagement/visitors', () =>
+    apiFetch('/engagement/visitors', {
+      method: 'POST',
+      body: JSON.stringify({
+        visitorName: str(fd, 'visitorName'),
+        mobile: opt(fd, 'mobile'),
+        organisation: opt(fd, 'organisation'),
+        purpose: str(fd, 'purpose'),
+        toMeet: opt(fd, 'toMeet'),
+        idProofKind: opt(fd, 'idProofKind'),
+        badgeNo: opt(fd, 'badgeNo'),
+      }),
+    }),
+  );
+}
+
+export async function visitorOut(fd: FormData) {
+  return run('/engagement/visitors', () =>
+    apiFetch(`/engagement/visitors/${str(fd, 'id')}/out`, { method: 'POST' }),
+  );
+}
+
+export async function officeGatePass(fd: FormData) {
+  return run('/engagement/gate-passes', () =>
+    apiFetch('/engagement/gate-passes', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        kind: str(fd, 'kind') === 'late_arrival' ? 'late_arrival' : 'early_leave',
+        onDate: opt(fd, 'onDate'),
+        atTime: opt(fd, 'atTime'),
+        reason: str(fd, 'reason'),
+        escortName: opt(fd, 'escortName'),
+        escortRelation: opt(fd, 'escortRelation'),
+        escortMobile: opt(fd, 'escortMobile'),
+      }),
+    }),
+  );
+}
+
+export async function decideGatePass(fd: FormData) {
+  return run('/engagement/gate-passes', () =>
+    apiFetch(`/engagement/gate-passes/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(decideBody(fd)),
+    }),
+  );
+}
+
+export async function saveConsentForm(fd: FormData) {
+  const id = opt(fd, 'id');
+  const back = `/engagement/consent-forms${id ? `?form=${id}` : ''}`;
+  let fields: unknown;
+  try {
+    fields = JSON.parse(str(fd, 'fields') || '[]');
+  } catch {
+    back_(back, 'validation-failed', 'Fields must be valid JSON');
+  }
+  const fee = str(fd, 'feeAmount');
+  return run(back, () =>
+    apiFetch(id ? `/engagement/consent-forms/${id}` : '/engagement/consent-forms', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code'),
+        title: str(fd, 'title'),
+        description: opt(fd, 'description'),
+        fields,
+        feeAmount: fee ? Number(fee) : null,
+        opensOn: opt(fd, 'opensOn'),
+        closesOn: opt(fd, 'closesOn'),
+      }),
+    }),
+  );
+}
+
+export async function setConsentFormStatus(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/engagement/consent-forms?form=${id}`, () =>
+    apiFetch(`/engagement/consent-forms/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: str(fd, 'status') }),
+    }),
+  );
+}
+
+export async function issueCertificates(fd: FormData) {
+  const ids = str(fd, 'studentIds')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  return run('/engagement/certificates', () =>
+    apiFetch('/engagement/certificates', {
+      method: 'POST',
+      body: JSON.stringify({
+        templateId: str(fd, 'templateId'),
+        ...(ids.length ? { studentIds: ids } : { classSectionId: str(fd, 'classSectionId') }),
+        title: str(fd, 'title'),
+        text: opt(fd, 'text'),
+        issuedOn: opt(fd, 'issuedOn'),
+      }),
+    }),
+  );
+}
+
+export async function recordClinicVisit(fd: FormData) {
+  const temp = str(fd, 'temperatureC');
+  return run('/engagement/clinic', () =>
+    apiFetch('/engagement/clinic', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        complaint: str(fd, 'complaint'),
+        treatment: opt(fd, 'treatment'),
+        temperatureC: temp ? Number(temp) : undefined,
+        referredTo: opt(fd, 'referredTo'),
+        sentHome: fd.get('sentHome') === 'on',
+        notify: fd.get('notify') !== null ? fd.get('notify') === 'on' : true,
+      }),
+    }),
+  );
+}
+
+export async function clinicOut(fd: FormData) {
+  return run('/engagement/clinic', () =>
+    apiFetch(`/engagement/clinic/${str(fd, 'id')}/out`, { method: 'POST' }),
+  );
+}
+
+export async function requestCctv(fd: FormData) {
+  return run('/engagement/cctv', () =>
+    apiFetch('/engagement/cctv', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: opt(fd, 'studentId'),
+        camera: str(fd, 'camera'),
+        fromAt: str(fd, 'fromAt'),
+        toAt: str(fd, 'toAt'),
+        reason: str(fd, 'reason'),
+      }),
+    }),
+  );
+}
+
+export async function decideCctv(fd: FormData) {
+  return run('/engagement/cctv', () =>
+    apiFetch(`/engagement/cctv/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(decideBody(fd)),
+    }),
+  );
+}
+
+export async function raiseEmployeeQuery(fd: FormData) {
+  return run('/engagement/employee-queries', () =>
+    apiFetch('/engagement/employee-queries', {
+      method: 'POST',
+      body: JSON.stringify({
+        category: str(fd, 'category') || 'other',
+        subject: str(fd, 'subject'),
+        detail: str(fd, 'detail'),
+      }),
+    }),
+  );
+}
+
+export async function answerEmployeeQuery(fd: FormData) {
+  return run('/engagement/employee-queries', () =>
+    apiFetch(`/engagement/employee-queries/${str(fd, 'id')}/answer`, {
+      method: 'POST',
+      body: JSON.stringify(decideBody(fd)),
+    }),
+  );
+}
+
+export async function createSchedule(fd: FormData) {
+  const split = (k: string) =>
+    str(fd, k)
+      .split(/[,\s]+/)
+      .filter(Boolean);
+  return run('/reports/schedules', () =>
+    apiFetch('/reports/schedules', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        dataset: str(fd, 'dataset'),
+        format: str(fd, 'format') || 'xlsx',
+        cron: str(fd, 'cron'),
+        recipientRoles: split('recipientRoles'),
+        recipientAddresses: split('recipientAddresses'),
+        channel: str(fd, 'channel') === 'email' ? 'email' : 'whatsapp',
+      }),
+    }),
+  );
+}
+
+export async function scheduleStatus(fd: FormData) {
+  return run('/reports/schedules', () =>
+    apiFetch(`/reports/schedules/${str(fd, 'id')}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active' }),
+    }),
+  );
+}
+
+export async function scheduleRun(fd: FormData) {
+  return run('/reports/schedules', () =>
+    apiFetch(`/reports/schedules/${str(fd, 'id')}/run`, { method: 'POST' }),
+  );
+}
+
+export async function closeShadowRun(fd: FormData) {
+  const back = '/fees/shadow';
+  try {
+    await apiFetch('/shadow/close', {
+      method: 'POST',
+      body: JSON.stringify({ reason: opt(fd, 'reason') }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(back)}`);
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}?ok=1`);
+}

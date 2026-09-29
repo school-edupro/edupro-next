@@ -5,11 +5,13 @@ import { Public } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { ServiceKeysService } from './service-keys.service';
 import {
+  CloseShadowDto,
   CreateServiceKeyDto,
   DecideVarianceDto,
   FeedDto,
   ReconcileDto,
   SHADOW,
+  SHADOW_CLOSE,
   VariancesQueryDto,
 } from './shadow.dto';
 import { ShadowService } from './shadow.service';
@@ -55,6 +57,21 @@ export class ShadowController {
   @RequirePermission(SHADOW.manage)
   reconcile(@ReqCtx() ctx: RequestContext, @Body() body: ReconcileDto) {
     return this.shadow.reconcile(ctx, body.from, body.to);
+  }
+
+  @Post('close')
+  @ApiOperation({
+    summary: 'Close the shadow term (three zero runs, or an override with a reason) — M3',
+  })
+  @RequirePermission(SHADOW_CLOSE, { description: 'Close the shadow run (M3)', mfa: true })
+  close(@ReqCtx() ctx: RequestContext, @Body() body: CloseShadowDto) {
+    return this.shadow.close(ctx, body.reason);
+  }
+
+  @Get('closure')
+  @RequirePermission(SHADOW.view)
+  async closure(@ReqCtx() ctx: RequestContext) {
+    return { closure: await this.shadow.closure(ctx) };
   }
 
   @Get('runs')

@@ -877,6 +877,26 @@ export class PaymentsService {
     });
   }
 
+  /** Sprint 19: a guardian reopens the checkout of an intent they created (e.g. a consent-form fee). */
+  async familyCheckout(
+    ctx: RequestContext,
+    intentId: string,
+  ): Promise<{ intent: IntentRow; checkout: Checkout }> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Record<string, unknown>>(
+        // eslint-disable-next-line no-restricted-syntax -- column list constant; values are bound parameters
+        `SELECT ${COLS} FROM payment_intents WHERE id = $1 AND created_by_user = $2 AND status IN ('created', 'pending') AND expires_at > now()`,
+        [intentId, ctx.user.id],
+      );
+      if (!r.rows[0])
+        throw new DomainError('not-found', 'Payment not found or no longer payable', {
+          status: 404,
+        });
+      const intent = toRow(r.rows[0]);
+      return { intent, checkout: this.checkout(intent) };
+    });
+  }
+
   /** The family's own intents (recent first), so the fees page can show what is pending or failed. */
   async familyIntents(ctx: RequestContext): Promise<IntentRow[]> {
     const tenant = requireTenant(ctx);

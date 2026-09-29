@@ -1228,6 +1228,33 @@ export const MASTERS: MasterDefinition[] = [
     search: ['t.code', 't.title', 't.author', 't.category'],
     orderBy: 't.category NULLS LAST, t.title',
   }),
+  master({
+    id: 'mis_dashboards',
+    title: 'MIS dashboards by role',
+    group: 'system',
+    table: 'mis_dashboards',
+    permission: { view: 'platform.school.view', manage: 'platform.settings.edit' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    fields: [
+      code(),
+      name(),
+      {
+        key: 'roles',
+        header: 'Roles',
+        type: 'text',
+        required: true,
+        array: true,
+        maxLength: 300,
+        width: 30,
+        help: 'comma separated role codes',
+      },
+      order(),
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name'],
+    orderBy: 't.sort_order, t.code',
+  }),
 ];
 
 /** Whether a lookup table carries deleted_at (ref resolution filters on it only then). */

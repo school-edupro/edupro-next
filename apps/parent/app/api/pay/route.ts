@@ -8,7 +8,8 @@ export async function POST(req: Request) {
   const txnid = String(fd.get('txnid') ?? '');
   const student = String(fd.get('student') ?? '');
   const outcome = String(fd.get('outcome') ?? 'success') === 'failure' ? 'failure' : 'success';
-  const target = new URL('/fees', req.url);
+  const backRaw = String(fd.get('back') ?? '/fees');
+  const target = new URL(/^\/[a-z-]*$/.test(backRaw) ? backRaw : '/fees', req.url);
   if (/^\d+$/.test(student)) target.searchParams.set('student', student);
   let paid = '0';
   if (/^[A-Za-z0-9]{6,40}$/.test(txnid)) {

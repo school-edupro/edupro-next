@@ -145,6 +145,11 @@ async function main(): Promise<void> {
     { name: 'archive.closed_years', data: SYSTEM_ENVELOPE('archive.closed_years') },
   );
   await maintenance.upsertJobScheduler(
+    'reports.scheduled',
+    { every: 60 * 60 * 1000 },
+    { name: 'reports.scheduled', data: SYSTEM_ENVELOPE('reports.scheduled') },
+  );
+  await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },
     { name: 'break_glass.expire', data: SYSTEM_ENVELOPE('break_glass.expire') },

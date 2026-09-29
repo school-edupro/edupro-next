@@ -10,7 +10,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { decideVariance, shadowFeed, shadowReconcile } from '@/lib/actions';
+import { closeShadowRun, decideVariance, shadowFeed, shadowReconcile } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Page, ShadowFeed, ShadowRun, ShadowVariance } from '@/lib/types';
 
@@ -51,6 +51,18 @@ export default async function ShadowPage({
     apiFetch<Page<ShadowVariance>>(`/shadow/variances?${q.toString()}`),
   ]);
   const canManage = me.permissions.includes('fees.shadow.manage');
+  const canClose = me.permissions.includes('fees.shadow.close');
+  const closure = await apiFetch<{
+    closure: {
+      closed_at: string;
+      closed_by: string | null;
+      zero_runs: number;
+      overridden: boolean;
+      reason: string | null;
+    } | null;
+  }>('/shadow/closure')
+    .then((x) => x.closure)
+    .catch(() => null);
   const kindLabel = (k: string) =>
     k === 'amount' ? s('amount_kind') : KINDS.includes(k) ? s(k) : k;
   const latest = runs[0];
@@ -72,6 +84,36 @@ export default async function ShadowPage({
         }
       />
       <Notice params={sp} />
+      <Card title={s('closeTitle')} style={{ marginBottom: 'var(--sp-4)' }}>
+        {closure ? (
+          <p>
+            <Badge tone={closure.overridden ? 'warning' : 'success'}>{s('closed')}</Badge>{' '}
+            {closure.closed_at.slice(0, 16).replace('T', ' ')} · {closure.closed_by ?? ''} ·{' '}
+            {closure.zero_runs} {s('zeroRuns')}
+            {closure.reason ? ` · ${closure.reason}` : ''}
+          </p>
+        ) : (
+          <>
+            <p className="ep-field__help">{s('closeHelp')}</p>
+            {canClose ? (
+              <form
+                action={closeShadowRun}
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-2)',
+                  alignItems: 'flex-end',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <InputField id="reason" name="reason" label={s('closeReason')} maxLength={600} />
+                <Button type="submit" variant="secondary" size="sm">
+                  {s('closeBtn')}
+                </Button>
+              </form>
+            ) : null}
+          </>
+        )}
+      </Card>
       <div
         style={{
           display: 'grid',

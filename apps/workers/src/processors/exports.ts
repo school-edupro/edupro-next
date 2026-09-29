@@ -14,6 +14,7 @@ import {
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
 import { renderAiReport } from '../renderers/ai-report';
+import { renderCertificate, renderCertificateBatch } from '../renderers/certificate';
 import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
 import { idCardHtml, loadIdCard } from '../renderers/id-card';
@@ -130,6 +131,13 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
         } else if (renderer.id === 'report_card') {
           const doc = await renderReportCard(db, storage, envelope, row.params, exportId);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'certificate') {
+          const doc = await renderCertificate(db, envelope, row.params);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'certificate_batch') {
+          const doc = await renderCertificateBatch(db, envelope, row.params, exportId);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+          log.info({ exportId, count: doc.count }, 'certificates rendered');
         } else if (renderer.id === 'report_card_batch') {
           const doc = await renderReportCardBatch(db, storage, envelope, row.params, exportId);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });

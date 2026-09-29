@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+export const SHADOW_CLOSE = 'fees.shadow.close';
 export const SHADOW = {
   view: 'fees.shadow.view',
   manage: 'fees.shadow.manage',
@@ -57,3 +58,10 @@ export const CreateServiceKeySchema = z.object({
     .max(5),
 });
 export class CreateServiceKeyDto extends createZodDto(CreateServiceKeySchema) {}
+
+// ---- Sprint 19: closing the shadow run (M3) ----
+export const CloseShadowSchema = z.object({
+  /** when the last runs are not all zero, an override needs a reason */
+  reason: z.string().trim().max(500).optional(),
+});
+export class CloseShadowDto extends createZodDto(CloseShadowSchema) {}

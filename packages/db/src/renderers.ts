@@ -62,6 +62,22 @@ RENDERERS.report_card_batch = {
   requiredParams: ['releaseId', 'classSectionId'],
 };
 
+// Sprint 19: certificates — one issued certificate, or an issue batch (the export groups them)
+RENDERERS.certificate = {
+  id: 'certificate',
+  title: 'Certificate',
+  permission: 'engagement.certificate.issue',
+  page: { width: '297mm', height: '210mm' },
+  requiredParams: ['certificateId'],
+};
+RENDERERS.certificate_batch = {
+  id: 'certificate_batch',
+  title: 'Certificates of a batch',
+  permission: 'engagement.certificate.issue',
+  page: { width: '297mm', height: '210mm' },
+  requiredParams: ['templateId'],
+};
+
 export const RENDERER_IDS = Object.keys(RENDERERS) as [string, ...string[]];
 
 export function rendererOrNull(id: string): RendererDefinition | null {

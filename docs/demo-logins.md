@@ -92,6 +92,16 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprint 19 walk-through (engagement, reports, the last approvals, M3)
+
+1. As `dev-parent` (http://localhost:3001): **Appointments** → request to meet the class teacher for Aarav with two slots, then **Request gate pass** (early leave, dentist). **Consent forms** → sign the Science City trip for Aarav (allow, pick-up by bus): the response is recorded and **Pay the fee now** opens the development gateway for ₹350; choose **Pay (success)** and the form shows _paid_. **Health** shows the morning clinic visit; **Certificates** is empty until step 4.
+2. As `dev-teacher`: **Approvals → Inbox** lists the appointment and the gate pass for VI-A; approve the appointment with a note ("Monday 10:00, staff room") and the gate pass. The parent app shows the confirmed slot and the pass number `GP/2026/00001`; the family gets a WhatsApp in the outbox.
+3. As `dev-admin`: **Engagement → Visitors** shows Meera Iyer signed in; sign her out. **Gate passes** shows the issued pass. **Clinic**: record a visit for any pupil with a temperature; the family message appears in **Communication → Outbox**. **CCTV requests**: raise one for Gate 2 and decide it from the inbox. **Employee queries** lists what staff raised; `dev-coordinator` answers from the inbox.
+4. As `dev-admin`: **System → Templates**, create a template of kind _certificate_ (landscape) using `{{certificate.title}}`, `{{student.name}}`, `{{certificate.serialNo}}`; **Engagement → Certificates** → issue "Certificate of Merit" to VI-A: serials `CERT/2026/…`, one batch PDF in the Export centre; the parent app **Certificates** now lets Aarav's family download its own PDF.
+5. As `dev-admin`: **Reports → Scheduled reports** → schedule the fee day book for Mondays 07:00 (`0 7 * * 1`) to the accountant role, then **Run now**; the export appears in the Export centre. **Reports → MIS centre** shows the dashboards mapped to your roles with live numbers; **System → MIS dashboards by role** is the master behind it (export, Excel upload).
+6. As `dev-group`: **Insights → Group view** shows Alpha and Beta side by side (pupils, attendance today, fees this month and outstanding, latest exam, open approvals, overdue library loans).
+7. As `dev-admin` with a fresh sign-in: **Fees → Variance workbench** → the closure card: **Close the shadow run** needs three zero runs or a reason; give a reason and confirm; the card shows who closed it and the summary. A stale sign-in (`;auth_time=…`) is sent to the step-up page.
+
 ### Sprint 18 walk-through (all bands and boards, library completion)
 
 - **dev-admin**: **Exams → Report cards → Designer**: the four default layouts now differ per band —

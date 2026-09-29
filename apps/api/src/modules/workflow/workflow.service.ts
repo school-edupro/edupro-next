@@ -307,6 +307,62 @@ export class WorkflowService {
           },
         ],
       },
+      // Sprint 19: the last approval flows on the engine
+      {
+        code: 'appointment_request',
+        name: 'Appointment request',
+        entityType: 'appointment_request',
+        levels: [
+          {
+            level: 1,
+            name: 'Class teacher confirms',
+            resolver: { kind: 'role', roleCode: 'class_teacher' },
+            slaHours: 48,
+            escalateTo: { kind: 'role', roleCode: 'academic_coordinator' },
+          },
+        ],
+      },
+      {
+        code: 'gate_pass',
+        name: 'Gate pass',
+        entityType: 'gate_pass',
+        levels: [
+          {
+            level: 1,
+            name: 'Class teacher',
+            resolver: { kind: 'role', roleCode: 'class_teacher' },
+            slaHours: 2,
+            escalateTo: { kind: 'role', roleCode: 'school_admin' },
+          },
+        ],
+      },
+      {
+        code: 'cctv_request',
+        name: 'CCTV footage request',
+        entityType: 'cctv_request',
+        levels: [
+          {
+            level: 1,
+            name: 'School admin decides',
+            resolver: { kind: 'role', roleCode: 'school_admin' },
+            slaHours: 72,
+          },
+        ],
+      },
+      {
+        code: 'employee_query',
+        name: 'Employee query',
+        entityType: 'employee_query',
+        levels: [
+          {
+            level: 1,
+            name: 'Coordinator answers',
+            resolver: { kind: 'role', roleCode: 'academic_coordinator' },
+            slaHours: 72,
+            escalateTo: { kind: 'role', roleCode: 'school_admin' },
+          },
+        ],
+      },
       {
         // Sprint 13: a family's bus request (join, change stop, leave) is approved by the office
         code: 'transport_request',

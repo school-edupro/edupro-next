@@ -10,6 +10,7 @@ import { AlertsService } from './alerts.service';
 import { AssistantService } from './assistant.service';
 import { DEPARTMENTS, DepartmentsService, type Department } from './departments.service';
 import { InsightsService } from './insights.service';
+import { MisService } from './mis.service';
 import { ResultsAnalyticsService } from './results-analytics.service';
 
 export const INSIGHTS = {
@@ -27,6 +28,9 @@ export const INSIGHTS = {
   reportView: 'insights.report.view',
   /** Sprint 18: results analytics */
   resultsView: 'insights.results.view',
+  /** Sprint 19: MIS centre and the group view */
+  misView: 'insights.mis.view',
+  groupView: 'insights.group.view',
   reportRun: 'insights.report.run',
 } as const;
 
@@ -88,6 +92,7 @@ export class InsightsController {
     private readonly alerts: AlertsService,
     private readonly aiReports: AiReportsService,
     private readonly results: ResultsAnalyticsService,
+    private readonly mis: MisService,
   ) {}
 
   // ---- Sprint 14: the assistant ----
@@ -236,5 +241,28 @@ export class InsightsController {
   @RequirePermission(INSIGHTS.resultsView, { description: 'Results analytics for the principal' })
   resultsAnalytics(@ReqCtx() ctx: RequestContext, @Query('examId') examId?: string) {
     return this.results.summary(ctx, examId && /^\d+$/.test(examId) ? examId : null);
+  }
+
+  // ---- Sprint 19: MIS centre and the group view ----
+  @Get('mis')
+  @ApiOperation({ summary: 'Dashboards mapped to my roles, each with its KPIs and datasets' })
+  @RequirePermission(INSIGHTS.misView, {
+    description: 'Open the MIS centre (dashboards mapped to the role)',
+  })
+  async misCentre(@ReqCtx() ctx: RequestContext) {
+    await this.mis.installDefaults(ctx);
+    return { data: await this.mis.mine(ctx) };
+  }
+
+  @Get('group')
+  @ApiOperation({
+    summary:
+      'One row per school of the group: pupils, attendance, fees, results, approvals, library',
+  })
+  @RequirePermission(INSIGHTS.groupView, {
+    description: 'Group dashboard across the schools of the group',
+  })
+  async group(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.mis.group(ctx) };
   }
 }

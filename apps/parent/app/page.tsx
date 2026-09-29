@@ -43,6 +43,10 @@ export default async function HomePage({
     ['Assistant', 'Ask about fees, attendance and homework', '/assistant'],
     ['Results', 'Report cards and progress', '/results'],
     ['Library', 'Books on loan and fines', '/library'],
+    ['Appointments', 'Meet a teacher; gate passes', '/appointments'],
+    ['Consent forms', 'Trips, activities and permissions', '/consents'],
+    ['Certificates', 'Certificates issued to your children', '/certificates'],
+    ['Health', 'Clinic visits and health checks', '/health'],
   ];
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>

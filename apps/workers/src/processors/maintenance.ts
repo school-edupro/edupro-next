@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import { providerFromEnv, writeNarrative } from '@edupro/ai';
 import {
   collectReportFacts,
+  nextCronRun,
   REPORT_DEPARTMENTS,
   type Db,
   type JobEnvelope,
@@ -462,6 +463,103 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         rows += Number(r.rows[0]?.n ?? 0);
       }
       log.info({ schools: schools.rows.length, rows }, 'exam results mart run');
+      return;
+    }
+    if (kind === 'reports.scheduled') {
+      // Sprint 19: run the due schedules as their owner (an export row + job), tell the recipients where the file lands.
+      const schools = { rows: await schoolsFor(db, job) };
+      let ran = 0;
+      for (const s of schools.rows) {
+        const due = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) =>
+            c.query<{
+              id: string;
+              name: string;
+              dataset: string;
+              format: string;
+              params: Record<string, unknown>;
+              cron: string;
+              recipient_roles: string[];
+              recipient_addresses: string[];
+              channel: string;
+              owner_id: string;
+            }>(
+              `SELECT id::text, name, dataset, format, params, cron, recipient_roles, recipient_addresses, channel::text, owner_id::text
+               FROM report_schedules WHERE status = 'active' AND next_run_at IS NOT NULL AND next_run_at <= now() ORDER BY next_run_at`,
+            ),
+        );
+        for (const sch of due.rows) {
+          try {
+            await db.withTenant(
+              { schoolId: s.id, userId: sch.owner_id, allowedSchoolIds: [s.id] },
+              async (c) => {
+                const exp = await c.query<{ id: string }>(
+                  `INSERT INTO exports (school_id, dataset, format, params, title, requested_by)
+                 VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, $5) RETURNING id::text`,
+                  [
+                    sch.dataset,
+                    sch.format,
+                    JSON.stringify(sch.params ?? {}),
+                    sch.name,
+                    sch.owner_id,
+                  ],
+                );
+                await c.query("SELECT app.enqueue_job('exports', $1::jsonb)", [
+                  JSON.stringify({
+                    schoolId: s.id,
+                    userId: sch.owner_id,
+                    requestId: null,
+                    kind: 'export.generate',
+                    payload: { exportId: exp.rows[0]!.id },
+                  }),
+                ]);
+                const next = nextCronRun(sch.cron, new Date());
+                await c.query(
+                  `UPDATE report_schedules SET last_run_at = now(), last_export_id = $2, next_run_at = $3 WHERE id = $1`,
+                  [sch.id, exp.rows[0]!.id, next],
+                );
+                const users = await c.query<{
+                  id: string;
+                  mobile: string | null;
+                  email: string | null;
+                }>(
+                  `SELECT DISTINCT u.id::text, u.mobile, u.email FROM user_roles ur JOIN roles r ON r.id = ur.role_id JOIN users u ON u.id = ur.user_id
+                  WHERE ur.school_id = app.current_school_id() AND r.code = ANY($1::text[]) AND ur.revoked_at IS NULL AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE) AND u.deleted_at IS NULL`,
+                  [sch.recipient_roles],
+                );
+                const body = `Scheduled report "${sch.name}" (${sch.format.toUpperCase()}) is being prepared. Open Reports → Exports, export #${exp.rows[0]!.id}, to download it.`;
+                const targets: Array<{ userId: string | null; address: string }> = [];
+                for (const u of users.rows) {
+                  const addr = sch.channel === 'email' ? u.email : u.mobile;
+                  if (addr) targets.push({ userId: u.id, address: addr });
+                }
+                for (const a of sch.recipient_addresses) targets.push({ userId: null, address: a });
+                for (const t of targets) {
+                  const m = await c.query<{ id: string }>(
+                    `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, subject, body, status)
+                   VALUES (app.current_school_id(), $1::comms_channel, $2, $3, $4, $5, 'queued') RETURNING id::text`,
+                    [sch.channel, t.userId, t.address, `Scheduled report: ${sch.name}`, body],
+                  );
+                  await c.query("SELECT app.enqueue_job('notifications', $1::jsonb)", [
+                    JSON.stringify({
+                      schoolId: s.id,
+                      userId: null,
+                      requestId: null,
+                      kind: 'comms.message',
+                      payload: { messageId: m.rows[0]!.id },
+                    }),
+                  ]);
+                }
+              },
+            );
+            ran += 1;
+          } catch (error) {
+            log.error({ err: error, scheduleId: sch.id }, 'scheduled report failed');
+          }
+        }
+      }
+      log.info({ schools: schools.rows.length, ran }, 'scheduled reports run');
       return;
     }
     if (kind === 'archive.closed_years') {
