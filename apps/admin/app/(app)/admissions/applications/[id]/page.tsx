@@ -82,7 +82,7 @@ export default async function ApplicationPage({
         style={{
           display: 'grid',
           gap: 'var(--sp-5)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
         <Card title={a('answers')}>

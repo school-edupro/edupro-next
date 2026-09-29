@@ -80,7 +80,7 @@ export default async function AssistantCostsPage({
         style={{
           display: 'grid',
           gap: 'var(--sp-5)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
         <Card title={c('byDay')}>

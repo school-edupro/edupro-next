@@ -63,7 +63,7 @@ export default async function StockPage({
         style={{
           display: 'grid',
           gap: 'var(--sp-5)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
         <Card title={open ? `${open.name} · ${open.startedOn}` : s('start')}>

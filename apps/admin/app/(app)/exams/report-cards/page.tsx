@@ -154,7 +154,7 @@ export default async function ReportCardsPage({
         style={{
           display: 'grid',
           gap: 'var(--sp-5)',
-          gridTemplateColumns: 'minmax(360px, 1fr) 2fr',
+          gridTemplateColumns: 'minmax(min(100%, 560px), 1fr) 2fr',
         }}
       >
         <Card title={r('releases')}>

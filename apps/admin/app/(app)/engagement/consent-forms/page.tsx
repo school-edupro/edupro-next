@@ -69,7 +69,7 @@ export default async function ConsentFormsPage({
         style={{
           display: 'grid',
           gap: 'var(--sp-5)',
-          gridTemplateColumns: 'minmax(360px, 1fr) 1fr',
+          gridTemplateColumns: 'minmax(min(100%, 560px), 1fr) 1fr',
         }}
       >
         <Card title={t('title')}>

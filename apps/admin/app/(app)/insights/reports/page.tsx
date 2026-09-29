@@ -43,7 +43,7 @@ export default async function AiReportsPage({
         style={{
           display: 'grid',
           gap: 'var(--sp-5)',
-          gridTemplateColumns: current ? '1fr' : 'repeat(auto-fit, minmax(420px, 1fr))',
+          gridTemplateColumns: current ? '1fr' : 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
         {current ? (
