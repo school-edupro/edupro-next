@@ -1,9 +1,10 @@
 /*
  * App-shell service worker (S5-08, extended S11): the shell and static assets are cached; pages are network
  * first with the last copy as fallback; when nothing is cached the /offline page is shown instead of a
- * browser error.
+ * browser error. Sprint 21 (VAPT readiness): responses marked no-store are never kept, and a sign-out
+ * message from the page clears the whole cache so personal pages do not outlive the session.
  */
-const CACHE = 'edupro-shell-v2';
+const CACHE = 'edupro-shell-v3';
 const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon.svg'];
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -33,7 +34,10 @@ self.addEventListener('fetch', (event) => {
           hit ||
           fetch(req).then((res) => {
             const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => undefined);
+            caches
+              .open(CACHE)
+              .then((cache) => cache.put(req, copy))
+              .catch(() => undefined);
             return res;
           }),
       ),
@@ -43,12 +47,30 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok && req.mode === 'navigate') {
+        const cc = res.headers.get('cache-control') || '';
+        if (res.ok && req.mode === 'navigate' && !/no-store/i.test(cc)) {
           const copy = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => undefined);
+          caches
+            .open(CACHE)
+            .then((cache) => cache.put(req, copy))
+            .catch(() => undefined);
         }
         return res;
       })
-      .catch(() => caches.match(req).then((hit) => hit || (req.mode === 'navigate' ? caches.match('/offline') : undefined) || caches.match('/'))),
+      .catch(() =>
+        caches
+          .match(req)
+          .then(
+            (hit) =>
+              hit ||
+              (req.mode === 'navigate' ? caches.match('/offline') : undefined) ||
+              caches.match('/'),
+          ),
+      ),
   );
+});
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'edupro:signed-out') {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))));
+  }
 });

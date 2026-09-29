@@ -42,3 +42,19 @@ test.describe('admin smoke', () => {
     await expect(page).toHaveURL(/\/login\?returnTo=%2Faccess%2Froles/);
   });
 });
+
+test.describe('security headers (Sprint 21 VAPT readiness)', () => {
+  test('every response carries the framing, sniffing, referrer and permissions headers', async ({
+    request,
+  }) => {
+    const res = await request.get('/login');
+    const h = res.headers();
+    expect(h['x-frame-options']).toBe('DENY');
+    expect(h['x-content-type-options']).toBe('nosniff');
+    expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(h['permissions-policy']).toContain('camera=()');
+    expect(h['cross-origin-opener-policy']).toBe('same-origin');
+    expect(h['x-powered-by']).toBeUndefined();
+    // the Content-Security-Policy is added by production builds only (next.config.ts)
+  });
+});

@@ -41,7 +41,7 @@ Migration `0032_sprint20_dpdp_tooling_compat.sql`: `data_subject_requests`, `ret
 | axe                                               | admin screens incl. `/system/privacy` and the tour         |
 | Browser walk-through                              | admin privacy queue, tour; parent data page; teacher Hindi |
 
-Full API run at the freeze: 37 suites, 242 tests (recorded after the run; see the commit message).
+Full API run at the freeze: 37 suites, 242 tests.
 
 ## 4. Carried forward (Sprint 21 and the pilot)
 

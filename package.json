@@ -32,7 +32,8 @@
   },
   "pnpm": {
     "overrides": {
-      "fastify": "5.11.3"
+      "fastify": "5.12.5",
+      "postcss": "8.5.28"
     }
   }
 }

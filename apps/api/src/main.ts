@@ -25,7 +25,8 @@ async function bootstrap(): Promise<void> {
     logger: loggerOptions(env.NODE_ENV),
     genReqId: (req: IncomingMessage) =>
       (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
-    trustProxy: true,
+    // one ingress hop (environment plan); trusting every hop lets a client spoof X-Forwarded-For
+    trustProxy: (_address: string, hop: number) => hop === 0,
     bodyLimit: RAW_BODY_LIMIT, // per content type limits are set in app.setup.ts
   });
 

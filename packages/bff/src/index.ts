@@ -239,7 +239,8 @@ export function createBff(options: BffOptions) {
     /** POST /api/auth/logout */
     async logout(req: NextRequest) {
       await session.clear();
-      return NextResponse.redirect(new URL('/login', req.url), { status: 303 });
+      // signedOut=1 lets the app shell drop its offline cache of personal pages (Sprint 21)
+      return NextResponse.redirect(new URL('/login?signedOut=1', req.url), { status: 303 });
     },
     /** POST /api/auth/dev (development bypass only) */
     async dev(req: NextRequest) {

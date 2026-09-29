@@ -14,6 +14,7 @@ const csp = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",
+  "object-src 'none'",
 ].join('; ');
 
 const securityHeaders = [
@@ -25,6 +26,7 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
 ];
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
