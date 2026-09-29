@@ -298,4 +298,55 @@ SETTINGS_CATALOGUE['compat.app_force_below'] = {
   module: 'platform',
 };
 
+// ---- Sprints 22-23: pilot feature flags, cut-over tolerance, hypercare SLAs ----
+export const MODULE_FLAGS = [
+  'people',
+  'admissions',
+  'fees',
+  'attendance',
+  'workflow',
+  'academics',
+  'access',
+  'communication',
+  'engagement',
+  'exams',
+  'transport',
+  'library',
+  'insights',
+  'reports',
+  'system',
+] as const;
+SETTINGS_CATALOGUE['platform.modules_enabled'] = {
+  schema: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/),
+  default: MODULE_FLAGS.join(','),
+  description:
+    'Modules shown in the apps during the pilot (comma separated); hidden modules stay available to the API and the compat layer (Sprint 22)',
+  module: 'platform',
+};
+SETTINGS_CATALOGUE['platform.cutover_tolerance_pct'] = {
+  schema: z.coerce.number().min(0).max(5),
+  default: 0,
+  description:
+    'Allowed difference in percent between legacy and live counts at the cut-over sign-off (Sprint 22)',
+  module: 'platform',
+};
+SETTINGS_CATALOGUE['platform.hypercare_until'] = {
+  schema: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/),
+  default: '',
+  description: 'Last day of hypercare: the daily digest stops after it (Sprint 22)',
+  module: 'platform',
+};
+for (const [sev, hours] of [
+  ['s1', 4],
+  ['s2', 24],
+  ['s3', 72],
+  ['s4', 168],
+] as const)
+  SETTINGS_CATALOGUE[`hypercare.sla_${sev}_hours`] = {
+    schema: z.coerce.number().int().min(1).max(720),
+    default: hours,
+    description: `Hours to resolve a severity ${sev.toUpperCase()} hypercare issue (Sprint 22)`,
+    module: 'platform',
+  };
+
 export const SETTING_KEYS = Object.keys(SETTINGS_CATALOGUE);

@@ -13,6 +13,65 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  Help: 'सहायता',
+  'Answers to the common questions': 'आम प्रश्नों के उत्तर',
+  'Report an issue': 'समस्या दर्ज करें',
+  'Tell the support desk during hypercare': 'हाइपरकेयर में सपोर्ट डेस्क को बताएँ',
+  'Answers to the common questions; the training pages of the admin help centre go deeper.':
+    'आम प्रश्नों के उत्तर; प्रशासन सहायता केंद्र के प्रशिक्षण पृष्ठ अधिक विस्तार में हैं।',
+  'I cannot see a section or subject.': 'मुझे अनुभाग या विषय नहीं दिखता।',
+  'You need a teacher assignment for that section and subject this year; ask the coordinator (Academics \u2192 Teacher assignments).':
+    'इस वर्ष उस अनुभाग और विषय के लिए शिक्षक आवंटन चाहिए; समन्वयक से कहें (Academics → Teacher assignments)।',
+  'A pupil tapped at the gate but shows absent.':
+    'विद्यार्थी ने गेट पर टैप किया पर अनुपस्थित दिखता है।',
+  'The tap may be outside the session window or from another route\u2019s reader; mark the pupil present and the office checks the device events.':
+    'टैप सत्र समय के बाहर या दूसरे रूट के रीडर से हो सकता है; विद्यार्थी को उपस्थित करें और कार्यालय उपकरण घटनाएँ जाँचेगा।',
+  'I marked the wrong pupil.': 'मैंने गलत विद्यार्थी को चिह्नित किया।',
+  'Fix it the same day before the session locks; afterwards ask the coordinator to unlock with a reason.':
+    'सत्र लॉक होने से पहले उसी दिन ठीक करें; बाद में समन्वयक से कारण सहित अनलॉक कराएँ।',
+  'Marks entry is locked.': 'अंक प्रविष्टि लॉक है।',
+  'The coordinator locked the subject after the entry; a reopen needs a reason and is audited.':
+    'समन्वयक ने प्रविष्टि के बाद विषय लॉक किया; पुनः खोलने के लिए कारण चाहिए और ऑडिट होता है।',
+  'How do I answer a family query?': 'परिवार के प्रश्न का उत्तर कैसे दूँ?',
+  'Queries lists the queries of your sections; reply, add an internal note, or close with a decision. Leave requests are approved the same way.':
+    'प्रश्न आपके अनुभागों के प्रश्न दिखाता है; उत्तर दें, आंतरिक टिप्पणी जोड़ें, या निर्णय के साथ बंद करें। अवकाश अनुरोध भी ऐसे ही स्वीकृत होते हैं।',
+  'Homework posted by mistake.': 'गृहकार्य गलती से पोस्ट हुआ।',
+  'Delete it from Daily work the same day; families see the update at once.':
+    'उसी दिन दैनिक कार्य से हटाएँ; परिवार तुरंत अद्यतन देखते हैं।',
+  'A family asks for an appointment.': 'परिवार भेंट माँगता है।',
+  'The request reaches your approvals inbox; confirm a slot and place and the family gets a WhatsApp.':
+    'अनुरोध आपके अनुमोदन इनबॉक्स में आता है; समय और स्थान की पुष्टि करें और परिवार को WhatsApp मिलता है।',
+  'Something is broken or slow.': 'कुछ टूटा या धीमा है।',
+  'Use Report an issue on the home page: the support desk sees it at once, with a severity and a due time.':
+    'होम पेज पर समस्या दर्ज करें का उपयोग करें: सपोर्ट डेस्क तुरंत देखता है, गंभीरता और नियत समय सहित।',
+  'How do I change the language?': 'भाषा कैसे बदलूँ?',
+  'The \u0939\u093f\u0928\u094d\u0926\u0940 / English link on the home page switches every screen.':
+    'होम पेज पर हिन्दी / English लिंक हर स्क्रीन बदल देता है।',
+  'Something broken, slow or wrong: the support desk sees it at once with a due time by severity.':
+    'कुछ टूटा, धीमा या गलत: सपोर्ट डेस्क तुरंत देखता है, गंभीरता अनुसार नियत समय सहित।',
+  'Thank you. The issue is logged and the desk will respond.':
+    'धन्यवाद। समस्या दर्ज है और डेस्क उत्तर देगा।',
+  'New issue': 'नई समस्या',
+  'What happened?': 'क्या हुआ?',
+  'Details (screen, pupil, time)': 'विवरण (स्क्रीन, विद्यार्थी, समय)',
+  Where: 'कहाँ',
+  attendance: 'उपस्थिति',
+  academics: 'शैक्षणिक',
+  exams: 'परीक्षा',
+  engagement: 'संलग्नता',
+  apps: 'ऐप',
+  other: 'अन्य',
+  'How urgent?': 'कितना ज़रूरी?',
+  'S1: the school cannot work': 'S1: विद्यालय काम नहीं कर सकता',
+  'S2: a task is blocked': 'S2: कोई कार्य अवरुद्ध है',
+  'S3: a workaround exists': 'S3: अस्थायी उपाय है',
+  'S4: cosmetic or a suggestion': 'S4: दिखावट या सुझाव',
+  Send: 'भेजें',
+  'Your issues': 'आपकी समस्याएँ',
+  'No issues reported yet.': 'अभी कोई समस्या दर्ज नहीं।',
+  Due: 'नियत',
+  Workaround: 'अस्थायी उपाय',
+  Resolution: 'समाधान',
   // Home
   'My classes': 'मेरी कक्षाएँ',
   'Your sections, subjects and this week’s timetable':

@@ -13,6 +13,40 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  Help: 'सहायता',
+  'Answers to the common questions': 'आम प्रश्नों के उत्तर',
+  'Answers to the common questions. For anything else, the school office is the first contact.':
+    'आम प्रश्नों के उत्तर। किसी और बात के लिए विद्यालय कार्यालय पहला संपर्क है।',
+  'How do I switch between my children?': 'मैं अपने बच्चों के बीच कैसे बदलूँ?',
+  'Every screen with a child switch shows one child at a time; tap the name at the top to change. Fees, results and attendance are per child.':
+    'बच्चा बदलने वाली हर स्क्रीन एक समय में एक बच्चा दिखाती है; बदलने के लिए ऊपर नाम पर टैप करें। शुल्क, परिणाम और उपस्थिति प्रति बच्चा हैं।',
+  'I paid online but the receipt is not showing.': 'मैंने ऑनलाइन भुगतान किया पर रसीद नहीं दिख रही।',
+  'Open Fees; a pending or failed payment is listed with a Retry button. A receipt appears only after the gateway confirms; the school office can see the transaction too.':
+    'शुल्क खोलें; लंबित या विफल भुगतान पुनः प्रयास बटन के साथ दिखता है। रसीद गेटवे की पुष्टि के बाद ही बनती है; कार्यालय भी लेन-देन देख सकता है।',
+  'How do I apply for leave?': 'अवकाश के लिए आवेदन कैसे करूँ?',
+  'Queries \u2192 New request \u2192 Leave, with the dates and the reason. The class teacher approves it and the attendance shows leave for those days.':
+    'प्रश्न → नया अनुरोध → अवकाश, तिथियाँ और कारण सहित। कक्षा शिक्षक स्वीकृत करते हैं और उपस्थिति में वे दिन अवकाश दिखते हैं।',
+  'How do I ask to meet a teacher?': 'शिक्षक से मिलने का अनुरोध कैसे करूँ?',
+  'Appointments \u2192 Request an appointment with up to three slots. The class teacher confirms one and you receive a WhatsApp.':
+    'भेंट → तीन तक समय के साथ अनुरोध करें। कक्षा शिक्षक एक की पुष्टि करते हैं और आपको WhatsApp मिलता है।',
+  'Why did I not get an absence alert?': 'मुझे अनुपस्थिति अलर्ट क्यों नहीं मिला?',
+  'Alerts go once a day per child after the attendance time. Check Profile \u2192 Your consents; safety and attendance alerts are always sent, but the mobile number on record must be current.':
+    'अलर्ट उपस्थिति समय के बाद प्रति बच्चा दिन में एक बार जाते हैं। प्रोफ़ाइल → आपकी सहमतियाँ देखें; सुरक्षा और उपस्थिति अलर्ट हमेशा जाते हैं, पर दर्ज मोबाइल नंबर सही होना चाहिए।',
+  'How do I change my mobile number or address?': 'मोबाइल नंबर या पता कैसे बदलूँ?',
+  'Profile \u2192 Request a change to my details. The school office approves it and the change is recorded.':
+    'प्रोफ़ाइल → मेरे विवरण में बदलाव का अनुरोध। कार्यालय स्वीकृत करता है और बदलाव दर्ज होता है।',
+  'Where is the report card?': 'रिपोर्ट कार्ड कहाँ है?',
+  'Results shows each released term; the PDF button prepares the card for download. A card can be withheld while fees are due.':
+    'परिणाम हर जारी सत्र दिखाता है; PDF बटन कार्ड डाउनलोड के लिए तैयार करता है। शुल्क बकाया होने पर कार्ड रोका जा सकता है।',
+  'What data does the school hold about my child?': 'विद्यालय मेरे बच्चे का कौन सा डेटा रखता है?',
+  'Profile \u2192 Your data lets you ask for a copy, a correction or raise a grievance under the DPDP Act. The school answers within the legal time.':
+    'प्रोफ़ाइल → आपका डेटा से DPDP अधिनियम के तहत प्रति, सुधार या शिकायत माँग सकते हैं। विद्यालय कानूनी समय में उत्तर देता है।',
+  'The app works offline but shows old data.': 'ऐप ऑफ़लाइन चलता है पर पुराना डेटा दिखाता है।',
+  'The app keeps the last copy of pages for reading when offline; it refreshes when the connection returns. Sign out clears the copies.':
+    'ऐप ऑफ़लाइन पढ़ने के लिए पृष्ठों की अंतिम प्रति रखता है; कनेक्शन लौटने पर ताज़ा होता है। साइन आउट प्रतियाँ हटा देता है।',
+  'How do I change the language?': 'भाषा कैसे बदलूँ?',
+  'The \u0939\u093f\u0928\u094d\u0926\u0940 / English link on the home page switches every screen.':
+    'होम पेज पर हिन्दी / English लिंक हर स्क्रीन बदल देता है।',
   Open: 'खुला',
   'Ask for a copy of the data the school holds, a correction, or raise a grievance.':
     'विद्यालय के पास मौजूद डेटा की प्रति, सुधार या शिकायत के लिए अनुरोध करें।',

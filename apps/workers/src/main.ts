@@ -149,6 +149,12 @@ async function main(): Promise<void> {
     { every: 60 * 60 * 1000 },
     { name: 'reports.scheduled', data: SYSTEM_ENVELOPE('reports.scheduled') },
   );
+  // 08:30 IST (03:00 UTC) every day during hypercare
+  await maintenance.upsertJobScheduler(
+    'hypercare.digest',
+    { pattern: '0 3 * * *' },
+    { name: 'hypercare.digest', data: SYSTEM_ENVELOPE('hypercare.digest') },
+  );
   // nightly 03:00 IST (21:30 UTC)
   await maintenance.upsertJobScheduler(
     'retention.purge',

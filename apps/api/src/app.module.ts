@@ -28,6 +28,7 @@ import { InsightsModule } from './modules/insights/insights.module';
 import { TemplatesModule } from './modules/platform/templates/templates.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommsModule } from './modules/comms/comms.module';
+import { OpsModule } from './modules/ops/ops.module';
 import { CompatModule } from './modules/compat/compat.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthController } from './modules/health/health.controller';
@@ -80,6 +81,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     LibraryModule,
     PeopleModule,
     CompatModule,
+    OpsModule,
   ],
   controllers: [HealthController, MetricsController, MeController],
   providers: [

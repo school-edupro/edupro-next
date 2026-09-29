@@ -82,6 +82,12 @@ const PAGES = [
   '/engagement/employee-queries',
   '/reports/schedules',
   '/reports/mis',
+  // Sprints 22-23
+  '/system/cutover',
+  '/system/hypercare',
+  '/fees/month-end',
+  '/help',
+  '/help/fees',
 ];
 
 test.describe('accessibility (axe)', () => {

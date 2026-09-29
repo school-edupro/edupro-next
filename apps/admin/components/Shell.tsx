@@ -59,6 +59,7 @@ const NAV: Array<{
       { href: '/fees/reports', label: 'feeReports', permission: 'fees.ledger.view' },
       { href: '/fees/bank', label: 'bankStatements', permission: 'payments.settlement.view' },
       { href: '/fees/shadow', label: 'shadowRun', permission: 'fees.shadow.view' },
+      { href: '/fees/month-end', label: 'monthEnd', permission: 'fees.period.view' },
     ],
   },
   {
@@ -275,6 +276,8 @@ const NAV: Array<{
       { href: '/system/years', label: 'years', permission: 'platform.year.view' },
       { href: '/system/settings', label: 'settings', permission: 'platform.settings.view' },
       { href: '/system/privacy', label: 'privacy', permission: 'platform.privacy.manage' },
+      { href: '/system/cutover', label: 'cutover', permission: 'platform.cutover.manage' },
+      { href: '/system/hypercare', label: 'hypercare', permission: 'platform.hypercare.manage' },
       { href: '/system/templates', label: 'templates', permission: 'platform.template.view' },
       { href: '/system/audit', label: 'auditLog', permission: 'platform.audit.view' },
       { href: '/system/security', label: 'security', permission: 'platform.security.view' },
@@ -322,10 +325,20 @@ export async function Shell({
         .then((r) => r.data.length)
         .catch(() => 0)
     : 0;
+  // Sprint 22: pilot feature flags hide whole navigation groups (setting platform.modules_enabled)
+  const features = await apiFetch<{ modules: Array<{ module: string; enabled: boolean }> }>(
+    '/ops/features',
+  )
+    .then((f) => new Set(f.modules.filter((m) => m.enabled).map((m) => m.module)))
+    .catch(() => null);
   const groups = NAV.map((group) => ({
     ...group,
     items: group.items.filter((i) => i.permission === null || allowed.has(i.permission)),
-  })).filter((g) => g.items.length > 0);
+  })).filter(
+    (g) =>
+      g.items.length > 0 &&
+      (g.section === 'overview' || g.section === 'system' || !features || features.has(g.section)),
+  );
   const portal =
     me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??
     me.memberships[0]?.schoolName ??
@@ -437,6 +450,9 @@ export async function Shell({
               {common('apply')}
             </button>
           </form>
+          <a className="ep-header__icon-btn" href="/help" aria-label={t('help')} title={t('help')}>
+            <Icon name="book" size={20} />
+          </a>
           {tour ? (
             <Tour
               id={tour.id}

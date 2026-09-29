@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
+import { assertPeriodOpen } from '../ops/ops.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { SETTINGS_CATALOGUE } from '../platform/settings.catalogue';
@@ -699,6 +700,7 @@ export class FeeAdjustmentsService {
             status: 409,
           },
         );
+      await assertPeriodOpen(c, 'misc', dto.receivedOn ?? null); // Sprint 23 month-end lock
       const r = await c.query<{ id: string }>(
         `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, employee_id, payer_name, payer_mobile, head_id, amount, received_on, mode, reference, instrument_no, bank_name, remarks, received_by, request_id)
          VALUES (app.current_school_id(), $1, $2, app.next_receipt_no('misc', $2), $3::payer_kind, $4, $5, $6, $7, $8, $9, COALESCE($10::date, CURRENT_DATE), $11, $12, $13, $14, $15, app.current_user_id(), app.current_request_id())

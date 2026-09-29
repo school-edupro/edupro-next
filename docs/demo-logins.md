@@ -92,6 +92,15 @@ http://localhost:3002/login (teacher app) and pick a subject in **Sign in as** (
 - Consent: the parent onboarding and **Communication → Consents** list a new purpose, **AI assistant in the
   parent app** (`ai.assistant`), off by default; the assistant itself arrives in Sprint 14.
 
+### Sprints 22-23 walk-through (pilot cut-over, hypercare, month-end)
+
+1. As `dev-admin`: **System → Cut-over** shows _Rehearsal 2 (timed)_ signed off and _Pilot cut-over weekend_ running; open the running one: tick the remaining hypercare steps with a note (each tick records who, when and the duration since the previous step), **Take live snapshot**, edit a legacy count to differ and **Sign off** → refused with the measure; restore it and sign off → the run is done with the sign-off recorded. **New run** installs the 27 steps of the go-live runbook.
+2. As `dev-teacher` (http://localhost:3002): **Report an issue** → "Attendance page slow", S2; the issue gets `HC/005` and a due time 24 hours out. As `dev-admin`: **System → Hypercare** shows the board with the severity counts and overdue badges; move it to _in progress_, assign `platform`, add a workaround, raise it to S1 (the due time tightens to 4 hours), then _fixed_ and _closed_. The workers send the admins a WhatsApp digest at 08:30 IST while `platform.hypercare_until` is unset or in the future.
+3. As `dev-admin`: **System → Settings** → `platform.modules_enabled` → remove `library,transport`: the side menu drops both groups (the API and the compat layer keep serving them); put them back.
+4. As `dev-accounts`: **Fees → Month-end close** → pick last month: the checks list receipts by ledger and mode and the blocking items; close with a fresh sign-in (second factor) → the period lock appears and the pack is queued in **Reports → Exports**. **Fees → Cashier**: a receipt dated inside the closed month is refused; **Reopen** with a reason releases the lock (audited).
+5. The **book icon** in the admin header opens the help centre (training pages); the parent and teacher apps have **Help** tiles with the bilingual FAQ.
+6. `node scripts/synthetic-check.mjs --base http://localhost:4000 --school 1 --token dev:dev-admin` prints the on-call check lines and exits non-zero on a failure.
+
 ### Sprint 20 walk-through (release-1 completeness)
 
 1. As `dev-parent` (http://localhost:3001): **Profile → Your data → Open** → ask for _a copy of the data the school holds_ about Aarav; the request lists with its due date. Switch the app to हिन्दी from the home header: every screen, including attendance, homework, notices and the profile, is now in Hindi.

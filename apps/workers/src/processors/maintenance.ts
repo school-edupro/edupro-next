@@ -452,6 +452,58 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       log.info({ deleted }, 'vehicle positions purge run');
       return;
     }
+    if (kind === 'hypercare.digest') {
+      // Sprint 22: every morning of hypercare the admins get the open issues by severity and the overdue list.
+      const schools = { rows: await schoolsFor(db, job) };
+      let sent = 0;
+      for (const s of schools.rows) {
+        await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          async (c) => {
+            const until = await c.query<{ v: string | null }>(
+              `SELECT app.setting('platform.hypercare_until') #>> '{}' AS v`,
+            );
+            const cutoff = until.rows[0]?.v ?? '';
+            if (cutoff && cutoff < new Date().toISOString().slice(0, 10)) return;
+            const open = await c.query<{ severity: string; n: string; overdue: string }>(
+              `SELECT severity, count(*)::text AS n, count(*) FILTER (WHERE due_at < now())::text AS overdue
+               FROM hypercare_issues WHERE status NOT IN ('closed', 'verified') GROUP BY severity ORDER BY severity`,
+            );
+            if (open.rows.length === 0) return;
+            const late = await c.query<{ number: string; title: string; severity: string }>(
+              `SELECT number, title, severity FROM hypercare_issues WHERE status NOT IN ('closed', 'verified') AND due_at < now() ORDER BY severity, due_at LIMIT 10`,
+            );
+            const summary = open.rows
+              .map((r) => `${r.severity.toUpperCase()} ${r.n} (${r.overdue} overdue)`)
+              .join(', ');
+            const body = `Hypercare digest: ${summary}.${late.rows.length ? ` Overdue: ${late.rows.map((l) => `${l.number} ${l.title}`).join('; ')}.` : ''} Open System → Hypercare.`;
+            const admins = await c.query<{ id: string; mobile: string | null }>(
+              `SELECT DISTINCT u.id::text, u.mobile FROM user_roles ur JOIN roles r ON r.id = ur.role_id JOIN users u ON u.id = ur.user_id
+              WHERE ur.school_id = app.current_school_id() AND r.code = 'school_admin' AND ur.revoked_at IS NULL AND u.deleted_at IS NULL AND u.mobile IS NOT NULL`,
+            );
+            for (const a of admins.rows) {
+              const m = await c.query<{ id: string }>(
+                `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, subject, body, status)
+               VALUES (app.current_school_id(), 'whatsapp', $1, $2, 'Hypercare digest', $3, 'queued') RETURNING id::text`,
+                [a.id, a.mobile, body],
+              );
+              await c.query("SELECT app.enqueue_job('notifications', $1::jsonb)", [
+                JSON.stringify({
+                  schoolId: s.id,
+                  userId: null,
+                  requestId: null,
+                  kind: 'comms.message',
+                  payload: { messageId: m.rows[0]!.id },
+                }),
+              ]);
+              sent += 1;
+            }
+          },
+        );
+      }
+      log.info({ schools: schools.rows.length, sent }, 'hypercare digest run');
+      return;
+    }
     if (kind === 'retention.purge') {
       // Sprint 20: DPDP storage limitation. Per school, each policy reads its setting (legal minimums are
       // enforced by the settings catalogue) and writes one retention_runs row; financial and academic

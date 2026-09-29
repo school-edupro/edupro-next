@@ -3317,3 +3317,152 @@ export async function breachUpdate(fd: FormData) {
     }),
   );
 }
+
+const runTo = run;
+
+// ---- Sprints 22-23: cut-over, hypercare, month-end -------------------------------------------------
+export async function cutoverCreateRun(fd: FormData) {
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>('/ops/cutover/runs', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: str(fd, 'kind') || 'rehearsal',
+        name: str(fd, 'name'),
+        notes: opt(fd, 'notes'),
+      }),
+    });
+    id = r.id;
+  } catch (error) {
+    if (error instanceof ApiError)
+      back_('/system/cutover', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`/system/cutover/${id}?ok=1`);
+}
+
+export async function cutoverStep(fd: FormData) {
+  const run = str(fd, 'runId');
+  return runTo(`/system/cutover/${run}`, () =>
+    apiFetch(`/ops/cutover/runs/${run}/steps/${str(fd, 'stepId')}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: str(fd, 'status'), note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function cutoverRunStatus(fd: FormData) {
+  const run = str(fd, 'runId');
+  return runTo(`/system/cutover/${run}`, () =>
+    apiFetch(`/ops/cutover/runs/${run}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: str(fd, 'status'), notes: opt(fd, 'notes') }),
+    }),
+  );
+}
+
+export async function cutoverSnapshotLive(fd: FormData) {
+  const run = str(fd, 'runId');
+  return runTo(`/system/cutover/${run}`, () =>
+    apiFetch(`/ops/cutover/runs/${run}/snapshots/live`, { method: 'POST' }),
+  );
+}
+
+export async function cutoverSnapshotLegacy(fd: FormData) {
+  const run = str(fd, 'runId');
+  const counts: Record<string, number> = {};
+  for (const [k, v] of fd.entries()) {
+    if (!k.startsWith('count.')) continue;
+    const n = Number(String(v).replace(/,/g, ''));
+    if (String(v).trim() !== '' && Number.isFinite(n)) counts[k.slice(6)] = n;
+  }
+  return runTo(`/system/cutover/${run}`, () =>
+    apiFetch(`/ops/cutover/runs/${run}/snapshots/legacy`, {
+      method: 'POST',
+      body: JSON.stringify({ counts }),
+    }),
+  );
+}
+
+export async function cutoverSignOff(fd: FormData) {
+  const run = str(fd, 'runId');
+  return runTo(`/system/cutover/${run}`, () =>
+    apiFetch(`/ops/cutover/runs/${run}/sign-off`, { method: 'POST' }),
+  );
+}
+
+export async function hypercareReport(fd: FormData) {
+  return runTo(str(fd, 'back') || '/system/hypercare', () =>
+    apiFetch('/ops/hypercare/issues', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: str(fd, 'title'),
+        detail: opt(fd, 'detail'),
+        module: str(fd, 'module') || 'other',
+        severity: str(fd, 'severity') || 's3',
+        channel: str(fd, 'channel') || 'admin',
+      }),
+    }),
+  );
+}
+
+export async function hypercareUpdate(fd: FormData) {
+  return runTo('/system/hypercare', () =>
+    apiFetch(`/ops/hypercare/issues/${str(fd, 'id')}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: opt(fd, 'status'),
+        severity: opt(fd, 'severity'),
+        assignedRole: opt(fd, 'assignedRole'),
+        workaround: opt(fd, 'workaround'),
+        resolution: opt(fd, 'resolution'),
+        body: opt(fd, 'body'),
+      }),
+    }),
+  );
+}
+
+async function mfaRun(back: string, fn: () => Promise<unknown>): Promise<never> {
+  try {
+    await fn();
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(back)}`);
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}${back.includes('?') ? '&' : '?'}ok=1`);
+}
+
+export async function monthEndClose(fd: FormData) {
+  const month = str(fd, 'month');
+  return mfaRun(`/fees/month-end?month=${month}`, () =>
+    apiFetch(`/fees/month-end/${month}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ note: opt(fd, 'note'), pack: fd.get('pack') !== 'off' }),
+    }),
+  );
+}
+
+export async function monthEndReopen(fd: FormData) {
+  const month = str(fd, 'month');
+  return mfaRun(`/fees/month-end?month=${month}`, () =>
+    apiFetch(`/fees/month-end/${month}/reopen`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
+export async function periodLock(fd: FormData) {
+  return mfaRun('/fees/month-end', () =>
+    apiFetch('/fees/period-locks', {
+      method: 'POST',
+      body: JSON.stringify({
+        ledger: opt(fd, 'ledger'),
+        lockedThrough: str(fd, 'lockedThrough'),
+        note: opt(fd, 'note'),
+      }),
+    }),
+  );
+}

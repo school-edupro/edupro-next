@@ -36,6 +36,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@edupro/ui'],
   output: 'standalone',
+  // the help centre reads content/help/*.md at request time (Sprint 22)
+  outputFileTracingIncludes: {
+    '/help': ['./content/help/**'],
+    '/help/[slug]': ['./content/help/**'],
+  },
   // S6-05: CSV imports are posted through a server action; the API accepts up to 2 MB of CSV text.
   experimental: { serverActions: { bodySizeLimit: '4mb' } },
   async headers() {

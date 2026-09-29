@@ -7,6 +7,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ENV, type Env } from '../../config/env';
 import { ViewerService } from '../academics/daily/viewer.service';
+import { assertPeriodOpen } from '../ops/ops.service';
 import { FeeLedgerService } from '../fees/fee-ledger.service';
 import {
   ccavenue,
@@ -749,6 +750,8 @@ export class PaymentsService {
         dto.studentId,
       ]);
       if (s.rowCount === 0) throw new DomainError('not-found', 'Student not found');
+      // Sprint 23: a closed fee month refuses back-dated receipts
+      await assertPeriodOpen(c, dto.ledger, dto.receivedOn ?? null);
       let out: ReceiptResult;
       try {
         out = await this.post(c, {

@@ -4269,6 +4269,158 @@ async function main(): Promise<void> {
       }
       await clearCtx();
 
+      // ---- Sprints 22-23: a signed-off rehearsal and a running final cut-over, hypercare issues, a closed month ----
+      await withCtx(alpha.id, 'dev-admin');
+      {
+        const admin = await c.query<{ id: string }>(
+          `SELECT id::text FROM users WHERE oneauth_sub = 'dev-admin'`,
+        );
+        const adminId = admin.rows[0]!.id;
+        const exists = await c.query(`SELECT 1 FROM cutover_runs WHERE school_id = $1`, [alpha.id]);
+        if (!exists.rowCount) {
+          const steps: Array<[string, string, string, string]> = [
+            [
+              'readiness',
+              'uat_signed',
+              'UAT scripts signed by the pilot super-users',
+              'delivery_lead',
+            ],
+            [
+              'readiness',
+              'training',
+              'Training sessions done; in-app tours enabled',
+              'delivery_lead',
+            ],
+            ['t_minus_7', 'etl_dry_run', 'Final ETL dry run; reconciliation attached', 'data'],
+            ['t_minus_7', 'go_no_go', 'Go / no-go meeting held', 'delivery_lead'],
+            ['t_minus_1', 'legacy_readonly', 'Legacy switched to read-only', 'platform'],
+            ['cutover', 'etl_load', 'ETL run against production per module', 'data'],
+            ['cutover', 'reconciliation', 'Legacy and live counts reconciled', 'delivery_lead'],
+            ['cutover', 'switch', 'DNS and app configuration switched', 'platform'],
+            ['hypercare', 'desk', 'On-site support desk for the first three days', 'delivery_lead'],
+          ];
+          for (const [kind, name, status, daysAgo] of [
+            ['rehearsal', 'Rehearsal 2 (timed)', 'done', 21],
+            ['final', 'Pilot cut-over weekend', 'running', 2],
+          ] as const) {
+            const run = await c.query<{ id: string }>(
+              `INSERT INTO cutover_runs (school_id, kind, name, status, started_at, finished_at, signed_off_by, signed_off_at, created_by, created_at)
+               VALUES ($1, $2, $3, $4, now() - make_interval(days => $5), CASE WHEN $4 = 'done' THEN now() - make_interval(days => $5) + interval '9 hours' END,
+                       CASE WHEN $4 = 'done' THEN $6::bigint END, CASE WHEN $4 = 'done' THEN now() - make_interval(days => $5) + interval '9 hours' END, $6, now() - make_interval(days => $5))
+               RETURNING id::text`,
+              [alpha.id, kind, name, status, daysAgo, adminId],
+            );
+            let seq = 0;
+            for (const [phase, code, title, owner] of steps) {
+              seq += 10;
+              const done = status === 'done' || phase !== 'hypercare';
+              await c.query(
+                `INSERT INTO cutover_steps (school_id, run_id, sequence, phase, code, title, owner_role, status, done_by, done_at, duration_s)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 = 'done' THEN $9::bigint END, CASE WHEN $8 = 'done' THEN now() - make_interval(days => $10) + make_interval(mins => $3 * 4) END, CASE WHEN $8 = 'done' THEN $3 * 24 END)`,
+                [
+                  alpha.id,
+                  run.rows[0]!.id,
+                  seq,
+                  phase,
+                  code,
+                  title,
+                  owner,
+                  done ? 'done' : 'pending',
+                  adminId,
+                  daysAgo,
+                ],
+              );
+            }
+            const live = await c.query<{ counts: unknown }>(`SELECT app.live_counts() AS counts`);
+            await c.query(
+              `INSERT INTO cutover_snapshots (school_id, run_id, source, counts, taken_by) VALUES ($1, $2, 'live', $3::jsonb, $4), ($1, $2, 'legacy', $3::jsonb, $4)`,
+              [alpha.id, run.rows[0]!.id, JSON.stringify(live.rows[0]!.counts), adminId],
+            );
+          }
+          const teacher = await c.query<{ id: string }>(
+            `SELECT id::text FROM users WHERE oneauth_sub = 'dev-teacher'`,
+          );
+          const issues: Array<[string, string, string, string, string, string, number]> = [
+            [
+              'HC/001',
+              'Cashier receipt print cuts the school name',
+              'fees',
+              's2',
+              'fixed',
+              'help_desk',
+              40,
+            ],
+            [
+              'HC/002',
+              'Attendance page slow for VI-A on Monday morning',
+              'attendance',
+              's1',
+              'closed',
+              'teacher_app',
+              30,
+            ],
+            [
+              'HC/003',
+              'Bus alert arrived twice for one pupil',
+              'transport',
+              's3',
+              'in_progress',
+              'phone',
+              20,
+            ],
+            [
+              'HC/004',
+              'Hindi label missing on the exam register',
+              'exams',
+              's4',
+              'open',
+              'teacher_app',
+              3,
+            ],
+          ];
+          for (const [number, title, module, severity, status, channel, hoursAgo] of issues) {
+            const sla = { s1: 4, s2: 24, s3: 72, s4: 168 }[severity as 's1' | 's2' | 's3' | 's4']!;
+            const iss = await c.query<{ id: string }>(
+              `INSERT INTO hypercare_issues (school_id, number, title, module, severity, channel, status, reporter_user, assigned_role, due_at, first_response_at, closed_at, resolution, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'platform', now() - make_interval(hours => $9) + make_interval(hours => $10),
+                       CASE WHEN $7 <> 'open' THEN now() - make_interval(hours => $9) + interval '30 minutes' END,
+                       CASE WHEN $7 IN ('closed', 'verified') THEN now() - make_interval(hours => $9) + interval '3 hours' END,
+                       CASE WHEN $7 IN ('fixed', 'closed') THEN 'Fixed in the hotfix lane' END, now() - make_interval(hours => $9))
+               RETURNING id::text`,
+              [
+                alpha.id,
+                number,
+                title,
+                module,
+                severity,
+                channel,
+                status,
+                channel === 'teacher_app' ? (teacher.rows[0]?.id ?? adminId) : adminId,
+                hoursAgo,
+                sla,
+              ],
+            );
+            await c.query(
+              `INSERT INTO hypercare_updates (school_id, issue_id, author, body, status_to) VALUES ($1, $2, $3, $4, 'open')`,
+              [alpha.id, iss.rows[0]!.id, adminId, title],
+            );
+          }
+          await c.query(
+            `INSERT INTO fee_month_closes (school_id, month, status, checks, closed_by, closed_at, note)
+             VALUES ($1, date_trunc('month', CURRENT_DATE - interval '2 months')::date, 'closed', '[]'::jsonb, $2, now() - interval '20 days', 'Closed together with the delivery team (first live month-end)')
+             ON CONFLICT (school_id, month) DO NOTHING`,
+            [alpha.id, adminId],
+          );
+          await c.query(
+            `INSERT INTO fee_period_locks (school_id, ledger, locked_through, note, locked_by)
+             SELECT $1, NULL, (date_trunc('month', CURRENT_DATE - interval '1 month') - interval '1 day')::date, 'Month-end close', $2
+              WHERE NOT EXISTS (SELECT 1 FROM fee_period_locks WHERE school_id = $1 AND released_at IS NULL)`,
+            [alpha.id, adminId],
+          );
+        }
+      }
+      await clearCtx();
+
       // reporting marts: refresh both schools so the principal dashboard has numbers before the workers run
       for (const school of Object.values(schools)) {
         await withCtx(school.id, 'dev-admin');

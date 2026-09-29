@@ -47,6 +47,7 @@ export default async function HomePage({
     ['Consent forms', 'Trips, activities and permissions', '/consents'],
     ['Certificates', 'Certificates issued to your children', '/certificates'],
     ['Health', 'Clinic visits and health checks', '/health'],
+    ['Help', 'Answers to the common questions', '/help'],
   ];
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>

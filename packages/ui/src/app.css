@@ -1353,3 +1353,37 @@
 a.ep-tabs__tab {
   text-decoration: none;
 }
+
+/* Help centre prose (Sprint 22) */
+.ep-prose h2 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  color: var(--text-heading);
+  margin: var(--sp-5) 0 var(--sp-2);
+}
+.ep-prose h3 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-body);
+  color: var(--text-heading);
+  margin: var(--sp-4) 0 var(--sp-1);
+}
+.ep-prose p,
+.ep-prose li {
+  line-height: 1.55;
+}
+.ep-prose ul,
+.ep-prose ol {
+  padding-left: var(--sp-5);
+  margin: 0 0 var(--sp-3);
+}
+.ep-prose li {
+  margin-bottom: var(--sp-1);
+}
+.ep-prose table {
+  margin: var(--sp-2) 0 var(--sp-4);
+}
+.ep-prose code {
+  background: var(--surface-muted);
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-sm);
+}

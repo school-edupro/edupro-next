@@ -84,6 +84,13 @@ export default async function HomePage() {
       '/calendar',
     ],
     [t(lang, 'Leave'), t(lang, 'Apply for leave and approvals'), true],
+    [t(lang, 'Help'), t(lang, 'Answers to the common questions'), true, '/help'],
+    [
+      t(lang, 'Report an issue'),
+      t(lang, 'Tell the support desk during hypercare'),
+      can('platform.hypercare.report'),
+      '/issues',
+    ],
   ];
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>

@@ -119,7 +119,11 @@
     "examTypes": "Types and grade scales",
     "examList": "Exams of the session",
     "assistant": "Assistant",
-    "assistantAudit": "Assistant audit"
+    "assistantAudit": "Assistant audit",
+    "cutover": "Cut-over",
+    "hypercare": "Hypercare",
+    "monthEnd": "Month-end close",
+    "help": "Help centre"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -133,7 +137,8 @@
     "portal": "Admin Portal",
     "collapse": "Collapse",
     "toggleSidebar": "Show or hide the menu",
-    "notifications": "{count, plural, =0 {No open alerts} one {# open alert} other {# open alerts}}"
+    "notifications": "{count, plural, =0 {No open alerts} one {# open alert} other {# open alerts}}",
+    "help": "Help centre"
   },
   "login": {
     "kicker": "Mobilise",
@@ -805,6 +810,26 @@
       "kicker": "Insights",
       "title": "Assistant audit",
       "description": "Prompts, tool calls, answers and cost, with personal data masked."
+    },
+    "system_cutover": {
+      "kicker": "System",
+      "title": "Cut-over runs",
+      "description": "Rehearsals and the final cut-over of the go-live runbook: every step ticked and timed, the legacy and live counts reconciled, the sign-off recorded."
+    },
+    "system_hypercare": {
+      "kicker": "System",
+      "title": "Hypercare",
+      "description": "Issues reported by staff during hypercare, triaged against the severity SLAs; the admins get a digest every morning."
+    },
+    "fees_month_end": {
+      "kicker": "Fees",
+      "title": "Month-end close",
+      "description": "The checks of a month, the close that locks the period and queues the month-end pack, and the period locks."
+    },
+    "help": {
+      "kicker": "Help",
+      "title": "Help centre",
+      "description": "The training pages for each module, the same routines the trainers walked through."
     }
   },
   "stepUp": {
@@ -3339,5 +3364,88 @@
       "4_title": "Breach log",
       "4_body": "Record, contain, notify the Board and the principals, close; the clock to the Board notice is shown."
     }
+  },
+  "ops": {
+    "newRun": "New run",
+    "kind": "Kind",
+    "rehearsal": "Rehearsal",
+    "final": "Final cut-over",
+    "name": "Name",
+    "notes": "Notes",
+    "create": "Create",
+    "status": "Status",
+    "steps": "Steps",
+    "elapsed": "Elapsed",
+    "phase": "Phase",
+    "owner": "Owner",
+    "done": "Done",
+    "skip": "Skip",
+    "fail": "Failed",
+    "reset": "Reset",
+    "note": "Note",
+    "signOff": "Sign off",
+    "signedOff": "Signed off by",
+    "start": "Start",
+    "abort": "Abort",
+    "snapshotLive": "Take live snapshot",
+    "legacyCounts": "Legacy counts",
+    "saveLegacy": "Save legacy counts",
+    "measure": "Measure",
+    "legacy": "Legacy",
+    "live": "Live",
+    "diff": "Difference",
+    "within": "within tolerance",
+    "outside": "outside tolerance",
+    "noRuns": "No cut-over run yet.",
+    "takenAt": "taken",
+    "reconciliation": "Reconciliation",
+    "tolerance": "Tolerance",
+    "issues": "Issues",
+    "report": "Report an issue",
+    "title": "Title",
+    "detail": "Detail",
+    "module": "Module",
+    "severity": "Severity",
+    "channel": "Channel",
+    "reporter": "Reporter",
+    "assigned": "Assigned",
+    "due": "Due",
+    "overdue": "Overdue",
+    "workaround": "Workaround",
+    "resolution": "Resolution",
+    "update": "Update",
+    "comment": "Comment",
+    "noIssues": "No issues.",
+    "open": "open",
+    "filter": "Filter",
+    "all": "All",
+    "summary": "{open} open · {overdue} overdue",
+    "month": "Month",
+    "show": "Show",
+    "checks": "Checks",
+    "check": "Check",
+    "value": "Value",
+    "blocking": "Blocking",
+    "close": "Close the month (second factor)",
+    "closeNote": "Note",
+    "pack": "Queue the month-end pack (day book, head-wise tally, Tally XML, defaulters)",
+    "closed": "Closed",
+    "reopen": "Reopen",
+    "reopenReason": "Reason for reopening",
+    "locks": "Period locks",
+    "lockThrough": "Lock through",
+    "ledger": "Ledger",
+    "allLedgers": "All ledgers",
+    "lock": "Lock the period",
+    "lockedBy": "Locked by",
+    "released": "Released",
+    "byLedger": "Receipts by ledger and mode",
+    "count": "Count",
+    "amount": "Amount",
+    "packExports": "Month-end pack",
+    "clearFirst": "Clear the blocking checks before closing.",
+    "helpIndex": "Modules",
+    "helpOpen": "Open",
+    "helpBack": "All help pages"
   }
 }
