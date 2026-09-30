@@ -219,6 +219,200 @@ describe('platform settings, years and school (e2e)', () => {
       expect(res.statusCode).toBe(409);
       expect(res.json()).toMatchObject({ type: 'year.active' });
     });
+
+    it('edits and deletes a planned year only', async () => {
+      const planned = await inject({
+        method: 'POST',
+        url: '/platform/years',
+        headers: A(admin.sub),
+        json: {
+          kind: 'academic',
+          code: '2029-30',
+          name: 'Session 2029-30',
+          startDate: '2029-04-01',
+          endDate: '2030-03-31',
+        },
+      });
+      expect(planned.statusCode).toBe(201);
+      const id = planned.json().id as string;
+      const edit = await inject({
+        method: 'PUT',
+        url: `/platform/years/academic/${id}`,
+        headers: A(admin.sub),
+        json: {
+          code: '2029-30',
+          name: 'Session 2029-30 (revised)',
+          startDate: '2029-04-01',
+          endDate: '2030-03-30',
+        },
+      });
+      expect(edit.statusCode).toBe(200);
+      expect(edit.json()).toMatchObject({
+        name: 'Session 2029-30 (revised)',
+        endDate: '2030-03-30',
+      });
+      const overlap = await inject({
+        method: 'PUT',
+        url: `/platform/years/academic/${id}`,
+        headers: A(admin.sub),
+        json: { code: '2029-30', name: 'Clash', startDate: '2028-01-01', endDate: '2030-03-30' },
+      });
+      expect(overlap.statusCode).toBe(409);
+      expect(overlap.json()).toMatchObject({ type: 'year.overlap' });
+      const editActive = await inject({
+        method: 'PUT',
+        url: `/platform/years/academic/${newYearId}`,
+        headers: A(admin.sub),
+        json: { code: '2027-28', name: 'Renamed', startDate: '2027-04-01', endDate: '2028-03-31' },
+      });
+      expect(editActive.statusCode).toBe(409);
+      expect(editActive.json()).toMatchObject({ type: 'year.not_planned' });
+      const denied = await inject({
+        method: 'DELETE',
+        url: `/platform/years/academic/${id}`,
+        headers: A(viewer.sub),
+      });
+      expect(denied.statusCode).toBe(403);
+      const delActive = await inject({
+        method: 'DELETE',
+        url: `/platform/years/academic/${newYearId}`,
+        headers: A(admin.sub),
+      });
+      expect(delActive.statusCode).toBe(409);
+      const del = await inject({
+        method: 'DELETE',
+        url: `/platform/years/academic/${id}`,
+        headers: A(admin.sub),
+      });
+      expect(del.statusCode).toBe(200);
+      const list = await inject({ method: 'GET', url: '/platform/years', headers: A(admin.sub) });
+      expect(list.json().data.some((y: { id: string }) => y.id === id)).toBe(false);
+    });
+
+    it('closes the locked year, then reopens it to locked with a reason', async () => {
+      const close = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/close`,
+        headers: A(admin.sub),
+        json: { reason: 'year end' },
+      });
+      expect(close.statusCode).toBe(201);
+      expect(close.json()).toMatchObject({ status: 'closed' });
+      const stage = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/reopen`,
+        headers: A(admin.sub),
+        json: { stage: 'fees', reason: 'late fix' },
+      });
+      expect(stage.statusCode).toBe(409);
+      expect(stage.json()).toMatchObject({ type: 'year.closed' });
+      const noReason = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/reopen-year`,
+        headers: A(admin.sub),
+        json: { reason: '' },
+      });
+      expect(noReason.statusCode).toBe(400);
+      const viewerTry = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/reopen-year`,
+        headers: A(viewer.sub),
+        json: { reason: 'please' },
+      });
+      expect(viewerTry.statusCode).toBe(403);
+      const reopen = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/reopen-year`,
+        headers: A(admin.sub),
+        json: { reason: 'late fee correction approved' },
+      });
+      expect(reopen.statusCode).toBe(201);
+      expect(reopen.json()).toMatchObject({ status: 'locked' });
+      const again = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/reopen-year`,
+        headers: A(admin.sub),
+        json: { reason: 'twice' },
+      });
+      expect(again.statusCode).toBe(409);
+      expect(again.json()).toMatchObject({ type: 'year.not_closed' });
+      // with the year back to locked, a single stage can be reopened for the correction
+      const fees = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/reopen`,
+        headers: A(admin.sub),
+        json: { stage: 'fees', reason: 'late fee correction' },
+      });
+      expect(fees.statusCode).toBe(201);
+      // another year is active, so the old year stays locked with only that stage open
+      expect(fees.json()).toMatchObject({
+        status: 'locked',
+        locks: { fees: false, academics: true },
+      });
+      // the database guard agrees: fees can take the correction, the other stages stay read only
+      const guard = (stage: string) =>
+        withMigrator(async (c) => {
+          await c.query(`SELECT set_config('app.school_id', $1, false)`, [school.id]);
+          try {
+            await c.query('SELECT app.assert_year_open($1, $2)', [school.yearId, stage]);
+            return 'open';
+          } catch (error) {
+            return (error as Error).message;
+          }
+        });
+      expect(await guard('fees')).toBe('open');
+      expect(await guard('academics')).toBe('year.stage_locked');
+      const relock = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/lock`,
+        headers: A(admin.sub),
+        json: { stage: 'fees', reason: 'correction done' },
+      });
+      expect(relock.statusCode).toBe(201);
+      expect(await guard('fees')).toBe('year.stage_locked');
+    });
+
+    it('makes a locked year the working year; the active one locks', async () => {
+      const planned = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${newYearId}/make-working`,
+        headers: A(admin.sub),
+        json: { reason: 'already working' },
+      });
+      expect(planned.statusCode).toBe(409);
+      expect(planned.json()).toMatchObject({ type: 'year.not_locked' });
+      const viewerTry = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/make-working`,
+        headers: A(viewer.sub),
+        json: { reason: 'please' },
+      });
+      expect(viewerTry.statusCode).toBe(403);
+      const res = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${school.yearId}/make-working`,
+        headers: A(admin.sub),
+        json: { reason: 'next session activated by mistake' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json()).toMatchObject({ status: 'active', locks: {} });
+      const list = await inject({ method: 'GET', url: '/platform/years', headers: A(admin.sub) });
+      const byId = new Map(
+        list.json().data.map((y: { id: string; status: string }) => [y.id, y.status]),
+      );
+      expect(byId.get(school.yearId)).toBe('active');
+      expect(byId.get(newYearId)).toBe('locked');
+      const me = await inject({ method: 'GET', url: '/me', headers: A(admin.sub) });
+      expect(me.json().academicYear).toMatchObject({ id: school.yearId });
+      // switch back so later suites see the original layout
+      const back = await inject({
+        method: 'POST',
+        url: `/platform/years/academic/${newYearId}/make-working`,
+        headers: A(admin.sub),
+        json: { reason: 'restore' },
+      });
+      expect(back.statusCode).toBe(201);
+    });
   });
 
   describe('school profile and campuses', () => {

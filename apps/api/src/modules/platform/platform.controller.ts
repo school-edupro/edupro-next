@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
@@ -11,6 +11,7 @@ import {
   StageDto,
   UpdateCampusDto,
   UpdateSchoolDto,
+  UpdateYearDto,
 } from './platform.dto';
 import { PLATFORM } from './platform.permissions';
 import { SchoolService } from './school.service';
@@ -76,6 +77,51 @@ export class PlatformController {
   @RequirePermission(PLATFORM.yearManage, { description: 'Create years, set active, edit dates' })
   createYear(@ReqCtx() ctx: RequestContext, @Body() body: CreateYearDto) {
     return this.years.create(ctx, body);
+  }
+
+  @Put('years/:kind/:id')
+  @ApiOperation({ summary: 'Edit code, name and dates of a planned year' })
+  @RequirePermission(PLATFORM.yearManage)
+  updateYear(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Body() body: UpdateYearDto,
+  ) {
+    return this.years.update(ctx, kindOf(kind), id, body);
+  }
+
+  @Delete('years/:kind/:id')
+  @ApiOperation({ summary: 'Delete a planned year that has no data yet' })
+  @RequirePermission(PLATFORM.yearManage)
+  deleteYear(@ReqCtx() ctx: RequestContext, @Param('kind') kind: string, @Param('id') id: string) {
+    return this.years.remove(ctx, kindOf(kind), id);
+  }
+
+  @Post('years/:kind/:id/reopen-year')
+  @ApiOperation({ summary: 'Reopen a closed year (closed → locked); reason required; MFA' })
+  @RequirePermission(PLATFORM.yearReopen, { mfa: true })
+  reopenYear(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Body() body: CloseYearDto,
+  ) {
+    return this.years.reopenYear(ctx, kindOf(kind), id, body.reason);
+  }
+
+  @Post('years/:kind/:id/make-working')
+  @ApiOperation({
+    summary: 'Make a locked year the working year; the active one becomes locked. Reason; MFA',
+  })
+  @RequirePermission(PLATFORM.yearManage, { mfa: true })
+  makeWorking(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Body() body: CloseYearDto,
+  ) {
+    return this.years.makeWorking(ctx, kindOf(kind), id, body.reason);
   }
 
   @Post('years/:kind/:id/activate')

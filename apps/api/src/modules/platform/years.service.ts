@@ -3,7 +3,7 @@ import type { PoolClient, TenantContext } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { CreateYearDto, YearStageType } from './platform.dto';
+import type { CreateYearDto, UpdateYearDto, YearStageType } from './platform.dto';
 
 export type YearKind = 'academic' | 'financial';
 
@@ -41,7 +41,7 @@ const toRow = (kind: YearKind, x: YearDbRow): YearRow => ({
   locks: x.locks ?? {},
 });
 
-/** Academic and financial years (ADR-003): create, activate, stage locks, close. */
+/** Academic and financial years (ADR-003): create, edit / delete while planned, activate, stage locks, close, reopen. */
 @Injectable()
 export class YearsService {
   constructor(private readonly db: DbService) {}
@@ -124,7 +124,7 @@ export class YearsService {
         });
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
-        `UPDATE ${table(kind)} SET status = 'locked', updated_by = app.current_user_id() WHERE status = 'active'`,
+        `UPDATE ${table(kind)} SET status = 'locked', locks = '{"attendance": true, "exams": true, "fees": true, "academics": true}'::jsonb, updated_by = app.current_user_id() WHERE status = 'active'`,
       );
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
@@ -159,7 +159,11 @@ export class YearsService {
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
         `UPDATE ${table(kind)} SET locks = jsonb_set(COALESCE(locks, '{}'::jsonb), ARRAY[$2::text], to_jsonb($3::boolean), true),
-                                   status = CASE WHEN status = 'locked' AND NOT $3::boolean THEN 'active' ELSE status END,
+                                   -- reopening a stage revives a locked year only when no other year of the kind is
+                                   -- active (one active year per school); otherwise it stays locked with that stage open
+                                   status = CASE WHEN status = 'locked' AND NOT $3::boolean
+                                                  AND NOT EXISTS (SELECT 1 FROM ${table(kind)} o WHERE o.status = 'active' AND o.id <> $1)
+                                                 THEN 'active' ELSE status END,
                                    updated_by = app.current_user_id()
           WHERE id = $1`,
         [id, stage, locked],
@@ -197,6 +201,171 @@ export class YearsService {
       entityId: id,
       before: result.before,
       after: { ...result.after, reason },
+    };
+    return result.after;
+  }
+
+  /** Edits code, name and dates of a planned year; a year in use (active, locked, closed) keeps its identity. */
+  async update(
+    ctx: RequestContext,
+    kind: YearKind,
+    id: string,
+    dto: UpdateYearDto,
+  ): Promise<YearRow> {
+    const tenant = requireTenant(ctx);
+    const result = await this.db.tenant(tenant, async (c) => {
+      const before = await this.get(tenant, kind, id, c);
+      if (before.status !== 'planned')
+        throw new DomainError('year.not_planned', 'Only a planned year can be edited', {
+          status: 409,
+        });
+      const overlap = await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
+        `SELECT 1 FROM ${table(kind)} WHERE id <> $3 AND daterange(start_date, end_date, '[]') && daterange($1::date, $2::date, '[]')`,
+        [dto.startDate, dto.endDate, id],
+      );
+      if ((overlap.rowCount ?? 0) > 0)
+        throw new DomainError('year.overlap', 'The dates overlap an existing year', {
+          status: 409,
+        });
+      try {
+        await c.query(
+          // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
+          `UPDATE ${table(kind)} SET code = $2, name = $3, start_date = $4, end_date = $5, updated_by = app.current_user_id()
+            WHERE id = $1`,
+          [id, dto.code, dto.name, dto.startDate, dto.endDate],
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code === '23505')
+          throw new DomainError('conflict', `Year ${dto.code} already exists`);
+        throw error;
+      }
+      return { before, after: await this.get(tenant, kind, id, c) };
+    });
+    ctx.audit = {
+      action: 'platform.year.update',
+      entityType: table(kind),
+      entityId: id,
+      before: result.before,
+      after: result.after,
+    };
+    return result.after;
+  }
+
+  /** Deletes a planned year that nothing references yet; anything already hanging off it blocks the delete. */
+  async remove(ctx: RequestContext, kind: YearKind, id: string): Promise<{ deleted: true }> {
+    const tenant = requireTenant(ctx);
+    const before = await this.db.tenant(tenant, async (c) => {
+      const row = await this.get(tenant, kind, id, c);
+      if (row.status !== 'planned')
+        throw new DomainError('year.not_planned', 'Only a planned year can be deleted', {
+          status: 409,
+        });
+      await c.query('SAVEPOINT year_delete');
+      try {
+        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
+        await c.query(`DELETE FROM ${table(kind)} WHERE id = $1`, [id]);
+      } catch (error) {
+        await c.query('ROLLBACK TO SAVEPOINT year_delete');
+        if ((error as { code?: string }).code === '23503')
+          throw new DomainError(
+            'year.in_use',
+            'This year already has data (classes, fees or other records); it cannot be deleted',
+            { status: 409 },
+          );
+        throw error;
+      }
+      return row;
+    });
+    ctx.audit = {
+      action: 'platform.year.delete',
+      entityType: table(kind),
+      entityId: id,
+      before,
+    };
+    return { deleted: true };
+  }
+
+  /**
+   * Reopens a closed year: closed → locked. Its stages keep their locks, so the admin then reopens
+   * only the stage that needs a correction. Needs a reason; audited.
+   */
+  async reopenYear(
+    ctx: RequestContext,
+    kind: YearKind,
+    id: string,
+    reason: string,
+  ): Promise<YearRow> {
+    const tenant = requireTenant(ctx);
+    const result = await this.db.tenant(tenant, async (c) => {
+      const before = await this.get(tenant, kind, id, c);
+      if (before.status !== 'closed')
+        throw new DomainError('year.not_closed', 'Only a closed year can be reopened', {
+          status: 409,
+        });
+      await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
+        `UPDATE ${table(kind)} SET status = 'locked', locks = '{"attendance": true, "exams": true, "fees": true, "academics": true}'::jsonb, updated_by = app.current_user_id() WHERE id = $1`,
+        [id],
+      );
+      return { before, after: await this.get(tenant, kind, id, c) };
+    });
+    ctx.audit = {
+      action: 'platform.year.reopen_year',
+      entityType: table(kind),
+      entityId: id,
+      before: result.before,
+      after: { ...result.after, reason },
+    };
+    return result.after;
+  }
+
+  /**
+   * Makes a locked year the working year again (e.g. the next year was activated by mistake): the
+   * currently active year of the kind becomes locked, the chosen one active. Needs a reason; audited.
+   */
+  async makeWorking(
+    ctx: RequestContext,
+    kind: YearKind,
+    id: string,
+    reason: string,
+  ): Promise<YearRow> {
+    const tenant = requireTenant(ctx);
+    const result = await this.db.tenant(tenant, async (c) => {
+      const before = await this.get(tenant, kind, id, c);
+      if (before.status !== 'locked')
+        throw new DomainError(
+          'year.not_locked',
+          before.status === 'planned'
+            ? 'Use Activate for a planned year'
+            : before.status === 'closed'
+              ? 'Reopen the closed year first'
+              : 'This year is already the working year',
+          { status: 409 },
+        );
+      const demoted = await c.query<{ id: string; code: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
+        `UPDATE ${table(kind)} SET status = 'locked', locks = '{"attendance": true, "exams": true, "fees": true, "academics": true}'::jsonb, updated_by = app.current_user_id()
+          WHERE status = 'active' RETURNING id::text, code`,
+      );
+      await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
+        // the promoted year becomes the working year with every stage open; lock stages again as needed
+        `UPDATE ${table(kind)} SET status = 'active', locks = '{}'::jsonb, updated_by = app.current_user_id() WHERE id = $1`,
+        [id],
+      );
+      return {
+        before,
+        after: await this.get(tenant, kind, id, c),
+        demoted: demoted.rows[0] ?? null,
+      };
+    });
+    ctx.audit = {
+      action: 'platform.year.make_working',
+      entityType: table(kind),
+      entityId: id,
+      before: result.before,
+      after: { ...result.after, reason, previousActive: result.demoted },
     };
     return result.after;
   }

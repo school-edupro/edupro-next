@@ -41,6 +41,22 @@ export const StageSchema = z.object({
 });
 export class StageDto extends createZodDto(StageSchema) {}
 
+export const UpdateYearSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .regex(/^(FY)?\d{4}-\d{2}$/, 'YYYY-YY or FYYYYY-YY'),
+    name: z.string().trim().min(3).max(60),
+    startDate: DateSchema,
+    endDate: DateSchema,
+  })
+  .refine((v) => v.endDate > v.startDate, {
+    message: 'endDate must be after startDate',
+    path: ['endDate'],
+  });
+export class UpdateYearDto extends createZodDto(UpdateYearSchema) {}
+
 export const CloseYearSchema = z.object({ reason: z.string().trim().min(3).max(500) });
 export class CloseYearDto extends createZodDto(CloseYearSchema) {}
 

@@ -6,7 +6,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import { readSession, writeSession } from './session';
+import { readContext, readSession, writeContext, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
   // the back path may already carry a query string (masters tabs, filters, paging): merge, never append a second '?'
@@ -190,17 +190,61 @@ export async function createYear(fd: FormData) {
 export async function yearAction(fd: FormData) {
   const kind = str(fd, 'kind');
   const id = str(fd, 'id');
-  const action = str(fd, 'action'); // activate | lock | reopen | close
+  // activate | lock | reopen (a stage) | close | reopen-year | delete
+  const action = str(fd, 'action');
+  if (!/^(academic|financial)$/.test(kind) || !/^\d{1,18}$/.test(id))
+    back_('/system/years', 'validation-failed', 'Unknown year');
+  if (action === 'delete')
+    return run('/system/years', () =>
+      apiFetch(`/platform/years/${kind}/${id}`, { method: 'DELETE' }),
+    );
+  if (!['activate', 'lock', 'reopen', 'close', 'reopen-year', 'make-working'].includes(action))
+    back_('/system/years', 'validation-failed', 'Unknown action');
+  const reason = str(fd, 'reason');
   const body =
     action === 'activate'
       ? undefined
-      : action === 'close'
-        ? { reason: str(fd, 'reason') || 'closed from admin' }
-        : { stage: str(fd, 'stage'), reason: str(fd, 'reason') || `${action} from admin` };
-  return run('/system/years', () =>
+      : action === 'close' || action === 'reopen-year' || action === 'make-working'
+        ? { reason }
+        : { stage: str(fd, 'stage'), reason: reason || `${action} from admin` };
+  const call = () =>
     apiFetch(`/platform/years/${kind}/${id}/${action}`, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
+    });
+  if (kind === 'academic' && (action === 'activate' || action === 'make-working')) {
+    // the working session changed: drop the remembered year so the header follows the new one
+    try {
+      await call();
+    } catch (error) {
+      if (error instanceof ApiError && error.problem.type === 'mfa-required')
+        redirect(`/step-up?returnTo=${encodeURIComponent('/system/years')}`);
+      if (error instanceof ApiError)
+        back('/system/years', error.problem.type, error.problem.detail);
+      throw error;
+    }
+    const current = await readContext();
+    if (current.schoolId) await writeContext({ schoolId: current.schoolId });
+    revalidatePath('/', 'layout');
+    back('/system/years', 'ok');
+  }
+  return run('/system/years', call);
+}
+
+export async function updateYear(fd: FormData) {
+  const kind = str(fd, 'kind');
+  const id = str(fd, 'id');
+  if (!/^(academic|financial)$/.test(kind) || !/^\d{1,18}$/.test(id))
+    back_('/system/years', 'validation-failed', 'Unknown year');
+  return run('/system/years', () =>
+    apiFetch(`/platform/years/${kind}/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        code: str(fd, 'code'),
+        name: str(fd, 'name'),
+        startDate: str(fd, 'startDate'),
+        endDate: str(fd, 'endDate'),
+      }),
     }),
   );
 }
