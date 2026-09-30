@@ -37,6 +37,9 @@ const MAX_ROWS = 5000;
 export const CLEAR_WORD = 'CLEAR';
 const SECTION_COLUMN = { key: 'class_section', label: 'Class-Section' };
 const NAME_COLUMN = { key: 'student_name', label: 'Student Name (reference)' };
+/** Separate Class and Section columns (the data collection workbook). */
+const CLASS_COLUMN = '__class';
+const SECTION_ONLY = '__section';
 
 export interface PayloadRow {
   row: number;
@@ -260,7 +263,12 @@ export class StudentBulkService {
     const tenant = requireTenant(ctx);
     if (!tenant.academicYearId)
       throw new DomainError('validation-failed', 'Select an academic year first', { status: 400 });
-    const { header, rows } = await readFile(dto, 'Students');
+    // our template ('Students') or the data collection workbook ('Student Data Entry', whose field names
+    // sit in row 2 under a section band)
+    const { header, rows, rowNumbers } = await readFile(dto, {
+      sheets: ['Students', 'Student Data Entry'],
+      isHeader: (cells) => cells.some((h) => norm(h.replace(/\*/g, '')) === 'admissionno'),
+    });
     if (rows.length === 0)
       throw new DomainError('validation-failed', 'The file has no data rows', { status: 400 });
     if (rows.length > MAX_ROWS)
@@ -278,19 +286,24 @@ export class StudentBulkService {
     byLabel.set(norm('Class Section'), SECTION_COLUMN.key);
     byLabel.set(norm(NAME_COLUMN.label), NAME_COLUMN.key);
     byLabel.set(norm('Roll No'), 'roll_no');
+    byLabel.set(norm('Class'), CLASS_COLUMN);
+    byLabel.set(norm('Section'), SECTION_ONLY);
     const colKey: Array<string | null> = header.map(
       (h) => byLabel.get(norm(h.replace(/\*/g, ''))) ?? null,
     );
-    const ignored = header.filter((h, i) => h.trim() && colKey[i] === null);
+    const ignored = header
+      .map((h, i) => ({ h, i }))
+      .filter(({ h, i }) => h.trim() && colKey[i] === null && !/^s\.?\s*no\.?$/i.test(h.trim()))
+      .map(({ h }) => h);
     const has = (k: string) => colKey.includes(k);
     if (!has('admission_no'))
       throw new DomainError('validation-failed', 'The file needs an "Admission No" column', {
         status: 400,
       });
-    if (dto.mode === 'create' && !has(SECTION_COLUMN.key))
+    if (dto.mode === 'create' && !has(SECTION_COLUMN.key) && !has(CLASS_COLUMN))
       throw new DomainError(
         'validation-failed',
-        'The file needs a "Class-Section" column (e.g. VI-A)',
+        'The file needs a "Class-Section" column (e.g. VI-A), or "Class" and "Section" columns',
         { status: 400 },
       );
 
@@ -308,23 +321,42 @@ export class StudentBulkService {
         [tenant.academicYearId],
       );
       for (const x of sec.rows) sections.set(norm(x.label), x.id);
+      // class by code or name ("VI", "Class VI", "Nursery") → its sections of the year
+      const byClass = new Map<string, Array<{ name: string; id: string }>>();
+      const cls = await c.query<{ code: string; name: string; section: string; id: string }>(
+        `SELECT c.code, c.name, cs.name AS section, cs.id::text AS id FROM class_sections cs JOIN classes c ON c.id = cs.class_id
+          WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL`,
+        [tenant.academicYearId],
+      );
+      for (const x of cls.rows)
+        for (const k of new Set([
+          norm(x.code),
+          norm(x.name),
+          norm(x.name.replace(/^class\s+/i, '')),
+        ]))
+          byClass.set(k, [...(byClass.get(k) ?? []), { name: x.section, id: x.id }]);
 
       const problems: Problem[] = [];
       const payload: PayloadRow[] = [];
       const seen = new Set<string>();
       let unchanged = 0;
+      let counted = 0;
       for (let i = 0; i < rows.length; i += 1) {
-        const rowNo = i + 2;
+        const rowNo = rowNumbers[i] ?? i + 2;
         const cells = rows[i]!;
         const raw: Record<string, string | null> = {};
         let admissionNo = '';
         let sectionLabel = '';
+        let className = '';
+        let sectionOnly = '';
         let rollText = '';
         colKey.forEach((k, ci) => {
           if (!k) return;
           const t = cellText(cells[ci] ?? null);
           if (k === 'admission_no') admissionNo = t;
           else if (k === SECTION_COLUMN.key) sectionLabel = t;
+          else if (k === CLASS_COLUMN) className = t;
+          else if (k === SECTION_ONLY) sectionOnly = t;
           else if (k === 'roll_no') rollText = t;
           else if (k === NAME_COLUMN.key) return;
           else if (t.toUpperCase() === CLEAR_WORD) raw[k] = null;
@@ -335,10 +367,18 @@ export class StudentBulkService {
             raw[k] = t;
           }
         });
+        if (!admissionNo && !sectionLabel && !className && !Object.keys(raw).length) continue;
+        counted += 1;
         const rowProblems: Problem[] = [];
         const bad = (column: string, message: string) =>
           rowProblems.push({ row: rowNo, admissionNo: admissionNo || undefined, column, message });
-        if (!admissionNo) bad('Admission No', 'is required');
+        if (!admissionNo)
+          bad(
+            'Admission No',
+            raw.registration_no
+              ? `no admission number yet (registration ${String(raw.registration_no)}); add it once the student is admitted`
+              : 'is required',
+          );
         const key = admissionNo.toUpperCase();
         if (admissionNo && seen.has(key)) bad('Admission No', 'appears twice in this file');
         seen.add(key);
@@ -350,10 +390,27 @@ export class StudentBulkService {
         let classSectionId: string | undefined;
         let rollNo: number | undefined;
         if (dto.mode === 'create') {
-          classSectionId = sections.get(norm(sectionLabel));
-          if (!sectionLabel) bad(SECTION_COLUMN.label, 'is required, e.g. VI-A');
-          else if (!classSectionId)
-            bad(SECTION_COLUMN.label, `no section "${sectionLabel}" in the working year`);
+          if (sectionLabel) {
+            classSectionId = sections.get(norm(sectionLabel));
+            if (!classSectionId)
+              bad(SECTION_COLUMN.label, `no section "${sectionLabel}" in the working year`);
+          } else if (className) {
+            const options = byClass.get(norm(className)) ?? [];
+            const pick = sectionOnly
+              ? options.find((o) => norm(o.name) === norm(sectionOnly))
+              : options.length === 1
+                ? options[0]
+                : undefined;
+            classSectionId = pick?.id;
+            if (!options.length) bad('Class', `no class "${className}" in the working year`);
+            else if (!pick)
+              bad(
+                'Section',
+                sectionOnly
+                  ? `class ${className} has no section "${sectionOnly}" (sections: ${options.map((o) => o.name).join(', ')})`
+                  : `class ${className} has ${String(options.length)} sections; fill the Section column`,
+              );
+          } else bad(SECTION_COLUMN.label, 'is required, e.g. VI-A');
         }
         if (rollText) {
           const n = Number(rollText);
@@ -427,8 +484,25 @@ export class StudentBulkService {
         });
       }
       const rejectedRows = new Set(problems.map((p) => p.row)).size;
-      for (const h of ignored)
-        problems.unshift({ row: 1, column: h, message: 'Column not recognised; ignored' });
+      const why = (h: string) => {
+        const n = norm(h.replace(/\*/g, ''));
+        if (n === 'schoolbranch') return 'not used: the school is the one you are working in';
+        if (n === 'schooludisecode') return 'not used: comes from the school profile';
+        if (n === 'ageason31mar' || n === 'staffward') return 'not used: calculated automatically';
+        if (n === 'academicyear') return 'not used: the working year applies';
+        return 'Column not recognised; ignored';
+      };
+      for (const h of [...ignored].reverse())
+        problems.unshift({ row: 1, column: h, message: why(h) });
+      if (
+        dto.mode === 'update' &&
+        (has(CLASS_COLUMN) || has(SECTION_ONLY) || has(SECTION_COLUMN.key))
+      )
+        problems.unshift({
+          row: 1,
+          column: 'Class / Section',
+          message: 'not changed by an update: move students between sections through enrolment',
+        });
       const imp = await c.query<{ id: string }>(
         `INSERT INTO master_imports (school_id, master, file_name, status, total_rows, ok_rows, rejected_rows, report, payload, requested_by, request_id)
          VALUES (app.current_school_id(), $1, $2, 'validated', $3, $4, $5, $6::jsonb, $7::jsonb, app.current_user_id(), $8)
@@ -436,7 +510,7 @@ export class StudentBulkService {
         [
           IMPORT_NAME[dto.mode],
           dto.fileName ?? null,
-          rows.length,
+          counted,
           payload.length,
           rejectedRows,
           JSON.stringify(problems),

@@ -91,6 +91,7 @@ const PAGES = [
   '/fees/month-end',
   '/help',
   '/help/fees',
+  '/help/students',
   // Student 360 profile
   '/people/students/quick-add',
   '/masters/system?tab=profile_lists',

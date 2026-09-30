@@ -698,14 +698,25 @@ function dmy(s: string): RegExpExecArray | null {
 }
 
 /** xlsx (first sheet) or csv, as header + rows of cells. */
+export interface ReadFileOptions {
+  /** Sheets to try in order (e.g. ['Students', 'Student Data Entry']); otherwise the first sheet. */
+  sheets?: string[];
+  /**
+   * Picks the header row among the first rows (a sheet with a title or a section band above the
+   * field names); row 1 when absent or when nothing matches.
+   */
+  isHeader?: (cells: string[]) => boolean;
+}
+
 export async function readFile(
   dto: Pick<UploadDto, 'csv' | 'contentBase64'>,
-  /** Sheet to read when present (e.g. 'Students'); otherwise the first sheet. */
-  preferSheet?: string,
-): Promise<{ header: string[]; rows: Cell[][] }> {
+  /** Sheet name to prefer, or options. */
+  opts?: string | ReadFileOptions,
+): Promise<{ header: string[]; rows: Cell[][]; rowNumbers: number[] }> {
+  const o: ReadFileOptions = typeof opts === 'string' ? { sheets: [opts] } : (opts ?? {});
   if (dto.csv) {
     const p = parseCsv(dto.csv);
-    return { header: p.header, rows: p.rows };
+    return { header: p.header, rows: p.rows, rowNumbers: p.rows.map((_, i) => i + 2) };
   }
   if (!dto.contentBase64)
     throw new DomainError('validation-failed', 'Send csv text or an xlsx file', { status: 400 });
@@ -725,18 +736,35 @@ export async function readFile(
       throw new DomainError('validation-failed', 'Not a readable .xlsx file', { status: 400 });
     }
   }
-  const ws = (preferSheet ? wb.getWorksheet(preferSheet) : undefined) ?? wb.worksheets[0];
+  const ws =
+    (o.sheets ?? []).map((n) => wb.getWorksheet(n)).find((w) => w !== undefined) ??
+    wb.worksheets[0];
   if (!ws) throw new DomainError('validation-failed', 'The workbook has no sheet', { status: 400 });
-  const header: string[] = [];
-  const rows: Cell[][] = [];
+  const all: Array<{ n: number; cells: Cell[] }> = [];
+  let width = 0;
   ws.eachRow((row, n) => {
+    width = Math.max(width, row.cellCount);
     const cells: Cell[] = [];
-    const count = Math.max(row.cellCount, header.length);
-    for (let i = 1; i <= count; i += 1) cells.push(cellValue(row.getCell(i).value));
-    if (n === 1) header.push(...cells.map((c) => (c === null ? '' : String(c))));
-    else if (cells.some((c) => c !== null && String(c).trim() !== '')) rows.push(cells);
+    for (let i = 1; i <= Math.max(row.cellCount, width); i += 1)
+      cells.push(cellValue(row.getCell(i).value));
+    all.push({ n, cells });
   });
-  return { header, rows };
+  const text = (cells: Cell[]) => cells.map((c) => (c === null ? '' : String(c)));
+  let headerAt = 0;
+  if (o.isHeader) {
+    const found = all.slice(0, 6).findIndex((r) => o.isHeader!(text(r.cells)));
+    if (found >= 0) headerAt = found;
+  }
+  const header = all[headerAt] ? text(all[headerAt]!.cells) : [];
+  const rows: Cell[][] = [];
+  const rowNumbers: number[] = [];
+  for (const r of all.slice(headerAt + 1)) {
+    if (r.cells.some((c) => c !== null && String(c).trim() !== '')) {
+      rows.push(r.cells);
+      rowNumbers.push(r.n);
+    }
+  }
+  return { header, rows, rowNumbers };
 }
 
 /** Removes cell notes (comments and their VML drawings) from an .xlsx package. */

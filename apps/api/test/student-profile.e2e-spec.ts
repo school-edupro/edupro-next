@@ -440,6 +440,92 @@ describe('student 360 profile (e2e)', () => {
       expect(list.json().data[0].enrolment).toMatchObject({ section: 'A', rollNo: 3 });
     });
 
+    it('reads the data collection workbook: section band, S.No, separate Class and Section, unused columns', async () => {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      wb.addWorksheet('Instructions').getCell(1, 1).value = 'How to fill';
+      const ws = wb.addWorksheet('Student Data Entry');
+      ws.addRow(['S.No', 'STUDENT']);
+      ws.addRow([
+        null,
+        'Registration No *',
+        'Admission No',
+        'First Name *',
+        'Date of Birth *',
+        'Gender *',
+        'Caste Category *',
+        'EWS / DG Category *',
+        'Class *',
+        'Section',
+        'School / Branch *',
+        "Father's Name *",
+        'SMS Mobile (Primary) *',
+        'Day Scholar / Hosteller *',
+        'Transport Required *',
+      ]);
+      const base = ['2014-05-05', 'Female', 'General', 'No'];
+      ws.addRow([
+        1,
+        'RG1',
+        'SP3001',
+        'tara',
+        ...base,
+        'VI',
+        'A',
+        'DPS X',
+        'tara father',
+        '9811100088',
+        'Day Scholar',
+        'No',
+      ]);
+      ws.addRow([
+        2,
+        'RG2',
+        null,
+        'isha',
+        ...base,
+        'VI',
+        'A',
+        'DPS X',
+        'isha father',
+        '9811100089',
+        'Day Scholar',
+        'No',
+      ]);
+      ws.addRow([3]); // serial number only
+      ws.addRow([
+        4,
+        'RG4',
+        'SP3004',
+        'noor',
+        ...base,
+        'VI',
+        'Z',
+        'DPS X',
+        'noor father',
+        '9811100090',
+        'Day Scholar',
+        'No',
+      ]);
+      const b64 = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+      const v = await inject({
+        method: 'POST',
+        url: '/people/profile/bulk/validate',
+        headers: h(),
+        json: { mode: 'create', fileName: 'collection.xlsx', contentBase64: b64 },
+      });
+      expect(v.statusCode).toBe(201);
+      const d = v.json();
+      expect(d).toMatchObject({ totalRows: 3, readyRows: 1, rejectedRows: 2 });
+      const byRow = (r: number) => d.problems.filter((p: { row: number }) => p.row === r);
+      expect(
+        byRow(1).map((p: { column: string; message: string }) => `${p.column}: ${p.message}`),
+      ).toContain('School / Branch *: not used: the school is the one you are working in');
+      expect(byRow(4)[0].message).toMatch(/registration RG2/);
+      expect(byRow(6)[0].message).toMatch(/no section "Z"/);
+      expect(d.preview[0]).toMatchObject({ row: 3, admissionNo: 'SP3001' });
+    });
+
     it('needs the import permission', async () => {
       const clerkless = await withMigrator((c) =>
         seedUser(c, school, `${stamp('SP')}-t`, 'class_teacher'),
