@@ -1425,3 +1425,47 @@ a.ep-tabs__tab {
   padding: 0 var(--sp-1);
   border-radius: var(--radius-sm);
 }
+
+/* ---- Student 360 profile editor ----------------------------------------------------- */
+.ep-profile__bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.ep-profile__meter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  font-size: var(--fs-small);
+}
+.ep-profile__meter progress {
+  inline-size: 10rem;
+  block-size: 0.5rem;
+  accent-color: var(--mob-cyan-700);
+}
+.ep-profile__tabs {
+  flex-wrap: wrap;
+}
+.ep-profile__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+.ep-profile__grid .ep-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}

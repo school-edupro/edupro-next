@@ -35,6 +35,8 @@ export interface StudentRow {
   details: Record<string, unknown>;
   status: 'active' | 'inactive';
   updatedAt: string;
+  /** Share of required profile fields filled (0-100). */
+  profileCompleteness: number;
   /** Current enrolment in the working year, when any. */
   enrolment: EnrolmentRow | null;
 }
@@ -96,6 +98,7 @@ interface StudentDbRow {
   details: Record<string, unknown>;
   status: 'active' | 'inactive';
   updated_at: Date;
+  profile_completeness: number;
   enrolment_id: string | null;
   academic_year_id: string | null;
   academic_year: string | null;
@@ -111,7 +114,7 @@ interface StudentDbRow {
 
 const STUDENT_SELECT =
   'SELECT s.id::text, s.admission_no, s.first_name, s.last_name, s.display_name, s.dob::text, s.gender::text, s.category, s.blood_group, s.house,' +
-  ' s.admitted_on::text, s.left_on::text, s.photo_file_id::text, s.address, s.details, s.status::text, s.updated_at,' +
+  ' s.admitted_on::text, s.left_on::text, s.photo_file_id::text, s.address, s.details, s.status::text, s.updated_at, s.profile_completeness,' +
   ' e.id::text AS enrolment_id, e.academic_year_id::text, y.code AS academic_year, e.class_section_id::text, c.code AS class_code, c.name AS class_name,' +
   ' cs.name AS section, e.roll_no, e.status::text AS enrolment_status, e.joined_on::text, e.ended_on::text' +
   ' FROM students s' +
@@ -138,6 +141,7 @@ const toStudent = (x: StudentDbRow): StudentRow => ({
   details: x.details,
   status: x.status,
   updatedAt: x.updated_at.toISOString(),
+  profileCompleteness: x.profile_completeness,
   enrolment: x.enrolment_id
     ? {
         id: x.enrolment_id,

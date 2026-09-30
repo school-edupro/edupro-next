@@ -263,6 +263,7 @@ export interface Student {
   details: Record<string, unknown>;
   status: 'active' | 'inactive';
   updatedAt: string;
+  profileCompleteness?: number;
   enrolment: Enrolment | null;
 }
 

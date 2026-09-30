@@ -6,6 +6,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
+import type { ProfileSnapshot, ProfileValues, QuickAddResult, SaveProfileResult } from './profile';
 import { readContext, readSession, writeContext, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
@@ -3575,4 +3576,75 @@ export async function periodLock(fd: FormData) {
       }),
     }),
   );
+}
+
+// ---- student 360 profile -------------------------------------------------------------------------
+/** Saves changed profile fields; returns the new snapshot or per-field errors (no redirect). */
+export async function saveStudentProfile(
+  id: string,
+  values: ProfileValues,
+): Promise<SaveProfileResult> {
+  if (!/^\d{1,18}$/.test(id)) return { ok: false, errors: {}, detail: 'Unknown student' };
+  try {
+    const snapshot = await apiFetch<ProfileSnapshot>(`/people/students/${id}/profile`, {
+      method: 'PATCH',
+      body: JSON.stringify({ values }),
+    });
+    revalidatePath(`/people/students/${id}`);
+    return { ok: true, snapshot };
+  } catch (error) {
+    if (error instanceof ApiError)
+      return {
+        ok: false,
+        errors: (error.problem.errors as Record<string, string> | undefined) ?? {},
+        detail: error.problem.detail ?? error.problem.type,
+      };
+    throw error;
+  }
+}
+
+/** Quick add: creates, enrols and returns the new student (no redirect, so the form can go again). */
+export async function quickAddStudent(input: {
+  classSectionId: string;
+  rollNo?: number;
+  values: ProfileValues;
+}): Promise<QuickAddResult> {
+  if (!/^\d{1,18}$/.test(input.classSectionId))
+    return {
+      ok: false,
+      errors: { classSectionId: 'Choose a class and section' },
+      detail: 'Missing section',
+    };
+  try {
+    const r = await apiFetch<{ id: string; completeness: number }>('/people/profile/quick-add', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/people/students');
+    return {
+      ok: true,
+      id: r.id,
+      completeness: r.completeness,
+      name: [input.values.first_name, input.values.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .toUpperCase(),
+      admissionNo: String(input.values.admission_no ?? ''),
+    };
+  } catch (error) {
+    if (error instanceof ApiError)
+      return {
+        ok: false,
+        errors: (error.problem.errors as Record<string, string> | undefined) ?? {},
+        detail: error.problem.detail ?? error.problem.type,
+      };
+    throw error;
+  }
+}
+
+export async function nextStudentNumbers(
+  classSectionId: string,
+): Promise<{ admissionNo: string | null; rollNo: number | null }> {
+  const q = /^\d{1,18}$/.test(classSectionId) ? `?classSectionId=${classSectionId}` : '';
+  return apiFetch(`/people/profile/next-numbers${q}`);
 }

@@ -41,9 +41,14 @@ export default async function StudentsPage({
         description={t('description')}
         actions={
           canCreate ? (
-            <a className="ep-btn ep-btn--primary" href="/people/students/new">
-              {t('new')}
-            </a>
+            <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+              <a className="ep-btn ep-btn--primary" href="/people/students/quick-add">
+                Quick add
+              </a>
+              <a className="ep-btn ep-btn--secondary" href="/people/students/new">
+                {t('new')}
+              </a>
+            </div>
           ) : null
         }
       />

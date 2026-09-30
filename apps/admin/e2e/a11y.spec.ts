@@ -91,11 +91,44 @@ const PAGES = [
   '/fees/month-end',
   '/help',
   '/help/fees',
+  // Student 360 profile
+  '/people/students/quick-add',
+  '/masters/system?tab=profile_lists',
 ];
 
 test.describe('accessibility (axe)', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsDeveloper(page, 'dev-admin');
+  });
+
+  test('no serious or critical violations on the full student profile', async ({ page }) => {
+    await page.goto('/people/students');
+    await page.waitForLoadState('networkidle');
+    const href = await page
+      .locator('a[href^="/people/students/"]')
+      .evaluateAll((as) =>
+        as
+          .map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /^\/people\/students\/\d+$/.test(h)),
+      );
+    expect(href).toBeTruthy();
+    for (const tab of ['student', 'address', 'father']) {
+      await page.goto(`${href!}/profile?tab=${tab}`);
+      await page.waitForLoadState('networkidle');
+      const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const serious = results.violations.filter(
+        (v) => v.impact === 'serious' || v.impact === 'critical',
+      );
+      expect(
+        serious.map(
+          (v) =>
+            `${tab} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+      ).toEqual([]);
+    }
   });
 
   for (const path of PAGES) {

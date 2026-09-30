@@ -463,7 +463,7 @@ export async function Shell({
                 back: tours('back'),
                 done: tours('done'),
                 skip: tours('skip'),
-                stepOfTemplate: tours('stepOf'),
+                stepOfTemplate: String(tours.raw('stepOf')),
               }}
             />
           ) : null}

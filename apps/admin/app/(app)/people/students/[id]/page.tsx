@@ -134,6 +134,13 @@ export default async function StudentPage({
             <Badge tone={student.status === 'active' ? 'success' : 'danger'}>
               {student.status}
             </Badge>
+            <a
+              className="ep-btn ep-btn--primary ep-btn--sm"
+              href={`/people/students/${student.id}/profile`}
+              title="All fields of the data collection sheet: IDs, parents, address, transport, health, bank, documents"
+            >
+              Full profile · {student.profileCompleteness ?? 0}% complete
+            </a>
             <form action={requestStudentIdCard}>
               <input type="hidden" name="id" value={student.id} />
               <Button type="submit" variant="secondary" size="sm" title={t('idCardHelp')}>
