@@ -180,6 +180,8 @@ export function validateChanges(
           : 'changes through enrolment (class, section, roll number)';
       continue;
     }
+    // a masked sensitive value sent back unchanged (XXXX-XXXX-1234) means "leave it as it is"
+    if (field.sensitive && typeof raw === 'string' && /^X{2,}/i.test(raw.trim())) continue;
     const n = normaliseValue(field, raw, lists);
     if (n.ok) values[key] = n.value;
     else errors[key] = `${field.label}: ${n.error}`;

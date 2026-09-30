@@ -3648,3 +3648,36 @@ export async function nextStudentNumbers(
   const q = /^\d{1,18}$/.test(classSectionId) ? `?classSectionId=${classSectionId}` : '';
   return apiFetch(`/people/profile/next-numbers${q}`);
 }
+
+// ---- student bulk update / create by Excel -------------------------------------------------------
+export async function studentBulkValidate(fd: FormData) {
+  const mode = str(fd, 'mode') === 'create' ? 'create' : 'update';
+  const back = `/people/students/bulk?mode=${mode}`;
+  const file = fd.get('file');
+  if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || (file as File).size === 0)
+    back_(back, 'validation-failed', 'Choose the filled .xlsx or .csv file');
+  const f = file as File;
+  const body: Record<string, string> = { mode, fileName: f.name };
+  if (/\.csv$/i.test(f.name)) body.csv = await f.text();
+  else body.contentBase64 = Buffer.from(await f.arrayBuffer()).toString('base64');
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>('/people/profile/bulk/validate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}&check=${out!.id}`);
+}
+
+export async function studentBulkCommit(fd: FormData) {
+  const id = str(fd, 'id');
+  const mode = str(fd, 'mode') === 'create' ? 'create' : 'update';
+  if (!/^\d{1,18}$/.test(id)) back_(`/people/students/bulk?mode=${mode}`, 'validation-failed');
+  return run(`/people/students/bulk?mode=${mode}&check=${id}`, () =>
+    apiFetch(`/people/profile/bulk/${id}/commit`, { method: 'POST' }),
+  );
+}

@@ -28,6 +28,7 @@ describe('student 360 profile (e2e)', () => {
   let first: string;
   let second: string;
   const h = (u: SeededUser = admin) => headersFor(u.sub, school.id);
+  const firstStudent = () => first;
 
   beforeAll(async () => {
     const s = stamp('SP');
@@ -208,7 +209,9 @@ describe('student 360 profile (e2e)', () => {
     });
     expect(full.json().masked).toEqual([]);
     // the masked value sent back by a form leaves the stored number alone
-    await patch(first, { aadhaar_no: 'XXXX-XXXX-9012', remarks: 'checked' });
+    const back = await patch(first, { aadhaar_no: 'XXXX-XXXX-9012', remarks: 'checked' });
+    expect(back.statusCode).toBe(200);
+    expect(back.json().values.remarks).toBe('checked');
     expect((await read(first, viewer)).json().values.aadhaar_no).toBe('123456789012');
     const audit = await withMigrator((c) =>
       c.query<{ t: string }>(
@@ -326,5 +329,128 @@ describe('student 360 profile (e2e)', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ lastName: null, category: null });
+  });
+
+  describe('bulk update and create from Excel', () => {
+    const upload = (mode: 'update' | 'create', csv: string) =>
+      inject({
+        method: 'POST',
+        url: '/people/profile/bulk/validate',
+        headers: h(),
+        json: { mode, fileName: 't.csv', csv },
+      });
+
+    it('downloads a template pre-filled with current values', async () => {
+      const r = await inject({
+        method: 'GET',
+        url: `/people/profile/bulk/template?mode=update&classSectionId=${sectionId}&fields=religion,sms_mobile,aadhaar_no`,
+        headers: h(),
+      });
+      expect(r.statusCode).toBe(200);
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(r.rawPayload as unknown as ArrayBuffer);
+      const ws = wb.getWorksheet('Students')!;
+      expect(ws.getRow(1).values).toEqual(
+        expect.arrayContaining([
+          'Admission No *',
+          'Student Name (reference)',
+          'Religion',
+          'Student Aadhaar No',
+        ]),
+      );
+      const rows = [2, 3].map((n) => ws.getRow(n).values as unknown[]);
+      const riya = rows.find((v) => v[1] === 'SP1001')!;
+      expect(riya).toContain('Hindu');
+      // Aadhaar is never written into a file
+      expect(JSON.stringify(rows)).not.toContain('123456789012');
+    });
+
+    it('updates by admission number: blank = unchanged, CLEAR empties, errors named, sensitive values encrypted until commit', async () => {
+      const v = await upload(
+        'update',
+        [
+          'Admission No,Religion,Remarks,Student Aadhaar No,Unknown Column',
+          'SP1001,sikh,CLEAR,,x',
+          'SP1002,,,999988887777,',
+          'SP1002,Hindu,,,',
+          'NOPE,Hindu,,,',
+          'SP1001,Martian,,,',
+        ].join('\n'),
+      );
+      expect(v.statusCode).toBe(201);
+      const d = v.json();
+      expect(d).toMatchObject({ totalRows: 5, readyRows: 2, rejectedRows: 3 });
+      expect(d.problems.map((p: { message: string }) => p.message)).toEqual(
+        expect.arrayContaining([
+          'Column not recognised; ignored',
+          'appears twice in this file',
+          'no student with this admission number',
+        ]),
+      );
+      const row1 = d.preview.find((p: { admissionNo: string }) => p.admissionNo === 'SP1001');
+      expect(row1.changes).toEqual(
+        expect.arrayContaining([
+          { field: 'Religion', from: 'Hindu', to: 'Sikh' },
+          { field: 'Remarks', from: 'checked', to: null },
+        ]),
+      );
+      const staged = await withMigrator((c) =>
+        c.query<{ payload: unknown }>('SELECT payload FROM master_imports WHERE id = $1', [d.id]),
+      );
+      expect(JSON.stringify(staged.rows[0]!.payload)).not.toContain('999988887777');
+      const commit = await inject({
+        method: 'POST',
+        url: `/people/profile/bulk/${d.id}/commit`,
+        headers: h(),
+      });
+      expect(commit.json()).toMatchObject({ applied: 2, failed: 0 });
+      expect((await read(firstStudent())).json().values).toMatchObject({
+        religion: 'Sikh',
+        remarks: null,
+      });
+      expect((await read(second, viewer)).json().values.aadhaar_no).toBe('999988887777');
+      const again = await inject({
+        method: 'POST',
+        url: `/people/profile/bulk/${d.id}/commit`,
+        headers: h(),
+      });
+      expect(again.statusCode).toBe(409);
+    });
+
+    it('creates students with enrolment and rejects existing admission numbers and unknown sections', async () => {
+      const header =
+        "Admission No,Class-Section,First Name,Date of Birth,Gender,Father's Name,SMS Mobile (Primary),Caste Category,EWS / DG Category,Day Scholar / Hosteller,Transport Required";
+      const row = (adm: string, sec: string) =>
+        `${adm},${sec},meera,05-05-2015,Female,raj,9811100077,General,No,Day Scholar,No`;
+      const v = await upload(
+        'create',
+        [header, row('SP2001', 'VI-A'), row('SP2002', 'XI-Z'), row('SP1001', 'VI-A')].join('\n'),
+      );
+      const d = v.json();
+      expect(d).toMatchObject({ readyRows: 1, rejectedRows: 2 });
+      const commit = await inject({
+        method: 'POST',
+        url: `/people/profile/bulk/${d.id}/commit`,
+        headers: h(),
+      });
+      expect(commit.json()).toMatchObject({ applied: 1 });
+      const list = await inject({ method: 'GET', url: '/people/students?q=SP2001', headers: h() });
+      expect(list.json().data[0]).toMatchObject({ admissionNo: 'SP2001', displayName: 'MEERA' });
+      expect(list.json().data[0].enrolment).toMatchObject({ section: 'A', rollNo: 3 });
+    });
+
+    it('needs the import permission', async () => {
+      const clerkless = await withMigrator((c) =>
+        seedUser(c, school, `${stamp('SP')}-t`, 'class_teacher'),
+      );
+      const r = await inject({
+        method: 'POST',
+        url: '/people/profile/bulk/validate',
+        headers: h(clerkless),
+        json: { mode: 'update', csv: 'Admission No\nSP1001' },
+      });
+      expect(r.statusCode).toBe(403);
+    });
   });
 });

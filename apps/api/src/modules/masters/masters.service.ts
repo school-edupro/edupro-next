@@ -11,6 +11,7 @@ import {
   type MasterField,
 } from '@edupro/db';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -38,7 +39,7 @@ export interface MasterImportRow {
   committedAt: string | null;
 }
 
-type Cell = string | number | boolean | Date | null;
+export type Cell = string | number | boolean | Date | null;
 type Reject = { row: number; column: string; message: string };
 
 const IMPORT_COLUMNS = `id::text, master, file_name, status::text, total_rows, ok_rows, rejected_rows, inserted_rows, updated_rows, report,
@@ -477,7 +478,8 @@ export class MastersService {
         if (f.type !== 'ref' || !f.lookup) continue;
         const l = f.lookup;
         const parentJoin = l.parent
-          ? `LEFT JOIN ${l.parent.table} p ON p.id = t.${l.parent.column}`
+          ? // eslint-disable-next-line no-restricted-syntax -- table and column names come from the master registry
+            `LEFT JOIN ${l.parent.table} p ON p.id = t.${l.parent.column}`
           : '';
         const parentCol = l.parent ? `p.${l.parent.valueColumn}::text` : 'NULL';
         const r = await c.query<{
@@ -696,7 +698,11 @@ function dmy(s: string): RegExpExecArray | null {
 }
 
 /** xlsx (first sheet) or csv, as header + rows of cells. */
-async function readFile(dto: UploadDto): Promise<{ header: string[]; rows: Cell[][] }> {
+export async function readFile(
+  dto: Pick<UploadDto, 'csv' | 'contentBase64'>,
+  /** Sheet to read when present (e.g. 'Students'); otherwise the first sheet. */
+  preferSheet?: string,
+): Promise<{ header: string[]; rows: Cell[][] }> {
   if (dto.csv) {
     const p = parseCsv(dto.csv);
     return { header: p.header, rows: p.rows };
@@ -706,13 +712,20 @@ async function readFile(dto: UploadDto): Promise<{ header: string[]; rows: Cell[
   const buf = Buffer.from(dto.contentBase64, 'base64');
   if (buf.length > 4 * 1024 * 1024)
     throw new DomainError('validation-failed', 'File larger than 4 MB', { status: 400 });
-  const wb = new ExcelJS.Workbook();
+  let wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(buf as unknown as ArrayBuffer);
   } catch {
-    throw new DomainError('validation-failed', 'Not a readable .xlsx file', { status: 400 });
+    // Files re-saved by LibreOffice, Google Sheets or openpyxl with cell notes trip an exceljs bug
+    // ("reading 'comments'"): drop the notes and try once more; the data cells are untouched.
+    try {
+      wb = new ExcelJS.Workbook();
+      await wb.xlsx.load((await withoutNotes(buf)) as unknown as ArrayBuffer);
+    } catch {
+      throw new DomainError('validation-failed', 'Not a readable .xlsx file', { status: 400 });
+    }
   }
-  const ws = wb.worksheets[0];
+  const ws = (preferSheet ? wb.getWorksheet(preferSheet) : undefined) ?? wb.worksheets[0];
   if (!ws) throw new DomainError('validation-failed', 'The workbook has no sheet', { status: 400 });
   const header: string[] = [];
   const rows: Cell[][] = [];
@@ -724,6 +737,30 @@ async function readFile(dto: UploadDto): Promise<{ header: string[]; rows: Cell[
     else if (cells.some((c) => c !== null && String(c).trim() !== '')) rows.push(cells);
   });
   return { header, rows };
+}
+
+/** Removes cell notes (comments and their VML drawings) from an .xlsx package. */
+async function withoutNotes(buf: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buf);
+  for (const name of Object.keys(zip.files)) {
+    if (/^xl\/comments\d*\.xml$/.test(name) || /^xl\/drawings\/vmlDrawing\d*\.vml$/.test(name))
+      zip.remove(name);
+  }
+  for (const name of Object.keys(zip.files)) {
+    const file = zip.file(name);
+    if (!file) continue;
+    if (/^xl\/worksheets\/_rels\/.+\.rels$/.test(name)) {
+      const xml = await file.async('string');
+      zip.file(name, xml.replace(/<Relationship[^>]*(comments|vmlDrawing)[^>]*\/>/g, ''));
+    } else if (/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) {
+      const xml = await file.async('string');
+      zip.file(name, xml.replace(/<legacyDrawing[^>]*\/>/g, ''));
+    } else if (name === '[Content_Types].xml') {
+      const xml = await file.async('string');
+      zip.file(name, xml.replace(/<Override[^>]*comments\d*\.xml[^>]*\/>/g, ''));
+    }
+  }
+  return zip.generateAsync({ type: 'nodebuffer' });
 }
 
 function cellValue(v: ExcelJS.CellValue): Cell {

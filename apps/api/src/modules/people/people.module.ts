@@ -8,6 +8,7 @@ import { ImportsController } from './imports.controller';
 import { ImportsService } from './imports.service';
 import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
+import { StudentBulkService } from './student-bulk.service';
 import { StudentProfileController } from './student-profile.controller';
 import { StudentProfileService } from './student-profile.service';
 import { StudentsController } from './students.controller';
@@ -23,6 +24,7 @@ import { StudentsService } from './students.service';
     ImportsController,
   ],
   providers: [
+    StudentBulkService,
     StudentProfileService,
     StudentsService,
     EmployeesService,

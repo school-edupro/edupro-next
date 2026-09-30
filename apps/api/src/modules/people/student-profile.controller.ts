@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  BulkTemplateQueryDto,
+  BulkUploadDto,
   IdSchema,
   NextNumbersQueryDto,
   ProfileQueryDto,
@@ -11,6 +14,7 @@ import {
   UpdateProfileDto,
 } from './people.dto';
 import { PEOPLE } from './people.permissions';
+import { StudentBulkService } from './student-bulk.service';
 import { StudentProfileService } from './student-profile.service';
 
 const idOf = (id: string): string => {
@@ -22,7 +26,69 @@ const idOf = (id: string): string => {
 @ApiBearerAuth()
 @Controller('people')
 export class StudentProfileController {
-  constructor(private readonly profile: StudentProfileService) {}
+  constructor(
+    private readonly profile: StudentProfileService,
+    private readonly bulk: StudentBulkService,
+  ) {}
+
+  private static sendXlsx(reply: FastifyReply, file: { fileName: string; bytes: Buffer }) {
+    void reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${file.fileName}"`)
+      .send(file.bytes);
+  }
+
+  @Get('profile/bulk/template')
+  @ApiOperation({
+    summary: 'Excel template for bulk update (pre-filled by admission no) or bulk create',
+  })
+  @RequirePermission(PEOPLE.importRun, { description: 'Run student and employee uploads' })
+  async bulkTemplate(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: BulkTemplateQueryDto,
+    @Res() reply: FastifyReply,
+  ) {
+    StudentProfileController.sendXlsx(reply, await this.bulk.template(ctx, q));
+  }
+
+  @Get('profile/bulk')
+  @ApiOperation({ summary: 'Recent student profile uploads' })
+  @RequirePermission(PEOPLE.importRun)
+  async bulkList(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.bulk.list(ctx) };
+  }
+
+  @Post('profile/bulk/validate')
+  @ApiOperation({ summary: 'Check an upload: match by admission no, validate, show old → new' })
+  @RequirePermission(PEOPLE.importRun)
+  bulkValidate(@ReqCtx() ctx: RequestContext, @Body() body: BulkUploadDto) {
+    return this.bulk.validate(ctx, body);
+  }
+
+  @Get('profile/bulk/:id')
+  @ApiOperation({ summary: 'A checked upload: counts, problems and the old → new preview' })
+  @RequirePermission(PEOPLE.importRun)
+  bulkSummary(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.bulk.summary(ctx, idOf(id));
+  }
+
+  @Post('profile/bulk/:id/commit')
+  @ApiOperation({ summary: 'Apply the valid rows of a checked upload' })
+  @RequirePermission(PEOPLE.importRun)
+  bulkCommit(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.bulk.commit(ctx, idOf(id));
+  }
+
+  @Get('profile/bulk/:id/result')
+  @ApiOperation({ summary: 'Outcome of every row of an upload, as Excel' })
+  @RequirePermission(PEOPLE.importRun)
+  async bulkResult(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    StudentProfileController.sendXlsx(reply, await this.bulk.resultFile(ctx, idOf(id)));
+  }
 
   @Get('profile/catalogue')
   @ApiOperation({ summary: 'Student profile sections, fields, drop-down options and geography' })

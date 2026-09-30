@@ -94,6 +94,8 @@ const PAGES = [
   // Student 360 profile
   '/people/students/quick-add',
   '/masters/system?tab=profile_lists',
+  '/people/students/bulk',
+  '/people/students/bulk?mode=create',
 ];
 
 test.describe('accessibility (axe)', () => {

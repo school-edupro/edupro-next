@@ -135,6 +135,26 @@ export class NextNumbersQueryDto extends createZodDto(NextNumbersQuerySchema) {}
 export const ProfileQuerySchema = z.object({ academicYearId: IdSchema.optional() });
 export class ProfileQueryDto extends createZodDto(ProfileQuerySchema) {}
 
+export const BulkTemplateQuerySchema = z.object({
+  mode: z.enum(['update', 'create']).default('update'),
+  classSectionId: IdSchema.optional(),
+  /** Comma-separated profile field keys; all editable fields when omitted. */
+  fields: z.string().max(4000).optional(),
+});
+export class BulkTemplateQueryDto extends createZodDto(BulkTemplateQuerySchema) {}
+
+export const BulkUploadSchema = z
+  .object({
+    mode: z.enum(['update', 'create']),
+    fileName: z.string().trim().max(200).optional(),
+    csv: z.string().max(2_000_000).optional(),
+    contentBase64: z.string().max(8_000_000).optional(),
+  })
+  .refine((v) => Boolean(v.csv) !== Boolean(v.contentBase64), {
+    message: 'send csv text or an xlsx file',
+  });
+export class BulkUploadDto extends createZodDto(BulkUploadSchema) {}
+
 // ---- documents -----------------------------------------------------------------------------------
 export const AddDocumentSchema = z.object({
   kind: DocumentKindSchema,
