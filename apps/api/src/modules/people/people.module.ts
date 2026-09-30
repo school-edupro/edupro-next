@@ -8,13 +8,28 @@ import { ImportsController } from './imports.controller';
 import { ImportsService } from './imports.service';
 import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
+import { StudentProfileController } from './student-profile.controller';
+import { StudentProfileService } from './student-profile.service';
 import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
 @Module({
   imports: [FilesModule, ReportsModule],
-  controllers: [StudentsController, EmployeesController, SearchController, ImportsController],
-  providers: [StudentsService, EmployeesService, SearchService, ImportsService, AuditService],
-  exports: [StudentsService, EmployeesService],
+  controllers: [
+    StudentProfileController,
+    StudentsController,
+    EmployeesController,
+    SearchController,
+    ImportsController,
+  ],
+  providers: [
+    StudentProfileService,
+    StudentsService,
+    EmployeesService,
+    SearchService,
+    ImportsService,
+    AuditService,
+  ],
+  exports: [StudentsService, EmployeesService, StudentProfileService],
 })
 export class PeopleModule {}

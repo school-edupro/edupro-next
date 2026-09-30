@@ -170,7 +170,7 @@ export class StudentsService {
   ) {}
 
   /** Section ids the caller may see, or null when unrestricted. */
-  private scopeFilter(tenant: TenantContext): Promise<string[] | null> {
+  scopeFilter(tenant: TenantContext): Promise<string[] | null> {
     return this.scopes.filter(tenant, PEOPLE.studentView, 'class_section');
   }
 
@@ -556,7 +556,7 @@ export class StudentsService {
   }
 
   // ---- enrolments ----------------------------------------------------------------------------------
-  private async enrolWith(
+  async enrolWith(
     c: PoolClient,
     tenant: TenantContext,
     studentId: string,

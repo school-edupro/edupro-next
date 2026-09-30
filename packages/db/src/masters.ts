@@ -9,6 +9,7 @@
  * run under the caller's tenant context, so a school only ever sees and writes its own masters.
  * Bound parameters only.
  */
+import { PROFILE_LIST_DEFAULTS } from './student-fields';
 import type { DatasetColumn, DatasetDefinition, DatasetQuery } from './datasets';
 
 export type MasterFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'ref';
@@ -629,6 +630,41 @@ export const MASTERS: MasterDefinition[] = [
     status: STATUS,
     search: ['t.account_name', 't.account_no', 't.ifsc', 't.branch'],
     orderBy: 't.is_default DESC, t.account_name',
+  }),
+  // ---- system: student profile drop-down lists ----
+  master({
+    id: 'profile_lists',
+    title: 'Student profile lists',
+    group: 'system',
+    table: 'profile_lists',
+    permission: { view: 'people.student.view', manage: 'platform.settings.edit' },
+    naturalKey: ['list_code', 'value'],
+    conflict: '(school_id, list_code, value)',
+    fields: [
+      {
+        key: 'list_code',
+        header: 'List',
+        type: 'select',
+        required: true,
+        identity: true,
+        options: Object.keys(PROFILE_LIST_DEFAULTS),
+        width: 16,
+        help: 'Which drop-down this value belongs to (Religion, Occupation, Income …)',
+      },
+      {
+        key: 'value',
+        header: 'Value',
+        type: 'text',
+        required: true,
+        identity: true,
+        maxLength: 80,
+        width: 28,
+      },
+      { key: 'sort_order', header: 'Order', type: 'number', min: 0, max: 9999, width: 8 },
+    ],
+    status: STATUS,
+    search: ['t.list_code', 't.value'],
+    orderBy: 't.list_code, t.sort_order, t.value',
   }),
   // ---- system: geography ----
   master({

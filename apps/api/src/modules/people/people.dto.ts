@@ -86,6 +86,11 @@ export class CreateStudentDto extends createZodDto(CreateStudentSchema) {}
 
 export const UpdateStudentSchema = StudentCore.omit({ admissionNo: true })
   .extend({
+    // optional text fields can be cleared: the edit form sends null for an emptied box
+    lastName: z.string().trim().max(80).nullable(),
+    category: z.string().trim().max(40).nullable(),
+    bloodGroup: z.string().trim().max(10).nullable(),
+    house: z.string().trim().max(40).nullable(),
     status: z.enum(['active', 'inactive']),
     /** Recorded in student_status_history when the status changes (S6-06). */
     statusReason: z.string().trim().max(200),
@@ -105,6 +110,30 @@ export const ListStudentsQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListStudentsQueryDto extends createZodDto(ListStudentsQuerySchema) {}
+
+// ---- student 360 profile -------------------------------------------------------------------------
+const ProfileRaw = z.union([z.string().max(300), z.number(), z.null()]);
+export const UpdateProfileSchema = z.object({
+  values: z
+    .record(z.string().max(60), ProfileRaw)
+    .refine((v) => Object.keys(v).length > 0 && Object.keys(v).length <= 250, {
+      message: 'send between 1 and 250 fields',
+    }),
+});
+export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {}
+
+export const QuickAddSchema = z.object({
+  values: z.record(z.string().max(60), ProfileRaw),
+  classSectionId: IdSchema,
+  rollNo: z.number().int().min(1).max(999).optional(),
+});
+export class QuickAddDto extends createZodDto(QuickAddSchema) {}
+
+export const NextNumbersQuerySchema = z.object({ classSectionId: IdSchema.optional() });
+export class NextNumbersQueryDto extends createZodDto(NextNumbersQuerySchema) {}
+
+export const ProfileQuerySchema = z.object({ academicYearId: IdSchema.optional() });
+export class ProfileQueryDto extends createZodDto(ProfileQuerySchema) {}
 
 // ---- documents -----------------------------------------------------------------------------------
 export const AddDocumentSchema = z.object({

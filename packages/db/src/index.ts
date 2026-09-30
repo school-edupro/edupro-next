@@ -218,3 +218,7 @@ export * from './document-data';
 export * from './report-facts';
 export * from './document-defaults';
 export * from './admission-form';
+export * from './student-fields';
+export * from './student-profile';
+export * from './field-crypto';
+export * from './student-profile-store';

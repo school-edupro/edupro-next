@@ -13,4 +13,6 @@ export const PEOPLE = {
   documentView: 'people.document.view',
   search: 'people.person.search',
   importRun: 'people.import.run',
+  /** Full Aadhaar, PAN and bank account numbers (granted through the Sensitive data viewer role). */
+  sensitiveView: 'people.sensitive.view',
 } as const;
