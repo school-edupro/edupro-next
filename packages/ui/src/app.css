@@ -1469,3 +1469,130 @@ a.ep-tabs__tab {
   gap: var(--sp-1);
   min-width: 0;
 }
+
+/* ---- Report builder ------------------------------------------------------------------ */
+.ep-rb__name {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--sp-3);
+  flex: 1 1 32rem;
+  min-width: 0;
+}
+.ep-rb__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-rb__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 18rem) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .ep-rb__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ep-rb__picker {
+  padding: var(--sp-4);
+  position: sticky;
+  top: var(--sp-4);
+  max-height: calc(100vh - 8rem);
+  overflow: auto;
+}
+.ep-rb__main {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.ep-rb__fieldlist {
+  list-style: none;
+  margin: var(--sp-1) 0 var(--sp-2);
+  padding: 0 0 0 var(--sp-2);
+  display: grid;
+  gap: var(--sp-1);
+  font-size: var(--fs-small);
+}
+.ep-rb__columns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-rb__column {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  background: var(--surface-card);
+}
+.ep-rb__grip {
+  cursor: grab;
+  color: var(--text-muted);
+}
+.ep-rb__index {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  min-width: 1.5rem;
+  text-align: right;
+}
+.ep-rb__header {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.ep-rb__colbtns {
+  display: flex;
+  gap: var(--sp-1);
+}
+.ep-rb__filter {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.6fr) auto;
+  gap: var(--sp-2);
+  align-items: end;
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-default);
+}
+@media (max-width: 760px) {
+  .ep-rb__filter {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ep-rb__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-1);
+}
+.ep-rb__chipx {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 var(--sp-1);
+  font: inherit;
+}
+.ep-rb__found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.ep-rb__shares {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-rb__shares li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--sp-3);
+  align-items: center;
+}

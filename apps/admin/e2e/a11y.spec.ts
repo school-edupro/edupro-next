@@ -96,6 +96,8 @@ const PAGES = [
   '/masters/system?tab=profile_lists',
   '/people/students/bulk',
   '/people/students/bulk?mode=create',
+  '/reports/builder',
+  '/reports/builder/new',
 ];
 
 test.describe('accessibility (axe)', () => {
@@ -131,6 +133,39 @@ test.describe('accessibility (axe)', () => {
         ),
       ).toEqual([]);
     }
+  });
+
+  test('no serious or critical violations on a saved report with its preview', async ({ page }) => {
+    await page.goto('/reports/builder');
+    await page.waitForLoadState('networkidle');
+    const href = await page
+      .locator('a[href^="/reports/builder/"]')
+      .evaluateAll((as) =>
+        as
+          .map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /^\/reports\/builder\/\d+$/.test(h)),
+      );
+    test.skip(!href, 'no saved report in this school');
+    await page.goto(href!);
+    await page.waitForLoadState('networkidle');
+    // the guided tour opens on a first visit; close it before using the page
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible().catch(() => false)) await skip.click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.getByRole('region', { name: 'Preview', exact: true }).waitFor();
+    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    const serious = results.violations.filter(
+      (v) => v.impact === 'serious' || v.impact === 'critical',
+    );
+    expect(
+      serious.map(
+        (v) =>
+          `${v.id}: ${v.help} ${v.nodes
+            .map((n) => n.target.join(' '))
+            .slice(0, 3)
+            .join(' | ')}`,
+      ),
+    ).toEqual([]);
   });
 
   for (const path of PAGES) {

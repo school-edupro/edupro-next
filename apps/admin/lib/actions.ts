@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type { ProfileSnapshot, ProfileValues, QuickAddResult, SaveProfileResult } from './profile';
+import type { PreviewResult, ReportSpec, Result, SavedReport } from './report-builder';
 import { readContext, readSession, writeContext, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
@@ -3680,4 +3681,123 @@ export async function studentBulkCommit(fd: FormData) {
   return run(`/people/students/bulk?mode=${mode}&check=${id}`, () =>
     apiFetch(`/people/profile/bulk/${id}/commit`, { method: 'POST' }),
   );
+}
+
+// ---- report builder ------------------------------------------------------------------------------
+const builderError = (error: unknown): { ok: false; error: string; errors?: string[] } => {
+  if (error instanceof ApiError)
+    return {
+      ok: false,
+      error: error.problem.detail ?? error.problem.type,
+      errors: Array.isArray(error.problem.errors) ? (error.problem.errors as string[]) : undefined,
+    };
+  throw error;
+};
+const idOk = (id: string) => /^\d{1,18}$/.test(id);
+
+export async function builderPreview(spec: ReportSpec): Promise<Result<PreviewResult>> {
+  try {
+    const data = await apiFetch<PreviewResult>('/reports/builder/preview', {
+      method: 'POST',
+      body: JSON.stringify({ spec, limit: 50 }),
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
+}
+
+export async function builderSave(
+  id: string | null,
+  input: { name: string; description: string | null; spec: ReportSpec },
+): Promise<Result<SavedReport>> {
+  if (id && !idOk(id)) return { ok: false, error: 'Unknown report' };
+  try {
+    const data = await apiFetch<SavedReport>(id ? `/reports/builder/${id}` : '/reports/builder', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/reports/builder');
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
+}
+
+export async function builderCopy(id: string, name: string): Promise<Result<SavedReport>> {
+  if (!idOk(id)) return { ok: false, error: 'Unknown report' };
+  try {
+    const data = await apiFetch<SavedReport>(`/reports/builder/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+    revalidatePath('/reports/builder');
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
+}
+
+export async function builderExport(
+  id: string,
+  format: 'xlsx' | 'pdf',
+): Promise<Result<{ exportId: string; format: string }>> {
+  if (!idOk(id)) return { ok: false, error: 'Unknown report' };
+  try {
+    const data = await apiFetch<{ exportId: string; format: string }>(
+      `/reports/builder/${id}/export`,
+      { method: 'POST', body: JSON.stringify({ format }) },
+    );
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
+}
+
+export async function builderShareOptions(q: string): Promise<{
+  users: Array<{ id: string; name: string; detail: string | null }>;
+  roles: Array<{ id: string; name: string; code: string }>;
+}> {
+  const qs = q.trim().length >= 2 ? `?q=${encodeURIComponent(q.trim().slice(0, 60))}` : '';
+  return apiFetch(`/reports/builder/share-options${qs}`);
+}
+
+export async function builderSaveShares(
+  id: string,
+  shares: Array<{ userId?: string; roleId?: string; canEdit: boolean }>,
+): Promise<Result<SavedReport>> {
+  if (!idOk(id)) return { ok: false, error: 'Unknown report' };
+  try {
+    const data = await apiFetch<SavedReport>(`/reports/builder/${id}/shares`, {
+      method: 'PUT',
+      body: JSON.stringify({ shares }),
+    });
+    revalidatePath('/reports/builder');
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
+}
+
+/** Form actions for the list screen (redirect back with a notice). */
+export async function builderDeleteForm(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/reports/builder', () => apiFetch(`/reports/builder/${id}`, { method: 'DELETE' }));
+}
+
+export async function builderExportForm(fd: FormData) {
+  const id = str(fd, 'id');
+  const format = str(fd, 'format') === 'pdf' ? 'pdf' : 'xlsx';
+  let out: { exportId: string } | undefined;
+  try {
+    out = await apiFetch<{ exportId: string }>(`/reports/builder/${id}/export`, {
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back_('/reports/builder', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`/reports/builder?export=${out!.exportId}&format=${format}`);
 }

@@ -48,6 +48,11 @@ export default async function StudentsPage({
               <a className="ep-btn ep-btn--secondary" href="/people/students/new">
                 {t('new')}
               </a>
+              {me.permissions.includes('reports.builder.use') ? (
+                <a className="ep-btn ep-btn--secondary" href="/reports/builder">
+                  Report builder
+                </a>
+              ) : null}
               {me.permissions.includes('people.import.run') ? (
                 <a className="ep-btn ep-btn--secondary" href="/people/students/bulk">
                   Bulk update from Excel

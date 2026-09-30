@@ -264,7 +264,7 @@ export default async function StudentBulkPage({
           {check.problems.length ? (
             <>
               <h3 className="ep-card__title">Errors ({check.problems.length})</h3>
-              <div className="ep-table-wrap">
+              <div className="ep-table-wrap" tabIndex={0}>
                 <table className="ep-table">
                   <thead>
                     <tr>
@@ -293,7 +293,7 @@ export default async function StudentBulkPage({
               <h3 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
                 {check.mode === 'update' ? 'Changes' : 'New students'} ({check.readyRows})
               </h3>
-              <div className="ep-table-wrap">
+              <div className="ep-table-wrap" tabIndex={0}>
                 <table className="ep-table">
                   <thead>
                     <tr>
@@ -344,7 +344,7 @@ export default async function StudentBulkPage({
 
       <Card title="Recent uploads" style={{ marginTop: 'var(--sp-5)' }}>
         {recent.length ? (
-          <div className="ep-table-wrap">
+          <div className="ep-table-wrap" tabIndex={0}>
             <table className="ep-table">
               <thead>
                 <tr>
