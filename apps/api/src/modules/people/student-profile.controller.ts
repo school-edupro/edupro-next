@@ -5,6 +5,8 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  StudentGridDto,
+  StudentGridExportDto,
   BulkTemplateQueryDto,
   BulkUploadDto,
   IdSchema,
@@ -15,6 +17,7 @@ import {
 } from './people.dto';
 import { PEOPLE } from './people.permissions';
 import { StudentBulkService } from './student-bulk.service';
+import { StudentGridService } from './student-grid.service';
 import { StudentProfileService } from './student-profile.service';
 
 const idOf = (id: string): string => {
@@ -29,6 +32,7 @@ export class StudentProfileController {
   constructor(
     private readonly profile: StudentProfileService,
     private readonly bulk: StudentBulkService,
+    private readonly grid: StudentGridService,
   ) {}
 
   private static sendXlsx(reply: FastifyReply, file: { fileName: string; bytes: Buffer }) {
@@ -36,6 +40,29 @@ export class StudentProfileController {
       .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       .header('content-disposition', `attachment; filename="${file.fileName}"`)
       .send(file.bytes);
+  }
+
+  @Get('students/grid/fields')
+  @ApiOperation({ summary: 'Fields the students list can show and filter on' })
+  @RequirePermission(PEOPLE.studentView)
+  studentGridFields(@ReqCtx() ctx: RequestContext) {
+    return this.grid.fields(ctx);
+  }
+
+  @Post('students/grid')
+  @ApiOperation({
+    summary: 'Students list: chosen columns, filters on any field, search, status counts, pages',
+  })
+  @RequirePermission(PEOPLE.studentView)
+  studentGrid(@ReqCtx() ctx: RequestContext, @Body() body: StudentGridDto) {
+    return this.grid.grid(ctx, body);
+  }
+
+  @Post('students/grid/export')
+  @ApiOperation({ summary: 'The current students list view as a branded Excel or PDF' })
+  @RequirePermission(PEOPLE.studentView)
+  studentGridExport(@ReqCtx() ctx: RequestContext, @Body() body: StudentGridExportDto) {
+    return this.grid.export(ctx, body);
   }
 
   @Get('profile/bulk/template')

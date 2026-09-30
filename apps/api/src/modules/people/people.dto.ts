@@ -155,6 +155,55 @@ export const BulkUploadSchema = z
   });
 export class BulkUploadDto extends createZodDto(BulkUploadSchema) {}
 
+const GridKey = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9_]{2,60}$/, 'unknown field');
+export const StudentGridSchema = z.object({
+  columns: z
+    .array(z.object({ key: GridKey, label: z.string().trim().max(80).nullable().optional() }))
+    .max(60)
+    .default([]),
+  filters: z
+    .array(
+      z.object({
+        key: GridKey,
+        op: z.enum([
+          'eq',
+          'neq',
+          'in',
+          'not_in',
+          'contains',
+          'starts',
+          'empty',
+          'not_empty',
+          'between',
+          'gte',
+          'lte',
+        ]),
+        values: z.array(z.string().trim().max(120)).max(200).optional(),
+      }),
+    )
+    .max(30)
+    .default([]),
+  sort: z
+    .array(z.object({ key: GridKey, dir: z.enum(['asc', 'desc']).default('asc') }))
+    .max(3)
+    .default([]),
+  search: z.string().trim().max(80).optional(),
+  status: z.enum(['active', 'inactive', 'withdrawn', 'all']).default('active'),
+  academicYearId: IdSchema.optional(),
+  page: z.number().int().min(1).default(1),
+  size: z.number().int().min(10).max(200).default(50),
+});
+export class StudentGridDto extends createZodDto(StudentGridSchema) {}
+
+export const StudentGridExportSchema = StudentGridSchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+  title: z.string().trim().max(120).optional(),
+});
+export class StudentGridExportDto extends createZodDto(StudentGridExportSchema) {}
+
 // ---- documents -----------------------------------------------------------------------------------
 export const AddDocumentSchema = z.object({
   kind: DocumentKindSchema,

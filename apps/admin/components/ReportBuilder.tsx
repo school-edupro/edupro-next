@@ -678,7 +678,7 @@ export function ReportBuilder({
   );
 }
 
-function FilterRow({
+export function FilterRow({
   index,
   filter,
   field,

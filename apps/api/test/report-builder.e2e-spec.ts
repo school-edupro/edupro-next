@@ -391,6 +391,88 @@ describe('report builder (e2e)', () => {
     expect(own.statusCode).toBe(200);
   });
 
+  describe('students list (grid)', () => {
+    const grid = (body: Record<string, unknown>) =>
+      inject({ method: 'POST', url: '/people/students/grid', headers: h(admin), json: body });
+
+    it('offers every field with filter values, including sections and statuses', async () => {
+      const r = await inject({
+        method: 'GET',
+        url: '/people/students/grid/fields',
+        headers: h(coord),
+      });
+      expect(r.statusCode).toBe(200);
+      const byKey = new Map(r.json().fields.map((f: { key: string }) => [f.key, f]));
+      expect((byKey.get('class_section') as { options: string[] }).options).toEqual([
+        'VII-A',
+        'VII-B',
+      ]);
+      expect((byKey.get('enrolment_status') as { options: string[] }).options).toContain(
+        'Withdrawn',
+      );
+    });
+
+    it('returns counts, chosen columns, search, filters, sort and pages', async () => {
+      const r = await grid({
+        columns: [{ key: 'religion' }, { key: 'father_name', label: 'Father' }],
+        filters: [{ key: 'class_section', op: 'eq', values: ['VII-B'] }],
+        sort: [{ key: 'full_name', dir: 'desc' }],
+        status: 'active',
+        page: 1,
+        size: 10,
+      });
+      expect(r.statusCode).toBe(201);
+      const d = r.json();
+      expect(d.stats).toEqual({ total: 4, active: 4, inactive: 0, withdrawn: 0 });
+      expect(d.columns.map((c: { header: string }) => c.header)).toEqual(['Religion', 'Father']);
+      expect(d.rows.map((x: { full_name: string }) => x.full_name)).toEqual(['MEHER', 'BELA']);
+      expect(d.rows[0]).toMatchObject({ religion: 'Sikh', class_section: 'VII-B' });
+      expect(d.rows[0].__id).toMatch(/^\d+$/);
+      const search = await grid({ search: 'zoya', status: 'all', page: 1, size: 10 });
+      expect(search.json().rows.map((x: { admission_no: string }) => x.admission_no)).toEqual([
+        'RB01',
+      ]);
+      const paged = await grid({ status: 'active', page: 2, size: 10 });
+      expect(paged.json()).toMatchObject({ total: 4, page: 1, pages: 1 });
+      const bad = await grid({
+        columns: [{ key: 'nope_field' }],
+        status: 'active',
+        page: 1,
+        size: 10,
+      });
+      expect(bad.statusCode).toBe(400);
+    });
+
+    it('exports the current view with its status and search as a branded file', async () => {
+      const r = await inject({
+        method: 'POST',
+        url: '/people/students/grid/export',
+        headers: h(admin),
+        json: {
+          columns: [{ key: 'religion' }],
+          filters: [],
+          sort: [],
+          search: 'meher',
+          status: 'active',
+          page: 1,
+          size: 50,
+          format: 'xlsx',
+        },
+      });
+      expect(r.statusCode).toBe(201);
+      expect(r.json().spec.options.search).toBe('meher');
+      expect(r.json().spec.filters[0]).toEqual({
+        key: 'student_status',
+        op: 'eq',
+        values: ['Active'],
+      });
+      expect(r.json().spec.columns.slice(0, 2)).toEqual([
+        { key: 'admission_no' },
+        { key: 'full_name', label: 'Student' },
+      ]);
+    });
+  });
+
   it('the owner deletes; the report disappears for everyone it was shared with', async () => {
     expect(
       (await inject({ method: 'DELETE', url: `/reports/builder/${reportId}`, headers: h(admin) }))

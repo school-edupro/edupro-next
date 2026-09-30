@@ -62,6 +62,8 @@ export interface ReportOptions {
   academicYearId?: string | null;
   /** Include students whose record is inactive (left, withdrawn). */
   includeInactive?: boolean;
+  /** Free search over admission no, name and family mobiles (the student list's search box). */
+  search?: string | null;
 }
 export interface ReportSpec {
   columns: ReportColumn[];
@@ -88,6 +90,7 @@ const EXTRA_FIELDS: ReportFieldDef[] = [
   { key: 'full_name', label: 'Student Full Name', section: 'student', type: 'text' },
   { key: 'class_section', label: 'Class-Section', section: 'academic', type: 'text' },
   { key: 'student_status', label: 'Student Status', section: 'record', type: 'text' },
+  { key: 'enrolment_status', label: 'Enrolment Status', section: 'record', type: 'text' },
   { key: 'profile_completeness', label: 'Profile Complete (%)', section: 'record', type: 'number' },
   { key: 'fee_group', label: 'Fee Group', section: 'fees_transport', type: 'text' },
   { key: 'student_type', label: 'New / Old Student', section: 'fees_transport', type: 'text' },
@@ -176,6 +179,8 @@ export async function loadStudentReportRows(
   const ids = await c.query<{
     id: string;
     status: string;
+    enrolment_status: string;
+    photo_file_id: string | null;
     profile_completeness: number;
     class_code: string;
     section: string;
@@ -185,7 +190,7 @@ export async function loadStudentReportRows(
     route: string | null;
     stop: string | null;
   }>(
-    `SELECT s.id::text, s.status::text, s.profile_completeness, c.code AS class_code, cs.name AS section,
+    `SELECT s.id::text, s.status::text, e.status::text AS enrolment_status, s.photo_file_id::text, s.profile_completeness, c.code AS class_code, cs.name AS section,
             fp.fee_group, fp.student_type, fd.name AS fee_discount,
             CASE WHEN r.id IS NULL THEN NULL ELSE r.code || ' ' || r.name END AS route,
             COALESCE(ts.name, ra.stop_name) AS stop
@@ -225,6 +230,9 @@ export async function loadStudentReportRows(
           .join(' '),
         class_section: `${x.class_code}-${x.section}`,
         student_status: x.status === 'active' ? 'Active' : 'Inactive',
+        enrolment_status: x.enrolment_status.charAt(0).toUpperCase() + x.enrolment_status.slice(1),
+        __id: id,
+        __photo: x.photo_file_id,
         profile_completeness: x.profile_completeness,
         fee_group: x.fee_group,
         student_type: x.student_type === 'new' ? 'New' : x.student_type === 'old' ? 'Old' : null,
@@ -257,6 +265,30 @@ const cmpInput = (s: string, type: ReportFieldDef['type']): string | number | nu
   if (type === 'date') return parseDate(t) ?? t;
   return t.toLowerCase();
 };
+
+/** The search box: admission number, name, or any family mobile containing the text. */
+export function applyReportSearch(rows: ReportRow[], search?: string | null): ReportRow[] {
+  const q = (search ?? '').trim().toLowerCase();
+  if (!q) return rows;
+  const keys = [
+    'admission_no',
+    'full_name',
+    'registration_no',
+    'sms_mobile',
+    'father_mobile',
+    'mother_mobile',
+    'guardian_mobile',
+    'father_name',
+    'mother_name',
+  ];
+  return rows.filter((r) =>
+    keys.some((k) =>
+      String(r[k] ?? '')
+        .toLowerCase()
+        .includes(q),
+    ),
+  );
+}
 
 export function applyReportFilters(rows: ReportRow[], filters: ReportFilter[]): ReportRow[] {
   if (!filters.length) return rows;
@@ -360,7 +392,10 @@ export interface ReportResult {
 
 /** Filters, sorts and projects loaded rows onto the chosen columns and headers. */
 export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
-  const filtered = sortReportRows(applyReportFilters(rows, spec.filters), spec.sort);
+  const filtered = sortReportRows(
+    applyReportFilters(applyReportSearch(rows, spec.options.search), spec.filters),
+    spec.sort,
+  );
   const columns = spec.columns.map((c) => {
     const def = STUDENT_REPORT_FIELD_BY_KEY.get(c.key)!;
     const header = c.label?.trim() || def.label;
@@ -386,7 +421,9 @@ export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
     columns,
     rows: projected,
     total: projected.length,
-    filtersText: describeReportFilters(spec.filters),
+    filtersText: spec.options.search?.trim()
+      ? [`Search "${spec.options.search.trim()}"`, ...describeReportFilters(spec.filters)]
+      : describeReportFilters(spec.filters),
   };
 }
 

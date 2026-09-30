@@ -42,6 +42,7 @@ export interface ReportSpec {
     orientation: 'auto' | 'portrait' | 'landscape';
     academicYearId?: string | null;
     includeInactive?: boolean;
+    search?: string | null;
   };
 }
 

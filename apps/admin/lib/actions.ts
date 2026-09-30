@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type { ProfileSnapshot, ProfileValues, QuickAddResult, SaveProfileResult } from './profile';
 import type { PreviewResult, ReportSpec, Result, SavedReport } from './report-builder';
+import type { StudentListQuery, StudentListResult } from './student-list';
 import { readContext, readSession, writeContext, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
@@ -3879,4 +3880,31 @@ export async function builderExportForm(fd: FormData) {
     throw error;
   }
   redirect(`/reports/builder?export=${out!.exportId}&format=${format}`);
+}
+
+// ---- students list (columns, filters, export) ----------------------------------------------------
+export async function studentListLoad(q: StudentListQuery): Promise<Result<StudentListResult>> {
+  try {
+    const data = await apiFetch<StudentListResult>('/people/students/grid', {
+      method: 'POST',
+      body: JSON.stringify({ ...q, search: q.search || undefined }),
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
+}
+
+export async function studentListExport(
+  q: StudentListQuery & { format: 'xlsx' | 'pdf' },
+): Promise<Result<{ exportId: string; format: string; spec: ReportSpec }>> {
+  try {
+    const data = await apiFetch<{ exportId: string; format: string; spec: ReportSpec }>(
+      '/people/students/grid/export',
+      { method: 'POST', body: JSON.stringify({ ...q, search: q.search || undefined }) },
+    );
+    return { ok: true, data };
+  } catch (error) {
+    return builderError(error);
+  }
 }

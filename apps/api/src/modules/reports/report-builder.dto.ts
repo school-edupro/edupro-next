@@ -39,6 +39,7 @@ export const ReportSpecSchema = z.object({
       orientation: z.enum(['auto', 'portrait', 'landscape']).default('auto'),
       academicYearId: Id.nullable().optional(),
       includeInactive: z.boolean().default(false),
+      search: z.string().trim().max(80).nullable().optional(),
     })
     .default({}),
 });

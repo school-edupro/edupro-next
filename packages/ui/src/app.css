@@ -1751,3 +1751,198 @@ a.ep-tabs__tab {
 .ep-hero__parents a {
   text-decoration: underline;
 }
+
+/* ---- Students list --------------------------------------------------------------------- */
+.ep-sl__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.ep-sl__stat {
+  display: grid;
+  gap: var(--sp-1);
+  text-align: left;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.ep-sl__stat[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.ep-sl__stat--info {
+  border-left-color: var(--mob-cyan-700);
+}
+.ep-sl__stat--success {
+  border-left-color: var(--status-success);
+}
+.ep-sl__stat--warning {
+  border-left-color: var(--status-warning);
+}
+.ep-sl__stat--danger {
+  border-left-color: var(--status-danger);
+}
+.ep-sl__stat-n {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-sl__stat-l {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-sl__filters {
+  padding: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.ep-sl__filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-sl__search {
+  grid-column: span 2;
+}
+@media (max-width: 640px) {
+  .ep-sl__search {
+    grid-column: auto;
+  }
+}
+.ep-sl__filter-actions,
+.ep-sl__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-sl__filter-actions {
+  margin-top: var(--sp-3);
+}
+.ep-sl__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.ep-sl__count {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-sl__table {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.ep-sl__table th,
+.ep-sl__table td {
+  white-space: nowrap;
+}
+.ep-sl__sticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-card);
+}
+.ep-sl__sort {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.ep-sl__who {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+.ep-sl__who strong {
+  display: block;
+  color: var(--text-heading);
+}
+.ep-sl__sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}
+.ep-sl__avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  background: var(--surface-subtle);
+  border: 2px solid var(--border-accent);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-sl__menu {
+  position: relative;
+}
+.ep-sl__menu ul {
+  position: absolute;
+  right: 0;
+  z-index: 3;
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-2);
+  min-width: 12rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card-hover);
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-sl__pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: space-between;
+  align-items: end;
+  margin-top: var(--sp-3);
+}
+.ep-sl__pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-sl__size {
+  max-width: 10rem;
+}
+.ep-sl__cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+}
+@media (max-width: 760px) {
+  .ep-sl__cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ep-sl__colpick {
+  max-height: 55vh;
+  overflow: auto;
+  margin-top: var(--sp-2);
+}
+.ep-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

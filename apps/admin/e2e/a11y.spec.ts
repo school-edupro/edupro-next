@@ -152,6 +152,36 @@ test.describe('accessibility (axe)', () => {
     }
   });
 
+  test('no serious or critical violations on the students list and its dialogs', async ({
+    page,
+  }) => {
+    await page.goto('/people/students');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible().catch(() => false)) await skip.click();
+    const check = async (where: string) => {
+      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+      expect(
+        bad.map(
+          (v) =>
+            `${where} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+      ).toEqual([]);
+    };
+    await check('list');
+    await page.getByRole('button', { name: /^Columns/ }).click();
+    await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
+    await check('columns dialog');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: /^More filters/ }).click();
+    await page.waitForTimeout(400);
+    await check('filters dialog');
+  });
+
   test('no serious or critical violations on a saved report with its preview', async ({ page }) => {
     await page.goto('/reports/builder');
     await page.waitForLoadState('networkidle');
