@@ -222,3 +222,4 @@ export * from './student-fields';
 export * from './student-profile';
 export * from './field-crypto';
 export * from './student-profile-store';
+export * from './report-builder';

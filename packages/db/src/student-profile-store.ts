@@ -111,131 +111,168 @@ async function loadGuardians(
   return out;
 }
 
+interface EnrolDbRow {
+  student_id: string;
+  academic_year_id: string;
+  academic_year: string;
+  start_date: string;
+  class_section_id: string;
+  class_name: string;
+  section: string;
+  roll_no: number | null;
+}
+
 /** Reads every catalogue value. Sensitive values are decrypted, then masked unless `showSensitive`. */
 export async function readStudentProfile(
   c: PoolClient,
   studentId: string,
   opts: { academicYearId?: string | null; showSensitive: boolean },
 ): Promise<StudentProfileSnapshot | null> {
+  const all = await readStudentProfiles(c, [studentId], opts);
+  return all.get(studentId) ?? null;
+}
+
+/**
+ * Batch read for lists, templates and reports: three queries for any number of students (students,
+ * their father / mother / guardian links, the enrolment of the year).
+ */
+export async function readStudentProfiles(
+  c: PoolClient,
+  studentIds: readonly string[],
+  opts: { academicYearId?: string | null; showSensitive: boolean },
+): Promise<Map<string, StudentProfileSnapshot>> {
+  const out = new Map<string, StudentProfileSnapshot>();
+  if (!studentIds.length) return out;
+  const ids = [...studentIds];
   const s = await c.query<StudentDbRow>(
     `SELECT id::text, admission_no, display_name, first_name, last_name, dob::text, gender::text, category, blood_group,
             admitted_on::text, address, profile, secure, updated_at
-       FROM students WHERE id = $1 AND deleted_at IS NULL`,
-    [studentId],
+       FROM students WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+    [ids],
   );
-  const st = s.rows[0];
-  if (!st) return null;
-  const guardians = await loadGuardians(c, studentId);
-  const e = await c.query<{
-    academic_year_id: string;
-    academic_year: string;
-    start_date: string;
-    class_section_id: string;
-    class_name: string;
-    section: string;
-    roll_no: number | null;
-  }>(
-    `SELECT e.academic_year_id::text, y.code AS academic_year, y.start_date::text, e.class_section_id::text,
-            c.name AS class_name, cs.name AS section, e.roll_no
+  const g = await c.query<GuardianDbRow & { student_id: string }>(
+    `SELECT sg.student_id::text, g.id::text, sg.relation::text AS relation, g.first_name, g.last_name, g.mobile,
+            g.email::text AS email, g.occupation, g.profile, g.secure
+       FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+      WHERE sg.student_id = ANY($1::bigint[])
+      ORDER BY sg.student_id, sg.is_primary DESC, sg.id`,
+    [ids],
+  );
+  const guardiansOf = new Map<string, Partial<Record<GuardianParty, GuardianDbRow>>>();
+  for (const row of g.rows) {
+    const party: GuardianParty =
+      row.relation === 'father' ? 'father' : row.relation === 'mother' ? 'mother' : 'guardian';
+    const bag = guardiansOf.get(row.student_id) ?? {};
+    if (!bag[party]) bag[party] = row;
+    guardiansOf.set(row.student_id, bag);
+  }
+  const e = await c.query<EnrolDbRow>(
+    `SELECT DISTINCT ON (e.student_id) e.student_id::text, e.academic_year_id::text, y.code AS academic_year,
+            y.start_date::text, e.class_section_id::text, c.name AS class_name, cs.name AS section, e.roll_no
        FROM enrolments e
        JOIN academic_years y ON y.id = e.academic_year_id
        JOIN class_sections cs ON cs.id = e.class_section_id
        JOIN classes c ON c.id = cs.class_id
-      WHERE e.student_id = $1 AND ($2::bigint IS NULL OR e.academic_year_id = $2::bigint)
-      ORDER BY (e.academic_year_id = COALESCE($2::bigint, app.current_academic_year_id())) DESC NULLS LAST, y.start_date DESC
-      LIMIT 1`,
-    [studentId, opts.academicYearId ?? null],
+      WHERE e.student_id = ANY($1::bigint[]) AND ($2::bigint IS NULL OR e.academic_year_id = $2::bigint)
+      ORDER BY e.student_id, (e.academic_year_id = COALESCE($2::bigint, app.current_academic_year_id())) DESC NULLS LAST,
+               y.start_date DESC`,
+    [ids, opts.academicYearId ?? null],
   );
-  const en = e.rows[0] ?? null;
+  const enrolOf = new Map(e.rows.map((x) => [x.student_id, x]));
 
-  const values: ProfileValues = {};
-  const masked: string[] = [];
-  const secureValue = (bag: Record<string, unknown>, key: string, f: ProfileField) => {
-    const stored = bag[key];
-    if (typeof stored !== 'string') return null;
-    const plain = decryptField(stored);
-    if (plain === null) return null;
-    if (opts.showSensitive) return plain;
-    masked.push(f.key);
-    return maskValue(plain, f.type);
-  };
-  for (const f of PROFILE_FIELDS) {
-    const st_ = f.store;
-    let v: ProfileValue = null;
-    switch (st_.t) {
-      case 'col': {
-        const raw = (st as unknown as Record<string, unknown>)[st_.col];
-        v = st_.col === 'gender' ? (ENUM_TO_GENDER[String(raw)] ?? null) : asValue(raw);
-        break;
-      }
-      case 'addr':
-        v = asValue(st.address[st_.key]);
-        break;
-      case 'json':
-        v =
-          st_.on === 'student'
-            ? asValue(st.profile[st_.key])
-            : asValue(guardians[st_.on]?.profile[st_.key]);
-        break;
-      case 'secure':
-        v =
-          st_.on === 'student'
-            ? secureValue(st.secure, st_.key, f)
-            : guardians[st_.on]
-              ? secureValue(guardians[st_.on]!.secure, st_.key, f)
-              : null;
-        break;
-      case 'gcol': {
-        const g = guardians[st_.on];
-        if (g) {
-          v =
-            st_.col === 'first_name'
-              ? asValue([g.first_name, g.last_name].filter(Boolean).join(' '))
-              : asValue((g as unknown as Record<string, unknown>)[st_.col]);
+  for (const st of s.rows) {
+    const guardians = guardiansOf.get(st.id) ?? {};
+    const en = enrolOf.get(st.id) ?? null;
+    const values: ProfileValues = {};
+    const masked: string[] = [];
+    const secureValue = (bag: Record<string, unknown>, key: string, f: ProfileField) => {
+      const stored = bag[key];
+      if (typeof stored !== 'string') return null;
+      const plain = decryptField(stored);
+      if (plain === null) return null;
+      if (opts.showSensitive) return plain;
+      masked.push(f.key);
+      return maskValue(plain, f.type);
+    };
+    for (const f of PROFILE_FIELDS) {
+      const st_ = f.store;
+      let v: ProfileValue = null;
+      switch (st_.t) {
+        case 'col': {
+          const raw = (st as unknown as Record<string, unknown>)[st_.col];
+          v = st_.col === 'gender' ? (ENUM_TO_GENDER[String(raw)] ?? null) : asValue(raw);
+          break;
         }
-        break;
-      }
-      case 'enrol':
-        if (en) {
+        case 'addr':
+          v = asValue(st.address[st_.key]);
+          break;
+        case 'json':
           v =
-            st_.col === 'academic_year'
-              ? en.academic_year
-              : st_.col === 'class'
-                ? en.class_name
-                : st_.col === 'section'
-                  ? en.section
-                  : en.roll_no;
+            st_.on === 'student'
+              ? asValue(st.profile[st_.key])
+              : asValue(guardians[st_.on]?.profile[st_.key]);
+          break;
+        case 'secure':
+          v =
+            st_.on === 'student'
+              ? secureValue(st.secure, st_.key, f)
+              : guardians[st_.on]
+                ? secureValue(guardians[st_.on]!.secure, st_.key, f)
+                : null;
+          break;
+        case 'gcol': {
+          const gd = guardians[st_.on];
+          if (gd) {
+            v =
+              st_.col === 'first_name'
+                ? asValue([gd.first_name, gd.last_name].filter(Boolean).join(' '))
+                : asValue((gd as unknown as Record<string, unknown>)[st_.col]);
+          }
+          break;
         }
-        break;
-      case 'auto':
-        break;
+        case 'enrol':
+          if (en) {
+            v =
+              st_.col === 'academic_year'
+                ? en.academic_year
+                : st_.col === 'class'
+                  ? en.class_name
+                  : st_.col === 'section'
+                    ? en.section
+                    : en.roll_no;
+          }
+          break;
+        case 'auto':
+          break;
+      }
+      values[f.key] = v;
     }
-    values[f.key] = v;
+    Object.assign(values, autoValues(values, en?.start_date ?? null));
+    const guardianIds: Partial<Record<GuardianParty, string>> = {};
+    for (const p of ['father', 'mother', 'guardian'] as const)
+      if (guardians[p]) guardianIds[p] = guardians[p]!.id;
+    out.set(st.id, {
+      studentId: st.id,
+      admissionNo: st.admission_no,
+      displayName: st.display_name,
+      values,
+      masked,
+      completeness: completeness(values),
+      guardianIds,
+      enrolment: en
+        ? {
+            academicYearId: en.academic_year_id,
+            academicYear: en.academic_year,
+            classSectionId: en.class_section_id,
+            className: en.class_name,
+            section: en.section,
+            rollNo: en.roll_no,
+          }
+        : null,
+      updatedAt: st.updated_at.toISOString(),
+    });
   }
-  Object.assign(values, autoValues(values, en?.start_date ?? null));
-  const guardianIds: Partial<Record<GuardianParty, string>> = {};
-  for (const p of ['father', 'mother', 'guardian'] as const)
-    if (guardians[p]) guardianIds[p] = guardians[p]!.id;
-  return {
-    studentId: st.id,
-    admissionNo: st.admission_no,
-    displayName: st.display_name,
-    values,
-    masked,
-    completeness: completeness(values),
-    guardianIds,
-    enrolment: en
-      ? {
-          academicYearId: en.academic_year_id,
-          academicYear: en.academic_year,
-          classSectionId: en.class_section_id,
-          className: en.class_name,
-          section: en.section,
-          rollNo: en.roll_no,
-        }
-      : null,
-    updatedAt: st.updated_at.toISOString(),
-  };
+  return out;
 }
 
 /**

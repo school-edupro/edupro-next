@@ -302,6 +302,14 @@ export class ReportsService {
   async status(ctx: RequestContext, id: string) {
     const tenant = requireTenant(ctx);
     const row = await this.get(tenant, id);
+    // a builder report run with full ID numbers opens only for its requester or a sensitive-data viewer
+    if (
+      row.dataset === 'report_builder' &&
+      (row.params as { showSensitive?: boolean }).showSensitive &&
+      row.requestedBy !== (tenant.userId ?? null) &&
+      !ctx.permissions?.has('people.sensitive.view')
+    )
+      throw new DomainError('not-found', 'Export not found');
     if (row.status !== 'ready' || !row.fileId) return { export: row, download: null };
     const { download } = await this.files.downloadUrl(ctx, row.fileId);
     await this.db.tenant(tenant, (c) =>
