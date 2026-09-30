@@ -44,7 +44,7 @@ export interface BuiltReport {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
-async function letterhead(
+export async function letterhead(
   db: Db,
   storage: StorageDriver,
   tenant: ReturnType<typeof tenantForJob>,

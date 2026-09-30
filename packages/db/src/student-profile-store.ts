@@ -29,6 +29,8 @@ export interface StudentProfileSnapshot {
   masked: string[];
   completeness: { percent: number; missing: string[] };
   guardianIds: Partial<Record<GuardianParty, string>>;
+  /** File ids of the photos: the student's and each parent's. */
+  photos: Partial<Record<'student' | GuardianParty, string>>;
   enrolment: {
     academicYearId: string;
     academicYear: string;
@@ -74,6 +76,7 @@ interface StudentDbRow {
   address: Record<string, unknown>;
   profile: Record<string, unknown>;
   secure: Record<string, unknown>;
+  photo_file_id: string | null;
   updated_at: Date;
 }
 interface GuardianDbRow {
@@ -84,6 +87,7 @@ interface GuardianDbRow {
   mobile: string | null;
   email: string | null;
   occupation: string | null;
+  photo_file_id: string | null;
   profile: Record<string, unknown>;
   secure: Record<string, unknown>;
 }
@@ -97,7 +101,7 @@ async function loadGuardians(
 ): Promise<Partial<Record<GuardianParty, GuardianDbRow>>> {
   const r = await c.query<GuardianDbRow>(
     `SELECT g.id::text, sg.relation::text AS relation, g.first_name, g.last_name, g.mobile, g.email::text AS email,
-            g.occupation, g.profile, g.secure
+            g.occupation, g.photo_file_id::text, g.profile, g.secure
        FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
       WHERE sg.student_id = $1
       ORDER BY sg.is_primary DESC, sg.id`,
@@ -147,13 +151,13 @@ export async function readStudentProfiles(
   const ids = [...studentIds];
   const s = await c.query<StudentDbRow>(
     `SELECT id::text, admission_no, display_name, first_name, last_name, dob::text, gender::text, category, blood_group, house,
-            admitted_on::text, address, profile, secure, updated_at
+            admitted_on::text, address, profile, secure, photo_file_id::text, updated_at
        FROM students WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
     [ids],
   );
   const g = await c.query<GuardianDbRow & { student_id: string }>(
     `SELECT sg.student_id::text, g.id::text, sg.relation::text AS relation, g.first_name, g.last_name, g.mobile,
-            g.email::text AS email, g.occupation, g.profile, g.secure
+            g.email::text AS email, g.occupation, g.photo_file_id::text, g.profile, g.secure
        FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
       WHERE sg.student_id = ANY($1::bigint[])
       ORDER BY sg.student_id, sg.is_primary DESC, sg.id`,
@@ -250,8 +254,12 @@ export async function readStudentProfiles(
     }
     Object.assign(values, autoValues(values, en?.start_date ?? null));
     const guardianIds: Partial<Record<GuardianParty, string>> = {};
-    for (const p of ['father', 'mother', 'guardian'] as const)
+    const photos: StudentProfileSnapshot['photos'] = {};
+    if (st.photo_file_id) photos.student = st.photo_file_id;
+    for (const p of ['father', 'mother', 'guardian'] as const) {
       if (guardians[p]) guardianIds[p] = guardians[p]!.id;
+      if (guardians[p]?.photo_file_id) photos[p] = guardians[p]!.photo_file_id!;
+    }
     out.set(st.id, {
       studentId: st.id,
       admissionNo: st.admission_no,
@@ -260,6 +268,7 @@ export async function readStudentProfiles(
       masked,
       completeness: completeness(values),
       guardianIds,
+      photos,
       enrolment: en
         ? {
             academicYearId: en.academic_year_id,

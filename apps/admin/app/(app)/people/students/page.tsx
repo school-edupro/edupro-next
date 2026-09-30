@@ -1,9 +1,14 @@
 import { PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { StudentList } from '@/components/StudentList';
-import { builderSave, studentListExport, studentListLoad } from '@/lib/actions';
+import {
+  builderSave,
+  studentListExport,
+  studentListLoad,
+  studentListSaveView,
+} from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import { DEFAULT_VIEW, type StudentListFields, type StudentListResult } from '@/lib/student-list';
+import { sanitizeView, type StudentListFields, type StudentListResult } from '@/lib/student-list';
 
 export default async function StudentsPage({
   searchParams,
@@ -13,13 +18,16 @@ export default async function StudentsPage({
   const sp = await searchParams;
   const me = await getMe();
   const can = (p: string) => me.permissions.includes(p);
-  const [fields, initial] = await Promise.all([
+  const [fields, saved] = await Promise.all([
     apiFetch<StudentListFields>('/people/students/grid/fields'),
-    apiFetch<StudentListResult>('/people/students/grid', {
-      method: 'POST',
-      body: JSON.stringify({ ...DEFAULT_VIEW, search: undefined, page: 1 }),
-    }),
+    // the view this user saved for this school; other users keep their own
+    apiFetch<{ value: unknown }>('/me/preferences/students.list').catch(() => ({ value: null })),
   ]);
+  const view = sanitizeView(saved.value, new Set(fields.fields.map((f) => f.key)));
+  const initial = await apiFetch<StudentListResult>('/people/students/grid', {
+    method: 'POST',
+    body: JSON.stringify({ ...view, search: view.search || undefined, page: 1 }),
+  });
   return (
     <>
       <PageHeader
@@ -31,13 +39,19 @@ export default async function StudentsPage({
       <StudentList
         fields={fields}
         initial={initial}
+        initialView={view}
         can={{
           create: can('people.student.create'),
           importRun: can('people.import.run'),
           builder: can('reports.builder.use'),
           edit: can('people.student.edit'),
         }}
-        actions={{ load: studentListLoad, exportFile: studentListExport, saveReport: builderSave }}
+        actions={{
+          load: studentListLoad,
+          exportFile: studentListExport,
+          saveReport: builderSave,
+          saveView: studentListSaveView,
+        }}
       />
     </>
   );

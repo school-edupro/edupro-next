@@ -39,6 +39,7 @@ export interface ProfileSnapshot {
   masked: string[];
   completeness: { percent: number; missing: string[] };
   guardianIds: Record<string, string>;
+  photos?: Partial<Record<'student' | 'father' | 'mother' | 'guardian', string>>;
   enrolment: {
     academicYearId: string;
     academicYear: string;

@@ -304,7 +304,7 @@ export class ReportsService {
     const row = await this.get(tenant, id);
     // a builder report run with full ID numbers opens only for its requester or a sensitive-data viewer
     if (
-      row.dataset === 'report_builder' &&
+      (row.dataset === 'report_builder' || row.dataset === 'student_profile') &&
       (row.params as { showSensitive?: boolean }).showSensitive &&
       row.requestedBy !== (tenant.userId ?? null) &&
       !ctx.permissions?.has('people.sensitive.view')

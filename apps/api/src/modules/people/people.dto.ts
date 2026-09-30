@@ -224,6 +224,12 @@ export const ReplaceDocumentSchema = z.object({
 });
 export class ReplaceDocumentDto extends createZodDto(ReplaceDocumentSchema) {}
 
+export const ParentPhotoSchema = z.object({
+  party: z.enum(['father', 'mother', 'guardian']),
+  fileId: IdSchema,
+});
+export class ParentPhotoDto extends createZodDto(ParentPhotoSchema) {}
+
 export const VerifyDocumentSchema = z.object({ verified: z.boolean() });
 export class VerifyDocumentDto extends createZodDto(VerifyDocumentSchema) {}
 

@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type { ProfileSnapshot, ProfileValues, QuickAddResult, SaveProfileResult } from './profile';
 import type { PreviewResult, ReportSpec, Result, SavedReport } from './report-builder';
-import type { StudentListQuery, StudentListResult } from './student-list';
+import type { StudentListQuery, StudentListResult, StudentListView } from './student-list';
 import { readContext, readSession, writeContext, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
@@ -591,6 +591,37 @@ export async function requestStudentIdCard(fd: FormData) {
   }
   // stay on the student: the page watches the export and starts the download when it is ready
   redirect(`${back}?export=${out!.id}&format=pdf`);
+}
+
+/** Student profile printout (A4 PDF with the student's and parents' photos); downloads on the page. */
+export async function requestStudentProfilePrint(fd: FormData) {
+  const id = str(fd, 'id');
+  const back = `/people/students/${id}`;
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>(`/people/students/${id}/profile-print`, {
+      method: 'POST',
+      body: '{}',
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect(`${back}?export=${out!.id}&format=pdf`);
+}
+
+/** Uploads the father's, mother's or guardian's photo. */
+export async function studentParentPhotoUpload(fd: FormData) {
+  const id = str(fd, 'id');
+  const party = str(fd, 'party');
+  return run(`/people/students/${id}?tab=overview`, async () => {
+    const [fileId] = await uploadAll(fd, 'file', 'personal');
+    if (!fileId) throw new ApiError(400, { type: 'validation-failed', detail: 'Choose a photo' });
+    await apiFetch(`/people/students/${id}/parent-photo`, {
+      method: 'POST',
+      body: JSON.stringify({ party, fileId }),
+    });
+  });
 }
 
 const SENSITIVE_KINDS = ['aadhaar', 'pan', 'bank'];
@@ -3907,4 +3938,12 @@ export async function studentListExport(
   } catch (error) {
     return builderError(error);
   }
+}
+
+/** Saves the students list view for the signed-in user of this school (never shared). */
+export async function studentListSaveView(v: StudentListView): Promise<void> {
+  await apiFetch('/me/preferences/students.list', {
+    method: 'PUT',
+    body: JSON.stringify({ value: v }),
+  });
 }

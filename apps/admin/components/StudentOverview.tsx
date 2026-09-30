@@ -1,4 +1,6 @@
 import { Card } from '@edupro/ui';
+import { PhotoUploader } from './PhotoUploader';
+import { studentParentPhotoUpload } from '@/lib/actions';
 import { ddmmyyyy, type ProfileCatalogue, type ProfileSnapshot } from '@/lib/profile';
 import type { Student360 } from '@/lib/types';
 
@@ -7,7 +9,9 @@ export function StudentOverview({
   student,
   profile,
   catalogue,
+  canEdit,
 }: {
+  canEdit: boolean;
   student: Student360;
   profile: ProfileSnapshot;
   catalogue: ProfileCatalogue;
@@ -108,20 +112,53 @@ export function StudentOverview({
           ))}
         </dl>
       </Card>
-      {block(
-        'Parents',
-        [
-          'father_name',
-          'father_mobile',
-          'father_email',
-          'father_occupation',
-          'mother_name',
-          'mother_mobile',
-          'mother_email',
-          'mother_occupation',
-        ],
-        'father',
-      )}
+      <Card
+        title="Parents"
+        actions={
+          <a
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            href={`/people/students/${student.id}/profile?tab=father`}
+          >
+            Edit
+          </a>
+        }
+      >
+        <div className="ep-parents">
+          {(['father', 'mother'] as const).map((party) => {
+            const pid = profile.photos?.[party];
+            const name = show(`${party}_name`);
+            return (
+              <div key={party} className="ep-parent">
+                <div className="ep-parent__photo">
+                  {pid ? (
+                    <img src={`/api/files/${pid}/view`} alt={`Photo of ${name ?? party}`} />
+                  ) : (
+                    <span aria-hidden="true">{party === 'father' ? 'F' : 'M'}</span>
+                  )}
+                </div>
+                <div className="ep-parent__info">
+                  <span className="ep-kicker">{party === 'father' ? 'Father' : 'Mother'}</span>
+                  <strong>{name ?? 'not filled'}</strong>
+                  <span>{show(`${party}_mobile`) ?? ''}</span>
+                  <span className="ep-field__help">
+                    {[show(`${party}_occupation`), show(`${party}_email`)]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                  {canEdit && name ? (
+                    <PhotoUploader
+                      action={studentParentPhotoUpload}
+                      studentId={student.id}
+                      label={pid ? 'Change photo' : 'Add photo'}
+                      fields={{ party }}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
       {block(
         'Academic and previous school',
         [

@@ -19,6 +19,7 @@ import {
   EnrolDto,
   LinkGuardianDto,
   ListStudentsQueryDto,
+  ParentPhotoDto,
   ReplaceDocumentDto,
   UpdateStudentDto,
   VerifyDocumentDto,
@@ -155,6 +156,24 @@ export class StudentsController {
     @Body() body: VerifyDocumentDto,
   ) {
     return this.students.verifyDocument(ctx, id, docId, body.verified);
+  }
+
+  @Post(':id/profile-print')
+  @ApiOperation({ summary: 'Student profile printout (A4 PDF with the student and parent photos)' })
+  @RequirePermission(PEOPLE.studentView)
+  profilePrint(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.students.requestProfilePrint(ctx, id);
+  }
+
+  @Post(':id/parent-photo')
+  @ApiOperation({ summary: "Set the father's, mother's or guardian's photo" })
+  @RequirePermission(PEOPLE.studentEdit)
+  parentPhoto(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: ParentPhotoDto,
+  ) {
+    return this.students.setParentPhoto(ctx, id, body.party, body.fileId);
   }
 
   @Post(':id/id-card')

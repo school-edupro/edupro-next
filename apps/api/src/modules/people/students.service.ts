@@ -839,6 +839,68 @@ export class StudentsService {
     });
   }
 
+  /** Student profile printout (A4 PDF with the student's and parents' photos). */
+  async requestProfilePrint(ctx: RequestContext, studentId: string) {
+    const tenant = requireTenant(ctx);
+    const student = await this.find(tenant, studentId);
+    return this.reports.create(
+      ctx,
+      {
+        dataset: 'student_profile',
+        format: 'pdf',
+        // the worker re-checks the requester's permission before printing full ID numbers
+        params: { studentId, showSensitive: ctx.permissions?.has(PEOPLE.sensitiveView) ?? false },
+        title: `Student profile ${student.admissionNo}`,
+      },
+      'people.student.profile_print',
+    );
+  }
+
+  /** Sets the father's, mother's or guardian's photo (kept as a guardian document too). */
+  async setParentPhoto(
+    ctx: RequestContext,
+    studentId: string,
+    party: 'father' | 'mother' | 'guardian',
+    fileId: string,
+  ) {
+    const tenant = requireTenant(ctx);
+    const file = await this.files.get(ctx, fileId);
+    if (file.status !== 'ready' || !/^image\/(png|jpeg|webp)$/.test(file.contentType))
+      throw new DomainError('validation-failed', 'Upload a JPG, PNG or WebP photo', {
+        status: 400,
+      });
+    return this.db.tenant(tenant, async (c) => {
+      await this.find(tenant, studentId, c);
+      const g = await c.query<{ id: string }>(
+        `SELECT g.id::text FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+          WHERE sg.student_id = $1 AND (CASE WHEN $2 = 'guardian' THEN sg.relation NOT IN ('father', 'mother') ELSE sg.relation::text = $2 END)
+          ORDER BY sg.is_primary DESC, sg.id LIMIT 1`,
+        [studentId, party],
+      );
+      const gid = g.rows[0]?.id;
+      if (!gid)
+        throw new DomainError('validation-failed', `Add the ${party}'s name in the profile first`, {
+          status: 400,
+        });
+      await c.query(
+        'UPDATE guardians SET photo_file_id = $2, updated_by = app.current_user_id(), updated_at = now() WHERE id = $1',
+        [gid, fileId],
+      );
+      await c.query(
+        `INSERT INTO person_documents (school_id, person_type, person_id, kind, file_id, created_by)
+         VALUES (app.current_school_id(), 'guardian', $1, 'photo', $2, app.current_user_id())`,
+        [gid, fileId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.guardian.photo',
+        entityType: 'guardians',
+        entityId: gid,
+        after: { party, fileId, studentId },
+      });
+      return { guardianId: gid, photoFileId: fileId };
+    });
+  }
+
   /** ID card as a rendered export (S4-04); the export centre serves the PDF. */
   async requestIdCard(ctx: RequestContext, studentId: string) {
     const tenant = requireTenant(ctx);

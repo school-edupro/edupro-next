@@ -18,6 +18,7 @@ import { renderCertificate, renderCertificateBatch } from '../renderers/certific
 import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
 import { renderDsrAccess } from '../renderers/dsr-access';
+import { renderStudentProfile } from '../renderers/student-profile';
 import {
   buildReport,
   reportToHtml,
@@ -137,6 +138,9 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
         } else if (renderer.id === 'report_card') {
           const doc = await renderReportCard(db, storage, envelope, row.params, exportId);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'student_profile') {
+          const doc = await renderStudentProfile(db, storage, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
         } else if (renderer.id === 'dsr_access') {
           const doc = await renderDsrAccess(db, envelope, row.params);

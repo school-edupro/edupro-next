@@ -435,6 +435,97 @@ describe('student 360 profile (e2e)', () => {
     });
   });
 
+  describe('parent photos, profile printout and per-user list views', () => {
+    const png = async () => {
+      const reg = await inject({
+        method: 'POST',
+        url: '/platform/files',
+        headers: h(),
+        json: {
+          fileName: 'p.png',
+          contentType: 'image/png',
+          sizeBytes: 12,
+          classification: 'personal',
+        },
+      });
+      await inject({
+        method: 'PUT',
+        url: reg.json().upload.url,
+        headers: {},
+        raw: { body: Buffer.from('fakepngbytes'), contentType: 'image/png' },
+      });
+      return reg.json().file.id as string;
+    };
+
+    it("sets the mother's photo; the profile returns every photo id", async () => {
+      const fileId = await png();
+      const r = await inject({
+        method: 'POST',
+        url: `/people/students/${first}/parent-photo`,
+        headers: h(),
+        json: { party: 'mother', fileId },
+      });
+      expect(r.statusCode).toBe(201);
+      expect((await read(first)).json().photos.mother).toBe(fileId);
+      const none = await inject({
+        method: 'POST',
+        url: `/people/students/${first}/parent-photo`,
+        headers: h(),
+        json: { party: 'guardian', fileId },
+      });
+      expect(none.statusCode).toBe(400);
+    });
+
+    it('queues the profile printout; full ID numbers only for a sensitive-data viewer', async () => {
+      const a = await inject({
+        method: 'POST',
+        url: `/people/students/${first}/profile-print`,
+        headers: h(),
+        json: {},
+      });
+      expect(a.statusCode).toBe(201);
+      expect(a.json()).toMatchObject({
+        dataset: 'student_profile',
+        format: 'pdf',
+        params: { studentId: first, showSensitive: false },
+      });
+      const b = await inject({
+        method: 'POST',
+        url: `/people/students/${first}/profile-print`,
+        headers: h(viewer),
+        json: {},
+      });
+      expect(b.json().params.showSensitive).toBe(true);
+      // the full-ID printout opens only for its requester or another sensitive viewer
+      expect(
+        (await inject({ method: 'GET', url: `/reports/exports/${b.json().id}`, headers: h() }))
+          .statusCode,
+      ).toBe(404);
+    });
+
+    it('keeps each user their own saved list view', async () => {
+      const put = await inject({
+        method: 'PUT',
+        url: '/me/preferences/students.list',
+        headers: h(),
+        json: { value: { columns: [{ key: 'religion' }], status: 'active' } },
+      });
+      expect(put.statusCode).toBe(200);
+      expect(
+        (await inject({ method: 'GET', url: '/me/preferences/students.list', headers: h() })).json()
+          .value.columns,
+      ).toEqual([{ key: 'religion' }]);
+      expect(
+        (
+          await inject({ method: 'GET', url: '/me/preferences/students.list', headers: h(viewer) })
+        ).json().value,
+      ).toBeNull();
+      expect(
+        (await inject({ method: 'GET', url: '/me/preferences/Bad Key', headers: h() })).statusCode,
+      ).toBe(400);
+    });
+  });
+
   describe('bulk update and create from Excel', () => {
     const upload = (mode: 'update' | 'create', csv: string) =>
       inject({

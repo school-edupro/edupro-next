@@ -60,3 +60,26 @@ export const QUICK_FILTERS: string[] = [
   'sibling_in_school',
   'boarding',
 ];
+
+/** A saved view as stored for the user, checked against today's fields (unknown keys and unfinished filters dropped). */
+export function sanitizeView(raw: unknown, known: ReadonlySet<string>): StudentListView {
+  if (!raw || typeof raw !== 'object') return DEFAULT_VIEW;
+  const v = raw as Partial<StudentListView>;
+  const statuses: ListStatus[] = ['active', 'inactive', 'withdrawn', 'all'];
+  const filters = (Array.isArray(v.filters) ? v.filters : []).filter((f) => {
+    if (!f || !known.has(f.key)) return false;
+    const n = (f.values ?? []).filter((x) => String(x).trim() !== '').length;
+    if (f.op === 'empty' || f.op === 'not_empty') return true;
+    return f.op === 'between' ? n >= 2 : n >= 1;
+  });
+  return {
+    columns: (Array.isArray(v.columns) ? v.columns : DEFAULT_VIEW.columns)
+      .filter((c) => c && known.has(c.key))
+      .slice(0, 60),
+    filters: filters.slice(0, 30),
+    sort: (Array.isArray(v.sort) ? v.sort : []).filter((x) => x && known.has(x.key)).slice(0, 3),
+    search: typeof v.search === 'string' ? v.search.slice(0, 80) : '',
+    status: statuses.includes(v.status as ListStatus) ? (v.status as ListStatus) : 'active',
+    size: [25, 50, 100, 200].includes(Number(v.size)) ? Number(v.size) : 50,
+  };
+}

@@ -151,10 +151,10 @@ export default async function StudentPage({
           id={sp.export}
           format={sp.format === 'pdf' ? 'pdf' : 'xlsx'}
           labels={{
-            queued: 'ID card requested',
+            queued: 'PDF requested',
             ready: 'Download',
-            pending: 'Preparing the card… it downloads automatically',
-            failed: 'The card could not be made',
+            pending: 'Preparing the PDF… it downloads automatically',
+            failed: 'The PDF could not be made',
             stuck:
               'Still waiting after a minute: the workers service prepares PDFs; check that it is running',
           }}
@@ -162,7 +162,12 @@ export default async function StudentPage({
       ) : null}
       <Notice params={sp} />
       {tab === 'overview' && profile && catalogue ? (
-        <StudentOverview student={student} profile={profile} catalogue={catalogue} />
+        <StudentOverview
+          student={student}
+          profile={profile}
+          catalogue={catalogue}
+          canEdit={can('people.student.edit')}
+        />
       ) : null}
       {tab === 'documents' ? (
         <StudentDocuments

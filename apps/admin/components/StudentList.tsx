@@ -1,5 +1,5 @@
 'use client';
-import { Dialog } from '@edupro/ui';
+import { Dialog, Drawer } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { ExportWatcher } from './ExportWatcher';
@@ -15,7 +15,7 @@ import {
   type StudentListView,
 } from '@/lib/student-list';
 
-const STORAGE_KEY = 'edupro.students.view.v1';
+const OLD_DEVICE_KEY = 'edupro.students.view.v1';
 const SIZES = [25, 50, 100, 200];
 
 const ddmmyyyy = (v: string | number | null | undefined) => {
@@ -78,41 +78,25 @@ function complete(f: StudentListView['filters'][number]): boolean {
   return f.op === 'between' ? n >= 2 : n >= 1;
 }
 
-function readView(): StudentListView | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as StudentListView;
-    if (!Array.isArray(v.columns) || !Array.isArray(v.filters)) return null;
-    return { ...DEFAULT_VIEW, ...v, filters: v.filters.filter(complete) };
-  } catch {
-    return null;
-  }
-}
-function writeView(v: StudentListView) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
-  } catch {
-    // private window or blocked storage: the view simply is not remembered
-  }
-}
-
 /**
  * The students list: counts by status, search and quick filters, any field as a filter, the columns
- * each user wants (chosen, ordered and renamed, remembered on this device), sortable headers, pages,
+ * each user wants (chosen, ordered and renamed, saved for the signed-in user only), sortable headers, pages,
  * and the same view as a branded Excel or PDF, or saved as a report.
  */
 export function StudentList({
   fields,
   initial,
+  initialView,
   can,
   actions,
 }: {
   fields: StudentListFields;
   initial: StudentListResult;
+  initialView: StudentListView;
   can: { create: boolean; importRun: boolean; builder: boolean; edit: boolean };
   actions: {
     load: (q: StudentListQuery) => Promise<Result<StudentListResult>>;
+    saveView: (v: StudentListView) => Promise<void>;
     exportFile: (
       q: StudentListQuery & { format: 'xlsx' | 'pdf' },
     ) => Promise<Result<{ exportId: string; format: string; spec: ReportSpec }>>;
@@ -128,16 +112,16 @@ export function StudentList({
     () => new Map(fields.fields.map((f) => [f.label.toLowerCase(), f])),
     [fields],
   );
-  const [view, setView] = useState<StudentListView>(DEFAULT_VIEW);
+  const [view, setView] = useState<StudentListView>(initialView);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<StudentListResult>(initial);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialView.search ?? '');
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [exporting, setExporting] = useState<{ id: string; format: string } | null>(null);
   const [pending, start] = useTransition();
-  const ready = useRef(false);
+  const ready = useRef(true);
   const fieldListId = 'sl-fields';
 
   const load = useCallback(
@@ -153,21 +137,20 @@ export function StudentList({
     [actions],
   );
 
-  // restore the user's view once, on this device
+  // views used to live in this browser; they are per user on the server now, so drop the old copy
   useEffect(() => {
-    const saved = readView();
-    ready.current = true;
-    if (saved) {
-      setView(saved);
-      setSearch(saved.search ?? '');
-      load(saved, 1);
+    try {
+      window.localStorage.removeItem(OLD_DEVICE_KEY);
+    } catch {
+      // storage blocked: nothing to remove
     }
   }, []);
 
   const apply = (next: StudentListView, p = 1) => {
     setView(next);
-    writeView(next);
     load(next, p);
+    // saved for the signed-in user of this school only; a failed save never blocks the list
+    void actions.saveView(next).catch(() => undefined);
   };
 
   // search as you type (after a short pause)
@@ -669,16 +652,28 @@ function FiltersDialog({
 }) {
   const [filters, setFilters] = useState(initial);
   return (
-    <Dialog
+    <Drawer
       open
-      size="lg"
-      title="Filters"
+      width="lg"
+      title="More filters"
       onClose={onClose}
-      primary={{ label: 'Apply filters', onClick: () => onApply(filters) }}
+      footer={
+        <>
+          <button type="button" className="ep-btn ep-btn--ghost" onClick={() => setFilters([])}>
+            Remove all
+          </button>
+          <button type="button" className="ep-btn ep-btn--secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="ep-btn ep-btn--primary" onClick={() => onApply(filters)}>
+            Apply filters
+          </button>
+        </>
+      }
     >
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        Filter on any field of the student profile, the fee profile or transport. All filters must
-        match.
+        Add conditions on any field of the profile, fees or transport. They work together with the
+        quick filters above the list; all must match. A condition without a value is ignored.
       </p>
       {filters.map((f, i) => (
         <FilterRow
@@ -693,14 +688,15 @@ function FiltersDialog({
           onRemove={() => setFilters((p) => p.filter((_, j) => j !== i))}
         />
       ))}
+      {!filters.length ? <p className="ep-field__help">No extra conditions yet.</p> : null}
       <button
         type="button"
-        className="ep-btn ep-btn--ghost ep-btn--sm"
+        className="ep-btn ep-btn--secondary ep-btn--sm"
         onClick={() => setFilters((p) => [...p, { key: 'religion', op: 'in', values: [] }])}
       >
-        + Add filter
+        + Add a condition
       </button>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -717,38 +713,56 @@ function ColumnsDialog({
 }) {
   const [cols, setCols] = useState(view.columns);
   const [q, setQ] = useState('');
+  const [drag, setDrag] = useState<number | null>(null);
   const byKey = new Map(fields.fields.map((f) => [f.key, f]));
   const chosen = new Set(cols.map((c) => c.key));
   const toggle = (key: string) =>
     setCols((p) =>
       p.some((c) => c.key === key) ? p.filter((c) => c.key !== key) : [...p, { key }],
     );
-  const move = (i: number, d: number) =>
+  const move = (from: number, to: number) =>
     setCols((p) => {
+      if (to < 0 || to >= p.length || from === to) return p;
       const n = [...p];
-      const j = i + d;
-      if (j < 0 || j >= n.length) return p;
-      [n[i], n[j]] = [n[j]!, n[i]!];
+      const [x] = n.splice(from, 1);
+      n.splice(to, 0, x!);
       return n;
     });
   const needle = q.trim().toLowerCase();
   return (
-    <Dialog
+    <Drawer
       open
-      size="lg"
+      width="lg"
       title="Columns"
       onClose={onClose}
-      primary={{ label: 'Show these columns', onClick: () => onApply(cols) }}
+      footer={
+        <>
+          <button
+            type="button"
+            className="ep-btn ep-btn--ghost"
+            onClick={() => setCols(DEFAULT_VIEW.columns)}
+          >
+            Default columns
+          </button>
+          <button type="button" className="ep-btn ep-btn--secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="ep-btn ep-btn--primary" onClick={() => onApply(cols)}>
+            Show {cols.length} column{cols.length === 1 ? '' : 's'}
+          </button>
+        </>
+      }
     >
       <div className="ep-sl__cols">
-        <div>
+        <section aria-label="Available fields" className="ep-sl__colpane">
           <label className="ep-field" htmlFor="sl-col-search">
-            <span className="ep-field__label">Find a field</span>
+            <span className="ep-field__label">Add fields</span>
             <input
               id="sl-col-search"
               className="ep-input"
+              type="search"
               value={q}
-              placeholder="e.g. mobile, religion, route"
+              placeholder="Search: mobile, religion, route…"
               onChange={(e) => setQ(e.target.value)}
             />
           </label>
@@ -761,15 +775,14 @@ function ColumnsDialog({
                   (!needle || f.label.toLowerCase().includes(needle)),
               );
               if (!list.length) return null;
+              const n = list.filter((f) => chosen.has(f.key)).length;
               return (
-                <details key={s.id} open={Boolean(needle)}>
+                <details key={s.id} open={Boolean(needle)} className="ep-sl__group">
                   <summary>
-                    {s.title}{' '}
-                    <span>
-                      ({list.filter((f) => chosen.has(f.key)).length}/{list.length})
-                    </span>
+                    <span>{s.title}</span>
+                    {n ? <span className="ep-badge ep-badge--info">{n}</span> : null}
                   </summary>
-                  <ul className="ep-rb__fieldlist">
+                  <ul>
                     {list.map((f) => (
                       <li key={f.key}>
                         <label>
@@ -777,9 +790,9 @@ function ColumnsDialog({
                             type="checkbox"
                             checked={chosen.has(f.key)}
                             onChange={() => toggle(f.key)}
-                          />{' '}
-                          {f.label}
-                          {f.masked ? <span className="ep-field__help"> (masked)</span> : null}
+                          />
+                          <span>{f.label}</span>
+                          {f.masked ? <span className="ep-sl__masked">masked</span> : null}
                         </label>
                       </li>
                     ))}
@@ -788,70 +801,82 @@ function ColumnsDialog({
               );
             })}
           </div>
-        </div>
-        <div>
-          <p className="ep-field__label" style={{ marginTop: 0 }}>
-            Shown, in this order ({cols.length})
+        </section>
+        <section aria-label="Columns shown" className="ep-sl__colpane">
+          <p className="ep-field__label" style={{ margin: 0 }}>
+            Shown, in order
           </p>
-          <p className="ep-field__help">
-            The Student column (photo, name, admission no) and Status are always shown.
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Drag or use the arrows. Type a header to rename a column. Student and Status always
+            show.
           </p>
-          <ol className="ep-rb__columns">
+          <ol className="ep-sl__chosen">
             {cols.map((c, i) => {
               const f = byKey.get(c.key);
+              const label = f?.label ?? c.key;
               return (
-                <li key={c.key} className="ep-rb__column">
-                  <span className="ep-rb__index">{i + 1}</span>
-                  <label className="ep-rb__header" htmlFor={`sl-h-${c.key}`}>
-                    <span className="ep-field__help">{f?.label ?? c.key}</span>
-                    <input
-                      id={`sl-h-${c.key}`}
-                      className="ep-input"
-                      value={c.label ?? ''}
-                      placeholder={f?.label ?? c.key}
-                      maxLength={80}
-                      aria-label={`Header for ${f?.label ?? c.key}`}
-                      onChange={(e) =>
-                        setCols((p) =>
-                          p.map((x, j) => (j === i ? { ...x, label: e.target.value || null } : x)),
-                        )
-                      }
-                    />
-                  </label>
-                  <span className="ep-rb__colbtns">
-                    <button
-                      type="button"
-                      className="ep-btn ep-btn--ghost ep-btn--sm"
-                      aria-label={`Move ${f?.label ?? c.key} up`}
-                      disabled={i === 0}
-                      onClick={() => move(i, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="ep-btn ep-btn--ghost ep-btn--sm"
-                      aria-label={`Move ${f?.label ?? c.key} down`}
-                      disabled={i === cols.length - 1}
-                      onClick={() => move(i, 1)}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="ep-btn ep-btn--ghost ep-btn--sm"
-                      aria-label={`Remove ${f?.label ?? c.key}`}
-                      onClick={() => toggle(c.key)}
-                    >
-                      ✕
-                    </button>
+                <li
+                  key={c.key}
+                  className="ep-sl__colrow"
+                  draggable
+                  onDragStart={() => setDrag(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (drag !== null) move(drag, i);
+                    setDrag(null);
+                  }}
+                >
+                  <span className="ep-sl__grip" aria-hidden="true">
+                    ⋮⋮
                   </span>
+                  <input
+                    className="ep-input"
+                    value={c.label ?? ''}
+                    placeholder={label}
+                    maxLength={80}
+                    aria-label={`Header for ${label}`}
+                    title={label}
+                    onChange={(e) =>
+                      setCols((p) =>
+                        p.map((x, j) => (j === i ? { ...x, label: e.target.value || null } : x)),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="ep-sl__icon"
+                    aria-label={`Move ${label} up`}
+                    disabled={i === 0}
+                    onClick={() => move(i, i - 1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="ep-sl__icon"
+                    aria-label={`Move ${label} down`}
+                    disabled={i === cols.length - 1}
+                    onClick={() => move(i, i + 1)}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="ep-sl__icon"
+                    aria-label={`Remove ${label}`}
+                    onClick={() => toggle(c.key)}
+                  >
+                    ✕
+                  </button>
                 </li>
               );
             })}
           </ol>
-        </div>
+          {!cols.length ? (
+            <p className="ep-field__help">Tick fields on the left to add columns.</p>
+          ) : null}
+        </section>
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

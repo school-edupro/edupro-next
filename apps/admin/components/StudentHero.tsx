@@ -1,6 +1,10 @@
 import { Badge } from '@edupro/ui';
 import { PhotoUploader } from './PhotoUploader';
-import { studentDocumentUpload, requestStudentIdCard } from '@/lib/actions';
+import {
+  requestStudentIdCard,
+  requestStudentProfilePrint,
+  studentDocumentUpload,
+} from '@/lib/actions';
 import { ddmmyyyy, type ProfileSnapshot } from '@/lib/profile';
 import type { Student360 } from '@/lib/types';
 
@@ -156,13 +160,15 @@ export function StudentHero({
             <a className="ep-btn ep-btn--primary" href={`/people/students/${student.id}/profile`}>
               {can('people.student.edit') ? 'Edit full profile' : 'Full profile'}
             </a>
+            <form action={requestStudentProfilePrint}>
+              <input type="hidden" name="id" value={student.id} />
+              <button type="submit" className="ep-btn ep-btn--secondary">
+                Print profile
+              </button>
+            </form>
             <form action={requestStudentIdCard}>
               <input type="hidden" name="id" value={student.id} />
-              <button
-                type="submit"
-                className="ep-btn ep-btn--secondary"
-               
-              >
+              <button type="submit" className="ep-btn ep-btn--secondary">
                 ID card
               </button>
             </form>

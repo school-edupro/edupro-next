@@ -1,4 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Put } from '@nestjs/common';
+import { DomainError } from '../../common/errors/domain-error';
+import { requireTenant } from '../../common/http/request-context';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedOnly, TenantOptional } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -68,5 +70,67 @@ export class MeController {
       academicYears: years,
       permissions,
     };
+  }
+
+  // ---- per-user preferences (screen views), never shared with other users ------------------------
+  private prefKey(key: string): string {
+    if (!/^[a-z0-9_.-]{2,60}$/.test(key))
+      throw new DomainError('validation-failed', 'Unknown preference', { status: 400 });
+    return key;
+  }
+
+  @Get('preferences/:key')
+  @ApiOperation({
+    summary: "The signed-in user's saved preference for this school (null when none)",
+  })
+  @AuthenticatedOnly()
+  async getPreference(@ReqCtx() ctx: RequestContext, @Param('key') key: string) {
+    const k = this.prefKey(key);
+    const tenant = requireTenant(ctx);
+    const value = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{ value: unknown }>(
+        'SELECT value FROM user_preferences WHERE user_id = $1 AND pref_key = $2',
+        [ctx.user.id, k],
+      );
+      return r.rows[0]?.value ?? null;
+    });
+    return { key: k, value };
+  }
+
+  @Put('preferences/:key')
+  @ApiOperation({ summary: "Save the signed-in user's preference for this school" })
+  @AuthenticatedOnly()
+  async putPreference(
+    @ReqCtx() ctx: RequestContext,
+    @Param('key') key: string,
+    @Body() body: { value?: unknown },
+  ) {
+    const k = this.prefKey(key);
+    const json = JSON.stringify(body?.value ?? null);
+    if (json.length > 32_000)
+      throw new DomainError('validation-failed', 'Preference too large', { status: 400 });
+    const tenant = requireTenant(ctx);
+    await this.db.tenant(tenant, (c) =>
+      c.query(
+        `INSERT INTO user_preferences (school_id, user_id, pref_key, value)
+         VALUES (app.current_school_id(), $1, $2, $3::jsonb)
+         ON CONFLICT (school_id, user_id, pref_key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [ctx.user.id, k, json],
+      ),
+    );
+    return { key: k, saved: true };
+  }
+
+  @Delete('preferences/:key')
+  @AuthenticatedOnly()
+  async deletePreference(@ReqCtx() ctx: RequestContext, @Param('key') key: string) {
+    const k = this.prefKey(key);
+    await this.db.tenant(requireTenant(ctx), (c) =>
+      c.query('DELETE FROM user_preferences WHERE user_id = $1 AND pref_key = $2', [
+        ctx.user.id,
+        k,
+      ]),
+    );
+    return { key: k, deleted: true };
   }
 }

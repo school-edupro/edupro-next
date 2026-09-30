@@ -21,6 +21,13 @@ export const RENDERERS: Record<string, RendererDefinition> = {
     page: { width: '85.6mm', height: '54mm' },
     requiredParams: ['studentId'],
   },
+  student_profile: {
+    id: 'student_profile',
+    title: 'Student profile',
+    permission: 'people.student.view',
+    page: { width: '210mm', height: '297mm' },
+    requiredParams: ['studentId'],
+  },
   employee_id_card: {
     id: 'employee_id_card',
     title: 'Employee ID card',
