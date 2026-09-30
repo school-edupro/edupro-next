@@ -366,6 +366,16 @@ export const PROFILE_FIELDS: ProfileField[] = [
     excelColumn: 'AH',
   },
   {
+    key: 'house',
+    section: 'academic',
+    label: 'House',
+    type: 'list',
+    list: 'House',
+    help: 'School house for sports and activities',
+    store: { t: 'col', col: 'house' },
+    excelColumn: '—',
+  },
+  {
     key: 'boarding',
     section: 'academic',
     label: 'Day Scholar / Hosteller',
@@ -1846,6 +1856,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
 
 /** Default dropdown values, preloaded into each school's `profile_lists` master. */
 export const PROFILE_LIST_DEFAULTS: Record<string, string[]> = {
+  House: ['Red', 'Blue', 'Green', 'Yellow'],
   YesNo: ['Yes', 'No'],
   Gender: ['Male', 'Female', 'Other'],
   BloodGroup: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Not Known'],

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { PoolClient, TenantContext } from '@edupro/db';
+import { maskValue, refreshCompleteness, type PoolClient, type TenantContext } from '@edupro/db';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -13,9 +13,20 @@ import type {
   EnrolDto,
   LinkGuardianDto,
   ListStudentsQueryDto,
+  ReplaceDocumentDto,
   UpdateStudentDto,
 } from './people.dto';
 import { PEOPLE } from './people.permissions';
+
+/** Documents whose number is an ID number (masked like the profile). */
+const SENSITIVE_DOC_KINDS = new Set(['aadhaar', 'pan', 'bank']);
+/** Uploading one of these ticks the matching item of the document checklist. */
+const CHECKLIST_BY_KIND: Record<string, string> = {
+  birth_certificate: 'birth_certificate_submitted',
+  address_proof: 'residence_proof_submitted',
+  photo: 'student_photo_submitted',
+  aadhaar: 'aadhaar_copy_submitted',
+};
 
 export interface StudentRow {
   id: string;
@@ -78,6 +89,9 @@ export interface DocumentRow {
   issuedOn: string | null;
   expiresOn: string | null;
   verifiedAt: string | null;
+  verifiedBy: string | null;
+  uploadedAt: string;
+  uploadedBy: string | null;
 }
 
 interface StudentDbRow {
@@ -296,7 +310,12 @@ export class StudentsService {
           WHERE e.student_id = $1 ORDER BY y.start_date DESC`,
         [id],
       );
-      const documents = await this.documentsOf(c, 'student', id);
+      const documents = await this.documentsOf(
+        c,
+        'student',
+        id,
+        ctx.permissions?.has(PEOPLE.sensitiveView) ?? false,
+      );
       const siblings = await c.query<{ id: string; display_name: string; admission_no: string }>(
         `SELECT DISTINCT s.id::text, s.display_name, s.admission_no FROM student_siblings ss JOIN students s ON s.id = ss.sibling_id
           WHERE ss.student_id = $1 AND s.deleted_at IS NULL ORDER BY s.display_name`,
@@ -602,6 +621,7 @@ export class StudentsService {
     c: PoolClient,
     personType: 'student' | 'employee' | 'guardian',
     personId: string,
+    showSensitive = false,
   ): Promise<DocumentRow[]> {
     const r = await c.query<{
       id: string;
@@ -614,9 +634,16 @@ export class StudentsService {
       issued_on: string | null;
       expires_on: string | null;
       verified_at: Date | null;
+      verified_by: string | null;
+      created_at: Date;
+      created_by: string | null;
     }>(
-      `SELECT d.id::text, d.kind::text, d.file_id::text, f.original_name AS file_name, f.content_type, d.title, d.number, d.issued_on::text, d.expires_on::text, d.verified_at
+      `SELECT d.id::text, d.kind::text, d.file_id::text, f.original_name AS file_name, f.content_type, d.title, d.number,
+              d.issued_on::text, d.expires_on::text, d.verified_at, vu.display_name AS verified_by, d.created_at,
+              cu.display_name AS created_by
          FROM person_documents d JOIN files f ON f.id = d.file_id
+         LEFT JOIN users vu ON vu.id = d.verified_by
+         LEFT JOIN users cu ON cu.id = d.created_by
         WHERE d.person_type = $1::person_type AND d.person_id = $2 AND d.deleted_at IS NULL ORDER BY d.created_at DESC`,
       [personType, personId],
     );
@@ -627,10 +654,17 @@ export class StudentsService {
       fileName: x.file_name,
       contentType: x.content_type,
       title: x.title,
-      number: x.number,
+      // ID numbers on documents follow the same rule as the profile: masked unless permitted
+      number:
+        x.number && SENSITIVE_DOC_KINDS.has(x.kind) && !showSensitive
+          ? maskValue(x.number, x.kind === 'aadhaar' ? 'digits12' : undefined)
+          : x.number,
       issuedOn: x.issued_on,
       expiresOn: x.expires_on,
       verifiedAt: x.verified_at ? x.verified_at.toISOString() : null,
+      verifiedBy: x.verified_by,
+      uploadedAt: x.created_at.toISOString(),
+      uploadedBy: x.created_by,
     }));
   }
 
@@ -665,6 +699,7 @@ export class StudentsService {
           'UPDATE students SET photo_file_id = $2, updated_by = app.current_user_id() WHERE id = $1',
           [studentId, dto.fileId],
         );
+      await this.tickChecklist(c, studentId, dto.kind);
       await this.audit.stage(ctx, c, {
         action: 'people.document.add',
         entityType: 'person_documents',
@@ -677,7 +712,130 @@ export class StudentsService {
           number: dto.number ?? null,
         },
       });
-      return this.documentsOf(c, 'student', studentId);
+      return this.documentsOf(c, 'student', studentId, ctx.permissions?.has(PEOPLE.sensitiveView));
+    });
+  }
+
+  /** Marks the matching "... submitted" item of the document checklist as Yes. */
+  private async tickChecklist(c: PoolClient, studentId: string, kind: string) {
+    const key = CHECKLIST_BY_KIND[kind];
+    if (!key) return;
+    await c.query(
+      `UPDATE students SET profile = profile || jsonb_build_object($2::text, 'Yes') WHERE id = $1`,
+      [studentId, key],
+    );
+    await refreshCompleteness(c, studentId);
+  }
+
+  private async documentFor(c: PoolClient, studentId: string, docId: string) {
+    const r = await c.query<{ id: string; kind: string; file_id: string; title: string | null }>(
+      `SELECT id::text, kind::text, file_id::text, title FROM person_documents
+        WHERE id = $1 AND person_type = 'student' AND person_id = $2 AND deleted_at IS NULL`,
+      [docId, studentId],
+    );
+    if (!r.rows[0]) throw new DomainError('not-found', 'Document not found');
+    return r.rows[0];
+  }
+
+  /** Replaces a document's file (and optionally its number and dates); the old one is kept as history. */
+  async replaceDocument(
+    ctx: RequestContext,
+    studentId: string,
+    docId: string,
+    dto: ReplaceDocumentDto,
+  ): Promise<DocumentRow[]> {
+    const tenant = requireTenant(ctx);
+    const file = await this.files.get(ctx, dto.fileId);
+    if (file.status !== 'ready')
+      throw new DomainError('file.not_ready', 'Upload the file before attaching it', {
+        status: 409,
+      });
+    return this.db.tenant(tenant, async (c) => {
+      await this.find(tenant, studentId, c);
+      const old = await this.documentFor(c, studentId, docId);
+      await c.query('UPDATE person_documents SET deleted_at = now() WHERE id = $1', [docId]);
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO person_documents (school_id, person_type, person_id, kind, file_id, title, number, issued_on, expires_on, created_by)
+         SELECT school_id, person_type, person_id, kind, $2, COALESCE($3, title), COALESCE($4, number),
+                COALESCE($5::date, issued_on), COALESCE($6::date, expires_on), app.current_user_id()
+           FROM person_documents WHERE id = $1 RETURNING id::text`,
+        [
+          docId,
+          dto.fileId,
+          dto.title ?? null,
+          dto.number ?? null,
+          dto.issuedOn ?? null,
+          dto.expiresOn ?? null,
+        ],
+      );
+      if (old.kind === 'photo')
+        await c.query(
+          'UPDATE students SET photo_file_id = $2, updated_by = app.current_user_id() WHERE id = $1',
+          [studentId, dto.fileId],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'people.document.replace',
+        entityType: 'person_documents',
+        entityId: r.rows[0]!.id,
+        before: { id: docId, kind: old.kind, fileId: old.file_id },
+        after: { kind: old.kind, fileId: dto.fileId },
+      });
+      return this.documentsOf(c, 'student', studentId, ctx.permissions?.has(PEOPLE.sensitiveView));
+    });
+  }
+
+  async removeDocument(
+    ctx: RequestContext,
+    studentId: string,
+    docId: string,
+  ): Promise<DocumentRow[]> {
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      await this.find(tenant, studentId, c);
+      const old = await this.documentFor(c, studentId, docId);
+      await c.query('UPDATE person_documents SET deleted_at = now() WHERE id = $1', [docId]);
+      if (old.kind === 'photo') {
+        // fall back to the newest remaining photo, if any
+        await c.query(
+          `UPDATE students SET photo_file_id = (
+             SELECT file_id FROM person_documents WHERE person_type = 'student' AND person_id = $1 AND kind = 'photo'
+                AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1), updated_by = app.current_user_id()
+            WHERE id = $1`,
+          [studentId],
+        );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.document.remove',
+        entityType: 'person_documents',
+        entityId: docId,
+        before: { kind: old.kind, fileId: old.file_id, title: old.title },
+      });
+      return this.documentsOf(c, 'student', studentId, ctx.permissions?.has(PEOPLE.sensitiveView));
+    });
+  }
+
+  async verifyDocument(
+    ctx: RequestContext,
+    studentId: string,
+    docId: string,
+    verified: boolean,
+  ): Promise<DocumentRow[]> {
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      await this.find(tenant, studentId, c);
+      await this.documentFor(c, studentId, docId);
+      await c.query(
+        `UPDATE person_documents SET verified_at = CASE WHEN $2 THEN now() END,
+                verified_by = CASE WHEN $2 THEN app.current_user_id() END WHERE id = $1`,
+        [docId, verified],
+      );
+      await this.audit.stage(ctx, c, {
+        action: verified ? 'people.document.verify' : 'people.document.unverify',
+        entityType: 'person_documents',
+        entityId: docId,
+        after: { verified },
+      });
+      return this.documentsOf(c, 'student', studentId, ctx.permissions?.has(PEOPLE.sensitiveView));
     });
   }
 

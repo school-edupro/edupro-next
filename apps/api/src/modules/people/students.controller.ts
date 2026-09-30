@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -8,7 +19,9 @@ import {
   EnrolDto,
   LinkGuardianDto,
   ListStudentsQueryDto,
+  ReplaceDocumentDto,
   UpdateStudentDto,
+  VerifyDocumentDto,
 } from './people.dto';
 import { PEOPLE } from './people.permissions';
 import { StudentsService } from './students.service';
@@ -107,6 +120,41 @@ export class StudentsController {
     @Body() body: AddDocumentDto,
   ) {
     return this.students.addDocument(ctx, id, body);
+  }
+
+  @Put(':id/documents/:docId')
+  @ApiOperation({ summary: 'Replace a document file (the old one is kept as history)' })
+  @RequirePermission(PEOPLE.studentEdit)
+  replaceDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: ReplaceDocumentDto,
+  ) {
+    return this.students.replaceDocument(ctx, id, docId, body);
+  }
+
+  @Delete(':id/documents/:docId')
+  @ApiOperation({ summary: 'Remove a document (kept in history, audited)' })
+  @RequirePermission(PEOPLE.studentEdit)
+  removeDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+  ) {
+    return this.students.removeDocument(ctx, id, docId);
+  }
+
+  @Post(':id/documents/:docId/verify')
+  @ApiOperation({ summary: 'Mark a document as checked against the original (or undo)' })
+  @RequirePermission(PEOPLE.studentEdit)
+  verifyDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: VerifyDocumentDto,
+  ) {
+    return this.students.verifyDocument(ctx, id, docId, body.verified);
   }
 
   @Post(':id/id-card')

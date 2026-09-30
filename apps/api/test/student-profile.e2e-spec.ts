@@ -85,8 +85,11 @@ describe('student 360 profile (e2e)', () => {
     const r = await inject({ method: 'GET', url: '/people/profile/catalogue', headers: h() });
     expect(r.statusCode).toBe(200);
     const body = r.json();
-    expect(body.fields).toHaveLength(188);
+    expect(body.fields).toHaveLength(189);
     expect(body.sections).toHaveLength(14);
+    expect(body.fields.find((f: { key: string }) => f.key === 'house').options).toEqual(
+      expect.arrayContaining(['Red', 'Blue']),
+    );
     const religion = body.fields.find((f: { key: string }) => f.key === 'religion');
     expect(religion.options).toEqual(expect.arrayContaining(['Hindu', 'Sikh', 'Parsi']));
     expect(body.fields.some((f: { label: string }) => /School \/ Branch/.test(f.label))).toBe(
@@ -329,6 +332,107 @@ describe('student 360 profile (e2e)', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ lastName: null, category: null });
+  });
+
+  describe('documents', () => {
+    const upload = async (name: string, contentType: string) => {
+      const reg = await inject({
+        method: 'POST',
+        url: '/platform/files',
+        headers: h(),
+        json: { fileName: name, contentType, sizeBytes: 12, classification: 'personal' },
+      });
+      expect(reg.statusCode).toBe(201);
+      const put = await inject({
+        method: 'PUT',
+        url: reg.json().upload.url,
+        headers: {},
+        raw: { body: Buffer.from('%PDF-1.4 abc'), contentType },
+      });
+      expect(put.statusCode).toBeLessThan(300);
+      return reg.json().file.id as string;
+    };
+
+    it('adds, masks ID numbers, ticks the checklist, verifies, replaces and removes', async () => {
+      const f1 = await upload('aadhaar.pdf', 'application/pdf');
+      const add = await inject({
+        method: 'POST',
+        url: `/people/students/${second}/documents`,
+        headers: h(),
+        json: { kind: 'aadhaar', fileId: f1, number: '999988887777' },
+      });
+      expect(add.statusCode).toBe(201);
+      const doc = add.json().find((d: { kind: string }) => d.kind === 'aadhaar');
+      expect(doc.number).toBe('XXXX-XXXX-7777');
+      expect((await read(second)).json().values.aadhaar_copy_submitted).toBe('Yes');
+      const full = await inject({
+        method: 'GET',
+        url: `/people/students/${second}`,
+        headers: h(viewer),
+      });
+      expect(full.json().documents.find((d: { id: string }) => d.id === doc.id).number).toBe(
+        '999988887777',
+      );
+
+      const ver = await inject({
+        method: 'POST',
+        url: `/people/students/${second}/documents/${doc.id}/verify`,
+        headers: h(),
+        json: { verified: true },
+      });
+      expect(ver.json().find((d: { id: string }) => d.id === doc.id).verifiedAt).not.toBeNull();
+
+      const f2 = await upload('aadhaar-new.pdf', 'application/pdf');
+      const rep = await inject({
+        method: 'PUT',
+        url: `/people/students/${second}/documents/${doc.id}`,
+        headers: h(),
+        json: { fileId: f2 },
+      });
+      expect(rep.statusCode).toBe(200);
+      const current = rep.json().filter((d: { kind: string }) => d.kind === 'aadhaar');
+      expect(current).toHaveLength(1);
+      expect(current[0]).toMatchObject({ fileId: f2, number: 'XXXX-XXXX-7777', verifiedAt: null });
+
+      const del = await inject({
+        method: 'DELETE',
+        url: `/people/students/${second}/documents/${current[0].id}`,
+        headers: h(),
+      });
+      expect(del.statusCode).toBe(200);
+      expect(del.json().some((d: { kind: string }) => d.kind === 'aadhaar')).toBe(false);
+      const history = await withMigrator((c) =>
+        c.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM person_documents WHERE person_id = $1 AND kind = 'aadhaar'`,
+          [second],
+        ),
+      );
+      expect(history.rows[0]!.n).toBe('2'); // kept as history
+    });
+
+    it('a photo becomes the student photo; removing it falls back to the previous one', async () => {
+      const p1 = await upload('p1.png', 'image/png');
+      const p2 = await upload('p2.png', 'image/png');
+      for (const fileId of [p1, p2])
+        await inject({
+          method: 'POST',
+          url: `/people/students/${second}/documents`,
+          headers: h(),
+          json: { kind: 'photo', fileId },
+        });
+      const s1 = await inject({ method: 'GET', url: `/people/students/${second}`, headers: h() });
+      expect(s1.json().photoFileId).toBe(p2);
+      const latest = s1.json().documents.find((d: { fileId: string }) => d.fileId === p2);
+      await inject({
+        method: 'DELETE',
+        url: `/people/students/${second}/documents/${latest.id}`,
+        headers: h(),
+      });
+      expect(
+        (await inject({ method: 'GET', url: `/people/students/${second}`, headers: h() })).json()
+          .photoFileId,
+      ).toBe(p1);
+    });
   });
 
   describe('bulk update and create from Excel', () => {

@@ -83,3 +83,10 @@ export function cascadeOf(key: string): { country: string; state: string; city: 
   const g = groups.find((x) => x.includes(key));
   return g ? { country: g[0], state: g[1], city: g[2] } : null;
 }
+
+/** 2026-09-30 (or a date string) as 30-09-2026, the format schools write by hand. */
+export function ddmmyyyy(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  return m ? `${m[3]!}-${m[2]!}-${m[1]!}` : v;
+}

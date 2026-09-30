@@ -577,8 +577,85 @@ export async function enrolStudent(fd: FormData) {
 
 export async function requestStudentIdCard(fd: FormData) {
   const id = str(fd, 'id');
-  return run('/reports/exports', () =>
-    apiFetch(`/people/students/${id}/id-card`, { method: 'POST', body: '{}' }),
+  const back = `/people/students/${id}`;
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>(`/people/students/${id}/id-card`, {
+      method: 'POST',
+      body: '{}',
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  // stay on the student: the page watches the export and starts the download when it is ready
+  redirect(`${back}?export=${out!.id}&format=pdf`);
+}
+
+const SENSITIVE_KINDS = ['aadhaar', 'pan', 'bank'];
+const studentBack = (fd: FormData, tab = 'documents') =>
+  `/people/students/${str(fd, 'id')}?tab=${str(fd, 'tab') || tab}`;
+
+/** Uploads a document (or the photo) for a student and attaches it. */
+export async function studentDocumentUpload(fd: FormData) {
+  const id = str(fd, 'id');
+  const kind = str(fd, 'kind') || 'other';
+  const back = studentBack(fd);
+  return run(back, async () => {
+    const [fileId] = await uploadAll(
+      fd,
+      'file',
+      SENSITIVE_KINDS.includes(kind) ? 'sensitive' : 'personal',
+    );
+    if (!fileId)
+      throw new ApiError(400, { type: 'validation-failed', detail: 'Choose a file to upload' });
+    await apiFetch(`/people/students/${id}/documents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind,
+        fileId,
+        title: opt(fd, 'title'),
+        number: opt(fd, 'number'),
+        issuedOn: opt(fd, 'issuedOn'),
+        expiresOn: opt(fd, 'expiresOn'),
+      }),
+    });
+  });
+}
+
+export async function studentDocumentReplace(fd: FormData) {
+  const id = str(fd, 'id');
+  const docId = str(fd, 'docId');
+  const kind = str(fd, 'kind');
+  return run(studentBack(fd), async () => {
+    const [fileId] = await uploadAll(
+      fd,
+      'file',
+      SENSITIVE_KINDS.includes(kind) ? 'sensitive' : 'personal',
+    );
+    if (!fileId)
+      throw new ApiError(400, { type: 'validation-failed', detail: 'Choose the new file' });
+    await apiFetch(`/people/students/${id}/documents/${docId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ fileId, number: opt(fd, 'number') }),
+    });
+  });
+}
+
+export async function studentDocumentRemove(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(studentBack(fd), () =>
+    apiFetch(`/people/students/${id}/documents/${str(fd, 'docId')}`, { method: 'DELETE' }),
+  );
+}
+
+export async function studentDocumentVerify(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(studentBack(fd), () =>
+    apiFetch(`/people/students/${id}/documents/${str(fd, 'docId')}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ verified: str(fd, 'verified') === 'true' }),
+    }),
   );
 }
 
@@ -911,8 +988,10 @@ async function uploadAll(
     const target = reg.upload.url.startsWith('http')
       ? reg.upload.url
       : `${process.env.API_BASE_URL ?? 'http://localhost:4000'}${reg.upload.url}`;
-    const headers: Record<string, string> = { 'content-type': entry.type };
-    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers[k] = v;
+    // Headers merges case-insensitively: the upload target may send its own Content-Type, and a
+    // doubled header ("application/pdf, application/pdf") is refused with 415
+    const headers = new Headers({ 'content-type': entry.type });
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
     const put = await fetch(target, {
       method: reg.upload.method || 'PUT',
       headers,

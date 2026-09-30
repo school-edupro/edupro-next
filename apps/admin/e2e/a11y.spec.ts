@@ -117,6 +117,22 @@ test.describe('accessibility (axe)', () => {
           .find((h) => /^\/people\/students\/\d+$/.test(h)),
       );
     expect(href).toBeTruthy();
+    // the student page tabs
+    for (const tab of ['overview', 'profile', 'academics', 'documents', 'fees', 'status']) {
+      await page.goto(`${href!}?tab=${tab}`);
+      await page.waitForLoadState('networkidle');
+      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+      expect(
+        bad.map(
+          (v) =>
+            `student ${tab} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+      ).toEqual([]);
+    }
     for (const tab of ['student', 'address', 'father']) {
       await page.goto(`${href!}/profile?tab=${tab}`);
       await page.waitForLoadState('networkidle');

@@ -290,6 +290,9 @@ export interface PersonDocument {
   issuedOn: string | null;
   expiresOn: string | null;
   verifiedAt: string | null;
+  verifiedBy?: string | null;
+  uploadedAt?: string;
+  uploadedBy?: string | null;
 }
 
 export interface Student360 extends Student {

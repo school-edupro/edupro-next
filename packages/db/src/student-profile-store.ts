@@ -69,6 +69,7 @@ interface StudentDbRow {
   gender: string;
   category: string | null;
   blood_group: string | null;
+  house: string | null;
   admitted_on: string | null;
   address: Record<string, unknown>;
   profile: Record<string, unknown>;
@@ -145,7 +146,7 @@ export async function readStudentProfiles(
   if (!studentIds.length) return out;
   const ids = [...studentIds];
   const s = await c.query<StudentDbRow>(
-    `SELECT id::text, admission_no, display_name, first_name, last_name, dob::text, gender::text, category, blood_group,
+    `SELECT id::text, admission_no, display_name, first_name, last_name, dob::text, gender::text, category, blood_group, house,
             admitted_on::text, address, profile, secure, updated_at
        FROM students WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
     [ids],

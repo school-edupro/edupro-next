@@ -166,6 +166,18 @@ export const AddDocumentSchema = z.object({
 });
 export class AddDocumentDto extends createZodDto(AddDocumentSchema) {}
 
+export const ReplaceDocumentSchema = z.object({
+  fileId: IdSchema,
+  title: z.string().trim().max(120).optional(),
+  number: z.string().trim().max(40).optional(),
+  issuedOn: DateSchema.optional(),
+  expiresOn: DateSchema.optional(),
+});
+export class ReplaceDocumentDto extends createZodDto(ReplaceDocumentSchema) {}
+
+export const VerifyDocumentSchema = z.object({ verified: z.boolean() });
+export class VerifyDocumentDto extends createZodDto(VerifyDocumentSchema) {}
+
 // ---- employees -----------------------------------------------------------------------------------
 export const UpsertPostingSchema = z.object({
   academicYearId: IdSchema.optional(),
