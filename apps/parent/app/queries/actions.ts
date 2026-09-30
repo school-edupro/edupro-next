@@ -7,9 +7,16 @@ const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').tri
 
 function fail(back: string, error: unknown): never {
   if (error instanceof ApiError) {
-    const detail = typeof error.problem.detail === 'string' ? error.problem.detail : '';
+    const fieldErrors = error.problem.errors as Record<string, string> | undefined;
+    // field-level validation: say which field and why, e.g. "Residential PIN Code: 6-digit PIN code"
+    const detail =
+      fieldErrors && Object.keys(fieldErrors).length
+        ? Object.values(fieldErrors).join('; ')
+        : typeof error.problem.detail === 'string'
+          ? error.problem.detail
+          : '';
     redirect(
-      `${back}${back.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 160))}`,
+      `${back}${back.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 300))}`,
     );
   }
   throw error;

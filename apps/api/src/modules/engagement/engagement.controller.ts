@@ -174,6 +174,16 @@ export class EngagementController {
     return this.family.createChangeRequest(ctx, dto);
   }
 
+  @Get('change-requests/profile-fields')
+  @ApiOperation({ summary: 'Profile fields a family may ask to change, with drop-down options' })
+  @RequirePermission(ENGAGEMENT.changeCreate)
+  profileFields(@ReqCtx() ctx: RequestContext, @Query('studentId') studentId?: string) {
+    return this.family.familyProfileFields(
+      ctx,
+      studentId && /^\d{1,18}$/.test(studentId) ? studentId : undefined,
+    );
+  }
+
   @Get('change-requests/mine')
   @RequirePermission(ENGAGEMENT.changeCreate)
   myChanges(@ReqCtx() ctx: RequestContext, @Query() q: ListChangeRequestsDto) {

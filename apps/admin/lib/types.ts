@@ -1156,7 +1156,7 @@ export interface ChangeRequest {
   studentId: string;
   studentName: string;
   requestedBy: string | null;
-  entity: 'student' | 'guardian';
+  entity: 'student' | 'guardian' | 'profile';
   entityId: string;
   entityName: string | null;
   changes: Record<string, { from: unknown; to: string }>;
@@ -1166,6 +1166,7 @@ export interface ChangeRequest {
   decidedAt: string | null;
   decisionNote: string | null;
   createdAt: string;
+  fieldLabels?: Record<string, string>;
 }
 export interface TransportRoute {
   id: string;

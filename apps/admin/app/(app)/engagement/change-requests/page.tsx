@@ -77,7 +77,8 @@ export default async function ChangeRequestsPage({
                 <ul style={{ margin: 0, paddingLeft: 'var(--sp-3)' }}>
                   {Object.entries(r.changes).map(([k, v]) => (
                     <li key={k}>
-                      <code>{k}</code>: {String(v.from ?? '—')} → <strong>{v.to}</strong>
+                      {r.fieldLabels?.[k] ?? <code>{k}</code>}: {String(v.from ?? '—')} →{' '}
+                      <strong>{String(v.to)}</strong>
                     </li>
                   ))}
                 </ul>

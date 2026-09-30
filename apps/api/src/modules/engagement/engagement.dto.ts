@@ -117,10 +117,11 @@ export const CHANGEABLE: Record<'student' | 'guardian', string[]> = {
 };
 export const CreateChangeRequestSchema = z.object({
   studentId: IdSchema,
-  entity: z.enum(['student', 'guardian']),
+  /** `profile` = catalogue fields of the student 360 profile (FAMILY_EDITABLE_KEYS). */
+  entity: z.enum(['student', 'guardian', 'profile']),
   entityId: IdSchema.optional(),
   changes: z
-    .record(z.string().min(1).max(40), z.string().trim().max(200))
+    .record(z.string().min(1).max(60), z.string().trim().max(300))
     .refine((v) => Object.keys(v).length > 0, { message: 'at least one change' }),
   reason: z.string().trim().max(500).optional(),
 });

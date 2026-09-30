@@ -51,6 +51,114 @@ interface Family {
   pendingChangeRequests: number;
 }
 
+interface FamilyField {
+  key: string;
+  section: string;
+  label: string;
+  type: string;
+  options: string[] | null;
+  help: string | null;
+}
+interface FamilyFields {
+  current: Record<string, string | number | null> | null;
+  fields: FamilyField[];
+}
+
+const SECTION_TITLES: Record<string, string> = {
+  student: 'Student',
+  contact: 'Contact',
+  address: 'Address',
+  transport_health: 'Transport and health',
+  father: 'Father',
+  mother: 'Mother',
+  guardian: 'Guardian',
+};
+
+/** Profile fields the family may ask to change, grouped by section; the office approves them. */
+function MoreDetailsForm({
+  child,
+  data,
+  lang,
+}: {
+  child: Child;
+  data: FamilyFields;
+  lang: Awaited<ReturnType<typeof currentLang>>;
+}) {
+  const sections = [...new Set(data.fields.map((f) => f.section))];
+  return (
+    <details style={{ marginTop: 'var(--sp-3)' }}>
+      <summary className="ep-btn ep-btn--ghost ep-btn--sm">
+        {t(lang, 'Update more details (address, contact, parents)')}
+      </summary>
+      <form
+        action={requestProfileChange}
+        style={{ display: 'grid', gap: 'var(--sp-3)', marginTop: 'var(--sp-2)' }}
+      >
+        <input type="hidden" name="studentId" value={child.id} />
+        <input type="hidden" name="entity" value="profile" />
+        <p className="ep-kicker" style={{ margin: 0 }}>
+          {t(lang, 'Fill only what has changed. The office checks each request before it applies.')}
+        </p>
+        {sections.map((sec) => (
+          <fieldset
+            key={sec}
+            style={{ border: 'none', padding: 0, margin: 0, display: 'grid', gap: 'var(--sp-2)' }}
+          >
+            <legend style={{ fontWeight: 600 }}>{t(lang, SECTION_TITLES[sec] ?? sec)}</legend>
+            {data.fields
+              .filter((f) => f.section === sec)
+              .map((f) => {
+                const cur = data.current?.[f.key];
+                const listId = f.options ? `dl-${child.id}-${f.key}` : undefined;
+                return (
+                  <label key={f.key} className="ep-field">
+                    <span className="ep-field__label">{f.label}</span>
+                    <input
+                      className="ep-input"
+                      name={`change.${f.key}`}
+                      type={f.type === 'date' ? 'date' : f.type === 'email' ? 'email' : 'text'}
+                      inputMode={
+                        ['mobile', 'pin', 'year', 'number'].includes(f.type) ? 'numeric' : undefined
+                      }
+                      list={listId}
+                      autoComplete="off"
+                      placeholder={cur === null || cur === undefined ? '' : String(cur)}
+                      maxLength={300}
+                    />
+                    {listId ? (
+                      <datalist id={listId}>
+                        {f.options!.map((o) => (
+                          <option key={o} value={o} />
+                        ))}
+                      </datalist>
+                    ) : null}
+                    {cur !== null && cur !== undefined ? (
+                      <span className="ep-field__help">
+                        {t(lang, 'On file')}: {String(cur)}
+                      </span>
+                    ) : null}
+                  </label>
+                );
+              })}
+          </fieldset>
+        ))}
+        <input
+          className="ep-input"
+          name="reason"
+          placeholder={t(lang, 'Reason (optional)')}
+          maxLength={500}
+          aria-label={t(lang, 'Reason')}
+        />
+        <div>
+          <Button type="submit" variant="secondary">
+            {t(lang, 'Send to the office')}
+          </Button>
+        </div>
+      </form>
+    </details>
+  );
+}
+
 /** S10: the family profile with change requests and DPDP consents. */
 export default async function ProfilePage({
   searchParams,
@@ -78,6 +186,13 @@ export default async function ProfilePage({
       );
     throw error;
   }
+  const moreFields = await Promise.all(
+    fam.children.map((c) =>
+      bff.api
+        .fetch<FamilyFields>(`/engagement/change-requests/profile-fields?studentId=${c.id}`)
+        .catch(() => null),
+    ),
+  );
   const me = fam.children[0]?.guardians.find((g) => g.isMe);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
@@ -195,6 +310,9 @@ export default async function ProfilePage({
               </div>
             </form>
           </details>
+          {moreFields[fam.children.indexOf(c)] ? (
+            <MoreDetailsForm child={c} data={moreFields[fam.children.indexOf(c)]!} lang={lang} />
+          ) : null}
           <h4 style={{ marginTop: 'var(--sp-4)' }}>{t(lang, 'Guardians')}</h4>
           {c.guardians.map((g) => (
             <div key={g.id} style={{ marginBottom: 'var(--sp-2)' }}>

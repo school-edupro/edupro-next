@@ -1,5 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import type { PoolClient } from '@edupro/db';
+import {
+  FAMILY_EDITABLE_KEYS,
+  PROFILE_FIELD_BY_KEY,
+  loadProfileLists,
+  optionsOf,
+  readStudentProfile,
+  refreshCompleteness,
+  validateChanges,
+  writeStudentProfile,
+  ProfileWriteError,
+  type PoolClient,
+} from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -164,8 +175,10 @@ export class FamilyService {
     const v = await this.viewer.resolve(ctx, 'engagement.change_request.create');
     if (v.kind === 'family' && !v.students.some((s) => s.id === dto.studentId))
       throw new DomainError('not-found', 'Student not found', { status: 404 });
+    if (dto.entity === 'profile') return this.createProfileRequest(ctx, dto);
+    const entity = dto.entity;
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const allowed = CHANGEABLE[dto.entity];
+      const allowed = CHANGEABLE[entity];
       const bad = Object.keys(dto.changes).filter((k) => !allowed.includes(k));
       if (bad.length)
         throw new DomainError(
@@ -174,7 +187,7 @@ export class FamilyService {
           { status: 422 },
         );
       let entityId = dto.entityId ?? dto.studentId;
-      if (dto.entity === 'guardian') {
+      if (entity === 'guardian') {
         const g = await c.query<{ id: string }>(
           `SELECT g.id::text FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = $1 AND ($2::bigint IS NULL AND g.user_id = app.current_user_id() OR g.id = $2::bigint) LIMIT 1`,
           [dto.studentId, dto.entityId ?? null],
@@ -185,7 +198,7 @@ export class FamilyService {
           });
         entityId = g.rows[0].id;
       }
-      const current = await this.currentValues(c, dto.entity, entityId);
+      const current = await this.currentValues(c, entity, entityId);
       const changes: Record<string, { from: unknown; to: string }> = {};
       for (const [k, to] of Object.entries(dto.changes))
         changes[k] = { from: current[k] ?? null, to };
@@ -238,7 +251,23 @@ export class FamilyService {
         throw new DomainError('engagement.change.decided', 'This request was already decided', {
           status: 409,
         });
-      if (dto.approve) await this.apply(c, before.entity, before.entityId, before.changes);
+      if (dto.approve && before.entity === 'profile') {
+        const values = Object.fromEntries(
+          Object.entries(before.changes).map(([k, v]) => [k, v.to]),
+        );
+        try {
+          await writeStudentProfile(c, before.entityId, values);
+        } catch (error) {
+          if (error instanceof ProfileWriteError)
+            throw new DomainError('validation-failed', error.message, {
+              status: 400,
+              extra: { errors: error.errors },
+            });
+          throw error;
+        }
+        await refreshCompleteness(c, before.entityId);
+      } else if (dto.approve && before.entity !== 'profile')
+        await this.apply(c, before.entity, before.entityId, before.changes);
       await c.query(
         `UPDATE profile_change_requests SET status = $2::change_request_status, decided_by = app.current_user_id(), decided_at = now(), decision_note = $3 WHERE id = $1`,
         [id, dto.approve ? 'approved' : 'rejected', dto.note ?? null],
@@ -247,7 +276,7 @@ export class FamilyService {
         action: dto.approve
           ? 'engagement.change_request.approve'
           : 'engagement.change_request.reject',
-        entityType: before.entity === 'student' ? 'students' : 'guardians',
+        entityType: before.entity === 'guardian' ? 'guardians' : 'students',
         entityId: before.entityId,
         before: Object.fromEntries(Object.entries(before.changes).map(([k, v]) => [k, v.from])),
         after: dto.approve
@@ -255,6 +284,77 @@ export class FamilyService {
           : { rejected: true, note: dto.note ?? null },
       });
       return this.findChange(c, id);
+    });
+  }
+
+  /** Fields a family may request, with their drop-down options (parent app form). */
+  async familyProfileFields(ctx: RequestContext, studentId?: string) {
+    let visible = false;
+    if (studentId) {
+      const v = await this.viewer.resolve(ctx, 'engagement.change_request.create');
+      visible = v.kind !== 'family' || v.students.some((x) => x.id === studentId);
+    }
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const lists = await loadProfileLists(c);
+      const snap =
+        visible && studentId
+          ? await readStudentProfile(c, studentId, { showSensitive: false })
+          : null;
+      return {
+        current: snap
+          ? Object.fromEntries(FAMILY_EDITABLE_KEYS.map((k) => [k, snap.values[k] ?? null]))
+          : null,
+        fields: FAMILY_EDITABLE_KEYS.map((k) => PROFILE_FIELD_BY_KEY.get(k)!).map((f) => ({
+          key: f.key,
+          section: f.section,
+          label: f.label,
+          type: f.type,
+          options: f.list ? optionsOf(f, lists) : null,
+          help: f.help ?? null,
+        })),
+      };
+    });
+  }
+
+  /** A request on catalogue fields: validated now, applied through the profile writer on approval. */
+  private async createProfileRequest(ctx: RequestContext, dto: CreateChangeRequestDto) {
+    const bad = Object.keys(dto.changes).filter((k) => !FAMILY_EDITABLE_KEYS.includes(k));
+    if (bad.length)
+      throw new DomainError(
+        'engagement.change.field_not_allowed',
+        `These fields cannot be changed from the app: ${bad.join(', ')}`,
+        { status: 422 },
+      );
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const lists = await loadProfileLists(c);
+      const { values, errors } = validateChanges(dto.changes, lists);
+      if (Object.keys(errors).length)
+        throw new DomainError('validation-failed', 'Some fields are not valid', {
+          status: 400,
+          extra: { errors },
+        });
+      const current = await readStudentProfile(c, dto.studentId, { showSensitive: false });
+      if (!current) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
+      for (const [k, to] of Object.entries(values))
+        if ((current.values[k] ?? null) !== to)
+          changes[k] = { from: current.values[k] ?? null, to };
+      if (!Object.keys(changes).length)
+        throw new DomainError('validation-failed', 'Nothing to change: the values are the same', {
+          status: 400,
+        });
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO profile_change_requests (school_id, student_id, requested_by_user_id, entity, entity_id, changes, reason)
+         VALUES (app.current_school_id(), $1, app.current_user_id(), 'profile', $1, $2::jsonb, $3) RETURNING id::text`,
+        [dto.studentId, JSON.stringify(changes), dto.reason ?? null],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'engagement.change_request.create',
+        entityType: 'profile_change_requests',
+        entityId: r.rows[0]!.id,
+        after: { entity: 'profile', fields: Object.keys(changes) },
+      });
+      return this.findChange(c, r.rows[0]!.id);
     });
   }
 
@@ -323,9 +423,16 @@ const toChange = (x: Record<string, unknown>) => ({
   studentId: x.student_id as string,
   studentName: x.student_name as string,
   requestedBy: (x.requested_by as string) ?? null,
-  entity: x.entity as 'student' | 'guardian',
+  entity: x.entity as 'student' | 'guardian' | 'profile',
   entityId: x.entity_id as string,
   entityName: (x.entity_name as string) ?? null,
+  /** Readable names of the changed fields (catalogue labels for profile requests). */
+  fieldLabels: Object.fromEntries(
+    Object.keys((x.changes as Record<string, unknown>) ?? {}).map((k) => [
+      k,
+      PROFILE_FIELD_BY_KEY.get(k)?.label ?? k,
+    ]),
+  ),
   changes: x.changes as Record<string, { from: unknown; to: string }>,
   reason: (x.reason as string) ?? null,
   status: x.status as 'pending' | 'approved' | 'rejected',

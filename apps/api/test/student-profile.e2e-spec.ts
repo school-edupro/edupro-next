@@ -3,6 +3,7 @@
  * field-level edit with validation and normalising, encrypted and masked Aadhaar / PAN, the
  * "Sensitive data viewer" role, parent records shared by siblings, quick add and number suggestions.
  */
+import { FAMILY_EDITABLE_KEYS, PROFILE_FIELD_BY_KEY } from '@edupro/db';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
   createApp,
@@ -22,6 +23,7 @@ describe('student 360 profile (e2e)', () => {
   let school: SeededSchool;
   let admin: SeededUser;
   let viewer: SeededUser;
+  let parent: SeededUser;
   let sectionId: string;
   let first: string;
   let second: string;
@@ -34,6 +36,7 @@ describe('student 360 profile (e2e)', () => {
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       // the admin grants full sensitive values to one named user through the role
       viewer = await seedUser(c, school, `${s}-viewer`, 'school_admin');
+      parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
       await c.query(
         `INSERT INTO user_roles (school_id, user_id, role_id, reason)
          SELECT $1, $2, id, 'e2e' FROM roles WHERE school_id IS NULL AND code = 'sensitive_data_viewer'`,
@@ -253,6 +256,65 @@ describe('student 360 profile (e2e)', () => {
     const r = await patch(first, { first_name: null, father_name: null });
     expect(r.statusCode).toBe(400);
     expect(Object.keys(r.json().errors).sort()).toEqual(['father_name', 'first_name']);
+  });
+
+  it('families request profile fields; approval applies them through the profile rules', async () => {
+    expect(FAMILY_EDITABLE_KEYS.filter((k) => !PROFILE_FIELD_BY_KEY.has(k))).toEqual([]);
+    // the parent account is the student's father
+    const fatherId = (await read(first)).json().guardianIds.father as string;
+    await withMigrator((c) =>
+      c.query('UPDATE guardians SET user_id = $1 WHERE id = $2', [parent.id, fatherId]),
+    );
+    const fields = await inject({
+      method: 'GET',
+      url: `/engagement/change-requests/profile-fields?studentId=${first}`,
+      headers: h(parent),
+    });
+    expect(fields.statusCode).toBe(200);
+    expect(fields.json().fields.length).toBe(FAMILY_EDITABLE_KEYS.length);
+    expect(fields.json().current).toMatchObject({ father_mobile: '9000000001' });
+    const create = (changes: Record<string, string>) =>
+      inject({
+        method: 'POST',
+        url: '/engagement/change-requests',
+        headers: h(parent),
+        json: { studentId: first, entity: 'profile', changes, reason: 'moved house' },
+      });
+    const notAllowed = await create({ category: 'SC', aadhaar_no: '123412341234' });
+    expect(notAllowed.statusCode).toBe(422);
+    const invalid = await create({ residential_pin_code: '2013' });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().errors.residential_pin_code).toMatch(/PIN/);
+    // the father may also ask for the sibling he is linked to
+    const other = await inject({
+      method: 'POST',
+      url: '/engagement/change-requests',
+      headers: h(parent),
+      json: { studentId: second, entity: 'profile', changes: { residential_city: 'Noida' } },
+    });
+    expect(other.statusCode).toBe(201);
+    const ok = await create({
+      residential_address_line_1: 'C-4, Sector 62',
+      residential_city: 'Noida',
+      residential_pin_code: '201309',
+      mother_occupation: 'education',
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ entity: 'profile', status: 'pending' });
+    expect(ok.json().fieldLabels.residential_pin_code).toBe('Residential PIN Code');
+    expect(ok.json().changes.mother_occupation.to).toBe('Education');
+    const decide = await inject({
+      method: 'POST',
+      url: `/engagement/change-requests/${ok.json().id}/decide`,
+      headers: h(),
+      json: { approve: true },
+    });
+    expect(decide.statusCode).toBe(201);
+    expect((await read(first)).json().values).toMatchObject({
+      residential_address_line_1: 'C-4, Sector 62',
+      residential_pin_code: '201309',
+      mother_occupation: 'Education',
+    });
   });
 
   it('the basic student edit accepts cleared optional fields', async () => {

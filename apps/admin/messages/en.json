@@ -1821,7 +1821,8 @@
     "entity": "Record",
     "entities": {
       "student": "Student",
-      "guardian": "Guardian"
+      "guardian": "Guardian",
+      "profile": "Profile"
     },
     "field": "Field",
     "from": "From",

@@ -1821,7 +1821,8 @@
     "entity": "रिकॉर्ड",
     "entities": {
       "student": "विद्यार्थी",
-      "guardian": "अभिभावक"
+      "guardian": "अभिभावक",
+      "profile": "प्रोफ़ाइल"
     },
     "field": "फ़ील्ड",
     "from": "से",
