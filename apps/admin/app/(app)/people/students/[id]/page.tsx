@@ -327,7 +327,10 @@ export default async function StudentPage({
                 {student.siblings.map((s, i) => (
                   <span key={s.id}>
                     {i > 0 ? ', ' : ''}
-                    <a href={`/people/students/${s.id}`}>{s.displayName}</a> ({s.admissionNo})
+                    <a href={`/people/students/${s.id}`} style={{ textDecoration: 'underline' }}>
+                      {s.displayName}
+                    </a>{' '}
+                    ({s.admissionNo})
                   </span>
                 ))}
               </p>

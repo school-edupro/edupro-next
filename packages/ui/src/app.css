@@ -1144,6 +1144,11 @@
   color: var(--text-heading);
   font-weight: var(--fw-semibold);
 }
+/* links in the trail are told apart by more than colour (WCAG 1.4.1) */
+.ep-breadcrumbs a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
 
 /* ---- DataGrid (Sprint 3) ---------------------------------------------------- */
 .ep-grid {
@@ -2857,4 +2862,37 @@ a.ep-tabs__tab {
 }
 .pp-reqs-box[open] .pp-reqs-summary__hint {
   visibility: hidden;
+}
+/* profile approvals: photo changes show the pictures */
+.ep-pa__photo {
+  display: inline-block;
+  vertical-align: middle;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-subtle);
+}
+.ep-pa__photo--sm {
+  width: 2.5rem;
+}
+.ep-pa__photo--md {
+  width: 6rem;
+}
+/* portal profile: photo upload under each picture */
+.pp-photo-box {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-1);
+  flex: none;
+}
+.pp-photo-change {
+  margin: 0;
+}
+.pp-photo-note {
+  display: inline-block;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+  max-width: 8rem;
+  text-align: center;
 }

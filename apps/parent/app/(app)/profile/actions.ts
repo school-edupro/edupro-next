@@ -91,6 +91,34 @@ export async function submitProfileChanges(fd: FormData) {
   redirect(`/profile?child=${studentId}&ok=${ok}`);
 }
 
+/** Sends a new student, father or mother photo; it waits for approval unless the school saves it at once. */
+export async function submitProfilePhoto(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const key = str(fd, 'key');
+  if (!idOk(studentId)) redirect('/profile');
+  const back = `/profile?child=${studentId}`;
+  const file = fd.get('file');
+  if (!/^photo_(student|father|mother)$/.test(key) || !(file instanceof File) || file.size === 0)
+    redirect(`${back}&error=photo&detail=${encodeURIComponent('Choose a photo to send.')}`);
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type))
+    redirect(`${back}&error=photo&detail=${encodeURIComponent('Send a JPG, PNG or WebP photo.')}`);
+  if (file.size > 5 * 1024 * 1024)
+    redirect(
+      `${back}&error=photo&detail=${encodeURIComponent('The photo must be 5 MB or smaller.')}`,
+    );
+  let result: { applied: string[]; pending: string[] } = { applied: [], pending: [] };
+  try {
+    const fileId = await upload(file);
+    result = await bff.api.fetch(`/engagement/mine/profile/${studentId}/changes`, {
+      method: 'POST',
+      body: JSON.stringify({ changes: { [key]: fileId }, proofs: [] }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=${result.pending.length ? 'photo_sent' : 'photo_saved'}`);
+}
+
 export async function cancelProfileRequest(fd: FormData) {
   const id = str(fd, 'id');
   const child = str(fd, 'child');

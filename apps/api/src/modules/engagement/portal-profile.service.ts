@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
+  LEGACY_PHOTO_KEYS,
+  PORTAL_PHOTOS,
+  PORTAL_PHOTO_BY_KEY,
   PROFILE_FIELDS,
   PROFILE_FIELD_BY_KEY,
   PROFILE_SECTIONS,
@@ -117,8 +120,13 @@ const LEGACY_LABEL: Record<string, string> = {
   'address.pin': 'PIN code',
   'details.emergency_contact': 'Emergency contact',
 };
-const label = (k: string) => PROFILE_FIELD_BY_KEY.get(k)?.label ?? LEGACY_LABEL[k] ?? k;
-const sectionOf = (k: string) => PROFILE_FIELD_BY_KEY.get(k)?.section ?? 'other';
+const label = (k: string) =>
+  PROFILE_FIELD_BY_KEY.get(k)?.label ?? PORTAL_PHOTO_BY_KEY.get(k)?.label ?? LEGACY_LABEL[k] ?? k;
+const sectionOf = (k: string) =>
+  PROFILE_FIELD_BY_KEY.get(k)?.section ?? PORTAL_PHOTO_BY_KEY.get(k)?.section ?? 'other';
+/** Photos a family sends: JPG, PNG or WebP up to 5 MB. */
+const PHOTO_TYPES = /^image\/(png|jpeg|webp)$/;
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const PROOF_LABEL: Record<string, string> = {
   birth_certificate: 'birth certificate',
   address_proof: 'residence proof',
@@ -182,13 +190,24 @@ export class PortalProfileService {
         updatedAt: row.rows[0]?.updated_at.toISOString() ?? null,
         updatedBy: row.rows[0]?.updated_by ?? null,
         sections: PROFILE_SECTIONS,
-        fields: PROFILE_FIELDS.map((f) => ({
-          key: f.key,
-          section: f.section,
-          label: f.label,
-          sensitive: Boolean(f.sensitive),
-          editable: isEditableKey(f),
-        })),
+        fields: [
+          ...PROFILE_FIELDS.filter((f) => !LEGACY_PHOTO_KEYS.has(f.key)).map((f) => ({
+            key: f.key,
+            section: f.section,
+            label: f.label,
+            sensitive: Boolean(f.sensitive),
+            editable: isEditableKey(f),
+            photo: false,
+          })),
+          ...PORTAL_PHOTOS.map((ph) => ({
+            key: ph.key,
+            section: ph.section,
+            label: ph.label,
+            sensitive: false,
+            editable: true,
+            photo: true,
+          })),
+        ],
         proofKinds: PROOF_KINDS.map((k) => ({ id: k, label: PROOF_LABEL[k] ?? k })),
         roles: roles.rows,
         staff: staff.rows.map((x) => ({
@@ -202,11 +221,13 @@ export class PortalProfileService {
 
   async savePolicy(ctx: RequestContext, dto: SavePortalPolicyDto) {
     const unknown = [
-      ...Object.keys(dto.fields.parent),
-      ...Object.keys(dto.fields.student),
-      ...Object.keys(dto.proofs),
-      ...Object.keys(dto.approval.fields),
-    ].filter((k) => !PROFILE_FIELD_BY_KEY.has(k));
+      ...[
+        ...Object.keys(dto.fields.parent),
+        ...Object.keys(dto.fields.student),
+        ...Object.keys(dto.approval.fields),
+      ].filter((k) => !PROFILE_FIELD_BY_KEY.has(k) && !PORTAL_PHOTO_BY_KEY.has(k)),
+      ...Object.keys(dto.proofs).filter((k) => !PROFILE_FIELD_BY_KEY.has(k)),
+    ];
     const badSections = Object.keys(dto.approval.sections).filter(
       (s) => !PROFILE_SECTIONS.some((x) => x.id === s),
     );
@@ -349,9 +370,21 @@ export class PortalProfileService {
           mother: Boolean(snap.photos.mother),
         },
         window: win,
-        canEdit: win.open && sections.some((s) => s.fields.some((f) => EDIT_LEVELS.has(f.level))),
+        canEdit:
+          win.open &&
+          (sections.some((s) => s.fields.some((f) => EDIT_LEVELS.has(f.level))) ||
+            PORTAL_PHOTOS.some((ph) => EDIT_LEVELS.has(levels[ph.key] ?? ''))),
         proofKinds: PROOF_KINDS.map((k) => ({ id: k, label: PROOF_LABEL[k] ?? k })),
         sections,
+        photoFields: PORTAL_PHOTOS.filter((ph) => levels[ph.key] !== 'hidden').map((ph) => ({
+          key: ph.key,
+          party: ph.party,
+          label: ph.label,
+          level: levels[ph.key]!,
+          pending: pending.has(ph.key)
+            ? { requestId: pending.get(ph.key)!.requestId, since: pending.get(ph.key)!.since }
+            : null,
+        })),
         geography: await this.geography(c),
       };
     });
@@ -428,7 +461,21 @@ export class PortalProfileService {
         { status: 422, extra: { fields: notAllowed } },
       );
     const lists = await loadProfileLists(c);
-    const { values, errors } = validateChanges(dto.changes, lists);
+    const photoKeys = Object.keys(dto.changes).filter((k) => PORTAL_PHOTO_BY_KEY.has(k));
+    const fieldChanges = Object.fromEntries(
+      Object.entries(dto.changes).filter(([k]) => !PORTAL_PHOTO_BY_KEY.has(k)),
+    );
+    const { values, errors } = Object.keys(fieldChanges).length
+      ? validateChanges(fieldChanges, lists)
+      : {
+          values: {} as Record<string, string | number | null>,
+          errors: {} as Record<string, string>,
+        };
+    for (const k of photoKeys) {
+      const problem = await this.checkPhoto(c, dto.changes[k]!);
+      if (problem) errors[k] = problem;
+      else values[k] = dto.changes[k]!;
+    }
     if (Object.keys(errors).length)
       throw new DomainError('validation-failed', 'Some fields are not valid', {
         status: 400,
@@ -436,9 +483,11 @@ export class PortalProfileService {
       });
     const current = await readStudentProfile(c, studentId, { showSensitive: true });
     if (!current) throw new DomainError('not-found', 'Student not found', { status: 404 });
-    const changed = Object.keys(values).filter(
-      (k) => (current.values[k] ?? null) !== (values[k] ?? null),
-    );
+    const onFile = (k: string): unknown => {
+      const ph = PORTAL_PHOTO_BY_KEY.get(k);
+      return ph ? (current.photos[ph.party] ?? null) : (current.values[k] ?? null);
+    };
+    const changed = Object.keys(values).filter((k) => onFile(k) !== (values[k] ?? null));
     if (!changed.length)
       throw new DomainError('validation-failed', 'Nothing to change: the values are the same', {
         status: 400,
@@ -489,10 +538,10 @@ export class PortalProfileService {
       return proofs.filter((p) => kinds.has(p.kind));
     };
     const item = (k: string, status: ChangeItem['status']): ChangeItem => {
-      const f = PROFILE_FIELD_BY_KEY.get(k)!;
-      const from = current.values[k] ?? null;
+      const f = PROFILE_FIELD_BY_KEY.get(k);
+      const from = onFile(k);
       const to = values[k] ?? null;
-      return f.sensitive
+      return f?.sensitive
         ? {
             from: from === null ? null : encryptField(String(from)),
             to: to === null ? null : encryptField(String(to)),
@@ -532,7 +581,7 @@ export class PortalProfileService {
       pending: routed,
     };
     if (direct.length) {
-      await this.write(c, studentId, Object.fromEntries(direct.map((k) => [k, values[k] ?? null])));
+      await this.apply(c, studentId, Object.fromEntries(direct.map((k) => [k, values[k] ?? null])));
       const id = await insert(direct, [], 'approved', proofsFor(direct));
       await this.attachProofs(c, studentId, proofsFor(direct));
       await c.query(
@@ -543,9 +592,7 @@ export class PortalProfileService {
         action: 'engagement.profile.update_direct',
         entityType: 'students',
         entityId: studentId,
-        before: maskSensitive(
-          Object.fromEntries(direct.map((k) => [k, current.values[k] ?? null])),
-        ),
+        before: maskSensitive(Object.fromEntries(direct.map((k) => [k, onFile(k)]))),
         after: maskSensitive(Object.fromEntries(direct.map((k) => [k, values[k] ?? null]))),
       });
       result.applied = direct;
@@ -600,6 +647,26 @@ export class PortalProfileService {
       out.push({ kind: p.kind, fileId: p.fileId, fileName: row.original_name });
     }
     return out;
+  }
+
+  /** A photo a family sends must be its own upload, finished, an image and not too large. */
+  private async checkPhoto(c: PoolClient, fileId: string): Promise<string | null> {
+    if (!/^\d{1,18}$/.test(fileId)) return 'Upload the photo again';
+    const f = await c.query<{
+      status: string;
+      mine: boolean;
+      content_type: string;
+      size_bytes: string;
+    }>(
+      `SELECT status::text, created_by = app.current_user_id() AS mine, content_type, size_bytes::text FROM files WHERE id = $1`,
+      [fileId],
+    );
+    const row = f.rows[0];
+    if (!row || !row.mine) return 'Upload the photo again';
+    if (row.status !== 'ready') return 'The photo has not finished uploading';
+    if (!PHOTO_TYPES.test(row.content_type)) return 'Send a JPG, PNG or WebP photo';
+    if (Number(row.size_bytes) > PHOTO_MAX_BYTES) return 'The photo must be 5 MB or smaller';
+    return null;
   }
 
   /** The family's requests for a student: what was asked, where it is, and each field's outcome. */
@@ -817,7 +884,10 @@ export class PortalProfileService {
       const r = await this.find(c, id);
       const reviewer =
         ctx.permissions?.has(ENGAGEMENT.changeView) || actor.override || this.canAct(actor, r);
-      if (!reviewer || !r.proofs.some((p) => p.fileId === fileId))
+      const photoFiles = Object.entries(r.changes)
+        .filter(([k]) => PORTAL_PHOTO_BY_KEY.has(k))
+        .flatMap(([, it]) => [it.from, it.to].map((v) => (v === null ? null : String(v))));
+      if (!reviewer || !(r.proofs.some((p) => p.fileId === fileId) || photoFiles.includes(fileId)))
         throw new DomainError('not-found', 'Document not found', { status: 404 });
     });
     return this.files.downloadUrl(ctx, fileId);
@@ -887,7 +957,7 @@ export class PortalProfileService {
     if (accepted.length && final) {
       if (row.entity === 'profile') {
         await this.assertFresh(c, row, accepted);
-        await this.write(
+        await this.apply(
           c,
           row.entity_id,
           Object.fromEntries(accepted.map((k) => [k, plain(changes[k]!, 'to') as string | null])),
@@ -975,7 +1045,8 @@ export class PortalProfileService {
     const now = await readStudentProfile(c, row.entity_id, { showSensitive: true });
     if (!now) throw new DomainError('not-found', 'Student not found', { status: 404 });
     const stale = keys.filter((k) => {
-      const cur = now.values[k] ?? null;
+      const ph = PORTAL_PHOTO_BY_KEY.get(k);
+      const cur = ph ? (now.photos[ph.party] ?? null) : (now.values[k] ?? null);
       const from = plain(row.changes[k]!, 'from');
       const to = plain(row.changes[k]!, 'to');
       return String(cur ?? '') !== String(from ?? '') && String(cur ?? '') !== String(to ?? '');
@@ -986,6 +1057,65 @@ export class PortalProfileService {
         `Changed in the office since the request: ${stale.map(label).join(', ')}. Check the student and decide again.`,
         { status: 409, extra: { fields: stale } },
       );
+  }
+
+  /** Writes accepted values: profile fields through the profile writer, photos onto the records. */
+  private async apply(c: PoolClient, studentId: string, values: Record<string, unknown>) {
+    const fields = Object.fromEntries(
+      Object.entries(values).filter(([k]) => !PORTAL_PHOTO_BY_KEY.has(k)),
+    );
+    if (Object.keys(fields).length) await this.write(c, studentId, fields);
+    for (const [k, v] of Object.entries(values)) {
+      const ph = PORTAL_PHOTO_BY_KEY.get(k);
+      if (ph && typeof v === 'string') await this.applyPhoto(c, studentId, ph.party, v);
+    }
+  }
+
+  /** The new photo replaces the student's or the parent's, and joins their documents. */
+  private async applyPhoto(
+    c: PoolClient,
+    studentId: string,
+    party: 'student' | 'father' | 'mother',
+    fileId: string,
+  ) {
+    if (party === 'student') {
+      await c.query(
+        'UPDATE students SET photo_file_id = $2, updated_by = app.current_user_id(), updated_at = now() WHERE id = $1',
+        [studentId, fileId],
+      );
+      await c.query(
+        `INSERT INTO person_documents (school_id, person_type, person_id, kind, file_id, title, created_by)
+         VALUES (app.current_school_id(), 'student', $1, 'photo', $2, 'Sent from the parent app', app.current_user_id())`,
+        [studentId, fileId],
+      );
+      await c.query(
+        `UPDATE students SET profile = profile || jsonb_build_object('student_photo_submitted', 'Yes') WHERE id = $1`,
+        [studentId],
+      );
+      await refreshCompleteness(c, studentId);
+      return;
+    }
+    const g = await c.query<{ id: string }>(
+      `SELECT g.id::text FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+        WHERE sg.student_id = $1 AND sg.relation::text = $2 ORDER BY sg.is_primary DESC, sg.id LIMIT 1`,
+      [studentId, party],
+    );
+    const gid = g.rows[0]?.id;
+    if (!gid)
+      throw new DomainError(
+        'validation-failed',
+        `Add the ${party}'s name in the profile before the photo`,
+        { status: 400 },
+      );
+    await c.query(
+      'UPDATE guardians SET photo_file_id = $2, updated_by = app.current_user_id(), updated_at = now() WHERE id = $1',
+      [gid, fileId],
+    );
+    await c.query(
+      `INSERT INTO person_documents (school_id, person_type, person_id, kind, file_id, title, created_by)
+       VALUES (app.current_school_id(), 'guardian', $1, 'photo', $2, 'Sent from the parent app', app.current_user_id())`,
+      [gid, fileId],
+    );
   }
 
   private async write(c: PoolClient, studentId: string, values: Record<string, unknown>) {
@@ -1179,6 +1309,7 @@ function toView(x: RequestDb, showSensitive: boolean) {
       key: k,
       label: label(k),
       section: sectionOf(k),
+      photo: PORTAL_PHOTO_BY_KEY.has(k),
       from: show(k, it, 'from'),
       to: show(k, it, 'to'),
       status:

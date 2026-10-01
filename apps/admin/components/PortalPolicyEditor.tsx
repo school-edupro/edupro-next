@@ -240,6 +240,7 @@ function FieldsTab({
                       <th scope="row" className="ep-pp__fname">
                         {f.label} {f.sensitive ? <Badge tone="warning">ID number</Badge> : null}{' '}
                         {!f.editable ? <Badge tone="neutral">office</Badge> : null}
+                        {f.photo ? <Badge tone="info">photo upload</Badge> : null}
                       </th>
                       {AUDIENCES.map((a) => {
                         const lvl = policy.fields[a.id][f.key] ?? 'view';
@@ -617,7 +618,7 @@ function ProofsTab({
     ['edit_approval', 'edit_direct'].includes(policy.fields.student[k] ?? '');
   const [all, setAll] = useState(false);
   const fields = screen.fields.filter(
-    (f) => f.editable && (all || open(f.key) || policy.proofs[f.key]),
+    (f) => f.editable && !f.photo && (all || open(f.key) || policy.proofs[f.key]),
   );
   return (
     <div>

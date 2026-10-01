@@ -38,6 +38,8 @@ export interface PolicyScreen {
     label: string;
     sensitive: boolean;
     editable: boolean;
+    /** A photo the family uploads (no proof document; the picture is the evidence). */
+    photo?: boolean;
   }>;
   proofKinds: Array<{ id: string; label: string }>;
   roles: Array<{ id: string; name: string; code: string }>;
@@ -71,6 +73,8 @@ export interface ChangeView {
     key: string;
     label: string;
     section: string;
+    /** A photo change: from / to are file ids, shown as pictures. */
+    photo?: boolean;
     from: string | number | null;
     to: string | number | null;
     status: 'pending' | 'approved' | 'rejected';

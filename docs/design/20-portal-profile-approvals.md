@@ -59,3 +59,22 @@ field-level decisions and bulk approval.
 (front office school role), `-accounts`, `-parent` (two children in III-A), `-student`, `-nobody`;
 then attendance, homework, notices, fee demands and receipts, a bus route, library loans, an exam
 with marks, a parent query, feedback and a profile change through the API. Idempotent.
+
+## Additions (2026-10-01, later the same day)
+
+- **Portal photos.** `photo_student`, `photo_father`, `photo_mother` (`PORTAL_PHOTOS` in
+  `profile-portal.ts`) sit in the policy like fields: four levels per audience, routed by their section.
+  Defaults: parents edit with approval; a student sees their own photo only. The value of a change is
+  the uploaded file id (the sender's own upload, ready, JPG/PNG/WebP, at most 5 MB). On approval (or
+  edit direct) the file becomes `students.photo_file_id` or the father's / mother's
+  `guardians.photo_file_id` and joins their documents. Approvers see current and new pictures through
+  `/api/profile-proofs/:id/:file/view` (bytes passed through; the API forbids cross-origin embedding).
+  The legacy text fields `photo_ref` / `*_photo` are no longer listed in the settings.
+- **Drop-downs from masters.** Sub-Caste is a profile list (`SubCaste`, flat; 0042), hidden on the
+  portal by default as sensitive data (0043 moves saved policies still on the old 'view'). City
+  (residential, permanent, office) comes from the Cities master and Bank Name from the Banks master;
+  saving refuses values outside the master, an empty master does not block. The portal edit form
+  narrows state by country and city by state like the admin editor.
+- **Portal PDF and requests.** The PDF notice re-checks itself and starts the download when ready (the
+  workers must run). My requests folds to a one-line summary.
+- **Admin Full profile** has a Photos panel (student, father, mother, guardian) with Add / Change photo.

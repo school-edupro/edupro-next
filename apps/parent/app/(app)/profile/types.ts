@@ -36,6 +36,13 @@ export interface PortalProfile {
   canEdit: boolean;
   proofKinds: Array<{ id: string; label: string }>;
   sections: Array<{ id: string; title: string; fields: PortalField[] }>;
+  photoFields: Array<{
+    key: string;
+    party: 'student' | 'father' | 'mother';
+    label: string;
+    level: Level;
+    pending: { requestId: string; since: string } | null;
+  }>;
   geography: {
     states: Array<{ name: string; country: string | null }>;
     cities: Array<{ name: string; state: string | null }>;

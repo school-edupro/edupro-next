@@ -52,7 +52,7 @@ pnpm --filter @edupro/db seed:demo    # Alpha + Beta demo data;  then seed:beta 
 ## Tests
 
 - API e2e: `cd apps/api && perl -e 'alarm 1500; exec @ARGV' npx jest --config test/jest-e2e.config.cjs
-  --testPathIgnorePatterns performance redteam pentest-fees > log 2>&1` (Jest hangs after the pass
+--testPathIgnorePatterns performance redteam pentest-fees > log 2>&1` (Jest hangs after the pass
   line → `pkill -f "jest.js --config test/jest-e2e.config.cjs"`; never two e2e runs at once; redirect
   to a file, a `| tail` pipe shows nothing). Last full run 2026-10-01: 38 suites / 272 passed.
 - Workers `npx vitest run` (22); db `npx vitest run` (unit + RLS).
@@ -79,9 +79,10 @@ Sprints 0–23 done; Release 1 frozen (M4/M5 reported with conditions). Then pos
 school profile + masters (0034), years reopen (0035), student 360 profile / quick add / Excel update /
 report builder (0036–0039), students list + per-user views + parent photos + profile printout (0040),
 portal profile + field policy + routed/partial/bulk approvals (0041, `aa52894`), Beta demo logins and
-data `seed:beta` (`15d0f99`). Migrations: 41.
+data `seed:beta` (`15d0f99`); parent/student portal frame and home dashboard (`adcbcd0`); sub-caste
+list, city/bank from masters, portal photo upload with approval, admin full-profile photos (0042–0043).
+Migrations: 43.
 
-Open follow-ups: SMS/WhatsApp notice on approval decisions (needs a template); parent photo change
-via portal; fee/attendance columns in the report builder; legacy student data clean-up and import
+Open follow-ups: SMS/WhatsApp notice on approval decisions (needs a template); fee/attendance columns in the report builder; legacy student data clean-up and import
 (dry run: `~/Documents/student_data/Student_Import_Check_2026-09-30.xlsx`); Release 2 (S24 HR core)
 per the sprint plan — confirm with the user before starting.

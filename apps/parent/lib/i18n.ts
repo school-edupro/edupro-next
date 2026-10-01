@@ -543,6 +543,16 @@ const DICT: Record<string, string> = {
   'Show history': 'इतिहास देखें',
   decided: 'निर्णीत',
   waiting: 'प्रतीक्षा में',
+  'New photo waiting for approval': 'नई फ़ोटो स्वीकृति की प्रतीक्षा में',
+  'Change photo': 'फ़ोटो बदलें',
+  'Add photo': 'फ़ोटो जोड़ें',
+  'The new photo is sent to the school for approval.':
+    'नई फ़ोटो स्वीकृति के लिए विद्यालय को भेजी गई।',
+  'The new photo is saved.': 'नई फ़ोटो सहेजी गई।',
+  'JPG, PNG or WebP up to 5 MB. The school approves it before it replaces the current photo.':
+    'JPG, PNG या WebP, अधिकतम 5 MB। विद्यालय की स्वीकृति के बाद यह वर्तमान फ़ोटो की जगह लेगी।',
+  'JPG, PNG or WebP up to 5 MB. It replaces the current photo at once.':
+    'JPG, PNG या WebP, अधिकतम 5 MB। यह तुरंत वर्तमान फ़ोटो की जगह लेगी।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

@@ -89,8 +89,36 @@ export const OFFICE_ONLY_KEYS: ReadonlySet<string> = new Set([
   'remarks',
 ]);
 
-/** Photo reference fields: shown as pictures, never as text. */
-const PHOTO_KEYS = new Set(['photo_ref', 'father_photo', 'mother_photo', 'guardian_photo']);
+/** Legacy photo reference fields (file name / link text): never shown on the portal. */
+export const LEGACY_PHOTO_KEYS: ReadonlySet<string> = new Set([
+  'photo_ref',
+  'father_photo',
+  'mother_photo',
+  'guardian_photo',
+]);
+const PHOTO_KEYS = LEGACY_PHOTO_KEYS;
+
+/**
+ * The photos a family may change from the portal. They follow the same levels and approval routes
+ * as fields (by section); the value of a change is the uploaded file's id.
+ */
+export const PORTAL_PHOTOS: ReadonlyArray<{
+  key: string;
+  party: 'student' | 'father' | 'mother';
+  section: string;
+  label: string;
+}> = [
+  { key: 'photo_student', party: 'student', section: 'student', label: 'Student photo' },
+  { key: 'photo_father', party: 'father', section: 'father', label: "Father's photo" },
+  { key: 'photo_mother', party: 'mother', section: 'mother', label: "Mother's photo" },
+];
+export const PORTAL_PHOTO_BY_KEY = new Map(PORTAL_PHOTOS.map((p) => [p.key, p]));
+
+/** Parents change photos with approval; a student sees their own photo, not the parents'. */
+function defaultPhotoLevel(audience: PortalAudience, key: string): PortalLevel {
+  if (audience === 'parent') return 'edit_approval';
+  return key === 'photo_student' ? 'view' : 'hidden';
+}
 
 export const isEditableKey = (f: ProfileField): boolean =>
   f.store.t !== 'auto' && f.store.t !== 'enrol' && !OFFICE_ONLY_KEYS.has(f.key);
@@ -177,6 +205,10 @@ export function resolvePolicy(
       if (PHOTO_KEYS.has(f.key)) lvl = 'hidden';
       fields[a][f.key] = lvl;
     }
+    for (const ph of PORTAL_PHOTOS)
+      fields[a][ph.key] = isLevel(stored[ph.key])
+        ? (stored[ph.key] as PortalLevel)
+        : defaultPhotoLevel(a, ph.key);
   }
   const proofs: Record<string, string> = {};
   const storedProofs = row?.proofs as Record<string, unknown> | undefined;
@@ -201,7 +233,7 @@ export function resolvePolicy(
   const fieldRoutes: Record<string, ApprovalRoute> = {};
   for (const [k, v] of Object.entries((ap.fields ?? {}) as Record<string, unknown>)) {
     const r = cleanRoute(v);
-    if (r && PROFILE_FIELD_BY_KEY.has(k)) fieldRoutes[k] = r;
+    if (r && (PROFILE_FIELD_BY_KEY.has(k) || PORTAL_PHOTO_BY_KEY.has(k))) fieldRoutes[k] = r;
   }
   return {
     fields,
@@ -229,10 +261,10 @@ export async function loadPortalPolicy(c: PoolClient): Promise<PortalPolicy> {
 
 /** The route a field's change follows: the field's own, else its section's, else the default. */
 export function routeFor(policy: PortalPolicy, key: string): ApprovalRoute {
-  const f = PROFILE_FIELD_BY_KEY.get(key);
+  const section = PROFILE_FIELD_BY_KEY.get(key)?.section ?? PORTAL_PHOTO_BY_KEY.get(key)?.section;
   return (
     policy.approval.fields[key] ??
-    (f ? policy.approval.sections[f.section] : undefined) ??
+    (section ? policy.approval.sections[section] : undefined) ??
     policy.approval.default
   );
 }

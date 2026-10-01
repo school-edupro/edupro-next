@@ -24,6 +24,30 @@ const when = (iso: string) =>
     minute: '2-digit',
   });
 
+/** A photo in a change request (current or new), opened through the request so approvers may see it. */
+function PhotoValue({
+  requestId,
+  fileId,
+  alt,
+  size = 'md',
+}: {
+  requestId: string;
+  fileId: string | number | null;
+  alt: string;
+  size?: 'sm' | 'md';
+}) {
+  if (fileId === null || fileId === '') return <span className="ep-pa__from">no photo</span>;
+  return (
+    <a href={`/api/profile-proofs/${requestId}/${String(fileId)}`} target="_blank" rel="noreferrer">
+      <img
+        className={`ep-pa__photo ep-pa__photo--${size}`}
+        src={`/api/profile-proofs/${requestId}/${String(fileId)}/view`}
+        alt={alt}
+      />
+    </a>
+  );
+}
+
 /**
  * Profile approvals: changes that parents and students asked for, routed by the school's rules. The
  * approver compares old and new values with the proof, accepts or refuses field by field, or decides
@@ -345,10 +369,23 @@ export function ProfileApprovals({
                     {r.items.map((it) => (
                       <li key={it.key} data-status={it.status}>
                         <span className="ep-pa__label">{it.label}</span>{' '}
-                        <span className="ep-pa__from">{show(it.from)}</span>
+                        {it.photo ? (
+                          <PhotoValue
+                            requestId={r.id}
+                            fileId={it.from}
+                            alt="Current photo"
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="ep-pa__from">{show(it.from)}</span>
+                        )}
                         <span aria-hidden="true"> → </span>
                         <span className="ep-sr-only"> to </span>
-                        <strong>{show(it.to)}</strong>
+                        {it.photo ? (
+                          <PhotoValue requestId={r.id} fileId={it.to} alt="New photo" size="sm" />
+                        ) : (
+                          <strong>{show(it.to)}</strong>
+                        )}
                         {it.status !== 'pending' ? (
                           <Badge tone={it.status === 'approved' ? 'success' : 'danger'}>
                             {it.status === 'approved' ? 'accepted' : 'refused'}
@@ -599,9 +636,19 @@ function ReviewDrawer({
                 {it.label}
                 <div className="ep-field__help">{sectionTitle.get(it.section) ?? it.section}</div>
               </th>
-              <td>{show(it.from)}</td>
               <td>
-                <strong>{show(it.to)}</strong>
+                {it.photo ? (
+                  <PhotoValue requestId={row.id} fileId={it.from} alt="Current photo" />
+                ) : (
+                  show(it.from)
+                )}
+              </td>
+              <td>
+                {it.photo ? (
+                  <PhotoValue requestId={row.id} fileId={it.to} alt="New photo" />
+                ) : (
+                  <strong>{show(it.to)}</strong>
+                )}
               </td>
               <td>
                 {it.status === 'pending' && row.canAct ? (

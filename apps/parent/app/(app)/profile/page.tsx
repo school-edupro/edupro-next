@@ -4,7 +4,8 @@ import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t, type Lang } from '@/lib/i18n';
 import { setConsent } from '../queries/actions';
-import { cancelProfileRequest, downloadProfilePdf } from './actions';
+import { cancelProfileRequest, downloadProfilePdf, submitProfilePhoto } from './actions';
+import { PhotoChange } from '@/components/PhotoChange';
 import { applies, shown, type PortalProfile, type PortalRequest } from './types';
 import { ExportWatcher } from '@/components/ExportWatcher';
 
@@ -26,6 +27,8 @@ const OK_TEXT: Record<string, string> = {
   both: 'Some changes are saved; the rest are waiting for the school’s approval.',
   withdrawn: 'The request was withdrawn.',
   consent: 'Your choice has been recorded.',
+  photo_sent: 'The new photo is sent to the school for approval.',
+  photo_saved: 'The new photo is saved.',
 };
 const STATUS: Record<
   PortalRequest['status'],
@@ -211,6 +214,29 @@ export default async function ProfilePage({
     },
   ];
 
+  // a photo the school opened: Add / Change photo, or the request already waiting for approval
+  const photoControl = (party: 'student' | 'father' | 'mother', has: boolean) => {
+    const pf = p.photoFields?.find((x) => x.party === party);
+    if (!pf) return null;
+    if (pf.pending)
+      return <span className="pp-photo-note">{t(lang, 'New photo waiting for approval')}</span>;
+    if (!p.window.open || (pf.level !== 'edit_approval' && pf.level !== 'edit_direct')) return null;
+    return (
+      <PhotoChange
+        action={submitProfilePhoto}
+        studentId={child.id}
+        photoKey={pf.key}
+        label={t(lang, has ? 'Change photo' : 'Add photo')}
+        help={t(
+          lang,
+          pf.level === 'edit_approval'
+            ? 'JPG, PNG or WebP up to 5 MB. The school approves it before it replaces the current photo.'
+            : 'JPG, PNG or WebP up to 5 MB. It replaces the current photo at once.',
+        )}
+      />
+    );
+  };
+
   return (
     <main className="pp-main">
       <PageHeader
@@ -269,7 +295,10 @@ export default async function ProfilePage({
 
       <Card style={{ marginBottom: 'var(--sp-3)' }}>
         <div className="pp-hero">
-          <Photo child={child.id} party="student" has={p.photos.student} label={p.name} />
+          <div className="pp-photo-box">
+            <Photo child={child.id} party="student" has={p.photos.student} label={p.name} />
+            {photoControl('student', p.photos.student)}
+          </div>
           <div className="pp-hero__body">
             <h2 className="pp-hero__name">{p.name}</h2>
             <dl className="pp-facts">
@@ -329,6 +358,7 @@ export default async function ProfilePage({
                   <div className="ep-kicker">{w.label}</div>
                   <strong>{w.name ? String(w.name) : '—'}</strong>
                   {w.mobile ? <div>{String(w.mobile)}</div> : null}
+                  {w.name ? photoControl(w.party as 'father' | 'mother', w.has) : null}
                 </div>
               </div>
             ))}

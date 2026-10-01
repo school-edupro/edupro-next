@@ -211,7 +211,10 @@ export function StudentOverview({
             {student.siblings.map((sib, i) => (
               <span key={sib.id}>
                 {i > 0 ? ', ' : ''}
-                <a href={`/people/students/${sib.id}`}>{sib.displayName}</a> ({sib.admissionNo})
+                <a href={`/people/students/${sib.id}`} style={{ textDecoration: 'underline' }}>
+                  {sib.displayName}
+                </a>{' '}
+                ({sib.admissionNo})
               </span>
             ))}
           </p>
