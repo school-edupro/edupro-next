@@ -65,6 +65,7 @@ export default async function EditProfilePage({
             fields={editable}
             context={context}
             proofKinds={p.proofKinds}
+            geography={p.geography}
             labels={{
               needsApproval: t(lang, 'needs approval'),
               savedAtOnce: t(lang, 'saved at once'),

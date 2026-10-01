@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
-import type { PortalField, Value } from '../app/(app)/profile/types';
-import { applies } from '../app/(app)/profile/types';
+import type { PortalField, PortalProfile, Value } from '../app/(app)/profile/types';
+import { applies, optionsFor } from '../app/(app)/profile/types';
 
 export interface EditLabels {
   needsApproval: string;
@@ -33,6 +33,7 @@ export function ProfileEditForm({
   context,
   proofKinds,
   labels,
+  geography,
 }: {
   action: (fd: FormData) => Promise<void>;
   studentId: string;
@@ -41,6 +42,7 @@ export function ProfileEditForm({
   context: Record<string, Value>;
   proofKinds: Array<{ id: string; label: string }>;
   labels: EditLabels;
+  geography?: PortalProfile['geography'];
 }) {
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f.key, asText(f.value)])),
@@ -62,7 +64,8 @@ export function ProfileEditForm({
       {fields.map((f) => {
         if (!applies(f, all)) return null;
         const id = `f-${f.key}`;
-        const listId = f.options ? `dl-${f.key}` : undefined;
+        const options = optionsFor(f, all, geography);
+        const listId = options ? `dl-${f.key}` : undefined;
         const type = f.type === 'date' ? 'date' : f.type === 'email' ? 'email' : 'text';
         const numeric = [
           'mobile',
@@ -112,7 +115,7 @@ export function ProfileEditForm({
                   />
                   {listId ? (
                     <datalist id={listId}>
-                      {f.options!.map((o) => (
+                      {options!.map((o) => (
                         <option key={o} value={o} />
                       ))}
                     </datalist>

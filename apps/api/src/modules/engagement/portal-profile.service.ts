@@ -352,8 +352,27 @@ export class PortalProfileService {
         canEdit: win.open && sections.some((s) => s.fields.some((f) => EDIT_LEVELS.has(f.level))),
         proofKinds: PROOF_KINDS.map((k) => ({ id: k, label: PROOF_LABEL[k] ?? k })),
         sections,
+        geography: await this.geography(c),
       };
     });
+  }
+
+  /** States with their country and cities with their state, so the portal form narrows the lists. */
+  private async geography(c: PoolClient) {
+    const r = await c.query<{ kind: string; name: string; parent: string | null }>(
+      `SELECT 'state' AS kind, s.name, co.name AS parent FROM states s LEFT JOIN countries co ON co.id = s.country_id WHERE s.status = 'active'
+       UNION ALL
+       SELECT 'city', ci.name, st.name FROM cities ci LEFT JOIN states st ON st.id = ci.state_id WHERE ci.status = 'active'
+       ORDER BY 1, 2`,
+    );
+    return {
+      states: r.rows
+        .filter((x) => x.kind === 'state')
+        .map((x) => ({ name: x.name, country: x.parent })),
+      cities: r.rows
+        .filter((x) => x.kind === 'city')
+        .map((x) => ({ name: x.name, state: x.parent })),
+    };
   }
 
   /** Fields of this student waiting for approval: the value asked for and the request. */

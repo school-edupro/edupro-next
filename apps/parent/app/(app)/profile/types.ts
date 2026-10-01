@@ -36,6 +36,42 @@ export interface PortalProfile {
   canEdit: boolean;
   proofKinds: Array<{ id: string; label: string }>;
   sections: Array<{ id: string; title: string; fields: PortalField[] }>;
+  geography: {
+    states: Array<{ name: string; country: string | null }>;
+    cities: Array<{ name: string; state: string | null }>;
+  };
+}
+
+/** Address groups: the state list follows the country, the city list follows the state. */
+const CASCADES: Array<[string, string, string]> = [
+  ['residential_country', 'residential_state', 'residential_city'],
+  ['permanent_country', 'permanent_state', 'permanent_city'],
+  ['father_office_country', 'father_office_state', 'father_office_city'],
+  ['mother_office_country', 'mother_office_state', 'mother_office_city'],
+  ['guardian_office_country', 'guardian_office_state', 'guardian_office_city'],
+];
+
+/** The options to offer for a field, narrowed by the country or state chosen in the same group. */
+export function optionsFor(
+  f: PortalField,
+  values: Record<string, Value>,
+  geo: PortalProfile['geography'] | undefined,
+): string[] | null {
+  if (!f.options) return null;
+  const g = CASCADES.find((x) => x.includes(f.key));
+  if (!g || !geo) return f.options;
+  if (f.key === g[1]) {
+    const country = String(values[g[0]] ?? '');
+    const states = geo.states.filter((s) => !country || !s.country || s.country === country);
+    return states.length
+      ? states.map((s) => s.name).filter((n) => f.options!.includes(n))
+      : f.options;
+  }
+  if (f.key === g[2]) {
+    const state = String(values[g[1]] ?? '');
+    return state ? geo.cities.filter((c) => c.state === state).map((c) => c.name) : f.options;
+  }
+  return f.options;
 }
 
 export interface PortalRequest {

@@ -87,6 +87,8 @@ export function normaliseValue(
     }
     case 'list': {
       const options = optionsOf(field, lists);
+      // a master the school has not filled yet (no cities or banks) does not block the form
+      if (!options.length) return { ok: true, value: s };
       const hit = options.find((o) => o.toLowerCase() === s.toLowerCase());
       return hit
         ? { ok: true, value: hit }

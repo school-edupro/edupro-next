@@ -512,9 +512,13 @@ export async function loadProfileLists(c: PoolClient): Promise<ProfileLists> {
   const out: ProfileLists = {};
   for (const x of r.rows) (out[x.list_code] ??= []).push(x.value);
   // State and Country also accept the school's geography masters
+  // City and Bank come only from their masters (Setup → Cities, Fees → Banks)
   const geo = await c.query<{ kind: string; name: string }>(
     `SELECT 'Country' AS kind, name FROM countries WHERE status = 'active'
-     UNION ALL SELECT 'State', name FROM states WHERE status = 'active'`,
+     UNION ALL SELECT 'State', name FROM states WHERE status = 'active'
+     UNION ALL SELECT 'City', name FROM cities WHERE status = 'active'
+     UNION ALL SELECT DISTINCT 'Bank', name FROM banks WHERE status = 'active'
+     ORDER BY 1, 2`,
   );
   for (const x of geo.rows) {
     const list = (out[x.kind] ??= []);

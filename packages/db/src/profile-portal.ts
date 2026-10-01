@@ -103,9 +103,13 @@ const STUDENT_HIDDEN = new Set([
   'guardian_annual_income',
 ]);
 
+/** Caste details are sensitive personal data (DPDP): off the portal until the school opens them. */
+const CASTE_HIDDEN = new Set(['sub_caste']);
+
 /** What the school gets before it changes anything. */
 export function defaultLevel(audience: PortalAudience, f: ProfileField): PortalLevel {
   if (PHOTO_KEYS.has(f.key)) return 'hidden';
+  if (CASTE_HIDDEN.has(f.key)) return 'hidden';
   if (f.section === 'documents') return 'hidden';
   if (audience === 'student') {
     if (f.sensitive || f.section === 'bank' || STUDENT_HIDDEN.has(f.key)) return 'hidden';
