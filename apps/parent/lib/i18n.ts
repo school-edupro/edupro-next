@@ -93,8 +93,8 @@ const DICT: Record<string, string> = {
   'Alerts go once a day per child after the attendance time. Check Profile \u2192 Your consents; safety and attendance alerts are always sent, but the mobile number on record must be current.':
     'अलर्ट उपस्थिति समय के बाद प्रति बच्चा दिन में एक बार जाते हैं। प्रोफ़ाइल → आपकी सहमतियाँ देखें; सुरक्षा और उपस्थिति अलर्ट हमेशा जाते हैं, पर दर्ज मोबाइल नंबर सही होना चाहिए।',
   'How do I change my mobile number or address?': 'मोबाइल नंबर या पता कैसे बदलूँ?',
-  'Profile \u2192 Request a change to my details. The school office approves it and the change is recorded.':
-    'प्रोफ़ाइल → मेरे विवरण में बदलाव का अनुरोध। कार्यालय स्वीकृत करता है और बदलाव दर्ज होता है।',
+  'Profile \u2192 Update on the section (address, contact, parents). Some changes save at once; others wait for the school\u2019s approval and may need a document such as an electricity bill. Follow them under My requests.':
+    'प्रोफ़ाइल → अनुभाग पर अद्यतन करें (पता, संपर्क, माता-पिता)। कुछ बदलाव तुरंत सहेजे जाते हैं; अन्य विद्यालय की स्वीकृति की प्रतीक्षा करते हैं और बिजली बिल जैसे दस्तावेज़ की आवश्यकता हो सकती है। उन्हें मेरे अनुरोध में देखें।',
   'Where is the report card?': 'रिपोर्ट कार्ड कहाँ है?',
   'Results shows each released term; the PDF button prepares the card for download. A card can be withheld while fees are due.':
     'परिणाम हर जारी सत्र दिखाता है; PDF बटन कार्ड डाउनलोड के लिए तैयार करता है। शुल्क बकाया होने पर कार्ड रोका जा सकता है।',

@@ -13,4 +13,15 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
   { sub: 'dev-parent', label: 'Parent (guardian of two children)' },
   { sub: 'dev-student', label: 'Student (VI-A)' },
   { sub: 'dev-nobody', label: 'Member with no roles' },
+  // Beta Public School (packages/db seed:beta)
+  { sub: 'dev-beta-principal', label: 'Beta: Principal (School Admin)' },
+  { sub: 'dev-beta-coordinator', label: 'Beta: Academic Coordinator' },
+  { sub: 'dev-beta-teacher', label: 'Beta: Class Teacher of III-A (scoped)' },
+  { sub: 'dev-beta-subject', label: 'Beta: Maths Teacher I-A and II-A (scoped)' },
+  { sub: 'dev-beta-auditor', label: 'Beta: Auditor (read-only)' },
+  { sub: 'dev-beta-clerk', label: 'Beta: Front Office (school role)' },
+  { sub: 'dev-beta-accounts', label: 'Beta: Accountant' },
+  { sub: 'dev-beta-parent', label: 'Beta: Parent (guardian of two children)' },
+  { sub: 'dev-beta-student', label: 'Beta: Student (III-A)' },
+  { sub: 'dev-beta-nobody', label: 'Beta: Member with no roles' },
 ];

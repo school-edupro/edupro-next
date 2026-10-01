@@ -25,7 +25,7 @@ const FAQ: Array<[string, string]> = [
   ],
   [
     'How do I change my mobile number or address?',
-    'Profile → Request a change to my details. The school office approves it and the change is recorded.',
+    'Profile → Update on the section (address, contact, parents). Some changes save at once; others wait for the school’s approval and may need a document such as an electricity bill. Follow them under My requests.',
   ],
   [
     'Where is the report card?',

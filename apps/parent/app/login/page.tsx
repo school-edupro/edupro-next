@@ -59,6 +59,8 @@ export default async function LoginPage({
                 {[
                   { sub: 'dev-parent', label: 'Parent: Suresh Sharma (two children)' },
                   { sub: 'dev-student', label: 'Student: Aarav Sharma (VI-A)' },
+                  { sub: 'dev-beta-parent', label: 'Beta parent: Rohan Verma (two children)' },
+                  { sub: 'dev-beta-student', label: 'Beta student: Sai Verma (III-A)' },
                 ].map((r) => (
                   <option key={r.sub} value={r.sub}>
                     {r.sub} · {r.label}

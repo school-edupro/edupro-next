@@ -5,10 +5,10 @@
 | Person                  | Does                                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------------------- |
 | Admission clerk         | Quick add for new students, completes profiles, uploads the Excel sheets                    |
-| School admin            | Grants the "Sensitive data viewer" role, edits the drop-down lists, approves family changes |
+| School admin            | Grants the "Sensitive data viewer" role, edits the drop-down lists, sets the portal profile |
 | Class teacher           | Sees and reports on the students of their own sections only                                 |
 | Anyone with the builder | Builds reports, saves them, shares them with colleagues, downloads Excel and PDF            |
-| Families                | Ask for changes to address, contact and parent details from the parent app                  |
+| Families                | See and download the profile, update what the school opens, with proof where asked          |
 
 ## Adding a student in a hurry
 
@@ -82,12 +82,49 @@ The owner presses **Share** and adds colleagues or whole roles (for example Acco
 running a shared report still gets only their own sections, and ID numbers stay masked unless they
 hold the Sensitive data viewer role.
 
-## Families asking for changes
+## The parent and student portal profile
 
-In the parent app, **Profile → Update more details** lets a family ask for changes to address,
-contact numbers, emergency contact, transport, medical notes and the parents' work and education.
-Names, category, ID numbers, bank details and class stay with the office. Requests arrive under
-**Engagement → Change requests**, where the office approves or rejects them.
+Parents (and students on their own login) see their child's profile on the portal, with the
+student's, father's and mother's photos, and can download it as a PDF marked "Parent copy" with the
+declaration and signature lines. The father and mother can both update it; a change to a parent's
+details updates every child that parent is linked to.
+
+**People → Portal profile settings** decides, field by field and separately for parents and students:
+
+| Setting            | What the family sees                                                     |
+| ------------------ | ------------------------------------------------------------------------ |
+| Hidden             | Nothing                                                                  |
+| View only          | The value                                                                |
+| Edit with approval | The value and an Update button; the change waits for the approvers       |
+| Edit direct        | The value and an Update button; the change is saved at once (and logged) |
+
+On the same screen:
+
+- **Approvers**: a default, then per section, then for single fields. Each is one or two steps:
+  the school office (anyone who decides profile changes), the student's class teacher, a role, or a
+  named employee. A change is split by approver, so each approver sees only what is theirs.
+- **Proof documents**: a change to the field must carry that document (birth certificate for the name
+  or date of birth, residence proof for the address, category certificate, Aadhaar card...). On
+  approval it joins the student's documents and ticks the checklist.
+- **Update window**: open all year, closed, or open for a period such as April and May, with a
+  message for families. Families can always see and download the profile.
+
+Parents see Aadhaar, PAN and bank numbers of their own child in full; approvers without the
+"Sensitive data viewer" role see them masked.
+
+## Approving profile changes
+
+**People → Profile approvals** lists what is waiting for you. Each row shows the value on file and the
+new value, the proof and the step it is at.
+
+- **Review** opens the request: accept or refuse each field, add a note (needed when refusing) and
+  save. With two steps, what you accept goes on to the second approver; at the last step it is saved.
+- Tick several rows and use **Approve selected** or **Refuse selected** to decide them together. Each
+  request is checked on its own; one that cannot be applied is reported and the rest go through.
+- If the office changed the same field after the family asked, the request is not applied: check
+  the student and decide again.
+- Administrators can decide any request at any step; their decision is final.
+- **All waiting** and **Decided** show every request of the school, for those who supervise.
 
 ## Drop-down lists
 
