@@ -2824,3 +2824,37 @@ a.ep-tabs__tab {
     flex: 1 1 100%;
   }
 }
+/* portal profile: "My requests" folds to a one-line summary; the history opens on click */
+.pp-reqs-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  list-style: none;
+}
+.pp-reqs-summary::-webkit-details-marker {
+  display: none;
+}
+.pp-reqs-summary__title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.pp-reqs-summary__count {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.pp-reqs-summary__hint {
+  margin-left: auto;
+  color: var(--text-link);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+.pp-reqs-box[open] .pp-reqs-summary {
+  margin-bottom: var(--sp-3);
+}
+.pp-reqs-box[open] .pp-reqs-summary__hint {
+  visibility: hidden;
+}

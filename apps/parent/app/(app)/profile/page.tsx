@@ -6,6 +6,7 @@ import { currentLang, t, type Lang } from '@/lib/i18n';
 import { setConsent } from '../queries/actions';
 import { cancelProfileRequest, downloadProfilePdf } from './actions';
 import { applies, shown, type PortalProfile, type PortalRequest } from './types';
+import { ExportWatcher } from '@/components/ExportWatcher';
 
 interface Family {
   children: Array<{ id: string; name: string; section: string | null }>;
@@ -57,55 +58,80 @@ function Photo({
   );
 }
 
-function Requests({ rows, child, lang }: { rows: PortalRequest[]; child: string; lang: Lang }) {
+function Requests({
+  rows,
+  child,
+  lang,
+  open,
+}: {
+  rows: PortalRequest[];
+  child: string;
+  lang: Lang;
+  open: boolean;
+}) {
   if (!rows.length) return null;
+  const waiting = rows.filter((r) => r.status === 'pending').length;
   return (
-    <Card title={t(lang, 'My requests')} style={{ marginBottom: 'var(--sp-3)' }}>
-      <ul className="pp-reqs" id="requests">
-        {rows.map((r) => (
-          <li key={r.id}>
-            <div className="pp-req__head">
-              <Badge tone={r.autoApplied ? 'success' : STATUS[r.status].tone}>
-                {r.autoApplied ? t(lang, 'Saved') : t(lang, STATUS[r.status].label)}
+    <Card style={{ marginBottom: 'var(--sp-3)' }}>
+      <details className="pp-reqs-box" id="requests" open={open || undefined}>
+        <summary className="pp-reqs-summary">
+          <span className="pp-reqs-summary__title">{t(lang, 'My requests')}</span>
+          <span className="pp-reqs-summary__count">
+            {waiting ? (
+              <Badge tone="warning">
+                {waiting} {t(lang, 'waiting')}
               </Badge>
-              <span className="ep-kicker">
-                {new Date(r.createdAt).toLocaleDateString('en-IN')}
-                {r.requestedBy ? ` · ${r.requestedBy}` : ''}
-                {r.status === 'pending' && r.waitingFor
-                  ? ` · ${t(lang, 'with')} ${r.waitingFor}${r.levels > 1 ? ` (${t(lang, 'step')} ${r.level}/${r.levels})` : ''}`
-                  : ''}
-              </span>
-            </div>
-            <ul className="pp-req__items">
-              {r.items.map((it) => (
-                <li key={it.key}>
-                  {it.label}: <strong>{shown(it.to) || t(lang, '(clear)')}</strong>{' '}
-                  {it.status === 'approved' ? (
-                    <Badge tone="success">{t(lang, 'approved')}</Badge>
-                  ) : it.status === 'rejected' ? (
-                    <Badge tone="danger">{t(lang, 'not approved')}</Badge>
-                  ) : null}
-                  {it.note ? <div className="ep-kicker">{it.note}</div> : null}
-                </li>
-              ))}
-            </ul>
-            {r.decisionNote && r.status !== 'pending' ? (
-              <div className="ep-kicker">
-                {t(lang, 'School note')}: {r.decisionNote}
+            ) : null}{' '}
+            {rows.length - waiting} {t(lang, 'decided')}
+          </span>
+          <span className="pp-reqs-summary__hint">{t(lang, 'Show history')}</span>
+        </summary>
+        <ul className="pp-reqs">
+          {rows.map((r) => (
+            <li key={r.id}>
+              <div className="pp-req__head">
+                <Badge tone={r.autoApplied ? 'success' : STATUS[r.status].tone}>
+                  {r.autoApplied ? t(lang, 'Saved') : t(lang, STATUS[r.status].label)}
+                </Badge>
+                <span className="ep-kicker">
+                  {new Date(r.createdAt).toLocaleDateString('en-IN')}
+                  {r.requestedBy ? ` · ${r.requestedBy}` : ''}
+                  {r.status === 'pending' && r.waitingFor
+                    ? ` · ${t(lang, 'with')} ${r.waitingFor}${r.levels > 1 ? ` (${t(lang, 'step')} ${r.level}/${r.levels})` : ''}`
+                    : ''}
+                </span>
               </div>
-            ) : null}
-            {r.status === 'pending' && r.mine ? (
-              <form action={cancelProfileRequest}>
-                <input type="hidden" name="id" value={r.id} />
-                <input type="hidden" name="child" value={child} />
-                <Button type="submit" size="sm" variant="ghost">
-                  {t(lang, 'Withdraw')}
-                </Button>
-              </form>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+              <ul className="pp-req__items">
+                {r.items.map((it) => (
+                  <li key={it.key}>
+                    {it.label}: <strong>{shown(it.to) || t(lang, '(clear)')}</strong>{' '}
+                    {it.status === 'approved' ? (
+                      <Badge tone="success">{t(lang, 'approved')}</Badge>
+                    ) : it.status === 'rejected' ? (
+                      <Badge tone="danger">{t(lang, 'not approved')}</Badge>
+                    ) : null}
+                    {it.note ? <div className="ep-kicker">{it.note}</div> : null}
+                  </li>
+                ))}
+              </ul>
+              {r.decisionNote && r.status !== 'pending' ? (
+                <div className="ep-kicker">
+                  {t(lang, 'School note')}: {r.decisionNote}
+                </div>
+              ) : null}
+              {r.status === 'pending' && r.mine ? (
+                <form action={cancelProfileRequest}>
+                  <input type="hidden" name="id" value={r.id} />
+                  <input type="hidden" name="child" value={child} />
+                  <Button type="submit" size="sm" variant="ghost">
+                    {t(lang, 'Withdraw')}
+                  </Button>
+                </form>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </details>
     </Card>
   );
 }
@@ -120,6 +146,7 @@ export default async function ProfilePage({
     error?: string;
     detail?: string;
     export?: string;
+    requests?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -222,6 +249,9 @@ export default async function ProfilePage({
       ) : null}
       {exp ? (
         <div className="ep-alert ep-alert--info" role="status">
+          {exp.export.status !== 'failed' ? (
+            <ExportWatcher id={exp.export.id} url={exp.download?.url ?? null} />
+          ) : null}
           {exp.download ? (
             <a href={exp.download.url}>{t(lang, 'Download the profile PDF')}</a>
           ) : exp.export.status === 'failed' ? (
@@ -280,7 +310,10 @@ export default async function ProfilePage({
                 </Button>
               </form>
               {pendingCount ? (
-                <a className="ep-btn ep-btn--ghost ep-btn--sm" href="#requests">
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`/profile?child=${child.id}&requests=open#requests`}
+                >
                   {pendingCount} {t(lang, 'waiting for approval')}
                 </a>
               ) : null}
@@ -314,7 +347,7 @@ export default async function ProfilePage({
         </div>
       ) : null}
 
-      <Requests rows={reqs} child={child.id} lang={lang} />
+      <Requests rows={reqs} child={child.id} lang={lang} open={sp.requests === 'open'} />
 
       {p.sections.map((s) => {
         const fields = s.fields.filter((f) => applies(f, values));

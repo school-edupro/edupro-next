@@ -540,6 +540,9 @@ const DICT: Record<string, string> = {
   'My certificates': 'मेरे प्रमाणपत्र',
   'My clinic visits and health checks': 'मेरी क्लिनिक विज़िट और स्वास्थ्य जाँच',
   'Ask about attendance and homework': 'उपस्थिति और गृहकार्य के बारे में पूछें',
+  'Show history': 'इतिहास देखें',
+  decided: 'निर्णीत',
+  waiting: 'प्रतीक्षा में',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */
