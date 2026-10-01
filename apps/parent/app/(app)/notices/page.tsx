@@ -72,18 +72,19 @@ export default async function NoticesPage() {
           </div>
           <p style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--sp-1)' }}>{n.body}</p>
           {n.files.length ? (
-            <ul className="pp-attachments">
-              {n.files.map((f) => (
-                <li key={f.id}>
-                  <FileLinks
-                    url={`/api/attachment/notice/${n.id}/${f.id}`}
-                    saveUrl={`/api/attachment/notice/${n.id}/${f.id}?save=1`}
-                    label={f.name ?? t(lang, 'file')}
-                    saveLabel={t(lang, 'Download')}
-                  />
-                </li>
+            <div className="pp-attachments ep-filecell">
+              <span>{t(lang, 'Attachments')}</span>
+              {n.files.map((f, i) => (
+                <FileLinks
+                  key={f.id}
+                  url={`/api/attachment/notice/${n.id}/${f.id}`}
+                  saveUrl={`/api/attachment/notice/${n.id}/${f.id}?save=1`}
+                  label={`${t(lang, 'Attachment')} ${String(i + 1)}`}
+                  viewLabel={t(lang, 'View')}
+                  saveLabel={t(lang, 'Download')}
+                />
               ))}
-            </ul>
+            </div>
           ) : null}
         </Card>
       ))}

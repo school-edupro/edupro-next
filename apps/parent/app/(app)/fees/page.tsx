@@ -154,12 +154,16 @@ export default async function FeesPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <FileLinks
-              url={exportStatus.download.url}
-              saveUrl={exportStatus.download.saveUrl}
-              label={t(lang, 'Open the receipt PDF')}
-              saveLabel={t(lang, 'Download')}
-            />
+            <span className="ep-filecell">
+              {t(lang, 'Receipt PDF')}
+              <FileLinks
+                url={exportStatus.download.url}
+                saveUrl={exportStatus.download.saveUrl}
+                label={t(lang, 'Receipt PDF')}
+                viewLabel={t(lang, 'View')}
+                saveLabel={t(lang, 'Download')}
+              />
+            </span>
           ) : (
             <>
               {t(lang, 'The receipt PDF is being prepared.')}{' '}

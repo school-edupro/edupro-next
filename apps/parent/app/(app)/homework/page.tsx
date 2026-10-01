@@ -146,18 +146,19 @@ export default async function HomeworkPage({
                 </div>
               ) : null}
               {w.files.length ? (
-                <ul className="pp-attachments">
-                  {w.files.map((f) => (
-                    <li key={f.id}>
-                      <FileLinks
-                        url={`/api/attachment/homework/${w.id}/${f.id}`}
-                        saveUrl={`/api/attachment/homework/${w.id}/${f.id}?save=1`}
-                        label={f.name ?? t(lang, 'file')}
-                        saveLabel={t(lang, 'Download')}
-                      />
-                    </li>
+                <div className="pp-attachments ep-filecell">
+                  <span>{t(lang, 'Attachments')}</span>
+                  {w.files.map((f, i) => (
+                    <FileLinks
+                      key={f.id}
+                      url={`/api/attachment/homework/${w.id}/${f.id}`}
+                      saveUrl={`/api/attachment/homework/${w.id}/${f.id}?save=1`}
+                      label={`${t(lang, 'Attachment')} ${String(i + 1)}`}
+                      viewLabel={t(lang, 'View')}
+                      saveLabel={t(lang, 'Download')}
+                    />
                   ))}
-                </ul>
+                </div>
               ) : null}
               {w.postedBy ? <div className="ep-kicker">{w.postedBy}</div> : null}
             </div>

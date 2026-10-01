@@ -165,10 +165,13 @@ export default async function PrivacyPage({
                   {r.exportId ? (
                     <div className="ep-kicker">
                       {r.exportStatus === 'ready' ? (
-                        <FileLinks
-                          href={`/reports/exports/${r.exportId}/download`}
-                          label={d('report')}
-                        />
+                        <span className="ep-filecell">
+                          {d('report')}
+                          <FileLinks
+                            href={`/reports/exports/${r.exportId}/download`}
+                            label={d('report')}
+                          />
+                        </span>
                       ) : (
                         `${d('report')} · ${r.exportStatus ?? ''}`
                       )}

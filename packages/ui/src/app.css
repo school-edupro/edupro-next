@@ -3121,7 +3121,7 @@ a.ep-tabs__tab {
   min-width: 9rem;
 }
 .ep-wdset__table tr[data-inactive='true'] {
-  opacity: 0.6;
+  background: var(--surface-subtle);
 }
 .ep-wdset__approvers {
   list-style: none;
@@ -3138,25 +3138,41 @@ a.ep-tabs__tab {
   align-items: center;
   margin-top: var(--sp-4);
 }
-/* file links: open in a new tab, Download beside it */
+/* file links: View (opens in the browser) and Download icons, no file name */
 .ep-filelinks {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-3);
-  align-items: baseline;
+  gap: var(--sp-1);
+  align-items: center;
+  vertical-align: middle;
 }
-.ep-filelinks a {
-  text-decoration: underline;
+.ep-filelinks__btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--mob-navy-800);
 }
-.ep-filelinks__save {
-  font-size: var(--fs-small);
+.ep-filelinks__btn:hover {
+  border-color: var(--border-accent);
+  background: var(--mob-cyan-50);
+}
+.ep-filelinks__btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 /* portal: homework and notice attachments */
 .pp-attachments {
-  list-style: none;
-  margin: var(--sp-2) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--sp-1);
+  margin-top: var(--sp-2);
   font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+/* a caption (not a file name) followed by the View / Download icons */
+.ep-filecell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
 }

@@ -559,6 +559,12 @@ const DICT: Record<string, string> = {
   'Open your data report (PDF)': 'अपनी डेटा रिपोर्ट (PDF) खोलें',
   'Open the profile PDF': 'प्रोफ़ाइल PDF खोलें',
   Download: 'डाउनलोड',
+  'Receipt PDF': 'रसीद PDF',
+  'Certificate PDF': 'प्रमाणपत्र PDF',
+  'Your data report (PDF)': 'आपकी डेटा रिपोर्ट (PDF)',
+  'Profile PDF': 'प्रोफ़ाइल PDF',
+  Attachments: 'संलग्नक',
+  Attachment: 'संलग्नक',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

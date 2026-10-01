@@ -21,16 +21,16 @@ const TONE: Record<Clearance['status'], 'success' | 'warning' | 'danger'> = {
 function Docs({ docs }: { docs: Array<{ fileId: string; name: string | null }> }) {
   if (!docs.length) return null;
   return (
-    <ul className="ep-wd__docs">
-      {docs.map((d) => (
-        <li key={d.fileId}>
-          <FileLinks
-            href={`/api/files/${d.fileId}/download`}
-            label={d.name ?? `Document ${d.fileId}`}
-          />
-        </li>
+    <div className="ep-filecell">
+      <span className="ep-field__help">Documents</span>
+      {docs.map((d, i) => (
+        <FileLinks
+          key={d.fileId}
+          href={`/api/files/${d.fileId}/download`}
+          label={`document ${String(i + 1)}`}
+        />
       ))}
-    </ul>
+    </div>
   );
 }
 

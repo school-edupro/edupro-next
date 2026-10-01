@@ -79,12 +79,16 @@ export default async function CertificatesPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <FileLinks
-              url={exportStatus.download.url}
-              saveUrl={exportStatus.download.saveUrl}
-              label={t(lang, 'Open the certificate PDF')}
-              saveLabel={t(lang, 'Download')}
-            />
+            <span className="ep-filecell">
+              {t(lang, 'Certificate PDF')}
+              <FileLinks
+                url={exportStatus.download.url}
+                saveUrl={exportStatus.download.saveUrl}
+                label={t(lang, 'Certificate PDF')}
+                viewLabel={t(lang, 'View')}
+                saveLabel={t(lang, 'Download')}
+              />
+            </span>
           ) : (
             <>
               {t(lang, 'Your PDF is being prepared.')}{' '}

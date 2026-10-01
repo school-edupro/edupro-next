@@ -285,7 +285,10 @@ export default async function ReportCardsPage({
                   header: r('exportStatus'),
                   render: (x) =>
                     x.exportId && x.exportStatus === 'ready' ? (
-                      <FileLinks href={`/reports/exports/${x.exportId}/download`} label="Open" />
+                      <FileLinks
+                        href={`/reports/exports/${x.exportId}/download`}
+                        label="report card PDF"
+                      />
                     ) : (
                       (x.exportStatus ?? '')
                     ),

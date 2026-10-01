@@ -93,12 +93,16 @@ export default async function ResultsPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <FileLinks
-              url={exportStatus.download.url}
-              saveUrl={exportStatus.download.saveUrl}
-              label={t(lang, 'Open the report card PDF')}
-              saveLabel={t(lang, 'Download')}
-            />
+            <span className="ep-filecell">
+              {t(lang, 'Report card PDF')}
+              <FileLinks
+                url={exportStatus.download.url}
+                saveUrl={exportStatus.download.saveUrl}
+                label={t(lang, 'Report card PDF')}
+                viewLabel={t(lang, 'View')}
+                saveLabel={t(lang, 'Download')}
+              />
+            </span>
           ) : (
             <>
               {t(lang, 'The report card PDF is being prepared.')}{' '}

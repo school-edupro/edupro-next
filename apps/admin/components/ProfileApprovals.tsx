@@ -1,4 +1,5 @@
 'use client';
+import { FileLinks } from './FileLinks';
 import { Badge, Drawer } from '@edupro/ui';
 import { useId, useMemo, useState } from 'react';
 import { bulkDecideProfileChanges, decidePortalChange, loadProfileApprovals } from '@/lib/actions';
@@ -399,14 +400,12 @@ export function ProfileApprovals({
                 <td>
                   {r.proofs.length
                     ? r.proofs.map((p) => (
-                        <div key={p.fileId}>
-                          <a
+                        <div key={p.fileId} className="ep-filecell">
+                          {p.label}
+                          <FileLinks
                             href={`/api/profile-proofs/${r.id}/${p.fileId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {p.label}
-                          </a>
+                            label={p.label}
+                          />
                         </div>
                       ))
                     : '—'}
@@ -702,14 +701,10 @@ function ReviewDrawer({
           <ul>
             {row.proofs.map((p) => (
               <li key={p.fileId} className="ep-pa__proof">
-                <a
-                  href={`/api/profile-proofs/${row.id}/${p.fileId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <span className="ep-filecell">
                   {p.label}
-                  {p.fileName ? ` (${p.fileName})` : ''} — open in a new tab
-                </a>
+                  <FileLinks href={`/api/profile-proofs/${row.id}/${p.fileId}`} label={p.label} />
+                </span>
                 {/\.(png|jpe?g|webp|gif)$/i.test(p.fileName ?? '') ? (
                   <img
                     className="ep-pa__preview"

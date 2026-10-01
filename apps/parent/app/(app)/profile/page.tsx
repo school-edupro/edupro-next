@@ -299,12 +299,16 @@ export default async function ProfilePage({
             <ExportWatcher id={exp.export.id} url={exp.download?.url ?? null} />
           ) : null}
           {exp.download ? (
-            <FileLinks
-              url={exp.download.url}
-              saveUrl={exp.download.saveUrl}
-              label={t(lang, 'Open the profile PDF')}
-              saveLabel={t(lang, 'Download')}
-            />
+            <span className="ep-filecell">
+              {t(lang, 'Profile PDF')}
+              <FileLinks
+                url={exp.download.url}
+                saveUrl={exp.download.saveUrl}
+                label={t(lang, 'Profile PDF')}
+                viewLabel={t(lang, 'View')}
+                saveLabel={t(lang, 'Download')}
+              />
+            </span>
           ) : exp.export.status === 'failed' ? (
             t(lang, 'The PDF could not be prepared. Please try again.')
           ) : (

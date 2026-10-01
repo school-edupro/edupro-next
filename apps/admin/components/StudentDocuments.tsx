@@ -158,16 +158,14 @@ export function StudentDocuments({
                   return (
                     <tr key={d.id}>
                       <td>
-                        <strong>
+                        <span className="ep-filecell">
+                          <strong>{kindLabel(d.kind)}</strong>
                           <FileLinks
                             href={`/api/files/${d.fileId}/download`}
                             label={kindLabel(d.kind)}
                           />
-                        </strong>
-                        <div className="ep-field__help">
-                          {d.fileName ?? ''}
-                          {d.title ? ` · ${d.title}` : ''}
-                        </div>
+                        </span>
+                        {d.title ? <div className="ep-field__help">{d.title}</div> : null}
                       </td>
                       <td>{d.number ?? '—'}</td>
                       <td>

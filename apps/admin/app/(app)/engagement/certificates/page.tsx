@@ -118,7 +118,10 @@ export default async function CertificatesPage({
               header: e('pdf'),
               render: (c) =>
                 c.exportId && c.exportStatus === 'ready' ? (
-                  <FileLinks href={`/reports/exports/${c.exportId}/download`} label="Open" />
+                  <FileLinks
+                    href={`/reports/exports/${c.exportId}/download`}
+                    label="certificate PDF"
+                  />
                 ) : (
                   (c.exportStatus ?? '')
                 ),

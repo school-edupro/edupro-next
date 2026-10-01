@@ -135,10 +135,13 @@ export default async function SchedulesPage({
               header: s('lastRun'),
               render: (r) =>
                 r.lastExportId ? (
-                  <FileLinks
-                    href={`/reports/exports/${r.lastExportId}/download`}
-                    label={when(r.lastRunAt)}
-                  />
+                  <span className="ep-filecell">
+                    {when(r.lastRunAt)}
+                    <FileLinks
+                      href={`/reports/exports/${r.lastExportId}/download`}
+                      label={`last run ${when(r.lastRunAt)}`}
+                    />
+                  </span>
                 ) : (
                   when(r.lastRunAt)
                 ),

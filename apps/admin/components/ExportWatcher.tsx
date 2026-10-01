@@ -59,7 +59,10 @@ export function ExportWatcher({
     >
       {labels.queued} · {format.toUpperCase()} ·{' '}
       {state === 'ready' ? (
-        <FileLinks href={download} label={labels.ready} />
+        <span className="ep-filecell">
+          {labels.ready}
+          <FileLinks href={download} label={labels.ready} />
+        </span>
       ) : state === 'failed' ? (
         <span>
           {labels.failed}

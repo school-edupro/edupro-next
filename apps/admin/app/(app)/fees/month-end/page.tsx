@@ -144,8 +144,12 @@ export default async function MonthEndPage({
                 <p className="ep-kicker">
                   {o('packExports')}:{' '}
                   {state.close.packExportIds.map((id) => (
-                    <span key={id} style={{ marginRight: 'var(--sp-3)' }}>
-                      <FileLinks href={`/reports/exports/${id}/download`} label={`#${id}`} />
+                    <span key={id} className="ep-filecell" style={{ marginRight: 'var(--sp-3)' }}>
+                      #{id}
+                      <FileLinks
+                        href={`/reports/exports/${id}/download`}
+                        label={`pack export ${id}`}
+                      />
                     </span>
                   ))}
                 </p>

@@ -56,10 +56,13 @@ export default async function AiReportsPage({
                   {current.periodFrom} → {current.periodTo}
                 </Badge>
                 {current.exportId && current.exportStatus === 'ready' ? (
-                  <FileLinks
-                    href={`/reports/exports/${current.exportId}/download`}
-                    label={a('pdfReady')}
-                  />
+                  <span className="ep-filecell">
+                    {a('pdfReady')}
+                    <FileLinks
+                      href={`/reports/exports/${current.exportId}/download`}
+                      label={a('pdfReady')}
+                    />
+                  </span>
                 ) : current.exportId ? (
                   <Badge tone="warning">{a('pdfPending')}</Badge>
                 ) : null}

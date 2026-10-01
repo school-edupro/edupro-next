@@ -70,7 +70,10 @@ export default async function ExportsPage({
               header: '',
               render: (e) =>
                 e.status === 'ready' ? (
-                  <FileLinks href={`/reports/exports/${e.id}/download`} label="Open" />
+                  <FileLinks
+                    href={`/reports/exports/${e.id}/download`}
+                    label={e.title ?? 'export'}
+                  />
                 ) : e.status === 'failed' ? (
                   <span className="ep-field__error">{e.error}</span>
                 ) : null,

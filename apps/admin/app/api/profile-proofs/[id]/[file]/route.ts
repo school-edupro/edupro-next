@@ -9,7 +9,7 @@ const INLINE = /^(application\/pdf|image\/(png|jpeg|webp|gif))$/;
  * PDFs and images are shown in the browser from the admin's own origin; other files download.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; file: string }> },
 ) {
   const { id, file } = await params;
@@ -18,8 +18,10 @@ export async function GET(
   try {
     const r = await apiFetch<{
       file: { contentType: string; fileName?: string | null };
-      download: { url: string };
+      download: { url: string; saveUrl?: string };
     }>(`/engagement/profile-approvals/${id}/proofs/${file}`);
+    if (req.nextUrl.searchParams.get('save') === '1')
+      return NextResponse.redirect(r.download.saveUrl ?? r.download.url, { status: 303 });
     if (!INLINE.test(r.file.contentType))
       return NextResponse.redirect(r.download.url, { status: 303 });
     const res = await fetch(r.download.url, { cache: 'no-store' });

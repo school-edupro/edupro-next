@@ -14,6 +14,8 @@ Claude acts as senior developer + architect + business analyst. Plans live in th
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`) → short report.
 - Every drop-down is a typeahead (`<input list>` + `<datalist>`, `RefDatalist`/`CascadeAddress`);
   state follows country, city follows state.
+- PDF / image files: never show the file name; show a **View** icon (opens in the browser, new tab)
+  and a **Download** icon — use `FileLinks` (admin and parent apps).
 - UI = Mobilise Design System (navy/cyan, Poppins / Source Sans 3); lint forbids raw hex/px — use tokens.
 - Never enter tokens/keys/passwords. Never push: `origin` (github.com/school-edupro/edupro-next) is the
   user's to push from Terminal.

@@ -108,12 +108,16 @@ export default async function DataPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <FileLinks
-              url={exportStatus.download.url}
-              saveUrl={exportStatus.download.saveUrl}
-              label={t(lang, 'Open your data report (PDF)')}
-              saveLabel={t(lang, 'Download')}
-            />
+            <span className="ep-filecell">
+              {t(lang, 'Your data report (PDF)')}
+              <FileLinks
+                url={exportStatus.download.url}
+                saveUrl={exportStatus.download.saveUrl}
+                label={t(lang, 'Your data report (PDF)')}
+                viewLabel={t(lang, 'View')}
+                saveLabel={t(lang, 'Download')}
+              />
+            </span>
           ) : (
             <>
               {t(lang, 'Your report is being prepared.')}{' '}

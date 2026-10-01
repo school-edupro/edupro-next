@@ -628,7 +628,12 @@ export function ReportBuilder({
                   ? ` · showing the first ${String(preview.rows.length)}`
                   : ''}
               </p>
-              <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Preview rows (scrolls sideways)">
+              <div
+                className="ep-table-wrap"
+                tabIndex={0}
+                role="region"
+                aria-label="Preview rows (scrolls sideways)"
+              >
                 <table className="ep-table">
                   <thead>
                     <tr>
