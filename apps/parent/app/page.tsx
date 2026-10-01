@@ -3,12 +3,13 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { ChildProfileCard } from '@/components/ChildProfileCard';
 
 /** Parent home (S5-08): sign-in round trip, school choice and the feature shell; content lands in Sprint 9. */
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ welcome?: string }>;
+  searchParams: Promise<{ welcome?: string; child?: string }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
@@ -135,6 +136,9 @@ export default async function HomePage({
             Switch
           </button>
         </form>
+      ) : null}
+      {me.permissions.includes('engagement.family.view') ? (
+        <ChildProfileCard childId={sp.child} lang={lang} />
       ) : null}
       <div
         style={{
