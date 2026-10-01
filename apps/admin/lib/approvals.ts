@@ -74,6 +74,43 @@ export async function myApprovals(
           }))
           .catch(() => null)
       : null,
+    has.has('people.withdrawal.clear')
+      ? apiFetch<{
+          data: Array<{
+            id: string;
+            studentName: string;
+            section: string | null;
+            leavingOn: string;
+            initiatedOn: string;
+            currentStep: number | null;
+            clearances: Array<{
+              departmentName: string;
+              step: number;
+              status: string;
+              canAct?: boolean;
+            }>;
+          }>;
+          page: { total: number };
+        }>(`/people/withdrawals?mine=true&size=${size}`)
+          .then((r): ApprovalGroup => ({
+            key: 'withdrawal',
+            title: 'Withdrawal clearances',
+            help: 'Leaving students waiting for your department to clear them',
+            href: '/people/withdrawals?status=mine',
+            count: r.page.total,
+            items: r.data.map((w) => ({
+              id: w.id,
+              title: `${w.studentName}${w.section ? ` · ${w.section}` : ''}`,
+              detail: `${w.clearances
+                .filter((x) => x.canAct && x.step === w.currentStep && x.status !== 'cleared')
+                .map((x) => x.departmentName)
+                .join(', ')} · leaving ${w.leavingOn}`,
+              href: `/people/withdrawals/${w.id}`,
+              since: w.initiatedOn,
+            })),
+          }))
+          .catch(() => null)
+      : null,
   ]);
   return groups.filter((g): g is ApprovalGroup => g !== null);
 }

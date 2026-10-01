@@ -1,7 +1,7 @@
 import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
 import type { Page, Withdrawal } from '@/lib/types';
 
 const tone = (s: Withdrawal['status']) =>
@@ -13,23 +13,50 @@ const tone = (s: Withdrawal['status']) =>
         ? 'info'
         : 'warning';
 
-/** S7-02: withdrawal register with clearance progress. */
+/** Withdrawal register: open, waiting for me, completed or cancelled, with the step each one is at. */
 export default async function WithdrawalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; status?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    status?: string;
+    q?: string;
+  }>;
 }) {
   const sp = await searchParams;
-  const [t, l, c] = await Promise.all([
-    getTranslations('pages.people_withdrawals'),
+  const [l, c, me] = await Promise.all([
     getTranslations('lifecycle'),
     getTranslations('common'),
+    getMe(),
   ]);
   const status = sp.status ?? 'open';
-  const list = await apiFetch<Page<Withdrawal>>(`/people/withdrawals?size=100&status=${status}`);
+  const qs = new URLSearchParams({ size: '200' });
+  if (status === 'mine') qs.set('mine', 'true');
+  else qs.set('status', status);
+  if (sp.q) qs.set('q', sp.q);
+  const list = await apiFetch<Page<Withdrawal>>(`/people/withdrawals?${qs.toString()}`);
+  const canManage = me.permissions.includes('people.withdrawal.manage');
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker="People"
+        title="Withdrawals"
+        description="Students leaving the school: each department clears them step by step, then the TC and completion."
+        actions={
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/people/withdrawals/bulk">
+              Bulk (class XII)
+            </a>
+            {canManage ? (
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/people/withdrawals/settings">
+                Departments and steps
+              </a>
+            ) : null}
+          </span>
+        }
+      />
       <Notice params={sp} />
       <Card>
         <form
@@ -38,6 +65,7 @@ export default async function WithdrawalsPage({
             display: 'flex',
             gap: 'var(--sp-3)',
             alignItems: 'flex-end',
+            flexWrap: 'wrap',
             marginBottom: 'var(--sp-4)',
           }}
         >
@@ -48,16 +76,21 @@ export default async function WithdrawalsPage({
             defaultValue={status}
             options={[
               { value: 'open', label: l('open') },
+              { value: 'mine', label: 'Waiting for me' },
               { value: 'completed', label: l('withdrawalStatuses.completed') },
               { value: 'cancelled', label: l('withdrawalStatuses.cancelled') },
             ]}
           />
+          <label className="ep-field" htmlFor="q" style={{ margin: 0 }}>
+            <span className="ep-field__label">Student or admission no</span>
+            <input id="q" name="q" className="ep-input" defaultValue={sp.q ?? ''} maxLength={80} />
+          </label>
           <Button type="submit" variant="secondary">
             {c('apply')}
           </Button>
         </form>
         <DataTable<Withdrawal>
-          caption={t('title')}
+          caption="Withdrawals"
           density="dense"
           columns={[
             {
@@ -69,13 +102,13 @@ export default async function WithdrawalsPage({
                 </a>
               ),
             },
-            { key: 'section', header: c('name'), render: (w) => w.section ?? '' },
-            { key: 'requested', header: l('requestedOn'), render: (w) => w.requestedOn },
+            { key: 'section', header: 'Class', render: (w) => w.section ?? '' },
+            { key: 'started', header: 'Started', render: (w) => w.initiatedOn },
             { key: 'leaving', header: l('leavingOn'), render: (w) => w.leavingOn },
             { key: 'reason', header: l('reason'), render: (w) => w.reason },
             {
               key: 'progress',
-              header: l('clearances'),
+              header: 'Departments',
               render: (w) => (
                 <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
                   {w.clearances.map((x) => (
@@ -86,26 +119,38 @@ export default async function WithdrawalsPage({
                           ? 'success'
                           : x.status === 'hold'
                             ? 'danger'
-                            : 'neutral'
+                            : x.step === w.currentStep
+                              ? 'warning'
+                              : 'neutral'
                       }
                     >
-                      {x.department}
+                      {x.departmentName}
                     </Badge>
                   ))}
                 </span>
               ),
             },
             {
+              key: 'tc',
+              header: 'TC',
+              render: (w) => (w.tc ? w.tc.tcNo : w.canIssueTc ? 'ready' : '—'),
+            },
+            {
               key: 'status',
               header: l('status'),
               render: (w) => (
-                <Badge tone={tone(w.status)}>{l(`withdrawalStatuses.${w.status}`)}</Badge>
+                <Badge tone={tone(w.status)}>
+                  {l(`withdrawalStatuses.${w.status}`)}
+                  {w.status === 'requested' && w.currentStep
+                    ? ` · step ${String(w.currentStep)}`
+                    : ''}
+                </Badge>
               ),
             },
           ]}
           rows={list.data}
           rowKey={(w) => w.id}
-          emptyTitle={l('noWithdrawals')}
+          emptyTitle={status === 'mine' ? 'Nothing is waiting for you.' : l('noWithdrawals')}
         />
       </Card>
     </>

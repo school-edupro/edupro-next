@@ -126,7 +126,9 @@
     "cutover": "कट-ओवर",
     "hypercare": "हाइपरकेयर",
     "monthEnd": "माह-अंत समापन",
-    "help": "सहायता केंद्र"
+    "help": "सहायता केंद्र",
+    "bulkWithdrawals": "सामूहिक निकासी और टीसी",
+    "withdrawalSettings": "निकासी सेटिंग"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

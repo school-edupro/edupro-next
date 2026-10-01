@@ -25,6 +25,16 @@ const NAV: Array<{
       { href: '/people/import', label: 'import', permission: 'people.import.run' },
       { href: '/people/tc', label: 'transferCertificates', permission: 'people.tc.view' },
       { href: '/people/withdrawals', label: 'withdrawals', permission: 'people.withdrawal.view' },
+      {
+        href: '/people/withdrawals/bulk',
+        label: 'bulkWithdrawals',
+        permission: 'people.withdrawal.manage',
+      },
+      {
+        href: '/people/withdrawals/settings',
+        label: 'withdrawalSettings',
+        permission: 'people.withdrawal.manage',
+      },
       { href: '/people/promotions', label: 'promotions', permission: 'people.promotion.view' },
       {
         href: '/people/profile-approvals',

@@ -105,6 +105,11 @@ const PAGES = [
   '/people/profile-approvals?box=all',
   '/people/profile-approvals?box=decided',
   '/approvals',
+  '/people/withdrawals',
+  '/people/withdrawals/settings',
+  '/people/withdrawals/bulk?tab=start&section=143',
+  '/people/withdrawals/bulk?tab=clear',
+  '/people/withdrawals/bulk?tab=tc',
 ];
 
 test.describe('accessibility (axe)', () => {

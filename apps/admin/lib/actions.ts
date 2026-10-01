@@ -1295,22 +1295,63 @@ export async function cancelTc(fd: FormData) {
 
 export async function requestWithdrawal(fd: FormData) {
   const studentId = str(fd, 'studentId');
-  return run(`/people/students/${studentId}`, () =>
-    apiFetch(`/people/students/${studentId}/withdrawal`, {
+  return run(`/people/students/${studentId}?tab=status`, async () => {
+    const files = await uploadAll(fd, 'documents', 'personal');
+    const w = await apiFetch<{ id: string }>(`/people/students/${studentId}/withdrawal`, {
       method: 'POST',
-      body: JSON.stringify({ leavingOn: str(fd, 'leavingOn'), reason: str(fd, 'reason') }),
-    }),
-  );
+      body: JSON.stringify({
+        initiatedOn: opt(fd, 'initiatedOn'),
+        leavingOn: str(fd, 'leavingOn'),
+        reason: str(fd, 'reason'),
+        remarks: opt(fd, 'remarks'),
+        documents: files.map((fileId) => ({ fileId })),
+      }),
+    });
+    redirect(`/people/withdrawals/${w.id}?ok=1`);
+  });
 }
 
 export async function recordClearance(fd: FormData) {
   const id = str(fd, 'id');
-  return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, () =>
-    apiFetch(`/people/withdrawals/${id}/clearances/${encodeURIComponent(str(fd, 'department'))}`, {
-      method: 'PUT',
+  return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, async () => {
+    const files = await uploadAll(fd, 'documents', 'personal');
+    await apiFetch(
+      `/people/withdrawals/${id}/clearances/${encodeURIComponent(str(fd, 'department'))}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: str(fd, 'status') || 'cleared',
+          dues: Number(str(fd, 'dues') || '0'),
+          remarks: opt(fd, 'remarks'),
+          documents: files.map((fileId) => ({ fileId })),
+        }),
+      },
+    );
+  });
+}
+
+export async function bypassClearance(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/withdrawals/${id}`, () =>
+    apiFetch(
+      `/people/withdrawals/${id}/clearances/${encodeURIComponent(str(fd, 'department'))}/bypass`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason: str(fd, 'reason') }),
+      },
+    ),
+  );
+}
+
+export async function issueWithdrawalTc(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/tc`, {
+      method: 'POST',
       body: JSON.stringify({
-        status: str(fd, 'status') || 'cleared',
-        dues: Number(str(fd, 'dues') || '0'),
+        issuedOn: opt(fd, 'issuedOn'),
+        conduct: opt(fd, 'conduct') ?? 'Good',
+        promotionStatus: opt(fd, 'promotionStatus'),
         remarks: opt(fd, 'remarks'),
       }),
     }),
@@ -1332,6 +1373,109 @@ export async function cancelWithdrawal(fd: FormData) {
       body: JSON.stringify({ reason: str(fd, 'reason') }),
     }),
   );
+}
+
+/** Saves the withdrawal departments (the settings editor sends the whole list as JSON). */
+export async function saveWithdrawalDepartments(
+  departments: unknown[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await apiFetch('/people/withdrawal-departments', {
+      method: 'PUT',
+      body: JSON.stringify({ departments }),
+    });
+    revalidatePath('/people/withdrawals/settings');
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError)
+      return {
+        ok: false,
+        error: String(error.problem.detail ?? error.problem.title ?? 'Not saved'),
+      };
+    throw error;
+  }
+}
+
+type BulkResult = {
+  done?: number;
+  started?: number;
+  failed: number;
+  results: Array<{ ok: boolean; error?: string }>;
+};
+const bulkSummary = (r: BulkResult, verb: string) => {
+  const ok = r.done ?? r.started ?? 0;
+  const firstError = r.results.find((x) => !x.ok)?.error;
+  return `${String(ok)} ${verb}${r.failed ? `; ${String(r.failed)} not: ${firstError ?? ''}` : ''}`;
+};
+
+export async function bulkWithdrawal(fd: FormData) {
+  const back = `/people/withdrawals/bulk?tab=start&section=${encodeURIComponent(str(fd, 'section'))}`;
+  const studentIds = fd.getAll('studentIds').map(String).filter(Boolean);
+  return run(back, async () => {
+    if (!studentIds.length)
+      throw new ApiError(400, {
+        type: 'validation-failed',
+        detail: 'Tick the students to withdraw',
+      });
+    const r = await apiFetch<BulkResult>('/people/withdrawals/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentIds,
+        initiatedOn: opt(fd, 'initiatedOn'),
+        leavingOn: str(fd, 'leavingOn'),
+        reason: str(fd, 'reason'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    });
+    redirect(
+      `/people/withdrawals/bulk?tab=clear&done=${encodeURIComponent(bulkSummary(r, 'withdrawals started'))}`,
+    );
+  });
+}
+
+export async function bulkClearance(fd: FormData) {
+  const department = str(fd, 'department');
+  const back = `/people/withdrawals/bulk?tab=clear&department=${encodeURIComponent(department)}`;
+  const withdrawalIds = fd.getAll('withdrawalIds').map(String).filter(Boolean);
+  return run(back, async () => {
+    if (!withdrawalIds.length)
+      throw new ApiError(400, { type: 'validation-failed', detail: 'Tick the students to clear' });
+    const r = await apiFetch<BulkResult>('/people/withdrawals/clearances/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        withdrawalIds,
+        department,
+        status: str(fd, 'status') || 'cleared',
+        remarks: opt(fd, 'remarks'),
+      }),
+    });
+    redirect(
+      `${back}&done=${encodeURIComponent(bulkSummary(r, str(fd, 'status') === 'hold' ? 'put on hold' : 'cleared'))}`,
+    );
+  });
+}
+
+export async function bulkWithdrawalTc(fd: FormData) {
+  const back = '/people/withdrawals/bulk?tab=tc';
+  const withdrawalIds = fd.getAll('withdrawalIds').map(String).filter(Boolean);
+  return run(back, async () => {
+    if (!withdrawalIds.length)
+      throw new ApiError(400, {
+        type: 'validation-failed',
+        detail: 'Tick the students to issue TCs',
+      });
+    const r = await apiFetch<BulkResult>('/people/withdrawals/tc/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        withdrawalIds,
+        issuedOn: opt(fd, 'issuedOn'),
+        conduct: opt(fd, 'conduct') ?? 'Good',
+        promotionStatus: opt(fd, 'promotionStatus'),
+        remarks: opt(fd, 'remarks'),
+      }),
+    });
+    redirect(`${back}&done=${encodeURIComponent(bulkSummary(r, 'TCs issued'))}`);
+  });
 }
 
 export async function savePromotions(fd: FormData) {

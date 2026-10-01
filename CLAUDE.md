@@ -4,7 +4,7 @@ School ERP rebuild of the legacy PHP "schoolerpalpha" (Mobilise App Lab; owner K
 Claude acts as senior developer + architect + business analyst. Plans live in the legacy folder
 `~/Documents/FTP/schoolerpalpha/` (`MERN_MIGRATION_BLUEPRINT.md`, `SCHOOL_ERP_PROJECT_PLAN.md`,
 `SCHOOL_ERP_SPRINT_PLAN.md`); design notes in `docs/design/` (latest 19 student 360 + report builder,
-20 portal profile + approvals); sprint records `docs/sprints/`; demo logins `docs/demo-logins.md`.
+20 portal profile + approvals, 21 withdrawal departments); sprint records `docs/sprints/`; demo logins `docs/demo-logins.md`.
 
 ## Working agreement (from the user)
 
@@ -81,7 +81,8 @@ report builder (0036–0039), students list + per-user views + parent photos + p
 portal profile + field policy + routed/partial/bulk approvals (0041, `aa52894`), Beta demo logins and
 data `seed:beta` (`15d0f99`); parent/student portal frame and home dashboard (`adcbcd0`); sub-caste
 list, city/bank from masters, portal photo upload with approval, admin full-profile photos (0042–0043).
-Migrations: 43.
+approvals bell + My approvals, proofs inline, sibling verify, withdrawal by configured departments
+with bulk start / clear / TC (design 21, 0045–0046). Migrations: 46.
 
 Open follow-ups: SMS/WhatsApp notice on approval decisions (needs a template); fee/attendance columns in the report builder; legacy student data clean-up and import
 (dry run: `~/Documents/student_data/Student_Import_Check_2026-09-30.xlsx`); Release 2 (S24 HR core)

@@ -126,7 +126,9 @@
     "cutover": "Cut-over",
     "hypercare": "Hypercare",
     "monthEnd": "Month-end close",
-    "help": "Help centre"
+    "help": "Help centre",
+    "bulkWithdrawals": "Bulk withdrawal and TCs",
+    "withdrawalSettings": "Withdrawal settings"
   },
   "shell": {
     "primaryNavigation": "Primary",

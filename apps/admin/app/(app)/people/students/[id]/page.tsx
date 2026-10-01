@@ -594,8 +594,12 @@ export default async function StudentPage({
             {can('people.withdrawal.manage') && !openWithdrawal && student.status === 'active' ? (
               <form action={requestWithdrawal} style={{ marginTop: 'var(--sp-4)' }}>
                 <input type="hidden" name="studentId" value={student.id} />
-                <p className="ep-field__help">{l('requestHelp')}</p>
+                <p className="ep-field__help">
+                  Each department then clears the student step by step (fees and library check
+                  themselves); the TC follows once fees have cleared.
+                </p>
                 <FormRow columns={2}>
+                  <InputField id="wInitiatedOn" name="initiatedOn" label="Started on" type="date" />
                   <InputField
                     id="wLeavingOn"
                     name="leavingOn"
@@ -609,8 +613,36 @@ export default async function StudentPage({
                     label={l('reason')}
                     required
                     maxLength={300}
+                    list="withdrawal-reasons"
                   />
+                  <InputField id="wRemarks" name="remarks" label="Remarks" maxLength={1000} />
                 </FormRow>
+                <datalist id="withdrawal-reasons">
+                  {[
+                    'Passed out (Class XII)',
+                    'Transfer of parent',
+                    'Shifting to another city',
+                    'Admission in another school',
+                    'Financial reasons',
+                    'Health reasons',
+                    'Other',
+                  ].map((r) => (
+                    <option key={r} value={r} />
+                  ))}
+                </datalist>
+                <label className="ep-field" htmlFor="wDocuments">
+                  <span className="ep-field__label">
+                    Documents (application letter, parent request …)
+                  </span>
+                  <input
+                    id="wDocuments"
+                    name="documents"
+                    type="file"
+                    multiple
+                    className="ep-input"
+                    accept="application/pdf,image/png,image/jpeg,image/webp"
+                  />
+                </label>
                 <FormActions>
                   <Button type="submit" variant="secondary">
                     {l('requestWithdrawal')}

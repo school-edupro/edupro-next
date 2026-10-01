@@ -603,11 +603,22 @@ export interface TransferCertificate {
 export interface Clearance {
   id: string;
   department: string;
+  departmentName: string;
+  step: number;
   status: 'pending' | 'cleared' | 'hold';
   dues: string;
   remarks: string | null;
+  bypassed: boolean;
+  auto: boolean;
+  check: { kind: string; due: number; detail: string } | null;
+  documents: Array<{ fileId: string; name: string | null }>;
+  approvers: string[];
+  bypassAllowed: boolean;
+  documentRequired: boolean;
+  gatesTc: boolean;
   actedBy: string | null;
   actedAt: string | null;
+  canAct?: boolean;
 }
 
 export interface Withdrawal {
@@ -616,14 +627,41 @@ export interface Withdrawal {
   studentName: string;
   admissionNo: string;
   section: string | null;
+  initiatedOn: string;
   requestedOn: string;
   leavingOn: string;
   reason: string;
+  remarks: string | null;
+  documents: Array<{ fileId: string; name: string | null }>;
   status: 'requested' | 'cleared' | 'completed' | 'cancelled';
+  currentStep: number | null;
   requestedBy: string | null;
   completedAt: string | null;
   cancelReason: string | null;
+  tc: { id: string; tcNo: string; exportId: string | null } | null;
   clearances: Clearance[];
+  canIssueTc?: boolean;
+}
+
+export type WithdrawalApprover =
+  | { kind: 'office' }
+  | { kind: 'class_teacher' }
+  | { kind: 'role'; roleId: string; name?: string }
+  | { kind: 'user'; userId: string; name?: string };
+
+export interface WithdrawalDepartment {
+  id: string;
+  code: string;
+  name: string;
+  step: number;
+  approvers: WithdrawalApprover[];
+  approverLabels: string[];
+  autoCheck: 'none' | 'fees' | 'library';
+  autoClear: boolean;
+  bypassAllowed: boolean;
+  documentRequired: boolean;
+  gatesTc: boolean;
+  active: boolean;
 }
 
 export interface PromotionRow {
