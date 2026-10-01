@@ -138,7 +138,7 @@ test.describe('accessibility (axe)', () => {
         ),
       ).toEqual([]);
     }
-    for (const tab of ['student', 'address', 'father']) {
+    for (const tab of ['student', 'address', 'father', 'mother', 'contact']) {
       await page.goto(`${href!}/profile?tab=${tab}`);
       await page.waitForLoadState('networkidle');
       const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();

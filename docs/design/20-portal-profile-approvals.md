@@ -78,3 +78,12 @@ with marks, a parent query, feedback and a profile change through the API. Idemp
 - **Portal PDF and requests.** The PDF notice re-checks itself and starts the download when ready (the
   workers must run). My requests folds to a one-line summary.
 - **Admin Full profile** has a Photos panel (student, father, mother, guardian) with Add / Change photo.
+- **Profile clean-up (later still).** Country / State / City options only from System setup; seven fields
+  retired (`retired: true`: transport required, travel mode, route no, four photo-link texts; data kept,
+  reportable, off edit / Excel / quick add / portal / PDF); alumni fields read "… is an Alumnus"; family
+  income uses the Income list (0044 converts amounts). Guardian photo on the portal; photo addresses
+  carry `?v=<file id>`; Edit student adds a missing mother / guardian with name and photo together.
+- **Contact roles** (admin editor, `lib/contact-roles.ts`): ticks per parent (WhatsApp, SMS / calls,
+  emergency, communication email, primary contact) fill the matching boxes; boxes copying a parent's
+  mobile or email follow it when it changes; the Contact tab picks the primary and emergency contact
+  from the parents. Derived from the values, nothing extra stored.

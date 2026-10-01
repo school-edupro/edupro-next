@@ -1,6 +1,8 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
+import { followChange } from '@/lib/contact-roles';
+import { FamilyContactPickers, ParentContactRoles } from './ContactRoles';
 import { ProfileField } from './ProfileField';
 import {
   applies,
@@ -76,14 +78,21 @@ export function ProfileEditor({
     return () => window.removeEventListener('beforeunload', warn);
   }, [changed.length]);
 
-  const onChange = (key: string, v: string | null) => {
-    setValues((prev) => ({ ...prev, [key]: v }));
+  // several boxes at once (contact roles); clears their errors
+  const setMany = (patch: ProfileValues) => {
+    setValues((prev) => ({ ...prev, ...patch }));
     setErrors((prev) => {
-      if (!prev[key]) return prev;
+      const keys = Object.keys(patch).filter((k) => prev[k]);
+      if (!keys.length) return prev;
       const next = { ...prev };
-      delete next[key];
+      for (const k of keys) delete next[k];
       return next;
     });
+  };
+
+  const onChange = (key: string, v: string | null) => {
+    // boxes copying a parent's mobile or email follow it when it changes
+    setMany({ ...followChange(values, key, v), [key]: v });
   };
 
   const jumpTo = (key: string) => {
@@ -228,6 +237,11 @@ export function ProfileEditor({
           className="ep-card"
           style={{ padding: 'var(--sp-4)' }}
         >
+          {s.id === 'father' || s.id === 'mother' || s.id === 'guardian' ? (
+            <ParentContactRoles party={s.id} values={values} disabled={!canEdit} set={setMany} />
+          ) : s.id === 'contact' ? (
+            <FamilyContactPickers values={values} disabled={!canEdit} set={setMany} />
+          ) : null}
           <div className="ep-profile__grid">
             {(fieldsBySection.get(s.id) ?? [])
               .filter((f) => applies(f, values))

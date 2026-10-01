@@ -2907,3 +2907,40 @@ a.ep-tabs__tab {
   justify-self: start;
   margin-top: var(--sp-1);
 }
+/* student profile: contact roles (WhatsApp / SMS / emergency / primary ticks, family pickers) */
+.ep-roles {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  padding: var(--sp-3) var(--sp-4);
+  margin: 0 0 var(--sp-4);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-roles legend {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  padding: 0 var(--sp-1);
+}
+.ep-roles__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+}
+.ep-roles__what {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-roles__tick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  cursor: pointer;
+}
+.ep-roles__pickers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--sp-3);
+}
