@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { endImpersonation } from '@/lib/actions';
 import type { Me } from '@/lib/api';
 import { apiFetch } from '@/lib/api';
+import { myApprovals } from '@/lib/approvals';
 import { tourFor } from '@/lib/tours';
 import { Icon, SECTION_ICON } from './nav-icons';
 import { Tour } from './Tour';
@@ -331,6 +332,16 @@ export async function Shell({
         .then((r) => r.data.length)
         .catch(() => 0)
     : 0;
+  // approvals waiting for me (profile changes, workflow steps, withdrawal clearances): best effort
+  const waiting = (await myApprovals(me.permissions).catch(() => [])).reduce(
+    (n, g) => n + g.count,
+    0,
+  );
+  const mayApprove = [
+    'engagement.change_request.approve',
+    'workflow.inbox.act',
+    'people.withdrawal.clear',
+  ].some((p) => allowed.has(p));
   // Sprint 22: pilot feature flags hide whole navigation groups (setting platform.modules_enabled)
   const features = await apiFetch<{ modules: Array<{ module: string; enabled: boolean }> }>(
     '/ops/features',
@@ -472,6 +483,19 @@ export async function Shell({
                 stepOfTemplate: String(tours.raw('stepOf')),
               }}
             />
+          ) : null}
+          {mayApprove ? (
+            <a
+              className="ep-header__icon-btn ep-header__bell"
+              href="/approvals"
+              aria-label={t('approvals', { count: waiting })}
+              title={t('approvals', { count: waiting })}
+            >
+              <Icon name="inbox" size={22} />
+              {waiting > 0 ? (
+                <span className="ep-header__badge">{waiting > 99 ? '99+' : waiting}</span>
+              ) : null}
+            </a>
           ) : null}
           {allowed.has('insights.alert.view') ? (
             <a

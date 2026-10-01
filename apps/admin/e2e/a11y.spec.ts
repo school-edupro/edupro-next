@@ -104,6 +104,7 @@ const PAGES = [
   '/people/profile-approvals',
   '/people/profile-approvals?box=all',
   '/people/profile-approvals?box=decided',
+  '/approvals',
 ];
 
 test.describe('accessibility (axe)', () => {

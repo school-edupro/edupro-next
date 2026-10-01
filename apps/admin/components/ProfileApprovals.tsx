@@ -701,15 +701,28 @@ function ReviewDrawer({
           <h3 className="ep-pa__h">Proof documents</h3>
           <ul>
             {row.proofs.map((p) => (
-              <li key={p.fileId}>
+              <li key={p.fileId} className="ep-pa__proof">
                 <a
                   href={`/api/profile-proofs/${row.id}/${p.fileId}`}
                   target="_blank"
                   rel="noreferrer"
                 >
                   {p.label}
-                  {p.fileName ? ` (${p.fileName})` : ''}
+                  {p.fileName ? ` (${p.fileName})` : ''} — open in a new tab
                 </a>
+                {/\.(png|jpe?g|webp|gif)$/i.test(p.fileName ?? '') ? (
+                  <img
+                    className="ep-pa__preview"
+                    src={`/api/profile-proofs/${row.id}/${p.fileId}`}
+                    alt={`${p.label} preview`}
+                  />
+                ) : /\.pdf$/i.test(p.fileName ?? '') ? (
+                  <iframe
+                    className="ep-pa__preview ep-pa__preview--pdf"
+                    src={`/api/profile-proofs/${row.id}/${p.fileId}`}
+                    title={`${p.label} preview`}
+                  />
+                ) : null}
               </li>
             ))}
           </ul>

@@ -2944,3 +2944,53 @@ a.ep-tabs__tab {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--sp-3);
 }
+/* profile approvals: proofs preview in the review panel */
+.ep-pa__proof {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.ep-pa__preview {
+  width: 100%;
+  max-height: 24rem;
+  object-fit: contain;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+.ep-pa__preview--pdf {
+  height: 24rem;
+}
+/* My approvals */
+.ep-approvals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--sp-4);
+}
+.ep-approvals__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.ep-approvals__title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+  margin: 0;
+}
+.ep-approvals__list {
+  list-style: none;
+  padding: 0;
+  margin: var(--sp-3) 0 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-approvals__list li {
+  display: grid;
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--sp-2);
+}
+.ep-approvals__list a {
+  text-decoration: underline;
+}

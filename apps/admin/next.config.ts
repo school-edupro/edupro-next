@@ -44,7 +44,24 @@ const nextConfig: NextConfig = {
   // S6-05: CSV imports are posted through a server action; the API accepts up to 2 MB of CSV text.
   experimental: { serverActions: { bodySizeLimit: '4mb' } },
   async headers() {
-    return [{ source: '/(.*)', headers: securityHeaders }];
+    return [
+      { source: '/(.*)', headers: securityHeaders },
+      // proof documents preview inside the approvals panel: framed by this site's own pages only
+      {
+        source: '/api/profile-proofs/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          ...(process.env.NODE_ENV === 'production'
+            ? [
+                {
+                  key: 'Content-Security-Policy',
+                  value: csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'"),
+                },
+              ]
+            : []),
+        ],
+      },
+    ];
   },
 };
 

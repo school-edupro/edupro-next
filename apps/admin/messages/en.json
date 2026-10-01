@@ -141,7 +141,8 @@
     "collapse": "Collapse",
     "toggleSidebar": "Show or hide the menu",
     "notifications": "{count, plural, =0 {No open alerts} one {# open alert} other {# open alerts}}",
-    "help": "Help centre"
+    "help": "Help centre",
+    "approvals": "{count, plural, =0 {Approvals: nothing waiting} one {# approval waiting for you} other {# approvals waiting for you}}"
   },
   "login": {
     "kicker": "Mobilise",
