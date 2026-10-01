@@ -60,7 +60,7 @@ export class StudentProfileService {
       );
       return {
         sections: PROFILE_SECTIONS,
-        fields: PROFILE_FIELDS.map((f) => ({
+        fields: PROFILE_FIELDS.filter((f) => !f.retired).map((f) => ({
           key: f.key,
           section: f.section,
           label: f.label,

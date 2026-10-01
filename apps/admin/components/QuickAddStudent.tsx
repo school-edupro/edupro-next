@@ -42,7 +42,6 @@ export function QuickAddStudent({
     admitted_on: today,
     ews: 'No',
     boarding: 'Day Scholar',
-    transport_required: 'No',
   });
   const [sectionId, setSectionId] = useState(initialSectionId);
   const [roll, setRoll] = useState<string>(

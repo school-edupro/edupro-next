@@ -82,7 +82,6 @@ describe('portal profile and approvals (e2e)', () => {
       category: 'General',
       ews: 'No',
       boarding: 'Day Scholar',
-      transport_required: 'No',
     };
     first = (
       await quick({

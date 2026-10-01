@@ -511,8 +511,7 @@ export async function loadProfileLists(c: PoolClient): Promise<ProfileLists> {
   );
   const out: ProfileLists = {};
   for (const x of r.rows) (out[x.list_code] ??= []).push(x.value);
-  // State and Country also accept the school's geography masters
-  // City and Bank come only from their masters (Setup → Cities, Fees → Banks)
+  // geography and banks from their System setup masters
   const geo = await c.query<{ kind: string; name: string }>(
     `SELECT 'Country' AS kind, name FROM countries WHERE status = 'active'
      UNION ALL SELECT 'State', name FROM states WHERE status = 'active'
@@ -520,9 +519,14 @@ export async function loadProfileLists(c: PoolClient): Promise<ProfileLists> {
      UNION ALL SELECT DISTINCT 'Bank', name FROM banks WHERE status = 'active'
      ORDER BY 1, 2`,
   );
+  // Country / State / City come only from System setup once the school has filled those masters (the
+  // older built-in Country and State lists are a fallback for a school that has not); Bank likewise
+  const fromMasters = new Map<string, string[]>();
   for (const x of geo.rows) {
-    const list = (out[x.kind] ??= []);
+    const list = fromMasters.get(x.kind) ?? [];
     if (!list.some((v) => v.toLowerCase() === x.name.toLowerCase())) list.push(x.name);
+    fromMasters.set(x.kind, list);
   }
+  for (const [kind, list] of fromMasters) out[kind] = list;
   return out;
 }

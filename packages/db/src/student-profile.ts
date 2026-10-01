@@ -124,7 +124,7 @@ export function applies(field: ProfileField, values: ProfileValues): boolean {
 /** Completeness over required fields that apply: percent and the keys still missing. */
 export function completeness(values: ProfileValues): { percent: number; missing: string[] } {
   const required = PROFILE_FIELDS.filter(
-    (f) => f.required && f.store.t !== 'auto' && applies(f, values),
+    (f) => f.required && !f.retired && f.store.t !== 'auto' && applies(f, values),
   );
   const missing = required
     .filter((f) => {

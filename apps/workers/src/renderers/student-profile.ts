@@ -170,7 +170,8 @@ export async function renderStudentProfile(
   const sections = PROFILE_SECTIONS.filter((s) => s.id !== 'documents')
     .map((s) => {
       const fields = PROFILE_FIELDS.filter(
-        (f) => f.section === s.id && !skip.has(f.key) && visible(f.key) && applies(f, v),
+        (f) =>
+          f.section === s.id && !f.retired && !skip.has(f.key) && visible(f.key) && applies(f, v),
       );
       const hasAny = fields.some(
         (f) => v[f.key] !== null && v[f.key] !== undefined && v[f.key] !== '',

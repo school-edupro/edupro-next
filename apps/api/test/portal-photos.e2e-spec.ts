@@ -106,7 +106,6 @@ describe('portal photos: upload, approval and records (e2e)', () => {
           category: 'General',
           ews: 'No',
           boarding: 'Day Scholar',
-          transport_required: 'No',
           father_name: 'vikram photo',
           mother_name: 'meera photo',
         },

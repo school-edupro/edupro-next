@@ -202,7 +202,7 @@ export function resolvePolicy(
     for (const f of PROFILE_FIELDS) {
       let lvl = isLevel(stored[f.key]) ? (stored[f.key] as PortalLevel) : defaultLevel(a, f);
       if ((lvl === 'edit_approval' || lvl === 'edit_direct') && !isEditableKey(f)) lvl = 'view';
-      if (PHOTO_KEYS.has(f.key)) lvl = 'hidden';
+      if (PHOTO_KEYS.has(f.key) || f.retired) lvl = 'hidden';
       fields[a][f.key] = lvl;
     }
     for (const ph of PORTAL_PHOTOS)

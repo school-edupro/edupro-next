@@ -191,7 +191,7 @@ export class PortalProfileService {
         updatedBy: row.rows[0]?.updated_by ?? null,
         sections: PROFILE_SECTIONS,
         fields: [
-          ...PROFILE_FIELDS.filter((f) => !LEGACY_PHOTO_KEYS.has(f.key)).map((f) => ({
+          ...PROFILE_FIELDS.filter((f) => !LEGACY_PHOTO_KEYS.has(f.key) && !f.retired).map((f) => ({
             key: f.key,
             section: f.section,
             label: f.label,

@@ -85,7 +85,7 @@ describe('student 360 profile (e2e)', () => {
     const r = await inject({ method: 'GET', url: '/people/profile/catalogue', headers: h() });
     expect(r.statusCode).toBe(200);
     const body = r.json();
-    expect(body.fields).toHaveLength(189);
+    expect(body.fields).toHaveLength(182);
     expect(body.sections).toHaveLength(14);
     expect(body.fields.find((f: { key: string }) => f.key === 'house').options).toEqual(
       expect.arrayContaining(['Red', 'Blue']),
@@ -111,7 +111,6 @@ describe('student 360 profile (e2e)', () => {
         'father_name',
         'gender',
         'sms_mobile',
-        'transport_required',
       ].sort(),
     );
     const ok = await quick({
@@ -126,7 +125,6 @@ describe('student 360 profile (e2e)', () => {
       category: 'general',
       ews: 'no',
       boarding: 'day scholar',
-      transport_required: 'yes',
     });
     expect(ok.statusCode).toBe(201);
     first = ok.json().id;
@@ -154,7 +152,6 @@ describe('student 360 profile (e2e)', () => {
       category: 'General',
       ews: 'No',
       boarding: 'Hosteller',
-      transport_required: 'No',
     });
     expect(dup.statusCode).toBe(400);
     expect(dup.json().errors.admission_no).toMatch(/already/);
@@ -188,7 +185,7 @@ describe('student 360 profile (e2e)', () => {
       father_pan_no: 'abcde1234f',
       religion: 'hindu',
       middle_name: 'kumari',
-      family_income: '12,00,000',
+      family_income: '10-25 Lakh',
     });
     expect(r.statusCode).toBe(200);
     expect(r.json().values).toMatchObject({
@@ -196,7 +193,7 @@ describe('student 360 profile (e2e)', () => {
       father_pan_no: 'XXXXXX234F',
       religion: 'Hindu',
       middle_name: 'KUMARI',
-      family_income: 1200000,
+      family_income: '10-25 Lakh',
     });
     const stored = await withMigrator((c) =>
       c.query<{ secure: Record<string, string> }>('SELECT secure FROM students WHERE id = $1', [
@@ -236,7 +233,6 @@ describe('student 360 profile (e2e)', () => {
       category: 'General',
       ews: 'No',
       boarding: 'Day Scholar',
-      transport_required: 'No',
     });
     expect(ok.statusCode).toBe(201);
     second = ok.json().id;
@@ -678,7 +674,7 @@ describe('student 360 profile (e2e)', () => {
         ...base,
         'VI',
         'A',
-        'DPS X',
+        'Group School X',
         'tara father',
         '9811100088',
         'Day Scholar',
@@ -692,7 +688,7 @@ describe('student 360 profile (e2e)', () => {
         ...base,
         'VI',
         'A',
-        'DPS X',
+        'Group School X',
         'isha father',
         '9811100089',
         'Day Scholar',
@@ -707,7 +703,7 @@ describe('student 360 profile (e2e)', () => {
         ...base,
         'VI',
         'Z',
-        'DPS X',
+        'Group School X',
         'noor father',
         '9811100090',
         'Day Scholar',

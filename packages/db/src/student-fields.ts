@@ -49,6 +49,11 @@ export interface ProfileField {
   when?: { key: string; in?: string[]; notIn?: string[] };
   /** Encrypted at rest and masked unless the viewer holds people.sensitive.view. */
   sensitive?: boolean;
+  /**
+   * Kept for the data already on file and for reports, but no longer asked for: off the edit screens,
+   * the Excel template, the portal and the profile PDF.
+   */
+  retired?: boolean;
   store: ProfileStore;
   /** Column letter in the data collection sheet. */
   excelColumn: string;
@@ -255,6 +260,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
   },
   {
     key: 'photo_ref',
+    retired: true,
     section: 'student',
     label: 'Student Photo (file name / link)',
     type: 'text',
@@ -495,6 +501,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
   },
   {
     key: 'father_photo',
+    retired: true,
     section: 'father',
     label: "Father's Photo (file name / link)",
     type: 'text',
@@ -689,10 +696,10 @@ export const PROFILE_FIELDS: ProfileField[] = [
   {
     key: 'father_dps_alumni',
     section: 'father',
-    label: 'Father DPS Alumni',
+    label: 'Father is an Alumnus',
     type: 'list',
     list: 'YesNo',
-    help: 'Studied at any DPS school',
+    help: 'Studied at this school or a school of the same group',
     store: { t: 'json', on: 'father', key: 'dps_alumni' },
     excelColumn: 'BQ',
   },
@@ -701,7 +708,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
     section: 'father',
     label: 'Father Alumni School & Branch',
     type: 'text',
-    help: 'Only if alumni — e.g. DPS Mathura Road, DPS Bokaro',
+    help: 'Only if alumni — the school and branch, e.g. Delhi Road branch',
     when: { key: 'father_dps_alumni', in: ['Yes'] },
     store: { t: 'json', on: 'father', key: 'alumni_school_branch' },
     excelColumn: 'BR',
@@ -799,6 +806,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
   },
   {
     key: 'mother_photo',
+    retired: true,
     section: 'mother',
     label: "Mother's Photo (file name / link)",
     type: 'text',
@@ -993,10 +1001,10 @@ export const PROFILE_FIELDS: ProfileField[] = [
   {
     key: 'mother_dps_alumni',
     section: 'mother',
-    label: 'Mother DPS Alumni',
+    label: 'Mother is an Alumnus',
     type: 'list',
     list: 'YesNo',
-    help: 'Studied at any DPS school',
+    help: 'Studied at this school or a school of the same group',
     store: { t: 'json', on: 'mother', key: 'dps_alumni' },
     excelColumn: 'CW',
   },
@@ -1005,7 +1013,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
     section: 'mother',
     label: 'Mother Alumni School & Branch',
     type: 'text',
-    help: 'Only if alumni — e.g. DPS Mathura Road, DPS Bokaro',
+    help: 'Only if alumni — the school and branch, e.g. Delhi Road branch',
     when: { key: 'mother_dps_alumni', in: ['Yes'] },
     store: { t: 'json', on: 'mother', key: 'alumni_school_branch' },
     excelColumn: 'CX',
@@ -1112,6 +1120,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
   },
   {
     key: 'guardian_photo',
+    retired: true,
     section: 'guardian',
     label: "Guardian's Photo (file name / link)",
     type: 'text',
@@ -1304,10 +1313,10 @@ export const PROFILE_FIELDS: ProfileField[] = [
   {
     key: 'guardian_dps_alumni',
     section: 'guardian',
-    label: 'Guardian DPS Alumni',
+    label: 'Guardian is an Alumnus',
     type: 'list',
     list: 'YesNo',
-    help: 'Studied at any DPS school',
+    help: 'Studied at this school or a school of the same group',
     store: { t: 'json', on: 'guardian', key: 'dps_alumni' },
     excelColumn: 'ED',
   },
@@ -1316,7 +1325,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
     section: 'guardian',
     label: 'Guardian Alumni School & Branch',
     type: 'text',
-    help: 'Only if alumni — e.g. DPS Mathura Road, DPS Bokaro',
+    help: 'Only if alumni — the school and branch, e.g. Delhi Road branch',
     when: { key: 'guardian_dps_alumni', in: ['Yes'] },
     store: { t: 'json', on: 'guardian', key: 'alumni_school_branch' },
     excelColumn: 'EE',
@@ -1395,9 +1404,10 @@ export const PROFILE_FIELDS: ProfileField[] = [
     key: 'family_income',
     section: 'family',
     label: 'Family Gross Annual Income (Rs)',
-    type: 'number',
+    type: 'list',
+    list: 'Income',
     required: true,
-    help: 'Total yearly income of the family in rupees',
+    help: 'Total yearly income of the family',
     store: { t: 'json', on: 'student', key: 'family_income' },
     excelColumn: 'EM',
   },
@@ -1671,16 +1681,17 @@ export const PROFILE_FIELDS: ProfileField[] = [
   },
   {
     key: 'transport_required',
+    retired: true,
     section: 'transport_health',
     label: 'Transport Required',
     type: 'list',
-    required: true,
     list: 'YesNo',
     store: { t: 'json', on: 'student', key: 'transport_required' },
     excelColumn: 'FP',
   },
   {
     key: 'travel_mode',
+    retired: true,
     section: 'transport_health',
     label: 'Travel Mode',
     type: 'list',
@@ -1691,6 +1702,7 @@ export const PROFILE_FIELDS: ProfileField[] = [
   },
   {
     key: 'route_no',
+    retired: true,
     section: 'transport_health',
     label: 'Route No',
     type: 'text',
@@ -2056,7 +2068,7 @@ export const PROFILE_FIELD_BY_KEY: ReadonlyMap<string, ProfileField> = new Map(
 
 /** Fields a user can type into (not enrolment-owned, not computed). */
 export const EDITABLE_PROFILE_FIELDS = PROFILE_FIELDS.filter(
-  (f) => f.store.t !== 'auto' && f.store.t !== 'enrol',
+  (f) => f.store.t !== 'auto' && f.store.t !== 'enrol' && !f.retired,
 );
 
 /** The quick-add form: the minimum the ERP needs on day one (fees, attendance, SMS, class lists). */
@@ -2073,7 +2085,6 @@ export const QUICK_ADD_KEYS = [
   'category',
   'ews',
   'boarding',
-  'transport_required',
 ] as const;
 
 /**
@@ -2108,8 +2119,6 @@ export const FAMILY_EDITABLE_KEYS: readonly string[] = [
   'permanent_country',
   'permanent_pin_code',
   'distance_from_school',
-  'transport_required',
-  'travel_mode',
   ...(['father', 'mother', 'guardian'] as const).flatMap((p) =>
     [
       'date_of_birth',
