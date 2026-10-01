@@ -147,7 +147,16 @@ export class TcService {
     });
   }
 
-  async issue(ctx: RequestContext, studentId: string, dto: IssueTcDto): Promise<TcRow> {
+  /**
+   * Issues a TC. From a withdrawal still in progress (`keepStatus`), the student stays active until the
+   * withdrawal completes; otherwise the TC itself ends the enrolment.
+   */
+  async issue(
+    ctx: RequestContext,
+    studentId: string,
+    dto: IssueTcDto,
+    opts: { keepStatus?: boolean } = {},
+  ): Promise<TcRow> {
     const tenant = requireTenant(ctx);
     if (!tenant.academicYearId)
       throw new DomainError('year.not_selected', 'No academic year is active or selected', {
@@ -223,7 +232,7 @@ export class TcService {
         ],
       );
       const id = r.rows[0]!.id;
-      if (student.status === 'active') {
+      if (student.status === 'active' && !opts.keepStatus) {
         await c.query(`SELECT set_config('app.status_reason', $1, true)`, [
           `transfer certificate ${no.rows[0]!.tc_no}`,
         ]);

@@ -4,6 +4,10 @@ import { RequirePermission } from '../../../common/access/require-permission.dec
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
 import {
   ApplyPromotionsDto,
+  BulkClearanceDto,
+  BulkTcDto,
+  BulkWithdrawalDto,
+  BypassDto,
   CancelDto,
   ClearanceDto,
   IssueTcDto,
@@ -12,7 +16,9 @@ import {
   ListTcQueryDto,
   ListWithdrawalsQueryDto,
   RequestWithdrawalDto,
+  SaveDepartmentsDto,
   SetPromotionsDto,
+  WithdrawalTcDto,
   YearSectionsQueryDto,
 } from './lifecycle.dto';
 import { PromotionsService } from './promotions.service';
@@ -83,6 +89,41 @@ export class LifecycleController {
     return { data: rows, page: { number: q.page, size: q.size, total } };
   }
 
+  @Get('withdrawal-departments')
+  @ApiOperation({ summary: 'Withdrawal departments: steps, approvers, checks, bypass, TC gate' })
+  @RequirePermission(LIFECYCLE.withdrawalView)
+  departments(@ReqCtx() ctx: RequestContext) {
+    return this.withdrawals.departments(ctx);
+  }
+
+  @Put('withdrawal-departments')
+  @ApiOperation({ summary: 'Save the withdrawal departments (left-out codes are switched off)' })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  saveDepartments(@ReqCtx() ctx: RequestContext, @Body() body: SaveDepartmentsDto) {
+    return this.withdrawals.saveDepartments(ctx, body);
+  }
+
+  @Post('withdrawals/bulk')
+  @ApiOperation({ summary: 'Start withdrawals for many students with one leaving date and reason' })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  bulkWithdrawal(@ReqCtx() ctx: RequestContext, @Body() body: BulkWithdrawalDto) {
+    return this.withdrawals.bulkRequest(ctx, body);
+  }
+
+  @Post('withdrawals/clearances/bulk')
+  @ApiOperation({ summary: 'One department clears (or holds) many withdrawals at once' })
+  @RequirePermission(LIFECYCLE.withdrawalClear)
+  bulkClearance(@ReqCtx() ctx: RequestContext, @Body() body: BulkClearanceDto) {
+    return this.withdrawals.bulkClearance(ctx, body);
+  }
+
+  @Post('withdrawals/tc/bulk')
+  @ApiOperation({ summary: 'Issue the TCs of many withdrawals whose TC gate has cleared' })
+  @RequirePermission(LIFECYCLE.tcIssue)
+  bulkTc(@ReqCtx() ctx: RequestContext, @Body() body: BulkTcDto) {
+    return this.withdrawals.bulkTc(ctx, body);
+  }
+
   @Get('withdrawals/:id')
   @RequirePermission(LIFECYCLE.withdrawalView)
   getWithdrawal(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
@@ -96,7 +137,9 @@ export class LifecycleController {
   }
 
   @Post('students/:id/withdrawal')
-  @ApiOperation({ summary: 'Step 1: request a withdrawal; one clearance per department is opened' })
+  @ApiOperation({
+    summary: 'Start a withdrawal; each active department opens a clearance at its step',
+  })
   @RequirePermission(LIFECYCLE.withdrawalManage, {
     description: 'Request, complete and cancel withdrawals',
   })
@@ -122,8 +165,33 @@ export class LifecycleController {
     return this.withdrawals.clearance(ctx, id, department, body);
   }
 
+  @Post('withdrawals/:id/clearances/:department/bypass')
+  @ApiOperation({ summary: 'Bypass a department the school allows to be skipped (reason kept)' })
+  @RequirePermission(LIFECYCLE.withdrawalClear)
+  bypass(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('department') department: string,
+    @Body() body: BypassDto,
+  ) {
+    return this.withdrawals.bypass(ctx, id, department, body);
+  }
+
+  @Post('withdrawals/:id/tc')
+  @ApiOperation({ summary: 'Issue the TC from the withdrawal once its gating departments cleared' })
+  @RequirePermission(LIFECYCLE.tcIssue)
+  withdrawalTc(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: WithdrawalTcDto,
+  ) {
+    return this.withdrawals.issueTc(ctx, id, body);
+  }
+
   @Post('withdrawals/:id/complete')
-  @ApiOperation({ summary: 'Step 2: complete; refused until every department has cleared' })
+  @ApiOperation({
+    summary: 'Complete: ends the enrolment, revokes the student (and lone parent) login',
+  })
   @RequirePermission(LIFECYCLE.withdrawalManage)
   complete(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.withdrawals.complete(ctx, id);

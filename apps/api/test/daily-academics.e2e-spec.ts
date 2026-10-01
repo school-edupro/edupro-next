@@ -565,8 +565,8 @@ describe('daily academics and student lifecycle (e2e)', () => {
     expect(exportRow.json().export.dataset).toBe('document');
   });
 
-  // ---- withdrawal in two steps -----------------------------------------------------------------
-  it('a withdrawal completes only after every department has cleared', async () => {
+  // ---- withdrawal through the departments, step by step --------------------------------------------
+  it('a withdrawal moves through the department steps and completes when all have cleared', async () => {
     const h = headersFor(admin.sub, school.id);
     const req = await inject({
       method: 'POST',
@@ -575,13 +575,19 @@ describe('daily academics and student lifecycle (e2e)', () => {
       json: { leavingOn: '2026-12-31', reason: 'Moving abroad' },
     });
     expect(req.statusCode).toBe(201);
-    expect(req.json().clearances.map((x: { department: string }) => x.department)).toEqual([
-      'fees',
-      'library',
-      'transport',
-      'academics',
-    ]);
-    const id = req.json().id;
+    const w = req.json();
+    expect(
+      w.clearances.map((x: { department: string; step: number }) => `${x.step}:${x.department}`),
+    ).toEqual(['1:fees', '1:library', '1:transport', '2:class_teacher', '3:principal']);
+    // no fee ledger and no library books: those two clear by themselves
+    const byDept = (
+      row: { clearances: Array<{ department: string; status: string; auto: boolean }> },
+      d: string,
+    ) => row.clearances.find((x) => x.department === d)!;
+    expect(byDept(w, 'fees')).toMatchObject({ status: 'cleared', auto: true });
+    expect(byDept(w, 'library')).toMatchObject({ status: 'cleared', auto: true });
+    expect(w.currentStep).toBe(1);
+    const id = w.id;
     const dup = await inject({
       method: 'POST',
       url: `/people/students/${studentA}/withdrawal`,
@@ -597,32 +603,53 @@ describe('daily academics and student lifecycle (e2e)', () => {
     });
     expect(early.statusCode).toBe(409);
     expect(early.json()).toMatchObject({ type: 'withdrawal.clearance_pending' });
-    for (const dept of ['fees', 'library', 'transport']) {
-      const r = await inject({
-        method: 'PUT',
-        url: `/people/withdrawals/${id}/clearances/${dept}`,
-        headers: h,
-        json: { status: 'cleared', remarks: 'ok' },
-      });
-      expect(r.statusCode).toBe(200);
-      expect(r.json().status).toBe('requested');
-    }
+    const tooSoon = await inject({
+      method: 'PUT',
+      url: `/people/withdrawals/${id}/clearances/class_teacher`,
+      headers: h,
+      json: { status: 'cleared' },
+    });
+    expect(tooSoon.statusCode).toBe(409);
+    expect(tooSoon.json()).toMatchObject({ type: 'withdrawal.not_this_step' });
+    const bypass = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${id}/clearances/transport/bypass`,
+      headers: h,
+      json: { reason: 'does not use the school bus' },
+    });
+    expect(bypass.statusCode).toBe(201);
+    expect(bypass.json().currentStep).toBe(2);
+    expect(byDept(bypass.json(), 'transport')).toMatchObject({ status: 'cleared', bypassed: true });
+    const noBypass = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${id}/clearances/principal/bypass`,
+      headers: h,
+      json: { reason: 'try' },
+    });
+    expect(noBypass.statusCode).toBe(409);
     const hold = await inject({
       method: 'PUT',
-      url: `/people/withdrawals/${id}/clearances/academics`,
+      url: `/people/withdrawals/${id}/clearances/class_teacher`,
       headers: h,
       json: { status: 'hold', remarks: 'report card pending' },
     });
-    expect(hold.json().status).toBe('requested');
+    expect(hold.json()).toMatchObject({ status: 'requested', currentStep: 2 });
     const stillEarly = await inject({
       method: 'POST',
       url: `/people/withdrawals/${id}/complete`,
       headers: h,
     });
     expect(stillEarly.statusCode).toBe(409);
+    const teacher = await inject({
+      method: 'PUT',
+      url: `/people/withdrawals/${id}/clearances/class_teacher`,
+      headers: h,
+      json: { status: 'cleared' },
+    });
+    expect(teacher.json().currentStep).toBe(3);
     const last = await inject({
       method: 'PUT',
-      url: `/people/withdrawals/${id}/clearances/academics`,
+      url: `/people/withdrawals/${id}/clearances/principal`,
       headers: h,
       json: { status: 'cleared' },
     });
@@ -648,6 +675,21 @@ describe('daily academics and student lifecycle (e2e)', () => {
       headers: h,
     });
     expect(open.json().page.total).toBe(0);
+    // Aarav was the parent's only child here, so the parent's login was revoked with his; the later
+    // gallery checks sign in as that parent, so the membership is restored for them
+    const m = await withMigrator((c) =>
+      c.query<{ status: string }>(
+        `SELECT status::text FROM user_school_memberships WHERE user_id = $1 AND school_id = $2 AND person_type = 'guardian'`,
+        [parent.id, school.id],
+      ),
+    );
+    expect(m.rows[0]?.status).toBe('inactive');
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE user_school_memberships SET status = 'active' WHERE user_id = $1 AND school_id = $2 AND person_type = 'guardian'`,
+        [parent.id, school.id],
+      ),
+    );
   });
 
   // ---- promotions ------------------------------------------------------------------------------
