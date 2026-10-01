@@ -615,7 +615,7 @@ export async function requestStudentProfilePrint(fd: FormData) {
 export async function studentParentPhotoUpload(fd: FormData) {
   const id = str(fd, 'id');
   const party = str(fd, 'party');
-  return run(`/people/students/${id}?tab=overview`, async () => {
+  return run(backTo(fd, `/people/students/${id}?tab=overview`), async () => {
     const [fileId] = await uploadAll(fd, 'file', 'personal');
     if (!fileId) throw new ApiError(400, { type: 'validation-failed', detail: 'Choose a photo' });
     await apiFetch(`/people/students/${id}/parent-photo`, {
@@ -626,8 +626,14 @@ export async function studentParentPhotoUpload(fd: FormData) {
 }
 
 const SENSITIVE_KINDS = ['aadhaar', 'pan', 'bank'];
+/** A page to return to after an upload, limited to the student pages (the full profile, say). */
+const backTo = (fd: FormData, fallback: string) => {
+  const b = str(fd, 'back');
+  return /^\/people\/students\/\d{1,18}(\/profile)?(\?[\w=&-]*)?$/.test(b) ? b : fallback;
+};
+
 const studentBack = (fd: FormData, tab = 'documents') =>
-  `/people/students/${str(fd, 'id')}?tab=${str(fd, 'tab') || tab}`;
+  backTo(fd, `/people/students/${str(fd, 'id')}?tab=${str(fd, 'tab') || tab}`);
 
 /** Uploads a document (or the photo) for a student and attaches it. */
 export async function studentDocumentUpload(fd: FormData) {

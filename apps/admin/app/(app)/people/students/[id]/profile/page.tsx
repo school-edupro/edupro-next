@@ -1,6 +1,7 @@
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ProfileEditor } from '@/components/ProfileEditor';
+import { ProfilePhotos } from '@/components/ProfilePhotos';
 import { saveStudentProfile } from '@/lib/actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { ProfileCatalogue, ProfileSnapshot } from '@/lib/profile';
@@ -24,6 +25,7 @@ export default async function StudentProfilePage({
     }),
   ]);
   const e = snapshot.enrolment;
+  const canEdit = me.permissions.includes('people.student.edit');
   return (
     <>
       <Breadcrumbs
@@ -52,10 +54,11 @@ export default async function StudentProfilePage({
           </a>
         }
       />
+      <ProfilePhotos snapshot={snapshot} canEdit={canEdit} />
       <ProfileEditor
         catalogue={catalogue}
         snapshot={snapshot}
-        canEdit={me.permissions.includes('people.student.edit')}
+        canEdit={canEdit}
         save={saveStudentProfile}
         initialTab={catalogue.sections.some((s) => s.id === sp.tab) ? sp.tab : undefined}
       />
