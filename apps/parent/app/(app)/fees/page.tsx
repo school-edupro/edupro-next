@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
@@ -101,7 +102,7 @@ export default async function FeesPage({
     ? await bff.api
         .fetch<{
           export: { id: string; status: string; title: string };
-          download: { url: string } | null;
+          download: { url: string; saveUrl?: string } | null;
         }>(`/fees/mine/exports/${sp.export}`)
         .catch(() => null)
     : null;
@@ -153,7 +154,12 @@ export default async function FeesPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <a href={exportStatus.download.url}>{t(lang, 'Download the receipt PDF')}</a>
+            <FileLinks
+              url={exportStatus.download.url}
+              saveUrl={exportStatus.download.saveUrl}
+              label={t(lang, 'Open the receipt PDF')}
+              saveLabel={t(lang, 'Download')}
+            />
           ) : (
             <>
               {t(lang, 'The receipt PDF is being prepared.')}{' '}

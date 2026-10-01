@@ -103,10 +103,8 @@ export class LocalStorage implements StorageDriver {
       contentType,
       name: fileName,
     });
-    return {
-      url: `${this.apiBaseUrl}/api/v1/platform/files/local?token=${token}`,
-      expiresAt: new Date(exp * 1000).toISOString(),
-    };
+    const url = `${this.apiBaseUrl}/api/v1/platform/files/local?token=${token}`;
+    return { url, saveUrl: `${url}&download=1`, expiresAt: new Date(exp * 1000).toISOString() };
   }
 
   async write(objectKey: string, bytes: Buffer): Promise<void> {

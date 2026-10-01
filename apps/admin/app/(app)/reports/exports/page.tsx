@@ -1,4 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { FileLinks } from '@/components/FileLinks';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createExport } from '@/lib/actions';
@@ -69,12 +70,7 @@ export default async function ExportsPage({
               header: '',
               render: (e) =>
                 e.status === 'ready' ? (
-                  <a
-                    className="ep-btn ep-btn--primary ep-btn--sm"
-                    href={`/reports/exports/${e.id}/download`}
-                  >
-                    Download
-                  </a>
+                  <FileLinks href={`/reports/exports/${e.id}/download`} label="Open" />
                 ) : e.status === 'failed' ? (
                   <span className="ep-field__error">{e.error}</span>
                 ) : null,

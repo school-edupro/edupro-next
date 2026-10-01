@@ -1,5 +1,6 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import {
   bypassClearance,
@@ -23,9 +24,10 @@ function Docs({ docs }: { docs: Array<{ fileId: string; name: string | null }> }
     <ul className="ep-wd__docs">
       {docs.map((d) => (
         <li key={d.fileId}>
-          <a href={`/api/files/${d.fileId}/download`} target="_blank" rel="noreferrer">
-            {d.name ?? `Document ${d.fileId}`}
-          </a>
+          <FileLinks
+            href={`/api/files/${d.fileId}/download`}
+            label={d.name ?? `Document ${d.fileId}`}
+          />
         </li>
       ))}
     </ul>

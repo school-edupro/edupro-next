@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import {
   Badge,
   Button,
@@ -134,7 +135,10 @@ export default async function SchedulesPage({
               header: s('lastRun'),
               render: (r) =>
                 r.lastExportId ? (
-                  <a href={`/reports/exports/${r.lastExportId}/download`}>{when(r.lastRunAt)}</a>
+                  <FileLinks
+                    href={`/reports/exports/${r.lastExportId}/download`}
+                    label={when(r.lastRunAt)}
+                  />
                 ) : (
                   when(r.lastRunAt)
                 ),

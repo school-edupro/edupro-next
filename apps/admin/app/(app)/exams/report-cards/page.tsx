@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import {
   Badge,
   Button,
@@ -284,7 +285,7 @@ export default async function ReportCardsPage({
                   header: r('exportStatus'),
                   render: (x) =>
                     x.exportId && x.exportStatus === 'ready' ? (
-                      <a href={`/reports/exports/${x.exportId}/download`}>{r('download')}</a>
+                      <FileLinks href={`/reports/exports/${x.exportId}/download`} label="Open" />
                     ) : (
                       (x.exportStatus ?? '')
                     ),

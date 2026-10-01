@@ -553,6 +553,12 @@ const DICT: Record<string, string> = {
     'JPG, PNG या WebP, अधिकतम 5 MB। विद्यालय की स्वीकृति के बाद यह वर्तमान फ़ोटो की जगह लेगी।',
   'JPG, PNG or WebP up to 5 MB. It replaces the current photo at once.':
     'JPG, PNG या WebP, अधिकतम 5 MB। यह तुरंत वर्तमान फ़ोटो की जगह लेगी।',
+  'Open the receipt PDF': 'रसीद PDF खोलें',
+  'Open the certificate PDF': 'प्रमाणपत्र PDF खोलें',
+  'Open the report card PDF': 'रिपोर्ट कार्ड PDF खोलें',
+  'Open your data report (PDF)': 'अपनी डेटा रिपोर्ट (PDF) खोलें',
+  'Open the profile PDF': 'प्रोफ़ाइल PDF खोलें',
+  Download: 'डाउनलोड',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

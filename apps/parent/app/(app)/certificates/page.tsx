@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import { Button, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
@@ -44,9 +45,10 @@ export default async function CertificatesPage({
   }
   const exportStatus = sp.export
     ? await bff.api
-        .fetch<{ export: { id: string; status: string }; download: { url: string } | null }>(
-          `/fees/mine/exports/${sp.export}`,
-        )
+        .fetch<{
+          export: { id: string; status: string };
+          download: { url: string; saveUrl?: string } | null;
+        }>(`/fees/mine/exports/${sp.export}`)
         .catch(() => null)
     : null;
   return (
@@ -77,7 +79,12 @@ export default async function CertificatesPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <a href={exportStatus.download.url}>{t(lang, 'Download the certificate PDF')}</a>
+            <FileLinks
+              url={exportStatus.download.url}
+              saveUrl={exportStatus.download.saveUrl}
+              label={t(lang, 'Open the certificate PDF')}
+              saveLabel={t(lang, 'Download')}
+            />
           ) : (
             <>
               {t(lang, 'Your PDF is being prepared.')}{' '}

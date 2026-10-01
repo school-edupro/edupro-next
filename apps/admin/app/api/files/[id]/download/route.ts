@@ -10,8 +10,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!/^\d{1,18}$/.test(id))
     return NextResponse.json({ type: 'validation-failed' }, { status: 400 });
   try {
-    const r = await apiFetch<{ download: { url: string } }>(`/platform/files/${id}/download-url`);
-    return NextResponse.redirect(r.download.url, { status: 303 });
+    const r = await apiFetch<{ download: { url: string; saveUrl?: string } }>(
+      `/platform/files/${id}/download-url`,
+    );
+    // PDFs and images open in the browser; ?save=1 (the Download links) saves a copy
+    const save = req.nextUrl.searchParams.get('save') === '1';
+    return NextResponse.redirect(save ? (r.download.saveUrl ?? r.download.url) : r.download.url, {
+      status: 303,
+    });
   } catch (error) {
     if (error instanceof ApiError)
       return NextResponse.json({ type: error.problem.type }, { status: error.status });

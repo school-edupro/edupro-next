@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import {
   Badge,
   Button,
@@ -143,13 +144,9 @@ export default async function MonthEndPage({
                 <p className="ep-kicker">
                   {o('packExports')}:{' '}
                   {state.close.packExportIds.map((id) => (
-                    <a
-                      key={id}
-                      href={`/reports/exports/${id}/download`}
-                      style={{ marginRight: 'var(--sp-2)' }}
-                    >
-                      #{id}
-                    </a>
+                    <span key={id} style={{ marginRight: 'var(--sp-3)' }}>
+                      <FileLinks href={`/reports/exports/${id}/download`} label={`#${id}`} />
+                    </span>
                   ))}
                 </p>
               ) : null}

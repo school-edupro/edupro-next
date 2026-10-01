@@ -56,6 +56,12 @@ export class DailyWorkController {
     return this.work.get(ctx, id);
   }
 
+  @Get(':id/files/:fileId')
+  @RequirePermission(DAILY.workView)
+  file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.work.fileUrl(ctx, id, fileId);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Post homework, classwork or an assignment with optional files' })
   @RequirePermission(DAILY.workPost, {
@@ -97,6 +103,12 @@ export class NoticesController {
   @RequirePermission(DAILY.noticeView)
   get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.notices.get(ctx, id);
+  }
+
+  @Get(':id/files/:fileId')
+  @RequirePermission(DAILY.noticeView)
+  file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.notices.fileUrl(ctx, id, fileId);
   }
 
   @Post()

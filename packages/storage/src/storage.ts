@@ -7,8 +7,20 @@ export interface UploadTarget {
 }
 
 export interface DownloadTarget {
+  /** Opens in the browser for PDFs and images (inline); other types download. */
   url: string;
+  /** Always downloads a copy (attachment), for the Download links. */
+  saveUrl: string;
   expiresAt: string;
+}
+
+/** Types a browser shows by itself: these open in the tab, anything else downloads. */
+export const VIEWABLE = /^(application\/pdf|image\/(png|jpeg|webp|gif))$/;
+
+/** Content-Disposition for a stored file: inline when it can be viewed and no copy was asked for. */
+export function disposition(contentType: string, fileName: string, save: boolean): string {
+  const safe = fileName.replace(/[^\w.-]+/g, '_');
+  return `${!save && VIEWABLE.test(contentType) ? 'inline' : 'attachment'}; filename="${safe}"`;
 }
 
 export interface StorageDriver {

@@ -1,4 +1,5 @@
 import { Badge, Card } from '@edupro/ui';
+import { FileLinks } from '@/components/FileLinks';
 import { ConfirmAction } from './ConfirmAction';
 import {
   studentDocumentRemove,
@@ -157,13 +158,12 @@ export function StudentDocuments({
                   return (
                     <tr key={d.id}>
                       <td>
-                        <a
-                          href={`/api/files/${d.fileId}/download`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <strong>{kindLabel(d.kind)}</strong>
-                        </a>
+                        <strong>
+                          <FileLinks
+                            href={`/api/files/${d.fileId}/download`}
+                            label={kindLabel(d.kind)}
+                          />
+                        </strong>
                         <div className="ep-field__help">
                           {d.fileName ?? ''}
                           {d.title ? ` · ${d.title}` : ''}

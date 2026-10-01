@@ -6,7 +6,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { DownloadTarget, StorageDriver, UploadTarget } from './storage';
+import { disposition, type DownloadTarget, type StorageDriver, type UploadTarget } from './storage';
 
 /** S3-compatible driver (AWS S3, Azure Blob through an S3 gateway, MinIO). Credentials come from the default provider chain. */
 export class S3Storage implements StorageDriver {
@@ -52,14 +52,23 @@ export class S3Storage implements StorageDriver {
     fileName: string,
     contentType: string,
   ): Promise<DownloadTarget> {
-    const command = new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: objectKey,
-      ResponseContentType: contentType,
-      ResponseContentDisposition: `attachment; filename="${fileName.replace(/[^\w.-]+/g, '_')}"`,
-    });
-    const url = await getSignedUrl(this.client, command, { expiresIn: this.ttlSeconds });
-    return { url, expiresAt: new Date(Date.now() + this.ttlSeconds * 1000).toISOString() };
+    const sign = (save: boolean) =>
+      getSignedUrl(
+        this.client,
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: objectKey,
+          ResponseContentType: contentType,
+          ResponseContentDisposition: disposition(contentType, fileName, save),
+        }),
+        { expiresIn: this.ttlSeconds },
+      );
+    const [url, saveUrl] = await Promise.all([sign(false), sign(true)]);
+    return {
+      url,
+      saveUrl,
+      expiresAt: new Date(Date.now() + this.ttlSeconds * 1000).toISOString(),
+    };
   }
 
   async write(objectKey: string, bytes: Buffer, contentType: string): Promise<void> {

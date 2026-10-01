@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import { FilesService } from '../../files/files.service';
 import { AuditService } from '../../../common/audit/audit.service';
 import { DbService } from '../../../common/db/db.service';
 import { DomainError } from '../../../common/errors/domain-error';
@@ -87,7 +88,16 @@ export class NoticesService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
+    private readonly files: FilesService,
   ) {}
+
+  /** A file attached to a notice the viewer may read (families included), as a signed link. */
+  async fileUrl(ctx: RequestContext, id: string, fileId: string) {
+    const row = await this.get(ctx, id);
+    if (!row.files.some((f) => f.id === fileId))
+      throw new DomainError('not-found', 'File not found', { status: 404 });
+    return this.files.downloadUrl(ctx, fileId);
+  }
 
   /** SQL fragment restricting rows to what the viewer may read; params are appended. */
   private visibility(ctx: RequestContext, v: Viewer, params: unknown[]): string {

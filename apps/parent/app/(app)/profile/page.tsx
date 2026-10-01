@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
@@ -188,9 +189,10 @@ export default async function ProfilePage({
       .catch(() => [] as PortalRequest[]),
     sp.export
       ? bff.api
-          .fetch<{ export: { id: string; status: string }; download: { url: string } | null }>(
-            `/engagement/mine/exports/${sp.export}`,
-          )
+          .fetch<{
+            export: { id: string; status: string };
+            download: { url: string; saveUrl?: string } | null;
+          }>(`/engagement/mine/exports/${sp.export}`)
           .catch(() => null)
       : Promise.resolve(null),
   ]);
@@ -297,7 +299,12 @@ export default async function ProfilePage({
             <ExportWatcher id={exp.export.id} url={exp.download?.url ?? null} />
           ) : null}
           {exp.download ? (
-            <a href={exp.download.url}>{t(lang, 'Download the profile PDF')}</a>
+            <FileLinks
+              url={exp.download.url}
+              saveUrl={exp.download.saveUrl}
+              label={t(lang, 'Open the profile PDF')}
+              saveLabel={t(lang, 'Download')}
+            />
           ) : exp.export.status === 'failed' ? (
             t(lang, 'The PDF could not be prepared. Please try again.')
           ) : (

@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
@@ -71,9 +72,18 @@ export default async function NoticesPage() {
           </div>
           <p style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--sp-1)' }}>{n.body}</p>
           {n.files.length ? (
-            <div className="ep-kicker">
-              {n.files.map((f) => f.name ?? t(lang, 'file')).join(', ')}
-            </div>
+            <ul className="pp-attachments">
+              {n.files.map((f) => (
+                <li key={f.id}>
+                  <FileLinks
+                    url={`/api/attachment/notice/${n.id}/${f.id}`}
+                    saveUrl={`/api/attachment/notice/${n.id}/${f.id}?save=1`}
+                    label={f.name ?? t(lang, 'file')}
+                    saveLabel={t(lang, 'Download')}
+                  />
+                </li>
+              ))}
+            </ul>
           ) : null}
         </Card>
       ))}

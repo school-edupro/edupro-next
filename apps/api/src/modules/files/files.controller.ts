@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Req, Res, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { disposition } from '@edupro/storage';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { Public } from '../../common/auth/decorators';
 import { DomainError } from '../../common/errors/domain-error';
@@ -60,11 +61,16 @@ export class FilesController {
   @Get('local')
   @Public()
   @ApiOperation({ summary: 'Local storage driver download (HMAC token in the query string)' })
-  async localGet(@Query('token') token: string, @Res() reply: FastifyReply) {
+  async localGet(
+    @Query('token') token: string,
+    @Query('download') download: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
     const { bytes, contentType, fileName } = await this.files.localGet(token);
+    // PDFs and images open in the browser; ?download=1 (the Download links) saves a copy
     void reply
       .header('content-type', contentType)
-      .header('content-disposition', `attachment; filename="${fileName.replace(/[^\w.-]+/g, '_')}"`)
+      .header('content-disposition', disposition(contentType, fileName, download === '1'))
       .header('cache-control', 'private, no-store')
       .send(bytes);
   }

@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import {
   Badge,
   Button,
@@ -164,7 +165,10 @@ export default async function PrivacyPage({
                   {r.exportId ? (
                     <div className="ep-kicker">
                       {r.exportStatus === 'ready' ? (
-                        <a href={`/reports/exports/${r.exportId}/download`}>{d('report')}</a>
+                        <FileLinks
+                          href={`/reports/exports/${r.exportId}/download`}
+                          label={d('report')}
+                        />
                       ) : (
                         `${d('report')} · ${r.exportStatus ?? ''}`
                       )}

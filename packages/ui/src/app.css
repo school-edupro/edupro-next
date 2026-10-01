@@ -3138,3 +3138,25 @@ a.ep-tabs__tab {
   align-items: center;
   margin-top: var(--sp-4);
 }
+/* file links: open in a new tab, Download beside it */
+.ep-filelinks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  align-items: baseline;
+}
+.ep-filelinks a {
+  text-decoration: underline;
+}
+.ep-filelinks__save {
+  font-size: var(--fs-small);
+}
+/* portal: homework and notice attachments */
+.pp-attachments {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+  font-size: var(--fs-small);
+}

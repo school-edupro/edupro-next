@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
@@ -61,9 +62,10 @@ export default async function DataPage({
   }
   const exportStatus = sp.export
     ? await bff.api
-        .fetch<{ export: { id: string; status: string }; download: { url: string } | null }>(
-          `/privacy/requests/mine/${sp.export}/export`,
-        )
+        .fetch<{
+          export: { id: string; status: string };
+          download: { url: string; saveUrl?: string } | null;
+        }>(`/privacy/requests/mine/${sp.export}/export`)
         .catch(() => null)
     : null;
   return (
@@ -106,7 +108,12 @@ export default async function DataPage({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {exportStatus.download ? (
-            <a href={exportStatus.download.url}>{t(lang, 'Download your data report (PDF)')}</a>
+            <FileLinks
+              url={exportStatus.download.url}
+              saveUrl={exportStatus.download.saveUrl}
+              label={t(lang, 'Open your data report (PDF)')}
+              saveLabel={t(lang, 'Download')}
+            />
           ) : (
             <>
               {t(lang, 'Your report is being prepared.')}{' '}

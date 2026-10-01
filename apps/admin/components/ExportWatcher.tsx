@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { FileLinks } from './FileLinks';
 
 /**
- * Polls a queued export every 2 s and starts the download the moment the file is ready, so the
- * user never has to refresh. After a minute still queued it explains that the workers service
+ * Polls a queued export every 2 s; when the file is ready a PDF shows Open (new tab) and Download,
+ * other formats download at once, so the user never has to refresh. After a minute still queued it explains that the workers service
  * renders exports (the usual cause locally is that it is not running).
  */
 export function ExportWatcher({
@@ -28,7 +29,9 @@ export function ExportWatcher({
         const s = (await r.json()) as { status?: string; ready?: boolean; error?: string | null };
         if (s.ready) {
           setState('ready');
-          window.location.assign(download);
+          // spreadsheets and other files download at once; a PDF waits for Open (a browser blocks
+          // tabs opened without a click), with Download beside it
+          if (format !== 'pdf') window.location.assign(`${download}?save=1`);
           return;
         }
         if (s.status === 'failed') {
@@ -46,7 +49,7 @@ export function ExportWatcher({
     return () => {
       stop = true;
     };
-  }, [id, download]);
+  }, [id, download, format]);
   return (
     <div
       className={`ep-alert ${state === 'failed' ? 'ep-alert--danger' : state === 'stuck' ? 'ep-alert--warning' : 'ep-alert--info'}`}
@@ -56,7 +59,7 @@ export function ExportWatcher({
     >
       {labels.queued} · {format.toUpperCase()} ·{' '}
       {state === 'ready' ? (
-        <a href={download}>{labels.ready}</a>
+        <FileLinks href={download} label={labels.ready} />
       ) : state === 'failed' ? (
         <span>
           {labels.failed}

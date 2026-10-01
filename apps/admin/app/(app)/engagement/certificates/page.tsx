@@ -1,4 +1,5 @@
 import { Button, Card, DataTable, FormRow, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { FileLinks } from '@/components/FileLinks';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { issueCertificates } from '@/lib/actions';
@@ -117,7 +118,7 @@ export default async function CertificatesPage({
               header: e('pdf'),
               render: (c) =>
                 c.exportId && c.exportStatus === 'ready' ? (
-                  <a href={`/reports/exports/${c.exportId}/download`}>{e('download')}</a>
+                  <FileLinks href={`/reports/exports/${c.exportId}/download`} label="Open" />
                 ) : (
                   (c.exportStatus ?? '')
                 ),

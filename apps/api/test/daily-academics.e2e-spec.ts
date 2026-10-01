@@ -272,6 +272,24 @@ describe('daily academics and student lifecycle (e2e)', () => {
     expect(mine.json().data.map((w: { title: string }) => w.title)).toEqual([
       'Fractions worksheet',
     ]);
+    // the parent opens the worksheet's attachment (a signed link that shows a PDF in the browser)
+    const sheet = mine.json().data[0] as { id: string; files: Array<{ id: string }> };
+    const file = await inject({
+      method: 'GET',
+      url: `/academics/daily-work/${sheet.id}/files/${sheet.files[0]!.id}`,
+      headers: ph,
+    });
+    expect(file.statusCode).toBe(200);
+    expect(file.json().download).toMatchObject({
+      url: expect.any(String),
+      saveUrl: expect.stringContaining('download=1'),
+    });
+    const wrongFile = await inject({
+      method: 'GET',
+      url: `/academics/daily-work/${inB.json().id}/files/${sheet.files[0]!.id}`,
+      headers: ph,
+    });
+    expect(wrongFile.statusCode).toBe(404);
     const otherSection = await inject({
       method: 'GET',
       url: `/academics/daily-work?classSectionId=${sectionB}`,

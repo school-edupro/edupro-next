@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
@@ -145,9 +146,18 @@ export default async function HomeworkPage({
                 </div>
               ) : null}
               {w.files.length ? (
-                <div className="ep-kicker">
-                  {w.files.map((f) => f.name ?? t(lang, 'file')).join(', ')}
-                </div>
+                <ul className="pp-attachments">
+                  {w.files.map((f) => (
+                    <li key={f.id}>
+                      <FileLinks
+                        url={`/api/attachment/homework/${w.id}/${f.id}`}
+                        saveUrl={`/api/attachment/homework/${w.id}/${f.id}?save=1`}
+                        label={f.name ?? t(lang, 'file')}
+                        saveLabel={t(lang, 'Download')}
+                      />
+                    </li>
+                  ))}
+                </ul>
               ) : null}
               {w.postedBy ? <div className="ep-kicker">{w.postedBy}</div> : null}
             </div>

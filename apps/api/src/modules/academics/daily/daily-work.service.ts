@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import { FilesService } from '../../files/files.service';
 import { ScopePolicy } from '../../../common/access/scope.policy';
 import { AuditService } from '../../../common/audit/audit.service';
 import { DbService } from '../../../common/db/db.service';
@@ -86,7 +87,16 @@ export class DailyWorkService {
     private readonly audit: AuditService,
     private readonly scopes: ScopePolicy,
     private readonly viewer: ViewerService,
+    private readonly files: FilesService,
   ) {}
+
+  /** A file attached to homework / classwork the viewer may see (families included), as a signed link. */
+  async fileUrl(ctx: RequestContext, id: string, fileId: string) {
+    const row = await this.get(ctx, id);
+    if (!row.files.some((f) => f.id === fileId))
+      throw new DomainError('not-found', 'File not found', { status: 404 });
+    return this.files.downloadUrl(ctx, fileId);
+  }
 
   async list(
     ctx: RequestContext,

@@ -1,3 +1,4 @@
+import { FileLinks } from '@/components/FileLinks';
 import {
   Badge,
   Button,
@@ -55,12 +56,10 @@ export default async function AiReportsPage({
                   {current.periodFrom} → {current.periodTo}
                 </Badge>
                 {current.exportId && current.exportStatus === 'ready' ? (
-                  <a
-                    className="ep-btn ep-btn--sm"
+                  <FileLinks
                     href={`/reports/exports/${current.exportId}/download`}
-                  >
-                    {a('pdfReady')}
-                  </a>
+                    label={a('pdfReady')}
+                  />
                 ) : current.exportId ? (
                   <Badge tone="warning">{a('pdfPending')}</Badge>
                 ) : null}
@@ -140,7 +139,10 @@ export default async function AiReportsPage({
                 header: a('pdf'),
                 render: (x) =>
                   x.exportId && x.exportStatus === 'ready' ? (
-                    <a href={`/reports/exports/${x.exportId}/download`}>{a('pdfReady')}</a>
+                    <FileLinks
+                      href={`/reports/exports/${x.exportId}/download`}
+                      label={a('pdfReady')}
+                    />
                   ) : (
                     (x.exportStatus ?? '')
                   ),
