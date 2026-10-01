@@ -8,6 +8,7 @@ import {
   mobileOf,
   nameOf,
   ownTicked,
+  ownValue,
   primaryParty,
   primaryValues,
   type Party,
@@ -57,10 +58,10 @@ export function ParentContactRoles({
           Mobile <strong>{mobile || 'not filled'}</strong> is also
         </span>
         {tick(`r-${party}-wa`, 'WhatsApp', ownTicked(values, party, 'whatsapp'), !!mobile, (on) =>
-          set({ [OWN.whatsapp(party)]: on ? mobile : null }),
+          set({ [OWN.whatsapp(party)]: ownValue(values, party, 'whatsapp', on) }),
         )}
         {tick(`r-${party}-sms`, 'SMS / calls', ownTicked(values, party, 'sms'), !!mobile, (on) =>
-          set({ [OWN.sms(party)]: on ? mobile : null }),
+          set({ [OWN.sms(party)]: ownValue(values, party, 'sms', on) }),
         )}
         {tick(
           `r-${party}-em`,
@@ -79,7 +80,7 @@ export function ParentContactRoles({
           'Communication email',
           ownTicked(values, party, 'communication'),
           !!email,
-          (on) => set({ [OWN.communication(party)]: on ? email : null }),
+          (on) => set({ [OWN.communication(party)]: ownValue(values, party, 'communication', on) }),
         )}
       </div>
       <div className="ep-roles__row">
@@ -97,7 +98,8 @@ export function ParentContactRoles({
         )}
       </div>
       <p id={`roles-${party}-help`} className="ep-field__help">
-        Ticks fill the matching boxes below and follow the mobile or email when it changes.
+        Ticks fill the matching boxes below (WhatsApp copies the mobile; SMS / calls, communication
+        email and emergency become Yes) and follow the mobile or email when it changes.
       </p>
     </fieldset>
   );

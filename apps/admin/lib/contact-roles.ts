@@ -15,7 +15,10 @@ export const mobileOf = (v: ProfileValues, p: Party) => text(v[k(p, 'mobile')]);
 export const emailOf = (v: ProfileValues, p: Party) => text(v[k(p, 'email')]);
 export const nameOf = (v: ProfileValues, p: Party) => text(v[k(p, 'name')]);
 
-/** The parent's own boxes that can copy their mobile or email. */
+/**
+ * The parent's own role boxes: WhatsApp holds a number (a copy of the mobile); SMS / calls,
+ * communication email and emergency contact are Yes / No switches.
+ */
 export const OWN = {
   whatsapp: (p: Party) => k(p, 'whatsapp_no'),
   sms: (p: Party) => k(p, 'mobile_for_sms_calls'),
@@ -24,24 +27,40 @@ export const OWN = {
 };
 
 export function ownTicked(v: ProfileValues, p: Party, role: 'whatsapp' | 'sms' | 'communication') {
-  const src = role === 'communication' ? emailOf(v, p) : mobileOf(v, p);
-  return src !== '' && text(v[OWN[role](p)]) === src;
+  if (role !== 'whatsapp') return text(v[OWN[role](p)]) === 'Yes';
+  const mobile = mobileOf(v, p);
+  return mobile !== '' && text(v[OWN.whatsapp(p)]) === mobile;
+}
+
+/** The value a role box takes when ticked or un-ticked. */
+export function ownValue(
+  v: ProfileValues,
+  p: Party,
+  role: 'whatsapp' | 'sms' | 'communication',
+  on: boolean,
+): string | null {
+  if (role === 'whatsapp') return on ? mobileOf(v, p) || null : null;
+  return on ? 'Yes' : 'No';
 }
 
 /** The family's contact boxes filled from the primary parent. */
 export function primaryValues(v: ProfileValues, p: Party): ProfileValues {
-  return {
-    sms_mobile: text(v[OWN.sms(p)]) || mobileOf(v, p) || null,
+  const out: ProfileValues = {
+    sms_mobile: mobileOf(v, p) || null,
     whatsapp_no: text(v[OWN.whatsapp(p)]) || mobileOf(v, p) || null,
-    primary_email: text(v[OWN.communication(p)]) || emailOf(v, p) || null,
+    primary_email: emailOf(v, p) || null,
   };
+  // the primary parent receives school SMS / calls and emails
+  if (mobileOf(v, p)) out[OWN.sms(p)] = 'Yes';
+  if (emailOf(v, p)) out[OWN.communication(p)] = 'Yes';
+  return out;
 }
 
 /** Which parent the family's SMS number belongs to, if any. */
 export function primaryParty(v: ProfileValues): Party | null {
   const sms = text(v.sms_mobile);
   if (!sms) return null;
-  return PARTIES.find((p) => sms === mobileOf(v, p) || sms === text(v[OWN.sms(p)])) ?? null;
+  return PARTIES.find((p) => sms === mobileOf(v, p)) ?? null;
 }
 
 const relationOf = (v: ProfileValues, p: Party) =>
@@ -75,8 +94,8 @@ export function followChange(v: ProfileValues, key: string, next: string | null)
   if (!old) return {};
   const targets =
     m[2] === 'mobile'
-      ? [OWN.whatsapp(p), OWN.sms(p), 'sms_mobile', 'whatsapp_no', 'emergency_contact_mobile']
-      : [OWN.communication(p), 'primary_email'];
+      ? [OWN.whatsapp(p), 'sms_mobile', 'whatsapp_no', 'emergency_contact_mobile']
+      : ['primary_email'];
   const out: ProfileValues = {};
   for (const t of targets) if (text(v[t]) === old) out[t] = next;
   return out;
