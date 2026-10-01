@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   EDITABLE_PROFILE_FIELDS,
+  findSibling,
   PROFILE_FIELDS,
   PROFILE_LIST_DEFAULTS,
   PROFILE_SECTIONS,
@@ -38,6 +39,17 @@ export class StudentProfileService {
 
   private canSeeSensitive(ctx: RequestContext): boolean {
     return ctx.permissions?.has(PEOPLE.sensitiveView) ?? false;
+  }
+
+  /** A sibling by admission number, for the Verify button on the Sibling tab. */
+  async sibling(ctx: RequestContext, admissionNo: string, exclude: string | null) {
+    const tenant = requireTenant(ctx);
+    const found = await this.db.tenant(tenant, (c) => findSibling(c, admissionNo, exclude));
+    if (!found)
+      throw new DomainError('not-found', `No other student has admission number ${admissionNo}`, {
+        status: 404,
+      });
+    return found;
   }
 
   /** Sections, fields and the school's drop-down options, plus geography for the address cascade. */

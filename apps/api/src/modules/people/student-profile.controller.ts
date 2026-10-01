@@ -124,6 +124,20 @@ export class StudentProfileController {
     return this.profile.catalogue(ctx);
   }
 
+  @Get('profile/sibling')
+  @ApiOperation({ summary: 'Find a sibling by admission number (name, class, parents) to verify' })
+  @RequirePermission(PEOPLE.studentView)
+  sibling(
+    @ReqCtx() ctx: RequestContext,
+    @Query('admissionNo') admissionNo?: string,
+    @Query('exclude') exclude?: string,
+  ) {
+    const no = (admissionNo ?? '').trim();
+    if (!no || no.length > 40)
+      throw new DomainError('validation-failed', 'Enter an admission number', { status: 400 });
+    return this.profile.sibling(ctx, no, exclude && /^\d{1,18}$/.test(exclude) ? exclude : null);
+  }
+
   @Get('profile/next-numbers')
   @ApiOperation({ summary: 'Suggested next admission number and roll number for quick add' })
   @RequirePermission(PEOPLE.studentCreate)

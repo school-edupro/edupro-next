@@ -290,12 +290,75 @@ export async function readStudentProfiles(
  * ignored. A parent block needs the parent's name before any other detail: the first write creates
  * and links the guardian record, which siblings then share.
  */
+/** A sibling found by admission number in the working school (never the student themselves). */
+export async function findSibling(
+  c: PoolClient,
+  admissionNo: string,
+  excludeStudentId?: string | null,
+): Promise<{
+  id: string;
+  admissionNo: string;
+  name: string;
+  classSection: string | null;
+  father: string | null;
+  mother: string | null;
+  status: string;
+} | null> {
+  const r = await c.query<{
+    id: string;
+    admission_no: string;
+    name: string;
+    class_section: string | null;
+    father: string | null;
+    mother: string | null;
+    status: string;
+  }>(
+    `SELECT s.id::text, s.admission_no, s.display_name AS name, s.status::text,
+            (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+              WHERE e.student_id = s.id AND e.status = 'active' ORDER BY e.joined_on DESC LIMIT 1) AS class_section,
+            (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id AND sg.relation = 'father' LIMIT 1) AS father,
+            (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id AND sg.relation = 'mother' LIMIT 1) AS mother
+       FROM students s
+      WHERE lower(s.admission_no) = lower($1) AND s.deleted_at IS NULL AND ($2::bigint IS NULL OR s.id <> $2::bigint)
+      LIMIT 1`,
+    [admissionNo.trim(), excludeStudentId ?? null],
+  );
+  const x = r.rows[0];
+  return x
+    ? {
+        id: x.id,
+        admissionNo: x.admission_no,
+        name: x.name,
+        classSection: x.class_section,
+        father: x.father,
+        mother: x.mother,
+        status: x.status,
+      }
+    : null;
+}
+
 export async function writeStudentProfile(
   c: PoolClient,
   studentId: string,
-  values: ProfileValues,
+  input: ProfileValues,
 ): Promise<{ changed: string[] }> {
   const errors: Record<string, string> = {};
+  // a sibling admission number must belong to another student of the school; the name and class
+  // come from that record, so the sibling details always match the student they point to
+  let values = input;
+  const sibNo = values.sibling_admission_no;
+  if (typeof sibNo === 'string' && sibNo.trim()) {
+    const sib = await findSibling(c, sibNo, studentId);
+    if (!sib) errors.sibling_admission_no = `No other student has admission number ${sibNo.trim()}`;
+    else
+      values = {
+        ...values,
+        sibling_in_school: 'Yes',
+        sibling_admission_no: sib.admissionNo,
+        sibling_name: sib.name,
+        sibling_class_section: sib.classSection,
+      };
+  }
   const studentSets: string[] = [];
   const studentParams: unknown[] = [];
   const setStudent = (sql: string, v: unknown) => {

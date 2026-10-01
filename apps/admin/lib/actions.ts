@@ -4039,3 +4039,34 @@ export async function bulkDecideProfileChanges(body: {
     return problem(error);
   }
 }
+
+/** Sibling lookup for the Verify button on the student profile's Sibling tab. */
+export async function verifySibling(
+  admissionNo: string,
+  studentId: string,
+): Promise<
+  | {
+      ok: true;
+      sibling: {
+        id: string;
+        admissionNo: string;
+        name: string;
+        classSection: string | null;
+        father: string | null;
+        mother: string | null;
+        status: string;
+      };
+    }
+  | { ok: false; error: string }
+> {
+  const no = admissionNo.trim();
+  if (!no) return { ok: false, error: 'Enter the sibling’s admission number' };
+  try {
+    const q = new URLSearchParams({ admissionNo: no, exclude: studentId });
+    return { ok: true, sibling: await apiFetch(`/people/profile/sibling?${q.toString()}`) };
+  } catch (error) {
+    if (error instanceof ApiError)
+      return { ok: false, error: String(error.problem.detail ?? 'Not found') };
+    throw error;
+  }
+}

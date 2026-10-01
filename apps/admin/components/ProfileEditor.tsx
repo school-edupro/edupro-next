@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { followChange } from '@/lib/contact-roles';
 import { FamilyContactPickers, ParentContactRoles } from './ContactRoles';
 import { ProfileField } from './ProfileField';
+import { SiblingVerify } from './SiblingVerify';
 import {
   applies,
   type ProfileCatalogue,
@@ -241,6 +242,13 @@ export function ProfileEditor({
             <ParentContactRoles party={s.id} values={values} disabled={!canEdit} set={setMany} />
           ) : s.id === 'contact' ? (
             <FamilyContactPickers values={values} disabled={!canEdit} set={setMany} />
+          ) : s.id === 'sibling' ? (
+            <SiblingVerify
+              studentId={base.studentId}
+              values={values}
+              disabled={!canEdit}
+              set={setMany}
+            />
           ) : null}
           <div className="ep-profile__grid">
             {(fieldsBySection.get(s.id) ?? [])

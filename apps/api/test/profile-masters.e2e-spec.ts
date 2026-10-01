@@ -111,4 +111,35 @@ describe('profile drop-downs from setup masters (e2e)', () => {
     expect(fields.parent.sub_caste).toBe('hidden');
     expect(fields.student.sub_caste).toBe('hidden');
   });
+
+  it('checks a sibling admission number and takes the name and class from that student', async () => {
+    const other = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: { admissionNo: `${s}-2`, firstName: 'Ira', lastName: 'Master' },
+    });
+    expect(other.statusCode).toBe(201);
+    const bad = await save({ sibling_in_school: 'Yes', sibling_admission_no: 'NO-SUCH-NO' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().errors.sibling_admission_no).toMatch(/No other student/);
+    const self = await save({ sibling_admission_no: `${s}-1` });
+    expect(self.statusCode).toBe(400);
+    const ok = await save({
+      sibling_admission_no: `${s}-2`.toLowerCase(),
+      sibling_name: 'typed wrong',
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().values).toMatchObject({
+      sibling_in_school: 'Yes',
+      sibling_admission_no: `${s}-2`,
+      sibling_name: 'Ira Master',
+    });
+    const look = await inject({
+      method: 'GET',
+      url: `/people/profile/sibling?admissionNo=${s}-2&exclude=${studentId}`,
+      headers: h(),
+    });
+    expect(look.json()).toMatchObject({ name: 'Ira Master', admissionNo: `${s}-2` });
+  });
 });
