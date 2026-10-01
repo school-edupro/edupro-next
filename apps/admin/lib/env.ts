@@ -26,6 +26,10 @@ export const env = {
       mfaAcr: process.env.ONEAUTH_MFA_ACR ?? 'mfa',
     };
   },
+  /** Where parents and students are sent when they sign in here (family-only accounts). */
+  get parentAppUrl(): string {
+    return process.env.PARENT_APP_URL ?? 'http://localhost:3001';
+  },
   get devBypass(): boolean {
     return process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_BYPASS === '1';
   },

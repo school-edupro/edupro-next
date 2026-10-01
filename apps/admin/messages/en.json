@@ -3453,5 +3453,12 @@
     "helpIndex": "Modules",
     "helpOpen": "Open",
     "helpBack": "All help pages"
+  },
+  "familyNotice": {
+    "kicker": "Parent and student portal",
+    "title": "Namaste, {name}",
+    "text": "This portal is for school staff. Your child’s profile, fees, attendance, homework and results are in the parent app.",
+    "open": "Open the parent app",
+    "signOut": "Sign out"
   }
 }

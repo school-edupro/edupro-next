@@ -10,8 +10,8 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
   { sub: 'dev-support', label: 'Support Engineer' },
   { sub: 'dev-clerk', label: 'Front Office (school role)' },
   { sub: 'dev-accounts', label: 'Accountant (fee masters and demands)' },
-  { sub: 'dev-parent', label: 'Parent (guardian of two children)' },
-  { sub: 'dev-student', label: 'Student (VI-A)' },
+  { sub: 'dev-parent', label: 'Parent (guardian of two children; opens the parent app)' },
+  { sub: 'dev-student', label: 'Student (VI-A; opens the parent app)' },
   { sub: 'dev-nobody', label: 'Member with no roles' },
   // Beta Public School (packages/db seed:beta)
   { sub: 'dev-beta-principal', label: 'Beta: Principal (School Admin)' },
@@ -21,7 +21,7 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
   { sub: 'dev-beta-auditor', label: 'Beta: Auditor (read-only)' },
   { sub: 'dev-beta-clerk', label: 'Beta: Front Office (school role)' },
   { sub: 'dev-beta-accounts', label: 'Beta: Accountant' },
-  { sub: 'dev-beta-parent', label: 'Beta: Parent (guardian of two children)' },
-  { sub: 'dev-beta-student', label: 'Beta: Student (III-A)' },
+  { sub: 'dev-beta-parent', label: 'Beta: Parent (two children; opens the parent app)' },
+  { sub: 'dev-beta-student', label: 'Beta: Student (III-A; opens the parent app)' },
   { sub: 'dev-beta-nobody', label: 'Beta: Member with no roles' },
 ];

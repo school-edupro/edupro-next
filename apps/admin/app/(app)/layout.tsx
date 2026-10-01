@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { FamilyNotice } from '@/components/FamilyNotice';
 import { Shell } from '@/components/Shell';
 import { ApiError, getMe } from '@/lib/api';
 
@@ -22,6 +23,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       );
     }
     throw error;
+  }
+  // Parents and students have no staff membership: their profile lives in the parent app.
+  if (
+    me.memberships.length > 0 &&
+    me.memberships.every((m) => m.personType === 'guardian' || m.personType === 'student')
+  ) {
+    return <FamilyNotice name={me.user.displayName} />;
   }
   if (!me.school && me.memberships.length > 0) {
     // No working school yet: let the context route pick the first membership and come back.
