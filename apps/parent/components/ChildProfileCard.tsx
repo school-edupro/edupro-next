@@ -2,30 +2,25 @@ import { Button, Card } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { t, type Lang } from '@/lib/i18n';
-import { downloadProfilePdf } from '@/app/profile/actions';
-import type { PortalProfile } from '@/app/profile/types';
+import { downloadProfilePdf } from '@/app/(app)/profile/actions';
+import type { PortalProfile } from '@/app/(app)/profile/types';
 
-interface Family {
-  children: Array<{ id: string; name: string; section: string | null }>;
+export interface FamilyChild {
+  id: string;
+  name: string;
+  section: string | null;
 }
 
-/** Home-page summary of the signed-in family's child: photo, class, roll, admission no and links. */
-export async function ChildProfileCard({ childId, lang }: { childId?: string; lang: Lang }) {
-  let fam: Family;
-  try {
-    fam = await bff.api.fetch<Family>('/engagement/family');
-  } catch (error) {
-    if (error instanceof ApiError) return null;
-    throw error;
-  }
-  const child = fam.children.find((c) => c.id === childId) ?? fam.children[0];
-  if (!child) {
-    return (
-      <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        {t(lang, 'Your account is not linked to a student yet. Please contact the school office.')}
-      </Card>
-    );
-  }
+/** Home-page summary of the chosen child: photo, class, roll, admission no and links. */
+export async function ChildProfileCard({
+  kids,
+  child,
+  lang,
+}: {
+  kids: FamilyChild[];
+  child: FamilyChild;
+  lang: Lang;
+}) {
   let p: PortalProfile;
   try {
     p = await bff.api.fetch<PortalProfile>(`/engagement/mine/profile/${child.id}`);
@@ -34,14 +29,14 @@ export async function ChildProfileCard({ childId, lang }: { childId?: string; la
     throw error;
   }
   return (
-    <section aria-label={t(lang, 'Student profile')} style={{ marginBottom: 'var(--sp-4)' }}>
-      {fam.children.length > 1 ? (
+    <section aria-label={t(lang, 'Student profile')}>
+      {kids.length > 1 ? (
         <nav
           className="pp-kids"
           aria-label={t(lang, 'Choose a child')}
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          {fam.children.map((c) => (
+          {kids.map((c) => (
             <a
               key={c.id}
               href={`/?child=${c.id}`}

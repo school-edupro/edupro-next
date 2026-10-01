@@ -311,7 +311,10 @@ export function createBff(options: BffOptions) {
         login.searchParams.set('returnTo', pathname);
         return NextResponse.redirect(login);
       }
-      return NextResponse.next();
+      // expose the path to server layouts for the active navigation state
+      const headers = new Headers(req.headers);
+      headers.set('x-pathname', pathname);
+      return NextResponse.next({ request: { headers } });
     };
 
   return { env, session, api, handlers, middleware, cookies: { session: SESSION_COOKIE } };

@@ -45,6 +45,13 @@ export class EngagementPlusController {
     return this.svc.decideAppointment(ctx, id, body);
   }
 
+  @Get('mine/birthdays/:studentId')
+  @ApiOperation({ summary: "Birthdays in the child's section over the next seven days" })
+  @RequirePermission(P.familyView)
+  myBirthdays(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.svc.myBirthdays(ctx, studentId);
+  }
+
   @Get('mine/appointments')
   @RequirePermission(P.familyView)
   myAppointments(@ReqCtx() ctx: RequestContext) {

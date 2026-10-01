@@ -2573,3 +2573,254 @@ a.ep-tabs__tab {
   background: var(--surface-card);
   border-top: 1px solid var(--border-default);
 }
+
+/* ---- Family portal (parent and student app) -------------------------------------- */
+/* pages keep their own <main>; inside the frame they fill the content column */
+.fp-content {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-4);
+}
+.fp-content > main,
+.fp-content > .pp-main {
+  padding: 0 !important;
+  max-width: 72rem !important;
+  margin: 0 !important;
+  width: 100%;
+}
+/* the sidebar and tab bar replace the old per-page "Home" buttons */
+.fp-content .ep-page-header a.ep-btn[href='/'] {
+  display: none;
+}
+.fp-home {
+  display: grid;
+  gap: var(--sp-5);
+}
+.fp-home > .ep-page-header {
+  margin-bottom: 0;
+}
+.fp-context {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.fp-context__school {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.fp-context__year {
+  color: var(--text-muted);
+}
+.fp-school-switch {
+  display: flex;
+  gap: var(--sp-2);
+}
+.fp-section-title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+  margin: 0 0 var(--sp-3);
+}
+.fp-glances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-3);
+}
+.fp-glance {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-4);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.fp-glance:hover,
+.fp-service:hover,
+.fp-action:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--border-accent);
+}
+.fp-glance__icon,
+.fp-service__icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-md);
+  background: var(--mob-cyan-50);
+  color: var(--mob-navy-800);
+  flex: none;
+}
+.fp-glance__body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.fp-glance__label {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.fp-glance__value {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.fp-glance__note {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.fp-two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--sp-3);
+}
+.fp-list {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  display: grid;
+}
+.fp-list > li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.fp-list > li:last-child {
+  border-bottom: 0;
+}
+.fp-list__meta {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+.fp-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--sp-3);
+}
+.fp-action {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--mob-navy-800);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+.fp-services {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--sp-3);
+}
+.fp-service {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  text-decoration: none;
+  color: var(--text-body);
+}
+.fp-service__title {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.fp-service__help {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+/* phone tab bar: the sidebar is hidden below 900px */
+.fp-tabbar {
+  display: none;
+}
+@media (max-width: 900px) {
+  .fp-tabbar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 20;
+    background: var(--surface-card);
+    border-top: 1px solid var(--border-default);
+    box-shadow: var(--shadow-overlay);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .fp-tabbar a {
+    display: grid;
+    justify-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-1);
+    color: var(--text-muted);
+    font-size: var(--fs-caption);
+    text-decoration: none;
+  }
+  .fp-tabbar a[aria-current='page'] {
+    color: var(--mob-navy-800);
+    font-weight: var(--fw-semibold);
+  }
+  .fp-shell .fp-content {
+    padding: var(--sp-3) var(--sp-3) calc(var(--sp-9) + env(safe-area-inset-bottom));
+  }
+  /* phone header: school and session on one compact row, the icons beside them; no sidebar button */
+  .fp-shell .ep-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    position: sticky;
+  }
+  .fp-shell .ep-header > .ep-header__context:first-child > .ep-header__icon-btn {
+    display: none;
+  }
+  .fp-shell .ep-header__module {
+    flex: 1 1 auto;
+    border: 0;
+    padding: 0;
+  }
+  .fp-shell .fp-context {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .fp-shell .fp-context__school {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .fp-shell .fp-context .ep-select {
+    max-width: 7.5rem;
+  }
+  .fp-shell .ep-header > .ep-header__context:last-child {
+    flex-wrap: nowrap;
+    gap: var(--sp-1);
+  }
+  .fp-shell .pp-photo {
+    width: 5rem;
+  }
+}
+/* narrow phones: the session control moves under the school name */
+@media (max-width: 480px) {
+  .fp-shell .fp-context {
+    flex-wrap: wrap;
+  }
+  .fp-shell .fp-context__school {
+    flex: 1 1 100%;
+  }
+}

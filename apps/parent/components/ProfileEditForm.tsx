@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
-import type { PortalField, Value } from '../app/profile/types';
-import { applies } from '../app/profile/types';
+import type { PortalField, Value } from '../app/(app)/profile/types';
+import { applies } from '../app/(app)/profile/types';
 
 export interface EditLabels {
   needsApproval: string;

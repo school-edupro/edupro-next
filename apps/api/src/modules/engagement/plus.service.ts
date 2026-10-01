@@ -186,6 +186,35 @@ export class EngagementPlusService {
     });
   }
 
+  /** Classmates' birthdays in the next seven days (the child's own section; first name, initial, day only). */
+  async myBirthdays(ctx: RequestContext, studentId: string) {
+    const s = await this.familyStudent(ctx, studentId);
+    if (!s.classSectionId) return { data: [] };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        first_name: string;
+        last_name: string | null;
+        day: string;
+      }>(
+        `WITH d AS (SELECT ((now() AT TIME ZONE 'Asia/Kolkata')::date + g) AS day FROM generate_series(0, 6) g)
+         SELECT s.id::text, s.first_name, s.last_name, to_char(d.day, 'YYYY-MM-DD') AS day
+           FROM enrolments e JOIN students s ON s.id = e.student_id
+           JOIN d ON to_char(s.dob, 'MM-DD') = to_char(d.day, 'MM-DD')
+          WHERE e.class_section_id = $1 AND e.status = 'active' AND s.status = 'active' AND s.deleted_at IS NULL
+          ORDER BY d.day, s.first_name LIMIT 30`,
+        [s.classSectionId],
+      );
+      return {
+        data: r.rows.map((x) => ({
+          name: x.last_name ? `${x.first_name} ${x.last_name.slice(0, 1)}.` : x.first_name,
+          day: x.day,
+          self: x.id === studentId,
+        })),
+      };
+    });
+  }
+
   async myAppointments(ctx: RequestContext) {
     const v = await this.viewer.resolve(ctx, 'engagement.family.view');
     if (v.kind !== 'family') return { data: [] };
