@@ -104,13 +104,14 @@ const PHOTO_KEYS = LEGACY_PHOTO_KEYS;
  */
 export const PORTAL_PHOTOS: ReadonlyArray<{
   key: string;
-  party: 'student' | 'father' | 'mother';
+  party: 'student' | 'father' | 'mother' | 'guardian';
   section: string;
   label: string;
 }> = [
   { key: 'photo_student', party: 'student', section: 'student', label: 'Student photo' },
   { key: 'photo_father', party: 'father', section: 'father', label: "Father's photo" },
   { key: 'photo_mother', party: 'mother', section: 'mother', label: "Mother's photo" },
+  { key: 'photo_guardian', party: 'guardian', section: 'guardian', label: "Guardian's photo" },
 ];
 export const PORTAL_PHOTO_BY_KEY = new Map(PORTAL_PHOTOS.map((p) => [p.key, p]));
 

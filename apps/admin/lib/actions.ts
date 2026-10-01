@@ -616,6 +616,13 @@ export async function studentParentPhotoUpload(fd: FormData) {
   const id = str(fd, 'id');
   const party = str(fd, 'party');
   return run(backTo(fd, `/people/students/${id}?tab=overview`), async () => {
+    // a mother or guardian not on record yet: the name typed with the photo creates the record first
+    const name = str(fd, 'name');
+    if (name && ['father', 'mother', 'guardian'].includes(party))
+      await apiFetch(`/people/students/${id}/profile`, {
+        method: 'PATCH',
+        body: JSON.stringify({ values: { [`${party}_name`]: name } }),
+      });
     const [fileId] = await uploadAll(fd, 'file', 'personal');
     if (!fileId) throw new ApiError(400, { type: 'validation-failed', detail: 'Choose a photo' });
     await apiFetch(`/people/students/${id}/parent-photo`, {

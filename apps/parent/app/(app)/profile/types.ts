@@ -31,14 +31,15 @@ export interface PortalProfile {
   } | null;
   classTeacher: string | null;
   completeness: number;
-  photos: { student: boolean; father: boolean; mother: boolean };
+  photos: { student: boolean; father: boolean; mother: boolean; guardian?: boolean };
+  photoVersions?: Partial<Record<'student' | 'father' | 'mother' | 'guardian', string | null>>;
   window: { open: boolean; message: string | null; until: string | null };
   canEdit: boolean;
   proofKinds: Array<{ id: string; label: string }>;
   sections: Array<{ id: string; title: string; fields: PortalField[] }>;
   photoFields: Array<{
     key: string;
-    party: 'student' | 'father' | 'mother';
+    party: 'student' | 'father' | 'mother' | 'guardian';
     label: string;
     level: Level;
     pending: { requestId: string; since: string } | null;

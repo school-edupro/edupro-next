@@ -51,7 +51,11 @@ export async function ChildProfileCard({
       <Card elevated>
         <div className="pp-hero">
           {p.photos.student ? (
-            <img className="pp-photo" src={`/api/photo/${child.id}/student`} alt={p.name} />
+            <img
+              className="pp-photo"
+              src={`/api/photo/${child.id}/student${p.photoVersions?.student ? `?v=${p.photoVersions.student}` : ''}`}
+              alt={p.name}
+            />
           ) : (
             <span
               className="pp-photo pp-photo--empty"

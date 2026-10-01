@@ -2896,3 +2896,14 @@ a.ep-tabs__tab {
   max-width: 8rem;
   text-align: center;
 }
+/* student profile: a parent not on record yet is added with the name and the photo together */
+.ep-newphoto {
+  display: grid;
+  gap: var(--sp-1);
+  max-width: 18rem;
+  margin-top: var(--sp-2);
+}
+.ep-newphoto .ep-btn {
+  justify-self: start;
+  margin-top: var(--sp-1);
+}

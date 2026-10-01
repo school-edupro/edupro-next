@@ -98,7 +98,11 @@ export async function submitProfilePhoto(fd: FormData) {
   if (!idOk(studentId)) redirect('/profile');
   const back = `/profile?child=${studentId}`;
   const file = fd.get('file');
-  if (!/^photo_(student|father|mother)$/.test(key) || !(file instanceof File) || file.size === 0)
+  if (
+    !/^photo_(student|father|mother|guardian)$/.test(key) ||
+    !(file instanceof File) ||
+    file.size === 0
+  )
     redirect(`${back}&error=photo&detail=${encodeURIComponent('Choose a photo to send.')}`);
   if (!/^image\/(png|jpeg|webp)$/.test(file.type))
     redirect(`${back}&error=photo&detail=${encodeURIComponent('Send a JPG, PNG or WebP photo.')}`);

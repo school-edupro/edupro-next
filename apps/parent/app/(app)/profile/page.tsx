@@ -46,14 +46,21 @@ function Photo({
   party,
   has,
   label,
+  version,
 }: {
   child: string;
   party: string;
   has: boolean;
   label: string;
+  /** The photo's file id: a new photo gets a new address, so a cached old one never shows. */
+  version?: string | null;
 }) {
   return has ? (
-    <img className="pp-photo" src={`/api/photo/${child}/${party}`} alt={label} />
+    <img
+      className="pp-photo"
+      src={`/api/photo/${child}/${party}${version ? `?v=${version}` : ''}`}
+      alt={label}
+    />
   ) : (
     <span className="pp-photo pp-photo--empty" role="img" aria-label={`${label}: no photo`}>
       {label.slice(0, 1)}
@@ -192,7 +199,7 @@ export default async function ProfilePage({
   const fact = (key: string) => all.find((f) => f.key === key)?.value ?? null;
   const pendingCount = reqs.filter((r) => r.status === 'pending').length;
   const parents: Array<{
-    party: string;
+    party: 'father' | 'mother' | 'guardian';
     label: string;
     name: unknown;
     mobile: unknown;
@@ -212,10 +219,21 @@ export default async function ProfilePage({
       mobile: fact('mother_mobile'),
       has: p.photos.mother,
     },
+    ...(fact('guardian_name')
+      ? [
+          {
+            party: 'guardian' as const,
+            label: t(lang, 'Guardian'),
+            name: fact('guardian_name'),
+            mobile: fact('guardian_mobile'),
+            has: Boolean(p.photos.guardian),
+          },
+        ]
+      : []),
   ];
 
   // a photo the school opened: Add / Change photo, or the request already waiting for approval
-  const photoControl = (party: 'student' | 'father' | 'mother', has: boolean) => {
+  const photoControl = (party: 'student' | 'father' | 'mother' | 'guardian', has: boolean) => {
     const pf = p.photoFields?.find((x) => x.party === party);
     if (!pf) return null;
     if (pf.pending)
@@ -296,7 +314,13 @@ export default async function ProfilePage({
       <Card style={{ marginBottom: 'var(--sp-3)' }}>
         <div className="pp-hero">
           <div className="pp-photo-box">
-            <Photo child={child.id} party="student" has={p.photos.student} label={p.name} />
+            <Photo
+              child={child.id}
+              party="student"
+              has={p.photos.student}
+              label={p.name}
+              version={p.photoVersions?.student}
+            />
             {photoControl('student', p.photos.student)}
           </div>
           <div className="pp-hero__body">
@@ -353,12 +377,18 @@ export default async function ProfilePage({
           <div className="pp-parents">
             {parents.map((w) => (
               <div key={w.party} className="pp-parent">
-                <Photo child={child.id} party={w.party} has={w.has} label={w.label} />
+                <Photo
+                  child={child.id}
+                  party={w.party}
+                  has={w.has}
+                  label={w.label}
+                  version={p.photoVersions?.[w.party]}
+                />
                 <div>
                   <div className="ep-kicker">{w.label}</div>
                   <strong>{w.name ? String(w.name) : '—'}</strong>
                   {w.mobile ? <div>{String(w.mobile)}</div> : null}
-                  {w.name ? photoControl(w.party as 'father' | 'mother', w.has) : null}
+                  {w.name ? photoControl(w.party, w.has) : null}
                 </div>
               </div>
             ))}

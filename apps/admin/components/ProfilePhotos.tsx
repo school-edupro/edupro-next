@@ -1,6 +1,7 @@
 import { Card } from '@edupro/ui';
 import { studentDocumentUpload, studentParentPhotoUpload } from '@/lib/actions';
 import type { ProfileSnapshot } from '@/lib/profile';
+import { NewParentPhoto } from './NewParentPhoto';
 import { PhotoUploader } from './PhotoUploader';
 
 type Party = 'student' | 'father' | 'mother' | 'guardian';
@@ -24,8 +25,7 @@ export function ProfilePhotos({
     { party: 'father', role: 'Father', name: value('father_name') },
     { party: 'mother', role: 'Mother', name: value('mother_name') },
   ];
-  if (value('guardian_name'))
-    people.push({ party: 'guardian', role: 'Guardian', name: value('guardian_name') });
+  people.push({ party: 'guardian', role: 'Guardian', name: value('guardian_name') });
   return (
     <Card title="Photos" style={{ marginBottom: 'var(--sp-4)' }}>
       <div className="ep-parents">
@@ -59,8 +59,8 @@ export function ProfilePhotos({
                       fields={{ party: p.party, back }}
                     />
                   )
-                ) : canEdit ? (
-                  <span className="ep-field__help">Add the name first</span>
+                ) : canEdit && p.party !== 'student' ? (
+                  <NewParentPhoto studentId={id} party={p.party} role={p.role} back={back} />
                 ) : null}
               </div>
             </div>

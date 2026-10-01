@@ -368,6 +368,14 @@ export class PortalProfileService {
           student: Boolean(snap.photos.student),
           father: Boolean(snap.photos.father),
           mother: Boolean(snap.photos.mother),
+          guardian: Boolean(snap.photos.guardian),
+        },
+        // changes whenever a photo is replaced, so the portal's cached picture is never stale
+        photoVersions: {
+          student: snap.photos.student ?? null,
+          father: snap.photos.father ?? null,
+          mother: snap.photos.mother ?? null,
+          guardian: snap.photos.guardian ?? null,
         },
         window: win,
         canEdit:
@@ -720,13 +728,13 @@ export class PortalProfileService {
 
   /** A signed link to the student's or a parent's photo, for the portal's own pages. */
   async photo(ctx: RequestContext, studentId: string, party: string) {
-    if (!['student', 'father', 'mother'].includes(party))
+    if (!['student', 'father', 'mother', 'guardian'].includes(party))
       throw new DomainError('not-found', 'Photo not found', { status: 404 });
     await this.familyOf(ctx, studentId);
     const snap = await this.db.tenant(requireTenant(ctx), (c) =>
       readStudentProfile(c, studentId, { showSensitive: false }),
     );
-    const id = snap?.photos[party as 'student' | 'father' | 'mother'];
+    const id = snap?.photos[party as 'student' | 'father' | 'mother' | 'guardian'];
     if (!id) throw new DomainError('not-found', 'Photo not found', { status: 404 });
     return this.files.downloadUrl(ctx, id);
   }
@@ -1075,7 +1083,7 @@ export class PortalProfileService {
   private async applyPhoto(
     c: PoolClient,
     studentId: string,
-    party: 'student' | 'father' | 'mother',
+    party: 'student' | 'father' | 'mother' | 'guardian',
     fileId: string,
   ) {
     if (party === 'student') {
@@ -1097,7 +1105,8 @@ export class PortalProfileService {
     }
     const g = await c.query<{ id: string }>(
       `SELECT g.id::text FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
-        WHERE sg.student_id = $1 AND sg.relation::text = $2 ORDER BY sg.is_primary DESC, sg.id LIMIT 1`,
+        WHERE sg.student_id = $1 AND (CASE WHEN $2 = 'guardian' THEN sg.relation NOT IN ('father', 'mother') ELSE sg.relation::text = $2 END)
+        ORDER BY sg.is_primary DESC, sg.id LIMIT 1`,
       [studentId, party],
     );
     const gid = g.rows[0]?.id;

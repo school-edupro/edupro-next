@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ student: string; party: string }> },
 ) {
   const { student, party } = await params;
-  if (!/^\d{1,18}$/.test(student) || !['student', 'father', 'mother'].includes(party))
+  if (!/^\d{1,18}$/.test(student) || !['student', 'father', 'mother', 'guardian'].includes(party))
     return new NextResponse(null, { status: 400 });
   try {
     const r = await bff.api.fetch<{ file: { contentType: string }; download: { url: string } }>(

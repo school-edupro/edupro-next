@@ -1,6 +1,7 @@
 import { Card } from '@edupro/ui';
 import { PhotoUploader } from './PhotoUploader';
 import { studentParentPhotoUpload } from '@/lib/actions';
+import { NewParentPhoto } from './NewParentPhoto';
 import { ddmmyyyy, type ProfileCatalogue, type ProfileSnapshot } from '@/lib/profile';
 import type { Student360 } from '@/lib/types';
 
@@ -151,6 +152,12 @@ export function StudentOverview({
                       studentId={student.id}
                       label={pid ? 'Change photo' : 'Add photo'}
                       fields={{ party }}
+                    />
+                  ) : canEdit ? (
+                    <NewParentPhoto
+                      studentId={student.id}
+                      party={party}
+                      role={party === 'father' ? 'Father' : 'Mother'}
                     />
                   ) : null}
                 </div>

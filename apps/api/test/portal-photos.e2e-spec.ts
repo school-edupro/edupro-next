@@ -123,7 +123,7 @@ describe('portal photos: upload, approval and records (e2e)', () => {
     await app.close();
   });
 
-  it('opens the three photos to parents with approval; a student sees only their own', async () => {
+  it('opens the four photos to parents with approval; a student sees only their own', async () => {
     const mine = await inject({
       method: 'GET',
       url: `/engagement/mine/profile/${studentId}`,
@@ -136,6 +136,7 @@ describe('portal photos: upload, approval and records (e2e)', () => {
       ['photo_student', 'edit_approval'],
       ['photo_father', 'edit_approval'],
       ['photo_mother', 'edit_approval'],
+      ['photo_guardian', 'edit_approval'],
     ]);
     const own = await inject({
       method: 'GET',
@@ -233,5 +234,49 @@ describe('portal photos: upload, approval and records (e2e)', () => {
     expect(direct.statusCode).toBe(201);
     expect(direct.json().applied).toEqual(['photo_mother']);
     expect((await profile()).photos.mother).toBe(motherFile);
+  });
+
+  it('a guardian added from the office can get a photo from the portal; versions follow the file', async () => {
+    const named = await inject({
+      method: 'PATCH',
+      url: `/people/students/${studentId}/profile`,
+      headers: h(),
+      json: { values: { guardian_name: 'ravi uncle' } },
+    });
+    expect(named.statusCode).toBe(200);
+    const file = await upload(parent);
+    const sent = await send(parent, { photo_guardian: file });
+    expect(sent.statusCode).toBe(201);
+    const inbox = await inject({
+      method: 'GET',
+      url: '/engagement/profile-approvals?box=mine',
+      headers: h(),
+    });
+    const req = inbox
+      .json()
+      .data.find(
+        (x: { studentId: string; items: Array<{ key: string }> }) =>
+          x.studentId === studentId && x.items.some((i) => i.key === 'photo_guardian'),
+      );
+    await inject({
+      method: 'POST',
+      url: `/engagement/profile-approvals/${req.id}/decide`,
+      headers: h(),
+      json: { approve: true },
+    });
+    expect((await profile()).photos.guardian).toBe(file);
+    const mine = await inject({
+      method: 'GET',
+      url: `/engagement/mine/profile/${studentId}`,
+      headers: h(parent),
+    });
+    expect(mine.json().photos.guardian).toBe(true);
+    expect(mine.json().photoVersions.guardian).toBe(file);
+    const link = await inject({
+      method: 'GET',
+      url: `/engagement/mine/profile/${studentId}/photo/guardian`,
+      headers: h(parent),
+    });
+    expect(link.statusCode).toBe(200);
   });
 });
