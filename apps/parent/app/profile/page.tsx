@@ -2,44 +2,13 @@ import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
-import { currentLang, t } from '@/lib/i18n';
-import { requestProfileChange, setConsent } from '../queries/actions';
+import { currentLang, t, type Lang } from '@/lib/i18n';
+import { setConsent } from '../queries/actions';
+import { cancelProfileRequest, downloadProfilePdf } from './actions';
+import { applies, shown, type PortalProfile, type PortalRequest } from './types';
 
-interface Child {
-  id: string;
-  admissionNo: string;
-  name: string;
-  dob: string | null;
-  gender: string;
-  bloodGroup: string | null;
-  house: string | null;
-  address: Record<string, string>;
-  emergencyContact: string | null;
-  section: string | null;
-  rollNo: number | null;
-  classTeacher: string | null;
-  route: {
-    code: string;
-    name: string;
-    vehicleNo: string | null;
-    stopName: string | null;
-    pickupTime: string | null;
-    dropTime: string | null;
-  } | null;
-  guardians: Array<{
-    id: string;
-    name: string;
-    mobile: string | null;
-    email: string | null;
-    occupation: string | null;
-    address: Record<string, string>;
-    relation: string;
-    isPrimary: boolean;
-    isMe: boolean;
-  }>;
-}
 interface Family {
-  children: Child[];
+  children: Array<{ id: string; name: string; section: string | null }>;
   consents: Array<{
     code: string;
     name: string;
@@ -48,330 +17,348 @@ interface Family {
     isRequired: boolean;
     recordedAt: string | null;
   }>;
-  pendingChangeRequests: number;
 }
 
-interface FamilyField {
-  key: string;
-  section: string;
-  label: string;
-  type: string;
-  options: string[] | null;
-  help: string | null;
-}
-interface FamilyFields {
-  current: Record<string, string | number | null> | null;
-  fields: FamilyField[];
-}
-
-const SECTION_TITLES: Record<string, string> = {
-  student: 'Student',
-  contact: 'Contact',
-  address: 'Address',
-  transport_health: 'Transport and health',
-  father: 'Father',
-  mother: 'Mother',
-  guardian: 'Guardian',
+const OK_TEXT: Record<string, string> = {
+  sent: 'Sent to the school for approval. You can follow it below.',
+  saved: 'Saved. The profile is updated.',
+  both: 'Some changes are saved; the rest are waiting for the school’s approval.',
+  withdrawn: 'The request was withdrawn.',
+  consent: 'Your choice has been recorded.',
+};
+const STATUS: Record<
+  PortalRequest['status'],
+  { label: string; tone: 'warning' | 'success' | 'danger' | 'info' | 'neutral' }
+> = {
+  pending: { label: 'Waiting', tone: 'warning' },
+  approved: { label: 'Approved', tone: 'success' },
+  rejected: { label: 'Not approved', tone: 'danger' },
+  partially_approved: { label: 'Partly approved', tone: 'info' },
+  cancelled: { label: 'Withdrawn', tone: 'neutral' },
 };
 
-/** Profile fields the family may ask to change, grouped by section; the office approves them. */
-function MoreDetailsForm({
+function Photo({
   child,
-  data,
-  lang,
+  party,
+  has,
+  label,
 }: {
-  child: Child;
-  data: FamilyFields;
-  lang: Awaited<ReturnType<typeof currentLang>>;
+  child: string;
+  party: string;
+  has: boolean;
+  label: string;
 }) {
-  const sections = [...new Set(data.fields.map((f) => f.section))];
-  return (
-    <details style={{ marginTop: 'var(--sp-3)' }}>
-      <summary className="ep-btn ep-btn--ghost ep-btn--sm">
-        {t(lang, 'Update more details (address, contact, parents)')}
-      </summary>
-      <form
-        action={requestProfileChange}
-        style={{ display: 'grid', gap: 'var(--sp-3)', marginTop: 'var(--sp-2)' }}
-      >
-        <input type="hidden" name="studentId" value={child.id} />
-        <input type="hidden" name="entity" value="profile" />
-        <p className="ep-kicker" style={{ margin: 0 }}>
-          {t(lang, 'Fill only what has changed. The office checks each request before it applies.')}
-        </p>
-        {sections.map((sec) => (
-          <fieldset
-            key={sec}
-            style={{ border: 'none', padding: 0, margin: 0, display: 'grid', gap: 'var(--sp-2)' }}
-          >
-            <legend style={{ fontWeight: 600 }}>{t(lang, SECTION_TITLES[sec] ?? sec)}</legend>
-            {data.fields
-              .filter((f) => f.section === sec)
-              .map((f) => {
-                const cur = data.current?.[f.key];
-                const listId = f.options ? `dl-${child.id}-${f.key}` : undefined;
-                return (
-                  <label key={f.key} className="ep-field">
-                    <span className="ep-field__label">{f.label}</span>
-                    <input
-                      className="ep-input"
-                      name={`change.${f.key}`}
-                      type={f.type === 'date' ? 'date' : f.type === 'email' ? 'email' : 'text'}
-                      inputMode={
-                        ['mobile', 'pin', 'year', 'number'].includes(f.type) ? 'numeric' : undefined
-                      }
-                      list={listId}
-                      autoComplete="off"
-                      placeholder={cur === null || cur === undefined ? '' : String(cur)}
-                      maxLength={300}
-                    />
-                    {listId ? (
-                      <datalist id={listId}>
-                        {f.options!.map((o) => (
-                          <option key={o} value={o} />
-                        ))}
-                      </datalist>
-                    ) : null}
-                    {cur !== null && cur !== undefined ? (
-                      <span className="ep-field__help">
-                        {t(lang, 'On file')}: {String(cur)}
-                      </span>
-                    ) : null}
-                  </label>
-                );
-              })}
-          </fieldset>
-        ))}
-        <input
-          className="ep-input"
-          name="reason"
-          placeholder={t(lang, 'Reason (optional)')}
-          maxLength={500}
-          aria-label={t(lang, 'Reason')}
-        />
-        <div>
-          <Button type="submit" variant="secondary">
-            {t(lang, 'Send to the office')}
-          </Button>
-        </div>
-      </form>
-    </details>
+  return has ? (
+    <img className="pp-photo" src={`/api/photo/${child}/${party}`} alt={label} />
+  ) : (
+    <span className="pp-photo pp-photo--empty" role="img" aria-label={`${label}: no photo`}>
+      {label.slice(0, 1)}
+    </span>
   );
 }
 
-/** S10: the family profile with change requests and DPDP consents. */
+function Requests({ rows, child, lang }: { rows: PortalRequest[]; child: string; lang: Lang }) {
+  if (!rows.length) return null;
+  return (
+    <Card title={t(lang, 'My requests')} style={{ marginBottom: 'var(--sp-3)' }}>
+      <ul className="pp-reqs" id="requests">
+        {rows.map((r) => (
+          <li key={r.id}>
+            <div className="pp-req__head">
+              <Badge tone={r.autoApplied ? 'success' : STATUS[r.status].tone}>
+                {r.autoApplied ? t(lang, 'Saved') : t(lang, STATUS[r.status].label)}
+              </Badge>
+              <span className="ep-kicker">
+                {new Date(r.createdAt).toLocaleDateString('en-IN')}
+                {r.requestedBy ? ` · ${r.requestedBy}` : ''}
+                {r.status === 'pending' && r.waitingFor
+                  ? ` · ${t(lang, 'with')} ${r.waitingFor}${r.levels > 1 ? ` (${t(lang, 'step')} ${r.level}/${r.levels})` : ''}`
+                  : ''}
+              </span>
+            </div>
+            <ul className="pp-req__items">
+              {r.items.map((it) => (
+                <li key={it.key}>
+                  {it.label}: <strong>{shown(it.to) || t(lang, '(clear)')}</strong>{' '}
+                  {it.status === 'approved' ? (
+                    <Badge tone="success">{t(lang, 'approved')}</Badge>
+                  ) : it.status === 'rejected' ? (
+                    <Badge tone="danger">{t(lang, 'not approved')}</Badge>
+                  ) : null}
+                  {it.note ? <div className="ep-kicker">{it.note}</div> : null}
+                </li>
+              ))}
+            </ul>
+            {r.decisionNote && r.status !== 'pending' ? (
+              <div className="ep-kicker">
+                {t(lang, 'School note')}: {r.decisionNote}
+              </div>
+            ) : null}
+            {r.status === 'pending' && r.mine ? (
+              <form action={cancelProfileRequest}>
+                <input type="hidden" name="id" value={r.id} />
+                <input type="hidden" name="child" value={child} />
+                <Button type="submit" size="sm" variant="ghost">
+                  {t(lang, 'Withdraw')}
+                </Button>
+              </form>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** The child's profile as the school shows it, with updates, the PDF and the family's requests. */
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; edit?: string }>;
+  searchParams: Promise<{
+    child?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+    export?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  const notLinked = (
+    <main className="pp-main">
+      <PageHeader kicker="EduPro" title={t(lang, 'Profile')} />
+      <Card>
+        {t(lang, 'Your account is not linked to a student yet. Please contact the school office.')}
+      </Card>
+    </main>
+  );
   let fam: Family;
   try {
     fam = await bff.api.fetch<Family>('/engagement/family');
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && (error.status === 403 || error.status === 409))
-      return (
-        <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
-          <PageHeader kicker="EduPro" title={t(lang, 'Profile')} />
-          <Card>
-            {t(
-              lang,
-              'Your account is not linked to a student yet. Please contact the school office.',
-            )}
-          </Card>
-        </main>
-      );
+      return notLinked;
     throw error;
   }
-  const moreFields = await Promise.all(
-    fam.children.map((c) =>
-      bff.api
-        .fetch<FamilyFields>(`/engagement/change-requests/profile-fields?studentId=${c.id}`)
-        .catch(() => null),
-    ),
-  );
-  const me = fam.children[0]?.guardians.find((g) => g.isMe);
+  const child = fam.children.find((c) => c.id === sp.child) ?? fam.children[0];
+  if (!child) return notLinked;
+  const [p, reqs, exp] = await Promise.all([
+    bff.api.fetch<PortalProfile>(`/engagement/mine/profile/${child.id}`),
+    bff.api
+      .fetch<{ data: PortalRequest[] }>(`/engagement/mine/profile/${child.id}/requests`)
+      .then((r) => r.data)
+      .catch(() => [] as PortalRequest[]),
+    sp.export
+      ? bff.api
+          .fetch<{ export: { id: string; status: string }; download: { url: string } | null }>(
+            `/engagement/mine/exports/${sp.export}`,
+          )
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
+  const all = p.sections.flatMap((s) => s.fields);
+  const values = Object.fromEntries(all.map((f) => [f.key, f.value]));
+  const fact = (key: string) => all.find((f) => f.key === key)?.value ?? null;
+  const pendingCount = reqs.filter((r) => r.status === 'pending').length;
+  const parents: Array<{
+    party: string;
+    label: string;
+    name: unknown;
+    mobile: unknown;
+    has: boolean;
+  }> = [
+    {
+      party: 'father',
+      label: t(lang, 'Father'),
+      name: fact('father_name'),
+      mobile: fact('father_mobile'),
+      has: p.photos.father,
+    },
+    {
+      party: 'mother',
+      label: t(lang, 'Mother'),
+      name: fact('mother_name'),
+      mobile: fact('mother_mobile'),
+      has: p.photos.mother,
+    },
+  ];
+
   return (
-    <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
+    <main className="pp-main">
       <PageHeader
         kicker={t(lang, 'Profile')}
-        title={me?.name ?? t(lang, 'Family')}
-        description={`${fam.children.length} ${fam.children.length === 1 ? t(lang, 'child') : t(lang, 'children')}${fam.pendingChangeRequests ? ` · ${fam.pendingChangeRequests} ${t(lang, 'change request(s) awaiting the office')}` : ''}`}
+        title={p.name}
+        description={`${p.enrolment ? `${p.enrolment.className} ${p.enrolment.section} · ` : ''}${t(lang, 'Admission no')} ${p.admissionNo}`}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
             {t(lang, 'Home')}
           </a>
         }
       />
-      {sp.ok === 'consent' ? (
-        <div
-          className="ep-alert ep-alert--success"
-          role="status"
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {t(lang, 'Your choice has been recorded.')}
-        </div>
-      ) : sp.ok ? (
-        <div
-          className="ep-alert ep-alert--success"
-          role="status"
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {t(lang, 'Change request sent to the school office.')}
+      {fam.children.length > 1 ? (
+        <nav className="pp-kids" aria-label={t(lang, 'Choose a child')}>
+          {fam.children.map((c) => (
+            <a
+              key={c.id}
+              href={`/profile?child=${c.id}`}
+              aria-current={c.id === child.id ? 'page' : undefined}
+            >
+              {c.name}
+              {c.section ? <span> · {c.section}</span> : null}
+            </a>
+          ))}
+        </nav>
+      ) : null}
+      {sp.ok && OK_TEXT[sp.ok] ? (
+        <div className="ep-alert ep-alert--success" role="status">
+          {t(lang, OK_TEXT[sp.ok] ?? '')}
         </div>
       ) : null}
       {sp.error ? (
-        <div
-          className="ep-alert ep-alert--danger"
-          role="alert"
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
+        <div className="ep-alert ep-alert--danger" role="alert">
           {sp.detail || sp.error}
         </div>
       ) : null}
-      {fam.children.map((c) => (
-        <Card
-          key={c.id}
-          title={`${c.name} · ${c.section ?? ''}`}
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          <dl
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'auto 1fr',
-              gap: 'var(--sp-1) var(--sp-3)',
-              margin: 0,
-            }}
-          >
-            <dt className="ep-kicker">{t(lang, 'Admission no')}</dt>
-            <dd style={{ margin: 0 }}>{c.admissionNo}</dd>
-            <dt className="ep-kicker">{t(lang, 'Roll no')}</dt>
-            <dd style={{ margin: 0 }}>{c.rollNo ?? '—'}</dd>
-            <dt className="ep-kicker">{t(lang, 'Date of birth')}</dt>
-            <dd style={{ margin: 0 }}>{c.dob ?? '—'}</dd>
-            <dt className="ep-kicker">{t(lang, 'Blood group')}</dt>
-            <dd style={{ margin: 0 }}>{c.bloodGroup ?? '—'}</dd>
-            <dt className="ep-kicker">{t(lang, 'House')}</dt>
-            <dd style={{ margin: 0 }}>{c.house ?? '—'}</dd>
-            <dt className="ep-kicker">{t(lang, 'Class teacher')}</dt>
-            <dd style={{ margin: 0 }}>{c.classTeacher ?? '—'}</dd>
-            <dt className="ep-kicker">{t(lang, 'Bus')}</dt>
-            <dd style={{ margin: 0 }}>
-              {c.route
-                ? `${c.route.code} · ${c.route.name}${c.route.stopName ? ` · ${c.route.stopName}` : ''}${c.route.pickupTime ? ` · ${t(lang, 'pickup')} ${c.route.pickupTime.slice(0, 5)}` : ''}`
-                : t(lang, 'Not using the school bus')}
-            </dd>
-            <dt className="ep-kicker">{t(lang, 'Emergency contact')}</dt>
-            <dd style={{ margin: 0 }}>{c.emergencyContact ?? '—'}</dd>
-          </dl>
-          <details style={{ marginTop: 'var(--sp-3)' }} open={sp.edit === `student-${c.id}`}>
-            <summary className="ep-btn ep-btn--ghost ep-btn--sm">
-              {t(lang, 'Request a change to')} {c.name.split(' ')[0]}
-              {t(lang, '’s details')}
-            </summary>
-            <form
-              action={requestProfileChange}
-              style={{ display: 'grid', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}
-            >
-              <input type="hidden" name="studentId" value={c.id} />
-              <input type="hidden" name="entity" value="student" />
-              {[
-                ['blood_group', t(lang, 'Blood group'), c.bloodGroup],
-                ['house', t(lang, 'House'), c.house],
-                ['address.line1', t(lang, 'Address line 1'), c.address.line1],
-                ['address.city', t(lang, 'City'), c.address.city],
-                ['address.pin', t(lang, 'PIN code'), c.address.pin],
-                ['details.emergency_contact', t(lang, 'Emergency contact'), c.emergencyContact],
-              ].map(([k, label, current]) => (
-                <label key={k as string} className="ep-field">
-                  <span className="ep-field__label">{label}</span>
-                  <input
-                    className="ep-input"
-                    name={`change.${k}`}
-                    placeholder={(current as string | null) ?? ''}
-                    maxLength={200}
-                  />
-                </label>
-              ))}
-              <input
-                className="ep-input"
-                name="reason"
-                placeholder={t(lang, 'Reason (optional)')}
-                maxLength={500}
-                aria-label={t(lang, 'Reason')}
-              />
+      {exp ? (
+        <div className="ep-alert ep-alert--info" role="status">
+          {exp.download ? (
+            <a href={exp.download.url}>{t(lang, 'Download the profile PDF')}</a>
+          ) : exp.export.status === 'failed' ? (
+            t(lang, 'The PDF could not be prepared. Please try again.')
+          ) : (
+            <>
+              {t(lang, 'Your PDF is being prepared.')}{' '}
+              <a href={`/profile?child=${child.id}&export=${exp.export.id}`}>
+                {t(lang, 'Refresh')}
+              </a>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      <Card style={{ marginBottom: 'var(--sp-3)' }}>
+        <div className="pp-hero">
+          <Photo child={child.id} party="student" has={p.photos.student} label={p.name} />
+          <div className="pp-hero__body">
+            <h2 className="pp-hero__name">{p.name}</h2>
+            <dl className="pp-facts">
+              {p.enrolment ? (
+                <div>
+                  <dt>{t(lang, 'Class')}</dt>
+                  <dd>
+                    {p.enrolment.className} {p.enrolment.section}
+                    {p.enrolment.rollNo ? ` · ${t(lang, 'Roll no')} ${p.enrolment.rollNo}` : ''}
+                  </dd>
+                </div>
+              ) : null}
               <div>
-                <Button type="submit" variant="secondary">
-                  {t(lang, 'Send to the office')}
+                <dt>{t(lang, 'Admission no')}</dt>
+                <dd>{p.admissionNo}</dd>
+              </div>
+              {p.classTeacher ? (
+                <div>
+                  <dt>{t(lang, 'Class teacher')}</dt>
+                  <dd>{p.classTeacher}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>{t(lang, 'Profile complete')}</dt>
+                <dd>
+                  <span className="pp-meter" aria-hidden="true">
+                    <span style={{ width: `${p.completeness}%` }} />
+                  </span>{' '}
+                  {p.completeness}%
+                </dd>
+              </div>
+            </dl>
+            <div className="pp-hero__actions">
+              <form action={downloadProfilePdf}>
+                <input type="hidden" name="child" value={child.id} />
+                <Button type="submit" variant="secondary" size="sm">
+                  {t(lang, 'Download profile (PDF)')}
                 </Button>
-              </div>
-            </form>
-          </details>
-          {moreFields[fam.children.indexOf(c)] ? (
-            <MoreDetailsForm child={c} data={moreFields[fam.children.indexOf(c)]!} lang={lang} />
-          ) : null}
-          <h4 style={{ marginTop: 'var(--sp-4)' }}>{t(lang, 'Guardians')}</h4>
-          {c.guardians.map((g) => (
-            <div key={g.id} style={{ marginBottom: 'var(--sp-2)' }}>
-              <strong>{g.name}</strong>{' '}
-              {g.isMe ? <Badge tone="info">{t(lang, 'you')}</Badge> : null}{' '}
-              {g.isPrimary ? <Badge tone="neutral">{t(lang, 'primary')}</Badge> : null}
-              <div className="ep-kicker">
-                {g.relation} · {g.mobile ?? '—'} · {g.email ?? '—'}
-                {g.occupation ? ` · ${g.occupation}` : ''}
-              </div>
-              {g.isMe ? (
-                <details style={{ marginTop: 'var(--sp-1)' }}>
-                  <summary className="ep-btn ep-btn--ghost ep-btn--sm">
-                    {t(lang, 'Request a change to my details')}
-                  </summary>
-                  <form
-                    action={requestProfileChange}
-                    style={{ display: 'grid', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}
-                  >
-                    <input type="hidden" name="studentId" value={c.id} />
-                    <input type="hidden" name="entity" value="guardian" />
-                    <input type="hidden" name="entityId" value={g.id} />
-                    {[
-                      ['mobile', t(lang, 'Mobile'), g.mobile],
-                      ['email', t(lang, 'Email'), g.email],
-                      ['occupation', t(lang, 'Occupation'), g.occupation],
-                      ['address.line1', t(lang, 'Address line 1'), g.address.line1],
-                      ['address.city', t(lang, 'City'), g.address.city],
-                      ['address.pin', t(lang, 'PIN code'), g.address.pin],
-                    ].map(([k, label, current]) => (
-                      <label key={k as string} className="ep-field">
-                        <span className="ep-field__label">{label}</span>
-                        <input
-                          className="ep-input"
-                          name={`change.${k}`}
-                          placeholder={(current as string | null) ?? ''}
-                          maxLength={200}
-                        />
-                      </label>
-                    ))}
-                    <input
-                      className="ep-input"
-                      name="reason"
-                      placeholder={t(lang, 'Reason (optional)')}
-                      maxLength={500}
-                      aria-label={t(lang, 'Reason')}
-                    />
-                    <div>
-                      <Button type="submit" variant="secondary">
-                        {t(lang, 'Send to the office')}
-                      </Button>
-                    </div>
-                  </form>
-                </details>
+              </form>
+              {pendingCount ? (
+                <a className="ep-btn ep-btn--ghost ep-btn--sm" href="#requests">
+                  {pendingCount} {t(lang, 'waiting for approval')}
+                </a>
               ) : null}
             </div>
-          ))}
-        </Card>
-      ))}
+          </div>
+        </div>
+        {p.audience === 'parent' ? (
+          <div className="pp-parents">
+            {parents.map((w) => (
+              <div key={w.party} className="pp-parent">
+                <Photo child={child.id} party={w.party} has={w.has} label={w.label} />
+                <div>
+                  <div className="ep-kicker">{w.label}</div>
+                  <strong>{w.name ? String(w.name) : '—'}</strong>
+                  {w.mobile ? <div>{String(w.mobile)}</div> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Card>
+
+      {!p.window.open ? (
+        <div className="ep-alert ep-alert--warning" role="status">
+          {p.window.message ?? t(lang, 'Profile updates are closed at the moment.')}
+        </div>
+      ) : p.window.message || p.window.until ? (
+        <div className="ep-alert ep-alert--info" role="status">
+          {p.window.message ?? ''}
+          {p.window.until ? ` ${t(lang, 'Updates are open until')} ${p.window.until}.` : ''}
+        </div>
+      ) : null}
+
+      <Requests rows={reqs} child={child.id} lang={lang} />
+
+      {p.sections.map((s) => {
+        const fields = s.fields.filter((f) => applies(f, values));
+        if (!fields.length) return null;
+        const editable =
+          p.window.open &&
+          fields.some((f) => f.level === 'edit_approval' || f.level === 'edit_direct');
+        return (
+          <Card
+            key={s.id}
+            title={t(lang, s.title)}
+            style={{ marginBottom: 'var(--sp-3)' }}
+            actions={
+              editable ? (
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/profile/edit?child=${child.id}&section=${s.id}`}
+                  aria-label={`${t(lang, 'Update')}: ${t(lang, s.title)}`}
+                >
+                  {t(lang, 'Update')}
+                </a>
+              ) : undefined
+            }
+          >
+            <dl className="pp-kv">
+              {fields.map((f) => (
+                <div key={f.key}>
+                  <dt>{f.label}</dt>
+                  <dd>
+                    {shown(f.value) || <span className="pp-empty">{t(lang, 'Not given')}</span>}
+                    {f.pending ? (
+                      <div className="pp-pending">
+                        <Badge tone="warning">{t(lang, 'Waiting for approval')}</Badge>{' '}
+                        {shown(f.pending.to) || t(lang, '(clear)')}
+                      </div>
+                    ) : null}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+        );
+      })}
+
       <Card
         title={t(lang, 'Your data')}
         style={{ marginBottom: 'var(--sp-3)' }}
@@ -395,49 +382,39 @@ export default async function ProfilePage({
             'Under the Digital Personal Data Protection Act you choose what the school may send you. Fee, attendance and safety messages are always sent.',
           )}
         </p>
-        {fam.consents.map((p) => (
-          <div
-            key={p.code}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 'var(--sp-2)',
-              alignItems: 'center',
-              padding: 'var(--sp-2) 0',
-              borderTop: '1px solid var(--border-subtle)',
-            }}
-          >
+        {fam.consents.map((c) => (
+          <div key={c.code} className="pp-consent">
             <div>
               <div>
-                <strong>{p.name}</strong>{' '}
+                <strong>{c.name}</strong>{' '}
                 <Badge
                   tone={
-                    p.status === 'granted'
+                    c.status === 'granted'
                       ? 'success'
-                      : p.status === 'withdrawn'
+                      : c.status === 'withdrawn'
                         ? 'danger'
                         : 'neutral'
                   }
                 >
-                  {p.status ? t(lang, p.status) : t(lang, 'not recorded')}
+                  {c.status ? t(lang, c.status) : t(lang, 'not recorded')}
                 </Badge>
               </div>
-              <div className="ep-kicker">{p.description}</div>
+              <div className="ep-kicker">{c.description}</div>
             </div>
             <form action={setConsent}>
-              <input type="hidden" name="purposeCode" value={p.code} />
+              <input type="hidden" name="purposeCode" value={c.code} />
               <input
                 type="hidden"
                 name="status"
-                value={p.status === 'granted' ? 'withdrawn' : 'granted'}
+                value={c.status === 'granted' ? 'withdrawn' : 'granted'}
               />
               <Button
                 type="submit"
                 variant="ghost"
                 size="sm"
-                disabled={p.isRequired && p.status === 'granted'}
+                disabled={c.isRequired && c.status === 'granted'}
               >
-                {p.status === 'granted' ? t(lang, 'Withdraw') : t(lang, 'Allow')}
+                {c.status === 'granted' ? t(lang, 'Withdraw') : t(lang, 'Allow')}
               </Button>
             </form>
           </div>

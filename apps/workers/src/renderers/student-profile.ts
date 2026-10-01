@@ -2,6 +2,7 @@ import {
   PROFILE_FIELDS,
   PROFILE_SECTIONS,
   applies,
+  loadPortalPolicy,
   readStudentProfile,
   tenantForJob,
   type Db,
@@ -63,18 +64,37 @@ export async function renderStudentProfile(
   params: Record<string, unknown>,
 ): Promise<{ html: string; width: string; height: string }> {
   const studentId = String(params.studentId ?? '');
+  // a parent or student downloading from the portal: only what that portal shows
+  const audience =
+    params.audience === 'parent' || params.audience === 'student' ? params.audience : null;
   const tenant = tenantForJob(envelope);
   const data = await db.withTenant(tenant, async (c) => {
-    // full ID numbers only when the requester holds people.sensitive.view today
-    const perm = envelope.userId
-      ? await c.query(
-          `SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id
+    let visible: (key: string) => boolean = () => true;
+    if (audience) {
+      const link = envelope.userId
+        ? await c.query(
+            `SELECT 1 FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL AND (s.user_id = $2 OR EXISTS (
+               SELECT 1 FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND g.user_id = $2 AND g.deleted_at IS NULL))`,
+            [studentId, envelope.userId],
+          )
+        : { rowCount: 0 };
+      if (!link.rowCount) throw new Error(`user is not linked to student ${studentId}`);
+      const policy = await loadPortalPolicy(c);
+      visible = (key) => policy.fields[audience][key] !== 'hidden';
+    }
+    // full ID numbers only when the requester holds people.sensitive.view today (or it is their own child)
+    const perm = audience
+      ? { rowCount: 1 }
+      : envelope.userId
+        ? await c.query(
+            `SELECT 1 FROM user_roles ur JOIN role_permissions rp ON rp.role_id = ur.role_id
             WHERE ur.user_id = $1 AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE
               AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE) AND rp.permission_code = 'people.sensitive.view'
             LIMIT 1`,
-          [envelope.userId],
-        )
-      : { rowCount: 0 };
+            [envelope.userId],
+          )
+        : { rowCount: 0 };
     const snap = await readStudentProfile(c, studentId, {
       showSensitive: (perm.rowCount ?? 0) > 0,
     });
@@ -91,8 +111,9 @@ export async function renderStudentProfile(
         WHERE person_type = 'student' AND person_id = $1 AND deleted_at IS NULL GROUP BY kind`,
       [studentId],
     );
-    return { snap, files: files.rows, docs: docs.rows };
+    return { snap, files: files.rows, docs: docs.rows, visible };
   });
+  const visible = data.visible;
   const lh: Letterhead = await letterhead(db, storage, tenant);
   const fileOf = new Map(data.files.map((f) => [f.id, f]));
   const photo = async (who: 'student' | 'father' | 'mother') => {
@@ -107,7 +128,7 @@ export async function renderStudentProfile(
   ]);
   const v = data.snap.values;
   const byKey = new Map(PROFILE_FIELDS.map((f) => [f.key, f]));
-  const val = (k: string) => esc(show(byKey.get(k), v[k] ?? null));
+  const val = (k: string) => (visible(k) ? esc(show(byKey.get(k), v[k] ?? null)) : '');
   const e = data.snap.enrolment;
 
   const photoBox = (uri: string | null, label: string, name: string, mobile: string) => `
@@ -116,21 +137,23 @@ export async function renderStudentProfile(
       <figcaption><strong>${esc(label)}</strong>${name ? `<br />${name}` : ''}${mobile ? `<br />${mobile}` : ''}</figcaption>
     </figure>`;
 
-  const keyFacts: Array<[string, string]> = [
+  const facts: Array<[string, string, string?]> = [
     ['Admission No', esc(data.snap.admissionNo)],
     ['Class & Section', e ? esc(`${e.className} ${e.section}`) : ''],
     ['Roll No', e?.rollNo ? String(e.rollNo) : ''],
     ['Academic Year', e ? esc(e.academicYear) : ''],
     [
       'Date of Birth',
-      `${val('dob')}${v.age !== null && v.age !== undefined ? ` (${String(v.age)} yrs)` : ''}`,
+      `${val('dob')}${v.age !== null && v.age !== undefined && visible('dob') ? ` (${String(v.age)} yrs)` : ''}`,
+      'dob',
     ],
-    ['Gender', val('gender')],
-    ['Blood Group', val('blood_group')],
-    ['Category', val('category')],
-    ['House', val('house')],
-    ['Day Scholar / Hosteller', val('boarding')],
+    ['Gender', val('gender'), 'gender'],
+    ['Blood Group', val('blood_group'), 'blood_group'],
+    ['Category', val('category'), 'category'],
+    ['House', val('house'), 'house'],
+    ['Day Scholar / Hosteller', val('boarding'), 'boarding'],
   ];
+  const keyFacts = facts.filter(([, , key]) => !key || visible(key));
 
   // every section, the fields that apply; parents' photo fields and enrolment facts shown above are skipped
   const skip = new Set([
@@ -147,12 +170,12 @@ export async function renderStudentProfile(
   const sections = PROFILE_SECTIONS.filter((s) => s.id !== 'documents')
     .map((s) => {
       const fields = PROFILE_FIELDS.filter(
-        (f) => f.section === s.id && !skip.has(f.key) && applies(f, v),
+        (f) => f.section === s.id && !skip.has(f.key) && visible(f.key) && applies(f, v),
       );
       const hasAny = fields.some(
         (f) => v[f.key] !== null && v[f.key] !== undefined && v[f.key] !== '',
       );
-      if (s.id === 'guardian' && !hasAny) return '';
+      if ((s.id === 'guardian' && !hasAny) || !fields.length) return '';
       const cells = fields
         .map(
           (f) =>
@@ -188,6 +211,7 @@ export async function renderStudentProfile(
   .title { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 0 6px; }
   .title h1 { font-family: Poppins, "Segoe UI", Arial, sans-serif; font-size: 15px; color: #00265D; margin: 0; }
   .title span { color: #52606D; font-size: 8.5px; }
+  .title small { font-size: 10px; color: #52606D; font-weight: 400; }
   .top { display: grid; grid-template-columns: 34mm 1fr 30mm 30mm; gap: 8px; align-items: start; border: 1px solid #D9E2EC; border-radius: 6px; padding: 8px; }
   .ph { margin: 0; text-align: center; font-size: 8.5px; }
   .ph img, .ph-empty { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 4px; border: 1px solid #00A0C6; background: #F5F7FA; }
@@ -217,7 +241,7 @@ export async function renderStudentProfile(
       ${lh.affiliation || lh.contact ? `<div class="sub">${esc([lh.affiliation, lh.contact].filter(Boolean).join(' · '))}</div>` : ''}
     </div>
   </div>
-  <div class="title"><h1>Student Profile</h1><span>Printed ${esc(istStamp(new Date()))} · Profile ${String(data.snap.completeness.percent)}% complete</span></div>
+  <div class="title"><h1>Student Profile${audience ? ` <small>· ${audience === 'parent' ? 'Parent' : 'Student'} copy</small>` : ''}</h1><span>${audience ? 'Downloaded from the portal' : 'Printed'} ${esc(istStamp(new Date()))} · Profile ${String(data.snap.completeness.percent)}% complete</span></div>
   <div class="top">
     ${photoBox(studentPhoto, 'Student', '', '')}
     <div>

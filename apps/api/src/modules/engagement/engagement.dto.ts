@@ -126,13 +126,10 @@ export const CreateChangeRequestSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 export class CreateChangeRequestDto extends createZodDto(CreateChangeRequestSchema) {}
-export const DecideChangeSchema = z.object({
-  approve: z.boolean(),
-  note: z.string().trim().max(500).optional(),
-});
-export class DecideChangeDto extends createZodDto(DecideChangeSchema) {}
+export { DecideItemsSchema as DecideChangeSchema } from './portal-profile.dto';
+export { DecideItemsDto as DecideChangeDto } from './portal-profile.dto';
 export const ListChangeRequestsSchema = z.object({
-  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'partially_approved', 'cancelled']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });

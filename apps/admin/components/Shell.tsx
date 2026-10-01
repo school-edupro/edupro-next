@@ -25,6 +25,16 @@ const NAV: Array<{
       { href: '/people/tc', label: 'transferCertificates', permission: 'people.tc.view' },
       { href: '/people/withdrawals', label: 'withdrawals', permission: 'people.withdrawal.view' },
       { href: '/people/promotions', label: 'promotions', permission: 'people.promotion.view' },
+      {
+        href: '/people/profile-approvals',
+        label: 'profileApprovals',
+        permission: 'engagement.change_request.approve',
+      },
+      {
+        href: '/people/portal-profile',
+        label: 'portalProfile',
+        permission: 'people.portal_profile.manage',
+      },
     ],
   },
   {
@@ -184,11 +194,6 @@ const NAV: Array<{
         permission: 'engagement.employee_query.answer',
       },
       { href: '/engagement/feedback', label: 'feedback', permission: 'engagement.feedback.view' },
-      {
-        href: '/engagement/change-requests',
-        label: 'changeRequests',
-        permission: 'engagement.change_request.view',
-      },
     ],
   },
   {

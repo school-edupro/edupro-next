@@ -271,6 +271,17 @@ describe('student 360 profile (e2e)', () => {
     await withMigrator((c) =>
       c.query('UPDATE guardians SET user_id = $1 WHERE id = $2', [parent.id, fatherId]),
     );
+    // this school asks for no proof documents (the portal policy otherwise wants residence proof)
+    const policy = (
+      await inject({ method: 'GET', url: '/people/portal-profile/policy', headers: h() })
+    ).json().policy;
+    const saved = await inject({
+      method: 'PUT',
+      url: '/people/portal-profile/policy',
+      headers: h(),
+      json: { ...policy, proofs: {} },
+    });
+    expect(saved.statusCode).toBe(200);
     const fields = await inject({
       method: 'GET',
       url: `/engagement/change-requests/profile-fields?studentId=${first}`,

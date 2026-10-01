@@ -61,6 +61,8 @@
     "queries": "Queries and complaints",
     "feedback": "Feedback",
     "changeRequests": "Profile change requests",
+    "profileApprovals": "Profile approvals",
+    "portalProfile": "Portal profile settings",
     "transport": "Transport",
     "routes": "Routes",
     "rfidDashboard": "RFID dashboard",

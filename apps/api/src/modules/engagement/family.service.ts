@@ -1,14 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import {
-  FAMILY_EDITABLE_KEYS,
+  PROFILE_FIELDS,
   PROFILE_FIELD_BY_KEY,
+  loadPortalPolicy,
   loadProfileLists,
   optionsOf,
   readStudentProfile,
-  refreshCompleteness,
-  validateChanges,
-  writeStudentProfile,
-  ProfileWriteError,
   type PoolClient,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -17,6 +14,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { ConsentsService } from '../comms/consents.service';
+import { PortalProfileService } from './portal-profile.service';
 import {
   CHANGEABLE,
   type CreateChangeRequestDto,
@@ -34,6 +32,7 @@ export class FamilyService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly consents: ConsentsService,
+    private readonly portal: PortalProfileService,
   ) {}
 
   /** The children linked to the signed-in guardian (or the student themself) with profile, guardians, route and consents. */
@@ -244,50 +243,12 @@ export class FamilyService {
     });
   }
 
+  /** Kept for the first parent app: the same routed, field-by-field decision as the approvals inbox. */
   async decideChange(ctx: RequestContext, id: string, dto: DecideChangeDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const before = await this.findChange(c, id);
-      if (before.status !== 'pending')
-        throw new DomainError('engagement.change.decided', 'This request was already decided', {
-          status: 409,
-        });
-      if (dto.approve && before.entity === 'profile') {
-        const values = Object.fromEntries(
-          Object.entries(before.changes).map(([k, v]) => [k, v.to]),
-        );
-        try {
-          await writeStudentProfile(c, before.entityId, values);
-        } catch (error) {
-          if (error instanceof ProfileWriteError)
-            throw new DomainError('validation-failed', error.message, {
-              status: 400,
-              extra: { errors: error.errors },
-            });
-          throw error;
-        }
-        await refreshCompleteness(c, before.entityId);
-      } else if (dto.approve && before.entity !== 'profile')
-        await this.apply(c, before.entity, before.entityId, before.changes);
-      await c.query(
-        `UPDATE profile_change_requests SET status = $2::change_request_status, decided_by = app.current_user_id(), decided_at = now(), decision_note = $3 WHERE id = $1`,
-        [id, dto.approve ? 'approved' : 'rejected', dto.note ?? null],
-      );
-      await this.audit.stage(ctx, c, {
-        action: dto.approve
-          ? 'engagement.change_request.approve'
-          : 'engagement.change_request.reject',
-        entityType: before.entity === 'guardian' ? 'guardians' : 'students',
-        entityId: before.entityId,
-        before: Object.fromEntries(Object.entries(before.changes).map(([k, v]) => [k, v.from])),
-        after: dto.approve
-          ? Object.fromEntries(Object.entries(before.changes).map(([k, v]) => [k, v.to]))
-          : { rejected: true, note: dto.note ?? null },
-      });
-      return this.findChange(c, id);
-    });
+    return this.portal.decide(ctx, id, dto);
   }
 
-  /** Fields a family may request, with their drop-down options (parent app form). */
+  /** Fields a family may change (the school's portal policy for parents), with drop-down options. */
   async familyProfileFields(ctx: RequestContext, studentId?: string) {
     let visible = false;
     if (studentId) {
@@ -296,65 +257,44 @@ export class FamilyService {
     }
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const lists = await loadProfileLists(c);
+      const policy = await loadPortalPolicy(c);
+      const keys = PROFILE_FIELDS.filter((f) =>
+        ['edit_approval', 'edit_direct'].includes(policy.fields.parent[f.key] ?? ''),
+      ).map((f) => f.key);
       const snap =
         visible && studentId
           ? await readStudentProfile(c, studentId, { showSensitive: false })
           : null;
       return {
-        current: snap
-          ? Object.fromEntries(FAMILY_EDITABLE_KEYS.map((k) => [k, snap.values[k] ?? null]))
-          : null,
-        fields: FAMILY_EDITABLE_KEYS.map((k) => PROFILE_FIELD_BY_KEY.get(k)!).map((f) => ({
-          key: f.key,
-          section: f.section,
-          label: f.label,
-          type: f.type,
-          options: f.list ? optionsOf(f, lists) : null,
-          help: f.help ?? null,
-        })),
+        current: snap ? Object.fromEntries(keys.map((k) => [k, snap.values[k] ?? null])) : null,
+        fields: keys
+          .map((k) => PROFILE_FIELD_BY_KEY.get(k)!)
+          .map((f) => ({
+            key: f.key,
+            section: f.section,
+            label: f.label,
+            type: f.type,
+            options: f.list ? optionsOf(f, lists) : null,
+            help: f.help ?? null,
+          })),
       };
     });
   }
 
-  /** A request on catalogue fields: validated now, applied through the profile writer on approval. */
+  /** A request on catalogue fields: the portal policy decides what may change and who approves. */
   private async createProfileRequest(ctx: RequestContext, dto: CreateChangeRequestDto) {
-    const bad = Object.keys(dto.changes).filter((k) => !FAMILY_EDITABLE_KEYS.includes(k));
-    if (bad.length)
-      throw new DomainError(
-        'engagement.change.field_not_allowed',
-        `These fields cannot be changed from the app: ${bad.join(', ')}`,
-        { status: 422 },
-      );
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const lists = await loadProfileLists(c);
-      const { values, errors } = validateChanges(dto.changes, lists);
-      if (Object.keys(errors).length)
-        throw new DomainError('validation-failed', 'Some fields are not valid', {
-          status: 400,
-          extra: { errors },
-        });
-      const current = await readStudentProfile(c, dto.studentId, { showSensitive: false });
-      if (!current) throw new DomainError('not-found', 'Student not found', { status: 404 });
-      const changes: Record<string, { from: unknown; to: unknown }> = {};
-      for (const [k, to] of Object.entries(values))
-        if ((current.values[k] ?? null) !== to)
-          changes[k] = { from: current.values[k] ?? null, to };
-      if (!Object.keys(changes).length)
-        throw new DomainError('validation-failed', 'Nothing to change: the values are the same', {
-          status: 400,
-        });
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO profile_change_requests (school_id, student_id, requested_by_user_id, entity, entity_id, changes, reason)
-         VALUES (app.current_school_id(), $1, app.current_user_id(), 'profile', $1, $2::jsonb, $3) RETURNING id::text`,
-        [dto.studentId, JSON.stringify(changes), dto.reason ?? null],
+      const own = await c.query<{ user_id: string | null }>(
+        `SELECT user_id::text FROM students WHERE id = $1`,
+        [dto.studentId],
       );
-      await this.audit.stage(ctx, c, {
-        action: 'engagement.change_request.create',
-        entityType: 'profile_change_requests',
-        entityId: r.rows[0]!.id,
-        after: { entity: 'profile', fields: Object.keys(changes) },
+      const audience = own.rows[0]?.user_id === ctx.user.id ? 'student' : 'parent';
+      const r = await this.portal.submitIn(c, ctx, dto.studentId, audience, {
+        changes: dto.changes,
+        reason: dto.reason,
+        proofs: [],
       });
-      return this.findChange(c, r.rows[0]!.id);
+      return this.findChange(c, r.requests[r.requests.length - 1]!);
     });
   }
 
@@ -379,31 +319,6 @@ export class FamilyService {
         : (row[col] ?? null);
     }
     return out;
-  }
-
-  private async apply(
-    c: PoolClient,
-    entity: 'student' | 'guardian',
-    id: string,
-    changes: Record<string, { from: unknown; to: string }>,
-  ) {
-    const table = entity === 'student' ? 'students' : 'guardians';
-    for (const [field, v] of Object.entries(changes)) {
-      if (!CHANGEABLE[entity].includes(field)) continue;
-      const [col, key] = field.split('.') as [string, string | undefined];
-      if (key)
-        await c.query(
-          // eslint-disable-next-line no-restricted-syntax -- table and column come from the CHANGEABLE allow-list; values are bound parameters
-          `UPDATE ${table} SET ${col} = jsonb_set(COALESCE(${col}, '{}'::jsonb), ARRAY[$2::text], to_jsonb($3::text), true), updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
-          [id, key, v.to],
-        );
-      else
-        await c.query(
-          // eslint-disable-next-line no-restricted-syntax -- table and column come from the CHANGEABLE allow-list; values are bound parameters
-          `UPDATE ${table} SET ${col} = $2, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
-          [id, v.to],
-        );
-    }
   }
 
   private async findChange(c: PoolClient, id: string) {
@@ -433,9 +348,17 @@ const toChange = (x: Record<string, unknown>) => ({
       PROFILE_FIELD_BY_KEY.get(k)?.label ?? k,
     ]),
   ),
-  changes: x.changes as Record<string, { from: unknown; to: string }>,
+  // ID numbers are kept encrypted in the request and never listed here in full
+  changes: Object.fromEntries(
+    Object.entries(
+      (x.changes as Record<string, { from: unknown; to: unknown; enc?: boolean }>) ?? {},
+    ).map(([k, v]) => [
+      k,
+      v.enc ? { from: v.from ? 'XXXX-XXXX-XXXX' : null, to: 'XXXX-XXXX-XXXX' } : v,
+    ]),
+  ) as Record<string, { from: unknown; to: string }>,
   reason: (x.reason as string) ?? null,
-  status: x.status as 'pending' | 'approved' | 'rejected',
+  status: x.status as 'pending' | 'approved' | 'rejected' | 'partially_approved' | 'cancelled',
   decidedBy: (x.decided_by as string) ?? null,
   decidedAt: x.decided_at ? (x.decided_at as Date).toISOString() : null,
   decisionNote: (x.decision_note as string) ?? null,

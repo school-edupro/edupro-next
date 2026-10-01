@@ -1,6 +1,7 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
+import { FilesModule } from '../files/files.module';
 import { CommsModule } from '../comms/comms.module';
 import { PlatformModule } from '../platform/platform.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -14,6 +15,8 @@ import { EngagementController } from './engagement.controller';
 import { FamilyService } from './family.service';
 import { EngagementPlusController } from './plus.controller';
 import { EngagementPlusService } from './plus.service';
+import { PortalProfileController } from './portal-profile.controller';
+import { PortalProfileService } from './portal-profile.service';
 import { PrivacyService } from './privacy.service';
 import { QueriesService } from './queries.service';
 
@@ -30,11 +33,18 @@ import { QueriesService } from './queries.service';
     PaymentsModule,
     ReportsModule,
     PlatformModule,
+    FilesModule,
   ],
-  controllers: [EngagementController, EngagementPlusController, DsrController],
+  controllers: [
+    EngagementController,
+    EngagementPlusController,
+    DsrController,
+    PortalProfileController,
+  ],
   providers: [
     QueriesService,
     FamilyService,
+    PortalProfileService,
     PrivacyService,
     EngagementPlusService,
     DsrService,

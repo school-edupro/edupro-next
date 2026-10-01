@@ -9,6 +9,7 @@ import { ApiError, apiFetch } from './api';
 import type { ProfileSnapshot, ProfileValues, QuickAddResult, SaveProfileResult } from './profile';
 import type { PreviewResult, ReportSpec, Result, SavedReport } from './report-builder';
 import type { StudentListQuery, StudentListResult, StudentListView } from './student-list';
+import type { ChangeView, Inbox, PortalPolicy } from './portal-profile';
 import { readContext, readSession, writeContext, writeSession } from './session';
 
 function back(path: string, status: 'ok' | string, detail?: string): never {
@@ -3946,4 +3947,82 @@ export async function studentListSaveView(v: StudentListView): Promise<void> {
     method: 'PUT',
     body: JSON.stringify({ value: v }),
   });
+}
+
+// ---- portal profile policy and profile approvals (2026-10-01) ------------------------------------------
+const problem = (error: unknown): { ok: false; error: string } => {
+  if (error instanceof ApiError) {
+    const errors = error.problem.errors as Record<string, string> | string[] | undefined;
+    const list = Array.isArray(errors) ? errors : errors ? Object.values(errors) : [];
+    return {
+      ok: false,
+      error: list.length ? list.join('; ') : (error.problem.detail ?? error.problem.type),
+    };
+  }
+  throw error;
+};
+
+export async function savePortalPolicy(policy: PortalPolicy): Promise<Result<PortalPolicy>> {
+  try {
+    const data = await apiFetch<PortalPolicy>('/people/portal-profile/policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    });
+    revalidatePath('/people/portal-profile');
+    return { ok: true, data };
+  } catch (error) {
+    return problem(error);
+  }
+}
+
+export async function loadProfileApprovals(qs: string): Promise<Result<Inbox>> {
+  try {
+    return { ok: true, data: await apiFetch<Inbox>(`/engagement/profile-approvals?${qs}`) };
+  } catch (error) {
+    return problem(error);
+  }
+}
+
+export async function decidePortalChange(
+  id: string,
+  body: { approve?: boolean; fields?: Record<string, boolean>; note?: string },
+): Promise<Result<ChangeView>> {
+  if (!idOk(id)) return { ok: false, error: 'Unknown request' };
+  try {
+    const data = await apiFetch<ChangeView>(`/engagement/profile-approvals/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ ...body, note: body.note || undefined }),
+    });
+    revalidatePath('/people/profile-approvals');
+    return { ok: true, data };
+  } catch (error) {
+    return problem(error);
+  }
+}
+
+export async function bulkDecideProfileChanges(body: {
+  ids: string[];
+  approve: boolean;
+  note?: string;
+}): Promise<
+  Result<{
+    done: number;
+    failed: number;
+    results: Array<{ id: string; ok: boolean; status?: string; error?: string }>;
+  }>
+> {
+  try {
+    const data = await apiFetch<{
+      done: number;
+      failed: number;
+      results: Array<{ id: string; ok: boolean; status?: string; error?: string }>;
+    }>('/engagement/profile-approvals/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ...body, note: body.note || undefined }),
+    });
+    revalidatePath('/people/profile-approvals');
+    return { ok: true, data };
+  } catch (error) {
+    return problem(error);
+  }
 }

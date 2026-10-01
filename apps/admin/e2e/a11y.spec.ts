@@ -99,6 +99,11 @@ const PAGES = [
   '/people/students/bulk?mode=create',
   '/reports/builder',
   '/reports/builder/new',
+  // portal profile and profile approvals (2026-10-01)
+  '/people/portal-profile',
+  '/people/profile-approvals',
+  '/people/profile-approvals?box=all',
+  '/people/profile-approvals?box=decided',
 ];
 
 test.describe('accessibility (axe)', () => {
@@ -180,6 +185,38 @@ test.describe('accessibility (axe)', () => {
     await page.getByRole('button', { name: /^More filters/ }).click();
     await page.waitForTimeout(400);
     await check('filters dialog');
+  });
+
+  test('no serious or critical violations on the portal profile tabs and the review drawer', async ({
+    page,
+  }) => {
+    const check = async (where: string) => {
+      await page.waitForTimeout(400);
+      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+      expect(
+        bad.map(
+          (v) =>
+            `${where} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+      ).toEqual([]);
+    };
+    await page.goto('/people/portal-profile');
+    await page.waitForLoadState('networkidle');
+    for (const tab of ['Approvers', 'Proof documents', 'Update window']) {
+      await page.getByRole('tab', { name: tab }).click();
+      await check(tab);
+    }
+    await page.goto('/people/profile-approvals?box=all');
+    await page.waitForLoadState('networkidle');
+    const open = page.getByRole('button', { name: /^(Review|Details)$/ }).first();
+    if (await open.isVisible().catch(() => false)) {
+      await open.click();
+      await check('review drawer');
+    }
   });
 
   test('no serious or critical violations on a saved report with its preview', async ({ page }) => {
