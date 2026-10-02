@@ -2,7 +2,7 @@ import { Card, PageHeader } from '@edupro/ui';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { apiFetch } from '@/lib/api';
-import { CHANNEL_LABEL, type Channel } from '@/lib/comms';
+import { CHANNEL_LABEL, reportXlsxHref, type Channel, type CountBucket } from '@/lib/comms';
 import { commsExport } from '@/lib/comms-actions';
 
 interface Table {
@@ -18,30 +18,104 @@ const cell = (v: unknown, type?: string, key?: string) => {
   return String(v);
 };
 
-function ExportButtons({ dataset, params }: { dataset: string; params: Record<string, string> }) {
+function ExportButtons({
+  dataset,
+  params,
+}: {
+  dataset: 'comms_monthly_usage' | 'comms_failures';
+  params: Record<string, string>;
+}) {
   return (
-    <form action={commsExport} className="ep-cdash__export">
-      <input type="hidden" name="dataset" value={dataset} />
-      {Object.entries(params).map(([k, v]) => (
-        <input key={k} type="hidden" name={k} value={v} />
-      ))}
-      <button
-        type="submit"
-        name="format"
-        value="xlsx"
+    <span className="ep-cdash__export">
+      <a
         className="ep-btn ep-btn--secondary ep-btn--sm"
+        href={reportXlsxHref(dataset, params)}
+        download
       >
         Excel
-      </button>
-      <button
-        type="submit"
-        name="format"
-        value="pdf"
-        className="ep-btn ep-btn--secondary ep-btn--sm"
-      >
-        PDF
-      </button>
-    </form>
+      </a>
+      <form action={commsExport}>
+        <input type="hidden" name="dataset" value={dataset} />
+        {Object.entries(params).map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+        <button
+          type="submit"
+          name="format"
+          value="pdf"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+        >
+          PDF
+        </button>
+      </form>
+    </span>
+  );
+}
+
+const STATEMENT_BUCKET: Record<string, CountBucket> = {
+  messages: 'all',
+  delivered: 'delivered',
+  read: 'read',
+  failed: 'failed',
+  pending: 'pending',
+};
+
+/** The statement with every count a download of the delivery report behind it. */
+function Statement({ t, from, to }: { t: Table; from: string; to: string }) {
+  if (!t.rows.length) return <p className="ep-field__help">Nothing for these dates.</p>;
+  // the statement months are whole months; the download keeps to the chosen dates inside each month
+  const range = (month: string) => {
+    const start = `${month}-01`;
+    const [y, m] = month.split('-').map(Number) as [number, number];
+    const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    return { from: start < from ? from : start, to: end > to ? to : end };
+  };
+  return (
+    <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Monthly usage statement">
+      <table className="ep-table">
+        <caption className="ep-sr-only">Monthly usage statement</caption>
+        <thead>
+          <tr>
+            {t.columns.map((c) => (
+              <th key={c.key} scope="col" className={c.type === 'number' ? 'ep-num' : undefined}>
+                {c.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {t.rows.map((r, i) => (
+            <tr key={i}>
+              {t.columns.map((c) => {
+                const bucket = STATEMENT_BUCKET[c.key];
+                const n = Number(r[c.key] ?? 0);
+                const text = cell(r[c.key], c.type, c.key);
+                return (
+                  <td key={c.key} className={c.type === 'number' ? 'ep-num' : undefined}>
+                    {bucket && n > 0 ? (
+                      <a
+                        className="ep-cdash__num"
+                        download
+                        href={reportXlsxHref('comms_delivery_log', {
+                          ...range(String(r.month)),
+                          channel: String(r.channel_code ?? ''),
+                          bucket,
+                        })}
+                        title={`Download Excel: ${String(r.channel)} ${String(r.month)} ${bucket === 'all' ? 'messages' : bucket}`}
+                      >
+                        {text}
+                      </a>
+                    ) : (
+                      text
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -104,13 +178,13 @@ export default async function CommsReportsPage({
     new URLSearchParams(
       Object.entries({ from, to, ...extra }).filter(([, v]) => v) as Array<[string, string]>,
     ).toString();
-  const [statement, failures, log] = await Promise.all([
-    apiFetch<Table>(`/comms/reports/comms_monthly_usage?${q({})}`),
+  const [statement, failures] = await Promise.all([
+    apiFetch<Table>(`/comms/reports/comms_monthly_usage?${q({ channel: sp.channel })}`),
     apiFetch<Table>(`/comms/reports/comms_failures?${q({})}`),
-    apiFetch<Table>(
-      `/comms/reports/comms_delivery_log?${q({ channel: sp.channel, status: sp.status })}`,
-    ),
   ]);
+  const filters = Object.fromEntries(
+    Object.entries({ from, to, channel: sp.channel ?? '' }).filter(([, v]) => v),
+  );
   const totals = statement.rows.reduce<Record<string, number>>((acc, r) => {
     for (const k of ['messages', 'units', 'delivered', 'failed', 'cost', 'credited'])
       acc[k] = (acc[k] ?? 0) + Number(r[k] ?? 0);
@@ -121,7 +195,7 @@ export default async function CommsReportsPage({
       <PageHeader
         kicker="Communication"
         title="Communication reports"
-        description="Monthly usage statement, failures and the delivery log for the dates you choose, as Excel or PDF."
+        description="Monthly usage statement and failures for the dates and channel you choose, as Excel or PDF."
       />
       <Notice params={sp} />
       {sp.export ? (
@@ -148,22 +222,12 @@ export default async function CommsReportsPage({
             <input id="r-to" name="to" type="date" className="ep-input" defaultValue={to} />
           </label>
           <label className="ep-field" htmlFor="r-ch">
-            <span className="ep-field__label">Channel (delivery log)</span>
+            <span className="ep-field__label">Channel</span>
             <select id="r-ch" name="channel" className="ep-select" defaultValue={sp.channel ?? ''}>
               <option value="">All</option>
               <option value="sms">SMS</option>
               <option value="whatsapp">WhatsApp</option>
               <option value="email">Email</option>
-            </select>
-          </label>
-          <label className="ep-field" htmlFor="r-st">
-            <span className="ep-field__label">Status (delivery log)</span>
-            <select id="r-st" name="status" className="ep-select" defaultValue={sp.status ?? ''}>
-              <option value="">All</option>
-              <option value="delivered">Delivered</option>
-              <option value="sent">Sent</option>
-              <option value="failed">Failed</option>
-              <option value="queued">Queued</option>
             </select>
           </label>
           <button type="submit" className="ep-btn ep-btn--primary">
@@ -181,9 +245,12 @@ export default async function CommsReportsPage({
             {Number(totals.cost ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} ·{' '}
             {Number(totals.credited ?? 0).toLocaleString('en-IN')} credits added
           </p>
-          <ExportButtons dataset="comms_monthly_usage" params={{ from, to }} />
+          <ExportButtons dataset="comms_monthly_usage" params={filters} />
         </div>
-        <DataTable t={statement} caption="Monthly usage statement" />
+        <p className="ep-field__help">
+          Click any count to download its delivery report (student, class, admission no., message).
+        </p>
+        <Statement t={statement} from={from} to={to} />
       </Card>
       <Card title="Failures by reason" style={{ marginTop: 'var(--sp-4)' }}>
         <div className="ep-cdash__bar">
@@ -192,30 +259,11 @@ export default async function CommsReportsPage({
         </div>
         <DataTable t={failures} caption="Failures by reason" />
       </Card>
-      <Card title="Delivery log" style={{ marginTop: 'var(--sp-4)' }}>
-        <div className="ep-cdash__bar">
-          <p className="ep-field__help" style={{ margin: 0 }}>
-            {log.rows.length >= 2000
-              ? 'First 2,000 shown; the Excel has every message.'
-              : `${String(log.rows.length)} messages`}
-          </p>
-          <ExportButtons
-            dataset="comms_delivery_log"
-            params={Object.fromEntries(
-              Object.entries({
-                from,
-                to,
-                channel: sp.channel ?? '',
-                status: sp.status ?? '',
-              }).filter(([, v]) => v),
-            )}
-          />
-        </div>
-        <DataTable
-          t={{ columns: log.columns.filter((c) => c.key !== 'address'), rows: log.rows }}
-          caption="Delivery log"
-        />
-      </Card>
+      <p style={{ marginTop: 'var(--sp-4)' }}>
+        <a href={`/comms/messages?${new URLSearchParams(filters).toString()}`}>
+          Delivery log for these dates (search by mobile, email, name or admission no.) →
+        </a>
+      </p>
     </>
   );
 }

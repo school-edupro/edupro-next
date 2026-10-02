@@ -114,6 +114,7 @@ const PAGES = [
   '/comms/templates/new?channel=email',
   '/comms/settings',
   '/comms/reports',
+  '/comms/messages',
   '/comms/requests/106',
   '/people/withdrawals/95',
   '/reports/strength?report=classwise&run=1&groupBy=section',

@@ -458,6 +458,73 @@ describe('communication v2 (e2e)', () => {
     ).toMatchObject({ messages: 2, credited: 1000 });
   });
 
+  it('reports: six months at a glance, a paged delivery log with the student, search, and an Excel of any count', async () => {
+    const dash = await inject({ method: 'GET', url: '/comms/dashboard', headers: h() });
+    const trend = dash.json().trend as Array<{ month: string; channel: string; messages: number }>;
+    expect(new Set(trend.map((t) => t.month)).size).toBe(6);
+    expect(trend).toHaveLength(18);
+    const thisMonth = dash.json().month as string;
+    expect(trend.find((t) => t.month === thisMonth && t.channel === 'sms')).toMatchObject({
+      messages: 2,
+      delivered: 2,
+    });
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    const page = await inject({
+      method: 'GET',
+      url: `/comms/reports/comms_delivery_log?from=${today}&to=${today}&channel=sms&bucket=delivered&page=1&size=10`,
+      headers: h(),
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toMatchObject({ total: 2, page: 1, size: 10 });
+    const withStudent = (
+      page.json().rows as Array<{
+        student_name: string | null;
+        admission_no: string | null;
+        class_section: string | null;
+      }>
+    ).find((r) => r.admission_no);
+    expect(withStudent?.student_name).toBeTruthy();
+    expect(withStudent?.class_section).toBeTruthy();
+    const found = await inject({
+      method: 'GET',
+      url: `/comms/reports/comms_delivery_log?from=${today}&to=${today}&q=${encodeURIComponent(withStudent!.admission_no!)}&page=1`,
+      headers: h(),
+    });
+    expect(found.json().total).toBeGreaterThan(0);
+    expect(
+      (found.json().rows as Array<{ admission_no: string }>).every(
+        (r) => r.admission_no === withStudent!.admission_no,
+      ),
+    ).toBe(true);
+    const none = await inject({
+      method: 'GET',
+      url: `/comms/reports/comms_delivery_log?from=2001-01-01&to=2001-01-02&page=1`,
+      headers: h(),
+    });
+    expect(none.json().total).toBe(0);
+    const xlsx = await inject({
+      method: 'GET',
+      url: `/comms/reports/comms_delivery_log/xlsx?month=${thisMonth}&channel=sms&bucket=delivered`,
+      headers: h(),
+    });
+    expect(xlsx.statusCode).toBe(200);
+    expect(xlsx.headers['content-disposition']).toContain(`delivery_log-${thisMonth}.xlsx`);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(xlsx.rawPayload as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    expect(String(ws.getRow(3).getCell(1).value)).toContain('Only: delivered');
+    expect(ws.getRow(4).getCell(4).value).toBe('Student');
+    expect(ws.rowCount).toBe(6); // 4 heading rows + 2 messages
+    const statement = await inject({
+      method: 'GET',
+      url: `/comms/reports/comms_monthly_usage?channel=email`,
+      headers: h(),
+    });
+    expect(
+      (statement.json().rows as Array<{ channel: string }>).every((r) => r.channel === 'Email'),
+    ).toBe(true);
+  });
+
   it('Meta statuses are accepted only with the school’s signature; a read sets read_at', async () => {
     await inject({
       method: 'PUT',

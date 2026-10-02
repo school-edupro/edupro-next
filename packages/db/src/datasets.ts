@@ -772,6 +772,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       { key: 'cost', header: 'Cost (₹)', type: 'number', width: 12 },
       { key: 'credited', header: 'Credits added', type: 'number', width: 13 },
     ],
+    // dates are school days (India time); the channel filter applies to messages and credits alike
     query: (p) => ({
       text: `WITH m AS (
                SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM') AS month, channel::text AS channel,
@@ -783,56 +784,112 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                       round(COALESCE(sum(cost), 0), 2)::float AS cost
                  FROM comms_messages
                 WHERE channel <> 'push' AND status <> 'cancelled'
-                  AND ($1::date IS NULL OR created_at >= $1::date) AND ($2::date IS NULL OR created_at < ($2::date + 1))
+                  AND ($1::date IS NULL OR created_at >= ($1::date::timestamp AT TIME ZONE 'Asia/Kolkata'))
+                  AND ($2::date IS NULL OR created_at < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'))
+                  AND ($3::text IS NULL OR channel::text = $3)
                 GROUP BY 1, 2),
              k AS (
                SELECT to_char(date_trunc('month', on_date), 'YYYY-MM') AS month, channel::text AS channel, sum(units)::float AS credited
-                 FROM comms_credits WHERE ($1::date IS NULL OR on_date >= $1::date) AND ($2::date IS NULL OR on_date <= $2::date) GROUP BY 1, 2)
-             SELECT COALESCE(m.month, k.month) AS month, (CASE COALESCE(m.channel, k.channel) WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' ELSE COALESCE(m.channel, k.channel)::text END) AS channel,
+                 FROM comms_credits
+                WHERE ($1::date IS NULL OR on_date >= $1::date) AND ($2::date IS NULL OR on_date <= $2::date)
+                  AND ($3::text IS NULL OR channel::text = $3)
+                GROUP BY 1, 2)
+             SELECT COALESCE(m.month, k.month) AS month, COALESCE(m.channel, k.channel) AS channel_code,
+                    (CASE COALESCE(m.channel, k.channel) WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' ELSE COALESCE(m.channel, k.channel)::text END) AS channel,
                     COALESCE(m.messages, 0) AS messages, COALESCE(m.units, 0) AS units, COALESCE(m.delivered, 0) AS delivered,
                     COALESCE(m.read, 0) AS read, COALESCE(m.failed, 0) AS failed, COALESCE(m.pending, 0) AS pending,
                     CASE WHEN COALESCE(m.messages, 0) > 0 THEN round(100.0 * m.delivered / m.messages, 1)::float ELSE NULL END AS delivery_rate,
                     COALESCE(m.cost, 0) AS cost, COALESCE(k.credited, 0) AS credited
                FROM m FULL JOIN k ON k.month = m.month AND k.channel = m.channel
-              ORDER BY 1 DESC, 2`,
-      values: [str(p.from), str(p.to)],
+              ORDER BY 1 DESC, array_position(ARRAY['sms', 'whatsapp', 'email'], COALESCE(m.channel, k.channel))`,
+      values: [str(p.from), str(p.to), str(p.channel)],
     }),
   },
   comms_delivery_log: {
     id: 'comms_delivery_log',
-    title: 'Communication delivery log',
+    title: 'Communication delivery report',
     permission: 'comms.report.view',
     maxRows: 100_000,
     columns: [
       { key: 'created_at', header: 'Queued', type: 'datetime', width: 18 },
       { key: 'channel', header: 'Channel', width: 10 },
-      { key: 'title', header: 'Message', width: 28 },
-      { key: 'recipient', header: 'Recipient', width: 24 },
-      { key: 'address', header: 'Mobile / email', width: 22 },
+      { key: 'title', header: 'Message', width: 26 },
+      { key: 'student_name', header: 'Student', width: 24 },
+      { key: 'class_section', header: 'Class', width: 10 },
+      { key: 'admission_no', header: 'Admission no.', width: 14 },
+      { key: 'recipient', header: 'Sent to', width: 24 },
+      { key: 'address', header: 'Mobile / email', width: 26 },
       { key: 'status', header: 'Status', width: 11 },
       { key: 'units', header: 'Units', type: 'number', width: 7 },
+      { key: 'cost', header: 'Cost (₹)', type: 'number', width: 9 },
       { key: 'sent_at', header: 'Sent', type: 'datetime', width: 18 },
       { key: 'delivered_at', header: 'Delivered', type: 'datetime', width: 18 },
       { key: 'read_at', header: 'Read', type: 'datetime', width: 18 },
       { key: 'last_error', header: 'Error', width: 30 },
       { key: 'sent_by', header: 'Sent by', width: 18 },
+      { key: 'message', header: 'Message text', width: 60 },
     ],
-    query: (p) => ({
-      text: `SELECT m.created_at, (CASE m.channel::text WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' ELSE m.channel::text::text END) AS channel, COALESCE(r.title, t.name, 'Single message') AS title,
-                    COALESCE(x.name, u.display_name) AS recipient, m.recipient_address AS address, m.status::text AS status, m.units,
-                    m.sent_at, m.delivered_at, m.read_at, m.last_error, s.display_name AS sent_by
-               FROM comms_messages m
-               LEFT JOIN message_requests r ON r.id = m.message_request_id
-               LEFT JOIN message_request_recipients x ON x.message_id = m.id
-               LEFT JOIN comms_templates t ON t.id = m.template_id
-               LEFT JOIN users u ON u.id = m.recipient_user_id
-               LEFT JOIN users s ON s.id = m.created_by
-              WHERE ($1::date IS NULL OR m.created_at >= $1::date) AND ($2::date IS NULL OR m.created_at < ($2::date + 1))
-                AND ($3::text IS NULL OR m.channel::text = $3) AND ($4::text IS NULL OR m.status::text = $4)
-                AND ($5::bigint IS NULL OR m.message_request_id = $5::bigint)
-              ORDER BY m.created_at DESC`,
-      values: [str(p.from), str(p.to), str(p.channel), str(p.status), str(p.requestId)],
-    }),
+    /**
+     * One row per message with the student it was about (name, class, admission no.). Filters: dates
+     * (India time) or a month (YYYY-MM), channel, status, a count bucket from the dashboard / statement
+     * (delivered, failed, pending, read; all = not cancelled), a search over mobile / email / names /
+     * admission no., and a request.
+     */
+    query: (p) => {
+      const month = str(p.month);
+      const ym = month && /^\d{4}-\d{2}$/.test(month) ? month : null;
+      const from = ym ? `${ym}-01` : str(p.from);
+      const to = ym ? null : str(p.to);
+      const bucket = str(p.bucket);
+      return {
+        text: `SELECT m.id::text AS id, m.created_at, (CASE m.channel::text WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' WHEN 'push' THEN 'App push' ELSE m.channel::text END) AS channel,
+                      COALESCE(r.title, t.name, 'Single message') AS title,
+                      s.display_name AS student_name, en.cls AS class_section, s.admission_no,
+                      COALESCE(x.name, u.display_name) AS recipient, m.recipient_address AS address, m.status::text AS status, m.units,
+                      round(COALESCE(m.cost, 0), 2)::float AS cost, m.sent_at, m.delivered_at, m.read_at, m.last_error, sb.display_name AS sent_by,
+                      left(concat_ws(' · ', NULLIF(m.subject, ''),
+                           CASE WHEN m.format = 'html' THEN btrim(regexp_replace(regexp_replace(m.body, '<[^>]+>', ' ', 'g'), '(\\s|&nbsp;)+', ' ', 'g')) ELSE m.body END), 2000) AS message
+                 FROM comms_messages m
+                 LEFT JOIN message_requests r ON r.id = m.message_request_id
+                 LEFT JOIN message_request_recipients x ON x.message_id = m.id
+                 LEFT JOIN comms_templates t ON t.id = m.template_id
+                 LEFT JOIN users u ON u.id = m.recipient_user_id
+                 LEFT JOIN users sb ON sb.id = m.created_by
+                 LEFT JOIN students s ON s.id = COALESCE(x.student_id,
+                      (SELECT st.id FROM students st WHERE m.recipient_user_id IS NOT NULL AND st.user_id = m.recipient_user_id LIMIT 1))
+                 LEFT JOIN LATERAL (
+                      SELECT k.code || '-' || cs.name AS cls
+                        FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                       WHERE e.student_id = s.id
+                       ORDER BY (e.status = 'active') DESC, e.academic_year_id DESC LIMIT 1) en ON true
+                WHERE ($1::date IS NULL OR m.created_at >= ($1::date::timestamp AT TIME ZONE 'Asia/Kolkata'))
+                  AND ($2::date IS NULL OR m.created_at < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'))
+                  AND ($8::boolean IS NOT TRUE OR m.created_at < ((($1::date + interval '1 month')::date)::timestamp AT TIME ZONE 'Asia/Kolkata'))
+                  AND ($3::text IS NULL OR m.channel::text = $3) AND ($4::text IS NULL OR m.status::text = $4)
+                  AND ($5::bigint IS NULL OR m.message_request_id = $5::bigint)
+                  AND (CASE $6::text
+                         WHEN 'delivered' THEN m.status = 'delivered'
+                         WHEN 'failed' THEN m.status = 'failed'
+                         WHEN 'pending' THEN m.status IN ('queued', 'sending', 'sent')
+                         WHEN 'read' THEN m.read_at IS NOT NULL
+                         WHEN 'all' THEN m.status <> 'cancelled' AND m.channel <> 'push'
+                         ELSE true END)
+                  AND ($7::text IS NULL OR concat_ws(' ', m.recipient_address, x.name, u.display_name, s.display_name, s.admission_no) ILIKE '%' || $7 || '%')
+                ORDER BY m.created_at DESC, m.id DESC`,
+        values: [
+          from,
+          to,
+          str(p.channel),
+          str(p.status),
+          str(p.requestId),
+          bucket && ['delivered', 'failed', 'pending', 'read', 'all'].includes(bucket)
+            ? bucket
+            : null,
+          str(p.q),
+          Boolean(ym),
+        ],
+      };
+    },
   },
   comms_failures: {
     id: 'comms_failures',

@@ -288,10 +288,11 @@ export async function commsExport(fd: FormData) {
   const { redirect } = await import('next/navigation');
   const dataset = String(fd.get('dataset') ?? '');
   const format = fd.get('format') === 'pdf' ? 'pdf' : 'xlsx';
+  const back = fd.get('back') === '/comms/messages' ? '/comms/messages' : '/comms/reports';
   if (!['comms_monthly_usage', 'comms_delivery_log', 'comms_failures'].includes(dataset))
-    redirect('/comms/reports?error=validation-failed');
+    redirect(`${back}?error=validation-failed`);
   const params: Record<string, string> = {};
-  for (const k of ['from', 'to', 'channel', 'status']) {
+  for (const k of ['from', 'to', 'channel', 'status', 'q', 'month', 'bucket']) {
     const v = String(fd.get(k) ?? '').trim();
     if (v) params[k] = v;
   }
@@ -306,12 +307,12 @@ export async function commsExport(fd: FormData) {
   } catch (error) {
     if (error instanceof ApiError)
       redirect(
-        `/comms/reports?error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(error.problem.detail ?? '')}`,
+        `${back}?error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(error.problem.detail ?? '')}`,
       );
     throw error;
   }
   const q = new URLSearchParams({ ...params, export: id, format });
-  redirect(`/comms/reports?${q.toString()}`);
+  redirect(`${back}?${q.toString()}`);
 }
 
 export async function saveCustomVariable(p: { key: string; label: string; value: string }) {

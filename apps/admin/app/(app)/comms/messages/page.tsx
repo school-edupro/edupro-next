@@ -1,11 +1,14 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { cancelMessage, sendMessage } from '@/lib/actions';
+import { reportXlsxHref } from '@/lib/comms';
+import { commsExport } from '@/lib/comms-actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { Membership, Message, Page, Template } from '@/lib/types';
+import type { Membership, Page, Template } from '@/lib/types';
 
-const TONE: Record<Message['status'], 'neutral' | 'info' | 'success' | 'danger' | 'warning'> = {
+const TONE: Record<string, 'neutral' | 'info' | 'success' | 'danger' | 'warning'> = {
   queued: 'info',
   sending: 'warning',
   sent: 'success',
@@ -14,18 +17,81 @@ const TONE: Record<Message['status'], 'neutral' | 'info' | 'success' | 'danger' 
   cancelled: 'neutral',
 };
 
-type Search = { ok?: string; error?: string; detail?: string; status?: string; channel?: string };
+interface LogRow {
+  id: string;
+  created_at: string;
+  channel: string;
+  title: string;
+  student_name: string | null;
+  class_section: string | null;
+  admission_no: string | null;
+  recipient: string | null;
+  address: string;
+  status: string;
+  units: number | null;
+  cost: number | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  last_error: string | null;
+  sent_by: string | null;
+  message: string | null;
+}
 
+type Search = {
+  ok?: string;
+  error?: string;
+  detail?: string;
+  status?: string;
+  channel?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+  page?: string;
+  size?: string;
+  export?: string;
+  format?: string;
+};
+
+const when = (v: string | null) =>
+  v
+    ? new Date(v).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+
+/**
+ * Delivery log (v2): a page at a time, today by default; dates, channel, status and one search box for
+ * mobile, email, student or parent name and admission no.; each row shows the student it was about;
+ * the filtered rows download as Excel (at once) or PDF.
+ */
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const t = await getTranslations('pages.comms_messages');
   const sp = await searchParams;
   const me = await getMe();
   const canSend = me.permissions.includes('comms.message.send');
-  const q = new URLSearchParams({ size: '200' });
-  if (sp.status) q.set('status', sp.status);
-  if (sp.channel) q.set('channel', sp.channel);
-  const [messages, templates, members] = await Promise.all([
-    apiFetch<Page<Message>>(`/comms/messages?${q.toString()}`),
+  const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+  // today by default; a From date alone runs to today; dates the wrong way round are swapped
+  const [from, to] = [sp.from || today, sp.to || today].sort() as [string, string];
+  const size = ['25', '50', '100'].includes(sp.size ?? '') ? Number(sp.size) : 50;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const filters = Object.fromEntries(
+    Object.entries({
+      from,
+      to,
+      channel: sp.channel,
+      status: sp.status,
+      q: sp.q?.trim(),
+    }).filter(([, v]) => v),
+  ) as Record<string, string>;
+  const qs = (extra: Record<string, string>) =>
+    new URLSearchParams({ ...filters, size: String(size), ...extra }).toString();
+  const [log, templates, members] = await Promise.all([
+    apiFetch<{ rows: LogRow[]; total: number; page: number; size: number }>(
+      `/comms/reports/comms_delivery_log?${qs({ page: String(page) })}`,
+    ),
     canSend
       ? apiFetch<{ data: Template[] }>('/comms/templates?status=active')
       : Promise.resolve({ data: [] as Template[] }),
@@ -33,16 +99,80 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
       ? apiFetch<Page<Membership>>('/access/memberships?size=200')
       : Promise.resolve({ data: [] as Membership[], page: { number: 1, size: 0, total: 0 } }),
   ]);
+  const pages = Math.max(1, Math.ceil(log.total / size));
+  const first = log.total ? (page - 1) * size + 1 : 0;
+  const last = Math.min(log.total, page * size);
+  const pageLinks = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, pages])]
+    .filter((n) => n >= 1 && n <= pages)
+    .sort((a, b) => a - b);
 
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
+      {sp.export ? (
+        <ExportWatcher
+          id={sp.export}
+          format={sp.format === 'pdf' ? 'pdf' : 'xlsx'}
+          labels={{
+            queued: 'Report requested',
+            ready: 'Download',
+            pending: 'Preparing the PDF… it downloads automatically',
+            failed: 'The file could not be made',
+            stuck:
+              'Still waiting: PDFs are made by the workers service; check that it is running. Excel downloads at once.',
+          }}
+        />
+      ) : null}
       <div className="ep-filter-band">
-        <form
-          method="get"
-          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
+        <form method="get" className="ep-dlog__filters">
+          <label className="ep-field" htmlFor="dl-from">
+            <span className="ep-field__label">From</span>
+            <input
+              id="dl-from"
+              name="from"
+              type="date"
+              className="ep-input"
+              defaultValue={from}
+              max={today}
+            />
+          </label>
+          <label className="ep-field" htmlFor="dl-to">
+            <span className="ep-field__label">To</span>
+            <input
+              id="dl-to"
+              name="to"
+              type="date"
+              className="ep-input"
+              defaultValue={to}
+              max={today}
+            />
+          </label>
+          <label className="ep-field ep-dlog__search" htmlFor="dl-q">
+            <span className="ep-field__label">Mobile, email, name or admission no.</span>
+            <input
+              id="dl-q"
+              name="q"
+              type="search"
+              className="ep-input"
+              defaultValue={sp.q ?? ''}
+              placeholder="e.g. 98222 or @gmail or Aarav or A-1024"
+              maxLength={80}
+            />
+          </label>
+          <SelectField
+            id="channel"
+            name="channel"
+            label="Channel"
+            defaultValue={sp.channel ?? ''}
+            options={[
+              { value: '', label: 'All' },
+              { value: 'sms', label: 'SMS' },
+              { value: 'whatsapp', label: 'WhatsApp' },
+              { value: 'email', label: 'Email' },
+              { value: 'push', label: 'App push' },
+            ]}
+          />
           <SelectField
             id="status"
             name="status"
@@ -51,60 +181,120 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
             options={[
               { value: '', label: 'All' },
               ...(['queued', 'sending', 'sent', 'delivered', 'failed', 'cancelled'] as const).map(
-                (s) => ({ value: s, label: s }),
+                (s) => ({ value: s, label: s[0]!.toUpperCase() + s.slice(1) }),
               ),
             ]}
           />
           <SelectField
-            id="channel"
-            name="channel"
-            label="Channel"
-            defaultValue={sp.channel ?? ''}
-            options={[
-              { value: '', label: 'All' },
-              ...(['sms', 'whatsapp', 'email', 'push'] as const).map((c) => ({
-                value: c,
-                label: c,
-              })),
-            ]}
+            id="size"
+            name="size"
+            label="Rows per page"
+            defaultValue={String(size)}
+            options={['25', '50', '100'].map((n) => ({ value: n, label: n }))}
           />
-          <Button type="submit" variant="secondary">
-            Filter
-          </Button>
+          <Button type="submit">Show</Button>
+          <a className="ep-btn ep-btn--secondary" href="/comms/messages">
+            Today
+          </a>
         </form>
       </div>
       <Card>
-        <DataTable<Message>
-          caption="Messages"
+        <div className="ep-cdash__bar">
+          <p className="ep-field__help" style={{ margin: 0 }} aria-live="polite">
+            {log.total
+              ? `${first.toLocaleString('en-IN')}–${last.toLocaleString('en-IN')} of ${log.total.toLocaleString('en-IN')} messages`
+              : 'No messages for these filters.'}
+            {from === to
+              ? ` · ${new Date(`${from}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
+              : ` · ${from} to ${to}`}
+          </p>
+          <span className="ep-cdash__export">
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={reportXlsxHref('comms_delivery_log', filters)}
+              download
+            >
+              Excel
+            </a>
+            <form action={commsExport}>
+              <input type="hidden" name="dataset" value="comms_delivery_log" />
+              <input type="hidden" name="back" value="/comms/messages" />
+              {Object.entries(filters).map(([k, v]) => (
+                <input key={k} type="hidden" name={k} value={v} />
+              ))}
+              <button
+                type="submit"
+                name="format"
+                value="pdf"
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+              >
+                PDF
+              </button>
+            </form>
+          </span>
+        </div>
+        <DataTable<LogRow>
+          caption="Delivery log"
           density="dense"
           columns={[
-            {
-              key: 'when',
-              header: 'Created',
-              render: (m) => new Date(m.createdAt).toLocaleString('en-IN'),
-            },
+            { key: 'when', header: 'Time', render: (m) => when(m.created_at) },
             { key: 'channel', header: 'Channel', render: (m) => m.channel },
             {
-              key: 'to',
-              header: 'Recipient',
-              render: (m) => m.recipientName ?? m.recipientAddress,
+              key: 'title',
+              header: 'Message',
+              render: (m) => (
+                <span title={m.message ?? ''}>
+                  {m.title}
+                  {m.sent_by ? <span className="ep-field__help"> · {m.sent_by}</span> : null}
+                </span>
+              ),
             },
-            { key: 'template', header: 'Template', render: (m) => m.templateCode ?? '' },
+            {
+              key: 'student',
+              header: 'Student',
+              render: (m) =>
+                m.student_name ? (
+                  <>
+                    {m.student_name}
+                    <div className="ep-field__help">
+                      {[m.class_section, m.admission_no].filter(Boolean).join(' · ')}
+                    </div>
+                  </>
+                ) : (
+                  '—'
+                ),
+            },
+            {
+              key: 'to',
+              header: 'Sent to',
+              render: (m) => (
+                <>
+                  {m.recipient ?? ''}
+                  <div className="ep-field__help">{m.address}</div>
+                </>
+              ),
+            },
             {
               key: 'status',
               header: 'Status',
-              render: (m) => <Badge tone={TONE[m.status]}>{m.status}</Badge>,
+              render: (m) => (
+                <>
+                  <Badge tone={TONE[m.status] ?? 'neutral'}>{m.status}</Badge>
+                  {m.read_at ? <div className="ep-field__help">read {when(m.read_at)}</div> : null}
+                  {!m.read_at && m.delivered_at ? (
+                    <div className="ep-field__help">{when(m.delivered_at)}</div>
+                  ) : null}
+                </>
+              ),
             },
             {
-              key: 'provider',
-              header: 'Provider',
+              key: 'cost',
+              header: 'Units · ₹',
+              numeric: true,
               render: (m) =>
-                m.provider
-                  ? `${m.provider}${m.providerMessageId ? ` · ${m.providerMessageId}` : ''}`
-                  : '',
+                m.units ? `${String(m.units)} · ${Number(m.cost ?? 0).toFixed(2)}` : '',
             },
-            { key: 'attempts', header: 'Attempts', numeric: true, render: (m) => m.attempts },
-            { key: 'error', header: 'Last error', render: (m) => m.lastError ?? '' },
+            { key: 'error', header: 'Error', render: (m) => m.last_error ?? '' },
             {
               key: 'actions',
               header: '',
@@ -119,10 +309,47 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
                 ) : null,
             },
           ]}
-          rows={messages.data}
+          rows={log.rows}
           rowKey={(m) => m.id}
-          emptyTitle="No messages yet"
+          emptyTitle="No messages for these filters"
         />
+        {pages > 1 ? (
+          <nav className="ep-grid__pager ep-dlog__pager" aria-label="Pages">
+            {page > 1 ? (
+              <a
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                href={`?${qs({ page: String(page - 1) })}`}
+              >
+                ← Previous
+              </a>
+            ) : null}
+            {pageLinks.map((n, i) => (
+              <span key={n}>
+                {i > 0 && n - pageLinks[i - 1]! > 1 ? <span aria-hidden="true">… </span> : null}
+                {n === page ? (
+                  <span className="ep-btn ep-btn--primary ep-btn--sm" aria-current="page">
+                    {n}
+                  </span>
+                ) : (
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`?${qs({ page: String(n) })}`}
+                  >
+                    {n}
+                  </a>
+                )}
+              </span>
+            ))}
+            {page < pages ? (
+              <a
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                href={`?${qs({ page: String(page + 1) })}`}
+              >
+                Next →
+              </a>
+            ) : null}
+          </nav>
+        ) : null}
       </Card>
       {canSend ? (
         <Card title="Send a message" style={{ marginTop: 'var(--sp-5)' }}>

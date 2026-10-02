@@ -64,3 +64,22 @@ test send, rules, credits).
 ## Not yet
 WhatsApp → SMS fallback on failure, two-way inbox for WhatsApp replies, per-teacher sending (decided
 office-only), template sync from Meta / DLT portals.
+
+## Part 4 — Delivery log, statement and 6-month dashboard (2026-10-02)
+
+- **Delivery log** (`/comms/messages`) reads the `comms_delivery_log` dataset a page at a time
+  (`GET /comms/reports/comms_delivery_log?page=&size=` returns `total`). Opens on today; From–To
+  (India time; a From date alone runs to today), channel, status, rows per page and one search box
+  matching mobile, email, student / parent name and admission no. Each row shows the student
+  (name, class-section, admission no.) found through `message_request_recipients.student_id`, or the
+  student whose login received it.
+- **Excel at once**: `GET /comms/reports/:id/xlsx` builds the workbook in the API (school, title,
+  filters, then the table in India time, auto-filter, message text wrapped), so Excel no longer
+  waits for the workers service. PDF still goes through the export queue (Chromium in workers).
+- **Counts are downloads**: every count on the dashboard (6-month table, this month's cards) and
+  the usage statement links to `/api/comms/report/comms_delivery_log?month=|from=&to=&channel=&bucket=`
+  with `bucket` = all (not cancelled, no push) / delivered / failed / pending / read.
+- **Usage statement**: dates bound in India time; the channel filter now applies to messages and
+  credits. **Dashboard**: `trend` = six months to the chosen month × SMS / WhatsApp / email
+  (count, delivered, read, failed, pending, units, ₹), shown as a stacked bar chart and a table
+  with totals.

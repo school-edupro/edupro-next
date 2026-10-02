@@ -3882,6 +3882,10 @@ a.ep-tabs__tab {
   display: grid;
   gap: var(--sp-2);
 }
+.ep-cdash__list a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
 .ep-cdash__h3 {
   font-family: var(--font-heading);
   font-size: var(--fs-h4);
@@ -3899,6 +3903,60 @@ a.ep-tabs__tab {
 .ep-cdash__export {
   display: flex;
   gap: var(--sp-2);
+}
+.ep-cdash__num {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.ep-cdash__num:hover,
+.ep-cdash__num:focus-visible {
+  text-decoration-thickness: 2px;
+}
+.ep-cdash__six {
+  display: grid;
+  gap: var(--sp-5);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  align-items: start;
+}
+.ep-cdash__chart--months {
+  height: 15rem;
+  gap: var(--sp-3);
+}
+.ep-cdash__chart--months .ep-cdash__day {
+  flex: 1 0 2.5rem;
+}
+.ep-cdash__mval {
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-cdash__dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: var(--radius-sm);
+}
+.ep-cdash__mtable tfoot th,
+.ep-cdash__mtable tfoot td {
+  border-top: 2px solid var(--border-strong);
+}
+.ep-dlog__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+}
+.ep-dlog__search {
+  flex: 1 1 16rem;
+}
+.ep-dlog__pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  justify-content: center;
+  align-items: center;
+  margin-top: var(--sp-3);
 }
 .ep-alert a {
   color: var(--text-heading);

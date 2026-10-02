@@ -1,5 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { DomainError } from '../../common/errors/domain-error';
@@ -43,6 +44,22 @@ export class CommsSettingsController {
   @RequirePermission(COMMS_V2.reportView)
   dashboard(@ReqCtx() ctx: RequestContext, @Query('month') month?: string) {
     return this.reports.dashboard(ctx, month);
+  }
+
+  @Get('reports/:id/xlsx')
+  @ApiOperation({ summary: 'The report as an Excel file now (no export queue)' })
+  @RequirePermission(COMMS_V2.reportView)
+  async reportXlsx(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: Record<string, string>,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, filename } = await this.reports.xlsx(ctx, id, q);
+    void reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(bytes);
   }
 
   @Get('reports/:id')

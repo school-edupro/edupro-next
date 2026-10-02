@@ -209,6 +209,8 @@ export interface Dashboard {
   channels: ChannelKpi[];
   previous: ChannelKpi[];
   daily: Array<{ day: string; channel: Channel; messages: number }>;
+  /** The last six months to the chosen month, one row per month and channel. */
+  trend: Array<ChannelKpi & { month: string }>;
   balances: Balance[];
   providers: Array<{ channel: Channel; provider: string; active: boolean }>;
   requests: Array<{
@@ -224,6 +226,20 @@ export interface Dashboard {
   }>;
   senders: Array<{ name: string; messages: number; cost: number }>;
   failures: Array<{ channel: string; reason: string; messages: number }>;
+}
+
+/** What a count stands for when it is clicked: the delivery report rows behind it. */
+export type CountBucket = 'all' | 'delivered' | 'failed' | 'pending' | 'read';
+
+/** The Excel delivery report (student, class, admission no., message) behind a count. */
+export function reportXlsxHref(
+  dataset: 'comms_delivery_log' | 'comms_monthly_usage' | 'comms_failures',
+  params: Record<string, string | undefined>,
+): string {
+  const q = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v) as Array<[string, string]>,
+  );
+  return `/api/comms/report/${dataset}?${q.toString()}`;
 }
 
 export const CHANNEL_LABEL: Record<Channel, string> = {
