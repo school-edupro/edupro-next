@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -6,6 +6,7 @@ import {
   CreateTemplateDto,
   ListMessagesQueryDto,
   ListTemplatesQueryDto,
+  PreviewTemplateDto,
   SendMessageDto,
   UpdateTemplateDto,
 } from './comms.dto';
@@ -28,6 +29,27 @@ export class CommsController {
   @RequirePermission(COMMS.templateView, { description: 'View notification templates' })
   async listTemplates(@ReqCtx() ctx: RequestContext, @Query() q: ListTemplatesQueryDto) {
     return { data: await this.templates.list(requireTenant(ctx), q) };
+  }
+
+  @Get('templates/variables')
+  @ApiOperation({ summary: 'Variables templates can use, with what they hold' })
+  @RequirePermission(COMMS.templateView)
+  templateVariables() {
+    return { data: this.templates.variables() };
+  }
+
+  @Post('templates/preview')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'A template with sample values: SMS units, the framed HTML email' })
+  @RequirePermission(COMMS.templateView)
+  previewTemplate(@ReqCtx() ctx: RequestContext, @Body() body: PreviewTemplateDto) {
+    return this.templates.preview(ctx, body);
+  }
+
+  @Delete('templates/:id')
+  @RequirePermission(COMMS.templateManage)
+  removeTemplate(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.templates.remove(ctx, id);
   }
 
   @Get('templates/:id')

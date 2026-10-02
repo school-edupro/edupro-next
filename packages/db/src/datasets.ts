@@ -753,6 +753,106 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [str(p.academicYearId), str(p.classLabel)],
     }),
   },
+  // ---- communication v2 (2026-10-02): usage statement, delivery log, failures ------------------------
+  comms_monthly_usage: {
+    id: 'comms_monthly_usage',
+    title: 'Communication usage statement',
+    permission: 'comms.report.view',
+    maxRows: 5_000,
+    columns: [
+      { key: 'month', header: 'Month', width: 12 },
+      { key: 'channel', header: 'Channel', width: 12 },
+      { key: 'messages', header: 'Messages', type: 'number', width: 11 },
+      { key: 'units', header: 'Units (SMS parts)', type: 'number', width: 14 },
+      { key: 'delivered', header: 'Delivered', type: 'number', width: 11 },
+      { key: 'read', header: 'Read', type: 'number', width: 9 },
+      { key: 'failed', header: 'Failed', type: 'number', width: 9 },
+      { key: 'pending', header: 'Pending', type: 'number', width: 9 },
+      { key: 'delivery_rate', header: 'Delivery %', type: 'number', width: 11 },
+      { key: 'cost', header: 'Cost (₹)', type: 'number', width: 12 },
+      { key: 'credited', header: 'Credits added', type: 'number', width: 13 },
+    ],
+    query: (p) => ({
+      text: `WITH m AS (
+               SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM') AS month, channel::text AS channel,
+                      count(*)::int AS messages, COALESCE(sum(units), 0)::int AS units,
+                      count(*) FILTER (WHERE status = 'delivered')::int AS delivered,
+                      count(*) FILTER (WHERE read_at IS NOT NULL)::int AS read,
+                      count(*) FILTER (WHERE status = 'failed')::int AS failed,
+                      count(*) FILTER (WHERE status IN ('queued', 'sending', 'sent'))::int AS pending,
+                      round(COALESCE(sum(cost), 0), 2)::float AS cost
+                 FROM comms_messages
+                WHERE channel <> 'push' AND status <> 'cancelled'
+                  AND ($1::date IS NULL OR created_at >= $1::date) AND ($2::date IS NULL OR created_at < ($2::date + 1))
+                GROUP BY 1, 2),
+             k AS (
+               SELECT to_char(date_trunc('month', on_date), 'YYYY-MM') AS month, channel::text AS channel, sum(units)::float AS credited
+                 FROM comms_credits WHERE ($1::date IS NULL OR on_date >= $1::date) AND ($2::date IS NULL OR on_date <= $2::date) GROUP BY 1, 2)
+             SELECT COALESCE(m.month, k.month) AS month, COALESCE(m.channel, k.channel) AS channel,
+                    COALESCE(m.messages, 0) AS messages, COALESCE(m.units, 0) AS units, COALESCE(m.delivered, 0) AS delivered,
+                    COALESCE(m.read, 0) AS read, COALESCE(m.failed, 0) AS failed, COALESCE(m.pending, 0) AS pending,
+                    CASE WHEN COALESCE(m.messages, 0) > 0 THEN round(100.0 * m.delivered / m.messages, 1)::float ELSE NULL END AS delivery_rate,
+                    COALESCE(m.cost, 0) AS cost, COALESCE(k.credited, 0) AS credited
+               FROM m FULL JOIN k ON k.month = m.month AND k.channel = m.channel
+              ORDER BY 1 DESC, 2`,
+      values: [str(p.from), str(p.to)],
+    }),
+  },
+  comms_delivery_log: {
+    id: 'comms_delivery_log',
+    title: 'Communication delivery log',
+    permission: 'comms.report.view',
+    maxRows: 100_000,
+    columns: [
+      { key: 'created_at', header: 'Queued', type: 'datetime', width: 18 },
+      { key: 'channel', header: 'Channel', width: 10 },
+      { key: 'title', header: 'Message', width: 28 },
+      { key: 'recipient', header: 'Recipient', width: 24 },
+      { key: 'address', header: 'Mobile / email', width: 22 },
+      { key: 'status', header: 'Status', width: 11 },
+      { key: 'units', header: 'Units', type: 'number', width: 7 },
+      { key: 'sent_at', header: 'Sent', type: 'datetime', width: 18 },
+      { key: 'delivered_at', header: 'Delivered', type: 'datetime', width: 18 },
+      { key: 'read_at', header: 'Read', type: 'datetime', width: 18 },
+      { key: 'last_error', header: 'Error', width: 30 },
+      { key: 'sent_by', header: 'Sent by', width: 18 },
+    ],
+    query: (p) => ({
+      text: `SELECT m.created_at, m.channel::text AS channel, COALESCE(r.title, t.name, 'Single message') AS title,
+                    COALESCE(x.name, u.display_name) AS recipient, m.recipient_address AS address, m.status::text AS status, m.units,
+                    m.sent_at, m.delivered_at, m.read_at, m.last_error, s.display_name AS sent_by
+               FROM comms_messages m
+               LEFT JOIN message_requests r ON r.id = m.message_request_id
+               LEFT JOIN message_request_recipients x ON x.message_id = m.id
+               LEFT JOIN comms_templates t ON t.id = m.template_id
+               LEFT JOIN users u ON u.id = m.recipient_user_id
+               LEFT JOIN users s ON s.id = m.created_by
+              WHERE ($1::date IS NULL OR m.created_at >= $1::date) AND ($2::date IS NULL OR m.created_at < ($2::date + 1))
+                AND ($3::text IS NULL OR m.channel::text = $3) AND ($4::text IS NULL OR m.status::text = $4)
+                AND ($5::bigint IS NULL OR m.message_request_id = $5::bigint)
+              ORDER BY m.created_at DESC`,
+      values: [str(p.from), str(p.to), str(p.channel), str(p.status), str(p.requestId)],
+    }),
+  },
+  comms_failures: {
+    id: 'comms_failures',
+    title: 'Communication failures by reason',
+    permission: 'comms.report.view',
+    maxRows: 2_000,
+    columns: [
+      { key: 'channel', header: 'Channel', width: 10 },
+      { key: 'reason', header: 'Reason', width: 50 },
+      { key: 'messages', header: 'Messages', type: 'number', width: 10 },
+      { key: 'last_seen', header: 'Last seen', type: 'datetime', width: 18 },
+    ],
+    query: (p) => ({
+      text: `SELECT channel::text AS channel, COALESCE(NULLIF(left(last_error, 200), ''), 'Unknown') AS reason, count(*)::int AS messages, max(failed_at) AS last_seen
+               FROM comms_messages WHERE status = 'failed'
+                AND ($1::date IS NULL OR created_at >= $1::date) AND ($2::date IS NULL OR created_at < ($2::date + 1))
+              GROUP BY 1, 2 ORDER BY 3 DESC`,
+      values: [str(p.from), str(p.to)],
+    }),
+  },
 };
 
 // every master is a dataset too (Excel, CSV and PDF exports of the grid)

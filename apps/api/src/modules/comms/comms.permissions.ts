@@ -15,3 +15,10 @@ export const COMMS_S10 = {
   consentManage: 'comms.consent.manage',
   consentSelf: 'comms.consent.self',
 } as const;
+
+/** Communication v2 (2026-10-02): settings and providers, reports, credits. */
+export const COMMS_V2 = {
+  settingsManage: 'comms.settings.manage',
+  reportView: 'comms.report.view',
+  creditManage: 'comms.credit.manage',
+} as const;

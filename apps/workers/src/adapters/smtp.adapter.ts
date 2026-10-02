@@ -1,16 +1,18 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import type { ChannelAdapter, DeliveryResult, OutboundMessage } from './adapter';
 
-/** Email through any SMTP relay (Mailpit locally, the school's provider in production). */
+/** Email through any SMTP relay: Mailpit locally, the school's own SMTP or Amazon SES SMTP in production. */
 export class SmtpAdapter implements ChannelAdapter {
   readonly name = 'smtp';
   private readonly transport: Transporter;
 
   constructor(
-    smtpUrl: string,
+    smtp: string | SMTPTransport.Options,
     private readonly from: string,
+    private readonly replyTo?: string,
   ) {
-    this.transport = nodemailer.createTransport(smtpUrl);
+    this.transport = nodemailer.createTransport(smtp);
   }
 
   async send(message: OutboundMessage): Promise<DeliveryResult> {
@@ -19,6 +21,11 @@ export class SmtpAdapter implements ChannelAdapter {
       to: message.to,
       subject: message.subject ?? '',
       text: message.body,
+      ...(message.html ? { html: message.html } : {}),
+      ...(this.replyTo ? { replyTo: this.replyTo } : {}),
+      attachments: (message.attachments ?? [])
+        .filter((a) => a.bytes)
+        .map((a) => ({ filename: a.name, content: a.bytes, contentType: a.contentType })),
     });
     return { providerMessageId: info.messageId ?? null, delivered: false };
   }

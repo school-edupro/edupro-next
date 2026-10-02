@@ -7,6 +7,16 @@ export interface OutboundMessage {
   subject: string | null;
   body: string;
   dlt: { templateId: string | null; entityId: string | null; senderId: string | null };
+  /** Email: html body (the text part is `body`). */
+  html?: string | null;
+  /** WhatsApp: the approved template, its parameters in order and header media. */
+  whatsapp?: {
+    templateName: string | null;
+    language: string | null;
+    params: string[];
+    header: 'none' | 'text' | 'image' | 'document';
+  } | null;
+  attachments?: Array<{ name: string; contentType: string; bytes?: Buffer; url?: string }>;
 }
 
 export interface DeliveryResult {

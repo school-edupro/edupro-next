@@ -34,6 +34,11 @@ describe('communication (e2e)', () => {
     await withMigrator(async (c) => {
       school = await seedSchool(c, `${s}A`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
+      // this suite exercises approval: every bulk request goes to the principal
+      await c.query(
+        `INSERT INTO comms_settings (school_id, approval_threshold, approval_exempt_roles) VALUES ($1, 0, '{}')`,
+        [school.id],
+      );
       coordinator = await seedUser(c, school, `${s}-coord`, 'academic_coordinator');
       parentA = await seedUser(c, school, `${s}-pa`, 'parent', 'guardian');
       parentB = await seedUser(c, school, `${s}-pb`, 'parent', 'guardian');

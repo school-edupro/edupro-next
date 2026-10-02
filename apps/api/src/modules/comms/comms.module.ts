@@ -7,7 +7,11 @@ import {
   CommsDeliveryController,
   CommsGroupsController,
   CommsRequestsController,
+  CommsWebhooksController,
 } from './comms-engagement.controller';
+import { CommsReportsService } from './comms-reports.service';
+import { CommsSettingsService } from './comms-settings.service';
+import { CommsSettingsController } from './comms-v2.controller';
 import { CommsController } from './comms.controller';
 import { ConsentsService } from './consents.service';
 import { DeliveryService } from './delivery.service';
@@ -25,6 +29,8 @@ import { TemplatesService } from './templates.service';
     CommsGroupsController,
     CommsConsentsController,
     CommsDeliveryController,
+    CommsSettingsController,
+    CommsWebhooksController,
   ],
   providers: [
     TemplatesService,
@@ -33,9 +39,11 @@ import { TemplatesService } from './templates.service';
     GroupsService,
     ConsentsService,
     DeliveryService,
+    CommsSettingsService,
+    CommsReportsService,
     AuditService,
   ],
-  exports: [MessagesService, TemplatesService, ConsentsService],
+  exports: [MessagesService, TemplatesService, ConsentsService, CommsSettingsService],
 })
 export class CommsModule implements OnModuleInit {
   constructor(
