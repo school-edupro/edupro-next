@@ -85,7 +85,7 @@ describe('student 360 profile (e2e)', () => {
     const r = await inject({ method: 'GET', url: '/people/profile/catalogue', headers: h() });
     expect(r.statusCode).toBe(200);
     const body = r.json();
-    expect(body.fields).toHaveLength(182);
+    expect(body.fields).toHaveLength(184); // + the student's own mobile and email (communication v2)
     expect(body.sections).toHaveLength(14);
     expect(body.fields.find((f: { key: string }) => f.key === 'house').options).toEqual(
       expect.arrayContaining(['Red', 'Blue']),

@@ -60,6 +60,10 @@ describe('permission coverage', () => {
     // with the working key and match order id and amount (S13, docs/design/09 section 3).
     expect(publicRoutes.sort()).toEqual([
       'CommsDeliveryController.webhook (comms/delivery)',
+      // communication v2: MSG91 (token) and Meta (signed with the school's app secret) delivery receipts
+      'CommsWebhooksController.meta (comms/webhooks)',
+      'CommsWebhooksController.metaVerify (comms/webhooks)',
+      'CommsWebhooksController.msg91 (comms/webhooks)',
       'CompatController.handshake (compat/v1)',
       'CompatParityController.appVersion (compat/v1)',
       'FilesController.localGet (platform/files)',
