@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { SearchableSelects } from '@edupro/ui';
 import '@edupro/ui/tokens.css';
 import '@edupro/ui/app.css';
 
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body style={{ background: 'var(--surface-page)' }}>
+        <SearchableSelects />
         <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>{children}</main>
       </body>
     </html>

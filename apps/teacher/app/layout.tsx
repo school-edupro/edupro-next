@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { SearchableSelects } from '@edupro/ui';
 import '@edupro/ui/tokens.css';
 import '@edupro/ui/app.css';
 import { RegisterSw } from '@/components/RegisterSw';
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body style={{ background: 'var(--surface-page)' }}>
+        <SearchableSelects />
         <RegisterSw />
         {children}
       </body>

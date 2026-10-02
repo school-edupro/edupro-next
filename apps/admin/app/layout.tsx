@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale } from 'next-intl/server';
 import type { ReactNode } from 'react';
+import { SearchableSelects } from '@edupro/ui';
 import '@edupro/ui/tokens.css';
 import '@edupro/ui/app.css';
 
@@ -25,6 +26,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         ) : null}
       </head>
       <body data-locale={locale}>
+        <SearchableSelects />
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>

@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { signInAsDeveloper } from './helpers';
 
@@ -35,6 +36,34 @@ test.describe('admin smoke', () => {
     await switcher.selectOption({ index: 1 });
     await page.getByRole('button', { name: 'Switch' }).click();
     await expect(page.getByRole('heading', { name: /welcome/i })).toBeVisible();
+  });
+
+  test('every drop-down is searchable: type to filter, Enter picks, the select keeps the id', async ({
+    page,
+  }) => {
+    await signInAsDeveloper(page);
+    await page.goto('/people/roll-numbers');
+    const section = page.getByRole('combobox', { name: 'Section' });
+    await section.click();
+    const search = page.getByRole('combobox', { name: 'Search Section' });
+    await expect(search).toBeFocused();
+    await search.fill('vi a');
+    const options = page.getByRole('listbox', { name: 'Section' }).getByRole('option');
+    await expect(options.first()).toContainText('VI-A');
+    // the open picker passes the accessibility check
+    const axe = await new AxeBuilder({ page }).include('.ep-ss').analyze();
+    expect(axe.violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''))).toEqual(
+      [],
+    );
+    await search.press('Enter');
+    await expect(page.locator('.ep-ss')).toHaveCount(0);
+    await expect(section).toBeFocused();
+    await expect(section.locator('option:checked')).toContainText('VI-A');
+    expect(await section.inputValue()).toMatch(/^\d+$/);
+    // Escape closes without changing; a short list opens without a search box
+    await section.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ep-ss')).toHaveCount(0);
   });
 
   test('redirects unauthenticated visitors to the login page', async ({ page }) => {

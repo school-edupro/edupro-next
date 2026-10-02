@@ -9,6 +9,8 @@ export {
   type SelectFieldProps,
 } from './components/Field';
 export { DataTable, type Column, type DataTableProps } from './components/DataTable';
+export { SearchableSelects } from './components/SearchableSelects';
+export { installSearchableSelects } from './components/searchable-select';
 export { Checkbox, type CheckboxProps } from './components/Checkbox';
 export { RadioGroup, type RadioGroupProps, type RadioOption } from './components/Radio';
 export { Switch, type SwitchProps } from './components/Switch';
