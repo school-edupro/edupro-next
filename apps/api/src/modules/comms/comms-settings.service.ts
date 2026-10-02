@@ -86,7 +86,7 @@ export class CommsSettingsService {
         `SELECT channel::text, provider, config, secret, active, updated_at FROM comms_providers ORDER BY channel`,
       );
       const roles = await c.query<{ code: string; name: string }>(
-        `SELECT DISTINCT code, name FROM roles WHERE (school_id IS NULL OR school_id = app.current_school_id()) AND deleted_at IS NULL ORDER BY name`,
+        `SELECT DISTINCT code, name FROM roles WHERE (school_id IS NULL OR school_id = app.current_school_id()) AND deleted_at IS NULL AND code NOT IN ('parent', 'student', 'support_engineer') ORDER BY name`,
       );
       return {
         policy: await this.policy(c),

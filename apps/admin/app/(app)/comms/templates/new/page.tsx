@@ -1,42 +1,33 @@
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
-import { Notice } from '@/components/Notice';
 import { TemplateEditor } from '@/components/comms/TemplateEditor';
 import { apiFetch, getMe } from '@/lib/api';
-import {
-  CHANNEL_LABEL,
-  type Channel,
-  type CommsTemplate,
-  type TemplateVariable,
-} from '@/lib/comms';
+import { CHANNEL_LABEL, type Channel, type TemplateVariable } from '@/lib/comms';
 
-export default async function TemplatePage({
-  params,
+export default async function NewTemplatePage({
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ channel?: string }>;
 }) {
-  const { id } = await params;
   const sp = await searchParams;
-  const [me, t, variables] = await Promise.all([
+  const channel = (
+    ['sms', 'whatsapp', 'email'].includes(sp.channel ?? '') ? sp.channel : 'sms'
+  ) as Channel;
+  const [me, variables] = await Promise.all([
     getMe(),
-    apiFetch<CommsTemplate>(`/comms/templates/${id}`),
     apiFetch<{ data: TemplateVariable[] }>('/comms/templates/variables').then((r) => r.data),
   ]);
-  const channel = (t.channel === 'push' ? 'sms' : t.channel) as Channel;
   return (
     <>
       <Breadcrumbs
         items={[
           { label: 'Communication', href: '/comms' },
           { label: 'Template master', href: `/comms/templates?channel=${channel}` },
-          { label: t.name },
+          { label: `New ${CHANNEL_LABEL[channel]} template` },
         ]}
       />
-      <PageHeader kicker={`${CHANNEL_LABEL[channel]} template`} title={t.name} />
-      <Notice params={sp} />
+      <PageHeader kicker="Template master" title={`New ${CHANNEL_LABEL[channel]} template`} />
       <TemplateEditor
-        template={t}
+        template={null}
         channel={channel}
         variables={variables}
         canManage={me.permissions.includes('comms.template.manage')}

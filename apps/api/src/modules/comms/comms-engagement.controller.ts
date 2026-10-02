@@ -51,6 +51,13 @@ export class CommsRequestsController {
     return this.requests.list(ctx, q);
   }
 
+  @Get('limits')
+  @ApiOperation({ summary: 'Attachment size, quiet hours and the approval threshold for compose' })
+  @RequirePermission(COMMS_S10.requestCreate)
+  limits(@ReqCtx() ctx: RequestContext) {
+    return this.requests.limits(ctx);
+  }
+
   @Post('recipients-sheet')
   @HttpCode(200)
   @ApiOperation({

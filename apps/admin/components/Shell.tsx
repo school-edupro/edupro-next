@@ -165,17 +165,20 @@ const NAV: Array<{
   {
     section: 'communication',
     items: [
+      { href: '/comms', label: 'commsDashboard', permission: 'comms.report.view' },
       { href: '/comms/compose', label: 'compose', permission: 'comms.request.create' },
       { href: '/comms/requests', label: 'requests', permission: 'comms.request.view' },
       { href: '/comms/groups', label: 'groups', permission: 'comms.group.view' },
       { href: '/comms/consents', label: 'consents', permission: 'comms.consent.view' },
-      { href: '/comms/templates', label: 'templates', permission: 'comms.template.view' },
+      { href: '/comms/templates', label: 'commsTemplates', permission: 'comms.template.view' },
       {
         href: '/masters/communication',
         label: 'communicationSetup',
         permission: 'comms.template.view',
       },
       { href: '/comms/messages', label: 'deliveryLog', permission: 'comms.message.view' },
+      { href: '/comms/reports', label: 'commsReports', permission: 'comms.report.view' },
+      { href: '/comms/settings', label: 'commsSettings', permission: 'comms.settings.manage' },
     ],
   },
   {
@@ -340,8 +343,13 @@ export async function Shell({
       }))
     : [];
   const allowed = new Set(me.permissions);
-  const isCurrent = (href: string) =>
+  const matches = (href: string) =>
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
+  // the most specific link wins: /comms/templates, not also /comms; /people/withdrawals/bulk, not also /people/withdrawals
+  const best = NAV.flatMap((g) => g.items.map((i) => i.href))
+    .filter(matches)
+    .sort((a, b) => b.length - a.length)[0];
+  const isCurrent = (href: string) => href === best;
   const canSearch = allowed.has('people.person.search');
   // open alerts feed the bell; the count is best effort and never blocks the page
   const openAlerts = allowed.has('insights.alert.view')

@@ -788,7 +788,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
              k AS (
                SELECT to_char(date_trunc('month', on_date), 'YYYY-MM') AS month, channel::text AS channel, sum(units)::float AS credited
                  FROM comms_credits WHERE ($1::date IS NULL OR on_date >= $1::date) AND ($2::date IS NULL OR on_date <= $2::date) GROUP BY 1, 2)
-             SELECT COALESCE(m.month, k.month) AS month, COALESCE(m.channel, k.channel) AS channel,
+             SELECT COALESCE(m.month, k.month) AS month, (CASE COALESCE(m.channel, k.channel) WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' ELSE COALESCE(m.channel, k.channel)::text END) AS channel,
                     COALESCE(m.messages, 0) AS messages, COALESCE(m.units, 0) AS units, COALESCE(m.delivered, 0) AS delivered,
                     COALESCE(m.read, 0) AS read, COALESCE(m.failed, 0) AS failed, COALESCE(m.pending, 0) AS pending,
                     CASE WHEN COALESCE(m.messages, 0) > 0 THEN round(100.0 * m.delivered / m.messages, 1)::float ELSE NULL END AS delivery_rate,
@@ -818,7 +818,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       { key: 'sent_by', header: 'Sent by', width: 18 },
     ],
     query: (p) => ({
-      text: `SELECT m.created_at, m.channel::text AS channel, COALESCE(r.title, t.name, 'Single message') AS title,
+      text: `SELECT m.created_at, (CASE m.channel::text WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' ELSE m.channel::text::text END) AS channel, COALESCE(r.title, t.name, 'Single message') AS title,
                     COALESCE(x.name, u.display_name) AS recipient, m.recipient_address AS address, m.status::text AS status, m.units,
                     m.sent_at, m.delivered_at, m.read_at, m.last_error, s.display_name AS sent_by
                FROM comms_messages m
@@ -846,7 +846,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       { key: 'last_seen', header: 'Last seen', type: 'datetime', width: 18 },
     ],
     query: (p) => ({
-      text: `SELECT channel::text AS channel, COALESCE(NULLIF(left(last_error, 200), ''), 'Unknown') AS reason, count(*)::int AS messages, max(failed_at) AS last_seen
+      text: `SELECT (CASE channel::text WHEN 'sms' THEN 'SMS' WHEN 'whatsapp' THEN 'WhatsApp' WHEN 'email' THEN 'Email' ELSE channel::text::text END) AS channel, COALESCE(NULLIF(left(last_error, 200), ''), 'Unknown') AS reason, count(*)::int AS messages, max(failed_at) AS last_seen
                FROM comms_messages WHERE status = 'failed'
                 AND ($1::date IS NULL OR created_at >= $1::date) AND ($2::date IS NULL OR created_at < ($2::date + 1))
               GROUP BY 1, 2 ORDER BY 3 DESC`,

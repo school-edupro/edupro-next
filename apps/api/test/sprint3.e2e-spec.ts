@@ -128,12 +128,13 @@ describe('comms, reports, audit and jobs (e2e)', () => {
     });
   });
 
+  // communication v2: only the office sends (teachers lost comms.message.send)
   describe('messages', () => {
     it('renders for a member recipient and queues an outbox job in the same transaction', async () => {
       const missing = await inject({
         method: 'POST',
         url: '/comms/messages',
-        headers: A(teacher.sub),
+        headers: A(admin.sub),
         json: { templateId, recipientUserId: member.id, variables: { name: 'Asha' } },
       });
       expect(missing.statusCode).toBe(400);
@@ -141,7 +142,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
       const res = await inject({
         method: 'POST',
         url: '/comms/messages',
-        headers: A(teacher.sub),
+        headers: A(admin.sub),
         json: {
           templateId,
           recipientUserId: member.id,
@@ -173,7 +174,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
       const nonMember = await inject({
         method: 'POST',
         url: '/comms/messages',
-        headers: A(teacher.sub),
+        headers: A(admin.sub),
         json: {
           templateId,
           recipientUserId: outsider.id,
@@ -239,6 +240,9 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'class_sections',
         'classes',
         'comms_delivery',
+        'comms_delivery_log',
+        'comms_failures',
+        'comms_monthly_usage',
         'employees',
         'fee_day_book',
         'fee_defaulters',

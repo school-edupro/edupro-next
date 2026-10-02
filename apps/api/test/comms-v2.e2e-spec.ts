@@ -444,7 +444,7 @@ describe('communication v2 (e2e)', () => {
       headers: h(),
     });
     expect(
-      statement.json().rows.find((r: { channel: string }) => r.channel === 'sms'),
+      statement.json().rows.find((r: { channel: string }) => r.channel === 'SMS'),
     ).toMatchObject({ messages: 2, credited: 1000 });
   });
 

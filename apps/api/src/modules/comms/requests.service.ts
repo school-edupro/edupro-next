@@ -202,6 +202,18 @@ export class RequestsService {
     });
   }
 
+  async limits(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const p = await this.settings.policy(c);
+      return {
+        attachmentMaxMb: p.attachmentMaxMb,
+        quietFrom: p.quietFrom,
+        quietTo: p.quietTo,
+        approvalThreshold: p.approvalThreshold,
+      };
+    });
+  }
+
   /** Counts recipients for a draft without saving anything (compose shows it before submitting). */
   async preview(ctx: RequestContext, dto: CreateRequestDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {

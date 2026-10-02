@@ -54,6 +54,10 @@
     "definitions": "Workflows",
     "payments": "Payments",
     "compose": "Compose",
+    "commsDashboard": "Dashboard",
+    "commsReports": "Reports and usage",
+    "commsSettings": "Providers and settings",
+    "commsTemplates": "Template master (SMS, WhatsApp, email)",
     "requests": "Message requests",
     "groups": "Groups",
     "consents": "Consent",
@@ -1703,7 +1707,9 @@
       "class_section": "Sections",
       "route": "Bus routes",
       "group": "Groups",
-      "individuals": "Individual members"
+      "individuals": "Individual members",
+      "filter": "Master-wise filter",
+      "upload": "Excel list"
     },
     "targets": "Targets",
     "scheduledAt": "Send at (optional)",

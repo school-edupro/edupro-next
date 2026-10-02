@@ -54,6 +54,10 @@
     "definitions": "वर्कफ़्लो",
     "payments": "भुगतान",
     "compose": "संदेश लिखें",
+    "commsDashboard": "डैशबोर्ड",
+    "commsReports": "रिपोर्ट और उपयोग",
+    "commsSettings": "प्रदाता और सेटिंग्स",
+    "commsTemplates": "टेम्पलेट मास्टर (SMS, WhatsApp, ईमेल)",
     "requests": "संदेश अनुरोध",
     "groups": "समूह",
     "consents": "सहमति",
@@ -1703,7 +1707,9 @@
       "class_section": "सेक्शन",
       "route": "बस रूट",
       "group": "समूह",
-      "individuals": "चुने सदस्य"
+      "individuals": "चुने सदस्य",
+      "filter": "मास्टर-वार फ़िल्टर",
+      "upload": "एक्सेल सूची"
     },
     "targets": "लक्ष्य",
     "scheduledAt": "भेजने का समय (वैकल्पिक)",

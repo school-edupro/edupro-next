@@ -1,9 +1,28 @@
 import { Badge, Breadcrumbs, Button, Card, DataTable, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { cancelRequest } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
+import { CHANNEL_LABEL, SEND_TO_LABEL, type Channel, type SendTo } from '@/lib/comms';
 import type { MessageRequest } from '@/lib/types';
+
+type RequestV2 = MessageRequest & {
+  channels?: Array<{ channel: Channel; templateId: string; templateName: string | null }>;
+  bodyFormat?: 'text' | 'html';
+  subject?: string | null;
+  sendTo?: SendTo;
+  uploadCount?: number;
+  attachments?: Array<{ fileId: string; name: string | null; contentType: string; size: number }>;
+  needsApproval?: boolean;
+  deliveryByChannel?: Record<string, Record<string, number>>;
+  recipients?: Array<
+    NonNullable<MessageRequest['recipients']>[number] & {
+      channel?: string | null;
+      readAt?: string | null;
+    }
+  >;
+};
 
 export default async function RequestPage({
   params,
@@ -18,7 +37,7 @@ export default async function RequestPage({
     getTranslations('pages.comms_requests'),
     getTranslations('comms'),
     getMe(),
-    apiFetch<MessageRequest>(`/comms/requests/${id}`),
+    apiFetch<RequestV2>(`/comms/requests/${id}`),
   ]);
   const tone =
     r.status === 'sent'
@@ -43,7 +62,7 @@ export default async function RequestPage({
       <PageHeader
         kicker={t('kicker')}
         title={r.title}
-        description={`${m(`audiences.${r.audience}`)}${r.targetLabels.length ? `: ${r.targetLabels.join(', ')}` : ''} · ${r.channel} · ${m(`categories.${r.category}`)}`}
+        description={`${m(`audiences.${r.audience}`)}${r.targetLabels.length ? `: ${r.targetLabels.join(', ')}` : ''}${r.uploadCount ? ` (${String(r.uploadCount)} rows)` : ''} · ${(r.channels ?? [{ channel: r.channel as Channel }]).map((c) => CHANNEL_LABEL[c.channel] ?? c.channel).join(' + ')} · ${m(`categories.${r.category}`)}${r.sendTo && r.sendTo !== 'primary' ? ` · to ${SEND_TO_LABEL[r.sendTo].toLowerCase()}` : ''}`}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
             <Badge tone={tone}>{m(`statuses.${r.status}`)}</Badge>
@@ -67,10 +86,38 @@ export default async function RequestPage({
         }}
       >
         <Card title={m('body')}>
-          <p style={{ whiteSpace: 'pre-wrap' }}>{r.body}</p>
+          {r.subject ? (
+            <p>
+              <strong>{r.subject}</strong>
+            </p>
+          ) : null}
+          {r.bodyFormat === 'html' ? (
+            <iframe className="ep-tpl__frame" title="Message" sandbox="" srcDoc={r.body} />
+          ) : (
+            <p style={{ whiteSpace: 'pre-wrap' }}>{r.body}</p>
+          )}
           <p className="ep-field__help">
-            {m('template')}: <code>{r.templateCode}</code>
+            {m('template')}:{' '}
+            {(r.channels ?? []).length
+              ? r
+                  .channels!.map(
+                    (c) => `${CHANNEL_LABEL[c.channel]}: ${c.templateName ?? c.templateId}`,
+                  )
+                  .join(' · ')
+              : r.templateCode}
           </p>
+          {r.attachments?.length ? (
+            <div className="ep-filecell">
+              <span className="ep-field__help">Attachments</span>
+              {r.attachments.map((a, i) => (
+                <FileLinks
+                  key={a.fileId}
+                  href={`/api/files/${a.fileId}/download`}
+                  label={a.name ?? `attachment ${String(i + 1)}`}
+                />
+              ))}
+            </div>
+          ) : null}
           <p className="ep-field__help">
             {m('requestedBy')} {r.requestedBy ?? '—'} ·{' '}
             {new Date(r.requestedAt).toLocaleString('en-IN')}
@@ -96,22 +143,31 @@ export default async function RequestPage({
             <Badge tone={r.recipientsSkipped ? 'warning' : 'neutral'}>
               {m('skipped')}: {r.recipientsSkipped}
             </Badge>
-            {Object.entries(r.delivery).map(([k, v]) => (
-              <Badge
-                key={k}
-                tone={k === 'delivered' ? 'success' : k === 'failed' ? 'danger' : 'info'}
-              >
-                {v} {m(`deliveryStates.${k}`)}
-              </Badge>
-            ))}
+            {Object.entries(r.deliveryByChannel ?? { [r.channel]: r.delivery }).flatMap(
+              ([ch, states]) =>
+                Object.entries(states).map(([k, v]) => (
+                  <Badge
+                    key={`${ch}-${k}`}
+                    tone={k === 'delivered' ? 'success' : k === 'failed' ? 'danger' : 'info'}
+                  >
+                    {CHANNEL_LABEL[ch as Channel] ?? ch}: {v} {m(`deliveryStates.${k}`)}
+                  </Badge>
+                )),
+            )}
           </div>
         </Card>
         <Card title={m('recipients')}>
-          <DataTable<NonNullable<MessageRequest['recipients']>[number]>
+          <DataTable<NonNullable<RequestV2['recipients']>[number]>
             caption={m('recipients')}
             density="dense"
             columns={[
               { key: 'name', header: m('recipient'), render: (x) => x.name ?? '—' },
+              {
+                key: 'channel',
+                header: 'Channel',
+                render: (x) =>
+                  x.channel ? (CHANNEL_LABEL[x.channel as Channel] ?? x.channel) : '',
+              },
               { key: 'student', header: m('student'), render: (x) => x.student ?? '' },
               { key: 'address', header: m('address'), render: (x) => x.address ?? '' },
               {
@@ -133,6 +189,8 @@ export default async function RequestPage({
                       >
                         {m(`deliveryStates.${x.status}`)}
                       </Badge>
+                      {x.readAt ? <Badge tone="success">read</Badge> : null}
+                      {x.lastError ? <span className="ep-field__help"> {x.lastError}</span> : null}
                     </span>
                   ) : (
                     ''
