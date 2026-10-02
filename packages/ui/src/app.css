@@ -3290,3 +3290,41 @@ a.ep-tabs__tab {
   display: block;
   text-decoration: underline;
 }
+
+/* ---- transfers between schools ------------------------------------------------------------------ */
+.ep-transfer__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-transfer {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-transfer__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-transfer__note {
+  margin: 0;
+}
+.ep-transfer__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+.ep-transfer__facts dt {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-transfer__facts dd {
+  margin: 0;
+}

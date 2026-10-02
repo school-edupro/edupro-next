@@ -106,6 +106,8 @@ const PAGES = [
   '/people/profile-approvals?box=decided',
   '/approvals',
   '/people/roll-numbers?section=143',
+  '/people/school-transfers',
+  '/people/withdrawals/95',
   '/reports/strength?report=classwise&run=1&groupBy=section',
   '/reports/strength?report=category&run=1&groupBy=class_stream',
   '/reports/strength?report=age&run=1&groupBy=section&asOn=2027-03-31',

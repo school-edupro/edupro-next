@@ -31,6 +31,6 @@ export function storageConfigFrom(env: Env) {
     },
     { provide: SCANNER, useClass: NoopScanner },
   ],
-  exports: [FilesService],
+  exports: [FilesService, STORAGE_DRIVER],
 })
 export class FilesModule {}

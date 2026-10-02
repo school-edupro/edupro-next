@@ -12,6 +12,7 @@ export const LIFECYCLE = {
   withdrawalClear: 'people.withdrawal.clear',
   promotionView: 'people.promotion.view',
   promotionManage: 'people.promotion.manage',
+  transferManage: 'people.transfer.manage',
 } as const;
 
 // ---- transfer certificates ----------------------------------------------------------------------
@@ -182,3 +183,27 @@ export class ApplyPromotionsDto extends createZodDto(ApplyPromotionsSchema) {}
 
 export const YearSectionsQuerySchema = z.object({ yearId: IdSchema });
 export class YearSectionsQueryDto extends createZodDto(YearSectionsQuerySchema) {}
+
+// ---- transfers between schools of the group -------------------------------------------------------
+export const RequestTransferSchema = z.object({
+  toSchoolId: IdSchema,
+  note: z.string().trim().max(500).optional(),
+});
+export class RequestTransferDto extends createZodDto(RequestTransferSchema) {}
+
+export const AcceptTransferSchema = z.object({
+  classSectionId: IdSchema,
+  admissionNo: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .regex(/^[A-Za-z0-9/-]+$/, 'Letters, digits, / and - only'),
+  rollNo: z.number().int().min(1).max(999).optional(),
+});
+export class AcceptTransferDto extends createZodDto(AcceptTransferSchema) {}
+
+export const ListTransfersQuerySchema = z.object({
+  box: z.enum(['incoming', 'outgoing', 'all']).default('all'),
+});
+export class ListTransfersQueryDto extends createZodDto(ListTransfersQuerySchema) {}

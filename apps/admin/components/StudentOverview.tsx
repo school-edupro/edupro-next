@@ -27,7 +27,8 @@ export function StudentOverview({
     return dateKeys.has(k) ? ddmmyyyy(String(x)) : String(x);
   };
   const block = (title: string, keys: string[], tab?: string) => {
-    const rows = keys.map((k) => [label.get(k) ?? k, show(k)] as const);
+    // fields removed from the catalogue (retired) have no label and are not shown
+    const rows = keys.filter((k) => label.has(k)).map((k) => [label.get(k) ?? k, show(k)] as const);
     return (
       <Card
         title={title}

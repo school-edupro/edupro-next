@@ -5,12 +5,14 @@ import { Notice } from '@/components/Notice';
 import {
   bypassClearance,
   cancelWithdrawal,
+  closeSchoolTransfer,
   completeWithdrawal,
   issueWithdrawalTc,
   recordClearance,
+  requestSchoolTransfer,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { Clearance, Withdrawal } from '@/lib/types';
+import type { Clearance, SchoolTransfer, Withdrawal } from '@/lib/types';
 
 const TONE: Record<Clearance['status'], 'success' | 'warning' | 'danger'> = {
   cleared: 'success',
@@ -167,6 +169,18 @@ export default async function WithdrawalPage({
   ]);
   const canManage = me.permissions.includes('people.withdrawal.manage');
   const canTc = me.permissions.includes('people.tc.issue');
+  const canTransfer = me.permissions.includes('people.transfer.manage');
+  const [targets, transfers] = canTransfer
+    ? await Promise.all([
+        apiFetch<{ data: Array<{ id: string; name: string }> }>('/people/school-transfers/targets')
+          .then((r) => r.data)
+          .catch(() => []),
+        apiFetch<{ data: SchoolTransfer[] }>('/people/school-transfers?box=outgoing')
+          .then((r) => r.data.filter((t) => t.withdrawalId === w.id))
+          .catch(() => [] as SchoolTransfer[]),
+      ])
+    : [[], [] as SchoolTransfer[]];
+  const liveTransfer = transfers.find((t) => t.status === 'requested' || t.status === 'accepted');
   const open = w.status === 'requested' || w.status === 'cleared';
   const steps = [...new Set(w.clearances.map((x) => x.step))].sort((a, b) => a - b);
   const gateWaiting = w.clearances
@@ -307,6 +321,71 @@ export default async function WithdrawalPage({
             </p>
           )}
         </Card>
+        {canTransfer && targets.length && w.status !== 'cancelled' ? (
+          <Card title="Transfer to another school">
+            {liveTransfer ? (
+              <>
+                <p style={{ marginTop: 0 }}>
+                  {liveTransfer.status === 'accepted'
+                    ? `Accepted by ${liveTransfer.toSchool}`
+                    : `Sent to ${liveTransfer.toSchool}, waiting for them to accept`}{' '}
+                  <Badge tone={liveTransfer.status === 'accepted' ? 'success' : 'warning'}>
+                    {liveTransfer.status}
+                  </Badge>
+                </p>
+                {liveTransfer.status === 'requested' ? (
+                  <form action={closeSchoolTransfer} className="ep-wd__form">
+                    <input type="hidden" name="id" value={liveTransfer.id} />
+                    <input type="hidden" name="how" value="cancel" />
+                    <input type="hidden" name="returnTo" value={`/people/withdrawals/${w.id}`} />
+                    <label className="ep-field ep-wd__wide" htmlFor="tr-cancel">
+                      <span className="ep-field__label">Reason to withdraw the transfer</span>
+                      <input
+                        id="tr-cancel"
+                        name="reason"
+                        className="ep-input"
+                        required
+                        maxLength={300}
+                      />
+                    </label>
+                    <Button type="submit" size="sm" variant="ghost">
+                      Withdraw transfer
+                    </Button>
+                  </form>
+                ) : null}
+              </>
+            ) : w.status === 'cleared' || w.status === 'completed' ? (
+              <form action={requestSchoolTransfer} className="ep-wd__form">
+                <input type="hidden" name="id" value={w.id} />
+                <label className="ep-field" htmlFor="tr-to">
+                  <span className="ep-field__label">School</span>
+                  <select id="tr-to" name="toSchoolId" className="ep-select" required>
+                    {targets.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ep-field ep-wd__wide" htmlFor="tr-note">
+                  <span className="ep-field__label">Note for that school (optional)</span>
+                  <input id="tr-note" name="note" className="ep-input" maxLength={500} />
+                </label>
+                <Button type="submit" size="sm">
+                  Send transfer
+                </Button>
+                <p className="ep-field__help ep-wd__wide">
+                  The other school receives the profile, photos and documents and admits the student
+                  with its own admission number. The parents keep one login for both schools.
+                </p>
+              </form>
+            ) : (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                Available once every department has cleared (fees, library and the rest).
+              </p>
+            )}
+          </Card>
+        ) : null}
         {open && canManage ? (
           <Card title="Finish">
             <form action={completeWithdrawal}>

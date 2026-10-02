@@ -2289,3 +2289,30 @@ export interface LibraryLoan {
   finePaidOn: string | null;
   note: string | null;
 }
+
+/** A transfer between schools of the group, seen from the sending or the receiving school. */
+export interface SchoolTransfer {
+  id: string;
+  direction: 'incoming' | 'outgoing';
+  status: 'requested' | 'accepted' | 'rejected' | 'cancelled';
+  withdrawalId: string | null;
+  student: { id: string; name: string; admissionNo: string; classSection: string | null };
+  fromSchool: string;
+  toSchool: string;
+  note: string | null;
+  requestedBy: string | null;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  toStudentId: string | null;
+  carries: { photos: string[]; documents: number; parentLogins: number; studentLogin: boolean };
+  details: {
+    gender: string | null;
+    dob: string | null;
+    fatherName: string | null;
+    motherName: string | null;
+    mobile: string | null;
+    address: string | null;
+  } | null;
+}

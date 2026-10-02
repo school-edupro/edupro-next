@@ -4293,3 +4293,40 @@ export async function moveToSection(fd: FormData) {
     }),
   );
 }
+
+// ---- transfers between schools of the group -------------------------------------------------------
+export async function requestSchoolTransfer(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/transfer`, {
+      method: 'POST',
+      body: JSON.stringify({ toSchoolId: str(fd, 'toSchoolId'), note: opt(fd, 'note') }),
+    }),
+  );
+}
+
+export async function acceptSchoolTransfer(fd: FormData) {
+  const id = str(fd, 'id');
+  const roll = str(fd, 'rollNo');
+  return run(`/people/school-transfers?open=${id}`, () =>
+    apiFetch(`/people/school-transfers/${id}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: str(fd, 'classSectionId'),
+        admissionNo: str(fd, 'admissionNo'),
+        rollNo: roll ? Number(roll) : undefined,
+      }),
+    }),
+  );
+}
+
+export async function closeSchoolTransfer(fd: FormData) {
+  const id = str(fd, 'id');
+  const how = str(fd, 'how') === 'reject' ? 'reject' : 'cancel';
+  return run(str(fd, 'returnTo') || '/people/school-transfers', () =>
+    apiFetch(`/people/school-transfers/${id}/${how}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    }),
+  );
+}

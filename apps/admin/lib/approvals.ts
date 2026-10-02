@@ -1,8 +1,9 @@
 import { apiFetch } from './api';
+import type { SchoolTransfer } from './types';
 
 /** One kind of approval waiting for the signed-in user, for the header count and My approvals. */
 export interface ApprovalGroup {
-  key: 'profile' | 'workflow' | 'withdrawal';
+  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer';
   title: string;
   help: string;
   href: string;
@@ -109,6 +110,29 @@ export async function myApprovals(
               since: w.initiatedOn,
             })),
           }))
+          .catch(() => null)
+      : null,
+    has.has('people.transfer.manage')
+      ? apiFetch<{ data: SchoolTransfer[] }>('/people/school-transfers?box=incoming')
+          .then((r): ApprovalGroup | null => {
+            const waiting = r.data.filter((t) => t.status === 'requested');
+            return waiting.length
+              ? {
+                  key: 'transfer',
+                  title: 'Students sent from other schools',
+                  help: 'Transfers from schools of the group, waiting to be admitted here',
+                  href: '/people/school-transfers',
+                  count: waiting.length,
+                  items: waiting.slice(0, size).map((t) => ({
+                    id: t.id,
+                    title: `${t.student.name}${t.student.classSection ? ` · ${t.student.classSection}` : ''}`,
+                    detail: `from ${t.fromSchool}`,
+                    href: `/people/school-transfers?open=${t.id}`,
+                    since: t.requestedAt,
+                  })),
+                }
+              : null;
+          })
           .catch(() => null)
       : null,
   ]);

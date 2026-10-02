@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
 import {
+  AcceptTransferDto,
   ApplyPromotionsDto,
   BulkClearanceDto,
   BulkTcDto,
@@ -14,7 +15,9 @@ import {
   LIFECYCLE,
   ListPromotionsQueryDto,
   ListTcQueryDto,
+  ListTransfersQueryDto,
   ListWithdrawalsQueryDto,
+  RequestTransferDto,
   RequestWithdrawalDto,
   SaveDepartmentsDto,
   SetPromotionsDto,
@@ -23,6 +26,7 @@ import {
 } from './lifecycle.dto';
 import { PromotionsService } from './promotions.service';
 import { TcService } from './tc.service';
+import { TransfersService } from './transfers.service';
 import { WithdrawalsService } from './withdrawals.service';
 
 @ApiTags('people')
@@ -33,6 +37,7 @@ export class LifecycleController {
     private readonly tc: TcService,
     private readonly withdrawals: WithdrawalsService,
     private readonly promotions: PromotionsService,
+    private readonly transfers: TransfersService,
   ) {}
 
   // ---- transfer certificates --------------------------------------------------------------------
@@ -240,5 +245,61 @@ export class LifecycleController {
   @RequirePermission(LIFECYCLE.promotionManage)
   apply(@ReqCtx() ctx: RequestContext, @Body() body: ApplyPromotionsDto) {
     return this.promotions.apply(ctx, body);
+  }
+
+  // ---- transfers between schools of the group ---------------------------------------------------
+  @Get('school-transfers/targets')
+  @ApiOperation({ summary: 'Other schools of the group a student can be transferred to' })
+  @RequirePermission(LIFECYCLE.transferManage, {
+    description: 'Send students to, and accept them from, other schools of the group',
+  })
+  async transferTargets(@ReqCtx() ctx: RequestContext) {
+    return this.transfers.targets(ctx);
+  }
+
+  @Get('school-transfers')
+  @RequirePermission(LIFECYCLE.transferManage)
+  listTransfers(@ReqCtx() ctx: RequestContext, @Query() q: ListTransfersQueryDto) {
+    return this.transfers.list(ctx, q.box);
+  }
+
+  @Get('school-transfers/:id')
+  @RequirePermission(LIFECYCLE.transferManage)
+  getTransfer(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.transfers.get(ctx, id);
+  }
+
+  @Post('withdrawals/:id/transfer')
+  @ApiOperation({ summary: 'Send a cleared withdrawal to another school of the group' })
+  @RequirePermission(LIFECYCLE.transferManage)
+  requestTransfer(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: RequestTransferDto,
+  ) {
+    return this.transfers.request(ctx, id, dto);
+  }
+
+  @Post('school-transfers/:id/accept')
+  @ApiOperation({ summary: 'Accept an incoming transfer into a class and section' })
+  @RequirePermission(LIFECYCLE.transferManage)
+  acceptTransfer(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: AcceptTransferDto,
+  ) {
+    return this.transfers.accept(ctx, id, dto);
+  }
+
+  @Post('school-transfers/:id/reject')
+  @RequirePermission(LIFECYCLE.transferManage)
+  rejectTransfer(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CancelDto) {
+    return this.transfers.close(ctx, id, 'rejected', dto.reason);
+  }
+
+  @Post('school-transfers/:id/cancel')
+  @RequirePermission(LIFECYCLE.transferManage)
+  cancelTransfer(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CancelDto) {
+    return this.transfers.close(ctx, id, 'cancelled', dto.reason);
   }
 }
