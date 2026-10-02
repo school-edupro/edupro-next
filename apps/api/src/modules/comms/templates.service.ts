@@ -381,7 +381,8 @@ export class TemplatesService {
     return this.db.tenant(tenant, async (c) => {
       const before = await this.get(tenant, id, c);
       await c.query(
-        `UPDATE comms_templates SET deleted_at = now(), status = 'inactive', updated_by = app.current_user_id() WHERE id = $1`,
+        // the code is freed (renamed) so a new template can reuse it; the unique index covers deleted rows
+        `UPDATE comms_templates SET deleted_at = now(), status = 'inactive', code = left(code, 40) || '_del' || id::text, updated_by = app.current_user_id() WHERE id = $1`,
         [id],
       );
       await this.audit.stage(ctx, c, {

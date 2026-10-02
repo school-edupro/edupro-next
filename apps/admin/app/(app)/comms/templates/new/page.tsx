@@ -12,9 +12,12 @@ export default async function NewTemplatePage({
   const channel = (
     ['sms', 'whatsapp', 'email'].includes(sp.channel ?? '') ? sp.channel : 'sms'
   ) as Channel;
-  const [me, variables] = await Promise.all([
+  const [me, variables, existing] = await Promise.all([
     getMe(),
     apiFetch<{ data: TemplateVariable[] }>('/comms/templates/variables').then((r) => r.data),
+    apiFetch<{ data: Array<{ code: string }> }>(`/comms/templates?channel=${channel}`)
+      .then((r) => r.data.map((t) => t.code))
+      .catch(() => [] as string[]),
   ]);
   return (
     <>
@@ -31,6 +34,7 @@ export default async function NewTemplatePage({
         channel={channel}
         variables={variables}
         canManage={me.permissions.includes('comms.template.manage')}
+        takenCodes={existing}
       />
     </>
   );

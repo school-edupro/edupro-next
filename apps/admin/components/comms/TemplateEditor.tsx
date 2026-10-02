@@ -44,11 +44,14 @@ export function TemplateEditor({
   channel: newChannel,
   variables,
   canManage,
+  takenCodes = [],
 }: {
   template: CommsTemplate | null;
   channel: Channel;
   variables: TemplateVariable[];
   canManage: boolean;
+  /** codes already used by templates of this channel (a new template's code must differ) */
+  takenCodes?: string[];
 }) {
   const channel = (template?.channel as Channel | undefined) ?? newChannel;
   const [name, setName] = useState(template?.name ?? '');
@@ -72,6 +75,15 @@ export function TemplateEditor({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const msgRef = useRef<HTMLParagraphElement>(null);
+  const taken = new Set(takenCodes);
+  /** the code from the name, made unique among this channel's templates (fee_due, fee_due_2...) */
+  const freeCode = (base: string) => {
+    if (!base || !taken.has(base)) return base;
+    let n = 2;
+    while (taken.has(`${base}_${String(n)}`)) n += 1;
+    return `${base}_${String(n)}`.slice(0, 60);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -103,7 +115,43 @@ export function TemplateEditor({
     });
   };
 
+  /** What still needs filling in before the template can be saved, in plain words. */
+  const problems = (): string[] => {
+    const out: string[] = [];
+    if (name.trim().length < 2) out.push('Enter a name (at least 2 characters)');
+    if (!template) {
+      if (!/^[a-z][a-z0-9_]{1,59}$/.test(code))
+        out.push(
+          'Code: lower-case letters, digits and _ only, starting with a letter (e.g. fee_reminder)',
+        );
+      else if (taken.has(code))
+        out.push(`Code "${code}" is already used by another ${CHANNEL_LABEL[channel]} template`);
+    }
+    if (channel === 'sms') {
+      if (!dlt.trim()) out.push('Enter the DLT content template id (from your DLT portal)');
+      else if (!/^\d{6,30}$/.test(dlt.trim())) out.push('DLT content template id: digits only');
+      if (entity && !/^\d{6,30}$/.test(entity.trim())) out.push('Principal entity id: digits only');
+    }
+    if (channel === 'email' && !subject.trim()) out.push('Enter the email subject');
+    if (!body.trim()) out.push(channel === 'email' ? 'Write the email body' : 'Write the text');
+    if (channel === 'whatsapp' && waParams.some((p) => !p))
+      out.push('Choose a variable for every WhatsApp parameter, or remove the empty one');
+    return out;
+  };
+
+  const showMsg = (m: { ok: boolean; text: string }) => {
+    setMsg(m);
+    requestAnimationFrame(() =>
+      msgRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+    );
+  };
+
   const save = async () => {
+    const missing = problems();
+    if (missing.length) {
+      showMsg({ ok: false, text: missing.join(' · ') });
+      return;
+    }
     setBusy(true);
     setMsg(null);
     const common = {
@@ -113,7 +161,11 @@ export function TemplateEditor({
       format: channel === 'email' ? format : 'text',
       category,
       ...(channel === 'sms'
-        ? { dltTemplateId: dlt, dltEntityId: entity || undefined, senderId: sender || undefined }
+        ? {
+            dltTemplateId: dlt.trim(),
+            dltEntityId: entity.trim() || undefined,
+            senderId: sender || undefined,
+          }
         : {}),
       ...(channel === 'email' ? { senderId: sender || undefined } : {}),
       ...(channel === 'whatsapp'
@@ -130,9 +182,9 @@ export function TemplateEditor({
       template ? { ...common, status } : { ...common, code, channel },
     );
     setBusy(false);
-    if (!r.ok) setMsg({ ok: false, text: [r.error, ...(r.errors ?? [])].join(' · ') });
+    if (!r.ok) showMsg({ ok: false, text: [r.error, ...(r.errors ?? [])].join(' · ') });
     else if (!template) window.location.href = `/comms/templates/${r.data.id}?ok=1`;
-    else setMsg({ ok: true, text: 'Saved.' });
+    else showMsg({ ok: true, text: 'Saved.' });
   };
 
   const meter = channel === 'sms' && body ? smsParts(preview?.text ?? body) : null;
@@ -142,14 +194,6 @@ export function TemplateEditor({
   return (
     <div className="ep-tpl">
       <div className="ep-tpl__form ep-card">
-        {msg ? (
-          <p
-            className={msg.ok ? 'ep-alert ep-alert--success' : 'ep-alert ep-alert--danger'}
-            role={msg.ok ? 'status' : 'alert'}
-          >
-            {msg.text}
-          </p>
-        ) : null}
         <div className="ep-wd__form">
           <label className="ep-field ep-wd__wide" htmlFor="t-name">
             <span className="ep-field__label">Name *</span>
@@ -161,7 +205,7 @@ export function TemplateEditor({
               disabled={disabled}
               onChange={(e) => {
                 setName(e.target.value);
-                if (!codeTouched) setCode(codeOf(e.target.value));
+                if (!codeTouched) setCode(freeCode(codeOf(e.target.value)));
               }}
               placeholder={`e.g. Fee reminder (${CHANNEL_LABEL[channel]})`}
             />
@@ -437,12 +481,21 @@ export function TemplateEditor({
             values
           </p>
         ) : null}
+        {msg ? (
+          <p
+            ref={msgRef}
+            className={msg.ok ? 'ep-alert ep-alert--success' : 'ep-alert ep-alert--danger'}
+            role={msg.ok ? 'status' : 'alert'}
+          >
+            {msg.text}
+          </p>
+        ) : null}
         {canManage ? (
           <div className="ep-wdset__actions">
             <button
               type="button"
               className="ep-btn ep-btn--primary"
-              disabled={busy || !name || !body}
+              disabled={busy}
               onClick={() => void save()}
             >
               {busy ? 'Saving…' : template ? 'Save' : 'Create template'}
