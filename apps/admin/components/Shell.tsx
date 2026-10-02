@@ -184,7 +184,32 @@ const NAV: Array<{
   {
     section: 'engagement',
     items: [
-      { href: '/engagement/queries', label: 'queries', permission: 'engagement.query.view' },
+      { href: '/engagement/helpdesk', label: 'helpdesk', permission: 'helpdesk.ticket.respond' },
+      {
+        href: '/engagement/helpdesk/parent',
+        label: 'parentQueries',
+        permission: 'engagement.query.view',
+      },
+      {
+        href: '/engagement/helpdesk/staff',
+        label: 'staffQueries',
+        permission: 'helpdesk.ticket.respond',
+      },
+      {
+        href: '/engagement/helpdesk/provider',
+        label: 'providerTickets',
+        permission: 'helpdesk.ticket.respond',
+      },
+      {
+        href: '/engagement/helpdesk/setup',
+        label: 'helpdeskSetup',
+        permission: 'helpdesk.settings.manage',
+      },
+      {
+        href: '/engagement/leave',
+        label: 'leaveRequests',
+        permission: 'engagement.query.view',
+      },
       {
         href: '/engagement/appointments',
         label: 'appointments',
@@ -208,11 +233,6 @@ const NAV: Array<{
       },
       { href: '/engagement/clinic', label: 'clinic', permission: 'engagement.clinic.manage' },
       { href: '/engagement/cctv', label: 'cctv', permission: 'engagement.cctv.decide' },
-      {
-        href: '/engagement/employee-queries',
-        label: 'employeeQueries',
-        permission: 'engagement.employee_query.answer',
-      },
       { href: '/engagement/feedback', label: 'feedback', permission: 'engagement.feedback.view' },
     ],
   },

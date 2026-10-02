@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -26,6 +27,8 @@ export default async function QueriesPage({
   }>;
 }) {
   const sp = await searchParams;
+  // queries and complaints live in the helpdesk now; this list stays for leave requests
+  if (sp.kind !== 'leave') redirect('/engagement/helpdesk/parent');
   const [t, e] = await Promise.all([
     getTranslations('pages.engagement_queries'),
     getTranslations('engagement'),
@@ -40,7 +43,11 @@ export default async function QueriesPage({
   ]);
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker={t('kicker')}
+        title="Leave requests"
+        description="Leave requests from families for their children; the class teacher approves or rejects them. Queries and complaints are in the Helpdesk."
+      />
       <Notice params={sp} />
       <Card>
         <form
@@ -66,19 +73,7 @@ export default async function QueriesPage({
               })),
             ]}
           />
-          <SelectField
-            id="kind"
-            name="kind"
-            label={e('kind')}
-            defaultValue={sp.kind ?? ''}
-            options={[
-              { value: '', label: '—' },
-              ...(['query', 'complaint', 'leave'] as const).map((k) => ({
-                value: k,
-                label: e(`kinds.${k}`),
-              })),
-            ]}
-          />
+          <input type="hidden" name="kind" value="leave" />
           <SelectField
             id="categoryCode"
             name="categoryCode"

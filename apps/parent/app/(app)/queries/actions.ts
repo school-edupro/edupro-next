@@ -2,6 +2,7 @@
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { uploadFiles } from '@/lib/upload';
 
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').trim();
 
@@ -26,6 +27,7 @@ function fail(back: string, error: unknown): never {
 export async function raiseQuery(fd: FormData) {
   let id = '';
   try {
+    const fileIds = await uploadFiles(fd);
     const r = await bff.api.fetch<{ id: string }>('/engagement/mine/queries', {
       method: 'POST',
       body: JSON.stringify({
@@ -36,6 +38,7 @@ export async function raiseQuery(fd: FormData) {
         body: str(fd, 'body'),
         leaveFrom: str(fd, 'leaveFrom') || undefined,
         leaveTo: str(fd, 'leaveTo') || undefined,
+        fileIds,
       }),
     });
     id = r.id;
@@ -48,9 +51,25 @@ export async function raiseQuery(fd: FormData) {
 export async function replyToQuery(fd: FormData) {
   const id = str(fd, 'id');
   try {
+    const fileIds = await uploadFiles(fd);
     await bff.api.fetch(`/engagement/mine/queries/${id}/responses`, {
       method: 'POST',
-      body: JSON.stringify({ body: str(fd, 'body') }),
+      body: JSON.stringify({ body: str(fd, 'body'), fileIds }),
+    });
+  } catch (error) {
+    fail(`/queries/${id}`, error);
+  }
+  redirect(`/queries/${id}?ok=1`);
+}
+
+/** The family reopens a closed query within the school's reopen window. */
+export async function reopenQuery(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    const fileIds = await uploadFiles(fd);
+    await bff.api.fetch(`/engagement/mine/queries/${id}/reopen`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason'), fileIds }),
     });
   } catch (error) {
     fail(`/queries/${id}`, error);

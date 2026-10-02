@@ -116,6 +116,19 @@ export default async function NewQueryPage({
             </span>
             <textarea className="ep-input" name="body" rows={5} required maxLength={4000} />
           </label>
+          <label className="ep-field">
+            <span className="ep-field__label">{t(lang, 'Attachments (optional)')}</span>
+            <input
+              className="ep-input"
+              type="file"
+              name="files"
+              multiple
+              accept="application/pdf,image/png,image/jpeg,image/webp"
+            />
+            <span className="ep-field__help">
+              {t(lang, 'PDF or photos, up to 5 files of 5 MB each.')}
+            </span>
+          </label>
           <div>
             <Button type="submit">
               {kind === 'leave' ? t(lang, 'Apply for leave') : t(lang, 'Send')}

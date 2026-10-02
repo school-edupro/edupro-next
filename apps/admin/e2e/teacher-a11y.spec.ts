@@ -1,24 +1,20 @@
-/** Parent app (port 3001) frame and home: axe on key screens as parent and student, desktop and phone. */
+/** Teacher app (port 3002): axe on the helpdesk screens (queries to answer, my requests, raise, a ticket), desktop and phone. */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const BASE = 'http://localhost:3001';
+const BASE = 'http://localhost:3002';
 const PAGES = [
-  '/?welcome=1',
-  '/profile',
-  '/attendance',
-  '/fees',
-  '/homework',
-  '/notices',
-  '/messages',
+  '/',
   '/queries',
-  '/queries/new?kind=query',
-  '/queries/16',
+  '/queries?tab=leave',
+  '/queries?tab=mine',
+  '/queries/new?desk=provider',
+  '/queries/t/208',
 ];
 
-for (const sub of ['dev-parent', 'dev-student']) {
+for (const sub of ['dev-teacher']) {
   for (const width of [1280, 375]) {
-    test(`family ${sub} @${width}`, async ({ page }) => {
+    test(`teacher ${sub} @${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${BASE}/login`);
       await page.selectOption('select[name=sub]', sub);

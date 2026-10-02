@@ -49,9 +49,9 @@ export default async function HomePage() {
       '/lesson-plans',
     ],
     [
-      t(lang, 'Queries'),
-      t(lang, 'Family queries and leave requests for your sections'),
-      can('engagement.query.respond'),
+      t(lang, 'Queries and helpdesk'),
+      t(lang, 'Family queries, leave requests, your own queries and ERP tickets'),
+      can('engagement.query.respond') || can('helpdesk.ticket.raise'),
       '/queries',
     ],
     [
@@ -93,9 +93,9 @@ export default async function HomePage() {
     [t(lang, 'Help'), t(lang, 'Answers to the common questions'), true, '/help'],
     [
       t(lang, 'Report an issue'),
-      t(lang, 'Tell the support desk during hypercare'),
-      can('platform.hypercare.report'),
-      '/issues',
+      t(lang, 'Raise a ticket to the ERP provider'),
+      can('helpdesk.ticket.raise'),
+      '/queries/new?desk=provider',
     ],
   ];
   return (
