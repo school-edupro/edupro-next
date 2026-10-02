@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@/lib/env';
+import { recordSignIn } from '@/lib/sign-in';
 import { writeSession } from '@/lib/session';
 
 /**
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
     expiresAt: Math.floor(Date.now() / 1000) + 12 * 3600,
     displayName: sub,
   });
+  await recordSignIn(req, `dev:${sub}`, 'dev');
   const returnTo = String(form.get('returnTo') ?? '/');
   const safeReturn = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
   return NextResponse.redirect(new URL(safeReturn, req.url), { status: 303 });

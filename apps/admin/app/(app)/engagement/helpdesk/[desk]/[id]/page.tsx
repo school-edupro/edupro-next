@@ -21,6 +21,7 @@ import {
   rateTicket,
   reopenTicket,
   replyTicket,
+  takeOverTicket,
 } from '@/lib/helpdesk-actions';
 
 const OK: Record<string, string> = {
@@ -29,6 +30,7 @@ const OK: Record<string, string> = {
   assign: 'Handed over.',
   close: 'Closed. The person who raised it has been told.',
   reopen: 'Reopened.',
+  'take-over': 'You have taken it over; you can answer and close it now.',
   rate: 'Thank you for rating.',
 };
 
@@ -200,6 +202,23 @@ export default async function TicketPage({
               </p>
             ) : null}
           </Card>
+          {!t.you.handler && !t.you.raiser && t.status !== 'closed' ? (
+            <div className="ep-alert ep-alert--info" style={{ marginTop: 'var(--sp-4)' }}>
+              This ticket is with{' '}
+              <strong>{t.assignedTo ?? t.assignedRoleName ?? t.assignedRole ?? '—'}</strong>
+              {t.level > 1 ? ` (level ${String(t.level)})` : ''}. Only they answer and close it
+              {t.you.canTakeOver ? '; take it over to answer it yourself, or hand it over.' : '.'}
+              {t.you.canTakeOver ? (
+                <form action={takeOverTicket} style={{ marginTop: 'var(--sp-2)' }}>
+                  <input type="hidden" name="id" value={t.id} />
+                  <input type="hidden" name="desk" value={t.desk} />
+                  <Button type="submit" variant="secondary" size="sm">
+                    Take over
+                  </Button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
           {t.you.canReply ? (
             <Card title="Reply" style={{ marginTop: 'var(--sp-4)' }}>
               <form action={replyTicket} className="ep-hd__form">

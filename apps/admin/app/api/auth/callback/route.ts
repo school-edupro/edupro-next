@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import { completeLogin } from '@/lib/oidc';
+import { recordSignIn } from '@/lib/sign-in';
 import { writeSession } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
       expiresAt: result.expiresAt,
       displayName: result.displayName,
     });
+    await recordSignIn(req, result.accessToken, 'oidc');
     const safeReturn =
       pending.returnTo.startsWith('/') && !pending.returnTo.startsWith('//')
         ? pending.returnTo

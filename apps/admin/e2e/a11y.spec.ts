@@ -122,6 +122,7 @@ const PAGES = [
   '/engagement/helpdesk/provider',
   '/engagement/helpdesk/provider/new',
   '/engagement/helpdesk/provider/164',
+  '/engagement/helpdesk/staff/224',
   '/engagement/helpdesk/setup',
   '/engagement/leave',
   '/people/withdrawals/95',

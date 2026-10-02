@@ -3,7 +3,7 @@ import type { SchoolTransfer } from './types';
 
 /** One kind of approval waiting for the signed-in user, for the header count and My approvals. */
 export interface ApprovalGroup {
-  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer';
+  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'helpdesk';
   title: string;
   help: string;
   href: string;
@@ -133,6 +133,45 @@ export async function myApprovals(
                 }
               : null;
           })
+          .catch(() => null)
+      : null,
+    ['helpdesk.ticket.respond', 'helpdesk.provider.respond', 'engagement.query.respond'].some((p) =>
+      has.has(p),
+    )
+      ? apiFetch<{
+          total: number;
+          overdue: number;
+          latest: Array<{
+            id: string;
+            number: string;
+            desk: string;
+            head: string;
+            subject: string;
+            studentName: string | null;
+            raisedBy: string | null;
+            overdue: boolean;
+            level: number;
+            openedAt: string;
+          }>;
+        }>('/helpdesk/waiting')
+          .then((r): ApprovalGroup | null =>
+            r.total
+              ? {
+                  key: 'helpdesk',
+                  title: 'Queries and tickets',
+                  help: `Parent, staff and ERP provider queries with you or your role${r.overdue ? ` · ${String(r.overdue)} past due` : ''}`,
+                  href: '/engagement/helpdesk',
+                  count: r.total,
+                  items: r.latest.slice(0, size).map((x) => ({
+                    id: x.id,
+                    title: `${x.number} · ${x.subject}`,
+                    detail: `${x.head}${x.studentName ? ` · ${x.studentName}` : x.raisedBy ? ` · ${x.raisedBy}` : ''}${x.level > 1 ? ` · level ${String(x.level)}` : ''}${x.overdue ? ' · past due' : ''}`,
+                    href: `/engagement/helpdesk/${x.desk}/${x.id}`,
+                    since: x.openedAt,
+                  })),
+                }
+              : null,
+          )
           .catch(() => null)
       : null,
   ]);

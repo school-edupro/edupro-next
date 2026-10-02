@@ -77,6 +77,23 @@ export class HelpdeskController {
     return this.helpdesk.assign(ctx, id, dto);
   }
 
+  @Post('tickets/:id/take-over')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Administrator / provider support takes the ticket to answer it' })
+  takeOver(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    this.helpdesk.assertAny(ctx);
+    return this.helpdesk.takeOver(ctx, id);
+  }
+
+  @Get('waiting')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Tickets with me now: count, past due, latest five' })
+  waiting(@ReqCtx() ctx: RequestContext) {
+    this.helpdesk.assertAny(ctx);
+    return this.helpdesk.waiting(ctx);
+  }
+
   @Post('tickets/:id/close')
   @HttpCode(200)
   @AuthenticatedOnly()

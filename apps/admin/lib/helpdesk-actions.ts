@@ -154,6 +154,10 @@ export async function rateTicket(fd: FormData) {
   }));
 }
 
+export async function takeOverTicket(fd: FormData) {
+  await act(fd, 'take-over', () => ({}));
+}
+
 export async function escalateNow() {
   let n = 0;
   try {

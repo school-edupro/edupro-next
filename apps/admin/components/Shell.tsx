@@ -386,7 +386,50 @@ export async function Shell({
     'engagement.change_request.approve',
     'workflow.inbox.act',
     'people.withdrawal.clear',
+    'helpdesk.ticket.respond',
+    'helpdesk.provider.respond',
   ].some((p) => allowed.has(p));
+  // queries with me now (header icon) and the user card: best effort, never block the page
+  const mayAnswer = ['helpdesk.ticket.respond', 'helpdesk.provider.respond'].some((p) =>
+    allowed.has(p),
+  );
+  const [queries, card] = await Promise.all([
+    mayAnswer
+      ? apiFetch<{
+          total: number;
+          overdue: number;
+          latest: Array<{
+            id: string;
+            number: string;
+            desk: string;
+            subject: string;
+            overdue: boolean;
+            level: number;
+          }>;
+        }>('/helpdesk/waiting').catch(() => null)
+      : Promise.resolve(null),
+    apiFetch<{
+      name: string;
+      roles: string[];
+      designation: string | null;
+      school: string | null;
+      academicYear: string | null;
+      mobile: string | null;
+      email: string | null;
+      thisLogin: { at: string; device: string | null; app: string | null } | null;
+      lastLogin: { at: string; device: string | null; app: string | null } | null;
+    }>('/me/card').catch(() => null),
+  ]);
+  const roleLabel = card?.roles.length ? card.roles.join(' · ') : t('portal');
+  const at = (v: string) =>
+    new Date(v).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Kolkata',
+    });
   // Sprint 22: pilot feature flags hide whole navigation groups (setting platform.modules_enabled)
   const features = await apiFetch<{ modules: Array<{ module: string; enabled: boolean }> }>(
     '/ops/features',
@@ -414,7 +457,9 @@ export async function Shell({
           </span>
           <span className="ep-sidebar__brand-text">
             <small>EduPro Next</small>
-            <b>{t('portal')}</b>
+            <b className="ep-sidebar__role" title={roleLabel}>
+              {roleLabel}
+            </b>
           </span>
         </div>
         <nav className="ep-nav" aria-label={t('primaryNavigation')}>
@@ -529,6 +574,50 @@ export async function Shell({
               }}
             />
           ) : null}
+          {queries ? (
+            <details className="ep-qmenu">
+              <summary
+                className="ep-header__icon-btn ep-header__bell"
+                aria-label={`Queries with me: ${String(queries.total)}${queries.overdue ? `, ${String(queries.overdue)} past due` : ''}`}
+                title={`Queries with me: ${String(queries.total)}`}
+              >
+                <Icon name="message" size={22} />
+                {queries.total > 0 ? (
+                  <span
+                    className={`ep-header__badge ${queries.overdue ? '' : 'ep-header__badge--calm'}`}
+                  >
+                    {queries.total > 99 ? '99+' : queries.total}
+                  </span>
+                ) : null}
+              </summary>
+              <div className="ep-qmenu__panel">
+                <div className="ep-qmenu__head">
+                  Queries with me · {queries.total}
+                  {queries.overdue ? ` · ${String(queries.overdue)} past due` : ''}
+                </div>
+                {queries.latest.length ? (
+                  <ul className="ep-qmenu__list">
+                    {queries.latest.map((q) => (
+                      <li key={q.id}>
+                        <a href={`/engagement/helpdesk/${q.desk}/${q.id}`}>
+                          <span className="ep-qmenu__no">{q.number}</span> {q.subject}
+                          {q.overdue ? <span className="ep-qmenu__late"> · past due</span> : null}
+                          {q.level > 1 ? (
+                            <span className="ep-qmenu__late"> · level {q.level}</span>
+                          ) : null}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="ep-qmenu__empty">Nothing waiting for you.</p>
+                )}
+                <a className="ep-qmenu__all" href="/approvals">
+                  See all
+                </a>
+              </div>
+            </details>
+          ) : null}
           {mayApprove ? (
             <a
               className="ep-header__icon-btn ep-header__bell"
@@ -555,10 +644,65 @@ export async function Shell({
               ) : null}
             </a>
           ) : null}
-          <a className="ep-header__user" href="/system/security" title={me.user.displayName}>
-            <Icon name="user" size={20} />
-            <span className="ep-header__user-name">{me.user.displayName}</span>
-          </a>
+          <div className="ep-usercard">
+            <a
+              className="ep-header__user"
+              href="/system/security"
+              aria-label={`My account: ${me.user.displayName}`}
+              aria-describedby="ep-usercard-panel"
+            >
+              <Icon name="user" size={20} />
+              <span className="ep-header__user-name">{me.user.displayName}</span>
+            </a>
+            <div className="ep-usercard__panel" id="ep-usercard-panel" role="tooltip">
+              <div className="ep-usercard__name">{card?.name ?? me.user.displayName}</div>
+              {card?.designation ? (
+                <div className="ep-usercard__muted">{card.designation}</div>
+              ) : null}
+              <dl className="ep-usercard__facts">
+                <div>
+                  <dt>Role</dt>
+                  <dd>{card?.roles.length ? card.roles.join(', ') : '—'}</dd>
+                </div>
+                <div>
+                  <dt>School</dt>
+                  <dd>
+                    {card?.school ?? portal}
+                    {card?.academicYear ? ` · ${card.academicYear}` : ''}
+                  </dd>
+                </div>
+                {card?.mobile ? (
+                  <div>
+                    <dt>Mobile</dt>
+                    <dd>{card.mobile}</dd>
+                  </div>
+                ) : null}
+                {card?.email ? (
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{card.email}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt>Last sign-in</dt>
+                  <dd>
+                    {card?.lastLogin
+                      ? `${at(card.lastLogin.at)}${card.lastLogin.device ? ` · ${card.lastLogin.device}` : ''}`
+                      : 'This is the first recorded sign-in'}
+                  </dd>
+                </div>
+                {card?.thisLogin ? (
+                  <div>
+                    <dt>Signed in now</dt>
+                    <dd>
+                      {at(card.thisLogin.at)}
+                      {card.thisLogin.device ? ` · ${card.thisLogin.device}` : ''}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          </div>
           <form method="post" action="/api/auth/logout">
             <button
               type="submit"

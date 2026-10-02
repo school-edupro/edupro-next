@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant } from '../../common/http/request-context';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -69,6 +69,122 @@ export class MeController {
         : null,
       academicYears: years,
       permissions,
+    };
+  }
+
+  /**
+   * The apps call this right after a sign-in so "last login" can be shown: the time, the app and the
+   * browser are recorded in login_events.
+   */
+  @Post('sign-in')
+  @HttpCode(204)
+  @AuthenticatedOnly()
+  @TenantOptional()
+  async signIn(
+    @ReqCtx() ctx: RequestContext,
+    @Body() body: { method?: string; app?: string; userAgent?: string; ip?: string },
+  ) {
+    const method = body?.method === 'dev' ? 'dev' : 'oidc';
+    const app = ['admin', 'parent', 'teacher'].includes(String(body?.app))
+      ? String(body?.app)
+      : 'admin';
+    const ip =
+      typeof body?.ip === 'string' && /^[0-9a-fA-F:.]{3,45}$/.test(body.ip) ? body.ip : null;
+    await this.db.global((c) =>
+      c.query(
+        `INSERT INTO login_events (user_id, school_id, method, outcome, ip, user_agent, detail)
+         VALUES ($1, $2, $3::login_method, 'success', $4::inet, $5, $6::jsonb)`,
+        [
+          ctx.user.id,
+          ctx.tenant?.schoolId ?? ctx.user.memberships[0]?.schoolId ?? null,
+          method,
+          ip,
+          typeof body?.userAgent === 'string' ? body.userAgent.slice(0, 300) : null,
+          JSON.stringify({ app }),
+        ],
+      ),
+    );
+  }
+
+  /** The header's user card: name, roles, school and year, mobile / email, this and the last sign-in. */
+  @Get('card')
+  @AuthenticatedOnly()
+  async card(@ReqCtx() ctx: RequestContext) {
+    const tenant = requireTenant(ctx);
+    const info = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{
+        roles: string[] | null;
+        school: string | null;
+        year: string | null;
+        mobile: string | null;
+        email: string | null;
+        designation: string | null;
+      }>(
+        `SELECT (SELECT array_agg(DISTINCT r.name ORDER BY r.name) FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                  WHERE ur.user_id = app.current_user_id() AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
+                    AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)) AS roles,
+                (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+                (SELECT name FROM academic_years WHERE id = app.current_academic_year_id()) AS year,
+                COALESCE((SELECT e.mobile FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1), u.mobile) AS mobile,
+                COALESCE((SELECT e.email::text FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1), u.email::text) AS email,
+                (SELECT e.designation FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1) AS designation
+           FROM users u WHERE u.id = app.current_user_id()`,
+      );
+      return r.rows[0];
+    });
+    const logins = await this.db.tenant(tenant, (c) =>
+      c.query<{ occurred_at: Date; user_agent: string | null; detail: { app?: string } }>(
+        `SELECT occurred_at, user_agent, detail FROM login_events
+          WHERE user_id = $1 AND outcome = 'success' AND method <> 'impersonation' ORDER BY occurred_at DESC LIMIT 2`,
+        [ctx.user.id],
+      ),
+    );
+    const device = (ua: string | null) => {
+      if (!ua) return null;
+      const browser = /Edg\//.test(ua)
+        ? 'Edge'
+        : /Chrome\//.test(ua)
+          ? 'Chrome'
+          : /Firefox\//.test(ua)
+            ? 'Firefox'
+            : /Safari\//.test(ua)
+              ? 'Safari'
+              : 'Browser';
+      const os = /Android/.test(ua)
+        ? 'Android'
+        : /iPhone|iPad/.test(ua)
+          ? 'iOS'
+          : /Windows/.test(ua)
+            ? 'Windows'
+            : /Mac OS X/.test(ua)
+              ? 'macOS'
+              : /Linux/.test(ua)
+                ? 'Linux'
+                : '';
+      return os ? `${browser} on ${os}` : browser;
+    };
+    const login = (x?: {
+      occurred_at: Date;
+      user_agent: string | null;
+      detail: { app?: string };
+    }) =>
+      x
+        ? {
+            at: x.occurred_at.toISOString(),
+            device: device(x.user_agent),
+            app: x.detail?.app ?? null,
+          }
+        : null;
+    return {
+      name: ctx.user.displayName,
+      roles: info?.roles ?? [],
+      designation: info?.designation ?? null,
+      school: info?.school ?? null,
+      academicYear: info?.year ?? null,
+      mobile: info?.mobile ?? null,
+      email: info?.email ?? null,
+      thisLogin: login(logins.rows[0]),
+      lastLogin: login(logins.rows[1]),
     };
   }
 

@@ -112,6 +112,7 @@ export interface TicketDetail extends Ticket {
     raiser: boolean;
     canReply: boolean;
     canAssign: boolean;
+    canTakeOver: boolean;
     canClose: boolean;
     canReopen: boolean;
     canRate: boolean;

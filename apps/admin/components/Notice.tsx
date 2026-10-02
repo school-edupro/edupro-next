@@ -20,6 +20,7 @@ const MESSAGES: Record<string, string> = {
   'not-found': 'Not found.',
   forbidden: 'You cannot do that on this ticket.',
   'helpdesk.file_invalid': 'Attach your own PDF or image files of up to 5 MB.',
+  'helpdesk.not_owner': 'This ticket is with someone else.',
   'helpdesk.closed': 'This ticket is closed; reopen it to write again.',
   'helpdesk.reopen_window': 'This ticket can no longer be reopened; raise a new one.',
   'helpdesk.not_answered': 'Rate the ticket once it is answered.',

@@ -202,7 +202,7 @@ export class HelpdeskService {
       `(q.assigned_role IS NOT NULL AND q.assigned_role <> 'class_teacher' AND q.assigned_user_id IS NULL AND q.assigned_role = ANY($${r}::text[]))`,
       // earlier owners keep the ticket in view after it moves on
       // eslint-disable-next-line no-restricted-syntax -- placeholder number only; the user id is a bound parameter
-      `EXISTS (SELECT 1 FROM query_events ev WHERE ev.query_id = q.id AND ev.kind IN ('created', 'assigned', 'escalated') AND ev.detail ->> 'userId' = $${u}::text)`,
+      `EXISTS (SELECT 1 FROM query_events ev WHERE ev.query_id = q.id AND ev.kind IN ('created', 'assigned', 'escalated') AND (ev.detail ->> 'userId' = $${u}::text OR (ev.detail ->> 'role' <> 'class_teacher' AND ev.detail ->> 'role' = ANY($${r}::text[]))))`,
     ];
     if (me.provider) parts.push(`q.desk = 'provider'`);
     if (me.sections === null) parts.push(`q.desk = 'parent'`);
@@ -216,16 +216,55 @@ export class HelpdeskService {
     return `(${parts.join(' OR ')})`;
   }
 
+  /**
+   * The current owner may answer and close: the person it is assigned to; otherwise the holders of the
+   * role it is with (provider support for the provider desk; a section's class teacher when no class
+   * teacher was found). Seeing everything (principal / admin) is not owning: they take over first.
+   */
   private isHandler(me: Me, t: TicketRow): boolean {
     if (me.family) return false;
-    if (me.viewAll) return true;
-    if (t.desk === 'provider' && me.provider) return true;
+    if (t.assignedUserId) return t.assignedUserId === me.userId;
+    if (!t.assignedRole) return false;
+    if (t.desk === 'provider' && t.assignedRole === 'erp_support') return me.provider;
     if (!me.respond) return false;
-    if (t.assignedUserId === me.userId) return true;
-    if (t.assignedRole && t.assignedRole !== 'class_teacher' && me.roles.includes(t.assignedRole))
-      return true;
-    if (t.desk === 'parent' && t.raisedByUserId !== me.userId) return true; // section scope already applied
-    return false;
+    if (t.assignedRole === 'class_teacher')
+      return Array.isArray(me.sections) && me.sections.length > 0;
+    return me.roles.includes(t.assignedRole);
+  }
+
+  /** Staff other than a plain raiser read internal notes and the full timeline. */
+  private seesNotes(me: Me, t: TicketRow): boolean {
+    if (me.family) return false;
+    return (
+      this.isHandler(me, t) ||
+      me.viewAll ||
+      (t.desk === 'provider' && me.provider) ||
+      !this.isRaiser(me, t)
+    );
+  }
+
+  /** SQL for "with me now" (the same rule as isHandler), fixed fragments with numbered placeholders. */
+  private ownerSql(me: Me, params: unknown[]): string {
+    params.push(me.userId);
+    const u = params.length;
+    params.push(me.roles);
+    const r = params.length;
+    const parts = [
+      `q.assigned_user_id = $${u}`,
+      `(q.assigned_user_id IS NULL AND q.assigned_role NOT IN ('class_teacher', 'erp_support') AND q.assigned_role = ANY($${r}::text[]))`,
+    ];
+    if (me.provider)
+      parts.push(
+        `(q.assigned_user_id IS NULL AND q.desk = 'provider' AND q.assigned_role = 'erp_support')`,
+      );
+    if (Array.isArray(me.sections) && me.sections.length) {
+      params.push(me.sections);
+      parts.push(
+        // eslint-disable-next-line no-restricted-syntax -- placeholder number only; the section ids are a bound parameter
+        `(q.assigned_user_id IS NULL AND q.assigned_role = 'class_teacher' AND EXISTS (SELECT 1 FROM enrolments e WHERE e.student_id = q.student_id AND e.academic_year_id = q.academic_year_id AND e.status = 'active' AND e.class_section_id = ANY($${params.length}::bigint[])))`,
+      );
+    }
+    return `(${parts.join(' OR ')})`;
   }
 
   private isRaiser(me: Me, t: TicketRow): boolean {
@@ -283,12 +322,7 @@ export class HelpdeskService {
       if (q.view === 'mine') {
         params.push(me.userId);
         where.push(`q.raised_by_user_id = $${params.length}`);
-      } else if (q.view === 'assigned') {
-        params.push(me.userId, me.roles);
-        where.push(
-          `(q.assigned_user_id = $${params.length - 1} OR (q.assigned_user_id IS NULL AND q.assigned_role = ANY($${params.length}::text[])))`,
-        );
-      }
+      } else if (q.view === 'assigned') where.push(this.ownerSql(me, params));
       if (q.head) {
         params.push(q.head);
         where.push(`q.category_code = $${params.length}`);
@@ -337,12 +371,13 @@ export class HelpdeskService {
       const t = await this.load(c, me, id);
       const handler = this.isHandler(me, t);
       const raiser = this.isRaiser(me, t);
+      const notes = this.seesNotes(me, t);
       const replies = await c.query<Row>(
         `SELECT x.id::text, x.author_user_id::text, COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = x.author_user_id LIMIT 1), u.display_name) AS author,
                 x.author_kind::text AS author_kind, x.body, x.file_ids, x.is_internal, x.created_at
            FROM query_responses x LEFT JOIN users u ON u.id = x.author_user_id
           WHERE x.query_id = $1 AND ($2 OR x.is_internal = false) ORDER BY x.created_at, x.id`,
-        [id, handler],
+        [id, notes],
       );
       const events = await c.query<Row>(
         `SELECT ev.kind, ev.level, ev.at, ev.detail, COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = ev.actor_user_id LIMIT 1), u.display_name) AS actor,
@@ -351,7 +386,7 @@ export class HelpdeskService {
            FROM query_events ev LEFT JOIN users u ON u.id = ev.actor_user_id
           WHERE ev.query_id = $1 AND ($2 OR ev.kind NOT IN ('note', 'assigned', 'escalated', 'breached'))
           ORDER BY ev.at, ev.id`,
-        [id, handler],
+        [id, notes],
       );
       const s = await c.query<{ reopen_days: number }>(
         `SELECT reopen_days FROM helpdesk_settings WHERE school_id = app.current_school_id()`,
@@ -389,7 +424,12 @@ export class HelpdeskService {
           handler,
           raiser,
           canReply: t.status !== 'closed' && (handler || raiser),
-          canAssign: handler && t.status !== 'closed',
+          canAssign: (handler || me.viewAll) && t.status !== 'closed',
+          canTakeOver:
+            !handler &&
+            !raiser &&
+            t.status !== 'closed' &&
+            (me.viewAll || (t.desk === 'provider' && me.provider)),
           canClose: handler && t.status !== 'closed',
           canReopen:
             raiser &&
@@ -412,7 +452,7 @@ export class HelpdeskService {
       if (t.fileIds.includes(fileId)) return true;
       const r = await c.query(
         `SELECT 1 FROM query_responses WHERE query_id = $1 AND file_ids ? $2 AND ($3 OR is_internal = false)`,
-        [id, fileId, this.isHandler(me, t)],
+        [id, fileId, this.seesNotes(me, t)],
       );
       return (r.rowCount ?? 0) > 0;
     });
@@ -478,7 +518,11 @@ export class HelpdeskService {
       const handler = this.isHandler(me, t);
       const raiser = this.isRaiser(me, t);
       if (!handler && !raiser)
-        throw new DomainError('forbidden', 'You cannot reply to this ticket', { status: 403 });
+        throw new DomainError(
+          'helpdesk.not_owner',
+          `This ticket is with ${t.assignedTo ?? t.assignedRoleName ?? t.assignedRole ?? 'someone else'}; take it over or hand it over first`,
+          { status: 403 },
+        );
       if (t.status === 'closed')
         throw new DomainError(
           'helpdesk.closed',
@@ -525,8 +569,12 @@ export class HelpdeskService {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const me = await this.me(ctx, c, v);
       const t = await this.load(c, me, id);
-      if (!this.isHandler(me, t) || t.status === 'closed')
-        throw new DomainError('forbidden', 'You cannot reassign this ticket', { status: 403 });
+      if (!(this.isHandler(me, t) || me.viewAll) || t.status === 'closed')
+        throw new DomainError(
+          'forbidden',
+          'Only the person it is with, or an administrator, can hand it over',
+          { status: 403 },
+        );
       if (dto.userId) {
         const u = await c.query(
           `SELECT 1 FROM user_school_memberships WHERE user_id = $1 AND school_id = app.current_school_id() AND status = 'active' AND deleted_at IS NULL AND person_type IN ('employee', 'external')`,
@@ -574,9 +622,11 @@ export class HelpdeskService {
       const me = await this.me(ctx, c, v);
       const t = await this.load(c, me, id);
       if (!this.isHandler(me, t))
-        throw new DomainError('forbidden', 'Only the person handling it closes a ticket', {
-          status: 403,
-        });
+        throw new DomainError(
+          'helpdesk.not_owner',
+          `Only ${t.assignedTo ?? t.assignedRoleName ?? t.assignedRole ?? 'the person it is with'} can close it; take it over first`,
+          { status: 403 },
+        );
       if (t.status === 'closed')
         throw new DomainError('helpdesk.closed', 'Already closed', { status: 409 });
       await this.checkFiles(c, dto.fileIds);
@@ -666,6 +716,89 @@ export class HelpdeskService {
       );
     });
     return this.get(ctx, id);
+  }
+
+  /** An administrator (or provider support on the provider desk) takes the ticket to answer it. */
+  async takeOver(ctx: RequestContext, id: string) {
+    const v = await this.viewerOf(ctx);
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = await this.me(ctx, c, v);
+      const t = await this.load(c, me, id);
+      if (t.status === 'closed' || !(me.viewAll || (t.desk === 'provider' && me.provider)))
+        throw new DomainError('forbidden', 'You cannot take this ticket over', { status: 403 });
+      await c.query(
+        `UPDATE parent_queries SET assigned_user_id = app.current_user_id(), assigned_role = CASE WHEN desk = 'provider' THEN assigned_role ELSE NULL END,
+                status = CASE WHEN status = 'open' THEN 'in_progress'::query_status ELSE status END, updated_at = now()
+          WHERE id = $1`,
+        [id],
+      );
+      await c.query(
+        `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body, is_internal)
+         VALUES (app.current_school_id(), $1, app.current_user_id(), 'staff', $2, true)`,
+        [id, `Taken over from ${t.assignedTo ?? t.assignedRoleName ?? t.assignedRole ?? '—'}`],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'helpdesk.ticket.take_over',
+        entityType: 'parent_queries',
+        entityId: id,
+        before: { userId: t.assignedUserId, role: t.assignedRole },
+      });
+    });
+    return this.get(ctx, id);
+  }
+
+  /** "With me now": open / in-progress tickets I own, the past-due ones and the latest five. */
+  async waiting(ctx: RequestContext) {
+    const v = await this.viewerOf(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = await this.me(ctx, c, v);
+      const params: unknown[] = [];
+      const cond = this.ownerSql(me, params);
+      const n = await c.query<{ total: number; overdue: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- cond holds fixed fragments; values bound
+        `SELECT count(*)::int AS total, count(*) FILTER (WHERE q.due_at < now())::int AS overdue
+           FROM parent_queries q WHERE q.kind <> 'leave' AND q.status IN ('open', 'in_progress') AND ${cond}`,
+        params,
+      );
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; cond holds fixed fragments; values bound
+        `${SELECT} WHERE q.kind <> 'leave' AND q.status IN ('open', 'in_progress') AND ${cond}
+          ORDER BY (q.due_at < now()) DESC, q.due_at NULLS LAST, q.opened_at DESC LIMIT 5`,
+        params,
+      );
+      return {
+        total: n.rows[0]?.total ?? 0,
+        overdue: n.rows[0]?.overdue ?? 0,
+        latest: r.rows.map(toTicket),
+      };
+    });
+  }
+
+  /**
+   * For the older query endpoints (inside the caller's transaction): only the owner answers or closes a
+   * query, the owner or an administrator hands it over. Leave requests keep their own rules.
+   */
+  async assertCan(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string,
+    action: 'reply' | 'close' | 'assign',
+  ) {
+    const me = await this.me(ctx, c, null);
+    const r = await c.query<Row>(
+      // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; the id is bound
+      `${SELECT} WHERE q.id = $1`,
+      [id],
+    );
+    if (!r.rows[0] || r.rows[0].kind === 'leave') return;
+    const t = toTicket(r.rows[0]);
+    const ok = this.isHandler(me, t) || (action === 'assign' && me.viewAll);
+    if (!ok)
+      throw new DomainError(
+        'helpdesk.not_owner',
+        `This query is with ${t.assignedTo ?? t.assignedRoleName ?? t.assignedRole ?? 'someone else'}; take it over in the Helpdesk first`,
+        { status: 403 },
+      );
   }
 
   /** Runs the escalation check now (the workers service runs it every five minutes). */

@@ -203,6 +203,7 @@ export class QueriesService {
       this.assertVisible(v, before);
       if (before.status === 'closed')
         throw new DomainError('engagement.query.closed', 'This query is closed', { status: 409 });
+      if (staff) await this.helpdesk.assertCan(c, ctx, id, 'reply');
       await this.helpdesk.checkFiles(c, dto.fileIds);
       await c.query(
         `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body, file_ids, is_internal) VALUES (app.current_school_id(), $1, app.current_user_id(), $2::author_kind, $3, $4::jsonb, $5)`,
@@ -244,6 +245,7 @@ export class QueriesService {
   async assign(ctx: RequestContext, id: string, dto: AssignDto): Promise<QueryRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.find(c, id, false);
+      await this.helpdesk.assertCan(c, ctx, id, 'assign');
       await c.query(
         `UPDATE parent_queries SET assigned_user_id = $2, status = CASE WHEN status = 'open' THEN 'in_progress'::query_status ELSE status END, updated_at = now() WHERE id = $1`,
         [id, dto.userId],
@@ -263,6 +265,7 @@ export class QueriesService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.find(c, id, false);
       this.assertVisible(v, before);
+      await this.helpdesk.assertCan(c, ctx, id, 'close');
       if (before.kind === 'leave' && !dto.decision)
         throw new DomainError('validation-failed', 'A leave request is closed with a decision', {
           status: 400,

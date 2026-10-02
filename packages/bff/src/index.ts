@@ -99,6 +99,29 @@ export function createBff(options: BffOptions) {
     return new Uint8Array(Buffer.from(env.sessionSecret.padEnd(32, '0').slice(0, 32)));
   }
 
+  /** Tells the API a sign-in happened (for "last sign-in"); never blocks or fails the sign-in. */
+  const recordSignIn = async (req: NextRequest, token: string, method: 'oidc' | 'dev') => {
+    try {
+      await fetch(`${env.apiBaseUrl}/api/v1/me/sign-in`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          method,
+          app: options.cookie.includes('teacher')
+            ? 'teacher'
+            : options.cookie.includes('parent')
+              ? 'parent'
+              : 'admin',
+          userAgent: req.headers.get('user-agent') ?? undefined,
+          ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined,
+        }),
+        signal: AbortSignal.timeout(3000),
+      });
+    } catch {
+      // the sign-in itself must not depend on this
+    }
+  };
+
   const session = {
     async write(s: Session): Promise<void> {
       const token = await new EncryptJWT(s as unknown as Record<string, unknown>)
@@ -231,6 +254,7 @@ export function createBff(options: BffOptions) {
           expiresAt: Math.floor(Date.now() / 1000) + expiresIn,
           displayName: typeof claims.name === 'string' ? claims.name : undefined,
         });
+        await recordSignIn(req, tokens.access_token, 'oidc');
         return NextResponse.redirect(new URL(safeReturn(pending.returnTo), req.url));
       } catch {
         return NextResponse.redirect(new URL('/login?error=login-failed', req.url));
@@ -255,6 +279,7 @@ export function createBff(options: BffOptions) {
         expiresAt: Math.floor(Date.now() / 1000) + 12 * 3600,
         displayName: sub,
       });
+      await recordSignIn(req, `dev:${sub}`, 'dev');
       return NextResponse.redirect(
         new URL(safeReturn(String(form.get('returnTo') ?? '')), req.url),
         { status: 303 },

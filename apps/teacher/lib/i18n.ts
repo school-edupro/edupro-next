@@ -13,6 +13,8 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'This query is with': 'यह प्रश्न इनके पास है',
+  'Only they can answer and close it.': 'केवल वही इसका उत्तर देकर बंद कर सकते हैं।',
   'Raised, sent to': 'भेजा गया, प्राप्तकर्ता',
   'Queries and helpdesk': 'प्रश्न और हेल्पडेस्क',
   'Family queries, leave requests, your own queries and ERP tickets':

@@ -545,4 +545,128 @@ describe('helpdesk (e2e)', () => {
       module: 'fees',
     });
   });
+
+  it('only the owner answers: an administrator sees it, but must take it over first; "with me" counts it', async () => {
+    const setup = (await inject({ method: 'GET', url: '/helpdesk/setup', headers: h() })).json();
+    const payroll = setup.heads.find(
+      (x: { desk: string; code: string }) => x.desk === 'staff' && x.code === 'payroll',
+    );
+    await inject({
+      method: 'PUT',
+      url: `/helpdesk/setup/heads/${payroll.id}`,
+      headers: h(),
+      json: {
+        desk: 'staff',
+        code: 'payroll',
+        name: 'Salary and payroll',
+        ownerType: 'role',
+        ownerRole: 'accountant',
+        slaHours: 48,
+      },
+    });
+    const r = await inject({
+      method: 'POST',
+      url: '/helpdesk/tickets',
+      headers: h(teacher),
+      json: {
+        desk: 'staff',
+        categoryCode: 'payroll',
+        subject: 'September salary short',
+        body: 'Two days deducted wrongly.',
+      },
+    });
+    const id = r.json().id as string;
+    expect(r.json().assignedRole).toBe('accountant');
+    // the accountant has it waiting
+    const w = await inject({ method: 'GET', url: '/helpdesk/waiting', headers: h(accountant) });
+    expect(w.json().latest.some((x: { id: string }) => x.id === id)).toBe(true);
+    expect(w.json().total).toBeGreaterThanOrEqual(1);
+    // the administrator sees it but may not answer or close it as it stands
+    const view = (
+      await inject({ method: 'GET', url: `/helpdesk/tickets/${id}`, headers: h() })
+    ).json();
+    expect(view.you).toMatchObject({
+      handler: false,
+      canReply: false,
+      canClose: false,
+      canAssign: true,
+      canTakeOver: true,
+    });
+    const denied = await inject({
+      method: 'POST',
+      url: `/helpdesk/tickets/${id}/replies`,
+      headers: h(),
+      json: { body: 'I will check' },
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json().type).toBe('helpdesk.not_owner');
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: `/helpdesk/tickets/${id}/close`,
+          headers: h(),
+          json: { resolution: 'Done' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    // ... another staff role cannot either
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: `/helpdesk/tickets/${id}/replies`,
+          headers: h(other),
+          json: { body: 'x' },
+        })
+      ).statusCode,
+    ).toBe(404);
+    // take over: now it is the administrator's, logged in the timeline, and the accountant no longer owns it
+    const took = await inject({
+      method: 'POST',
+      url: `/helpdesk/tickets/${id}/take-over`,
+      headers: h(),
+    });
+    expect(took.statusCode).toBe(200);
+    expect(took.json()).toMatchObject({ assignedUserId: admin.id, assignedRole: null });
+    expect(took.json().you).toMatchObject({ handler: true, canReply: true });
+    const ok = await inject({
+      method: 'POST',
+      url: `/helpdesk/tickets/${id}/replies`,
+      headers: h(),
+      json: { body: 'Corrected in October salary.' },
+    });
+    expect(ok.statusCode).toBe(201);
+    const acc = (
+      await inject({ method: 'GET', url: `/helpdesk/tickets/${id}`, headers: h(accountant) })
+    ).json();
+    expect(acc.you.canReply).toBe(false);
+  });
+
+  it('a sign-in is recorded and the user card shows roles, school, contact and the last sign-in', async () => {
+    for (let i = 0; i < 2; i += 1)
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: '/me/sign-in',
+            headers: h(teacher),
+            json: {
+              method: 'dev',
+              app: 'admin',
+              userAgent: 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0',
+            },
+          })
+        ).statusCode,
+      ).toBe(204);
+    const card = await inject({ method: 'GET', url: '/me/card', headers: h(teacher) });
+    expect(card.statusCode).toBe(200);
+    expect(card.json()).toMatchObject({
+      roles: ['Class Teacher'],
+      email: 'tanvi@example.com',
+      mobile: '9811100001',
+    });
+    expect(card.json().school).toBeTruthy();
+    expect(card.json().lastLogin).toMatchObject({ device: 'Chrome on Windows', app: 'admin' });
+  });
 });

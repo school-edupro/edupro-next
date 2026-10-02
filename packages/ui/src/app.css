@@ -4066,6 +4066,111 @@ a.ep-tabs__tab {
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
 }
+.ep-sidebar__brand-text b.ep-sidebar__role {
+  display: block;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-small);
+}
+.ep-header__badge--calm {
+  background: var(--action-primary);
+}
+.ep-usercard,
+.ep-qmenu {
+  position: relative;
+}
+.ep-usercard__panel,
+.ep-qmenu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--sp-2));
+  z-index: 60;
+  width: min(22rem, calc(100vw - 2rem));
+  background: var(--surface-card);
+  color: var(--text-body);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--sp-3);
+  text-transform: none;
+}
+.ep-usercard__panel {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.ep-usercard:hover .ep-usercard__panel,
+.ep-usercard:focus-within .ep-usercard__panel {
+  visibility: visible;
+  opacity: 1;
+}
+.ep-usercard__name {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-usercard__muted,
+.ep-qmenu__empty {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  margin: 0;
+}
+.ep-usercard__facts {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+}
+.ep-usercard__facts dt {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-usercard__facts dd {
+  margin: 0;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+.ep-qmenu summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ep-qmenu summary::-webkit-details-marker {
+  display: none;
+}
+.ep-qmenu__head {
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  margin-bottom: var(--sp-2);
+}
+.ep-qmenu__list {
+  list-style: none;
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-qmenu__list a {
+  display: block;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-heading);
+  text-decoration: none;
+}
+.ep-qmenu__list a:hover,
+.ep-qmenu__list a:focus-visible {
+  background: var(--surface-subtle);
+  text-decoration: underline;
+}
+.ep-qmenu__no {
+  font-weight: var(--fw-semibold);
+}
+.ep-qmenu__late {
+  color: var(--status-danger);
+}
+.ep-qmenu__all {
+  font-weight: var(--fw-semibold);
+  color: var(--text-link);
+}
 .ep-dlog__filters {
   display: flex;
   flex-wrap: wrap;

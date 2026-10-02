@@ -213,6 +213,13 @@ export default async function TicketPage({
           <strong>{t(lang, 'Resolution')}:</strong> {q.resolution}
         </div>
       ) : null}
+      {!q.you.handler && !q.you.raiser && q.status !== 'closed' ? (
+        <div className="ep-alert ep-alert--info" style={{ marginTop: 'var(--sp-3)' }}>
+          {t(lang, 'This query is with')}{' '}
+          <strong>{q.assignedTo ?? q.assignedRoleName ?? '—'}</strong>.{' '}
+          {t(lang, 'Only they can answer and close it.')}
+        </div>
+      ) : null}
       {q.you.canReply ? (
         <Card title={t(lang, 'Reply')} style={{ marginTop: 'var(--sp-3)' }}>
           <form action={reply} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
