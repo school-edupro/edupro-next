@@ -84,6 +84,8 @@ export const BulkClearanceSchema = z.object({
   department: z.string().trim().min(1).max(40),
   status: z.enum(['cleared', 'hold']),
   remarks: z.string().trim().max(500).optional(),
+  /** One document (e.g. the signed no-dues list) attached to every ticked student's clearance. */
+  documents: z.array(FileRef).max(5).default([]),
 });
 export class BulkClearanceDto extends createZodDto(BulkClearanceSchema) {}
 

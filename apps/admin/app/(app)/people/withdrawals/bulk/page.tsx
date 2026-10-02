@@ -266,6 +266,21 @@ export default async function BulkWithdrawalPage({
                     <span className="ep-field__label">Remarks</span>
                     <input id="bremarks" name="remarks" className="ep-input" maxLength={500} />
                   </label>
+                  <label className="ep-field ep-wd__wide" htmlFor="bdocs">
+                    <span className="ep-field__label">
+                      {department.documentRequired
+                        ? 'Document * (required to clear; attached to every ticked student)'
+                        : 'Document (optional; attached to every ticked student)'}
+                    </span>
+                    <input
+                      id="bdocs"
+                      name="documents"
+                      type="file"
+                      multiple
+                      className="ep-input"
+                      accept="application/pdf,image/png,image/jpeg,image/webp"
+                    />
+                  </label>
                   <Button type="submit">Record for the ticked students</Button>
                 </div>
               </form>

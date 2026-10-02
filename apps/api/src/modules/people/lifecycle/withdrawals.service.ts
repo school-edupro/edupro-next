@@ -901,7 +901,7 @@ export class WithdrawalsService {
           status: dto.status,
           dues: 0,
           remarks: dto.remarks,
-          documents: [],
+          documents: dto.documents ?? [],
         });
         results.push({ id, ok: true });
       } catch (error) {

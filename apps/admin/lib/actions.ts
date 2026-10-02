@@ -1440,6 +1440,7 @@ export async function bulkClearance(fd: FormData) {
   return run(back, async () => {
     if (!withdrawalIds.length)
       throw new ApiError(400, { type: 'validation-failed', detail: 'Tick the students to clear' });
+    const files = await uploadAll(fd, 'documents', 'personal');
     const r = await apiFetch<BulkResult>('/people/withdrawals/clearances/bulk', {
       method: 'POST',
       body: JSON.stringify({
@@ -1447,6 +1448,7 @@ export async function bulkClearance(fd: FormData) {
         department,
         status: str(fd, 'status') || 'cleared',
         remarks: opt(fd, 'remarks'),
+        documents: files.map((fileId) => ({ fileId })),
       }),
     });
     redirect(

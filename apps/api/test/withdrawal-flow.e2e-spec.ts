@@ -308,6 +308,43 @@ describe('withdrawal through configured departments (e2e)', () => {
       json: { withdrawalIds: started, department: 'class_teacher', status: 'cleared' },
     });
     expect(clear.json()).toMatchObject({ done: 3, failed: 0 });
+    // the principal's step needs a document: a bulk clear without one is refused, with one it clears
+    const noDoc = await inject({
+      method: 'POST',
+      url: '/people/withdrawals/clearances/bulk',
+      headers: h(),
+      json: { withdrawalIds: started, department: 'principal', status: 'cleared' },
+    });
+    expect(noDoc.json()).toMatchObject({ done: 0, failed: 3 });
+    const reg = await inject({
+      method: 'POST',
+      url: '/platform/files',
+      headers: h(),
+      json: {
+        fileName: 'no-dues.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: 9,
+        classification: 'personal',
+      },
+    });
+    await inject({
+      method: 'PUT',
+      url: reg.json().upload.url,
+      headers: {},
+      raw: { body: Buffer.from('%PDF-1.4\n'), contentType: 'application/pdf' },
+    });
+    const withDoc = await inject({
+      method: 'POST',
+      url: '/people/withdrawals/clearances/bulk',
+      headers: h(),
+      json: {
+        withdrawalIds: started,
+        department: 'principal',
+        status: 'cleared',
+        documents: [{ fileId: reg.json().file.id }],
+      },
+    });
+    expect(withDoc.json()).toMatchObject({ done: 3, failed: 0 });
     const tcs = await inject({
       method: 'POST',
       url: '/people/withdrawals/tc/bulk',
