@@ -154,3 +154,14 @@ export const DETAILED_TEMPLATE: ReportSpec['columns'] = (
     ['primary_email', 5],
   ] as const
 ).map(([key, group]) => ({ key, group }));
+
+/**
+ * Columns a PDF page must hold, counted as the server does: excluded fields do not count, and in the
+ * detailed layout fields with the same stack number share one column (plus the Sr# column).
+ */
+export function pdfColumnCount(spec: ReportSpec): number {
+  const shown = spec.columns.filter((c) => !c.hidden);
+  if (spec.layout !== 'detailed') return shown.length;
+  const stacks = new Set(shown.map((c) => (c.group ? `g${String(c.group)}` : `k:${c.key}`)));
+  return stacks.size + 1;
+}

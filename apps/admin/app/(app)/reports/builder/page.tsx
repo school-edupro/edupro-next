@@ -5,7 +5,7 @@ import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { builderDeleteForm, builderExportForm } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { BuilderFields, SavedReport } from '@/lib/report-builder';
+import { pdfColumnCount, type BuilderFields, type SavedReport } from '@/lib/report-builder';
 
 function ReportTable({
   rows,
@@ -34,7 +34,7 @@ function ReportTable({
         </thead>
         <tbody>
           {rows.map((r) => {
-            const pdfOk = r.spec.columns.length <= pdfLimit[r.spec.options.paper];
+            const pdfOk = pdfColumnCount(r.spec) <= pdfLimit[r.spec.options.paper];
             return (
               <tr key={r.id}>
                 <td>

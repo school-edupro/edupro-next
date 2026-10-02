@@ -14,6 +14,7 @@ import {
   type Result,
   type SavedReport,
   DETAILED_TEMPLATE,
+  pdfColumnCount,
 } from '@/lib/report-builder';
 
 type ShareRow = { userId?: string; roleId?: string; name: string; canEdit: boolean };
@@ -235,9 +236,9 @@ export function ReportBuilder({
             type="button"
             className="ep-btn ep-btn--secondary"
             onClick={() => doExport('pdf')}
-            disabled={pending || !saved || spec.columns.length > pdfLimit}
+            disabled={pending || !saved || pdfColumnCount(spec) > pdfLimit}
             title={
-              spec.columns.length > pdfLimit
+              pdfColumnCount(spec) > pdfLimit
                 ? `A PDF on ${spec.options.paper} holds ${String(pdfLimit)} columns`
                 : undefined
             }
@@ -357,7 +358,7 @@ export function ReportBuilder({
             <p className="ep-field__help" style={{ marginTop: 0 }}>
               Drag or use the arrows to set the order. The header is what Excel and PDF show; leave
               it empty to use the field name.{' '}
-              {spec.columns.length > pdfLimit
+              {pdfColumnCount(spec) > pdfLimit
                 ? `PDF on ${spec.options.paper} holds ${String(pdfLimit)} columns: choose fewer, switch to A3, or use Excel.`
                 : `PDF on ${spec.options.paper}: up to ${String(pdfLimit)} columns.`}
             </p>
