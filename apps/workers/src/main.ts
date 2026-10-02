@@ -166,6 +166,12 @@ async function main(): Promise<void> {
     { pattern: '30 21 * * *' },
     { name: 'retention.purge', data: SYSTEM_ENVELOPE('retention.purge') },
   );
+  // helpdesk: escalate tickets past their SLA every five minutes
+  await maintenance.upsertJobScheduler(
+    'helpdesk.escalate',
+    { every: 5 * 60 * 1000 },
+    { name: 'helpdesk.escalate', data: SYSTEM_ENVELOPE('helpdesk.escalate') },
+  );
   await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },

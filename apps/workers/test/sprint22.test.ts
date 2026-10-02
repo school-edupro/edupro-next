@@ -36,10 +36,12 @@ describe('maintenance: hypercare digest (Sprint 22)', () => {
         [school.id, school.userId, role.rows[0]!.id],
       );
       await c.query(
-        `INSERT INTO hypercare_issues (school_id, number, title, module, severity, status, reporter_user, due_at)
-         VALUES ($1, 'HC/001', 'Cashier print fails', 'fees', 's1', 'in_progress', $2, now() - interval '1 hour'),
-                ($1, 'HC/002', 'Typo on the notice screen', 'academics', 's4', 'open', $2, now() + interval '5 days'),
-                ($1, 'HC/003', 'Already closed', 'exams', 's2', 'closed', $2, now() - interval '2 days')`,
+        // hypercare issues are tickets to the ERP provider (helpdesk 0056)
+        `INSERT INTO parent_queries (school_id, academic_year_id, number, kind, category_code, raised_by_user_id, subject, body, desk, module, priority, provider_status, status, due_at)
+         SELECT $1, (SELECT id FROM academic_years WHERE school_id = $1 ORDER BY start_date DESC LIMIT 1), x.number, 'query', 'bug', $2, x.title, x.title, 'provider', x.module, x.priority, x.pstatus, x.status::query_status, now() + x.due
+           FROM (VALUES ('HC/001', 'Cashier print fails', 'fees', 'urgent', 'in_progress', 'in_progress', interval '-1 hour'),
+                        ('HC/002', 'Typo on the notice screen', 'academics', 'low', 'open', 'open', interval '5 days'),
+                        ('HC/003', 'Already closed', 'exams', 'high', 'closed', 'closed', interval '-2 days')) AS x(number, title, module, priority, pstatus, status, due)`,
         [school.id, school.userId],
       );
     });
@@ -53,7 +55,9 @@ describe('maintenance: hypercare digest (Sprint 22)', () => {
       await c
         .query(`DELETE FROM jobs_outbox WHERE payload->>'schoolId' = $1`, [school.id])
         .catch(() => undefined);
-      await c.query(`DELETE FROM hypercare_issues WHERE school_id = $1`, [school.id]);
+      await c.query(`DELETE FROM parent_queries WHERE school_id = $1 AND desk = 'provider'`, [
+        school.id,
+      ]);
     });
     await rm(dir, { recursive: true, force: true });
     await db.close();

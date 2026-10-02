@@ -13,6 +13,8 @@ import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
 import { EngagementController } from './engagement.controller';
 import { FamilyService } from './family.service';
+import { HelpdeskController } from './helpdesk.controller';
+import { HelpdeskService } from './helpdesk.service';
 import { EngagementPlusController } from './plus.controller';
 import { EngagementPlusService } from './plus.service';
 import { PortalProfileController } from './portal-profile.controller';
@@ -40,9 +42,11 @@ import { QueriesService } from './queries.service';
     EngagementPlusController,
     DsrController,
     PortalProfileController,
+    HelpdeskController,
   ],
   providers: [
     QueriesService,
+    HelpdeskService,
     FamilyService,
     PortalProfileService,
     PrivacyService,
@@ -50,7 +54,14 @@ import { QueriesService } from './queries.service';
     DsrService,
     AuditService,
   ],
-  exports: [QueriesService, FamilyService, PrivacyService, EngagementPlusService, DsrService],
+  exports: [
+    QueriesService,
+    HelpdeskService,
+    FamilyService,
+    PrivacyService,
+    EngagementPlusService,
+    DsrService,
+  ],
 })
 export class EngagementModule implements OnModuleInit {
   constructor(

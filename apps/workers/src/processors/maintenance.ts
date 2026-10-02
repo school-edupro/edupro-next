@@ -452,6 +452,21 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       log.info({ deleted }, 'vehicle positions purge run');
       return;
     }
+    if (kind === 'helpdesk.escalate') {
+      // Helpdesk (0056): unresolved tickets past their working-hours due time move up the escalation
+      // matrix; the database function reassigns, records the timeline and queues the mails and pushes.
+      const schools = { rows: await schoolsFor(db, job) };
+      let moved = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.helpdesk_escalate_due() AS n'),
+        );
+        moved += r.rows[0]?.n ?? 0;
+      }
+      if (moved) log.info({ moved }, 'helpdesk escalation run');
+      return;
+    }
     if (kind === 'hypercare.digest') {
       // Sprint 22: every morning of hypercare the admins get the open issues by severity and the overdue list.
       const schools = { rows: await schoolsFor(db, job) };
@@ -467,11 +482,11 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
             if (cutoff && cutoff < new Date().toISOString().slice(0, 10)) return;
             const open = await c.query<{ severity: string; n: string; overdue: string }>(
               `SELECT severity, count(*)::text AS n, count(*) FILTER (WHERE due_at < now())::text AS overdue
-               FROM hypercare_issues WHERE status NOT IN ('closed', 'verified') GROUP BY severity ORDER BY severity`,
+               FROM provider_issues WHERE status NOT IN ('closed', 'verified') GROUP BY severity ORDER BY severity`,
             );
             if (open.rows.length === 0) return;
             const late = await c.query<{ number: string; title: string; severity: string }>(
-              `SELECT number, title, severity FROM hypercare_issues WHERE status NOT IN ('closed', 'verified') AND due_at < now() ORDER BY severity, due_at LIMIT 10`,
+              `SELECT number, title, severity FROM provider_issues WHERE status NOT IN ('closed', 'verified') AND due_at < now() ORDER BY severity, due_at LIMIT 10`,
             );
             const summary = open.rows
               .map((r) => `${r.severity.toUpperCase()} ${r.n} (${r.overdue} overdue)`)

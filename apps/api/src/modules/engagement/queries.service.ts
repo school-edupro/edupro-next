@@ -7,6 +7,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ViewerService, type Viewer } from '../academics/daily/viewer.service';
 import type { SendMessageDto } from '../comms/comms.dto';
 import { MessagesService } from '../comms/messages.service';
+import { HelpdeskService } from './helpdesk.service';
 import {
   DEFAULT_QUERY_CATEGORIES,
   type AssignDto,
@@ -59,7 +60,7 @@ const SELECT = `SELECT q.id::text, q.number, q.kind::text, q.category_code, COAL
         u.display_name AS raised_by, q.raised_by_user_id::text, q.subject, q.body, q.file_ids, q.leave_from::text, q.leave_to::text, q.status::text, q.assigned_role, COALESCE((SELECT emp.display_name FROM employees emp WHERE emp.user_id = a.id LIMIT 1), a.display_name) AS assigned_to, q.assigned_user_id::text,
         q.decision, q.rating, q.rating_comment, q.opened_at, q.first_response_at, q.closed_at
    FROM parent_queries q JOIN students s ON s.id = q.student_id LEFT JOIN users u ON u.id = q.raised_by_user_id LEFT JOIN users a ON a.id = q.assigned_user_id
-   LEFT JOIN query_categories qc ON qc.school_id = q.school_id AND qc.code = q.category_code`;
+   LEFT JOIN query_categories qc ON qc.school_id = q.school_id AND qc.desk = q.desk AND qc.code = q.category_code`;
 
 /**
  * Parent queries, complaints and leave requests (S10, legacy parent_query + parent_query_responses +
@@ -75,12 +76,14 @@ export class QueriesService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly messages: MessagesService,
+    private readonly helpdesk: HelpdeskService,
   ) {}
 
   async categories(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.helpdesk_ensure_defaults()`);
       const r = await c.query<{ code: string; name: string; route_to: string }>(
-        `SELECT code, name, route_to FROM query_categories WHERE status = 'active' ORDER BY sort_order, name`,
+        `SELECT code, name, route_to FROM query_categories WHERE desk = 'parent' AND status = 'active' ORDER BY sort_order, name`,
       );
       if (r.rows.length)
         return r.rows.map((x) => ({ code: x.code, name: x.name, routeTo: x.route_to }));
@@ -94,8 +97,9 @@ export class QueriesService {
     const v = await this.viewer.resolve(ctx, 'engagement.query.create');
     if (v.kind === 'family' && !v.students.some((s) => s.id === dto.studentId))
       throw new DomainError('not-found', 'Student not found', { status: 404 });
+    const categories = await this.categories(ctx);
     return this.db.tenant(tenant, async (c) => {
-      const categories = await this.categories(ctx);
+      await this.helpdesk.checkFiles(c, dto.fileIds);
       const cat =
         categories.find((k) => k.code === dto.categoryCode) ??
         categories.find((k) => k.code === 'other')!;
@@ -129,6 +133,8 @@ export class QueriesService {
           studentId: dto.studentId,
         },
       });
+      // the class teacher / owner hears of it at once (app alert, mail for roles)
+      if (dto.kind !== 'leave') await this.helpdesk.notifyOwner(c, id, 'new');
       return this.find(c, id, true);
     });
   }
@@ -197,6 +203,7 @@ export class QueriesService {
       this.assertVisible(v, before);
       if (before.status === 'closed')
         throw new DomainError('engagement.query.closed', 'This query is closed', { status: 409 });
+      await this.helpdesk.checkFiles(c, dto.fileIds);
       await c.query(
         `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body, file_ids, is_internal) VALUES (app.current_school_id(), $1, app.current_user_id(), $2::author_kind, $3, $4::jsonb, $5)`,
         [
@@ -217,11 +224,13 @@ export class QueriesService {
           [id],
         );
         await this.notify(c, ctx, before, dto.body);
-      } else if (!staff)
+      } else if (!staff) {
         await c.query(
           `UPDATE parent_queries SET status = 'open', updated_at = now() WHERE id = $1`,
           [id],
         );
+        if (before.kind !== 'leave') await this.helpdesk.notifyOwner(c, id, 'reply', dto.body);
+      }
       await this.audit.stage(ctx, c, {
         action: 'engagement.query.respond',
         entityType: 'parent_queries',

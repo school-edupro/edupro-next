@@ -419,7 +419,7 @@ export class OpsService {
        i.due_at, i.workaround, i.resolution, i.first_response_at, i.closed_at, i.created_at, i.updated_at,
        (i.status NOT IN ('closed', 'verified') AND i.due_at < now()) AS overdue,
        rp.display_name AS reporter, au.display_name AS assigned_to
-  FROM hypercare_issues i LEFT JOIN users rp ON rp.id = i.reporter_user LEFT JOIN users au ON au.id = i.assigned_user`;
+  FROM provider_issues i LEFT JOIN users rp ON rp.id = i.reporter_user LEFT JOIN users au ON au.id = i.assigned_user`;
 
   private toIssue(x: Row) {
     return {
@@ -456,12 +456,19 @@ export class OpsService {
         ),
       ) || 72;
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      // hypercare issues are tickets to the ERP provider (helpdesk 0056), numbered HC/nnn as before
       const n = await c.query<{ n: string }>(
-        `SELECT lpad((count(*) + 1)::text, 3, '0') AS n FROM hypercare_issues`,
+        `SELECT lpad((count(*) + 1)::text, 3, '0') AS n FROM parent_queries WHERE desk = 'provider' AND number LIKE 'HC/%'`,
       );
       const r = await c.query<{ id: string }>(
-        `INSERT INTO hypercare_issues (school_id, number, title, detail, module, severity, channel, reporter_user, due_at, request_id)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id(), now() + make_interval(hours => $7), app.current_request_id()) RETURNING id::text`,
+        `INSERT INTO parent_queries (school_id, academic_year_id, number, kind, category_code, raised_by_user_id, subject, body,
+                                     desk, priority, module, channel, provider_status, due_at, request_id)
+         VALUES (app.current_school_id(),
+                 COALESCE(app.current_academic_year_id(), (SELECT id FROM academic_years WHERE status = 'active' ORDER BY start_date DESC LIMIT 1),
+                          (SELECT id FROM academic_years ORDER BY start_date DESC LIMIT 1)),
+                 $1, 'query', 'bug', app.current_user_id(), $2, COALESCE(NULLIF($3, ''), $2), 'provider',
+                 CASE $5 WHEN 's1' THEN 'urgent' WHEN 's2' THEN 'high' WHEN 's3' THEN 'normal' ELSE 'low' END,
+                 $4, $6, 'open', now() + make_interval(hours => $7), app.current_request_id()) RETURNING id::text`,
         [
           `HC/${n.rows[0]!.n}`,
           dto.title,
@@ -473,13 +480,9 @@ export class OpsService {
         ],
       );
       const id = r.rows[0]!.id;
-      await c.query(
-        `INSERT INTO hypercare_updates (school_id, issue_id, author, body, status_to) VALUES (app.current_school_id(), $1, app.current_user_id(), $2, 'open')`,
-        [id, dto.detail ?? dto.title],
-      );
       await this.audit.stage(ctx, c, {
         action: 'ops.hypercare.report',
-        entityType: 'hypercare_issues',
+        entityType: 'parent_queries',
         entityId: id,
         after: { title: dto.title, severity: dto.severity },
       });
@@ -492,7 +495,13 @@ export class OpsService {
     const r = await c.query<Row>(`${OpsService.ISSUE} WHERE i.id = $1`, [id]);
     if (!r.rows[0]) throw new DomainError('not-found', 'Issue not found', { status: 404 });
     const updates = await c.query<Row>(
-      `SELECT u.id::text, u.body, u.status_from, u.status_to, u.created_at, a.display_name AS author FROM hypercare_updates u LEFT JOIN users a ON a.id = u.author WHERE u.issue_id = $1 ORDER BY u.created_at`,
+      `SELECT * FROM (
+         SELECT 'r' || x.id AS id, x.body, NULL::text AS status_from, NULL::text AS status_to, x.created_at, a.display_name AS author
+           FROM query_responses x LEFT JOIN users a ON a.id = x.author_user_id WHERE x.query_id = $1 AND x.is_internal = false
+         UNION ALL
+         SELECT 'e' || ev.id, NULL, ev.detail ->> 'from', ev.detail ->> 'to', ev.at, a.display_name
+           FROM query_events ev LEFT JOIN users a ON a.id = ev.actor_user_id WHERE ev.query_id = $1 AND ev.kind = 'status') u
+       ORDER BY u.created_at, u.id`,
       [id],
     );
     return {
@@ -537,7 +546,7 @@ export class OpsService {
       const summary = await c.query<{ severity: string; open: string; overdue: string }>(
         `SELECT severity, count(*) FILTER (WHERE status NOT IN ('closed', 'verified'))::text AS open,
                 count(*) FILTER (WHERE status NOT IN ('closed', 'verified') AND due_at < now())::text AS overdue
-           FROM hypercare_issues GROUP BY severity ORDER BY severity`,
+           FROM provider_issues GROUP BY severity ORDER BY severity`,
       );
       return {
         data: r.rows.map((x) => this.toIssue(x)),
@@ -557,7 +566,7 @@ export class OpsService {
   async updateIssue(ctx: RequestContext, id: string, dto: IssueUpdateDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await c.query<{ status: string; severity: string }>(
-        `SELECT status, severity FROM hypercare_issues WHERE id = $1`,
+        `SELECT status, severity FROM provider_issues WHERE id = $1`,
         [id],
       );
       if (!before.rows[0]) throw new DomainError('not-found', 'Issue not found', { status: 404 });
@@ -569,14 +578,18 @@ export class OpsService {
         due = `${hours}`;
       }
       await c.query(
-        `UPDATE hypercare_issues SET status = COALESCE($2, status), severity = COALESCE($3, severity),
-                assigned_role = COALESCE($4, assigned_role), assigned_user = COALESCE($5::bigint, assigned_user),
+        `UPDATE parent_queries SET provider_status = COALESCE($2, provider_status),
+                status = CASE $2 WHEN NULL THEN status WHEN 'open' THEN 'open'::query_status WHEN 'triaged' THEN 'in_progress'::query_status
+                                 WHEN 'in_progress' THEN 'in_progress'::query_status WHEN 'fixed' THEN 'answered'::query_status
+                                 WHEN 'verified' THEN 'closed'::query_status WHEN 'closed' THEN 'closed'::query_status ELSE status END,
+                priority = COALESCE(CASE $3 WHEN 's1' THEN 'urgent' WHEN 's2' THEN 'high' WHEN 's3' THEN 'normal' WHEN 's4' THEN 'low' END, priority),
+                assigned_role = COALESCE($4, assigned_role), assigned_user_id = COALESCE($5::bigint, assigned_user_id),
                 workaround = COALESCE($6, workaround), resolution = COALESCE($7, resolution),
                 first_response_at = COALESCE(first_response_at, now()),
-                due_at = CASE WHEN $8::int IS NULL THEN due_at ELSE created_at + make_interval(hours => $8::int) END,
+                due_at = CASE WHEN $8::int IS NULL THEN due_at ELSE opened_at + make_interval(hours => $8::int) END,
                 closed_at = CASE WHEN $2 IN ('closed', 'verified') THEN COALESCE(closed_at, now()) WHEN $2 IS NOT NULL THEN NULL ELSE closed_at END,
                 updated_at = now()
-          WHERE id = $1`,
+          WHERE id = $1 AND desk = 'provider'`,
         [
           id,
           dto.status ?? null,
@@ -588,19 +601,19 @@ export class OpsService {
           due === null ? null : Number(due),
         ],
       );
-      if (dto.body || (dto.status && dto.status !== prev.status))
+      if (dto.body)
         await c.query(
-          `INSERT INTO hypercare_updates (school_id, issue_id, author, body, status_from, status_to) VALUES (app.current_school_id(), $1, app.current_user_id(), $2, $3, $4)`,
-          [
-            id,
-            dto.body ?? null,
-            dto.status && dto.status !== prev.status ? prev.status : null,
-            dto.status && dto.status !== prev.status ? dto.status : null,
-          ],
+          `INSERT INTO query_responses (school_id, query_id, author_user_id, author_kind, body) VALUES (app.current_school_id(), $1, app.current_user_id(), 'staff', $2)`,
+          [id, dto.body],
+        );
+      if (dto.status && dto.status !== prev.status)
+        await c.query(
+          `INSERT INTO query_events (school_id, query_id, actor_user_id, kind, detail) VALUES (app.current_school_id(), $1, app.current_user_id(), 'status', jsonb_build_object('from', $2::text, 'to', $3::text))`,
+          [id, prev.status, dto.status],
         );
       await this.audit.stage(ctx, c, {
         action: 'ops.hypercare.update',
-        entityType: 'hypercare_issues',
+        entityType: 'parent_queries',
         entityId: id,
         before: prev,
         after: dto as Row,

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -20,6 +20,8 @@ import {
   RespondDto,
 } from './engagement.dto';
 import { FamilyService } from './family.service';
+import { ReopenTicketDto } from './helpdesk.dto';
+import { HelpdeskService } from './helpdesk.service';
 import { PrivacyService } from './privacy.service';
 import { QueriesService } from './queries.service';
 
@@ -31,6 +33,7 @@ export class EngagementController {
     private readonly queries: QueriesService,
     private readonly family: FamilyService,
     private readonly privacy: PrivacyService,
+    private readonly helpdesk: HelpdeskService,
   ) {}
 
   // ---- DPDP onboarding -----------------------------------------------------------------------------
@@ -137,6 +140,26 @@ export class EngagementController {
   @RequirePermission(ENGAGEMENT.queryCreate)
   reply(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: RespondDto) {
     return this.queries.respond(ctx, id, dto, ENGAGEMENT.queryCreate);
+  }
+
+  @Post('mine/queries/:id/reopen')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Reopen my closed query within the reopen window' })
+  @RequirePermission(ENGAGEMENT.queryCreate)
+  reopen(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ReopenTicketDto) {
+    return this.helpdesk.reopen(ctx, id, dto);
+  }
+
+  @Get('mine/queries/:id/files/:fileId')
+  @RequirePermission(ENGAGEMENT.queryCreate)
+  myFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.helpdesk.fileUrl(ctx, id, fileId);
+  }
+
+  @Get('mine/queries/:id/timeline')
+  @RequirePermission(ENGAGEMENT.queryCreate)
+  myTimeline(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.helpdesk.get(ctx, id);
   }
 
   @Post('mine/queries/:id/rate')
