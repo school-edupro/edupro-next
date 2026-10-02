@@ -51,6 +51,7 @@ const NAV: NavGroup[] = [
     label: { parent: 'School', student: 'School' },
     icon: 'book',
     items: [
+      { href: '/messages', label: 'Messages' },
       { href: '/notices', label: 'Notices' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/transport', label: 'School bus' },
@@ -101,11 +102,14 @@ export function FamilyShell({
   lang,
   currentPath,
   children,
+  unread = 0,
 }: {
   me: Me;
   lang: Lang;
   currentPath: string;
   children: ReactNode;
+  /** messages from the school not opened yet (header badge) */
+  unread?: number;
 }) {
   const audience = audienceOf(me);
   const isCurrent = (href: string) =>
@@ -230,6 +234,23 @@ export function FamilyShell({
             lang={lang === 'hi' ? 'en' : 'hi'}
           >
             {lang === 'hi' ? 'English' : 'हिन्दी'}
+          </a>
+          <a
+            className="ep-header__icon-btn fp-msgbtn"
+            href="/messages"
+            aria-label={
+              unread
+                ? `${t(lang, 'Messages')}: ${String(unread)} ${t(lang, 'new')}`
+                : t(lang, 'Messages')
+            }
+            title={t(lang, 'Messages')}
+          >
+            <Icon name="message" size={22} />
+            {unread ? (
+              <span className="fp-msgbtn__badge" aria-hidden="true">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            ) : null}
           </a>
           <a
             className="ep-header__icon-btn"

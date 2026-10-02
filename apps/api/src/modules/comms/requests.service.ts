@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import {
+  TEMPLATE_VARIABLES,
   resolveAudience,
   type AudienceInput,
   type AudienceRule,
@@ -19,7 +20,14 @@ import { CommsSettingsService, type CommsPolicy } from './comms-settings.service
 import type { CreateRequestDto, ListRequestsQueryDto, RecipientSheetDto } from './comms.dto';
 import { emailLayout, sanitizeEmailHtml } from './email-html';
 import { parseMemberSheet } from './groups.service';
-import { escapeHtml, htmlToText, renderLenient, smsUnits, textToHtml } from './render';
+import {
+  escapeHtml,
+  extractVariables,
+  htmlToText,
+  renderLenient,
+  smsUnits,
+  textToHtml,
+} from './render';
 
 export interface RequestRow {
   id: string;
@@ -251,6 +259,10 @@ export class RequestsService {
         skippedReasons: countBy(plan.skipped.map((s) => s.reason)),
         byChannel,
         needsApproval: await this.needsApproval(c, policy, plan.send.length),
+        askValues: await this.askValues(c, templates, dto),
+        switchedOff: (await this.settings.switchedOff(c)).filter((ch) =>
+          templates.some((t) => t.channel === ch),
+        ),
         quietHours: this.quietUntil(policy, dto)
           ? this.quietUntil(policy, dto)!.toISOString()
           : null,
@@ -285,6 +297,15 @@ export class RequestsService {
       const templates = await this.templates(c, dto);
       const policy = await this.settings.policy(c);
       const attachments = await this.checkAttachments(c, dto.attachments, policy);
+      const off = (await this.settings.switchedOff(c)).filter((ch) =>
+        templates.some((t) => t.channel === ch),
+      );
+      if (off.length)
+        throw new DomainError(
+          'comms.channel.off',
+          `${off.join(', ')} ${off.length === 1 ? 'is' : 'are'} switched off in Communication settings`,
+          { status: 409 },
+        );
       const plan = await resolveAudience(c, this.input(ctx, dto, templates));
       if (plan.send.length === 0)
         throw new DomainError('comms.request.no_recipients', 'Nobody would receive this message', {
@@ -628,6 +649,34 @@ export class RequestsService {
   }
 
   // ---- helpers ----------------------------------------------------------------------------------
+  /**
+   * Variables the chosen templates use that nobody fills in: not built in, not computed, not a school
+   * variable, not an Excel column. Compose asks for them once (the same value for everyone).
+   */
+  async askValues(
+    c: PoolClient,
+    templates: TemplateLite[],
+    dto: { body: string; subject?: string; upload?: UploadRow[] | null },
+  ): Promise<string[]> {
+    const known = new Set([
+      ...TEMPLATE_VARIABLES.map((v) => v.key),
+      'subject',
+      ...(await c.query<{ key: string }>(`SELECT key FROM comms_variables`)).rows.map((x) => x.key),
+      ...(dto.upload ?? []).flatMap((r) => Object.keys(r.vars ?? {})),
+    ]);
+    const used = extractVariables(
+      [
+        ...templates.map(
+          (t) =>
+            `${t.subject ?? ''} ${t.body} ${(t.wa_params ?? []).map((p) => `{{${p}}}`).join(' ')}`,
+        ),
+        dto.body,
+        dto.subject ?? '',
+      ].join(' '),
+    );
+    return used.filter((v) => !known.has(v));
+  }
+
   private input(
     ctx: RequestContext,
     dto: CreateRequestDto,

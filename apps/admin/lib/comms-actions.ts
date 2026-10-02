@@ -252,11 +252,11 @@ export async function saveProvider(
   );
 }
 
-export async function testProvider(channel: Channel, to: string) {
+export async function testProvider(channel: Channel, to: string, templateId?: string) {
   return call(() =>
     apiFetch<{ messageId: string }>(`/comms/providers/${channel}/test`, {
       method: 'POST',
-      body: JSON.stringify({ to }),
+      body: JSON.stringify({ to, ...(templateId ? { templateId } : {}) }),
     }),
   );
 }
@@ -302,4 +302,18 @@ export async function commsExport(fd: FormData) {
   }
   const q = new URLSearchParams({ ...params, export: id, format });
   redirect(`/comms/reports?${q.toString()}`);
+}
+
+export async function saveCustomVariable(p: { key: string; label: string; value: string }) {
+  return call(
+    () => apiFetch('/comms/variables', { method: 'PUT', body: JSON.stringify(p) }),
+    '/comms/templates',
+  );
+}
+
+export async function deleteCustomVariable(key: string) {
+  return call(
+    () => apiFetch(`/comms/variables/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+    '/comms/templates',
+  );
 }

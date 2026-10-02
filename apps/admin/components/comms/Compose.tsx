@@ -116,6 +116,7 @@ export function Compose({
   const [html, setHtml] = useState(false);
   const [subject, setSubject] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
+  const [askVals, setAskVals] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ComposePreview | null>(null);
@@ -141,6 +142,7 @@ export function Compose({
       targets: [],
       sendTo,
       attachments: files.map((f) => f.id),
+      variables: askVals,
       ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
     };
     if (['class_section', 'class', 'route', 'group'].includes(audience))
@@ -171,6 +173,7 @@ export function Compose({
     rule,
     people,
     sheet,
+    askVals,
   ]);
 
   const reset = () => {
@@ -778,6 +781,30 @@ export function Compose({
                   .
                 </p>
               ) : null}
+              {preview.switchedOff.length ? (
+                <p className="ep-alert ep-alert--danger" role="alert">
+                  {preview.switchedOff.map((c) => CHANNEL_LABEL[c as Channel] ?? c).join(', ')}{' '}
+                  switched off in Communication settings: untick{' '}
+                  {preview.switchedOff.length === 1 ? 'it' : 'them'} or switch on.
+                </p>
+              ) : null}
+              {preview.askValues.length ? (
+                <fieldset className="ep-compose__ask">
+                  <legend className="ep-field__label">Fill in for everyone</legend>
+                  {preview.askValues.map((k) => (
+                    <label key={k} className="ep-field" htmlFor={`c-ask-${k}`}>
+                      <span className="ep-field__label">{`{{${k}}}`} *</span>
+                      <input
+                        id={`c-ask-${k}`}
+                        className="ep-input"
+                        maxLength={300}
+                        value={askVals[k] ?? ''}
+                        onChange={(e) => setAskVals({ ...askVals, [k]: e.target.value })}
+                      />
+                    </label>
+                  ))}
+                </fieldset>
+              ) : null}
               <p className={preview.needsApproval ? 'ep-compose__approval' : 'ep-field__help'}>
                 {preview.needsApproval
                   ? 'Needs the principal’s approval before it goes out.'
@@ -830,7 +857,13 @@ export function Compose({
             <button
               type="button"
               className="ep-btn ep-btn--primary"
-              disabled={busy !== null || !preview || preview.total === 0}
+              disabled={
+                busy !== null ||
+                !preview ||
+                preview.total === 0 ||
+                preview.switchedOff.length > 0 ||
+                preview.askValues.some((k) => !askVals[k]?.trim())
+              }
               onClick={() => void run('send')}
             >
               {busy === 'send' ? 'Sending…' : preview?.needsApproval ? 'Send for approval' : 'Send'}

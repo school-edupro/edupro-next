@@ -13,6 +13,22 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  Messages: 'संदेश',
+  'Messages from school': 'विद्यालय के संदेश',
+  'All children': 'सभी बच्चे',
+  'No messages yet.': 'अभी कोई संदेश नहीं।',
+  Unread: 'नया',
+  'Read on WhatsApp': 'WhatsApp पर पढ़ा गया',
+  Delivered: 'पहुँचा',
+  Sent: 'भेजा गया',
+  Failed: 'नहीं पहुँचा',
+  Queued: 'कतार में',
+  Attachment: 'संलग्नक',
+  'Older messages': 'पुराने संदेश',
+  'Newer messages': 'नए संदेश',
+  'Open the email': 'ईमेल खोलें',
+  'Messages are not available for this account.': 'इस खाते के लिए संदेश उपलब्ध नहीं हैं।',
+  'SMS, WhatsApp and email the school sent you': 'विद्यालय द्वारा भेजे गए SMS, WhatsApp और ईमेल',
   Help: 'सहायता',
   'Answers to the common questions': 'आम प्रश्नों के उत्तर',
   'Report an issue': 'समस्या दर्ज करें',

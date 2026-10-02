@@ -33,6 +33,7 @@ describe('communication v2 (e2e)', () => {
   let school: SeededSchool;
   let admin: SeededUser;
   let coordinator: SeededUser;
+  let parent: SeededUser;
   let s: string;
   const ids: Record<string, string> = {};
   const h = (u: SeededUser = admin) => headersFor(u.sub, school.id);
@@ -43,6 +44,7 @@ describe('communication v2 (e2e)', () => {
       school = await seedSchool(c, `${s}A`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       coordinator = await seedUser(c, school, `${s}-coord`, 'academic_coordinator');
+      parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
       await c.query(
         `INSERT INTO employees (school_id, employee_code, first_name, last_name, mobile, email, department, designation)
          VALUES ($1, 'T01', 'Tanvi', 'Rao', '9811100001', 'tanvi@example.com', 'Academics', 'TGT'),
@@ -106,6 +108,10 @@ describe('communication v2 (e2e)', () => {
         [ids.a],
       );
       await c.query(`UPDATE students SET house = 'Blue' WHERE id = $1`, [ids.b]);
+      await c.query(
+        `UPDATE guardians SET user_id = $2 WHERE id = (SELECT guardian_id FROM student_guardians WHERE student_id = $1 AND relation = 'father')`,
+        [ids.a, parent.id],
+      );
       ids.t01 = (
         await c.query<{ id: string }>(
           `SELECT id::text FROM employees WHERE school_id = $1 AND employee_code = 'T01'`,
@@ -383,7 +389,11 @@ describe('communication v2 (e2e)', () => {
       headers: h(),
       json: { note: 'ok' },
     });
-    const sent = await inject({ method: 'GET', url: `/comms/requests/${ids.pending}`, headers: h() });
+    const sent = await inject({
+      method: 'GET',
+      url: `/comms/requests/${ids.pending}`,
+      headers: h(),
+    });
     expect(sent.json()).toMatchObject({ status: 'sent', recipientsTotal: 1 });
     expect(sent.json().recipients[0]).toMatchObject({ channel: 'sms', name: 'Visitor One' });
   });
@@ -515,5 +525,134 @@ describe('communication v2 (e2e)', () => {
       headers: {},
     });
     expect(verify.body).toBe('12345');
+  });
+
+  it('school variables, values asked at send time and computed values fill the message', async () => {
+    const v = await inject({
+      method: 'PUT',
+      url: '/comms/variables',
+      headers: h(),
+      json: { key: 'principal_name', label: 'Principal', value: 'Dr. Mehta' },
+    });
+    expect(v.statusCode).toBe(200);
+    const clash = await inject({
+      method: 'PUT',
+      url: '/comms/variables',
+      headers: h(),
+      json: { key: 'student_name', label: 'Student', value: 'y' },
+    });
+    expect(clash.statusCode).toBe(409);
+    const t = await inject({
+      method: 'POST',
+      url: '/comms/templates',
+      headers: h(),
+      json: {
+        code: 'ptm_sms',
+        channel: 'sms',
+        name: 'PTM SMS',
+        body: 'PTM on {{ptm_date}} for {{student_name}}. Attendance {{attendance_percent}}. {{principal_name}}',
+        dltTemplateId: '1207160000000000002',
+      },
+    });
+    ids.ptm = t.json().id;
+    const base = {
+      title: 'PTM',
+      body: '-',
+      channels: [{ channel: 'sms', templateId: ids.ptm }],
+      audience: 'individuals',
+      targets: [{ type: 'student', id: ids.a }],
+    };
+    const pv = await inject({
+      method: 'POST',
+      url: '/comms/requests/preview',
+      headers: h(),
+      json: base,
+    });
+    expect(pv.json().askValues).toEqual(['ptm_date']);
+    const sent = await inject({
+      method: 'POST',
+      url: '/comms/requests',
+      headers: h(),
+      json: { ...base, variables: { ptm_date: '10 Oct' } },
+    });
+    expect(sent.statusCode).toBe(201);
+    const body = await withMigrator((c) =>
+      c.query<{ body: string }>(`SELECT body FROM comms_messages WHERE message_request_id = $1`, [
+        sent.json().id,
+      ]),
+    );
+    expect(body.rows[0]!.body).toBe('PTM on 10 Oct for Anu Eight. Attendance . Dr. Mehta');
+  });
+
+  it('a switched-off channel cannot be used; smsbhejo / EMS providers keep their keys secret', async () => {
+    const save = await inject({
+      method: 'PUT',
+      url: '/comms/providers/sms',
+      headers: h(),
+      json: {
+        provider: 'smsbhejo',
+        config: { user: 'school', entityId: '1101' },
+        secrets: { key: 'live-key-xyz' },
+        active: false,
+      },
+    });
+    expect(save.statusCode).toBe(200);
+    const got = await inject({ method: 'GET', url: '/comms/settings', headers: h() });
+    expect(JSON.stringify(got.json())).not.toContain('live-key-xyz');
+    expect(got.json().switchedOff).toEqual(['sms']);
+    const blocked = await inject({
+      method: 'POST',
+      url: '/comms/requests',
+      headers: h(),
+      json: {
+        title: 'Switched off',
+        body: 'y',
+        channels: [{ channel: 'sms', templateId: ids.sms }],
+        audience: 'individuals',
+        targets: [{ type: 'student', id: ids.a }],
+      },
+    });
+    expect(blocked.statusCode).toBe(409);
+    await inject({
+      method: 'PUT',
+      url: '/comms/providers/sms',
+      headers: h(),
+      json: { provider: 'smsbhejo', config: { user: 'school', entityId: '1101' }, active: true },
+    });
+  });
+
+  it('the parent sees their messages in the app inbox, per child, and can mark them read', async () => {
+    const ph = headersFor(parent.sub, school.id);
+    const inbox = await inject({ method: 'GET', url: '/comms/inbox', headers: ph });
+    expect(inbox.statusCode).toBe(200);
+    const items = inbox.json().data as Array<{
+      title: string;
+      channels: string[];
+      unread: boolean;
+      messageIds: string[];
+      student: { name: string } | null;
+    }>;
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.some((x) => x.title === 'Red house meeting')).toBe(true);
+    expect(inbox.json().children.map((x: { name: string }) => x.name)).toEqual(['Anu Eight']);
+    expect(items.every((x) => !x.title.includes('Visitor'))).toBe(true);
+    const before = (await inject({ method: 'GET', url: '/comms/inbox/unread', headers: ph })).json()
+      .unread;
+    expect(before).toBeGreaterThan(0);
+    await inject({
+      method: 'POST',
+      url: '/comms/inbox/read',
+      headers: ph,
+      json: { ids: items[0]!.messageIds },
+    });
+    const after = (await inject({ method: 'GET', url: '/comms/inbox/unread', headers: ph })).json()
+      .unread;
+    expect(after).toBe(before - 1);
+    const other = await inject({
+      method: 'GET',
+      url: `/comms/inbox?studentId=${ids.b}`,
+      headers: ph,
+    });
+    expect(other.statusCode).toBe(404);
   });
 });

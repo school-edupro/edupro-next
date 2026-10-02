@@ -1,11 +1,20 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { CommsReportsService } from './comms-reports.service';
 import { CommsSettingsService, type ProviderChannel } from './comms-settings.service';
-import { CommsSettingsDto, CreditDto, ProviderDto, ProviderTestDto } from './comms.dto';
+import {
+  CommsSettingsDto,
+  CreditDto,
+  InboxQueryDto,
+  InboxReadDto,
+  ProviderDto,
+  ProviderTestDto,
+} from './comms.dto';
+import { InboxService } from './inbox.service';
 import { COMMS_V2 } from './comms.permissions';
 
 const channelOf = (v: string): ProviderChannel => {
@@ -98,5 +107,33 @@ export class CommsSettingsController {
   @RequirePermission(COMMS_V2.creditManage, { description: 'Record credit top-ups' })
   addCredit(@ReqCtx() ctx: RequestContext, @Body() dto: CreditDto) {
     return this.settings.addCredit(ctx, dto);
+  }
+}
+
+/** The Messages inbox of the parent, student and teacher apps: the signed-in person's own messages. */
+@ApiTags('comms')
+@ApiBearerAuth()
+@Controller('comms/inbox')
+export class CommsInboxController {
+  constructor(private readonly inbox: InboxService) {}
+
+  @Get()
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Messages the school sent me (parents: also about each child)' })
+  list(@ReqCtx() ctx: RequestContext, @Query() q: InboxQueryDto) {
+    return this.inbox.list(ctx, q);
+  }
+
+  @Get('unread')
+  @AuthenticatedOnly()
+  unread(@ReqCtx() ctx: RequestContext) {
+    return this.inbox.unread(ctx);
+  }
+
+  @Post('read')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  read(@ReqCtx() ctx: RequestContext, @Body() dto: InboxReadDto) {
+    return this.inbox.markRead(ctx, dto.ids);
   }
 }

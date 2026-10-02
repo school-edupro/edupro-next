@@ -7,6 +7,8 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { OutboxService } from '../../common/jobs/outbox.service';
 import { normaliseEmail, normaliseMobile } from './audience';
+import { renderLenient } from './render';
+import { SAMPLE_VARIABLES } from './templates.service';
 import type { CommsSettingsDto, CreditDto, ProviderDto, ProviderTestDto } from './comms.dto';
 
 export type ProviderChannel = 'sms' | 'whatsapp' | 'email';
@@ -24,13 +26,15 @@ export interface CommsPolicy {
 /** Secret fields of each provider: stored encrypted, shown only as "saved". */
 const SECRET_FIELDS: Record<string, string[]> = {
   msg91: ['authKey'],
+  smsbhejo: ['key'],
   meta_whatsapp: ['accessToken', 'appSecret'],
+  ems_whatsapp: ['apiKey'],
   smtp: ['password'],
   console: [],
 };
 const PROVIDER_FOR: Record<ProviderChannel, string[]> = {
-  sms: ['msg91', 'console'],
-  whatsapp: ['meta_whatsapp', 'console'],
+  sms: ['smsbhejo', 'msg91', 'console'],
+  whatsapp: ['ems_whatsapp', 'meta_whatsapp', 'console'],
   email: ['smtp', 'console'],
 };
 
@@ -106,6 +110,7 @@ export class CommsSettingsService {
           };
         }),
         roles: roles.rows,
+        switchedOff: providers.rows.filter((p) => !p.active).map((p) => p.channel),
         webhooks: {
           msg91: '/api/v1/comms/webhooks/msg91',
           meta: '/api/v1/comms/webhooks/meta',
@@ -217,17 +222,33 @@ export class CommsSettingsService {
           `SELECT name FROM schools WHERE id = app.current_school_id()`,
         )
       ).rows[0]?.name;
-      const body =
+      let body =
         dto.text?.trim() || `Test message from ${school ?? 'EduPro'}: your ${channel} setup works.`;
+      let params: string[] | null = null;
+      if (dto.templateId) {
+        const t = await c.query<{ channel: string; body: string; wa_params: string[] }>(
+          `SELECT channel::text, body, wa_params FROM comms_templates WHERE id = $1 AND deleted_at IS NULL`,
+          [dto.templateId],
+        );
+        const tpl = t.rows[0];
+        if (!tpl || tpl.channel !== channel)
+          throw new DomainError('validation-failed', `Choose a ${channel} template`, {
+            status: 400,
+          });
+        const vars: Record<string, string> = { ...SAMPLE_VARIABLES, school: school ?? '' };
+        body = renderLenient(tpl.body, vars);
+        params = (tpl.wa_params ?? []).map((k) => vars[k] ?? 'test');
+      }
       const r = await c.query<{ id: string }>(
-        `INSERT INTO comms_messages (school_id, template_id, channel, recipient_address, subject, body, variables, request_id, created_by)
-         VALUES (app.current_school_id(), $1, $2::comms_channel, $3, $4, $5, '{}'::jsonb, app.current_request_id(), app.current_user_id()) RETURNING id::text`,
+        `INSERT INTO comms_messages (school_id, template_id, channel, recipient_address, subject, body, variables, params, request_id, created_by)
+         VALUES (app.current_school_id(), $1, $2::comms_channel, $3, $4, $5, '{}'::jsonb, $6::jsonb, app.current_request_id(), app.current_user_id()) RETURNING id::text`,
         [
           dto.templateId ?? null,
           channel,
           address,
           channel === 'email' ? `Test email from ${school ?? 'EduPro'}` : null,
           body,
+          params ? JSON.stringify(params) : null,
         ],
       );
       await this.outbox.enqueue(c, ctx, QUEUES.notifications, 'comms.message', {
@@ -235,6 +256,14 @@ export class CommsSettingsService {
       });
       return { messageId: r.rows[0]!.id };
     });
+  }
+
+  /** Channels the school switched off (a provider row with active = false). */
+  async switchedOff(c: PoolClient): Promise<ProviderChannel[]> {
+    const r = await c.query<{ channel: ProviderChannel }>(
+      `SELECT channel::text FROM comms_providers WHERE NOT active`,
+    );
+    return r.rows.map((x) => x.channel);
   }
 
   // ---- credits ---------------------------------------------------------------------------------

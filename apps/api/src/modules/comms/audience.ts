@@ -276,6 +276,109 @@ export async function groupPeople(
   }
 }
 
+const inr = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const day = (d: string | Date) =>
+  new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+/**
+ * Values calculated for each student when a message goes out: fee due by head, the last payment,
+ * attendance this month and the latest exam result. Empty when there is nothing on file.
+ */
+export async function computedStudentValues(
+  c: PoolClient,
+  studentIds: string[],
+  yearId: string,
+): Promise<Map<string, Record<string, string>>> {
+  const out = new Map<string, Record<string, string>>(
+    studentIds.map((id) => [
+      id,
+      {
+        fee_due_heads: '',
+        last_paid_amount: '',
+        last_paid_date: '',
+        attendance_percent: '',
+        absent_days: '',
+        present_days: '',
+        last_exam: '',
+        last_exam_percent: '',
+        last_exam_result: '',
+        last_exam_grade: '',
+      },
+    ]),
+  );
+  if (!studentIds.length) return out;
+  const set = (id: string, k: string, v: string) => {
+    const row = out.get(id);
+    if (row) row[k] = v;
+  };
+  const heads = await c.query<{ student_id: string; head: string; due: string }>(
+    `SELECT d.student_id::text, h.name AS head, sum(d.net - d.paid)::text AS due
+       FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id
+      WHERE d.student_id = ANY($1::bigint[]) AND d.academic_year_id = $2::bigint AND d.due_on <= CURRENT_DATE AND d.net > d.paid
+      GROUP BY d.student_id, h.name ORDER BY h.name`,
+    [studentIds, yearId],
+  );
+  const byStudent = new Map<string, string[]>();
+  for (const h of heads.rows)
+    byStudent.set(h.student_id, [
+      ...(byStudent.get(h.student_id) ?? []),
+      `${h.head} ₹${inr(Number(h.due))}`,
+    ]);
+  for (const [id, list] of byStudent) set(id, 'fee_due_heads', list.join(', '));
+  const paid = await c.query<{ student_id: string; amount: string; received_on: Date }>(
+    `SELECT DISTINCT ON (student_id) student_id::text, amount::text, received_on
+       FROM fee_payments WHERE student_id = ANY($1::bigint[]) ORDER BY student_id, received_on DESC, id DESC`,
+    [studentIds],
+  );
+  for (const p of paid.rows) {
+    set(p.student_id, 'last_paid_amount', inr(Number(p.amount)));
+    set(p.student_id, 'last_paid_date', day(p.received_on));
+  }
+  const att = await c.query<{ student_id: string; present: string; absent: string; total: string }>(
+    `SELECT m.student_id::text,
+            sum(CASE WHEN m.code IN ('P', 'L', 'OD', 'SR', 'SB') THEN 1 WHEN m.code = 'H' THEN 0.5 ELSE 0 END)::text AS present,
+            count(*) FILTER (WHERE m.code = 'A')::text AS absent, count(*)::text AS total
+       FROM attendance_marks m JOIN attendance_sessions s ON s.id = m.session_id
+      WHERE s.kind = 'day' AND s.on_date >= date_trunc('month', CURRENT_DATE)::date AND m.student_id = ANY($1::bigint[])
+      GROUP BY m.student_id`,
+    [studentIds],
+  );
+  for (const a of att.rows) {
+    const total = Number(a.total);
+    set(a.student_id, 'present_days', String(Number(a.present)));
+    set(a.student_id, 'absent_days', a.absent);
+    if (total)
+      set(
+        a.student_id,
+        'attendance_percent',
+        `${String(Math.round((100 * Number(a.present)) / total))}%`,
+      );
+  }
+  const exams = await c.query<{
+    student_id: string;
+    exam: string;
+    pct: string | null;
+    result: string;
+    grade: string | null;
+  }>(
+    `SELECT DISTINCT ON (r.student_id) r.student_id::text, e.name AS exam, r.pct::text, r.result, r.grade
+       FROM exam_results r JOIN exams e ON e.id = r.exam_id
+      WHERE r.student_id = ANY($1::bigint[]) ORDER BY r.student_id, e.starts_on DESC NULLS LAST, r.computed_at DESC`,
+    [studentIds],
+  );
+  for (const e of exams.rows) {
+    set(e.student_id, 'last_exam', e.exam);
+    set(e.student_id, 'last_exam_percent', e.pct === null ? '' : `${String(Number(e.pct))}%`);
+    set(
+      e.student_id,
+      'last_exam_result',
+      e.result === 'pass' ? 'Pass' : e.result === 'fail' ? 'Needs improvement' : 'Incomplete',
+    );
+    set(e.student_id, 'last_exam_grade', e.grade ?? '');
+  }
+  return out;
+}
+
 /** Expands an audience to one recipient per channel and address, with the reasons people were skipped. */
 export async function resolveAudience(
   c: PoolClient,
@@ -333,7 +436,12 @@ export async function resolveAudience(
   const school = await c.query<{ name: string }>(
     `SELECT name FROM schools WHERE id = app.current_school_id()`,
   );
+  // school custom variables ({{principal_name}}, {{fee_pay_link}}...); built-in names always win
+  const custom = await c.query<{ key: string; value: string }>(
+    `SELECT key, value FROM comms_variables`,
+  );
   const base: Record<string, string> = {
+    ...Object.fromEntries(custom.rows.map((x) => [x.key, x.value])),
     school: school.rows[0]?.name ?? '',
     date: new Date().toLocaleDateString('en-IN', {
       day: '2-digit',
@@ -386,6 +494,7 @@ export async function resolveAudience(
       [sIds, input.yearId],
     );
     const dueOf = new Map(dues.rows.map((d) => [d.student_id, Number(d.due)]));
+    const computed = await computedStudentValues(c, sIds, input.yearId);
     const byStudent = new Map<string, GuardianRow[]>();
     for (const g of gs.rows)
       byStudent.set(g.student_id, [...(byStudent.get(g.student_id) ?? []), g]);
@@ -406,6 +515,7 @@ export async function resolveAudience(
         mother_name: mother?.name ?? '',
         guardian_name: primary?.name ?? '',
         fee_due: (dueOf.get(s.id) ?? 0).toLocaleString('en-IN'),
+        ...computed.get(s.id),
       };
       const common = { personId: s.id, studentId: s.id };
       if (input.sendTo === 'primary') {
@@ -637,6 +747,20 @@ export const TEMPLATE_VARIABLES: Array<{ key: string; label: string; for: string
   { key: 'mother_name', label: 'Mother’s name', for: 'students' },
   { key: 'guardian_name', label: 'Primary guardian', for: 'students' },
   { key: 'fee_due', label: 'Fee due today (₹)', for: 'students' },
+  {
+    key: 'fee_due_heads',
+    label: 'Fee due by head (e.g. Tuition ₹5,000, Transport ₹1,200)',
+    for: 'computed',
+  },
+  { key: 'last_paid_amount', label: 'Last fee paid (₹)', for: 'computed' },
+  { key: 'last_paid_date', label: 'Date of the last fee payment', for: 'computed' },
+  { key: 'attendance_percent', label: 'Attendance this month (%)', for: 'computed' },
+  { key: 'present_days', label: 'Days present this month', for: 'computed' },
+  { key: 'absent_days', label: 'Days absent this month', for: 'computed' },
+  { key: 'last_exam', label: 'Latest exam', for: 'computed' },
+  { key: 'last_exam_percent', label: 'Latest exam percentage', for: 'computed' },
+  { key: 'last_exam_result', label: 'Latest exam result', for: 'computed' },
+  { key: 'last_exam_grade', label: 'Latest exam grade', for: 'computed' },
   { key: 'employee_name', label: 'Employee name', for: 'employees' },
   { key: 'employee_code', label: 'Employee code', for: 'employees' },
   { key: 'designation', label: 'Designation', for: 'employees' },

@@ -34,6 +34,8 @@ export interface MasterMeta {
   yearScoped: boolean;
   canManage: boolean;
   canClone: boolean;
+  /** owned by another screen; opened from there, not listed */
+  hidden?: boolean;
   naturalKey: string[];
   status: { column: string; values: string[] } | null;
   fields: MasterField[];

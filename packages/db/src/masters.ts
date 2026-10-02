@@ -84,6 +84,11 @@ export interface MasterDefinition {
   maxRows?: number;
   /** Short guidance shown on the upload card. */
   uploadHelp?: string;
+  /**
+   * Not listed on its setup page because a dedicated screen owns the data (communication templates:
+   * the Template master); the grid stays reachable from that screen for Excel import and export.
+   */
+  hidden?: boolean;
 }
 
 export interface MasterListParams {
@@ -1263,8 +1268,9 @@ export const MASTERS: MasterDefinition[] = [
   // ---- communication ----
   master({
     id: 'comms_templates',
-    title: 'Message templates',
+    title: 'Templates (Excel import / export)',
     group: 'communication',
+    hidden: true,
     table: 'comms_templates',
     permission: { view: 'comms.template.view', manage: 'comms.template.manage' },
     naturalKey: ['code', 'channel'],
@@ -1299,22 +1305,6 @@ export const MASTERS: MasterDefinition[] = [
     status: STATUS,
     search: ['t.code', 't.name', 't.body'],
     orderBy: 't.code, t.channel',
-  }),
-  master({
-    id: 'comms_groups',
-    title: 'Groups',
-    group: 'communication',
-    table: 'comms_groups',
-    permission: { view: 'comms.template.view', manage: 'comms.template.manage' },
-    naturalKey: ['code'],
-    conflict: '(school_id, code) WHERE deleted_at IS NULL',
-    fields: [
-      code(),
-      name(),
-      { key: 'description', header: 'Description', type: 'text', maxLength: 200, width: 30 },
-    ],
-    search: ['t.code', 't.name'],
-    orderBy: 't.code',
   }),
   master({
     id: 'query_categories',

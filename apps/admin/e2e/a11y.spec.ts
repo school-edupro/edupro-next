@@ -110,6 +110,7 @@ const PAGES = [
   '/comms',
   '/comms/groups?new=1',
   '/comms/templates?channel=whatsapp',
+  '/comms/templates?channel=variables',
   '/comms/templates/new?channel=email',
   '/comms/settings',
   '/comms/reports',

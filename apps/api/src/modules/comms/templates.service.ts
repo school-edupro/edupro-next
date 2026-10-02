@@ -105,6 +105,16 @@ export const SAMPLE_VARIABLES: Record<string, string> = {
   department: 'Academics',
   title: 'PTM on Saturday',
   body: 'The parent-teacher meeting is on Saturday at 9 am.',
+  fee_due_heads: 'Tuition ₹10,000, Transport ₹2,500',
+  last_paid_amount: '15,000',
+  last_paid_date: '05 Sep 2026',
+  attendance_percent: '92%',
+  present_days: '23',
+  absent_days: '2',
+  last_exam: 'Half Yearly',
+  last_exam_percent: '84.5%',
+  last_exam_result: 'Pass',
+  last_exam_grade: 'A2',
 };
 
 /**
@@ -119,8 +129,72 @@ export class TemplatesService {
     private readonly audit: AuditService,
   ) {}
 
-  variables() {
-    return TEMPLATE_VARIABLES;
+  /** Built-in, computed and the school's own variables, for pickers. */
+  async variables(ctx: RequestContext) {
+    const custom = await this.customVariables(ctx);
+    return [
+      ...TEMPLATE_VARIABLES,
+      ...custom.map((v) => ({
+        key: v.key,
+        label: `${v.label} (${v.value || 'empty'})`,
+        for: 'school',
+      })),
+    ];
+  }
+
+  async customVariables(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ key: string; label: string; value: string; updated_at: Date }>(
+        `SELECT key, label, value, updated_at FROM comms_variables ORDER BY key`,
+      );
+      return r.rows.map((x) => ({
+        key: x.key,
+        label: x.label,
+        value: x.value,
+        updatedAt: x.updated_at.toISOString(),
+      }));
+    });
+  }
+
+  /** A school variable: a fixed value every message can use, e.g. {{principal_name}}. */
+  async saveCustomVariable(
+    ctx: RequestContext,
+    dto: { key: string; label: string; value: string },
+  ) {
+    if (TEMPLATE_VARIABLES.some((v) => v.key === dto.key) || dto.key in SAMPLE_VARIABLES)
+      throw new DomainError(
+        'conflict',
+        `{{${dto.key}}} is a built-in variable; choose another name`,
+        {
+          status: 409,
+        },
+      );
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(
+        `INSERT INTO comms_variables (school_id, key, label, value, updated_by) VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id())
+         ON CONFLICT (school_id, key) DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, updated_at = now(), updated_by = app.current_user_id()`,
+        [dto.key, dto.label, dto.value],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'comms.variable.save',
+        entityType: 'comms_variables',
+        entityId: dto.key,
+        after: dto,
+      });
+      return { ok: true as const };
+    });
+  }
+
+  async deleteCustomVariable(ctx: RequestContext, key: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`DELETE FROM comms_variables WHERE key = $1`, [key]);
+      await this.audit.stage(ctx, c, {
+        action: 'comms.variable.delete',
+        entityType: 'comms_variables',
+        entityId: key,
+      });
+      return { ok: true as const };
+    });
   }
 
   list(tenant: TenantContext, q: ListTemplatesQueryDto): Promise<TemplateRow[]> {
@@ -154,7 +228,10 @@ export class TemplatesService {
       );
       return r.rows[0]?.name ?? 'School';
     });
-    const vars = { ...SAMPLE_VARIABLES, school };
+    const custom = Object.fromEntries(
+      (await this.customVariables(ctx)).map((v) => [v.key, v.value]),
+    );
+    const vars = { ...custom, ...SAMPLE_VARIABLES, school };
     const html = dto.channel === 'email' && dto.format === 'html';
     const body = html
       ? renderLenient(sanitizeEmailHtml(dto.body), vars, escapeHtml)
@@ -166,7 +243,7 @@ export class TemplatesService {
       text: html ? htmlToText(body) : body,
       sms: dto.channel === 'sms' ? smsUnits(body) : null,
       unknownVariables: extractVariables(`${dto.subject ?? ''} ${dto.body}`).filter(
-        (v) => !(v in SAMPLE_VARIABLES),
+        (v) => !(v in vars),
       ),
     };
   }

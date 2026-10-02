@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 const BASE = 'http://localhost:3001';
-const PAGES = ['/?welcome=1', '/profile', '/attendance', '/fees', '/homework', '/notices'];
+const PAGES = ['/?welcome=1', '/profile', '/attendance', '/fees', '/homework', '/notices', '/messages'];
 
 for (const sub of ['dev-parent', 'dev-student']) {
   for (const width of [1280, 375]) {

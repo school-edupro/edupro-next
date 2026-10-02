@@ -40,7 +40,12 @@ async function main(): Promise<void> {
 
   type Processor = (job: Job<JobEnvelope<never>>) => Promise<void>;
   const processors: Record<string, Processor> = {
-    [QUEUES.notifications]: notificationProcessor(db, adapters, log, storage) as unknown as Processor,
+    [QUEUES.notifications]: notificationProcessor(
+      db,
+      adapters,
+      log,
+      storage,
+    ) as unknown as Processor,
     [QUEUES.exports]: exportProcessor({
       db,
       storage,

@@ -19,6 +19,12 @@ export default async function HomePage() {
   const can = (p: string) => me.permissions.includes(p);
   const tiles: Array<[string, string, boolean, string?]> = [
     [
+      t(lang, 'Messages'),
+      t(lang, 'SMS, WhatsApp and email the school sent you'),
+      true,
+      '/messages',
+    ],
+    [
       t(lang, 'My classes'),
       t(lang, 'Your sections, subjects and this week’s timetable'),
       can('academics.timetable.view'),

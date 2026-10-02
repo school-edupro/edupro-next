@@ -120,6 +120,7 @@ export interface ComposePayload {
   upload?: UploadRow[];
   sendTo: SendTo;
   attachments: string[];
+  variables?: Record<string, string>;
   scheduledAt?: string;
 }
 
@@ -130,6 +131,9 @@ export interface ComposePreview {
   skippedReasons: Record<string, number>;
   byChannel: Record<string, { send: number; skipped: number; units: number; cost: number }>;
   needsApproval: boolean;
+  /** template variables nobody fills in: compose asks for one value for everyone */
+  askValues: string[];
+  switchedOff: string[];
   quietHours: string | null;
   sample: Array<{ channel: string; name: string; address: string; student: string | null }>;
   rendered: Array<{ channel: string; subject: string | null; text: string; units: number }>;
@@ -165,6 +169,7 @@ export interface CommsSettings {
   policy: CommsPolicy;
   providers: ProviderView[];
   roles: Array<{ code: string; name: string }>;
+  switchedOff?: string[];
   webhooks: { msg91: string; meta: string };
 }
 

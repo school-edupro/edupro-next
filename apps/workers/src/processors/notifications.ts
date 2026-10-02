@@ -1,8 +1,10 @@
 import { decryptField, tenantForJob, type Db, type JobEnvelope } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import type { Adapters, Channel, ChannelAdapter, OutboundMessage } from '../adapters';
+import { EmsWhatsAppAdapter } from '../adapters/ems-whatsapp.adapter';
 import { MetaWhatsAppAdapter } from '../adapters/meta-whatsapp.adapter';
 import { Msg91Adapter } from '../adapters/msg91.adapter';
+import { SmsBhejoAdapter } from '../adapters/smsbhejo.adapter';
 import { SmtpAdapter } from '../adapters/smtp.adapter';
 import type { Logger } from '../logger';
 
@@ -36,6 +38,7 @@ interface MessageDbRow {
     provider: string;
     config: Record<string, unknown>;
     secret: string | null;
+    active: boolean;
     updated_at: string;
   } | null;
 }
@@ -52,6 +55,13 @@ const htmlToText = (html: string): string =>
     .replace(/&quot;/g, '"')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+/** The school switched the channel off in Communication settings: fail at once, no retries. */
+class SwitchedOff extends Error {
+  constructor(channel: string) {
+    super(`The ${channel} channel is switched off in Communication settings`);
+  }
+}
 
 const cache = new Map<string, { at: number; adapter: ChannelAdapter }>();
 
@@ -74,6 +84,22 @@ export function schoolAdapter(
   const cfg = row.config as Record<string, string | number | boolean | undefined>;
   let adapter: ChannelAdapter | null = null;
   if (row.provider === 'msg91' && secret.authKey) adapter = new Msg91Adapter(cfg, secret.authKey);
+  if (row.provider === 'smsbhejo' && secret.key)
+    adapter = new SmsBhejoAdapter(
+      {
+        ...cfg,
+        countryPrefix: cfg.countryPrefix === true || cfg.countryPrefix === 'true',
+      } as never,
+      secret.key,
+    );
+  if (row.provider === 'ems_whatsapp' && secret.apiKey)
+    adapter = new EmsWhatsAppAdapter(
+      {
+        ...cfg,
+        countryPrefix: cfg.countryPrefix === true || cfg.countryPrefix === 'true',
+      } as never,
+      secret.apiKey,
+    );
   if (row.provider === 'meta_whatsapp' && secret.accessToken)
     adapter = new MetaWhatsAppAdapter(cfg, secret.accessToken);
   if (row.provider === 'smtp' && cfg.host) {
@@ -121,8 +147,8 @@ export function notificationProcessor(
       const r = await c.query<MessageDbRow>(
         `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments,
                 t.dlt_template_id, t.dlt_entity_id, t.sender_id, t.wa_template_name, t.wa_language, t.wa_header, t.wa_params,
-                (SELECT jsonb_build_object('provider', p.provider, 'config', p.config, 'secret', p.secret, 'updated_at', p.updated_at)
-                   FROM comms_providers p WHERE p.channel = m.channel AND p.active) AS provider
+                (SELECT jsonb_build_object('provider', p.provider, 'config', p.config, 'secret', p.secret, 'active', p.active, 'updated_at', p.updated_at)
+                   FROM comms_providers p WHERE p.channel = m.channel) AS provider
            FROM comms_messages m LEFT JOIN comms_templates t ON t.id = m.template_id
           WHERE m.id = $1`,
         [messageId],
@@ -146,6 +172,7 @@ export function notificationProcessor(
 
     let adapter: ChannelAdapter = adapters[row.channel];
     try {
+      if (row.provider && !row.provider.active) throw new SwitchedOff(row.channel);
       adapter =
         schoolAdapter(envelope.schoolId, row.channel, row.provider) ?? adapters[row.channel];
       const attachments: NonNullable<OutboundMessage['attachments']> = [];
@@ -167,26 +194,25 @@ export function notificationProcessor(
         );
         for (const f of files) {
           const name = f.original_name ?? `attachment-${f.id}`;
-          if (row.channel === 'email')
-            attachments.push({
-              name,
-              contentType: f.content_type,
-              bytes: await storage.read(f.object_key),
-            });
-          else
-            attachments.push({
-              name,
-              contentType: f.content_type,
-              url: (
-                await storage.createDownloadUrl(
-                  f.object_key,
-                  name,
-                  f.content_type,
-                  f.id,
-                  envelope.schoolId,
-                )
-              ).url,
-            });
+          // email and the EMS bridge take the bytes; Meta needs a link it can fetch
+          attachments.push({
+            name,
+            contentType: f.content_type,
+            bytes: await storage.read(f.object_key),
+            ...(row.channel === 'whatsapp'
+              ? {
+                  url: (
+                    await storage.createDownloadUrl(
+                      f.object_key,
+                      name,
+                      f.content_type,
+                      f.id,
+                      envelope.schoolId,
+                    )
+                  ).url,
+                }
+              : {}),
+          });
         }
       }
       const result = await adapter.send({
@@ -230,7 +256,9 @@ export function notificationProcessor(
       log.info({ messageId, channel: row.channel, provider: adapter.name }, 'notification sent');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const lastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      // a switched-off channel is not retried
+      const lastAttempt =
+        error instanceof SwitchedOff || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
       await db.withTenant(tenant, (c) =>
         c.query(
           `UPDATE comms_messages
@@ -245,7 +273,7 @@ export function notificationProcessor(
         { messageId, channel: row.channel, provider: adapter.name, err: message, lastAttempt },
         'notification failed',
       );
-      throw error;
+      if (!(error instanceof SwitchedOff)) throw error;
     }
   };
 }

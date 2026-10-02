@@ -18,49 +18,96 @@ interface Field {
   placeholder?: string;
 }
 
-const PROVIDERS: Record<Channel, { id: string; label: string; fields: Field[]; help: string }> = {
-  sms: {
-    id: 'msg91',
-    label: 'MSG91',
-    help: 'Your MSG91 account’s auth key and the DLT-approved sender id. Every SMS template carries its DLT template id.',
-    fields: [
-      { key: 'authKey', label: 'Auth key', secret: true },
-      { key: 'senderId', label: 'Default sender id (header)', placeholder: 'e.g. ALPHAS' },
-      { key: 'dltEntityId', label: 'DLT principal entity id' },
-      { key: 'route', label: 'Route', placeholder: '4 (transactional)' },
-    ],
-  },
-  whatsapp: {
-    id: 'meta_whatsapp',
-    label: 'Meta WhatsApp Cloud API',
-    help: 'From Meta Business → WhatsApp → API setup: the phone number id, WhatsApp Business account id and a permanent access token; the app secret signs status updates.',
-    fields: [
-      { key: 'phoneNumberId', label: 'Phone number id' },
-      { key: 'wabaId', label: 'WhatsApp Business account id' },
-      { key: 'accessToken', label: 'Permanent access token', secret: true },
-      { key: 'appSecret', label: 'App secret (webhook signature)', secret: true },
-      { key: 'apiVersion', label: 'Graph API version', placeholder: 'v21.0' },
-    ],
-  },
-  email: {
-    id: 'smtp',
-    label: 'SMTP / Amazon SES',
-    help: 'Any SMTP server. For Amazon SES use the SES SMTP endpoint (e.g. email-smtp.ap-south-1.amazonaws.com, port 587) and SES SMTP credentials.',
-    fields: [
-      { key: 'host', label: 'SMTP host', placeholder: 'email-smtp.ap-south-1.amazonaws.com' },
-      { key: 'port', label: 'Port', type: 'number', placeholder: '587' },
-      { key: 'secure', label: 'Use TLS from the start (port 465)', type: 'checkbox' },
-      { key: 'user', label: 'User name' },
-      { key: 'password', label: 'Password', secret: true },
-      { key: 'fromEmail', label: 'From email', placeholder: 'office@school.in' },
-      { key: 'fromName', label: 'From name', placeholder: 'Alpha Public School' },
-      { key: 'replyTo', label: 'Reply-to (optional)' },
-    ],
-  },
+interface ProviderDef {
+  id: string;
+  label: string;
+  fields: Field[];
+  help: string;
+}
+
+const PROVIDERS: Record<Channel, ProviderDef[]> = {
+  sms: [
+    {
+      id: 'smsbhejo',
+      label: 'smsbhejo.org (DLT)',
+      help: 'The gateway your current ERP uses: account user and key, the default DLT sender id (header) and principal entity id. Each SMS template carries its DLT template id.',
+      fields: [
+        { key: 'user', label: 'Account user' },
+        { key: 'key', label: 'API key', secret: true },
+        { key: 'senderId', label: 'Default sender id (header)', placeholder: 'e.g. DPSNOI' },
+        { key: 'entityId', label: 'DLT principal entity id' },
+        { key: 'url', label: 'Gateway address', placeholder: 'https://smsbhejo.org/submitsms.jsp' },
+        { key: 'countryPrefix', label: 'Send numbers with 91 in front', type: 'checkbox' },
+      ],
+    },
+    {
+      id: 'msg91',
+      label: 'MSG91',
+      help: 'Your MSG91 account’s auth key and the DLT-approved sender id. Every SMS template carries its DLT template id.',
+      fields: [
+        { key: 'authKey', label: 'Auth key', secret: true },
+        { key: 'senderId', label: 'Default sender id (header)', placeholder: 'e.g. ALPHAS' },
+        { key: 'dltEntityId', label: 'DLT principal entity id' },
+        { key: 'route', label: 'Route', placeholder: '4 (transactional)' },
+      ],
+    },
+  ],
+  whatsapp: [
+    {
+      id: 'ems_whatsapp',
+      label: 'Mobilise EMS WhatsApp bridge',
+      help: 'The bridge your current ERP uses: its address and bearer key. Templates must be approved on the WhatsApp Business account; PDF / image headers are sent inline (no public link needed).',
+      fields: [
+        {
+          key: 'url',
+          label: 'Bridge address',
+          placeholder: 'https://ems.onmobilise.com/api/v1/messages',
+        },
+        { key: 'apiKey', label: 'Bearer key', secret: true },
+        { key: 'countryPrefix', label: 'Send numbers with 91 in front', type: 'checkbox' },
+      ],
+    },
+    {
+      id: 'meta_whatsapp',
+      label: 'Meta WhatsApp Cloud API',
+      help: 'From Meta Business → WhatsApp → API setup: the phone number id, WhatsApp Business account id and a permanent access token; the app secret signs status updates.',
+      fields: [
+        { key: 'phoneNumberId', label: 'Phone number id' },
+        { key: 'wabaId', label: 'WhatsApp Business account id' },
+        { key: 'accessToken', label: 'Permanent access token', secret: true },
+        { key: 'appSecret', label: 'App secret (webhook signature)', secret: true },
+        { key: 'apiVersion', label: 'Graph API version', placeholder: 'v21.0' },
+      ],
+    },
+  ],
+  email: [
+    {
+      id: 'smtp',
+      label: 'SMTP / Amazon SES',
+      help: 'Any SMTP server (your current ERP: the school mail server on port 465 with TLS from the start). For Amazon SES use the SES SMTP endpoint, port 587, and SES SMTP credentials.',
+      fields: [
+        { key: 'host', label: 'SMTP host', placeholder: 'mail.example.com' },
+        { key: 'port', label: 'Port', type: 'number', placeholder: '465 or 587' },
+        { key: 'secure', label: 'Use TLS from the start (port 465)', type: 'checkbox' },
+        { key: 'user', label: 'User name' },
+        { key: 'password', label: 'Password', secret: true },
+        { key: 'fromEmail', label: 'From email', placeholder: 'noreply@school.in' },
+        { key: 'fromName', label: 'From name', placeholder: 'School name' },
+        { key: 'replyTo', label: 'Reply-to (optional)' },
+      ],
+    },
+  ],
 };
 
-function ProviderCard({ channel, settings }: { channel: Channel; settings: CommsSettings }) {
-  const def = PROVIDERS[channel];
+function ProviderCard({
+  channel,
+  settings,
+  templates,
+}: {
+  channel: Channel;
+  settings: CommsSettings;
+  templates: Array<{ id: string; name: string }>;
+}) {
   const saved = settings.providers.find((p) => p.channel === channel);
   const [mode, setMode] = useState<string>(saved?.provider ?? 'console');
   const [config, setConfig] = useState<Record<string, string | number | boolean>>(
@@ -69,9 +116,11 @@ function ProviderCard({ channel, settings }: { channel: Channel; settings: Comms
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [active, setActive] = useState(saved?.active ?? true);
   const [to, setTo] = useState('');
+  const [testTpl, setTestTpl] = useState(templates[0]?.id ?? '');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const real = mode === def.id;
+  const def = PROVIDERS[channel].find((p) => p.id === mode);
+  const real = Boolean(def);
   return (
     <section className="ep-card ep-prov" aria-labelledby={`prov-${channel}`}>
       <h2 className="ep-card__title" id={`prov-${channel}`}>
@@ -94,10 +143,14 @@ function ProviderCard({ channel, settings }: { channel: Channel; settings: Comms
           onChange={(e) => setMode(e.target.value)}
         >
           <option value="console">Not set up (messages are only logged)</option>
-          <option value={def.id}>{def.label}</option>
+          {PROVIDERS[channel].map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
         </select>
       </label>
-      {real ? (
+      {def ? (
         <>
           <p className="ep-field__help">{def.help}</p>
           <div className="ep-wd__form">
@@ -144,7 +197,7 @@ function ProviderCard({ channel, settings }: { channel: Channel; settings: Comms
                 checked={active}
                 onChange={(e) => setActive(e.target.checked)}
               />{' '}
-              In use
+              Channel switched on (off = nothing goes out on {CHANNEL_LABEL[channel]})
             </label>
           </div>
           {channel === 'whatsapp' && typeof saved?.config.verifyToken === 'string' ? (
@@ -194,12 +247,30 @@ function ProviderCard({ channel, settings }: { channel: Channel; settings: Comms
             onChange={(e) => setTo(e.target.value)}
           />
         </label>
+        {channel === 'whatsapp' ? (
+          <label className="ep-field" htmlFor={`prov-${channel}-tpl`}>
+            <span className="ep-field__label">Approved template (sample values)</span>
+            <select
+              id={`prov-${channel}-tpl`}
+              className="ep-select"
+              value={testTpl}
+              onChange={(e) => setTestTpl(e.target.value)}
+            >
+              {templates.length ? null : <option value="">No WhatsApp template yet</option>}
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button
           type="button"
           className="ep-btn ep-btn--secondary ep-btn--sm"
           disabled={!to}
           onClick={async () => {
-            const r = await testProvider(channel, to);
+            const r = await testProvider(channel, to, channel === 'whatsapp' ? testTpl : undefined);
             setMsg(
               r.ok
                 ? { ok: true, text: 'Test queued. The delivery log shows whether it went out.' }
@@ -516,7 +587,9 @@ export function CommsSettingsForm({
   settings,
   credits,
   canCredit,
+  whatsappTemplates,
 }: {
+  whatsappTemplates: Array<{ id: string; name: string }>;
   settings: CommsSettings;
   credits: { balances: Balance[]; ledger: Parameters<typeof Credits>[0]['ledger'] };
   canCredit: boolean;
@@ -525,7 +598,12 @@ export function CommsSettingsForm({
     <div className="ep-grp">
       <div className="ep-prov__grid">
         {(['sms', 'whatsapp', 'email'] as Channel[]).map((c) => (
-          <ProviderCard key={c} channel={c} settings={settings} />
+          <ProviderCard
+            key={c}
+            channel={c}
+            settings={settings}
+            templates={c === 'whatsapp' ? whatsappTemplates : []}
+          />
         ))}
       </div>
       <Policy settings={settings} />

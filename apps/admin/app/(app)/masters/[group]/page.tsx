@@ -69,8 +69,10 @@ export default async function MasterGroupPage({
     masterRegistry(),
   ]);
   const masters = registry.filter((m) => m.group === group);
-  if (masters.length === 0) notFound();
-  const master = masters.find((m) => m.id === sp.tab) ?? masters[0]!;
+  // a hidden master (owned by another screen) opens only by its link, never as a tab
+  const listed = masters.filter((m) => !m.hidden);
+  if (listed.length === 0) notFound();
+  const master = masters.find((m) => m.id === sp.tab) ?? listed[0]!;
   const page = Math.max(1, Number(sp.page) || 1);
   const size = SIZES.includes(sp.size ?? '') ? Number(sp.size) : 50;
   const q = (sp.q ?? '').trim();
@@ -145,7 +147,7 @@ export default async function MasterGroupPage({
 
       <div className="ep-tabs">
         <div role="tablist" aria-label={t(`title.${groupKey}`)} className="ep-tabs__list">
-          {masters.map((m) => (
+          {listed.map((m) => (
             <a
               key={m.id}
               role="tab"

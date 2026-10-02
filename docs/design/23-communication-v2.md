@@ -34,6 +34,21 @@ Dashboard `/comms`, Compose, Groups (+ detail with search, Excel dry run, rule e
 read), Reports (usage statement, failures, delivery log; Excel / PDF), Providers and settings (keys,
 test send, rules, credits).
 
+## Part 2 (migration 0053)
+- Gateways of the legacy ERP: smsbhejo.org (`submitsms.jsp`, user / key / senderid / entityid / tempid)
+  and the Mobilise EMS WhatsApp bridge (bearer key, inline base64 header), next to MSG91 / Meta / SMTP.
+  Keys are typed by the school in Providers and settings (encrypted); none are in the repository.
+- A provider row with `active = false` switches the channel off: compose refuses it, the worker fails
+  queued messages at once ("switched off") without retries.
+- Variables: school variables (`comms_variables`), values asked once at send time (`askValues` from the
+  preview), Excel columns, and computed per student (`computedStudentValues`: fee due by head, last
+  payment, attendance this month, latest exam).
+- Messages inbox in the parent / student app (`/messages`, header badge) and the teacher app: messages
+  to the person's login, own mobile / email, as a parent, or the family contact of a child; read marks in
+  `comms_inbox_reads`.
+- The "Message templates" and "Groups" grids left Communication setup (duplicates of the Template master
+  and Groups); template Excel import / export stays as a hidden master opened from the Template master.
+
 ## Not yet
 WhatsApp → SMS fallback on failure, two-way inbox for WhatsApp replies, per-teacher sending (decided
 office-only), template sync from Meta / DLT portals.

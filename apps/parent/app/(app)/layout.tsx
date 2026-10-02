@@ -18,8 +18,13 @@ export default async function FamilyLayout({ children }: { children: ReactNode }
       redirect('/login?error=session-expired');
     throw error;
   }
+  // unread school messages for the header badge; best effort, never blocks the page
+  const unread = await bff.api
+    .fetch<{ unread: number }>('/comms/inbox/unread')
+    .then((r) => r.unread)
+    .catch(() => 0);
   return (
-    <FamilyShell me={me} lang={lang} currentPath={currentPath}>
+    <FamilyShell me={me} lang={lang} currentPath={currentPath} unread={unread}>
       {children}
     </FamilyShell>
   );

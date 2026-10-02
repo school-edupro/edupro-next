@@ -3905,3 +3905,145 @@ a.ep-tabs__tab {
   font-weight: var(--fw-semibold);
   text-decoration: underline;
 }
+.ep-cv__help ul {
+  margin: 0;
+  padding-left: var(--sp-4);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-compose__ask {
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+  margin: var(--sp-2) 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* ---- Messages inbox (parent, student and teacher apps) ------------------------------------------- */
+.fp-page {
+  padding: var(--sp-4);
+  max-width: 760px;
+  margin: 0 auto;
+}
+.fp-msgbtn {
+  position: relative;
+}
+.fp-msgbtn__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 var(--sp-1);
+  border-radius: 999px;
+  background: var(--status-danger);
+  color: var(--text-inverse);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  line-height: 1.1rem;
+  text-align: center;
+}
+.fp-msg__list {
+  display: grid;
+  gap: var(--sp-2);
+}
+.fp-msg {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.fp-msg[data-unread] {
+  border-color: var(--border-accent);
+}
+.fp-msg__head {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  cursor: pointer;
+  list-style: none;
+}
+.fp-msg__head::-webkit-details-marker {
+  display: none;
+}
+.fp-msg__title {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.fp-msg[data-unread] .fp-msg__title {
+  font-weight: var(--fw-bold);
+}
+.fp-msg__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--action-accent);
+  flex: none;
+}
+.fp-msg__meta {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.fp-msg__preview {
+  font-size: var(--fs-small);
+  color: var(--text-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-msg[open] .fp-msg__preview {
+  display: none;
+}
+.fp-msg__body {
+  padding: 0 var(--sp-3) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.fp-msg__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.fp-msg__frame {
+  width: 100%;
+  min-height: 24rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+}
+.fp-msg__files {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.fp-msg__status {
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.fp-msg__children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.fp-msg__children a {
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-small);
+  color: var(--text-heading);
+  text-decoration: none;
+}
+.fp-msg__children a[aria-current='page'] {
+  background: var(--surface-band);
+  border-color: var(--border-accent);
+}
+.fp-msg__pager {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--sp-3);
+}

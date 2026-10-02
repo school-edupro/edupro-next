@@ -1,5 +1,6 @@
 import { Badge, Card, PageHeader, toneForStatus } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
+import { CustomVariables, type CustomVariable } from '@/components/comms/CustomVariables';
 import { apiFetch, getMe } from '@/lib/api';
 import { CHANNEL_LABEL, type Channel, type CommsTemplate } from '@/lib/comms';
 
@@ -28,10 +29,14 @@ export default async function TemplatesPage({
   searchParams: Promise<{ ok?: string; error?: string; detail?: string; channel?: string }>;
 }) {
   const sp = await searchParams;
+  const onVariables = sp.channel === 'variables';
   const channel = (TABS.some((t) => t.id === sp.channel) ? sp.channel : 'sms') as Channel;
-  const [me, all] = await Promise.all([
+  const [me, all, custom] = await Promise.all([
     getMe(),
     apiFetch<{ data: CommsTemplate[] }>('/comms/templates').then((r) => r.data),
+    apiFetch<{ data: CustomVariable[] }>('/comms/variables')
+      .then((r) => r.data)
+      .catch(() => [] as CustomVariable[]),
   ]);
   const canManage = me.permissions.includes('comms.template.manage');
   const rows = all.filter((t) => t.channel === channel);
@@ -43,11 +48,22 @@ export default async function TemplatesPage({
         title="Template master"
         description="SMS, WhatsApp and email templates with variables such as {{student_name}}, {{class}} and {{fee_due}}."
         actions={
-          canManage ? (
-            <a className="ep-btn ep-btn--primary" href={`/comms/templates/new?channel=${channel}`}>
-              New {CHANNEL_LABEL[channel]} template
+          <span className="ep-wdset__actions" style={{ margin: 0 }}>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href="/masters/communication?tab=comms_templates"
+            >
+              Excel import / export
             </a>
-          ) : undefined
+            {canManage && !onVariables ? (
+              <a
+                className="ep-btn ep-btn--primary"
+                href={`/comms/templates/new?channel=${channel}`}
+              >
+                New {CHANNEL_LABEL[channel]} template
+              </a>
+            ) : null}
+          </span>
         }
       />
       <Notice params={sp} />
@@ -57,68 +73,78 @@ export default async function TemplatesPage({
             key={t.id}
             className="ep-tabs__tab"
             href={`/comms/templates?channel=${t.id}`}
-            aria-current={t.id === channel ? 'page' : undefined}
+            aria-current={!onVariables && t.id === channel ? 'page' : undefined}
           >
             {t.label} ({all.filter((x) => x.channel === t.id).length})
           </a>
         ))}
+        <a
+          className="ep-tabs__tab"
+          href="/comms/templates?channel=variables"
+          aria-current={onVariables ? 'page' : undefined}
+        >
+          School variables ({custom.length})
+        </a>
       </nav>
-      <Card>
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          {tab.help}
-        </p>
-        {rows.length ? (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
-            <table className="ep-table">
-              <caption className="ep-sr-only">{tab.label} templates</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Template</th>
-                  <th scope="col">Code</th>
-                  <th scope="col">
-                    {channel === 'sms'
-                      ? 'DLT id'
-                      : channel === 'whatsapp'
-                        ? 'Meta name'
-                        : 'Subject'}
-                  </th>
-                  <th scope="col">Variables</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((t) => (
-                  <tr key={t.id}>
-                    <td>
-                      <a href={`/comms/templates/${t.id}`}>{t.name}</a>
-                    </td>
-                    <td>
-                      <code>{t.code}</code>
-                    </td>
-                    <td>
+      {onVariables ? <CustomVariables initial={custom} canManage={canManage} /> : null}
+      {onVariables ? null : (
+        <Card>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {tab.help}
+          </p>
+          {rows.length ? (
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
+              <table className="ep-table">
+                <caption className="ep-sr-only">{tab.label} templates</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Template</th>
+                    <th scope="col">Code</th>
+                    <th scope="col">
                       {channel === 'sms'
-                        ? (t.dltTemplateId ?? '—')
+                        ? 'DLT id'
                         : channel === 'whatsapp'
-                          ? (t.waTemplateName ?? '—')
-                          : (t.subject ?? '—')}
-                    </td>
-                    <td className="ep-field__help">
-                      {t.variables.map((v) => `{{${v}}}`).join(' ')}
-                    </td>
-                    <td>{t.category === 'service' ? 'Important' : 'General'}</td>
-                    <td>
-                      <Badge tone={toneForStatus(t.status)}>{t.status}</Badge>
-                    </td>
+                          ? 'Meta name'
+                          : 'Subject'}
+                    </th>
+                    <th scope="col">Variables</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="ep-field__help">No {tab.label} templates yet.</p>
-        )}
-      </Card>
+                </thead>
+                <tbody>
+                  {rows.map((t) => (
+                    <tr key={t.id}>
+                      <td>
+                        <a href={`/comms/templates/${t.id}`}>{t.name}</a>
+                      </td>
+                      <td>
+                        <code>{t.code}</code>
+                      </td>
+                      <td>
+                        {channel === 'sms'
+                          ? (t.dltTemplateId ?? '—')
+                          : channel === 'whatsapp'
+                            ? (t.waTemplateName ?? '—')
+                            : (t.subject ?? '—')}
+                      </td>
+                      <td className="ep-field__help">
+                        {t.variables.map((v) => `{{${v}}}`).join(' ')}
+                      </td>
+                      <td>{t.category === 'service' ? 'Important' : 'General'}</td>
+                      <td>
+                        <Badge tone={toneForStatus(t.status)}>{t.status}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="ep-field__help">No {tab.label} templates yet.</p>
+          )}
+        </Card>
+      )}
     </>
   );
 }

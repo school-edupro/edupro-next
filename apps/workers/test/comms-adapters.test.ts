@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { EmsWhatsAppAdapter } from '../src/adapters/ems-whatsapp.adapter';
 import { MetaWhatsAppAdapter } from '../src/adapters/meta-whatsapp.adapter';
 import { Msg91Adapter } from '../src/adapters/msg91.adapter';
+import { SmsBhejoAdapter } from '../src/adapters/smsbhejo.adapter';
 
 const fake = (status: number, body: unknown) => {
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
@@ -90,5 +92,89 @@ describe('Meta WhatsApp adapter', () => {
     await expect(
       a.send({ ...base, channel: 'whatsapp', body: 'x', whatsapp: { ...wa, header: 'none' } }),
     ).rejects.toThrow(/Template not approved/);
+  });
+});
+
+describe('smsbhejo adapter', () => {
+  it('sends user, key, sender, entity and DLT template like the legacy worker', async () => {
+    const f = fake(200, 'MsgID:123456789');
+    const a = new SmsBhejoAdapter({ user: 'school', entityId: '110100001' }, 'k', f.fn);
+    const r = await a.send({ ...base, body: 'Dear parent,\nfee due' });
+    expect(r.providerMessageId).toBe('MsgID:123456789');
+    const url = new URL(f.calls[0]!.url);
+    expect(url.origin + url.pathname).toBe('https://smsbhejo.org/submitsms.jsp');
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      user: 'school',
+      key: 'k',
+      mobile: '9876543210',
+      message: 'Dear parent, fee due',
+      senderid: 'ALPHAS',
+      accusage: '1',
+      entityid: '110100001',
+      tempid: '1207000000000000001',
+    });
+  });
+  it('treats an empty or error answer as a failure', async () => {
+    const a = new SmsBhejoAdapter(
+      { user: 'u', entityId: 'e' },
+      'k',
+      fake(200, 'Invalid template').fn,
+    );
+    await expect(a.send({ ...base, body: 'x' })).rejects.toThrow(/Invalid template/);
+    const b = new SmsBhejoAdapter({ user: 'u', entityId: 'e' }, 'k', fake(200, '').fn);
+    await expect(b.send({ ...base, body: 'x' })).rejects.toThrow(/smsbhejo/);
+  });
+});
+
+describe('EMS WhatsApp bridge adapter', () => {
+  it('posts the approved template with variables and an inline base64 document', async () => {
+    const f = fake(200, { id: 'ems-1' });
+    const a = new EmsWhatsAppAdapter({}, 'bearer-key', f.fn);
+    const r = await a.send({
+      ...base,
+      channel: 'whatsapp',
+      body: 'x',
+      whatsapp: {
+        templateName: 'fee_due',
+        language: 'en',
+        params: ['Suresh', '5,000'],
+        header: 'document',
+      },
+      attachments: [{ name: 'fee.pdf', contentType: 'application/pdf', bytes: Buffer.from('PDF') }],
+    });
+    expect(r.providerMessageId).toBe('ems-1');
+    expect(f.calls[0]!.url).toBe('https://ems.onmobilise.com/api/v1/messages');
+    expect((f.calls[0]!.init!.headers as Record<string, string>).authorization).toBe(
+      'Bearer bearer-key',
+    );
+    expect(JSON.parse(String(f.calls[0]!.init!.body))).toEqual({
+      to: '9876543210',
+      type: 'template',
+      template: {
+        name: 'fee_due',
+        language: 'en',
+        variables: ['Suresh', '5,000'],
+        header: {
+          type: 'document',
+          data: Buffer.from('PDF').toString('base64'),
+          mime: 'application/pdf',
+          filename: 'fee.pdf',
+        },
+      },
+    });
+  });
+  it('needs an approved template name and reports bridge errors', async () => {
+    const a = new EmsWhatsAppAdapter({}, 'k', fake(401, { error: 'bad key' }).fn);
+    await expect(a.send({ ...base, channel: 'whatsapp', body: 'x' })).rejects.toThrow(
+      /approved template name/,
+    );
+    await expect(
+      a.send({
+        ...base,
+        channel: 'whatsapp',
+        body: 'x',
+        whatsapp: { templateName: 't', language: 'en', params: [], header: 'none' },
+      }),
+    ).rejects.toThrow(/401 bad key/);
   });
 });

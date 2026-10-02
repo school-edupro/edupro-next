@@ -326,7 +326,7 @@ export const CommsSettingsSchema = z.object({
 export class CommsSettingsDto extends createZodDto(CommsSettingsSchema) {}
 export const ProviderChannelSchema = z.enum(['sms', 'whatsapp', 'email']);
 export const ProviderSchema = z.object({
-  provider: z.enum(['msg91', 'meta_whatsapp', 'smtp', 'console']),
+  provider: z.enum(['msg91', 'smsbhejo', 'meta_whatsapp', 'ems_whatsapp', 'smtp', 'console']),
   /** non-secret: senderId, route, dltEntityId, phoneNumberId, wabaId, apiVersion, host, port, secure, user, fromEmail, fromName, replyTo */
   config: z
     .record(z.string().max(40), z.union([z.string().max(300), z.number(), z.boolean()]))
@@ -357,3 +357,22 @@ export const CreditSchema = z.object({
     .optional(),
 });
 export class CreditDto extends createZodDto(CreditSchema) {}
+
+export const CustomVariableSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,39}$/, 'lower case letters, digits and _, starting with a letter'),
+  label: z.string().trim().min(2).max(80),
+  value: z.string().max(500).default(''),
+});
+export class CustomVariableDto extends createZodDto(CustomVariableSchema) {}
+
+export const InboxQuerySchema = z.object({
+  studentId: IdSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(50).default(20),
+});
+export class InboxQueryDto extends createZodDto(InboxQuerySchema) {}
+export const InboxReadSchema = z.object({ ids: z.array(IdSchema).min(1).max(200) });
+export class InboxReadDto extends createZodDto(InboxReadSchema) {}

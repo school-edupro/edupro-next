@@ -1,9 +1,21 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, requireTenant, type RequestContext } from '../../common/http/request-context';
 import {
   CreateTemplateDto,
+  CustomVariableDto,
   ListMessagesQueryDto,
   ListTemplatesQueryDto,
   PreviewTemplateDto,
@@ -34,8 +46,27 @@ export class CommsController {
   @Get('templates/variables')
   @ApiOperation({ summary: 'Variables templates can use, with what they hold' })
   @RequirePermission(COMMS.templateView)
-  templateVariables() {
-    return { data: this.templates.variables() };
+  async templateVariables(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.templates.variables(ctx) };
+  }
+
+  @Get('variables')
+  @ApiOperation({ summary: 'The school’s own variables ({{principal_name}}, {{fee_pay_link}}...)' })
+  @RequirePermission(COMMS.templateView)
+  async customVariables(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.templates.customVariables(ctx) };
+  }
+
+  @Put('variables')
+  @RequirePermission(COMMS.templateManage)
+  saveVariable(@ReqCtx() ctx: RequestContext, @Body() body: CustomVariableDto) {
+    return this.templates.saveCustomVariable(ctx, body);
+  }
+
+  @Delete('variables/:key')
+  @RequirePermission(COMMS.templateManage)
+  deleteVariable(@ReqCtx() ctx: RequestContext, @Param('key') key: string) {
+    return this.templates.deleteCustomVariable(ctx, key);
   }
 
   @Post('templates/preview')

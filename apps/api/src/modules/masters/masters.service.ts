@@ -94,6 +94,7 @@ export class MastersService {
       title: m.title,
       group: m.group,
       yearScoped: m.yearScoped === true,
+      hidden: m.hidden === true,
       canManage: held.has(m.permission.manage),
       canClone: m.clone !== undefined && held.has(m.permission.manage),
       naturalKey: m.naturalKey,

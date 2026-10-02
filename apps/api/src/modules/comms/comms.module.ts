@@ -1,5 +1,6 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
+import { FilesModule } from '../files/files.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WorkflowService } from '../workflow/workflow.service';
 import {
@@ -11,7 +12,8 @@ import {
 } from './comms-engagement.controller';
 import { CommsReportsService } from './comms-reports.service';
 import { CommsSettingsService } from './comms-settings.service';
-import { CommsSettingsController } from './comms-v2.controller';
+import { CommsInboxController, CommsSettingsController } from './comms-v2.controller';
+import { InboxService } from './inbox.service';
 import { CommsController } from './comms.controller';
 import { ConsentsService } from './consents.service';
 import { DeliveryService } from './delivery.service';
@@ -22,7 +24,7 @@ import { TemplatesService } from './templates.service';
 
 /** S3 templates and delivery log; S10 message requests with approval, groups, consent and receipts. */
 @Module({
-  imports: [WorkflowModule],
+  imports: [WorkflowModule, FilesModule],
   controllers: [
     CommsController,
     CommsRequestsController,
@@ -31,6 +33,7 @@ import { TemplatesService } from './templates.service';
     CommsDeliveryController,
     CommsSettingsController,
     CommsWebhooksController,
+    CommsInboxController,
   ],
   providers: [
     TemplatesService,
@@ -41,6 +44,7 @@ import { TemplatesService } from './templates.service';
     DeliveryService,
     CommsSettingsService,
     CommsReportsService,
+    InboxService,
     AuditService,
   ],
   exports: [MessagesService, TemplatesService, ConsentsService, CommsSettingsService],
