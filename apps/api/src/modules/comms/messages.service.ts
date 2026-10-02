@@ -6,7 +6,8 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { OutboxService } from '../../common/jobs/outbox.service';
 import type { Channel, ListMessagesQueryDto, SendMessageDto } from './comms.dto';
-import { renderTemplate } from './render';
+import { PushService, eventOfTemplate } from './push.service';
+import { htmlToText, renderTemplate } from './render';
 import { TemplatesService, type TemplateRow } from './templates.service';
 
 export type MessageStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' | 'cancelled';
@@ -98,6 +99,7 @@ export class MessagesService {
     private readonly templates: TemplatesService,
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
+    private readonly push: PushService,
   ) {}
 
   list(
@@ -212,6 +214,18 @@ export class MessagesService {
         dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
       );
       const row = await this.get(tenant, id, c);
+      // automatic alerts (attendance, fees, transport, queries...) also reach the person's app
+      if (channel !== 'push') {
+        const users = userId ? [userId] : await this.push.usersOfAddresses(c, [address]);
+        await this.push.send(c, ctx, {
+          userIds: users,
+          title: template.name,
+          body: (template.format === 'html' ? htmlToText(body.text) : body.text).slice(0, 300),
+          link: '/messages',
+          event: eventOfTemplate(template.code),
+          dedupe: true,
+        });
+      }
       await this.audit.stage(ctx, c, {
         action: 'comms.message.send',
         entityType: 'comms_messages',

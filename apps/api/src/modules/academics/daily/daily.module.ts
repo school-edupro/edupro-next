@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from '../../../common/audit/audit.service';
+import { CommsModule } from '../../comms/comms.module';
 import { FilesModule } from '../../files/files.module';
 import { CalendarService } from './calendar.service';
 import {
@@ -15,7 +16,7 @@ import { ViewerService } from './viewer.service';
 
 /** Sprint 7: homework, classwork, assignments, notices, holidays, almanac and gallery. */
 @Module({
-  imports: [FilesModule],
+  imports: [FilesModule, CommsModule],
   controllers: [DailyWorkController, NoticesController, CalendarController, GalleryController],
   providers: [
     ViewerService,

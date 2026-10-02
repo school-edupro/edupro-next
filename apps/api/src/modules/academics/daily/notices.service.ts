@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import { PushService } from '../../comms/push.service';
 import { FilesService } from '../../files/files.service';
 import { AuditService } from '../../../common/audit/audit.service';
 import { DbService } from '../../../common/db/db.service';
@@ -89,6 +90,7 @@ export class NoticesService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly files: FilesService,
+    private readonly push: PushService,
   ) {}
 
   /** A file attached to a notice the viewer may read (families included), as a signed link. */
@@ -242,6 +244,18 @@ export class NoticesService {
       await this.writeTargets(c, id, dto.targets);
       await this.writeFiles(c, id, dto.fileIds);
       const created = (await this.find(c, id))!;
+      // published today: a push to the families and staff it reaches (when the admin switched it on)
+      if (
+        dto.publish &&
+        (!dto.publishFrom || dto.publishFrom <= new Date().toISOString().slice(0, 10))
+      )
+        await this.push.send(c, ctx, {
+          userIds: await this.push.usersOfNotice(c, id),
+          title: dto.kind === 'circular' ? 'New circular' : 'New notice',
+          body: dto.title,
+          link: '/notices',
+          event: 'notices',
+        });
       await this.audit.stage(ctx, c, {
         action: dto.publish ? 'academics.notice.publish' : 'academics.notice.create',
         entityType: 'notices',

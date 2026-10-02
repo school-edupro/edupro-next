@@ -51,6 +51,15 @@ export class CommsRequestsController {
     return this.requests.list(ctx, q);
   }
 
+  @Get(':id/preview')
+  @ApiOperation({
+    summary: 'The message as recipients get it (for approvers and the request page)',
+  })
+  @RequirePermission('workflow.inbox.act')
+  messagePreview(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.requests.previewOf(ctx, id);
+  }
+
   @Get('limits')
   @ApiOperation({ summary: 'Attachment size, quiet hours and the approval threshold for compose' })
   @RequirePermission(COMMS_S10.requestCreate)

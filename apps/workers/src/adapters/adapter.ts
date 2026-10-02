@@ -17,6 +17,8 @@ export interface OutboundMessage {
     header: 'none' | 'text' | 'image' | 'document';
   } | null;
   attachments?: Array<{ name: string; contentType: string; bytes?: Buffer; url?: string }>;
+  /** push: where the notification opens the app */
+  link?: string | null;
 }
 
 export interface DeliveryResult {

@@ -21,7 +21,20 @@ export interface CommsPolicy {
   attachmentMaxMb: number;
   rates: Record<ProviderChannel, number>;
   lowBalance: Partial<Record<ProviderChannel, number>>;
+  /** events that also send a push to the apps (the admin decides) */
+  pushEvents: string[];
 }
+
+export const PUSH_EVENTS = [
+  'school_message',
+  'attendance',
+  'fees',
+  'transport',
+  'queries',
+  'notices',
+  'homework',
+  'approvals',
+] as const;
 
 /** Secret fields of each provider: stored encrypted, shown only as "saved". */
 const SECRET_FIELDS: Record<string, string[]> = {
@@ -30,12 +43,14 @@ const SECRET_FIELDS: Record<string, string[]> = {
   meta_whatsapp: ['accessToken', 'appSecret'],
   ems_whatsapp: ['apiKey'],
   smtp: ['password'],
+  fcm: ['serviceAccount'],
   console: [],
 };
-const PROVIDER_FOR: Record<ProviderChannel, string[]> = {
+const PROVIDER_FOR: Record<ProviderChannel | 'push', string[]> = {
   sms: ['smsbhejo', 'msg91', 'console'],
   whatsapp: ['ems_whatsapp', 'meta_whatsapp', 'console'],
   email: ['smtp', 'console'],
+  push: ['fcm', 'console'],
 };
 
 /**
@@ -61,9 +76,10 @@ export class CommsSettingsService {
       attachment_max_mb: number;
       rates: Record<ProviderChannel, number>;
       low_balance: Partial<Record<ProviderChannel, number>>;
+      push_events: string[];
     }>(
       `SELECT approval_threshold, approval_exempt_roles, to_char(quiet_from, 'HH24:MI') AS quiet_from, to_char(quiet_to, 'HH24:MI') AS quiet_to,
-              attachment_max_mb, rates, low_balance FROM comms_settings WHERE school_id = app.current_school_id()`,
+              attachment_max_mb, rates, low_balance, push_events FROM comms_settings WHERE school_id = app.current_school_id()`,
     );
     const x = r.rows[0];
     return {
@@ -74,6 +90,7 @@ export class CommsSettingsService {
       attachmentMaxMb: x?.attachment_max_mb ?? 5,
       rates: x?.rates ?? { sms: 0.2, whatsapp: 0.8, email: 0 },
       lowBalance: x?.low_balance ?? { sms: 1000, whatsapp: 200 },
+      pushEvents: x?.push_events ?? [...PUSH_EVENTS],
     };
   }
 
@@ -94,6 +111,7 @@ export class CommsSettingsService {
       );
       return {
         policy: await this.policy(c),
+        approvers: await this.approvers(c),
         providers: providers.rows.map((p) => {
           const saved = p.secret
             ? (JSON.parse(decryptField(p.secret) ?? '{}') as Record<string, string>)
@@ -123,11 +141,12 @@ export class CommsSettingsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.policy(c);
       await c.query(
-        `INSERT INTO comms_settings (school_id, approval_threshold, approval_exempt_roles, quiet_from, quiet_to, attachment_max_mb, rates, low_balance, updated_by)
-         VALUES (app.current_school_id(), $1, $2::text[], $3::time, $4::time, $5, $6::jsonb, $7::jsonb, app.current_user_id())
+        `INSERT INTO comms_settings (school_id, approval_threshold, approval_exempt_roles, quiet_from, quiet_to, attachment_max_mb, rates, low_balance, push_events, updated_by)
+         VALUES (app.current_school_id(), $1, $2::text[], $3::time, $4::time, $5, $6::jsonb, $7::jsonb, COALESCE($8::text[], ARRAY['school_message', 'attendance', 'fees', 'transport', 'queries', 'notices', 'homework', 'approvals']), app.current_user_id())
          ON CONFLICT (school_id) DO UPDATE SET approval_threshold = EXCLUDED.approval_threshold, approval_exempt_roles = EXCLUDED.approval_exempt_roles,
            quiet_from = EXCLUDED.quiet_from, quiet_to = EXCLUDED.quiet_to, attachment_max_mb = EXCLUDED.attachment_max_mb,
-           rates = EXCLUDED.rates, low_balance = EXCLUDED.low_balance, updated_at = now(), updated_by = app.current_user_id()`,
+           rates = EXCLUDED.rates, low_balance = EXCLUDED.low_balance,
+           push_events = COALESCE($8::text[], comms_settings.push_events), updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.approvalThreshold,
           dto.approvalExemptRoles,
@@ -136,6 +155,7 @@ export class CommsSettingsService {
           dto.attachmentMaxMb,
           JSON.stringify(dto.rates),
           JSON.stringify(dto.lowBalance),
+          dto.pushEvents ?? null,
         ],
       );
       const after = await this.policy(c);
@@ -150,7 +170,7 @@ export class CommsSettingsService {
   }
 
   /** Saves a provider. Secret fields left empty keep the saved value. */
-  async saveProvider(ctx: RequestContext, channel: ProviderChannel, dto: ProviderDto) {
+  async saveProvider(ctx: RequestContext, channel: ProviderChannel | 'push', dto: ProviderDto) {
     if (!PROVIDER_FOR[channel].includes(dto.provider))
       throw new DomainError('validation-failed', `${dto.provider} does not send ${channel}`, {
         status: 400,
@@ -255,6 +275,110 @@ export class CommsSettingsService {
         messageId: r.rows[0]!.id,
       });
       return { messageId: r.rows[0]!.id };
+    });
+  }
+
+  /** Who approves bulk messages: one step, any one of these roles or named employees. */
+  async approvers(c: PoolClient) {
+    const d = await c.query<{ levels: Array<{ resolver: Record<string, unknown> }> }>(
+      `SELECT levels FROM workflow_definitions WHERE code = 'message_approval' AND deleted_at IS NULL LIMIT 1`,
+    );
+    const r = d.rows[0]?.levels?.[0]?.resolver ?? { kind: 'role', roleCode: 'school_admin' };
+    const roleCodes =
+      r.kind === 'any_of'
+        ? (r.roleCodes as string[])
+        : r.kind === 'role'
+          ? [r.roleCode as string]
+          : [];
+    const userIds =
+      r.kind === 'any_of'
+        ? (r.userIds as string[])
+        : r.kind === 'named_user'
+          ? [r.userId as string]
+          : [];
+    const people = userIds.length
+      ? (
+          await c.query<{
+            user_id: string;
+            name: string;
+            code: string | null;
+            designation: string | null;
+          }>(
+            `SELECT u.id::text AS user_id, COALESCE(e.display_name, u.display_name) AS name, e.employee_code AS code, e.designation
+               FROM users u LEFT JOIN employees e ON e.user_id = u.id AND e.deleted_at IS NULL
+              WHERE u.id = ANY($1::bigint[])`,
+            [userIds],
+          )
+        ).rows
+      : [];
+    return {
+      roleCodes,
+      people: people.map((p) => ({
+        userId: p.user_id,
+        name: p.name,
+        code: p.code,
+        designation: p.designation,
+      })),
+    };
+  }
+
+  async saveApprovers(
+    ctx: RequestContext,
+    dto: { roleCodes: string[]; employeeIds: string[]; keepUserIds: string[] },
+  ) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const emp = dto.employeeIds.length
+        ? await c.query<{ id: string; user_id: string | null; name: string }>(
+            `SELECT id::text, user_id::text, display_name AS name FROM employees WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+            [dto.employeeIds],
+          )
+        : { rows: [] };
+      const noLogin = emp.rows.filter((e) => !e.user_id).map((e) => e.name);
+      if (noLogin.length)
+        throw new DomainError(
+          'validation-failed',
+          `${noLogin.join(', ')} ${noLogin.length === 1 ? 'has' : 'have'} no login, so cannot approve`,
+          { status: 400 },
+        );
+      const kept = dto.keepUserIds.length
+        ? (
+            await c.query<{ id: string }>(
+              `SELECT user_id::text AS id FROM user_school_memberships WHERE school_id = app.current_school_id() AND user_id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+              [dto.keepUserIds],
+            )
+          ).rows.map((x) => x.id)
+        : [];
+      const userIds = [...new Set([...kept, ...emp.rows.map((e) => e.user_id!)])];
+      if (!dto.roleCodes.length && !userIds.length)
+        throw new DomainError('validation-failed', 'Choose at least one role or employee', {
+          status: 400,
+        });
+      const levels = [
+        {
+          level: 1,
+          name: 'Message approval',
+          resolver: { kind: 'any_of', roleCodes: dto.roleCodes, userIds },
+          slaHours: 24,
+        },
+      ];
+      const upd = await c.query(
+        `UPDATE workflow_definitions SET levels = $1::jsonb, status = 'active', updated_at = now(), updated_by = app.current_user_id()
+          WHERE code = 'message_approval' AND deleted_at IS NULL`,
+        [JSON.stringify(levels)],
+      );
+      if (!upd.rowCount)
+        await c.query(
+          `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by, updated_by)
+           VALUES (app.current_school_id(), 'message_approval', 'Message approval', 'message_request', $1::jsonb, app.current_user_id(), app.current_user_id())`,
+          [JSON.stringify(levels)],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'comms.approvers.edit',
+        entityType: 'workflow_definitions',
+        entityId: 'message_approval',
+        after: { roleCodes: dto.roleCodes, userIds },
+      });
+      return this.approvers(c);
     });
   }
 

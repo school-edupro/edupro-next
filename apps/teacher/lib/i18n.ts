@@ -13,6 +13,16 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'Notifications are on for this device.': 'इस डिवाइस पर सूचनाएँ चालू हैं।',
+  'Get a notification when the school sends you something.': 'विद्यालय कुछ भेजे तो सूचना पाएँ।',
+  'Turn on notifications': 'सूचनाएँ चालू करें',
+  'Turn off': 'बंद करें',
+  'Notifications are blocked in this browser’s settings.':
+    'इस ब्राउज़र की सेटिंग में सूचनाएँ बंद हैं।',
+  'This browser cannot show notifications. On iPhone, add the app to the Home Screen first.':
+    'यह ब्राउज़र सूचनाएँ नहीं दिखा सकता। iPhone पर पहले ऐप को होम स्क्रीन पर जोड़ें।',
+  'The school has not set up notifications yet.': 'विद्यालय ने अभी सूचनाएँ सेट नहीं की हैं।',
+  'Notifications could not be turned on. Try again.': 'सूचनाएँ चालू नहीं हो सकीं। फिर कोशिश करें।',
   Messages: 'संदेश',
   'Messages from school': 'विद्यालय के संदेश',
   'All children': 'सभी बच्चे',

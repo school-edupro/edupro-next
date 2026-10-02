@@ -248,7 +248,7 @@ export async function savePolicy(p: CommsPolicy) {
 }
 
 export async function saveProvider(
-  channel: Channel,
+  channel: Channel | 'push',
   p: {
     provider: string;
     config: Record<string, string | number | boolean>;
@@ -325,5 +325,31 @@ export async function deleteCustomVariable(key: string) {
   return call(
     () => apiFetch(`/comms/variables/${encodeURIComponent(key)}`, { method: 'DELETE' }),
     '/comms/templates',
+  );
+}
+
+export async function saveApprovers(p: {
+  roleCodes: string[];
+  employeeIds: string[];
+  keepUserIds: string[];
+}) {
+  return call(
+    () =>
+      apiFetch<{
+        roleCodes: string[];
+        people: Array<{
+          userId: string;
+          name: string;
+          code: string | null;
+          designation: string | null;
+        }>;
+      }>('/comms/approvers', { method: 'PUT', body: JSON.stringify(p) }),
+    '/comms/settings',
+  );
+}
+
+export async function testPushToMe() {
+  return call(() =>
+    apiFetch<{ devices: number }>('/comms/push/test', { method: 'POST', body: '{}' }),
   );
 }

@@ -17,6 +17,7 @@ import {
   type UploadRow,
 } from './audience';
 import { CommsSettingsService, type CommsPolicy } from './comms-settings.service';
+import { PushService } from './push.service';
 import type { CreateRequestDto, ListRequestsQueryDto, RecipientSheetDto } from './comms.dto';
 import { emailLayout, sanitizeEmailHtml } from './email-html';
 import { parseMemberSheet } from './groups.service';
@@ -55,6 +56,15 @@ export interface RequestRow {
   sendTo: SendTo;
   attachments: Attachment[];
   needsApproval: boolean;
+  preview: Array<{
+    channel: string;
+    template: string;
+    to: string | null;
+    subject: string | null;
+    text: string;
+    html: string | null;
+    units: number;
+  }> | null;
   status: string;
   scheduledAt: string | null;
   requestedBy: string | null;
@@ -89,7 +99,7 @@ export interface TemplateLite {
 }
 
 const SELECT = `SELECT r.id::text, r.title, r.category::text, r.channel::text, r.template_id::text, t.code AS template_code, r.body, r.body_format, r.subject, r.variables,
-        r.audience::text, r.targets, r.rule, COALESCE(jsonb_array_length(r.upload), 0) AS upload_count, r.send_to, r.channels, r.attachments, r.needs_approval,
+        r.audience::text, r.targets, r.rule, COALESCE(jsonb_array_length(r.upload), 0) AS upload_count, r.send_to, r.channels, r.attachments, r.needs_approval, r.preview,
         r.status::text, r.scheduled_at, u.display_name AS requested_by, r.requested_at, r.workflow_instance_id::text, d.display_name AS decided_by, r.decided_at, r.decision_note,
         r.recipients_total, r.recipients_skipped, r.dispatched_at,
         COALESCE((SELECT jsonb_object_agg(s.k, s.n) FROM (SELECT m.channel::text || ':' || m.status::text AS k, count(*)::int AS n FROM comms_messages m WHERE m.message_request_id = r.id GROUP BY 1) s), '{}'::jsonb) AS delivery
@@ -115,6 +125,7 @@ export class RequestsService {
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
     private readonly settings: CommsSettingsService,
+    private readonly push: PushService,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -191,6 +202,55 @@ export class RequestsService {
           lastError: y.last_error,
         })),
       };
+    });
+  }
+
+  /**
+   * The message as recipients get it, per channel. Stored when the request is made; older requests are
+   * rendered now with the first recipient (or sample values) and kept.
+   */
+  async previewOf(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const row = await this.find(c, id);
+      if (row.preview) return { title: row.title, status: row.status, preview: row.preview };
+      const stored = await c.query<{ upload: UploadRow[] | null }>(
+        `SELECT upload FROM message_requests WHERE id = $1`,
+        [id],
+      );
+      const templates = [
+        ...(await this.loadTemplates(
+          c,
+          row.channels.filter((x) => x.templateId).map((x) => x.templateId!),
+        )),
+        ...(row.channels.some((x) => x.custom) ? [this.ownEmail(row.subject ?? row.title)] : []),
+      ];
+      const plan = await resolveAudience(c, {
+        yearId: this.year(ctx),
+        audience: row.audience as AudienceInput['audience'],
+        targets: row.targets,
+        rule: row.rule,
+        upload: stored.rows[0]?.upload ?? null,
+        sendTo: row.sendTo,
+        channels: templates.map((t) => t.channel),
+        category: row.category,
+      });
+      const preview = this.previews(
+        templates,
+        plan.send,
+        {
+          title: row.title,
+          body: row.body,
+          bodyFormat: row.bodyFormat,
+          subject: row.subject ?? undefined,
+          variables: row.variables,
+        },
+        await this.schoolName(c),
+      );
+      await c.query(`UPDATE message_requests SET preview = $2::jsonb WHERE id = $1`, [
+        id,
+        JSON.stringify(preview),
+      ]);
+      return { title: row.title, status: row.status, preview };
     });
   }
 
@@ -424,6 +484,16 @@ export class RequestsService {
         ],
       );
       const id = r.rows[0]!.id;
+      const preview = this.previews(
+        templates,
+        plan.send,
+        { ...dto, body },
+        await this.schoolName(c),
+      );
+      await c.query(`UPDATE message_requests SET preview = $2::jsonb WHERE id = $1`, [
+        id,
+        JSON.stringify(preview),
+      ]);
       await this.audit.stage(ctx, c, {
         action: 'comms.request.create',
         entityType: 'message_requests',
@@ -448,6 +518,14 @@ export class RequestsService {
             audience: dto.audience,
             channel: templates[0]!.channel,
             category: dto.category,
+            recipients: plan.send.length,
+            // what goes out, so the approver reads it before deciding
+            preview: preview.map((p) => ({
+              channel: p.channel,
+              subject: p.subject,
+              text: p.text.slice(0, 1500),
+              to: p.to,
+            })),
           },
         });
         await c.query(`UPDATE message_requests SET workflow_instance_id = $2 WHERE id = $1`, [
@@ -629,6 +707,14 @@ export class RequestsService {
         [JSON.stringify(envelopeBase), when.toISOString(), ids, QUEUES.notifications],
       );
     }
+    // one push per person (not per channel) to the apps; personal values stay in Messages
+    await this.push.send(c, ctx, {
+      userIds: plan.send.map((r) => r.userId).filter((u): u is string => Boolean(u)),
+      title: row.title,
+      body: `New message from ${school}. Tap to read it.`,
+      link: '/messages',
+      event: 'school_message',
+    });
     await c.query(
       `UPDATE message_requests SET status = 'sent', recipients_total = $2, recipients_skipped = $3, dispatched_at = now(), updated_at = now() WHERE id = $1`,
       [id, plan.send.length, plan.skipped.length],
@@ -734,6 +820,39 @@ export class RequestsService {
       units: t.channel === 'sms' ? smsUnits(body).units : 1,
       params,
     };
+  }
+
+  /** Per channel, the message as its first recipient gets it (sample values when nobody is reached). */
+  private previews(
+    templates: TemplateLite[],
+    send: Recipient[],
+    dto: {
+      title: string;
+      body: string;
+      bodyFormat?: 'text' | 'html';
+      subject?: string;
+      variables?: Record<string, unknown>;
+    },
+    school: string,
+  ) {
+    return templates.map((t) => {
+      const first = send.find((r) => r.channel === t.channel);
+      const out = this.render(
+        t,
+        { vars: first?.vars ?? { ...SAMPLE_VARIABLES, school } },
+        dto,
+        school,
+      );
+      return {
+        channel: t.channel,
+        template: t.name,
+        to: first ? first.name : null,
+        subject: out.subject,
+        text: out.format === 'html' ? htmlToText(out.body) : out.body,
+        html: out.format === 'html' ? out.body : null,
+        units: out.units,
+      };
+    });
   }
 
   // ---- helpers ----------------------------------------------------------------------------------
@@ -1017,6 +1136,7 @@ export class RequestsService {
       sendTo: (x.send_to as SendTo) ?? 'primary',
       attachments: (x.attachments as Attachment[]) ?? [],
       needsApproval: Boolean(x.needs_approval),
+      preview: (x.preview as RequestRow['preview']) ?? null,
       status: x.status as string,
       scheduledAt: d('scheduled_at'),
       requestedBy: (x.requested_by as string) ?? null,

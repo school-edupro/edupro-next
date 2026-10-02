@@ -136,6 +136,21 @@ const toInstance = (r: InstanceDb, steps: StepRow[] = []): InstanceRow => ({
 export class WorkflowService {
   private readonly logger = new Logger(WorkflowService.name);
   private readonly handlers = new Map<string, CompletionHandler>();
+  /** told when a step lands with people (push notifications to approvers) */
+  private readonly assignListeners: Array<
+    (c: PoolClient, ctx: RequestContext, userIds: string[], subject: string) => Promise<unknown>
+  > = [];
+
+  onAssign(
+    listener: (
+      c: PoolClient,
+      ctx: RequestContext,
+      userIds: string[],
+      subject: string,
+    ) => Promise<unknown>,
+  ): void {
+    this.assignListeners.push(listener);
+  }
 
   constructor(
     private readonly db: DbService,
@@ -397,6 +412,18 @@ export class WorkflowService {
     requestedBy: string | null,
   ): Promise<string[]> {
     if (resolver.kind === 'named_user') return [resolver.userId];
+    if (resolver.kind === 'any_of') {
+      const r = await c.query<{ id: string }>(
+        `SELECT DISTINCT ur.user_id::text AS id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.school_id = app.current_school_id() AND r.code = ANY($1::text[]) AND ur.revoked_at IS NULL
+            AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
+         UNION
+         SELECT m.user_id::text FROM user_school_memberships m
+          WHERE m.school_id = app.current_school_id() AND m.user_id = ANY($2::bigint[]) AND m.deleted_at IS NULL AND m.status = 'active'`,
+        [resolver.roleCodes, resolver.userIds],
+      );
+      return r.rows.map((x) => x.id);
+    }
     if (resolver.kind === 'role') {
       const r = await c.query<{ id: string }>(
         `SELECT DISTINCT ur.user_id::text AS id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
@@ -524,6 +551,7 @@ export class WorkflowService {
       throw error;
     }
     const requester = ctx.user.id;
+    let firstAssignees: string[] = [];
     for (const level of [...def.rows[0].levels].sort((a, b) => a.level - b.level)) {
       const assignees = await this.resolveAssignees(c, level.resolver, requester);
       if (assignees.length === 0)
@@ -534,6 +562,7 @@ export class WorkflowService {
         );
       // the first level's clock starts now; later levels start when they become current (act())
       const first = level.level === Math.min(...def.rows[0].levels.map((l) => l.level));
+      if (first) firstAssignees = assignees;
       await c.query(
         `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, due_at)
          VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::bigint[], CASE WHEN $6::boolean AND $7::int IS NOT NULL THEN now() + make_interval(hours => $7::int) END)`,
@@ -549,6 +578,7 @@ export class WorkflowService {
       );
     }
     await this.event(c, id, null, 'started', ctx.user.id, null, { subject: input.subject });
+    for (const l of this.assignListeners) await l(c, ctx, firstAssignees, input.subject);
     await this.audit.stage(ctx, c, {
       action: 'workflow.instance.started',
       entityType: 'workflow_instances',

@@ -910,7 +910,8 @@ export type WorkflowResolver =
   | { kind: 'named_user'; userId: string }
   | { kind: 'role'; roleCode: string }
   | { kind: 'position'; designation: string }
-  | { kind: 'approver_chain'; depth: number };
+  | { kind: 'approver_chain'; depth: number }
+  | { kind: 'any_of'; roleCodes: string[]; userIds: string[] };
 export interface WorkflowLevel {
   level: number;
   name: string;

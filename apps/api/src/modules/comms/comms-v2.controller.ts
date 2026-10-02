@@ -7,14 +7,17 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { CommsReportsService } from './comms-reports.service';
 import { CommsSettingsService, type ProviderChannel } from './comms-settings.service';
 import {
+  ApproversDto,
   CommsSettingsDto,
   CreditDto,
   InboxQueryDto,
   InboxReadDto,
+  PushDeviceDto,
   ProviderDto,
   ProviderTestDto,
 } from './comms.dto';
 import { InboxService } from './inbox.service';
+import { PushService } from './push.service';
 import { COMMS_V2 } from './comms.permissions';
 
 const channelOf = (v: string): ProviderChannel => {
@@ -30,6 +33,7 @@ export class CommsSettingsController {
   constructor(
     private readonly settings: CommsSettingsService,
     private readonly reports: CommsReportsService,
+    private readonly push: PushService,
   ) {}
 
   @Get('dashboard')
@@ -71,15 +75,30 @@ export class CommsSettingsController {
     return this.settings.savePolicy(ctx, dto);
   }
 
+  @Put('approvers')
+  @ApiOperation({ summary: 'Who approves bulk messages: roles and / or named employees (any one)' })
+  @RequirePermission(COMMS_V2.settingsManage)
+  saveApprovers(@ReqCtx() ctx: RequestContext, @Body() dto: ApproversDto) {
+    return this.settings.saveApprovers(ctx, dto);
+  }
+
   @Put('providers/:channel')
-  @ApiOperation({ summary: 'Save the SMS (MSG91), WhatsApp (Meta) or email (SMTP / SES) provider' })
+  @ApiOperation({ summary: 'Save the SMS, WhatsApp, email or push (Firebase) provider' })
   @RequirePermission(COMMS_V2.settingsManage)
   saveProvider(
     @ReqCtx() ctx: RequestContext,
     @Param('channel') channel: string,
     @Body() dto: ProviderDto,
   ) {
-    return this.settings.saveProvider(ctx, channelOf(channel), dto);
+    return this.settings.saveProvider(ctx, channel === 'push' ? 'push' : channelOf(channel), dto);
+  }
+
+  @Post('push/test')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'A test push to my own registered devices' })
+  @RequirePermission(COMMS_V2.settingsManage)
+  pushTest(@ReqCtx() ctx: RequestContext) {
+    return this.push.testMe(ctx);
   }
 
   @Post('providers/:channel/test')
@@ -135,5 +154,35 @@ export class CommsInboxController {
   @AuthenticatedOnly()
   read(@ReqCtx() ctx: RequestContext, @Body() dto: InboxReadDto) {
     return this.inbox.markRead(ctx, dto.ids);
+  }
+}
+
+/** Push notifications for the parent / student and teacher apps (Firebase). */
+@ApiTags('comms')
+@ApiBearerAuth()
+@Controller('comms/push')
+export class CommsPushController {
+  constructor(private readonly push: PushService) {}
+
+  @Get('config')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Firebase web config and VAPID key for the apps (no secrets)' })
+  config(@ReqCtx() ctx: RequestContext) {
+    return this.push.config(ctx);
+  }
+
+  @Post('devices')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Register this device for push notifications' })
+  register(@ReqCtx() ctx: RequestContext, @Body() dto: PushDeviceDto) {
+    return this.push.register(ctx, dto);
+  }
+
+  @Post('devices/remove')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  unregister(@ReqCtx() ctx: RequestContext, @Body() dto: PushDeviceDto) {
+    return this.push.unregister(ctx, dto.token);
   }
 }

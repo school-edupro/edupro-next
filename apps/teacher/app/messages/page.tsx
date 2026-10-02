@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { EnablePush } from './EnablePush';
 import { MessageItem, type InboxItem } from './MessageItem';
 
 interface Inbox {
@@ -77,6 +78,21 @@ export default async function MessagesPage({
           ))}
         </nav>
       ) : null}
+      <EnablePush
+        labels={{
+          on: t(lang, 'Notifications are on for this device.'),
+          off: t(lang, 'Get a notification when the school sends you something.'),
+          turnOn: t(lang, 'Turn on notifications'),
+          turnOff: t(lang, 'Turn off'),
+          denied: t(lang, 'Notifications are blocked in this browser’s settings.'),
+          unsupported: t(
+            lang,
+            'This browser cannot show notifications. On iPhone, add the app to the Home Screen first.',
+          ),
+          notSetUp: t(lang, 'The school has not set up notifications yet.'),
+          failed: t(lang, 'Notifications could not be turned on. Try again.'),
+        }}
+      />
       {inbox.data.length === 0 ? <Card>{t(lang, 'No messages yet.')}</Card> : null}
       <div className="fp-msg__list">
         {inbox.data.map((m) => (

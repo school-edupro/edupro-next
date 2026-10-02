@@ -2,6 +2,7 @@ import { decryptField, tenantForJob, type Db, type JobEnvelope } from '@edupro/d
 import type { StorageDriver } from '@edupro/storage';
 import type { Adapters, Channel, ChannelAdapter, OutboundMessage } from '../adapters';
 import { EmsWhatsAppAdapter } from '../adapters/ems-whatsapp.adapter';
+import { DeadToken, FcmAdapter } from '../adapters/fcm.adapter';
 import { MetaWhatsAppAdapter } from '../adapters/meta-whatsapp.adapter';
 import { Msg91Adapter } from '../adapters/msg91.adapter';
 import { SmsBhejoAdapter } from '../adapters/smsbhejo.adapter';
@@ -27,6 +28,7 @@ interface MessageDbRow {
   format: 'text' | 'html';
   params: string[] | null;
   attachments: Array<{ fileId: string; name: string | null; contentType: string }>;
+  link: string | null;
   dlt_template_id: string | null;
   dlt_entity_id: string | null;
   sender_id: string | null;
@@ -92,6 +94,8 @@ export function schoolAdapter(
       } as never,
       secret.key,
     );
+  if (row.provider === 'fcm' && secret.serviceAccount)
+    adapter = new FcmAdapter(JSON.parse(secret.serviceAccount) as never);
   if (row.provider === 'ems_whatsapp' && secret.apiKey)
     adapter = new EmsWhatsAppAdapter(
       {
@@ -145,7 +149,7 @@ export function notificationProcessor(
 
     const row = await db.withTenant(tenant, async (c) => {
       const r = await c.query<MessageDbRow>(
-        `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments,
+        `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments, m.variables->>'link' AS link,
                 t.dlt_template_id, t.dlt_entity_id, t.sender_id, t.wa_template_name, t.wa_language, t.wa_header, t.wa_params,
                 (SELECT jsonb_build_object('provider', p.provider, 'config', p.config, 'secret', p.secret, 'active', p.active, 'updated_at', p.updated_at)
                    FROM comms_providers p WHERE p.channel = m.channel) AS provider
@@ -237,6 +241,7 @@ export function notificationProcessor(
               }
             : null,
         attachments,
+        link: row.link,
       });
       await db.withTenant(tenant, (c) =>
         c.query(
@@ -257,8 +262,15 @@ export function notificationProcessor(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // a switched-off channel is not retried
-      const lastAttempt =
-        error instanceof SwitchedOff || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      const final = error instanceof SwitchedOff || error instanceof DeadToken;
+      const lastAttempt = final || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      if (error instanceof DeadToken)
+        await db.withTenant(tenant, (c) =>
+          c.query(
+            `UPDATE push_devices SET revoked_at = now() WHERE token = $1 AND revoked_at IS NULL`,
+            [row.recipient_address],
+          ),
+        );
       await db.withTenant(tenant, (c) =>
         c.query(
           `UPDATE comms_messages
@@ -273,7 +285,7 @@ export function notificationProcessor(
         { messageId, channel: row.channel, provider: adapter.name, err: message, lastAttempt },
         'notification failed',
       );
-      if (!(error instanceof SwitchedOff)) throw error;
+      if (!final) throw error;
     }
   };
 }

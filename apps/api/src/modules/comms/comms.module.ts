@@ -12,8 +12,13 @@ import {
 } from './comms-engagement.controller';
 import { CommsReportsService } from './comms-reports.service';
 import { CommsSettingsService } from './comms-settings.service';
-import { CommsInboxController, CommsSettingsController } from './comms-v2.controller';
+import {
+  CommsInboxController,
+  CommsPushController,
+  CommsSettingsController,
+} from './comms-v2.controller';
 import { InboxService } from './inbox.service';
+import { PushService } from './push.service';
 import { CommsController } from './comms.controller';
 import { ConsentsService } from './consents.service';
 import { DeliveryService } from './delivery.service';
@@ -34,6 +39,7 @@ import { TemplatesService } from './templates.service';
     CommsSettingsController,
     CommsWebhooksController,
     CommsInboxController,
+    CommsPushController,
   ],
   providers: [
     TemplatesService,
@@ -45,17 +51,29 @@ import { TemplatesService } from './templates.service';
     CommsSettingsService,
     CommsReportsService,
     InboxService,
+    PushService,
     AuditService,
   ],
-  exports: [MessagesService, TemplatesService, ConsentsService, CommsSettingsService],
+  exports: [MessagesService, TemplatesService, ConsentsService, CommsSettingsService, PushService],
 })
 export class CommsModule implements OnModuleInit {
   constructor(
     private readonly workflow: WorkflowService,
     private readonly requests: RequestsService,
+    private readonly push: PushService,
   ) {}
 
   onModuleInit() {
+    // approvers get a push in the teacher app when an approval lands with them
+    this.workflow.onAssign((c, ctx, userIds, subject) =>
+      this.push.send(c, ctx, {
+        userIds,
+        title: 'Approval waiting',
+        body: subject,
+        link: '/',
+        event: 'approvals',
+      }),
+    );
     this.workflow.onComplete('message_request', (c, ctx, instance, outcome) =>
       this.requests.onDecision(c, ctx, instance, outcome),
     );

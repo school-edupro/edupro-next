@@ -74,3 +74,39 @@ self.addEventListener('message', (event) => {
     event.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))));
   }
 });
+
+/* Push notifications (Firebase): show the school's message; a tap opens the app at its link. */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { notification: { title: 'School', body: event.data ? event.data.text() : '' } };
+  }
+  const n = data.notification || {};
+  const link =
+    (data.fcmOptions && data.fcmOptions.link) || (data.data && data.data.link) || '/messages';
+  event.waitUntil(
+    self.registration.showNotification(n.title || 'School', {
+      body: n.body || '',
+      icon: n.icon || '/icons/icon.svg',
+      badge: '/icons/icon.svg',
+      data: { link },
+    }),
+  );
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || '/messages';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) {
+        if ('focus' in w) {
+          w.navigate(link);
+          return w.focus();
+        }
+      }
+      return self.clients.openWindow(link);
+    }),
+  );
+});

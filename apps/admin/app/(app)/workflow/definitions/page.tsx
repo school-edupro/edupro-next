@@ -26,6 +26,8 @@ const describe = (r: WorkflowResolver, label: (k: string) => string) => {
       return `${label('role')}: ${r.roleCode}`;
     case 'position':
       return `${label('position')}: ${r.designation}`;
+    case 'any_of':
+      return `Any of: ${[...r.roleCodes, ...r.userIds.map((u) => `#${u}`)].join(', ')} (set in Communication settings)`;
     default:
       return `${label('approver_chain')} (${r.depth})`;
   }
@@ -37,7 +39,9 @@ const valueOf = (r: WorkflowResolver) =>
       ? r.roleCode
       : r.kind === 'position'
         ? r.designation
-        : String(r.depth);
+        : r.kind === 'any_of'
+          ? [...r.roleCodes, ...r.userIds].join(',')
+          : String(r.depth);
 
 /** S9-01: definitions; Sprint 17: the editor (levels, SLA, escalation) and activation. */
 export default async function DefinitionsPage({

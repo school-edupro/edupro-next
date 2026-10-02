@@ -334,17 +334,40 @@ export const CommsSettingsSchema = z.object({
     whatsapp: z.number().min(0).max(10_000_000).optional(),
     email: z.number().min(0).max(10_000_000).optional(),
   }),
+  pushEvents: z
+    .array(
+      z.enum([
+        'school_message',
+        'attendance',
+        'fees',
+        'transport',
+        'queries',
+        'notices',
+        'homework',
+        'approvals',
+      ]),
+    )
+    .max(8)
+    .optional(),
 });
 export class CommsSettingsDto extends createZodDto(CommsSettingsSchema) {}
 export const ProviderChannelSchema = z.enum(['sms', 'whatsapp', 'email']);
 export const ProviderSchema = z.object({
-  provider: z.enum(['msg91', 'smsbhejo', 'meta_whatsapp', 'ems_whatsapp', 'smtp', 'console']),
+  provider: z.enum([
+    'msg91',
+    'smsbhejo',
+    'meta_whatsapp',
+    'ems_whatsapp',
+    'smtp',
+    'fcm',
+    'console',
+  ]),
   /** non-secret: senderId, route, dltEntityId, phoneNumberId, wabaId, apiVersion, host, port, secure, user, fromEmail, fromName, replyTo */
   config: z
     .record(z.string().max(40), z.union([z.string().max(300), z.number(), z.boolean()]))
     .default({}),
   /** secret: authKey, accessToken, appSecret, password; empty keeps the saved value */
-  secrets: z.record(z.string().max(40), z.string().max(2000)).optional(),
+  secrets: z.record(z.string().max(40), z.string().max(10_000)).optional(),
   active: z.boolean().default(true),
 });
 export class ProviderDto extends createZodDto(ProviderSchema) {}
@@ -388,3 +411,26 @@ export const InboxQuerySchema = z.object({
 export class InboxQueryDto extends createZodDto(InboxQuerySchema) {}
 export const InboxReadSchema = z.object({ ids: z.array(IdSchema).min(1).max(200) });
 export class InboxReadDto extends createZodDto(InboxReadSchema) {}
+
+export const ApproversSchema = z.object({
+  roleCodes: z
+    .array(
+      z
+        .string()
+        .trim()
+        .regex(/^[a-z_]{2,40}$/),
+    )
+    .max(20)
+    .default([]),
+  employeeIds: z.array(IdSchema).max(50).default([]),
+  /** approvers saved before (by login), kept as they are */
+  keepUserIds: z.array(IdSchema).max(50).default([]),
+});
+export class ApproversDto extends createZodDto(ApproversSchema) {}
+
+export const PushDeviceSchema = z.object({
+  token: z.string().trim().min(20).max(4096),
+  app: z.enum(['parent', 'teacher']),
+  userAgent: z.string().trim().max(300).optional(),
+});
+export class PushDeviceDto extends createZodDto(PushDeviceSchema) {}

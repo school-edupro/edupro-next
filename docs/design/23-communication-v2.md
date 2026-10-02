@@ -49,6 +49,18 @@ test send, rules, credits).
 - The "Message templates" and "Groups" grids left Communication setup (duplicates of the Template master
   and Groups); template Excel import / export stays as a hidden master opened from the Template master.
 
+## Part 3 (migration 0055)
+- Push: Firebase (FCM) per school (`comms_providers` channel push, service account encrypted; web config +
+  VAPID key served to the apps by `/comms/push/config`). Apps register device tokens (`push_devices`) from
+  the Messages page; the worker's `FcmAdapter` signs in with the service account (JWT) and sends FCM v1
+  webpush; dead tokens are revoked. Events the admin switches on (`comms_settings.push_events`):
+  school_message, attendance, fees, transport, queries, notices, homework, approvals.
+- Approval: one step, any one of the chosen roles / named employees (`any_of` resolver on the
+  `message_approval` workflow), set in Communication settings.
+- The message as recipients get it is stored on the request (`preview`) and shown to the approver in
+  My inbox and on the request page (`GET /comms/requests/:id/preview`).
+- Opted-out families get nothing on that channel (decided: no in-app copy).
+
 ## Not yet
 WhatsApp → SMS fallback on failure, two-way inbox for WhatsApp replies, per-teacher sending (decided
 office-only), template sync from Meta / DLT portals.

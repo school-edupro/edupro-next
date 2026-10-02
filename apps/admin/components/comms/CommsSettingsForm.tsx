@@ -1,6 +1,13 @@
 'use client';
 import { useState } from 'react';
-import { addCredit, savePolicy, saveProvider, testProvider } from '@/lib/comms-actions';
+import { ApproversForm } from './ApproversForm';
+import {
+  addCredit,
+  savePolicy,
+  saveProvider,
+  testProvider,
+  testPushToMe,
+} from '@/lib/comms-actions';
 import {
   CHANNEL_LABEL,
   type Balance,
@@ -14,7 +21,7 @@ interface Field {
   label: string;
   secret?: boolean;
   help?: string;
-  type?: 'text' | 'number' | 'checkbox';
+  type?: 'text' | 'number' | 'checkbox' | 'textarea';
   placeholder?: string;
 }
 
@@ -25,7 +32,31 @@ interface ProviderDef {
   help: string;
 }
 
-const PROVIDERS: Record<Channel, ProviderDef[]> = {
+type Ch = Channel | 'push';
+const LABEL: Record<Ch, string> = { ...CHANNEL_LABEL, push: 'App push notifications' };
+
+const PROVIDERS: Record<Ch, ProviderDef[]> = {
+  push: [
+    {
+      id: 'fcm',
+      label: 'Firebase Cloud Messaging (FCM)',
+      help: 'From the Firebase console of the school’s project: Project settings → General → Your apps (web app config) and Cloud Messaging → Web Push certificates (VAPID key); Service accounts → Generate new private key (paste the whole JSON file). Parents, students and teachers then tap “Turn on notifications” in Messages.',
+      fields: [
+        { key: 'projectId', label: 'Project id' },
+        { key: 'apiKey', label: 'Web API key (public)' },
+        { key: 'authDomain', label: 'Auth domain', placeholder: 'project.firebaseapp.com' },
+        { key: 'messagingSenderId', label: 'Messaging sender id' },
+        { key: 'appId', label: 'Web app id' },
+        { key: 'vapidKey', label: 'Web Push certificate (VAPID public key)' },
+        {
+          key: 'serviceAccount',
+          label: 'Service account JSON (private key file)',
+          secret: true,
+          type: 'textarea',
+        },
+      ],
+    },
+  ],
   sms: [
     {
       id: 'smsbhejo',
@@ -104,7 +135,7 @@ function ProviderCard({
   settings,
   templates,
 }: {
-  channel: Channel;
+  channel: Ch;
   settings: CommsSettings;
   templates: Array<{ id: string; name: string }>;
 }) {
@@ -124,7 +155,7 @@ function ProviderCard({
   return (
     <section className="ep-card ep-prov" aria-labelledby={`prov-${channel}`}>
       <h2 className="ep-card__title" id={`prov-${channel}`}>
-        {CHANNEL_LABEL[channel]}
+        {LABEL[channel]}
       </h2>
       {msg ? (
         <p
@@ -171,22 +202,40 @@ function ProviderCard({
                     {f.label}
                     {f.secret && saved?.secrets[f.key] ? ' (saved; leave empty to keep)' : ''}
                   </span>
-                  <input
-                    id={`prov-${channel}-${f.key}`}
-                    className="ep-input"
-                    type={f.secret ? 'password' : f.type === 'number' ? 'number' : 'text'}
-                    autoComplete="off"
-                    placeholder={f.secret && saved?.secrets[f.key] ? '••••••••' : f.placeholder}
-                    value={f.secret ? (secrets[f.key] ?? '') : String(config[f.key] ?? '')}
-                    onChange={(e) =>
-                      f.secret
-                        ? setSecrets({ ...secrets, [f.key]: e.target.value })
-                        : setConfig({
-                            ...config,
-                            [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value,
-                          })
-                    }
-                  />
+                  {f.type === 'textarea' ? (
+                    <textarea
+                      id={`prov-${channel}-${f.key}`}
+                      className="ep-input"
+                      rows={4}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder={
+                        saved?.secrets[f.key]
+                          ? 'Saved. Paste a new file to replace it.'
+                          : '{ "type": "service_account", ... }'
+                      }
+                      value={secrets[f.key] ?? ''}
+                      onChange={(e) => setSecrets({ ...secrets, [f.key]: e.target.value })}
+                    />
+                  ) : (
+                    <input
+                      id={`prov-${channel}-${f.key}`}
+                      className="ep-input"
+                      type={f.secret ? 'password' : f.type === 'number' ? 'number' : 'text'}
+                      autoComplete="off"
+                      placeholder={f.secret && saved?.secrets[f.key] ? '••••••••' : f.placeholder}
+                      value={f.secret ? (secrets[f.key] ?? '') : String(config[f.key] ?? '')}
+                      onChange={(e) =>
+                        f.secret
+                          ? setSecrets({ ...secrets, [f.key]: e.target.value })
+                          : setConfig({
+                              ...config,
+                              [f.key]:
+                                f.type === 'number' ? Number(e.target.value) : e.target.value,
+                            })
+                      }
+                    />
+                  )}
                 </label>
               ),
             )}
@@ -197,7 +246,7 @@ function ProviderCard({
                 checked={active}
                 onChange={(e) => setActive(e.target.checked)}
               />{' '}
-              Channel switched on (off = nothing goes out on {CHANNEL_LABEL[channel]})
+              Channel switched on (off = nothing goes out on {LABEL[channel]})
             </label>
           </div>
           {channel === 'whatsapp' && typeof saved?.config.verifyToken === 'string' ? (
@@ -235,52 +284,81 @@ function ProviderCard({
           Save
         </button>
       </div>
-      <div className="ep-wd__form ep-prov__test">
-        <label className="ep-field" htmlFor={`prov-${channel}-to`}>
-          <span className="ep-field__label">Send a test to</span>
-          <input
-            id={`prov-${channel}-to`}
-            className="ep-input"
-            value={to}
-            inputMode={channel === 'email' ? 'email' : 'tel'}
-            placeholder={channel === 'email' ? 'you@school.in' : '10-digit mobile'}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
-        {channel === 'whatsapp' ? (
-          <label className="ep-field" htmlFor={`prov-${channel}-tpl`}>
-            <span className="ep-field__label">Approved template (sample values)</span>
-            <select
-              id={`prov-${channel}-tpl`}
-              className="ep-select"
-              value={testTpl}
-              onChange={(e) => setTestTpl(e.target.value)}
-            >
-              {templates.length ? null : <option value="">No WhatsApp template yet</option>}
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+      {channel === 'push' ? (
+        <div className="ep-wd__form ep-prov__test">
+          <button
+            type="button"
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            onClick={async () => {
+              const r = await testPushToMe();
+              setMsg(
+                r.ok
+                  ? {
+                      ok: true,
+                      text: `Test push sent to your ${String(r.data.devices)} device(s).`,
+                    }
+                  : { ok: false, text: r.error },
+              );
+            }}
+          >
+            Send me a test push
+          </button>
+          <span className="ep-field__help">
+            Turn on notifications in the teacher or parent app on your phone first.
+          </span>
+        </div>
+      ) : (
+        <div className="ep-wd__form ep-prov__test">
+          <label className="ep-field" htmlFor={`prov-${channel}-to`}>
+            <span className="ep-field__label">Send a test to</span>
+            <input
+              id={`prov-${channel}-to`}
+              className="ep-input"
+              value={to}
+              inputMode={channel === 'email' ? 'email' : 'tel'}
+              placeholder={channel === 'email' ? 'you@school.in' : '10-digit mobile'}
+              onChange={(e) => setTo(e.target.value)}
+            />
           </label>
-        ) : null}
-        <button
-          type="button"
-          className="ep-btn ep-btn--secondary ep-btn--sm"
-          disabled={!to}
-          onClick={async () => {
-            const r = await testProvider(channel, to, channel === 'whatsapp' ? testTpl : undefined);
-            setMsg(
-              r.ok
-                ? { ok: true, text: 'Test queued. The delivery log shows whether it went out.' }
-                : { ok: false, text: r.error },
-            );
-          }}
-        >
-          Send test
-        </button>
-      </div>
+          {channel === 'whatsapp' ? (
+            <label className="ep-field" htmlFor={`prov-${channel}-tpl`}>
+              <span className="ep-field__label">Approved template (sample values)</span>
+              <select
+                id={`prov-${channel}-tpl`}
+                className="ep-select"
+                value={testTpl}
+                onChange={(e) => setTestTpl(e.target.value)}
+              >
+                {templates.length ? null : <option value="">No WhatsApp template yet</option>}
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            disabled={!to}
+            onClick={async () => {
+              const r = await testProvider(
+                channel,
+                to,
+                channel === 'whatsapp' ? testTpl : undefined,
+              );
+              setMsg(
+                r.ok
+                  ? { ok: true, text: 'Test queued. The delivery log shows whether it went out.' }
+                  : { ok: false, text: r.error },
+              );
+            }}
+          >
+            Send test
+          </button>
+        </div>
+      )}
       {channel === 'whatsapp' && real ? (
         <p className="ep-field__help">
           A test outside a template only reaches a number that messaged the school in the last 24
@@ -290,6 +368,17 @@ function ProviderCard({
     </section>
   );
 }
+
+const PUSH_EVENTS = [
+  { id: 'school_message', label: 'Messages from compose (SMS, WhatsApp, email)' },
+  { id: 'attendance', label: 'Attendance alerts (absent, late)' },
+  { id: 'fees', label: 'Fee reminders and receipts' },
+  { id: 'transport', label: 'School bus (boarded, dropped)' },
+  { id: 'queries', label: 'Replies to queries' },
+  { id: 'notices', label: 'New notices and circulars' },
+  { id: 'homework', label: 'New homework and classwork' },
+  { id: 'approvals', label: 'Approvals waiting (staff)' },
+];
 
 function Policy({ settings }: { settings: CommsSettings }) {
   const [p, setP] = useState<CommsPolicy>(settings.policy);
@@ -415,6 +504,31 @@ function Policy({ settings }: { settings: CommsSettings }) {
           </label>
         ))}
       </div>
+      <fieldset className="ep-cl">
+        <legend className="ep-field__label">Send an app push notification for</legend>
+        <ul className="ep-cl__list">
+          {PUSH_EVENTS.map((ev) => (
+            <li key={ev.id}>
+              <label className="ep-roles__tick" htmlFor={`pol-push-${ev.id}`}>
+                <input
+                  id={`pol-push-${ev.id}`}
+                  type="checkbox"
+                  checked={p.pushEvents.includes(ev.id)}
+                  onChange={(e) =>
+                    setP({
+                      ...p,
+                      pushEvents: e.target.checked
+                        ? [...p.pushEvents, ev.id]
+                        : p.pushEvents.filter((x) => x !== ev.id),
+                    })
+                  }
+                />{' '}
+                {ev.label}
+              </label>
+            </li>
+          ))}
+        </ul>
+      </fieldset>
       <div className="ep-wdset__actions">
         <button
           type="button"
@@ -597,7 +711,7 @@ export function CommsSettingsForm({
   return (
     <div className="ep-grp">
       <div className="ep-prov__grid">
-        {(['sms', 'whatsapp', 'email'] as Channel[]).map((c) => (
+        {(['sms', 'whatsapp', 'email', 'push'] as Ch[]).map((c) => (
           <ProviderCard
             key={c}
             channel={c}
@@ -607,6 +721,7 @@ export function CommsSettingsForm({
         ))}
       </div>
       <Policy settings={settings} />
+      <ApproversForm initial={settings.approvers} roles={settings.roles} />
       {canCredit ? <Credits balances={credits.balances} ledger={credits.ledger} /> : null}
     </div>
   );

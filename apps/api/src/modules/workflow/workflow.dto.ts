@@ -21,6 +21,20 @@ export const ResolverSchema = z.discriminatedUnion('kind', [
       .regex(/^[a-z_]{2,40}$/),
   }),
   z.object({ kind: z.literal('position'), designation: z.string().trim().min(2).max(80) }),
+  /** Any one of these roles or named people (message approval set in Communication settings). */
+  z.object({
+    kind: z.literal('any_of'),
+    roleCodes: z
+      .array(
+        z
+          .string()
+          .trim()
+          .regex(/^[a-z_]{2,40}$/),
+      )
+      .max(20)
+      .default([]),
+    userIds: z.array(IdSchema).max(50).default([]),
+  }),
   /** The requester's reporting line: level n is the n-th manager above the requesting employee. */
   z.object({ kind: z.literal('approver_chain'), depth: z.number().int().min(1).max(5).default(1) }),
 ]);

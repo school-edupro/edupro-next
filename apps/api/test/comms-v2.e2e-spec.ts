@@ -781,4 +781,136 @@ describe('communication v2 (e2e)', () => {
     expect(missing.statusCode).toBe(400);
     expect(missing.json().detail).toMatch(/Write the message: Circular SMS has a place for it/);
   });
+
+  it('approvers set to a named employee: the step goes to them and they read the message first', async () => {
+    const t01User = await withMigrator(async (c) => {
+      const u = await c.query<{ id: string }>(
+        `INSERT INTO users (oneauth_sub, display_name) VALUES ($1, 'Tanvi Rao') RETURNING id::text`,
+        [`${s}-tanvi`],
+      );
+      await c.query(
+        `INSERT INTO user_school_memberships (school_id, user_id, person_type) VALUES ($1, $2, 'employee')`,
+        [school.id, u.rows[0]!.id],
+      );
+      await c.query(
+        `INSERT INTO user_roles (school_id, user_id, role_id, reason) SELECT $1, $2, id, 'e2e' FROM roles WHERE school_id IS NULL AND code = 'class_teacher'`,
+        [school.id, u.rows[0]!.id],
+      );
+      await c.query(`UPDATE employees SET user_id = $2 WHERE id = $1`, [ids.t01, u.rows[0]!.id]);
+      return u.rows[0]!.id;
+    });
+    const saved = await inject({
+      method: 'PUT',
+      url: '/comms/approvers',
+      headers: h(),
+      json: { roleCodes: [], employeeIds: [ids.t01] },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().people).toEqual([
+      expect.objectContaining({ userId: t01User, name: 'Tanvi Rao' }),
+    ]);
+    const req = await inject({
+      method: 'POST',
+      url: '/comms/requests',
+      headers: h(coordinator),
+      json: {
+        title: 'Sports day',
+        body: 'Sports day on Friday.',
+        channels: [{ channel: 'sms', templateId: ids.sms }],
+        audience: 'individuals',
+        targets: [{ type: 'student', id: ids.a }],
+      },
+    });
+    expect(req.json()).toMatchObject({ status: 'pending_approval' });
+    const tanvi = headersFor(`${s}-tanvi`, school.id);
+    const inbox = await inject({ method: 'GET', url: '/workflow/inbox', headers: tanvi });
+    const step = inbox
+      .json()
+      .data.find((x: { instance: { entityId: string } }) => x.instance.entityId === req.json().id);
+    expect(step).toBeTruthy();
+    expect(step.instance.payload.preview[0]).toMatchObject({ channel: 'sms' });
+    expect(step.instance.payload.preview[0].text).toContain('Sports day on Friday.');
+    const pv = await inject({
+      method: 'GET',
+      url: `/comms/requests/${req.json().id}/preview`,
+      headers: tanvi,
+    });
+    expect(pv.statusCode).toBe(200);
+    expect(pv.json().preview[0].text).toContain('Sports day on Friday.');
+  });
+
+  it('push: a parent registers a device; a send queues one push per device, only for events the admin switched on', async () => {
+    await inject({
+      method: 'PUT',
+      url: '/comms/providers/push',
+      headers: h(),
+      json: {
+        provider: 'fcm',
+        config: {
+          projectId: 'school-app',
+          apiKey: 'AIza-test',
+          messagingSenderId: '123',
+          appId: '1:123:web:abc',
+          vapidKey: 'BPublicVapidKeyForTesting',
+        },
+        secrets: {
+          serviceAccount: JSON.stringify({
+            project_id: 'school-app',
+            client_email: 'x@y',
+            private_key: 'k',
+          }),
+        },
+      },
+    });
+    const ph = headersFor(parent.sub, school.id);
+    const cfg = await inject({ method: 'GET', url: '/comms/push/config', headers: ph });
+    expect(cfg.json()).toMatchObject({ enabled: true, vapidKey: 'BPublicVapidKeyForTesting' });
+    expect(JSON.stringify(cfg.json())).not.toContain('private_key');
+    const reg = await inject({
+      method: 'POST',
+      url: '/comms/push/devices',
+      headers: ph,
+      json: { token: `token-${s}-0123456789`, app: 'parent' },
+    });
+    expect(reg.json()).toEqual({ devices: 1 });
+    const send = () =>
+      inject({
+        method: 'POST',
+        url: '/comms/requests',
+        headers: h(),
+        json: {
+          title: `Push check ${String(Math.random())}`,
+          body: 'x',
+          channels: [{ channel: 'sms', templateId: ids.sms }],
+          audience: 'individuals',
+          targets: [{ type: 'student', id: ids.a }],
+          sendTo: 'parents',
+        },
+      });
+    const countPush = async () =>
+      (
+        await withMigrator((c) =>
+          c.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM comms_messages WHERE school_id = $1 AND channel = 'push' AND recipient_address = $2`,
+            [school.id, `token-${s}-0123456789`],
+          ),
+        )
+      ).rows[0]!.n;
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE comms_settings SET approval_threshold = 100, approval_exempt_roles = '{school_admin}' WHERE school_id = $1`,
+        [school.id],
+      ),
+    );
+    const before = await countPush();
+    expect((await send()).json()).toMatchObject({ status: 'sent' });
+    expect(await countPush()).toBe(before + 1);
+    await withMigrator((c) =>
+      c.query(`UPDATE comms_settings SET push_events = '{attendance}' WHERE school_id = $1`, [
+        school.id,
+      ]),
+    );
+    await send();
+    expect(await countPush()).toBe(before + 1);
+  });
 });

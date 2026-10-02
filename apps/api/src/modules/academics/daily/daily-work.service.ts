@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import { PushService } from '../../comms/push.service';
 import { FilesService } from '../../files/files.service';
 import { ScopePolicy } from '../../../common/access/scope.policy';
 import { AuditService } from '../../../common/audit/audit.service';
@@ -88,6 +89,7 @@ export class DailyWorkService {
     private readonly scopes: ScopePolicy,
     private readonly viewer: ViewerService,
     private readonly files: FilesService,
+    private readonly push: PushService,
   ) {}
 
   /** A file attached to homework / classwork the viewer may see (families included), as a signed link. */
@@ -203,6 +205,13 @@ export class DailyWorkService {
           [id, fileId],
         );
       const created = (await this.find(c, id))!;
+      await this.push.send(c, ctx, {
+        userIds: await this.push.familyUsersOfSections(c, [dto.classSectionId]),
+        title: dto.kind === 'homework' ? 'New homework' : `New ${dto.kind}`,
+        body: dto.title,
+        link: '/homework',
+        event: 'homework',
+      });
       await this.audit.stage(ctx, c, {
         action: `academics.${dto.kind}.post`,
         entityType: 'daily_work',

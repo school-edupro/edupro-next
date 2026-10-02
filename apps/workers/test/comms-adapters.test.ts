@@ -1,4 +1,6 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { DeadToken, FcmAdapter } from '../src/adapters/fcm.adapter';
 import { EmsWhatsAppAdapter } from '../src/adapters/ems-whatsapp.adapter';
 import { MetaWhatsAppAdapter } from '../src/adapters/meta-whatsapp.adapter';
 import { Msg91Adapter } from '../src/adapters/msg91.adapter';
@@ -176,5 +178,68 @@ describe('EMS WhatsApp bridge adapter', () => {
         whatsapp: { templateName: 't', language: 'en', params: [], header: 'none' },
       }),
     ).rejects.toThrow(/401 bad key/);
+  });
+});
+
+describe('FCM adapter', () => {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const account = {
+    project_id: 'school-app',
+    client_email: `push-${String(Date.now())}@school-app.iam.gserviceaccount.com`,
+    private_key: privateKey,
+  };
+  it('signs in with the service account and sends a webpush that opens the link', async () => {
+    const calls: Array<{ url: string; body: string }> = [];
+    const fn = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body ?? '') });
+      if (String(url).includes('oauth2'))
+        return new Response(JSON.stringify({ access_token: 'ya29.x', expires_in: 3600 }), {
+          status: 200,
+        });
+      return new Response(JSON.stringify({ name: 'projects/school-app/messages/1' }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const a = new FcmAdapter(account, fn);
+    const r = await a.send({
+      ...base,
+      channel: 'push',
+      to: 'device-token',
+      subject: 'New homework',
+      body: 'Maths worksheet',
+      link: '/homework',
+    });
+    expect(r.providerMessageId).toBe('projects/school-app/messages/1');
+    expect(new URLSearchParams(calls[0]!.body).get('grant_type')).toBe(
+      'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    );
+    expect(calls[1]!.url).toBe('https://fcm.googleapis.com/v1/projects/school-app/messages:send');
+    expect(JSON.parse(calls[1]!.body)).toMatchObject({
+      message: {
+        token: 'device-token',
+        notification: { title: 'New homework' },
+        webpush: { fcm_options: { link: '/homework' } },
+      },
+    });
+  });
+  it('reports a dead device token so it can be removed', async () => {
+    const fn = (async (url: string | URL) =>
+      String(url).includes('oauth2')
+        ? new Response(JSON.stringify({ access_token: 'ya29.x', expires_in: 3600 }), {
+            status: 200,
+          })
+        : new Response(
+            JSON.stringify({
+              error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] },
+            }),
+            { status: 404 },
+          )) as unknown as typeof fetch;
+    await expect(
+      new FcmAdapter(account, fn).send({ ...base, channel: 'push', to: 'old', body: 'x' }),
+    ).rejects.toBeInstanceOf(DeadToken);
   });
 });

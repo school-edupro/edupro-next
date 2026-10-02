@@ -1,6 +1,7 @@
 import { Badge, Breadcrumbs, Button, Card, DataTable, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { FileLinks } from '@/components/FileLinks';
+import { MessagePreview, type PreviewItem } from '@/components/comms/MessagePreview';
 import { Notice } from '@/components/Notice';
 import { cancelRequest } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -33,11 +34,14 @@ export default async function RequestPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, m, me, r] = await Promise.all([
+  const [t, m, me, r, preview] = await Promise.all([
     getTranslations('pages.comms_requests'),
     getTranslations('comms'),
     getMe(),
     apiFetch<RequestV2>(`/comms/requests/${id}`),
+    apiFetch<{ preview: PreviewItem[] }>(`/comms/requests/${id}/preview`)
+      .then((x) => x.preview)
+      .catch(() => [] as PreviewItem[]),
   ]);
   const tone =
     r.status === 'sent'
@@ -86,12 +90,9 @@ export default async function RequestPage({
         }}
       >
         <Card title={m('body')}>
-          {r.subject ? (
-            <p>
-              <strong>{r.subject}</strong>
-            </p>
-          ) : null}
-          {r.bodyFormat === 'html' ? (
+          {preview.length ? (
+            <MessagePreview items={preview} />
+          ) : r.bodyFormat === 'html' ? (
             <iframe className="ep-tpl__frame" title="Message" sandbox="" srcDoc={r.body} />
           ) : (
             <p style={{ whiteSpace: 'pre-wrap' }}>{r.body}</p>

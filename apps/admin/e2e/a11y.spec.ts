@@ -146,7 +146,12 @@ test.describe('accessibility (axe)', () => {
     for (const tab of ['overview', 'profile', 'academics', 'documents', 'fees', 'status']) {
       await page.goto(`${href!}?tab=${tab}`);
       await page.waitForLoadState('networkidle');
-      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const r = await new AxeBuilder({ page })
+        // email previews sit in sandboxed frames (no scripts) the checker cannot enter
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
       const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
       expect(
         bad.map(
@@ -161,7 +166,12 @@ test.describe('accessibility (axe)', () => {
     for (const tab of ['student', 'address', 'father', 'mother', 'contact']) {
       await page.goto(`${href!}/profile?tab=${tab}`);
       await page.waitForLoadState('networkidle');
-      const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const results = await new AxeBuilder({ page })
+        // email previews sit in sandboxed frames (no scripts) the checker cannot enter
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
       const serious = results.violations.filter(
         (v) => v.impact === 'serious' || v.impact === 'critical',
       );
@@ -185,7 +195,12 @@ test.describe('accessibility (axe)', () => {
     const skip = page.getByRole('button', { name: 'Skip' });
     if (await skip.isVisible().catch(() => false)) await skip.click();
     const check = async (where: string) => {
-      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const r = await new AxeBuilder({ page })
+        // email previews sit in sandboxed frames (no scripts) the checker cannot enter
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
       const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
       expect(
         bad.map(
@@ -212,7 +227,12 @@ test.describe('accessibility (axe)', () => {
   }) => {
     const check = async (where: string) => {
       await page.waitForTimeout(400);
-      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const r = await new AxeBuilder({ page })
+        // email previews sit in sandboxed frames (no scripts) the checker cannot enter
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
       const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
       expect(
         bad.map(
@@ -257,7 +277,12 @@ test.describe('accessibility (axe)', () => {
     if (await skip.isVisible().catch(() => false)) await skip.click();
     await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await page.getByRole('region', { name: 'Preview', exact: true }).waitFor();
-    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    const results = await new AxeBuilder({ page })
+      // email previews sit in sandboxed frames (no scripts) the checker cannot enter
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
     const serious = results.violations.filter(
       (v) => v.impact === 'serious' || v.impact === 'critical',
     );
@@ -276,7 +301,12 @@ test.describe('accessibility (axe)', () => {
     test(`no serious or critical violations on ${path}`, async ({ page }) => {
       await page.goto(path);
       await page.waitForLoadState('networkidle');
-      const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const results = await new AxeBuilder({ page })
+        // email previews sit in sandboxed frames (no scripts) the checker cannot enter
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
       const serious = results.violations.filter(
         (v) => v.impact === 'serious' || v.impact === 'critical',
       );

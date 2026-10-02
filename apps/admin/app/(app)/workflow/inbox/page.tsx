@@ -4,6 +4,7 @@ import { Notice } from '@/components/Notice';
 import { actOnStep } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
 import type { InboxItem } from '@/lib/types';
+import { MessagePreview, type PreviewItem } from '@/components/comms/MessagePreview';
 
 /** S9-01: the approver's inbox; each card is one pending step assigned to the signed-in user. */
 export default async function InboxPage({
@@ -17,6 +18,24 @@ export default async function InboxPage({
     getTranslations('workflow'),
     apiFetch<{ data: InboxItem[] }>('/workflow/inbox').then((r) => r.data),
   ]);
+  // message approvals: the approver reads exactly what goes out before deciding
+  const previews = new Map<string, PreviewItem[]>(
+    await Promise.all(
+      items
+        .filter((s) => s.instance.entityType === 'message_request')
+        .map(
+          async (s) =>
+            [
+              s.instance.entityId,
+              await apiFetch<{ preview: PreviewItem[] }>(
+                `/comms/requests/${s.instance.entityId}/preview`,
+              )
+                .then((r) => r.preview)
+                .catch(() => [] as PreviewItem[]),
+            ] as [string, PreviewItem[]],
+        ),
+    ),
+  );
   return (
     <>
       <PageHeader
@@ -58,6 +77,16 @@ export default async function InboxPage({
               {s.instance.definitionName} · {w('requestedBy')} {s.instance.requestedBy ?? '—'} ·{' '}
               {w('requestedAt')} {new Date(s.instance.requestedAt).toLocaleString('en-IN')}
             </p>
+            {s.instance.entityType === 'message_request' ? (
+              <>
+                <MessagePreview items={previews.get(s.instance.entityId) ?? []} />
+                <p style={{ marginTop: 'var(--sp-2)' }}>
+                  <a href={`/comms/requests/${s.instance.entityId}`}>
+                    Open the request (recipients, attachments)
+                  </a>
+                </p>
+              </>
+            ) : null}
             {s.instance.entityType === 'application' ? (
               <p style={{ marginTop: 'var(--sp-2)' }}>
                 <a href={`/admissions/applications/${s.instance.entityId}`}>{w('viewEntity')}</a>

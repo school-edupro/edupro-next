@@ -4059,3 +4059,50 @@ a.ep-tabs__tab {
   display: grid;
   gap: var(--sp-2);
 }
+.ep-mprev {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.ep-mprev__item {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+}
+.ep-mprev__head {
+  font-family: var(--font-heading);
+  font-size: var(--fs-small);
+  color: var(--text-heading);
+  margin: 0 0 var(--sp-2);
+}
+.ep-mprev__subject {
+  margin: 0 0 var(--sp-2);
+}
+.ep-mprev__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  margin: 0;
+}
+.ep-mprev__frame {
+  width: 100%;
+  min-height: 22rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+}
+.fp-push {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  background: var(--status-info-bg);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-small);
+}

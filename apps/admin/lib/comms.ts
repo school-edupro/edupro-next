@@ -154,10 +154,11 @@ export interface CommsPolicy {
   attachmentMaxMb: number;
   rates: Record<Channel, number>;
   lowBalance: Partial<Record<Channel, number>>;
+  pushEvents: string[];
 }
 
 export interface ProviderView {
-  channel: Channel;
+  channel: Channel | 'push';
   provider: string;
   config: Record<string, string | number | boolean>;
   secrets: Record<string, boolean>;
@@ -167,6 +168,15 @@ export interface ProviderView {
 
 export interface CommsSettings {
   policy: CommsPolicy;
+  approvers: {
+    roleCodes: string[];
+    people: Array<{
+      userId: string;
+      name: string;
+      code: string | null;
+      designation: string | null;
+    }>;
+  };
   providers: ProviderView[];
   roles: Array<{ code: string; name: string }>;
   switchedOff?: string[];
