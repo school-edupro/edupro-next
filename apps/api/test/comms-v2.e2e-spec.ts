@@ -655,4 +655,90 @@ describe('communication v2 (e2e)', () => {
     });
     expect(other.statusCode).toBe(404);
   });
+
+  it('an own email (no template) fills {{values}} written in the text; "send me a test" goes to the sender', async () => {
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE students SET profile = profile || '{"primary_email": "anu.family@example.com"}'::jsonb WHERE id = $1`,
+        [ids.a],
+      ),
+    );
+    const base = {
+      title: 'Annual day',
+      subject: 'Annual day on {{event_date}}',
+      body: '<p>Dear {{recipient_name}}, annual day is on <b>{{event_date}}</b> for {{student_name}}.</p><script>x</script>',
+      bodyFormat: 'html',
+      channels: [{ channel: 'email', custom: true }],
+      audience: 'individuals',
+      targets: [{ type: 'student', id: ids.a }],
+    };
+    const noSubject = await inject({
+      method: 'POST',
+      url: '/comms/requests/preview',
+      headers: h(),
+      json: { ...base, subject: '' },
+    });
+    expect(noSubject.statusCode).toBe(400);
+    const pv = await inject({
+      method: 'POST',
+      url: '/comms/requests/preview',
+      headers: h(),
+      json: base,
+    });
+    expect(pv.statusCode).toBe(201);
+    expect(pv.json().askValues).toEqual(['event_date']);
+    const noMail = await inject({
+      method: 'POST',
+      url: '/comms/requests/test-email',
+      headers: h(),
+      json: { ...base, variables: { event_date: '20 Dec' } },
+    });
+    expect(noMail.statusCode).toBe(409);
+    await withMigrator((c) =>
+      c.query(`UPDATE users SET email = $2 WHERE id = $1`, [
+        admin.id,
+        `${s.toLowerCase()}@example.com`,
+      ]),
+    );
+    const test = await inject({
+      method: 'POST',
+      url: '/comms/requests/test-email',
+      headers: h(),
+      json: { ...base, variables: { event_date: '20 Dec' } },
+    });
+    expect(test.statusCode).toBe(200);
+    const testMsg = await withMigrator((c) =>
+      c.query<{ subject: string; body: string; recipient_address: string }>(
+        `SELECT subject, body, recipient_address FROM comms_messages WHERE id = $1`,
+        [test.json().messageId],
+      ),
+    );
+    expect(testMsg.rows[0]).toMatchObject({
+      subject: '[Test] Annual day on 20 Dec',
+      recipient_address: `${s.toLowerCase()}@example.com`,
+    });
+    expect(testMsg.rows[0]!.body).toContain('annual day is on <b>20 Dec</b> for Anu Eight');
+    const sent = await inject({
+      method: 'POST',
+      url: '/comms/requests',
+      headers: h(),
+      json: { ...base, variables: { event_date: '20 Dec' } },
+    });
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json().channels).toEqual([
+      expect.objectContaining({
+        channel: 'email',
+        custom: true,
+        templateName: 'Own email (no template)',
+      }),
+    ]);
+    const msg = await withMigrator((c) =>
+      c.query<{ subject: string; body: string; template_id: string | null }>(
+        `SELECT subject, body, template_id::text FROM comms_messages WHERE message_request_id = $1`,
+        [sent.json().id],
+      ),
+    );
+    expect(msg.rows[0]).toMatchObject({ subject: 'Annual day on 20 Dec', template_id: null });
+    expect(msg.rows[0]!.body).not.toContain('<script>');
+  });
 });

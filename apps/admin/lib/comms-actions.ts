@@ -62,6 +62,16 @@ export async function composeSend(p: ComposePayload) {
   );
 }
 
+/** The email exactly as the first recipient gets it, sent to the signed-in user first. */
+export async function composeTestEmail(p: ComposePayload) {
+  return call(() =>
+    apiFetch<{ to: string; as: string; messageId: string }>('/comms/requests/test-email', {
+      method: 'POST',
+      body: JSON.stringify(p),
+    }),
+  );
+}
+
 export async function readRecipientSheet(fd: FormData) {
   const file = fd.get('file');
   if (!(file instanceof File) || !file.size)

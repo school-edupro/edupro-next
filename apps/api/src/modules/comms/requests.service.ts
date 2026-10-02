@@ -20,6 +20,7 @@ import { CommsSettingsService, type CommsPolicy } from './comms-settings.service
 import type { CreateRequestDto, ListRequestsQueryDto, RecipientSheetDto } from './comms.dto';
 import { emailLayout, sanitizeEmailHtml } from './email-html';
 import { parseMemberSheet } from './groups.service';
+import { SAMPLE_VARIABLES } from './templates.service';
 import {
   escapeHtml,
   extractVariables,
@@ -34,8 +35,13 @@ export interface RequestRow {
   title: string;
   category: 'service' | 'general';
   channel: string;
-  channels: Array<{ channel: Channel; templateId: string; templateName: string | null }>;
-  templateId: string;
+  channels: Array<{
+    channel: Channel;
+    templateId: string | null;
+    custom?: boolean;
+    templateName: string | null;
+  }>;
+  templateId: string | null;
   templateCode: string | null;
   body: string;
   bodyFormat: 'text' | 'html';
@@ -292,6 +298,75 @@ export class RequestsService {
     });
   }
 
+  /**
+   * "Send me a test first": the email exactly as the first recipient gets it (their values), sent to
+   * the sender's own email with [Test] in the subject. Nothing is recorded on a request.
+   */
+  async testEmail(ctx: RequestContext, dto: CreateRequestDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const templates = await this.templates(c, dto);
+      const t = templates.find((x) => x.channel === 'email');
+      if (!t)
+        throw new DomainError('validation-failed', 'Tick Email to send yourself a test', {
+          status: 400,
+        });
+      const me = await c.query<{ email: string | null }>(
+        `SELECT COALESCE(NULLIF(u.email::text, ''), (SELECT e.email::text FROM employees e WHERE e.user_id = u.id AND e.email IS NOT NULL LIMIT 1)) AS email
+           FROM users u WHERE u.id = app.current_user_id()`,
+      );
+      const to = me.rows[0]?.email;
+      if (!to)
+        throw new DomainError(
+          'comms.test.no_email',
+          'Your login has no email address; add one to your employee record or profile',
+          { status: 409 },
+        );
+      const policy = await this.settings.policy(c);
+      const attachments = await this.checkAttachments(c, dto.attachments, policy);
+      const plan = await resolveAudience(c, {
+        ...this.input(ctx, dto, templates),
+        channels: ['email'],
+      });
+      const first = plan.send[0] ?? plan.skipped[0];
+      const school = await this.schoolName(c);
+      const out = this.render(
+        t,
+        { vars: first?.vars ?? { ...SAMPLE_VARIABLES, school } },
+        { ...dto, body: dto.bodyFormat === 'html' ? sanitizeEmailHtml(dto.body) : dto.body },
+        school,
+      );
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO comms_messages (school_id, template_id, channel, recipient_user_id, recipient_address, subject, body, variables, format, attachments, request_id, created_by)
+         VALUES (app.current_school_id(), $1, 'email', app.current_user_id(), $2, $3, $4, '{}'::jsonb, $5, $6::jsonb, app.current_request_id(), app.current_user_id())
+         RETURNING id::text`,
+        [
+          t.id || null,
+          to,
+          `[Test] ${out.subject ?? dto.title}`,
+          out.body,
+          out.format,
+          JSON.stringify(attachments),
+        ],
+      );
+      const tenant = requireTenant(ctx);
+      await c.query(`SELECT app.enqueue_job($1, $2::jsonb)`, [
+        QUEUES.notifications,
+        JSON.stringify({
+          schoolId: tenant.schoolId,
+          userId: tenant.userId ?? null,
+          requestId: ctx.requestId,
+          kind: 'comms.message',
+          payload: { messageId: r.rows[0]!.id },
+        }),
+      ]);
+      return {
+        to: mask(to),
+        as: first ? first.name : 'sample values',
+        messageId: r.rows[0]!.id,
+      };
+    });
+  }
+
   async create(ctx: RequestContext, dto: CreateRequestDto): Promise<RequestRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const templates = await this.templates(c, dto);
@@ -323,7 +398,7 @@ export class RequestsService {
           dto.title,
           dto.category,
           templates[0]!.channel,
-          templates[0]!.id,
+          templates[0]!.id || null,
           body,
           dto.bodyFormat,
           dto.subject ?? null,
@@ -333,7 +408,13 @@ export class RequestsService {
           dto.rule ? JSON.stringify(dto.rule) : null,
           dto.upload ? JSON.stringify(dto.upload) : null,
           dto.sendTo,
-          JSON.stringify(templates.map((t) => ({ channel: t.channel, templateId: t.id }))),
+          JSON.stringify(
+            templates.map((t) =>
+              t.id
+                ? { channel: t.channel, templateId: t.id }
+                : { channel: t.channel, templateId: null, custom: true },
+            ),
+          ),
           JSON.stringify(attachments),
           needsApproval,
           needsApproval ? 'pending_approval' : 'approved',
@@ -446,10 +527,13 @@ export class RequestsService {
       `SELECT upload FROM message_requests WHERE id = $1`,
       [id],
     );
-    const templates = await this.loadTemplates(
-      c,
-      row.channels.map((x) => x.templateId),
-    );
+    const templates = [
+      ...(await this.loadTemplates(
+        c,
+        row.channels.filter((x) => x.templateId).map((x) => x.templateId!),
+      )),
+      ...(row.channels.some((x) => x.custom) ? [this.ownEmail(row.subject ?? row.title)] : []),
+    ];
     const policy = await this.settings.policy(c);
     const school = await this.schoolName(c);
     const dto = {
@@ -509,7 +593,7 @@ export class RequestsService {
           when.toISOString(),
           id,
           JSON.stringify(row.attachments),
-          rendered.map((x) => byChannel.get(x.r.channel)!.id),
+          rendered.map((x) => byChannel.get(x.r.channel)!.id || null),
           rendered.map((x) => x.r.channel),
           rendered.map((x) => x.r.userId),
           rendered.map((x) => x.r.address),
@@ -607,6 +691,10 @@ export class RequestsService {
       title: dto.title,
       subject: dto.subject ?? dto.title,
     };
+    // {{variables}} written in the compose text are filled too (escaped inside HTML)
+    const own = composeHtml
+      ? renderLenient(dto.body, vars, escapeHtml)
+      : renderLenient(dto.body, vars);
     if (t.channel === 'email') {
       const html = t.format === 'html' || composeHtml;
       const subjectTpl = t.subject && t.subject.trim() ? t.subject : (dto.subject ?? dto.title);
@@ -614,7 +702,7 @@ export class RequestsService {
       if (!html)
         return {
           subject,
-          body: renderLenient(t.body, { ...vars, body: dto.body }),
+          body: renderLenient(t.body, { ...vars, body: own }),
           format: 'text',
           units: 1,
           params: null,
@@ -624,7 +712,7 @@ export class RequestsService {
         frame.replace(/\{\{\s*body\s*\}\}/g, '\u0000BODY\u0000'),
         vars,
         escapeHtml,
-      ).replace('\u0000BODY\u0000', composeHtml ? dto.body : textToHtml(dto.body));
+      ).replace('\u0000BODY\u0000', composeHtml ? own : textToHtml(own));
       return {
         subject,
         body: emailLayout(escapeHtml(school), inner),
@@ -633,7 +721,7 @@ export class RequestsService {
         params: null,
       };
     }
-    const text = composeHtml ? htmlToText(dto.body) : dto.body;
+    const text = composeHtml ? htmlToText(own) : own;
     const body = renderLenient(t.body, { ...vars, body: text });
     const params =
       t.channel === 'whatsapp'
@@ -789,10 +877,29 @@ export class RequestsService {
       .filter((t): t is TemplateLite => Boolean(t));
   }
 
+  /** An email written in compose: no template, the subject and body come from the request. */
+  private ownEmail(subject: string): TemplateLite {
+    return {
+      id: '',
+      channel: 'email',
+      name: 'Own email (no template)',
+      subject,
+      body: '{{body}}',
+      format: 'html',
+      wa_params: [],
+      status: 'active',
+    };
+  }
+
   private async templates(c: PoolClient, dto: CreateRequestDto): Promise<TemplateLite[]> {
-    const wanted = dto.channels?.length
-      ? dto.channels
-      : [{ channel: null as Channel | null, templateId: dto.templateId! }];
+    const own = dto.channels?.find((w) => w.custom);
+    if (own && !(dto.subject ?? '').trim())
+      throw new DomainError('validation-failed', 'Write the email subject', { status: 400 });
+    const wanted = (
+      dto.channels?.length
+        ? dto.channels.filter((w) => !w.custom)
+        : [{ channel: null as Channel | null, templateId: dto.templateId! }]
+    ) as Array<{ channel: Channel | null; templateId: string }>;
     const list = await this.loadTemplates(
       c,
       wanted.map((w) => w.templateId),
@@ -820,6 +927,9 @@ export class RequestsService {
           },
         );
     }
+    if (own) list.push(this.ownEmail(dto.subject!.trim()));
+    if (!list.length)
+      throw new DomainError('validation-failed', 'Choose at least one channel', { status: 400 });
     if (new Set(list.map((t) => t.channel)).size !== list.length)
       throw new DomainError('comms.request.channel', 'One template per channel', { status: 400 });
     return list;
@@ -854,12 +964,13 @@ export class RequestsService {
       if (l.rows[0]) labels.push(l.rows[0].label);
     }
     if (targets.length > 20) labels.push(`and ${String(targets.length - 20)} more`);
-    const channels = ((x.channels as Array<{ channel: Channel; templateId: string }>) ?? []).length
-      ? (x.channels as Array<{ channel: Channel; templateId: string }>)
-      : [{ channel: x.channel as Channel, templateId: x.template_id as string }];
+    type Ch = { channel: Channel; templateId: string | null; custom?: boolean };
+    const channels = ((x.channels as Ch[]) ?? []).length
+      ? (x.channels as Ch[])
+      : [{ channel: x.channel as Channel, templateId: (x.template_id as string) ?? null }];
     const names = await c.query<{ id: string; name: string }>(
       `SELECT id::text, name FROM comms_templates WHERE id = ANY($1::bigint[])`,
-      [channels.map((ch) => ch.templateId)],
+      [channels.map((ch) => ch.templateId).filter(Boolean)],
     );
     const raw = (x.delivery as Record<string, number>) ?? {};
     const delivery: Record<string, number> = {};
@@ -877,9 +988,11 @@ export class RequestsService {
       channel: x.channel as string,
       channels: channels.map((ch) => ({
         ...ch,
-        templateName: names.rows.find((n) => n.id === ch.templateId)?.name ?? null,
+        templateName: ch.custom
+          ? 'Own email (no template)'
+          : (names.rows.find((n) => n.id === ch.templateId)?.name ?? null),
       })),
-      templateId: x.template_id as string,
+      templateId: (x.template_id as string) ?? null,
       templateCode: (x.template_code as string) ?? null,
       body: x.body as string,
       bodyFormat: (x.body_format as 'text' | 'html') ?? 'text',

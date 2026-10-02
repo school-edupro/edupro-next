@@ -69,6 +69,14 @@ export class CommsRequestsController {
     return this.requests.readSheet(ctx, dto);
   }
 
+  @Post('test-email')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Send the email to myself first, as the first recipient gets it' })
+  @RequirePermission(COMMS_S10.requestCreate)
+  testEmail(@ReqCtx() ctx: RequestContext, @Body() dto: CreateRequestDto) {
+    return this.requests.testEmail(ctx, dto);
+  }
+
   @Post('preview')
   @ApiOperation({ summary: 'Counts the recipients of a draft (who would be skipped and why)' })
   @RequirePermission(COMMS_S10.requestCreate)

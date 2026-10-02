@@ -4047,3 +4047,15 @@ a.ep-tabs__tab {
   justify-content: space-between;
   margin-top: var(--sp-3);
 }
+.ep-compose__insert {
+  display: block;
+  margin-top: var(--sp-2);
+  max-width: 22rem;
+}
+.ep-compose__test {
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}

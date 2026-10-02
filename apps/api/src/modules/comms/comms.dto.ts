@@ -157,7 +157,18 @@ export const CreateRequestSchema = z
     templateId: IdSchema.optional(),
     /** ... or several at once: SMS + WhatsApp + email */
     channels: z
-      .array(z.object({ channel: z.enum(['sms', 'whatsapp', 'email']), templateId: IdSchema }))
+      .array(
+        z
+          .object({
+            channel: z.enum(['sms', 'whatsapp', 'email']),
+            templateId: IdSchema.optional(),
+            /** email only: written in compose, no template (subject + body from the request) */
+            custom: z.boolean().optional(),
+          })
+          .refine((v) => (v.custom ? v.channel === 'email' : Boolean(v.templateId)), {
+            message: 'choose a template (only an email can be written without one)',
+          }),
+      )
       .max(3)
       .optional(),
     /** the message merged into each template's {{body}}; HTML from the email editor when bodyFormat is html */

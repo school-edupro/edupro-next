@@ -110,7 +110,7 @@ export interface SheetResult {
 export interface ComposePayload {
   title: string;
   category: 'service' | 'general';
-  channels: Array<{ channel: Channel; templateId: string }>;
+  channels: Array<{ channel: Channel; templateId?: string; custom?: boolean }>;
   body: string;
   bodyFormat: 'text' | 'html';
   subject?: string;

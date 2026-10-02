@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import {
   composePreview,
   composeSend,
+  composeTestEmail,
   readRecipientSheet,
   searchPeople,
   uploadAttachment,
@@ -63,6 +64,10 @@ const AUDIENCES: Array<{ id: Audience; label: string; help: string }> = [
 ];
 
 const CHANNELS: Channel[] = ['sms', 'whatsapp', 'email'];
+/** the email "template" choice for an email written here, without a template */
+const OWN = '__own';
+const PLACEHOLDER = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+const varsIn = (text: string) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]!);
 const money = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 /**
@@ -102,7 +107,7 @@ export function Compose({
   const [tpl, setTpl] = useState<Record<Channel, string>>({
     sms: byChannel('sms')[0]?.id ?? '',
     whatsapp: byChannel('whatsapp')[0]?.id ?? '',
-    email: byChannel('email')[0]?.id ?? '',
+    email: byChannel('email')[0]?.id ?? OWN,
   });
   const [audience, setAudience] = useState<Audience>('class_section');
   const [picked, setPicked] = useState<Record<string, string[]>>({});
@@ -127,6 +132,33 @@ export function Compose({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chosen = CHANNELS.filter((c) => on[c] && tpl[c]);
+  const ownEmail = on.email && tpl.email === OWN;
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // values to fill once for everyone: {{names}} in the chosen templates or the text that nothing fills
+  const known = new Set([
+    ...variables.map((v) => v.key),
+    'body',
+    'title',
+    'subject',
+    ...(sheet?.variables ?? []),
+  ]);
+  const askLive = [
+    ...new Set(
+      varsIn(
+        [
+          ...chosen.map((c) => {
+            const t = templates.find((x) => x.id === tpl[c]);
+            return t
+              ? `${t.subject ?? ''} ${t.body} ${t.waParams.map((k) => `{{${k}}}`).join(' ')}`
+              : '';
+          }),
+          body,
+          subject,
+        ].join(' '),
+      ),
+    ),
+  ].filter((k) => !known.has(k));
   const studentsInvolved =
     !['employees'].includes(audience) && !(audience === 'filter' && rule.people === 'employees');
   const payload = useMemo<ComposePayload | null>(() => {
@@ -134,9 +166,13 @@ export function Compose({
     const p: ComposePayload = {
       title: title.trim(),
       category,
-      channels: chosen.map((c) => ({ channel: c, templateId: tpl[c] })),
+      channels: chosen.map((c) =>
+        c === 'email' && tpl.email === OWN
+          ? { channel: c, custom: true }
+          : { channel: c, templateId: tpl[c] },
+      ),
       body,
-      bodyFormat: html && on.email ? 'html' : 'text',
+      bodyFormat: (html || ownEmail) && on.email ? 'html' : 'text',
       ...(on.email && subject.trim() ? { subject: subject.trim() } : {}),
       audience,
       targets: [],
@@ -292,7 +328,7 @@ export function Compose({
                       id={`c-on-${c}`}
                       type="checkbox"
                       checked={on[c]}
-                      disabled={!list.length}
+                      disabled={!list.length && c !== 'email'}
                       onChange={(e) => {
                         setOn({ ...on, [c]: e.target.checked });
                         reset();
@@ -300,7 +336,7 @@ export function Compose({
                     />{' '}
                     <strong>{CHANNEL_LABEL[c]}</strong>
                   </label>
-                  {list.length ? (
+                  {list.length || c === 'email' ? (
                     <label className="ep-field" htmlFor={`c-tpl-${c}`}>
                       <span className="ep-field__label">{CHANNEL_LABEL[c]} template</span>
                       <select
@@ -318,6 +354,9 @@ export function Compose({
                             {t.name}
                           </option>
                         ))}
+                        {c === 'email' ? (
+                          <option value={OWN}>Write my own email (no template)</option>
+                        ) : null}
                       </select>
                     </label>
                   ) : (
@@ -325,6 +364,12 @@ export function Compose({
                       No active {CHANNEL_LABEL[c]} template. <a href="/comms/templates">Add one</a>
                     </p>
                   )}
+                  {c === 'email' && ownEmail ? (
+                    <p className="ep-compose__tpl">
+                      Your own email: write the subject and the text in step 3. The school
+                      letterhead is added.
+                    </p>
+                  ) : null}
                   {on[c] && tplOf(c) ? (
                     <p className="ep-compose__tpl">
                       {tplOf(c)!.format === 'html'
@@ -603,7 +648,7 @@ export function Compose({
             <div className="ep-wd__form">
               <label className="ep-field ep-wd__wide" htmlFor="c-subject">
                 <span className="ep-field__label">
-                  Email subject (optional; the title when empty)
+                  {ownEmail ? 'Email subject *' : 'Email subject (optional; the title when empty)'}
                 </span>
                 <input
                   id="c-subject"
@@ -617,7 +662,8 @@ export function Compose({
                 <input
                   id="c-html"
                   type="checkbox"
-                  checked={html}
+                  disabled={ownEmail}
+                  checked={html || ownEmail}
                   onChange={(e) => {
                     setHtml(e.target.checked);
                     reset();
@@ -627,7 +673,7 @@ export function Compose({
               </label>
             </div>
           ) : null}
-          {html && on.email ? (
+          {(html || ownEmail) && on.email ? (
             <HtmlEditor
               id="c-body-html"
               label="Message *"
@@ -642,6 +688,7 @@ export function Compose({
             <label className="ep-field" htmlFor="c-body">
               <span className="ep-field__label">Message *</span>
               <textarea
+                ref={bodyRef}
                 id="c-body"
                 className="ep-input"
                 rows={6}
@@ -653,8 +700,65 @@ export function Compose({
                 }}
                 placeholder="Goes into each template’s {{body}}"
               />
+              <span className="ep-compose__insert">
+                <select
+                  aria-label="Insert a variable into the message"
+                  className="ep-select"
+                  value=""
+                  onChange={(e) => {
+                    let key = e.target.value;
+                    if (!key) return;
+                    if (key === '__new') {
+                      const name = window.prompt('Name of the new variable (e.g. ptm_date)', '');
+                      key = (name ?? '')
+                        .trim()
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '_')
+                        .replace(/^_+|_+$/g, '');
+                      if (!/^[a-z][a-z0-9_]{0,39}$/.test(key)) return;
+                    }
+                    const el = bodyRef.current;
+                    const token = `{{${key}}}`;
+                    const at = el?.selectionStart ?? body.length;
+                    const end = el?.selectionEnd ?? body.length;
+                    setBody(body.slice(0, at) + token + body.slice(end));
+                    setPreview(null);
+                    requestAnimationFrame(() => {
+                      el?.focus();
+                      el?.setSelectionRange(at + token.length, at + token.length);
+                    });
+                  }}
+                >
+                  <option value="">Insert a variable…</option>
+                  <option value="__new">+ A new variable (you give its value below)</option>
+                  {variables.map((v) => (
+                    <option key={v.key} value={v.key}>
+                      {v.label} — {`{{${v.key}}}`}
+                    </option>
+                  ))}
+                </select>
+              </span>
             </label>
           )}
+          {askLive.length ? (
+            <fieldset className="ep-compose__ask">
+              <legend className="ep-field__label">
+                Values for this message (the same for everyone)
+              </legend>
+              {askLive.map((k) => (
+                <label key={k} className="ep-field" htmlFor={`c-ask-${k}`}>
+                  <span className="ep-field__label">{`{{${k}}}`} *</span>
+                  <input
+                    id={`c-ask-${k}`}
+                    className="ep-input"
+                    maxLength={300}
+                    value={askVals[k] ?? ''}
+                    onChange={(e) => setAskVals({ ...askVals, [k]: e.target.value })}
+                  />
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
           {smsText && on.sms ? (
             <p className="ep-field__help" aria-live="polite">
               {smsText.length} characters · about {smsText.units} SMS part
@@ -788,23 +892,6 @@ export function Compose({
                   {preview.switchedOff.length === 1 ? 'it' : 'them'} or switch on.
                 </p>
               ) : null}
-              {preview.askValues.length ? (
-                <fieldset className="ep-compose__ask">
-                  <legend className="ep-field__label">Fill in for everyone</legend>
-                  {preview.askValues.map((k) => (
-                    <label key={k} className="ep-field" htmlFor={`c-ask-${k}`}>
-                      <span className="ep-field__label">{`{{${k}}}`} *</span>
-                      <input
-                        id={`c-ask-${k}`}
-                        className="ep-input"
-                        maxLength={300}
-                        value={askVals[k] ?? ''}
-                        onChange={(e) => setAskVals({ ...askVals, [k]: e.target.value })}
-                      />
-                    </label>
-                  ))}
-                </fieldset>
-              ) : null}
               <p className={preview.needsApproval ? 'ep-compose__approval' : 'ep-field__help'}>
                 {preview.needsApproval
                   ? 'Needs the principal’s approval before it goes out.'
@@ -862,13 +949,47 @@ export function Compose({
                 !preview ||
                 preview.total === 0 ||
                 preview.switchedOff.length > 0 ||
-                preview.askValues.some((k) => !askVals[k]?.trim())
+                [...askLive, ...preview.askValues].some((k) => !askVals[k]?.trim())
               }
               onClick={() => void run('send')}
             >
               {busy === 'send' ? 'Sending…' : preview?.needsApproval ? 'Send for approval' : 'Send'}
             </button>
           </div>
+          {on.email ? (
+            <div className="ep-compose__test">
+              <button
+                type="button"
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                disabled={busy !== null || !payload || askLive.some((k) => !askVals[k]?.trim())}
+                onClick={async () => {
+                  if (!payload) return;
+                  setBusy('test');
+                  setTestMsg(null);
+                  const r = await composeTestEmail(payload);
+                  setBusy(null);
+                  setTestMsg(
+                    r.ok
+                      ? {
+                          ok: true,
+                          text: `Test email sent to ${r.data.to} (as ${r.data.as} would get it). Check your inbox.`,
+                        }
+                      : { ok: false, text: r.error },
+                  );
+                }}
+              >
+                {busy === 'test' ? 'Sending test…' : 'Send me a test email first'}
+              </button>
+              {testMsg ? (
+                <p
+                  className={testMsg.ok ? 'ep-field__help' : 'ep-alert ep-alert--danger'}
+                  role={testMsg.ok ? 'status' : 'alert'}
+                >
+                  {testMsg.text}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </aside>
     </div>
