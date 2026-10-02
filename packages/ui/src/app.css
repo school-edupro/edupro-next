@@ -3251,3 +3251,42 @@ a.ep-tabs__tab {
 .ep-strength__table td a {
   text-decoration: underline;
 }
+/* report builder: detailed layout, highlight and exclude */
+.ep-rb__colopts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-rb__colopts .ep-select {
+  min-width: 7rem;
+}
+.ep-rb__layoutopt {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-rb__hl,
+.ep-rb__hlcell {
+  background: var(--mark-highlight);
+  color: var(--text-heading);
+}
+.ep-rb__detailed th,
+.ep-rb__detailed td {
+  vertical-align: top;
+}
+.ep-rb__stackline {
+  display: block;
+  line-height: 1.5;
+  width: fit-content;
+}
+.ep-rb__stackfirst {
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-rb__glabel {
+  display: block;
+  text-decoration: underline;
+}

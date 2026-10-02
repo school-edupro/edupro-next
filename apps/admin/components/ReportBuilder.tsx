@@ -13,6 +13,7 @@ import {
   type ReportSpec,
   type Result,
   type SavedReport,
+  DETAILED_TEMPLATE,
 } from '@/lib/report-builder';
 
 type ShareRow = { userId?: string; roleId?: string; name: string; canEdit: boolean };
@@ -398,6 +399,70 @@ export function ReportBuilder({
                         }
                       />
                     </label>
+                    <span className="ep-rb__colopts">
+                      {spec.layout === 'detailed' ? (
+                        <label htmlFor={`rb-g-${c.key}`}>
+                          <span className="ep-field__help">Stack in</span>
+                          <select
+                            id={`rb-g-${c.key}`}
+                            className="ep-select"
+                            value={c.group ?? ''}
+                            disabled={!canEdit}
+                            onChange={(e) =>
+                              setColumns(
+                                spec.columns.map((x, j) =>
+                                  j === i
+                                    ? {
+                                        ...x,
+                                        group: e.target.value ? Number(e.target.value) : null,
+                                      }
+                                    : x,
+                                ),
+                              )
+                            }
+                          >
+                            <option value="">Own column</option>
+                            {Array.from({ length: 12 }, (_, n) => n + 1).map((n) => (
+                              <option key={n} value={n}>
+                                Column {n}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <label className="ep-roles__tick" htmlFor={`rb-hl-${c.key}`}>
+                        <input
+                          id={`rb-hl-${c.key}`}
+                          type="checkbox"
+                          checked={Boolean(c.highlight)}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setColumns(
+                              spec.columns.map((x, j) =>
+                                j === i ? { ...x, highlight: e.target.checked } : x,
+                              ),
+                            )
+                          }
+                        />{' '}
+                        Highlight
+                      </label>
+                      <label className="ep-roles__tick" htmlFor={`rb-ex-${c.key}`}>
+                        <input
+                          id={`rb-ex-${c.key}`}
+                          type="checkbox"
+                          checked={Boolean(c.hidden)}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setColumns(
+                              spec.columns.map((x, j) =>
+                                j === i ? { ...x, hidden: e.target.checked } : x,
+                              ),
+                            )
+                          }
+                        />{' '}
+                        Exclude
+                      </label>
+                    </span>
                     {canEdit ? (
                       <span className="ep-rb__colbtns">
                         <button
@@ -558,6 +623,76 @@ export function ReportBuilder({
                   ))}
                 </select>
               </label>
+              <fieldset className="ep-rb__layoutopt">
+                <legend className="ep-field__label">Layout</legend>
+                <label className="ep-roles__tick" htmlFor="rb-layout-table">
+                  <input
+                    id="rb-layout-table"
+                    type="radio"
+                    name="rb-layout"
+                    checked={spec.layout !== 'detailed'}
+                    disabled={!canEdit}
+                    onChange={() => setSpec((s) => ({ ...s, layout: 'table' }))}
+                  />{' '}
+                  Table (one field per column)
+                </label>
+                <label className="ep-roles__tick" htmlFor="rb-layout-detailed">
+                  <input
+                    id="rb-layout-detailed"
+                    type="radio"
+                    name="rb-layout"
+                    checked={spec.layout === 'detailed'}
+                    disabled={!canEdit}
+                    onChange={() => setSpec((s) => ({ ...s, layout: 'detailed' }))}
+                  />{' '}
+                  Detailed (fields stacked in columns, like the office register)
+                </label>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    onClick={() =>
+                      setSpec((s) => ({
+                        ...s,
+                        layout: 'detailed',
+                        columns: DETAILED_TEMPLATE.map((c) => ({ ...c })),
+                        groupLabels: {},
+                      }))
+                    }
+                  >
+                    Use the office-register template
+                  </button>
+                ) : null}
+                {spec.layout === 'detailed'
+                  ? [
+                      ...new Set(
+                        spec.columns.map((c) => c.group).filter((g): g is number => Boolean(g)),
+                      ),
+                    ]
+                      .sort((a, b) => a - b)
+                      .map((g) => (
+                        <label key={g} className="ep-field" htmlFor={`rb-gl-${String(g)}`}>
+                          <span className="ep-field__label">Heading of column {g} (optional)</span>
+                          <input
+                            id={`rb-gl-${String(g)}`}
+                            className="ep-input"
+                            maxLength={80}
+                            value={spec.groupLabels?.[String(g)] ?? ''}
+                            disabled={!canEdit}
+                            onChange={(e) =>
+                              setSpec((s) => ({
+                                ...s,
+                                groupLabels: {
+                                  ...(s.groupLabels ?? {}),
+                                  [String(g)]: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                      ))
+                  : null}
+              </fieldset>
               <label className="ep-field" htmlFor="rb-paper">
                 <span className="ep-field__label">Paper (PDF and print)</span>
                 <select
@@ -622,6 +757,20 @@ export function ReportBuilder({
                 Preview · {preview.total} student{preview.total === 1 ? '' : 's'} ·{' '}
                 {preview.academicYear}
               </h2>
+              {preview.excluded?.length || preview.highlighted?.length ? (
+                <p className="ep-field__help" style={{ marginTop: 0 }}>
+                  {preview.excluded?.length
+                    ? `Excluded fields (report and exports): ${preview.excluded.join(', ')}`
+                    : ''}
+                  {preview.excluded?.length && preview.highlighted?.length ? ' · ' : ''}
+                  {preview.highlighted?.length ? (
+                    <>
+                      Highlighted fields:{' '}
+                      <mark className="ep-rb__hl">{preview.highlighted.join(', ')}</mark>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               <p className="ep-field__help" style={{ marginTop: 0 }}>
                 Filters: {preview.filtersText.length ? preview.filtersText.join('; ') : 'none'}
                 {preview.total > preview.rows.length
@@ -634,28 +783,32 @@ export function ReportBuilder({
                 role="region"
                 aria-label="Preview rows (scrolls sideways)"
               >
-                <table className="ep-table">
-                  <thead>
-                    <tr>
-                      {preview.columns.map((c) => (
-                        <th key={c.key} scope="col">
-                          {c.header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.rows.map((r, i) => (
-                      <tr key={i}>
+                {preview.layout === 'detailed' && preview.groups?.length ? (
+                  <DetailedPreview preview={preview} />
+                ) : (
+                  <table className="ep-table">
+                    <thead>
+                      <tr>
                         {preview.columns.map((c) => (
-                          <td key={c.key}>
-                            {r[c.key] === null || r[c.key] === undefined ? '' : String(r[c.key])}
-                          </td>
+                          <th key={c.key} scope="col">
+                            {c.header}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {preview.rows.map((r, i) => (
+                        <tr key={i}>
+                          {preview.columns.map((c) => (
+                            <td key={c.key} className={c.highlight ? 'ep-rb__hlcell' : undefined}>
+                              {r[c.key] === null || r[c.key] === undefined ? '' : String(r[c.key])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </section>
           ) : null}
@@ -680,6 +833,59 @@ export function ReportBuilder({
         />
       ) : null}
     </div>
+  );
+}
+
+/** Detailed preview: S. No, then each stack of fields in one column, one field per line. */
+function DetailedPreview({ preview }: { preview: PreviewResult }) {
+  const byKey = new Map(preview.columns.map((c) => [c.key, c]));
+  return (
+    <table className="ep-table ep-rb__detailed">
+      <thead>
+        <tr>
+          <th scope="col">S. No</th>
+          {preview.groups!.map((g, gi) => (
+            <th key={gi} scope="col">
+              {g.label ? <span className="ep-rb__glabel">{g.label}</span> : null}
+              {g.keys.map((k) => (
+                <span key={k} className="ep-rb__stackline">
+                  {byKey.get(k)?.header ?? k}
+                </span>
+              ))}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {preview.rows.map((r, i) => (
+          <tr key={i}>
+            <td>{i + 1}</td>
+            {preview.groups!.map((g, gi) => (
+              <td key={gi}>
+                {g.keys.map((k, j) => {
+                  const v = r[k];
+                  const text = v === null || v === undefined || v === '' ? '—' : String(v);
+                  return (
+                    <span
+                      key={k}
+                      className={[
+                        'ep-rb__stackline',
+                        j === 0 ? 'ep-rb__stackfirst' : '',
+                        byKey.get(k)?.highlight ? 'ep-rb__hl' : '',
+                      ]
+                        .join(' ')
+                        .trim()}
+                    >
+                      {text}
+                    </span>
+                  );
+                })}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

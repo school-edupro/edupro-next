@@ -45,6 +45,12 @@ export interface ReportColumn {
   label?: string | null;
   /** Excel column width in characters. */
   width?: number | null;
+  /** Detailed layout: fields with the same group number stack in one column (1–20). */
+  group?: number | null;
+  /** Shown with a yellow highlight on screen and in the exports. */
+  highlight?: boolean;
+  /** Excluded: kept in the report's design but left out of the screen and the exports. */
+  hidden?: boolean;
 }
 export interface ReportFilter {
   key: string;
@@ -70,7 +76,44 @@ export interface ReportSpec {
   filters: ReportFilter[];
   sort: ReportSort[];
   options: ReportOptions;
+  /** 'table' (one field per column) or 'detailed' (stacked fields per column, like an office register). */
+  layout?: 'table' | 'detailed';
+  /** Detailed layout: an optional heading per group number. */
+  groupLabels?: Record<string, string>;
 }
+
+/**
+ * The office-register template: class, then the student, the father, the mother and the address and
+ * contacts, each as one stacked column.
+ */
+export const DETAILED_TEMPLATE: ReportColumn[] = [
+  ['class_section', 1],
+  ['full_name', 2],
+  ['admission_no', 2],
+  ['dob', 2],
+  ['admitted_on', 2],
+  ['gender', 2],
+  ['category', 2],
+  ['aadhaar_no', 2],
+  ['father_name', 3],
+  ['father_education', 3],
+  ['father_designation', 3],
+  ['father_organisation', 3],
+  ['father_office_address_line_1', 3],
+  ['father_mobile', 3],
+  ['father_aadhaar_no', 3],
+  ['mother_name', 4],
+  ['mother_education', 4],
+  ['mother_designation', 4],
+  ['mother_organisation', 4],
+  ['mother_office_address_line_1', 4],
+  ['mother_mobile', 4],
+  ['mother_aadhaar_no', 4],
+  ['residential_address_line_1', 5],
+  ['sms_mobile', 5],
+  ['alternate_mobile', 5],
+  ['primary_email', 5],
+].map(([key, group]) => ({ key: key as string, group: group as number }));
 
 export interface ReportFieldDef {
   key: string;
@@ -154,7 +197,20 @@ export function validateReportSpec(spec: ReportSpec, format?: 'xlsx' | 'pdf'): s
   }
   for (const s of spec.sort)
     if (!STUDENT_REPORT_FIELD_BY_KEY.has(s.key)) errors.push(`Unknown sort field ${s.key}`);
-  if (format === 'pdf' && spec.columns.length > PDF_COLUMN_LIMIT[spec.options.paper])
+  for (const c of spec.columns)
+    if (
+      c.group !== undefined &&
+      c.group !== null &&
+      (!Number.isInteger(c.group) || c.group < 1 || c.group > 20)
+    )
+      errors.push(`Column ${c.key}: the stack number must be 1 to 20`);
+  if (!spec.columns.some((c) => !c.hidden))
+    errors.push('Every column is excluded; keep at least one');
+  const pdfColumns =
+    spec.layout === 'detailed'
+      ? reportGroups(spec).length + 1
+      : spec.columns.filter((c) => !c.hidden).length;
+  if (format === 'pdf' && pdfColumns > PDF_COLUMN_LIMIT[spec.options.paper])
     errors.push(
       `A PDF on ${spec.options.paper} holds at most ${String(PDF_COLUMN_LIMIT[spec.options.paper])} columns; choose fewer columns, A3 paper, or Excel`,
     );
@@ -384,10 +440,45 @@ export function describeReportFilters(filters: ReportFilter[]): string[] {
 }
 
 export interface ReportResult {
-  columns: Array<{ key: string; header: string; type: ReportFieldDef['type']; width: number }>;
+  columns: Array<{
+    key: string;
+    header: string;
+    type: ReportFieldDef['type'];
+    width: number;
+    highlight: boolean;
+  }>;
   rows: ReportRow[];
   total: number;
   filtersText: string[];
+  layout: 'table' | 'detailed';
+  /** Detailed layout: the stacked columns in order (keys of `columns`). */
+  groups: Array<{ label: string | null; keys: string[] }>;
+  /** Fields left out of this run (excluded), by header, for the report's note line. */
+  excluded: string[];
+  highlighted: string[];
+}
+
+/**
+ * The stacked columns of a detailed report: shown fields with the same group number share a column,
+ * in the order the group first appears; a field without a number has a column of its own.
+ */
+export function reportGroups(spec: ReportSpec): Array<{ label: string | null; keys: string[] }> {
+  const out: Array<{ id: string; label: string | null; keys: string[] }> = [];
+  for (const c of spec.columns) {
+    if (c.hidden) continue;
+    const id = c.group ? `g${String(c.group)}` : `k:${c.key}`;
+    let g = out.find((x) => x.id === id);
+    if (!g) {
+      g = {
+        id,
+        label: c.group ? spec.groupLabels?.[String(c.group)]?.trim() || null : null,
+        keys: [],
+      };
+      out.push(g);
+    }
+    g.keys.push(c.key);
+  }
+  return out.map(({ label, keys }) => ({ label, keys }));
 }
 
 /** Filters, sorts and projects loaded rows onto the chosen columns and headers. */
@@ -396,16 +487,21 @@ export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
     applyReportFilters(applyReportSearch(rows, spec.options.search), spec.filters),
     spec.sort,
   );
-  const columns = spec.columns.map((c) => {
-    const def = STUDENT_REPORT_FIELD_BY_KEY.get(c.key)!;
-    const header = c.label?.trim() || def.label;
-    return {
-      key: c.key,
-      header,
-      type: def.type,
-      width: c.width ?? Math.min(Math.max(header.length + 2, def.type === 'date' ? 12 : 10), 40),
-    };
-  });
+  const columns = spec.columns
+    .filter((c) => !c.hidden)
+    .map((c) => {
+      const def = STUDENT_REPORT_FIELD_BY_KEY.get(c.key)!;
+      const header = c.label?.trim() || def.label;
+      return {
+        key: c.key,
+        header,
+        type: def.type,
+        width: c.width ?? Math.min(Math.max(header.length + 2, def.type === 'date' ? 12 : 10), 40),
+        highlight: Boolean(c.highlight),
+      };
+    });
+  const headerOf = (c: ReportColumn) =>
+    c.label?.trim() || STUDENT_REPORT_FIELD_BY_KEY.get(c.key)?.label || c.key;
   const projected = filtered.map((r) => {
     const o: ReportRow = {};
     for (const col of columns) {
@@ -424,6 +520,10 @@ export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
     filtersText: spec.options.search?.trim()
       ? [`Search "${spec.options.search.trim()}"`, ...describeReportFilters(spec.filters)]
       : describeReportFilters(spec.filters),
+    layout: spec.layout === 'detailed' ? 'detailed' : 'table',
+    groups: spec.layout === 'detailed' ? reportGroups(spec) : [],
+    excluded: spec.columns.filter((c) => c.hidden).map(headerOf),
+    highlighted: columns.filter((c) => c.highlight).map((c) => c.header),
   };
 }
 

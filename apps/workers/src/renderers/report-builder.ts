@@ -189,8 +189,30 @@ export async function reportToXlsx(b: BuiltReport, spec: ReportSpec): Promise<Bu
     `Filters: ${result.filtersText.length ? result.filtersText.join('; ') : 'none (all students)'}`,
     { size: 10, italic: true, color: { argb: 'FF52606D' } },
   );
+  const note = fieldNote(result);
+  if (note) line(note, { size: 10, italic: true, color: { argb: 'FF52606D' } });
   r += 1;
+  // detailed layout: a heading row above the fields of each stacked column
+  if (result.layout === 'detailed' && result.groups?.length) {
+    let col = 1;
+    result.groups.forEach((g, gi) => {
+      const span = g.keys.length;
+      if (span > 1) ws.mergeCells(r, col, r, col + span - 1);
+      const cell = ws.getCell(r, col);
+      cell.value = g.label ?? (span > 1 ? `Column ${String(gi + 1)}` : '');
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4E89' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      col += span;
+    });
+    r += 1;
+  }
   const headerRow = r;
+  // detailed exports keep one field per Excel column, in the stacked order
+  if (result.layout === 'detailed' && result.groups?.length) {
+    const order = result.groups.flatMap((g) => g.keys);
+    result.columns.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  }
   result.columns.forEach((c, i) => {
     const cell = ws.getCell(headerRow, i + 1);
     cell.value = c.header;
@@ -208,14 +230,20 @@ export async function reportToXlsx(b: BuiltReport, spec: ReportSpec): Promise<Bu
       excelRow.getCell(i + 1).value =
         v === null || v === undefined ? null : c.type === 'number' ? Number(v) : String(v);
     });
-    if (n % 2 === 1)
-      result.columns.forEach((_, i) => {
+    result.columns.forEach((c, i) => {
+      if (c.highlight)
+        excelRow.getCell(i + 1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFF3A3' },
+        };
+      else if (n % 2 === 1)
         excelRow.getCell(i + 1).fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FFF5F7FA' },
         };
-      });
+    });
   });
   ws.views = [{ state: 'frozen', ySplit: headerRow }];
   if (result.columns.length)
@@ -239,12 +267,58 @@ export async function reportToXlsx(b: BuiltReport, spec: ReportSpec): Promise<Bu
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
+/** "Excluded: …; highlighted: …" for the report header, as the office register prints it. */
+function fieldNote(r: ReportResult): string | null {
+  const parts = [
+    r.excluded?.length ? `Excluded fields: ${r.excluded.join(', ')}` : null,
+    r.highlighted?.length ? `Highlighted fields: ${r.highlighted.join(', ')}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** Detailed (office-register) layout: S. No, then one column per stack, each field on its own line. */
+function detailedTable(result: ReportResult): string {
+  const byKey = new Map(result.columns.map((c) => [c.key, c]));
+  const head = `<th class="num">S. No</th>${result.groups
+    .map(
+      (g) =>
+        `<th>${g.label ? `<div class="glabel">${esc(g.label)}</div>` : ''}${g.keys
+          .map((k) => `<div>${esc(byKey.get(k)?.header ?? k)}</div>`)
+          .join('')}</th>`,
+    )
+    .join('')}`;
+  const body = result.rows
+    .map(
+      (row, i) =>
+        `<tr><td class="num">${String(i + 1)}</td>${result.groups
+          .map(
+            (g) =>
+              `<td>${g.keys
+                .map((k, j) => {
+                  const v = row[k];
+                  const text = v === null || v === undefined || v === '' ? '—' : esc(String(v));
+                  const c = byKey.get(k);
+                  return `<div class="${[j === 0 ? 'first' : '', c?.highlight ? 'hl' : ''].join(' ').trim()}">${text}</div>`;
+                })
+                .join('')}</td>`,
+          )
+          .join('')}</tr>`,
+    )
+    .join('\n');
+  return `<table class="detailed"><thead><tr>${head}</tr></thead><tbody>\n${body}\n</tbody></table>`;
+}
+
 export function reportToHtml(b: BuiltReport, spec: ReportSpec): string {
   const { result, letterhead: lh, meta } = b;
-  const land = landscape(spec, result.columns.length);
+  const detailed = result.layout === 'detailed' && (result.groups?.length ?? 0) > 0;
+  const land = detailed
+    ? spec.options.orientation === 'portrait'
+      ? false
+      : spec.options.orientation === 'landscape' || result.groups.length > 4
+    : landscape(spec, result.columns.length);
   const head = result.columns
     .map((c) => `<th class="${c.type === 'number' ? 'num' : ''}">${esc(c.header)}</th>`)
     .join('');
@@ -254,7 +328,7 @@ export function reportToHtml(b: BuiltReport, spec: ReportSpec): string {
         `<tr>${result.columns
           .map((c) => {
             const v = row[c.key];
-            return `<td class="${c.type === 'number' ? 'num' : ''}">${v === null || v === undefined ? '' : esc(String(v))}</td>`;
+            return `<td class="${[c.type === 'number' ? 'num' : '', c.highlight ? 'hl' : ''].join(' ').trim()}">${v === null || v === undefined ? '' : esc(String(v))}</td>`;
           })
           .join('')}</tr>`,
     )
@@ -285,6 +359,13 @@ export function reportToHtml(b: BuiltReport, spec: ReportSpec): string {
   td { border-bottom: 1px solid #E4E7EB; padding: 3px 5px; vertical-align: top; }
   tr:nth-child(even) td { background: #F5F7FA; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hl { background: #FFF3A3 !important; }
+  table.detailed th { vertical-align: bottom; line-height: 1.35; }
+  table.detailed th .glabel { font-weight: 700; text-decoration: underline; margin-bottom: 2px; }
+  table.detailed td { line-height: 1.45; padding: 4px 6px; }
+  table.detailed td div.first { font-weight: 700; color: #00265D; }
+  table.detailed td div.hl { display: inline-block; padding: 0 3px; }
+  table.detailed tr:nth-child(even) td { background: #F8FAFC; }
 </style></head>
 <body>
   <div class="lh">
@@ -297,9 +378,13 @@ export function reportToHtml(b: BuiltReport, spec: ReportSpec): string {
   </div>
   <h1>${esc(meta.title)}</h1>
   <div class="meta">Academic year ${esc(meta.academicYear)} · Generated ${esc(istStamp(meta.generatedAt))}${meta.requestedBy ? ` by ${esc(meta.requestedBy)}` : ''} · ${String(result.total)} student${result.total === 1 ? '' : 's'}</div>
-  <div class="filters">Filters: ${result.filtersText.length ? esc(result.filtersText.join('; ')) : 'none (all students)'}</div>
-  <table><thead><tr>${head}</tr></thead><tbody>
+  <div class="filters">Filters: ${result.filtersText.length ? esc(result.filtersText.join('; ')) : 'none (all students)'}${fieldNote(result) ? ` · ${esc(fieldNote(result)!)}` : ''}</div>
+  ${
+    detailed
+      ? detailedTable(result)
+      : `<table><thead><tr>${head}</tr></thead><tbody>
 ${body}
-  </tbody></table>
+  </tbody></table>`
+  }
 </body></html>`;
 }

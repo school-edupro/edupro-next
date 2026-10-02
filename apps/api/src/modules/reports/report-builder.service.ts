@@ -447,6 +447,10 @@ export class ReportBuilderService {
         rows: shaped.rows.slice(0, dto.limit),
         total: shaped.total,
         filtersText: shaped.filtersText,
+        layout: shaped.layout,
+        groups: shaped.groups,
+        excluded: shaped.excluded,
+        highlighted: shaped.highlighted,
         academicYear: run.academicYear,
       };
     });

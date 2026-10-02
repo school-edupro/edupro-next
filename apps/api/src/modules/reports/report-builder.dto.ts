@@ -15,6 +15,9 @@ export const ReportSpecSchema = z.object({
         key: Key,
         label: z.string().trim().max(80).nullable().optional(),
         width: z.number().int().min(4).max(80).nullable().optional(),
+        group: z.number().int().min(1).max(20).nullable().optional(),
+        highlight: z.boolean().optional(),
+        hidden: z.boolean().optional(),
       }),
     )
     .min(1, 'choose at least one column')
@@ -42,6 +45,8 @@ export const ReportSpecSchema = z.object({
       search: z.string().trim().max(80).nullable().optional(),
     })
     .default({}),
+  layout: z.enum(['table', 'detailed']).default('table'),
+  groupLabels: z.record(z.string().regex(/^\d{1,2}$/), z.string().trim().max(80)).optional(),
 });
 
 export const SaveReportSchema = z.object({

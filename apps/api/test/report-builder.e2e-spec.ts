@@ -192,6 +192,41 @@ describe('report builder (e2e)', () => {
     expect(inFilter.json().filtersText[0]).toBe('Religion is one of hindu, Sikh');
   });
 
+  it('detailed layout: stacked columns, excluded fields left out, highlighted fields marked', async () => {
+    const base = spec();
+    const r = await inject({
+      method: 'POST',
+      url: '/reports/builder/preview',
+      headers: h(admin),
+      json: {
+        spec: {
+          ...base,
+          layout: 'detailed',
+          groupLabels: { '2': 'Student' },
+          columns: [
+            { key: 'class_section' },
+            { key: 'full_name', group: 2 },
+            { key: 'admission_no', group: 2, highlight: true },
+            { key: 'religion', group: 2, hidden: true },
+            { key: 'aadhaar_no', group: 3 },
+          ],
+        },
+      },
+    });
+    expect(r.statusCode).toBe(201);
+    const d = r.json();
+    expect(d.layout).toBe('detailed');
+    expect(d.groups).toEqual([
+      { label: null, keys: ['class_section'] },
+      { label: 'Student', keys: ['full_name', 'admission_no'] },
+      { label: null, keys: ['aadhaar_no'] },
+    ]);
+    expect(d.columns.map((c: { key: string }) => c.key)).not.toContain('religion');
+    expect(d.excluded).toEqual(['Religion']);
+    expect(d.highlighted).toEqual(['Admission No']);
+    expect(d.rows[0].religion).toBeUndefined();
+  });
+
   it('rejects unknown columns and too many columns for a PDF', async () => {
     const bad = await inject({
       method: 'POST',

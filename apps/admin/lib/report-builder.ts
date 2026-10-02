@@ -34,7 +34,18 @@ export interface BuilderFields {
 }
 
 export interface ReportSpec {
-  columns: Array<{ key: string; label?: string | null; width?: number | null }>;
+  columns: Array<{
+    key: string;
+    label?: string | null;
+    width?: number | null;
+    /** Detailed layout: fields with the same number stack in one column. */
+    group?: number | null;
+    highlight?: boolean;
+    /** Excluded from the screen and the exports. */
+    hidden?: boolean;
+  }>;
+  layout?: 'table' | 'detailed';
+  groupLabels?: Record<string, string>;
   filters: Array<{ key: string; op: FilterOp; values?: string[] }>;
   sort: Array<{ key: string; dir: 'asc' | 'desc' }>;
   options: {
@@ -63,7 +74,11 @@ export interface SavedReport {
 }
 
 export interface PreviewResult {
-  columns: Array<{ key: string; header: string; type: string; width: number }>;
+  columns: Array<{ key: string; header: string; type: string; width: number; highlight?: boolean }>;
+  layout?: 'table' | 'detailed';
+  groups?: Array<{ label: string | null; keys: string[] }>;
+  excluded?: string[];
+  highlighted?: string[];
   rows: Array<Record<string, string | number | null>>;
   total: number;
   filtersText: string[];
@@ -107,3 +122,35 @@ export const EMPTY_SPEC: ReportSpec = {
   ],
   options: { paper: 'A4', orientation: 'auto', includeInactive: false },
 };
+
+/** The office-register template: class, student, father, mother, address and contacts as stacks. */
+export const DETAILED_TEMPLATE: ReportSpec['columns'] = (
+  [
+    ['class_section', 1],
+    ['full_name', 2],
+    ['admission_no', 2],
+    ['dob', 2],
+    ['admitted_on', 2],
+    ['gender', 2],
+    ['category', 2],
+    ['aadhaar_no', 2],
+    ['father_name', 3],
+    ['father_education', 3],
+    ['father_designation', 3],
+    ['father_organisation', 3],
+    ['father_office_address_line_1', 3],
+    ['father_mobile', 3],
+    ['father_aadhaar_no', 3],
+    ['mother_name', 4],
+    ['mother_education', 4],
+    ['mother_designation', 4],
+    ['mother_organisation', 4],
+    ['mother_office_address_line_1', 4],
+    ['mother_mobile', 4],
+    ['mother_aadhaar_no', 4],
+    ['residential_address_line_1', 5],
+    ['sms_mobile', 5],
+    ['alternate_mobile', 5],
+    ['primary_email', 5],
+  ] as const
+).map(([key, group]) => ({ key, group }));
