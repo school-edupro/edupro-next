@@ -741,4 +741,44 @@ describe('communication v2 (e2e)', () => {
     expect(msg.rows[0]).toMatchObject({ subject: 'Annual day on 20 Dec', template_id: null });
     expect(msg.rows[0]!.body).not.toContain('<script>');
   });
+
+  it('a template without {{body}} needs no message; one with {{body}} says the message is missing', async () => {
+    const fixed = await inject({
+      method: 'POST',
+      url: '/comms/templates',
+      headers: h(),
+      json: {
+        code: 'fixed_sms',
+        channel: 'sms',
+        name: 'Fixed SMS',
+        body: 'School closed tomorrow. {{school}}',
+        dltTemplateId: '1207160000000055555',
+      },
+    });
+    const ok = await inject({
+      method: 'POST',
+      url: '/comms/requests/preview',
+      headers: h(),
+      json: {
+        title: 'Closed',
+        channels: [{ channel: 'sms', templateId: fixed.json().id }],
+        audience: 'individuals',
+        targets: [{ type: 'student', id: ids.a }],
+      },
+    });
+    expect(ok.statusCode).toBe(201);
+    const missing = await inject({
+      method: 'POST',
+      url: '/comms/requests/preview',
+      headers: h(),
+      json: {
+        title: 'Closed',
+        channels: [{ channel: 'sms', templateId: ids.sms }],
+        audience: 'individuals',
+        targets: [{ type: 'student', id: ids.a }],
+      },
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().detail).toMatch(/Write the message: Circular SMS has a place for it/);
+  });
 });

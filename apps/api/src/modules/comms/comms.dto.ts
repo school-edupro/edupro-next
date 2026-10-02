@@ -172,7 +172,8 @@ export const CreateRequestSchema = z
       .max(3)
       .optional(),
     /** the message merged into each template's {{body}}; HTML from the email editor when bodyFormat is html */
-    body: z.string().trim().min(1).max(100_000),
+    /** needed only when a chosen template has {{body}} (and for an own email) */
+    body: z.string().trim().max(100_000).default(''),
     bodyFormat: z.enum(['text', 'html']).default('text'),
     /** email subject when the template's subject is just {{title}} or empty */
     subject: z.string().trim().max(200).optional(),

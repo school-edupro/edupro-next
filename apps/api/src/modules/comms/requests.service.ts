@@ -928,6 +928,17 @@ export class RequestsService {
         );
     }
     if (own) list.push(this.ownEmail(dto.subject!.trim()));
+    // the message box is filled only when a template has a {{body}} slot (or for an own email)
+    const slot = /\{\{\s*body\s*\}\}/;
+    const needsBody = list.filter(
+      (t) => slot.test(`${t.subject ?? ''} ${t.body}`) || (t.wa_params ?? []).includes('body'),
+    );
+    if (needsBody.length && !dto.body.trim())
+      throw new DomainError(
+        'validation-failed',
+        `Write the message: ${needsBody.map((t) => t.name).join(', ')} ${needsBody.length === 1 ? 'has' : 'have'} a place for it`,
+        { status: 400 },
+      );
     if (!list.length)
       throw new DomainError('validation-failed', 'Choose at least one channel', { status: 400 });
     if (new Set(list.map((t) => t.channel)).size !== list.length)

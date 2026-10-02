@@ -118,7 +118,6 @@ export function Compose({
   const [sheet, setSheet] = useState<SheetResult | null>(null);
   const [sendTo, setSendTo] = useState<SendTo>('primary');
   const [body, setBody] = useState('');
-  const [html, setHtml] = useState(false);
   const [subject, setSubject] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [askVals, setAskVals] = useState<Record<string, string>>({});
@@ -159,10 +158,31 @@ export function Compose({
       ),
     ),
   ].filter((k) => !known.has(k));
+  // the message box is needed only when a chosen template has a {{body}} slot, or for an own email
+  const SLOT = /\{\{\s*body\s*\}\}/;
+  const bodyFor = chosen.filter((c) => {
+    if (c === 'email' && tpl.email === OWN) return true;
+    const t = templates.find((x) => x.id === tpl[c]);
+    return Boolean(t && (SLOT.test(`${t.subject ?? ''} ${t.body}`) || t.waParams.includes('body')));
+  });
+  const usesBody = bodyFor.length > 0;
+  /** what is still missing, in plain words (shown instead of a generic error) */
+  const missing = [
+    !title.trim() ? 'a title' : null,
+    !chosen.length ? 'a channel with its template' : null,
+    ownEmail && !subject.trim() ? 'the email subject' : null,
+    usesBody && !body.trim() ? 'the message' : null,
+  ].filter((x): x is string => Boolean(x));
   const studentsInvolved =
     !['employees'].includes(audience) && !(audience === 'filter' && rule.people === 'employees');
   const payload = useMemo<ComposePayload | null>(() => {
-    if (!chosen.length || !title.trim() || !body.trim()) return null;
+    if (
+      !chosen.length ||
+      !title.trim() ||
+      (usesBody && !body.trim()) ||
+      (ownEmail && !subject.trim())
+    )
+      return null;
     const p: ComposePayload = {
       title: title.trim(),
       category,
@@ -171,9 +191,9 @@ export function Compose({
           ? { channel: c, custom: true }
           : { channel: c, templateId: tpl[c] },
       ),
-      body,
-      bodyFormat: (html || ownEmail) && on.email ? 'html' : 'text',
-      ...(on.email && subject.trim() ? { subject: subject.trim() } : {}),
+      body: usesBody ? body : '',
+      bodyFormat: ownEmail ? 'html' : 'text',
+      ...(ownEmail && subject.trim() ? { subject: subject.trim() } : {}),
       audience,
       targets: [],
       sendTo,
@@ -198,7 +218,6 @@ export function Compose({
     category,
     tpl,
     body,
-    html,
     on.email,
     subject,
     audience,
@@ -219,7 +238,7 @@ export function Compose({
   };
   const run = async (what: 'preview' | 'send') => {
     if (!payload) {
-      setError('Add a title, the message and at least one channel with its template.');
+      setError(`Add ${missing.join(', ')}.`);
       return;
     }
     setBusy(what);
@@ -234,7 +253,7 @@ export function Compose({
     else setDone(r.data as { id: string; needsApproval: boolean; status: string });
   };
 
-  const smsText = body ? smsParts(html ? body.replace(/<[^>]+>/g, ' ') : body) : null;
+  const smsText = body && bodyFor.includes('sms') ? smsParts(body) : null;
   const tplOf = (c: Channel) => templates.find((t) => t.id === tpl[c]);
 
   if (done)
@@ -644,12 +663,10 @@ export function Compose({
           <h2 className="ep-card__title" id="c-step3">
             3 · Text
           </h2>
-          {on.email ? (
+          {ownEmail ? (
             <div className="ep-wd__form">
               <label className="ep-field ep-wd__wide" htmlFor="c-subject">
-                <span className="ep-field__label">
-                  {ownEmail ? 'Email subject *' : 'Email subject (optional; the title when empty)'}
-                </span>
+                <span className="ep-field__label">Email subject *</span>
                 <input
                   id="c-subject"
                   className="ep-input"
@@ -658,22 +675,16 @@ export function Compose({
                   onChange={(e) => setSubject(e.target.value)}
                 />
               </label>
-              <label className="ep-roles__tick" htmlFor="c-html">
-                <input
-                  id="c-html"
-                  type="checkbox"
-                  disabled={ownEmail}
-                  checked={html || ownEmail}
-                  onChange={(e) => {
-                    setHtml(e.target.checked);
-                    reset();
-                  }}
-                />{' '}
-                Write with formatting (HTML editor)
-              </label>
             </div>
           ) : null}
-          {(html || ownEmail) && on.email ? (
+          {!usesBody && chosen.length ? (
+            <p className="ep-field__help">
+              The chosen {chosen.length === 1 ? 'template is' : 'templates are'} sent as written in
+              the Template master
+              {askLive.length ? '; fill in the values below' : ''}. Nothing else to write.
+            </p>
+          ) : null}
+          {ownEmail ? (
             <HtmlEditor
               id="c-body-html"
               label="Message *"
@@ -684,9 +695,14 @@ export function Compose({
               }}
               variables={variables}
             />
-          ) : (
+          ) : usesBody ? (
             <label className="ep-field" htmlFor="c-body">
-              <span className="ep-field__label">Message *</span>
+              <span className="ep-field__label">
+                Message *{' '}
+                <span className="ep-field__help">
+                  (goes into {bodyFor.map((c) => CHANNEL_LABEL[c]).join(', ')})
+                </span>
+              </span>
               <textarea
                 ref={bodyRef}
                 id="c-body"
@@ -698,7 +714,7 @@ export function Compose({
                   setBody(e.target.value);
                   setPreview(null);
                 }}
-                placeholder="Goes into each template’s {{body}}"
+                placeholder="Goes into the template’s {{body}}"
               />
               <span className="ep-compose__insert">
                 <select
@@ -739,7 +755,7 @@ export function Compose({
                 </select>
               </span>
             </label>
-          )}
+          ) : null}
           {askLive.length ? (
             <fieldset className="ep-compose__ask">
               <legend className="ep-field__label">
