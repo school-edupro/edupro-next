@@ -84,7 +84,8 @@ export class StudentProfileService {
           help: f.help ?? null,
           when: f.when ?? null,
           sensitive: f.sensitive ?? false,
-          readOnly: f.store.t === 'auto' || f.store.t === 'enrol',
+          // the admission number changes only through the administrators' step with a reason
+          readOnly: f.store.t === 'auto' || f.store.t === 'enrol' || f.key === 'admission_no',
           excelColumn: f.excelColumn,
         })),
         quickAdd: QUICK_ADD_KEYS,

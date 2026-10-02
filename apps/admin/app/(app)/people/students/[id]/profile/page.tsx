@@ -1,6 +1,7 @@
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ProfileEditor } from '@/components/ProfileEditor';
+import { AdmissionNoPanel } from '@/components/AdmissionNoPanel';
 import { ProfilePhotos } from '@/components/ProfilePhotos';
 import { saveStudentProfile } from '@/lib/actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
@@ -17,12 +18,23 @@ export default async function StudentProfilePage({
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
-  const [catalogue, snapshot] = await Promise.all([
+  const [catalogue, snapshot, admissionHistory] = await Promise.all([
     apiFetch<ProfileCatalogue>('/people/profile/catalogue'),
     apiFetch<ProfileSnapshot>(`/people/students/${id}/profile`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
     }),
+    apiFetch<{
+      data: Array<{
+        oldNo: string;
+        newNo: string;
+        reason: string;
+        changedBy: string | null;
+        changedAt: string;
+      }>;
+    }>(`/people/students/${id}/admission-no/history`)
+      .then((r) => r.data)
+      .catch(() => []),
   ]);
   const e = snapshot.enrolment;
   const canEdit = me.permissions.includes('people.student.edit');
@@ -53,6 +65,12 @@ export default async function StudentProfilePage({
             Back to student
           </a>
         }
+      />
+      <AdmissionNoPanel
+        studentId={id}
+        admissionNo={snapshot.admissionNo}
+        history={admissionHistory}
+        canChange={me.permissions.includes('people.admission_no.change')}
       />
       <ProfilePhotos snapshot={snapshot} canEdit={canEdit} />
       <ProfileEditor

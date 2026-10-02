@@ -206,7 +206,9 @@ export class StudentsService {
       if (q.q) {
         params.push(q.q);
         clauses.push(
-          `(s.search_text LIKE app.search_text($${params.length}::text) || '%' OR s.search_text % app.search_text($${params.length}::text) OR lower(s.admission_no) = lower($${params.length}::text))`,
+          // eslint-disable-next-line no-restricted-syntax -- only the placeholder number is interpolated; the value is a bound parameter
+          `(s.search_text LIKE app.search_text($${params.length}::text) || '%' OR s.search_text % app.search_text($${params.length}::text) OR lower(s.admission_no) = lower($${params.length}::text)
+            OR EXISTS (SELECT 1 FROM admission_no_changes x WHERE x.student_id = s.id AND lower(x.old_no) = lower($${params.length}::text)))`,
         );
       }
       if (q.classSectionId) {
@@ -614,6 +616,94 @@ export class StudentsService {
       });
       return after;
     });
+  }
+
+  // ---- admission number ------------------------------------------------------------------------------
+  /**
+   * Changes the admission number (administrators only, with a reason). Every screen reads the number
+   * live; the old one is kept in the history and still finds the student; sibling links follow.
+   */
+  async changeAdmissionNo(
+    ctx: RequestContext,
+    studentId: string,
+    dto: { admissionNo: string; reason: string },
+  ) {
+    const tenant = requireTenant(ctx);
+    const next = dto.admissionNo.trim();
+    return this.db.tenant(tenant, async (c) => {
+      const cur = await c.query<{ admission_no: string }>(
+        'SELECT admission_no FROM students WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
+        [studentId],
+      );
+      const old = cur.rows[0]?.admission_no;
+      if (!old) throw new DomainError('not-found', 'Student not found');
+      if (old === next)
+        throw new DomainError('validation-failed', 'That is already the admission number', {
+          status: 400,
+        });
+      const taken = await c.query(
+        'SELECT 1 FROM students WHERE lower(admission_no) = lower($1) AND id <> $2',
+        [next, studentId],
+      );
+      if (taken.rowCount)
+        throw new DomainError(
+          'people.admission_no.taken',
+          `Another student has admission number ${next}`,
+          {
+            status: 409,
+          },
+        );
+      await c.query(
+        'UPDATE students SET admission_no = $2, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1',
+        [studentId, next],
+      );
+      await c.query(
+        `INSERT INTO admission_no_changes (school_id, student_id, old_no, new_no, reason, changed_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())`,
+        [studentId, old, next, dto.reason],
+      );
+      const siblings = await c.query(
+        `UPDATE students SET profile = jsonb_set(profile, '{sibling_admission_no}', to_jsonb($2::text))
+          WHERE profile->>'sibling_admission_no' = $1 AND id <> $3`,
+        [old, next, studentId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.admission_no.change',
+        entityType: 'students',
+        entityId: studentId,
+        before: { admissionNo: old },
+        after: { admissionNo: next, reason: dto.reason, siblingLinks: siblings.rowCount ?? 0 },
+      });
+      return this.admissionHistoryIn(c, studentId);
+    });
+  }
+
+  private async admissionHistoryIn(c: PoolClient, studentId: string) {
+    const r = await c.query<{
+      old_no: string;
+      new_no: string;
+      reason: string;
+      by: string | null;
+      changed_at: Date;
+    }>(
+      `SELECT x.old_no, x.new_no, x.reason, u.display_name AS by, x.changed_at
+         FROM admission_no_changes x LEFT JOIN users u ON u.id = x.changed_by
+        WHERE x.student_id = $1 ORDER BY x.changed_at DESC`,
+      [studentId],
+    );
+    return {
+      data: r.rows.map((x) => ({
+        oldNo: x.old_no,
+        newNo: x.new_no,
+        reason: x.reason,
+        changedBy: x.by,
+        changedAt: x.changed_at.toISOString(),
+      })),
+    };
+  }
+
+  async admissionHistory(ctx: RequestContext, studentId: string) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.admissionHistoryIn(c, studentId));
   }
 
   // ---- documents -----------------------------------------------------------------------------------

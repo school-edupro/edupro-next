@@ -4246,3 +4246,50 @@ export async function exportStrength(fd: FormData) {
     redirect(`${back}&export=${r.exportId}&format=${format}`);
   });
 }
+
+/** Administrators change a student's admission number with a reason (the old one is kept). */
+export async function changeAdmissionNo(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/students/${id}/profile`, () =>
+    apiFetch(`/people/students/${id}/admission-no`, {
+      method: 'POST',
+      body: JSON.stringify({ admissionNo: str(fd, 'admissionNo'), reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
+/** Saves a section's roll numbers (the roll numbers screen sends the whole list). */
+export async function saveRollNumbers(
+  sectionId: string,
+  rolls: Array<{ studentId: string; rollNo: number }>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await apiFetch(`/people/sections/${sectionId}/roll`, {
+      method: 'PUT',
+      body: JSON.stringify({ rolls }),
+    });
+    revalidatePath('/people/roll-numbers');
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError)
+      return {
+        ok: false,
+        error: String(error.problem.detail ?? error.problem.title ?? 'Not saved'),
+      };
+    throw error;
+  }
+}
+
+/** Moves a student to another section of the same class (coordinator / admin). */
+export async function moveToSection(fd: FormData) {
+  const from = str(fd, 'sectionId');
+  return run(`/people/roll-numbers?section=${from}`, () =>
+    apiFetch(`/people/sections/${from}/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        toSectionId: str(fd, 'toSectionId'),
+      }),
+    }),
+  );
+}

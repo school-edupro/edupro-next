@@ -343,6 +343,17 @@ export async function writeStudentProfile(
   input: ProfileValues,
 ): Promise<{ changed: string[] }> {
   const errors: Record<string, string> = {};
+  // the admission number changes only through the administrators' own step (with a reason kept)
+  const newNo = input.admission_no;
+  if (typeof newNo === 'string' && newNo.trim()) {
+    const cur = await c.query<{ admission_no: string }>(
+      'SELECT admission_no FROM students WHERE id = $1',
+      [studentId],
+    );
+    if (cur.rows[0] && cur.rows[0].admission_no !== newNo.trim())
+      errors.admission_no =
+        'The admission number is changed by an administrator from the student page, with a reason';
+  }
   // a sibling admission number must belong to another student of the school; the name and class
   // come from that record, so the sibling details always match the student they point to
   let values = input;

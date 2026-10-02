@@ -293,3 +293,14 @@ export const SearchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 export class SearchQueryDto extends createZodDto(SearchQuerySchema) {}
+
+export const ChangeAdmissionNoSchema = z.object({
+  admissionNo: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .regex(/^[A-Za-z0-9/\-]+$/, 'letters, digits, / and - only'),
+  reason: z.string().trim().min(3).max(300),
+});
+export class ChangeAdmissionNoDto extends createZodDto(ChangeAdmissionNoSchema) {}

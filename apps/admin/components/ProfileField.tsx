@@ -91,7 +91,9 @@ export function ProfileField({
   const help = f.readOnly
     ? f.type === 'auto'
       ? 'Calculated automatically'
-      : 'Changes through enrolment (class, section, roll number)'
+      : f.key === 'admission_no'
+        ? 'Changed by an administrator with a reason (Admission number panel above)'
+        : 'Changes through enrolment (class, section, roll number)'
     : masked
       ? `Stored as ${masked}. Type a new number to replace it.`
       : (f.help ?? spec.hint ?? null);

@@ -174,7 +174,8 @@ export function QuickAddStudent({
         {fields.map((f) => (
           <ProfileField
             key={f.key}
-            field={f}
+            // a new student's admission number is typed here (later changes are the admins' step)
+            field={f.key === 'admission_no' ? { ...f, readOnly: false } : f}
             values={values}
             geography={catalogue.geography}
             error={errors[f.key]}

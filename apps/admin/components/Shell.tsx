@@ -35,6 +35,7 @@ const NAV: Array<{
         label: 'withdrawalSettings',
         permission: 'people.withdrawal.manage',
       },
+      { href: '/people/roll-numbers', label: 'rollNumbers', permission: 'people.roll_no.manage' },
       { href: '/people/promotions', label: 'promotions', permission: 'people.promotion.view' },
       {
         href: '/people/profile-approvals',

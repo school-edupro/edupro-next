@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  ChangeAdmissionNoDto,
   AddDocumentDto,
   CreateStudentDto,
   EnrolDto,
@@ -100,6 +101,27 @@ export class StudentsController {
     @Param('guardianId') guardianId: string,
   ) {
     return this.students.unlinkGuardian(ctx, id, guardianId);
+  }
+
+  @Post(':id/admission-no')
+  @ApiOperation({
+    summary: 'Change the admission number (administrators; the reason and old number are kept)',
+  })
+  @RequirePermission(PEOPLE.admissionNoChange, {
+    description: "Change a student's admission number with a reason",
+  })
+  changeAdmissionNo(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: ChangeAdmissionNoDto,
+  ) {
+    return this.students.changeAdmissionNo(ctx, id, body);
+  }
+
+  @Get(':id/admission-no/history')
+  @RequirePermission(PEOPLE.studentView)
+  admissionHistory(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.students.admissionHistory(ctx, id);
   }
 
   @Post(':id/enrolments')

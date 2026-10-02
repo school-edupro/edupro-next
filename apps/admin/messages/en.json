@@ -129,7 +129,8 @@
     "help": "Help centre",
     "bulkWithdrawals": "Bulk withdrawal and TCs",
     "withdrawalSettings": "Withdrawal settings",
-    "studentStrength": "Student strength"
+    "studentStrength": "Student strength",
+    "rollNumbers": "Roll numbers and sections"
   },
   "shell": {
     "primaryNavigation": "Primary",

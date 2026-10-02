@@ -6,6 +6,8 @@ export const PEOPLE = {
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',
+  admissionNoChange: 'people.admission_no.change',
+  rollNoManage: 'people.roll_no.manage',
   employeeView: 'people.employee.view',
   employeeCreate: 'people.employee.create',
   employeeEdit: 'people.employee.edit',
