@@ -280,6 +280,7 @@ const NAV: Array<{
     section: 'reports',
     items: [
       { href: '/reports/builder', label: 'reportBuilder', permission: 'reports.builder.use' },
+      { href: '/reports/strength', label: 'studentStrength', permission: 'people.student.view' },
       { href: '/reports/exports', label: 'exportCentre', permission: 'reports.export.view' },
       { href: '/reports/schedules', label: 'schedules', permission: 'reports.schedule.manage' },
       { href: '/reports/mis', label: 'misCentre', permission: 'insights.mis.view' },

@@ -224,3 +224,4 @@ export * from './field-crypto';
 export * from './student-profile-store';
 export * from './report-builder';
 export * from './profile-portal';
+export * from './strength-reports';

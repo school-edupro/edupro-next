@@ -3176,3 +3176,78 @@ a.ep-tabs__tab {
   align-items: center;
   gap: var(--sp-2);
 }
+/* student strength reports */
+.ep-strength__checks {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  max-height: 10rem;
+  overflow: auto;
+}
+.ep-strength__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin-bottom: var(--sp-3);
+}
+.ep-strength__downloads {
+  display: flex;
+  gap: var(--sp-2);
+}
+.ep-strength__wrap {
+  max-height: 70vh;
+  overflow: auto;
+}
+.ep-strength__table {
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.ep-strength__table th,
+.ep-strength__table td {
+  border: 1px solid var(--border-default);
+  padding: var(--sp-1) var(--sp-2);
+  text-align: center;
+  white-space: nowrap;
+}
+.ep-strength__table thead th {
+  background: var(--mob-navy-800);
+  color: var(--text-inverse);
+  position: sticky;
+  top: 0;
+}
+.ep-strength__table thead tr + tr th {
+  top: 1.9rem;
+}
+.ep-strength__sub {
+  font-weight: var(--fw-medium);
+}
+.ep-strength__cls {
+  text-align: left;
+  font-weight: var(--fw-semibold);
+}
+.ep-strength__table tbody th {
+  background: var(--surface-card);
+}
+.ep-strength__table tr[data-kind='subtotal'] td,
+.ep-strength__table tr[data-kind='subtotal'] th {
+  background: var(--mob-cyan-50);
+  font-weight: var(--fw-bold);
+}
+.ep-strength__table tr[data-kind='total'] td,
+.ep-strength__table tr[data-kind='total'] th {
+  background: var(--mob-navy-800);
+  color: var(--text-inverse);
+  font-weight: var(--fw-bold);
+}
+.ep-strength__table tr[data-kind='total'] a {
+  color: var(--text-inverse);
+}
+.ep-strength__table td a {
+  text-decoration: underline;
+}

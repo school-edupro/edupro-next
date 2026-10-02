@@ -4216,3 +4216,33 @@ export async function verifySibling(
     throw error;
   }
 }
+
+/** Queues a student strength report as Excel or PDF and returns to the report with the watcher. */
+export async function exportStrength(fd: FormData) {
+  const query = str(fd, 'query');
+  const format = str(fd, 'format') === 'pdf' ? 'pdf' : 'xlsx';
+  const back = `/reports/strength?${query}`;
+  return run(back, async () => {
+    const q = new URLSearchParams(query);
+    const list = (k: string) => {
+      const v = q.get(k);
+      return v ? v : undefined;
+    };
+    const r = await apiFetch<{ exportId: string }>('/reports/strength/export', {
+      method: 'POST',
+      body: JSON.stringify({
+        report: q.get('report') ?? 'classwise',
+        academicYearId: list('academicYearId'),
+        classIds: list('classIds'),
+        sectionIds: list('sectionIds'),
+        groupBy: q.get('groupBy') ?? 'section',
+        includeLeft: q.get('includeLeft') === 'true',
+        showEmpty: q.get('showEmpty') === 'true',
+        asOn: list('asOn'),
+        discountId: list('discountId'),
+        format,
+      }),
+    });
+    redirect(`${back}&export=${r.exportId}&format=${format}`);
+  });
+}

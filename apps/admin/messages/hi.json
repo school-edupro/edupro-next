@@ -128,7 +128,8 @@
     "monthEnd": "माह-अंत समापन",
     "help": "सहायता केंद्र",
     "bulkWithdrawals": "सामूहिक निकासी और टीसी",
-    "withdrawalSettings": "निकासी सेटिंग"
+    "withdrawalSettings": "निकासी सेटिंग",
+    "studentStrength": "छात्र संख्या रिपोर्ट"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

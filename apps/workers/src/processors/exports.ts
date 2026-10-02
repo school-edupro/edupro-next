@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { datasetOrNull, rendererOrNull, tenantForJob, type Db } from '@edupro/db';
+import {
+  datasetOrNull,
+  rendererOrNull,
+  tenantForJob,
+  type Db,
+  type StrengthParams,
+} from '@edupro/db';
 import { objectKeyFor, type StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import {
@@ -14,6 +20,7 @@ import {
 import type { JobLike } from './notifications';
 import type { PdfEngine } from './pdf';
 import { renderAiReport } from '../renderers/ai-report';
+import { buildStrength, strengthToHtml, strengthToXlsx } from '../renderers/strength-report';
 import { renderCertificate, renderCertificateBatch } from '../renderers/certificate';
 import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
@@ -186,6 +193,35 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
         log.info(
           { exportId, report: params.definitionId, format: row.format, rows: built.result.total },
           'report builder export ready',
+        );
+        return;
+      }
+      if (row.dataset === 'strength_report') {
+        // student strength: letterhead, two-row F / M / T headers, class subtotals and a grand total
+        const built = await buildStrength(
+          db,
+          storage,
+          envelope,
+          row.params as unknown as StrengthParams,
+          row.requested_by_name,
+        );
+        const bytes =
+          row.format === 'pdf'
+            ? await pdf.render(strengthToHtml(built))
+            : await strengthToXlsx(built);
+        await store(
+          bytes,
+          CONTENT_TYPES[row.format === 'pdf' ? 'pdf' : 'xlsx'],
+          built.table.meta.students,
+        );
+        log.info(
+          {
+            exportId,
+            report: built.table.report,
+            format: row.format,
+            students: built.table.meta.students,
+          },
+          'strength report export ready',
         );
         return;
       }

@@ -84,7 +84,7 @@ portal profile + field policy + routed/partial/bulk approvals (0041, `aa52894`),
 data `seed:beta` (`15d0f99`); parent/student portal frame and home dashboard (`adcbcd0`); sub-caste
 list, city/bank from masters, portal photo upload with approval, admin full-profile photos (0042–0043).
 approvals bell + My approvals, proofs inline, sibling verify, withdrawal by configured departments
-with bulk start / clear / TC (design 21, 0045–0046). Migrations: 46.
+with bulk start / clear / TC (design 21, 0045–0046). Student strength reports (design 22). Migrations: 47.
 
 Open follow-ups: SMS/WhatsApp notice on approval decisions (needs a template); fee/attendance columns in the report builder; legacy student data clean-up and import
 (dry run: `~/Documents/student_data/Student_Import_Check_2026-09-30.xlsx`); Release 2 (S24 HR core)

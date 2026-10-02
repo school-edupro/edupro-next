@@ -128,7 +128,8 @@
     "monthEnd": "Month-end close",
     "help": "Help centre",
     "bulkWithdrawals": "Bulk withdrawal and TCs",
-    "withdrawalSettings": "Withdrawal settings"
+    "withdrawalSettings": "Withdrawal settings",
+    "studentStrength": "Student strength"
   },
   "shell": {
     "primaryNavigation": "Primary",
