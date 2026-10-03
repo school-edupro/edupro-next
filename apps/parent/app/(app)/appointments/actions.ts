@@ -17,25 +17,29 @@ function fail(back: string, error: unknown): never {
 
 /** A guardian books a free slot with a person or desk the school has opened to parents (0059). */
 export async function requestAppointment(fd: FormData) {
-  const back = `/appointments?${new URLSearchParams({
+  const back = `/appointments/new?${new URLSearchParams({
     student: str(fd, 'studentId'),
     host: str(fd, 'hostId'),
-    date: str(fd, 'date'),
+    date: str(fd, 'startsAt').slice(0, 10),
+    time: str(fd, 'startsAt').slice(11, 16),
   }).toString()}`;
+  let id = '';
   try {
-    await bff.api.fetch('/appointments/mine', {
-      method: 'POST',
-      body: JSON.stringify({
-        studentId: str(fd, 'studentId'),
-        hostId: str(fd, 'hostId'),
-        startsAt: str(fd, 'startsAt'),
-        purpose: str(fd, 'purpose'),
-      }),
-    });
+    id = (
+      await bff.api.fetch<{ id: string }>('/appointments/mine', {
+        method: 'POST',
+        body: JSON.stringify({
+          studentId: str(fd, 'studentId'),
+          hostId: str(fd, 'hostId'),
+          startsAt: str(fd, 'startsAt'),
+          purpose: str(fd, 'purpose'),
+        }),
+      })
+    ).id;
   } catch (error) {
     fail(back, error);
   }
-  redirect('/appointments?ok=1');
+  redirect(`/appointments/${id}?ok=1`);
 }
 
 /** A guardian cancels an appointment that has not happened yet. */
@@ -48,7 +52,7 @@ export async function cancelAppointment(fd: FormData) {
   } catch (error) {
     fail('/appointments', error);
   }
-  redirect('/appointments?ok=cancelled');
+  redirect('/appointments?ok=cancelled#list');
 }
 
 /** Sprint 19: a guardian asks for an early-leave or late-arrival pass. */
@@ -68,9 +72,9 @@ export async function requestGatePass(fd: FormData) {
       }),
     });
   } catch (error) {
-    fail('/appointments', error);
+    fail('/gate-passes', error);
   }
-  redirect('/appointments?ok=pass');
+  redirect('/gate-passes?ok=1');
 }
 
 /** Sprint 19: a guardian signs a consent form for one child (a fee opens the pay flow). */

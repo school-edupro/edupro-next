@@ -25,6 +25,8 @@ interface Detail {
   cancelReason: string | null;
   createdAt: string;
   passLink: string | null;
+  passQr: string | null;
+  passBarcode: string | null;
   events: Array<{ kind: string; at: string; startsAt: string | null; reason: string | null }>;
 }
 const STATE: Record<State, [string, 'warning' | 'success' | 'danger' | 'info' | 'neutral']> = {
@@ -47,6 +49,7 @@ const EVENT: Record<string, string> = {
   no_show: 'Did not come',
   reminded: 'Reminder sent',
 };
+const svg = (v: string) => `data:image/svg+xml;utf8,${encodeURIComponent(v)}`;
 const when = (v: string) =>
   new Date(v).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -61,10 +64,13 @@ const when = (v: string) =>
 /** One appointment of the family: everything that was asked, what the school decided, and the pass. */
 export default async function AppointmentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ ok?: string }>;
 }) {
   const { id } = await params;
+  const sent = (await searchParams).ok === '1';
   const lang = await currentLang();
   let a: Detail;
   try {
@@ -94,12 +100,44 @@ export default async function AppointmentDetailPage({
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
             <Badge tone={STATE[a.state][1]}>{t(lang, STATE[a.state][0])}</Badge>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/appointments#list">
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/appointments">
               {t(lang, 'Back to appointments')}
             </a>
           </span>
         }
       />
+      {sent ? (
+        <div
+          className="ep-alert ep-alert--success"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {t(lang, 'Appointment requested. The school will confirm it and send you the pass.')}
+        </div>
+      ) : null}
+      {a.passQr ? (
+        <Card title={t(lang, 'Gate pass')} style={{ marginBottom: 'var(--sp-3)' }}>
+          <div className="ep-appt__poster">
+            <p className="ep-pass__name">{a.visitorName ?? a.student}</p>
+            <p style={{ margin: 0 }}>
+              {[a.number, a.withName ?? a.hostName, a.startsAt ? when(a.startsAt) : null, a.place]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+            <img src={svg(a.passQr)} alt={t(lang, 'QR code of the gate pass')} />
+            {a.passBarcode ? (
+              <img
+                className="ep-appt__barcode"
+                src={svg(a.passBarcode)}
+                alt={t(lang, 'Barcode of the gate pass')}
+              />
+            ) : null}
+            <p className="ep-field__help">
+              {t(lang, 'Show this at the school gate on the day of the appointment.')}
+            </p>
+          </div>
+        </Card>
+      ) : null}
       <Card title={t(lang, 'Details')} style={{ marginBottom: 'var(--sp-3)' }}>
         <dl className="ep-hd__facts">
           {facts
@@ -112,16 +150,6 @@ export default async function AppointmentDetailPage({
             ))}
         </dl>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-3)' }}>
-          {a.passLink ? (
-            <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href={a.passLink}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t(lang, 'Gate pass')}
-            </a>
-          ) : null}
           {['requested', 'approved'].includes(a.state) ? (
             <form action={cancelAppointment}>
               <input type="hidden" name="id" value={a.id} />

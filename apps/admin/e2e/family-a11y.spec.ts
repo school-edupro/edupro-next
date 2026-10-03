@@ -15,13 +15,17 @@ const PAGES = [
   '/queries/new?kind=query',
   '/queries/16',
   '/appointments',
-  '/appointments?host=47&date=2026-10-12',
+  '/appointments/new',
+  '/appointments/new?student=12307&host=47',
+  '/gate-passes',
   '/appointments?st=open&q=progress',
 ];
 
 for (const sub of ['dev-parent', 'dev-student']) {
   for (const width of [1280, 375]) {
     test(`family ${sub} @${width}`, async ({ page }) => {
+      // many screens in one sign-in: allow more than the default half minute
+      test.setTimeout(120_000);
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${BASE}/login`);
       await page.selectOption('select[name=sub]', sub);

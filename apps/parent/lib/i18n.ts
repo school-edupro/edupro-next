@@ -114,7 +114,7 @@ const DICT: Record<string, string> = {
   'Queries \u2192 New request \u2192 Leave, with the dates and the reason. The class teacher approves it and the attendance shows leave for those days.':
     'प्रश्न → नया अनुरोध → अवकाश, तिथियाँ और कारण सहित। कक्षा शिक्षक स्वीकृत करते हैं और उपस्थिति में वे दिन अवकाश दिखते हैं।',
   'How do I ask to meet a teacher?': 'शिक्षक से मिलने का अनुरोध कैसे करूँ?',
-  'Appointments \u2192 pick the child, whom to meet and the day, then a free time. The school confirms it and sends you the gate pass.':
+  'Appointments \u2192 Book an appointment: pick the child, whom to meet, an open day and a free time. The school confirms it and the gate pass shows on the appointment.':
     'भेंट → बच्चा, किससे मिलना है और दिन चुनें, फिर खाली समय। विद्यालय पुष्टि करके गेट पास भेजता है।',
   'Why did I not get an absence alert?': 'मुझे अनुपस्थिति अलर्ट क्यों नहीं मिला?',
   'Alerts go once a day per child after the attendance time. Check Profile \u2192 Your consents; safety and attendance alerts are always sent, but the mobile number on record must be current.':
@@ -162,6 +162,33 @@ const DICT: Record<string, string> = {
   'Alternative slot': 'वैकल्पिक समय',
   Request: 'अनुरोध',
   'Your appointments': 'आपकी भेंटें',
+  'Gate passes': 'गेट पास',
+  'Ask for an early leave or a late arrival for your child.':
+    'अपने बच्चे के लिए जल्दी छुट्टी या देर से आने की अनुमति माँगें।',
+  'Meet the school': 'विद्यालय से मिलें',
+  'Book an appointment': 'भेंट बुक करें',
+  'No appointments yet. Use Book an appointment to meet a teacher or the office.':
+    'अभी कोई भेंट नहीं। शिक्षक या कार्यालय से मिलने के लिए “भेंट बुक करें” दबाएँ।',
+  'Details and gate pass': 'विवरण और गेट पास',
+  Step: 'चरण',
+  'Which child is this about?': 'यह किस बच्चे के बारे में है?',
+  'Whom do you want to meet?': 'आप किससे मिलना चाहते हैं?',
+  'Pick a day': 'दिन चुनें',
+  'Pick a time': 'समय चुनें',
+  'time free': 'समय खाली',
+  'times free': 'समय खाली',
+  'Why do you want to meet?': 'आप क्यों मिलना चाहते हैं?',
+  'Send the request': 'अनुरोध भेजें',
+  Change: 'बदलें',
+  'The school confirms the request and sends you the gate pass.':
+    'विद्यालय अनुरोध की पुष्टि करके आपको गेट पास भेजता है।',
+  'The school has not opened appointments for parents yet.':
+    'विद्यालय ने अभी अभिभावकों के लिए भेंट नहीं खोली है।',
+  'The days could not be loaded. Please try again.': 'दिन लोड नहीं हो सके। कृपया फिर कोशिश करें।',
+  'QR code of the gate pass': 'गेट पास का क्यूआर कोड',
+  'Barcode of the gate pass': 'गेट पास का बारकोड',
+  'Show this at the school gate on the day of the appointment.':
+    'भेंट के दिन विद्यालय के गेट पर यह दिखाएँ।',
   'Still to come': 'आने वाली',
   'Over or closed': 'हो चुकी या बंद',
   'Number, purpose or whom to meet': 'संख्या, कारण या किससे मिलना है',

@@ -294,6 +294,22 @@ describe('appointments v2 (e2e)', () => {
       })
     ).json();
     expect(slots.closed).toBeNull();
+    // the days the class teacher can be booked, each with its free times (school days only)
+    const days = (
+      await inject({
+        method: 'GET',
+        url: `/appointments/mine/days?hostId=${hosts['Class teacher']}&studentId=${studentId}`,
+        headers: h(parent),
+      })
+    ).json();
+    expect(days.data.length).toBe(10);
+    expect(days.data.map((d: { date: string }) => d.date)).toContain(day);
+    expect(days.data.every((d: { free: number }) => d.free > 0 && d.free <= 4)).toBe(true);
+    expect(
+      days.data.every(
+        (d: { date: string }) => ![0, 6].includes(new Date(`${d.date}T00:00:00Z`).getUTCDay()),
+      ),
+    ).toBe(true);
     expect(slots.slots.map((x: { time: string }) => x.time)).toEqual([
       '14:00',
       '14:15',
@@ -417,6 +433,8 @@ describe('appointments v2 (e2e)', () => {
       await inject({ method: 'GET', url: `/appointments/mine/${ids.parent}`, headers: h(parent) })
     ).json();
     expect(detail).toMatchObject({ purpose: 'Discuss reading progress', withName: 'Tanvi Rao' });
+    expect(detail.passQr).toContain('<svg');
+    expect(detail.passBarcode).toContain('<svg');
     expect(detail.events.map((e: { kind: string }) => e.kind)).toEqual(['requested', 'approved']);
     // the teacher sees it among the appointments with her, without the parent's contact details
     const withMe = (

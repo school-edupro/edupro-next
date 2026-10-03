@@ -71,6 +71,7 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/queries', label: 'Queries', parentOnly: true },
       { href: '/appointments', label: 'Appointments', parentOnly: true },
+      { href: '/gate-passes', label: 'Gate passes', parentOnly: true },
       { href: '/consents', label: 'Consent forms', parentOnly: true },
       { href: '/assistant', label: 'Assistant' },
       { href: '/help', label: 'Help' },

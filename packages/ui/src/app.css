@@ -4882,3 +4882,131 @@ a.ep-tabs__tab {
   text-align: left;
   justify-self: stretch;
 }
+
+/* parent app: appointment cards with a date block, and the step-by-step booking page */
+.ep-apt {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+.ep-apt__date {
+  display: grid;
+  justify-items: center;
+  padding: var(--sp-2);
+  border-radius: var(--radius-md);
+  background: var(--surface-band);
+  color: var(--text-heading);
+  text-align: center;
+}
+.ep-apt__day {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  line-height: 1.1;
+}
+.ep-apt__month,
+.ep-apt__time {
+  font-size: var(--fs-caption);
+}
+.ep-apt__time {
+  font-weight: var(--fw-semibold);
+}
+.ep-apt__body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.ep-apt__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.ep-apt__title {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-apt__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-1);
+}
+.ep-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-body);
+  font-family: var(--font-body, inherit);
+}
+.ep-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.ep-step__no {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--action-primary);
+  color: var(--text-inverse);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+.ep-step--done .ep-step__no {
+  background: var(--status-success);
+}
+.ep-step--done .ep-step__label {
+  color: var(--text-muted);
+}
+.ep-step--done a {
+  margin-left: auto;
+}
+.ep-step--open .ep-step__label {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-choices {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  margin-bottom: var(--sp-3);
+}
+.ep-choices--days {
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+}
+.ep-choices--times {
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+}
+.ep-choice {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-body);
+  text-decoration: none;
+  font-size: var(--fs-small);
+}
+.ep-choice strong {
+  color: var(--text-heading);
+  font-size: var(--fs-body);
+}
+.ep-choices--times .ep-choice {
+  text-align: center;
+}
+.ep-choice:hover,
+.ep-choice:focus-visible {
+  border-color: var(--border-accent);
+  background: var(--surface-band);
+}

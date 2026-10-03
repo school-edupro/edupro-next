@@ -67,6 +67,9 @@ export const SlotsQuerySchema = z.object({
 });
 export class SlotsQueryDto extends createZodDto(SlotsQuerySchema) {}
 
+export const DaysQuerySchema = z.object({ hostId: IdSchema, studentId: IdSchema.optional() });
+export class DaysQueryDto extends createZodDto(DaysQuerySchema) {}
+
 export const CalendarQuerySchema = z.object({
   from: DateSchema,
   to: DateSchema,

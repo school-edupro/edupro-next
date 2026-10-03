@@ -11,6 +11,7 @@ import {
   CalendarQueryDto,
   CancelDto,
   CheckInDto,
+  DaysQueryDto,
   DeskBookDto,
   ExportAppointmentsDto,
   FamilyBookDto,
@@ -48,6 +49,13 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Whom a parent can meet, with visiting hours' })
   mineHosts(@ReqCtx() ctx: RequestContext) {
     return this.svc.familyHosts(ctx);
+  }
+
+  @Get('mine/days')
+  @RequirePermission(P.family)
+  @ApiOperation({ summary: 'The next days a person or desk has free times for a parent' })
+  mineDays(@ReqCtx() ctx: RequestContext, @Query() q: DaysQueryDto) {
+    return this.svc.familyDays(ctx, q);
   }
 
   @Get('mine/slots')

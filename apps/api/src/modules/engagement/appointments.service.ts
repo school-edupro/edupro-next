@@ -18,6 +18,7 @@ import type {
   CalendarQueryDto,
   CancelDto,
   CheckInDto,
+  DaysQueryDto,
   DeskBookDto,
   ExportAppointmentsDto,
   FamilyBookDto,
@@ -1604,6 +1605,42 @@ export class AppointmentsService {
     });
   }
 
+  /**
+   * The next days a person or desk can be booked by a parent, with how many times are still free, so
+   * the parent taps a day instead of guessing which dates are open (up to ten days).
+   */
+  async familyDays(ctx: RequestContext, q: DaysQueryDto) {
+    const v = await this.family(ctx);
+    if (q.studentId && !v.students.some((x) => x.id === q.studentId))
+      throw new DomainError('not-found', 'Student not found');
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const s = await this.settings(c);
+      const host = await this.host(c, q.hostId);
+      if (!host.openParent || host.status !== 'active')
+        throw new DomainError('not-found', 'That person or desk was not found');
+      const withEmployee =
+        host.kind === 'class_teacher' && q.studentId
+          ? await this.classTeacher(c, q.studentId)
+          : null;
+      if (host.kind === 'class_teacher' && !withEmployee)
+        return { data: [], note: 'No class teacher is set for this class yet.' };
+      const start = Date.now() + 330 * 60_000;
+      const data: Array<{ date: string; free: number }> = [];
+      for (let i = 0; i <= s.maxDaysAhead && data.length < 10; i += 1) {
+        const date = new Date(start + i * 86_400_000).toISOString().slice(0, 10);
+        const day = await this.slots(c, s, host, date, withEmployee, { byDesk: false });
+        const free = day.slots.filter((x) => x.available).length;
+        if (free > 0) data.push({ date, free });
+      }
+      return {
+        data,
+        note: data.length
+          ? null
+          : `No free time in the next ${String(s.maxDaysAhead)} days. Please try another person or desk.`,
+      };
+    });
+  }
+
   async familyBook(ctx: RequestContext, dto: FamilyBookDto) {
     const v = await this.family(ctx);
     if (!v.students.some((x) => x.id === dto.studentId))
@@ -1711,6 +1748,9 @@ export class AppointmentsService {
       return {
         ...a,
         passLink: live ? await this.passLink(c, a.passCode) : null,
+        // the pass shown inside the portal: what the gate scans
+        passQr: live && a.passCode ? await this.qrSvg((await this.passLink(c, a.passCode))!) : null,
+        passBarcode: live && a.passCode ? this.barcodeSvg(a.passCode) : null,
         events: await this.history(c, id),
       };
     });
