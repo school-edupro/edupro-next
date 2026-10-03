@@ -3,8 +3,6 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
-  AppointmentDecideDto,
-  AppointmentRequestDto,
   CctvRequestDto,
   ClinicVisitDto,
   ConsentFormDto,
@@ -21,48 +19,18 @@ import {
 } from './plus.dto';
 import { EngagementPlusService } from './plus.service';
 
-/** Sprint 19: appointments, visitors, gate passes, consent forms, certificates, clinic, CCTV, employee queries. */
+/** Sprint 19: visitors, gate passes, consent forms, certificates, clinic, CCTV, employee queries. */
 @ApiTags('engagement')
 @ApiBearerAuth()
 @Controller('engagement')
 export class EngagementPlusController {
   constructor(private readonly svc: EngagementPlusService) {}
 
-  // ---- appointments ----
-  @Get('appointments')
-  @RequirePermission(P.appointmentView, { description: 'View appointment requests' })
-  appointments(@ReqCtx() ctx: RequestContext, @Query() q: ListQueryDto) {
-    return this.svc.appointments(ctx, q);
-  }
-
-  @Post('appointments/:id/decide')
-  @RequirePermission(P.appointmentDecide, { description: 'Confirm or decline appointments' })
-  decideAppointment(
-    @ReqCtx() ctx: RequestContext,
-    @Param('id') id: string,
-    @Body() body: AppointmentDecideDto,
-  ) {
-    return this.svc.decideAppointment(ctx, id, body);
-  }
-
   @Get('mine/birthdays/:studentId')
   @ApiOperation({ summary: "Birthdays in the child's section over the next seven days" })
   @RequirePermission(P.familyView)
   myBirthdays(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
     return this.svc.myBirthdays(ctx, studentId);
-  }
-
-  @Get('mine/appointments')
-  @RequirePermission(P.familyView)
-  myAppointments(@ReqCtx() ctx: RequestContext) {
-    return this.svc.myAppointments(ctx);
-  }
-
-  @Post('mine/appointments')
-  @ApiOperation({ summary: 'A family asks to meet a teacher, the coordinator or the principal' })
-  @RequirePermission(P.familyView)
-  requestAppointment(@ReqCtx() ctx: RequestContext, @Body() body: AppointmentRequestDto) {
-    return this.svc.requestAppointment(ctx, body);
   }
 
   // ---- visitors ----

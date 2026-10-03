@@ -12,8 +12,6 @@ import { PaymentsService } from '../payments/payments.service';
 import { ReportsService } from '../reports/reports.service';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import type {
-  AppointmentDecideDto,
-  AppointmentRequestDto,
   CctvRequestDto,
   ClinicVisitDto,
   ConsentFormDto,
@@ -113,79 +111,6 @@ export class EngagementPlusService {
     return `LIMIT $${params.length - 1} OFFSET $${params.length}`;
   }
 
-  // ---- appointments -------------------------------------------------------------------------------
-  private static readonly APPT = `SELECT a.id::text, a.student_id::text, s.display_name AS student, a.with_kind, a.with_employee_id::text, e.display_name AS with_name,
-      a.purpose, a.preferred_slots, a.confirmed_at, a.location, a.status::text, a.decision_note, a.workflow_instance_id::text, u.display_name AS requested_by, a.created_at
-    FROM appointments a JOIN students s ON s.id = a.student_id LEFT JOIN employees e ON e.id = a.with_employee_id LEFT JOIN users u ON u.id = a.requested_by`;
-
-  private toAppt(r: Row) {
-    return {
-      id: String(r.id),
-      studentId: String(r.student_id),
-      student: String(r.student),
-      withKind: String(r.with_kind),
-      withEmployeeId: (r.with_employee_id as string | null) ?? null,
-      withName: (r.with_name as string | null) ?? null,
-      purpose: String(r.purpose),
-      preferredSlots: (r.preferred_slots as string[]) ?? [],
-      confirmedAt: iso(r.confirmed_at),
-      location: (r.location as string | null) ?? null,
-      status: String(r.status),
-      decisionNote: (r.decision_note as string | null) ?? null,
-      workflowInstanceId: (r.workflow_instance_id as string | null) ?? null,
-      requestedBy: (r.requested_by as string | null) ?? null,
-      createdAt: iso(r.created_at)!,
-    };
-  }
-
-  async requestAppointment(ctx: RequestContext, dto: AppointmentRequestDto) {
-    const student = await this.familyStudent(ctx, dto.studentId);
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const open = await c.query(
-        `SELECT 1 FROM appointments WHERE student_id = $1 AND status = 'pending'`,
-        [dto.studentId],
-      );
-      if (open.rowCount)
-        throw new DomainError(
-          'engagement.appointment_pending',
-          'An appointment request is already pending for this child',
-          { status: 409 },
-        );
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO appointments (school_id, student_id, requested_by, with_kind, with_employee_id, purpose, preferred_slots, request_id)
-         VALUES (app.current_school_id(), $1, app.current_user_id(), $2, $3, $4, $5::jsonb, app.current_request_id()) RETURNING id::text`,
-        [
-          dto.studentId,
-          dto.withKind,
-          dto.withEmployeeId ?? null,
-          dto.purpose,
-          JSON.stringify(dto.preferredSlots),
-        ],
-      );
-      const id = r.rows[0]!.id;
-      const wf = await this.startIfDefined(
-        c,
-        ctx,
-        'appointment_request',
-        id,
-        `Appointment: ${student.name}${student.section ? ` (${student.section})` : ''} · ${dto.withKind}`,
-        { purpose: dto.purpose, slots: dto.preferredSlots },
-      );
-      if (wf)
-        await c.query(`UPDATE appointments SET workflow_instance_id = $2 WHERE id = $1`, [id, wf]);
-      await this.audit.stage(ctx, c, {
-        action: 'engagement.appointment.request',
-        entityType: 'appointments',
-        entityId: id,
-        after: dto,
-      });
-      return this.toAppt(
-        // eslint-disable-next-line no-restricted-syntax -- fixed SELECT fragment constant; values are bound parameters
-        (await c.query<Row>(`${EngagementPlusService.APPT} WHERE a.id = $1`, [id])).rows[0]!,
-      );
-    });
-  }
-
   /** Classmates' birthdays in the next seven days (the child's own section; first name, initial, day only). */
   async myBirthdays(ctx: RequestContext, studentId: string) {
     const s = await this.familyStudent(ctx, studentId);
@@ -215,99 +140,34 @@ export class EngagementPlusService {
     });
   }
 
-  async myAppointments(ctx: RequestContext) {
-    const v = await this.viewer.resolve(ctx, 'engagement.family.view');
-    if (v.kind !== 'family') return { data: [] };
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- fixed SELECT fragment constant; values are bound parameters
-        `${EngagementPlusService.APPT} WHERE a.student_id = ANY($1::bigint[]) ORDER BY a.created_at DESC LIMIT 50`,
-        [v.students.map((s) => s.id)],
-      );
-      return { data: r.rows.map((x) => this.toAppt(x)) };
-    });
-  }
-
-  async appointments(ctx: RequestContext, q: ListQueryDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const params: unknown[] = [];
-      const where = q.status ? `WHERE a.status = $1::workflow_status` : '';
-      if (q.status) params.push(q.status);
-      const r = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- constant SELECT and fragments; values bound
-        `${EngagementPlusService.APPT.replace('SELECT a.id::text', 'SELECT count(*) OVER () AS total, a.id::text')} ${where} ORDER BY a.status = 'pending' DESC, a.created_at DESC ${this.paged(q, params)}`,
-        params,
-      );
-      return {
-        data: r.rows.map((x) => this.toAppt(x)),
-        page: { number: q.page, size: q.size, total: Number(r.rows[0]?.total ?? 0) },
-      };
-    });
-  }
-
-  /** Direct decision when no workflow holds it; the workflow's completion calls applyAppointment. */
-  async decideAppointment(ctx: RequestContext, id: string, dto: AppointmentDecideDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const cur = await c.query<{ status: string; workflow_instance_id: string | null }>(
-        `SELECT status::text, workflow_instance_id::text FROM appointments WHERE id = $1 FOR UPDATE`,
-        [id],
-      );
-      if (!cur.rows[0])
-        throw new DomainError('not-found', 'Appointment not found', { status: 404 });
-      if (cur.rows[0].status !== 'pending')
-        throw new DomainError('conflict', `Already ${cur.rows[0].status}`, { status: 409 });
-      if (cur.rows[0].workflow_instance_id)
-        throw new DomainError('engagement.in_workflow', 'Decide it from the approvals inbox', {
-          status: 409,
-        });
-      await this.applyAppointment(
-        c,
-        ctx,
-        id,
-        dto.outcome,
-        dto.note ?? null,
-        dto.confirmedAt ?? null,
-        dto.location ?? null,
-      );
-      return this.toAppt(
-        // eslint-disable-next-line no-restricted-syntax -- fixed SELECT fragment constant; values are bound parameters
-        (await c.query<Row>(`${EngagementPlusService.APPT} WHERE a.id = $1`, [id])).rows[0]!,
-      );
-    });
-  }
-
+  // ---- appointments -------------------------------------------------------------------------------
+  /**
+   * Appointments live in AppointmentsService since 0059 (slots, front desk, gate). Only this remains: a
+   * request that an approval flow from before then still holds ends here. With a slot it is confirmed or
+   * declined; without one it stays in the front-desk queue to be given a slot.
+   */
   async applyAppointment(
     c: PoolClient,
     ctx: RequestContext,
     id: string,
     outcome: 'approved' | 'rejected',
     note: string | null,
-    confirmedAt: string | null,
-    location: string | null,
   ) {
-    const row = await c.query<{ student_id: string; preferred_slots: string[]; student: string }>(
-      `SELECT a.student_id::text, a.preferred_slots, s.display_name AS student FROM appointments a JOIN students s ON s.id = a.student_id WHERE a.id = $1`,
-      [id],
+    const r = await c.query<{ state: string }>(
+      `UPDATE appointments SET status = $2::workflow_status, decision_note = $3, decided_at = now(), updated_at = now(),
+              state = CASE WHEN $2 = 'rejected' THEN 'rejected' WHEN starts_at IS NOT NULL THEN 'approved' ELSE state END,
+              confirmed_at = CASE WHEN $2 = 'approved' THEN starts_at END
+        WHERE id = $1 AND state = 'requested' RETURNING state`,
+      [id, outcome, note],
     );
-    const slot = confirmedAt ?? row.rows[0]?.preferred_slots?.[0] ?? null;
-    await c.query(
-      `UPDATE appointments SET status = $2::workflow_status, decision_note = $3, confirmed_at = CASE WHEN $2 = 'approved' THEN $4::timestamptz ELSE NULL END, location = $5, updated_at = now() WHERE id = $1`,
-      [id, outcome, note, outcome === 'approved' ? slot : null, location],
-    );
-    if (row.rows[0])
-      await this.notifyFamily(
-        c,
-        ctx,
-        row.rows[0].student_id,
-        outcome === 'approved'
-          ? `Appointment for ${row.rows[0].student} confirmed${slot ? ` for ${slot.replace('T', ' ')}` : ''}${location ? ` at ${location}` : ''}.`
-          : `Appointment request for ${row.rows[0].student} could not be confirmed${note ? `: ${note}` : '.'}`,
-      );
+    const state = r.rows[0]?.state;
+    if (state === 'approved' || state === 'rejected')
+      await c.query(`SELECT app.appointment_notify($1, $2, $3, NULL)`, [id, state, note]);
     await this.audit.stage(ctx, c, {
       action: `engagement.appointment.${outcome}`,
       entityType: 'appointments',
       entityId: id,
-      after: { note, confirmedAt: slot, location },
+      after: { note },
     });
   }
 
@@ -1239,7 +1099,7 @@ export class EngagementPlusService {
     const note = instance.steps.find((s) => s.status === outcome)?.note ?? null;
     switch (instance.entityType) {
       case 'appointment_request':
-        return this.applyAppointment(c, ctx, instance.entityId, outcome, note, null, null);
+        return this.applyAppointment(c, ctx, instance.entityId, outcome, note);
       case 'gate_pass':
         return this.applyGatePass(c, ctx, instance.entityId, outcome, note);
       case 'cctv_request':

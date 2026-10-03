@@ -126,54 +126,7 @@ describe('engagement plus, scheduled reports, MIS and the shadow close (e2e, Spr
         expect(codes).toContain(code);
     });
 
-    it('a family appointment request reaches the class teacher, who confirms a slot', async () => {
-      const req = await inject({
-        method: 'POST',
-        url: '/engagement/mine/appointments',
-        headers: h(parent),
-        json: {
-          studentId,
-          withKind: 'class_teacher',
-          purpose: 'Discuss reading progress',
-          preferredSlots: ['2026-10-05T10:00', '2026-10-06T10:00'],
-        },
-      });
-      expect(req.statusCode).toBe(201);
-      expect(req.json()).toMatchObject({ status: 'pending', student: 'Aanya Nineteen' });
-      expect(req.json().workflowInstanceId).toBeTruthy();
-      const item = (await inboxOf(teacher)).find(
-        (i) =>
-          i.instance.entityType === 'appointment_request' && i.instance.entityId === req.json().id,
-      );
-      expect(item).toBeDefined();
-      const ok = await inject({
-        method: 'POST',
-        url: `/workflow/steps/${item!.id}/approve`,
-        headers: h(teacher),
-        json: { note: 'Monday 10:00 in the staff room' },
-      });
-      expect(ok.statusCode).toBe(201);
-      const mine = await inject({
-        method: 'GET',
-        url: '/engagement/mine/appointments',
-        headers: h(parent),
-      });
-      const a = (
-        mine.json().data as Array<{ id: string; status: string; decisionNote: string | null }>
-      ).find((x) => x.id === req.json().id);
-      expect(a).toMatchObject({
-        status: 'approved',
-        decisionNote: 'Monday 10:00 in the staff room',
-      });
-      // the office cannot decide directly once the flow owns it
-      const direct = await inject({
-        method: 'POST',
-        url: `/engagement/appointments/${req.json().id}/decide`,
-        headers: h(),
-        json: { outcome: 'rejected' },
-      });
-      expect([400, 409]).toContain(direct.statusCode);
-    });
+    // appointments moved to slots and the front desk in 0059: see appointments.e2e-spec.ts
 
     it('a gate pass raised by the family is numbered once the class teacher issues it', async () => {
       const req = await inject({

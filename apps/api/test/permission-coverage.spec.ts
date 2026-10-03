@@ -88,6 +88,14 @@ describe('permission coverage', () => {
       'PublicAdmissionsController.submitApplication (public/admissions)',
       'PublicAdmissionsController.updateApplication (public/admissions)',
       'PublicAdmissionsController.verifyOtp (public/admissions)',
+      // appointments for outside visitors (0059): desks, slots and the pass are read-only and throttled;
+      // booking, the visitor's own list and cancelling need the OTP-issued applicant token
+      'PublicAppointmentsController.book (public/appointments)',
+      'PublicAppointmentsController.cancel (public/appointments)',
+      'PublicAppointmentsController.info (public/appointments)',
+      'PublicAppointmentsController.mine (public/appointments)',
+      'PublicAppointmentsController.pass (public/appointments)',
+      'PublicAppointmentsController.slots (public/appointments)',
       'PunchController.ingest (attendance/punch)',
       'RfidController.ingest (attendance/rfid)',
       'ShadowController.ingest (shadow)',

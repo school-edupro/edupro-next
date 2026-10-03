@@ -172,6 +172,12 @@ async function main(): Promise<void> {
     { every: 5 * 60 * 1000 },
     { name: 'helpdesk.escalate', data: SYSTEM_ENVELOPE('helpdesk.escalate') },
   );
+  // appointments: reminders, no-shows and wiping expired one-time codes, every five minutes
+  await maintenance.upsertJobScheduler(
+    'appointments.tick',
+    { every: 5 * 60 * 1000 },
+    { name: 'appointments.tick', data: SYSTEM_ENVELOPE('appointments.tick') },
+  );
   await maintenance.upsertJobScheduler(
     'break_glass.expire',
     { every: 5 * 60 * 1000 },

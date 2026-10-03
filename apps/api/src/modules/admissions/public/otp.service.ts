@@ -23,8 +23,8 @@ export const publicTenant = (schoolId: string, requestId?: string): TenantContex
 
 /**
  * Mobile OTP for applicants (S8-01, legacy candidate OTP with 20 attempts): six digits, ten minutes,
- * five attempts, three live codes per mobile. Delivery goes to the notification service in Sprint 10; until
- * then the code is logged, and returned in the response only under the development bypass.
+ * five attempts, three live codes per mobile. The code goes out by SMS and WhatsApp through the school's
+ * own providers (0059); it is returned in the response only under the development bypass.
  */
 @Injectable()
 export class OtpService {
@@ -60,6 +60,13 @@ export class OtpService {
         `INSERT INTO public_otps (school_id, mobile, purpose, code_hash, expires_at, ip) VALUES (app.current_school_id(), $1, 'admission_login', $2, now() + make_interval(mins => $3), $4)`,
         [mobile, this.hash(code), this.env.OTP_TTL_MINUTES, ip ?? null],
       );
+      // by SMS and WhatsApp through the school's providers (template appointment_otp); the log wipes the
+      // code once it has expired
+      await c.query(`SELECT app.public_otp_send($1, $2, $3)`, [
+        mobile,
+        code,
+        this.env.OTP_TTL_MINUTES,
+      ]);
     });
     this.logger.log(
       `OTP for ${mobile.slice(0, 2)}******${mobile.slice(-2)} issued (school ${schoolId})`,

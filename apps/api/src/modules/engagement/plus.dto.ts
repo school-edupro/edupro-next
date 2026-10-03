@@ -22,36 +22,6 @@ const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const TimeSchema = z.string().regex(/^\d{2}:\d{2}$/);
 const Note = z.string().trim().max(500).optional();
 
-// ---- appointments ----
-export const AppointmentRequestSchema = z.object({
-  studentId: IdSchema,
-  withKind: z.enum(['class_teacher', 'coordinator', 'principal', 'employee']),
-  withEmployeeId: IdSchema.optional(),
-  purpose: z.string().trim().min(3).max(500),
-  preferredSlots: z
-    .array(
-      z
-        .string()
-        .datetime({ offset: true })
-        .or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)),
-    )
-    .min(1)
-    .max(3),
-});
-export class AppointmentRequestDto extends createZodDto(AppointmentRequestSchema) {}
-
-export const AppointmentDecideSchema = z.object({
-  outcome: z.enum(['approved', 'rejected']),
-  confirmedAt: z
-    .string()
-    .datetime({ offset: true })
-    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/))
-    .optional(),
-  location: z.string().trim().max(120).optional(),
-  note: Note,
-});
-export class AppointmentDecideDto extends createZodDto(AppointmentDecideSchema) {}
-
 // ---- visitors ----
 export const VisitorInSchema = z.object({
   visitorName: z.string().trim().min(2).max(120),

@@ -17,7 +17,11 @@ import { HelpdeskController } from './helpdesk.controller';
 import { HelpdeskService } from './helpdesk.service';
 import { EngagementPlusController } from './plus.controller';
 import { EngagementPlusService } from './plus.service';
+import { AdmissionsModule } from '../admissions/admissions.module';
+import { AppointmentsController } from './appointments.controller';
+import { AppointmentsService } from './appointments.service';
 import { PortalProfileController } from './portal-profile.controller';
+import { PublicAppointmentsController } from './public-appointments.controller';
 import { PortalProfileService } from './portal-profile.service';
 import { PrivacyService } from './privacy.service';
 import { QueriesService } from './queries.service';
@@ -36,6 +40,7 @@ import { QueriesService } from './queries.service';
     ReportsModule,
     PlatformModule,
     FilesModule,
+    AdmissionsModule,
   ],
   controllers: [
     EngagementController,
@@ -43,10 +48,13 @@ import { QueriesService } from './queries.service';
     DsrController,
     PortalProfileController,
     HelpdeskController,
+    AppointmentsController,
+    PublicAppointmentsController,
   ],
   providers: [
     QueriesService,
     HelpdeskService,
+    AppointmentsService,
     FamilyService,
     PortalProfileService,
     PrivacyService,

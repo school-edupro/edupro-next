@@ -28,7 +28,14 @@ import { PublicThrottleGuard } from './public/public-throttle.guard';
     PublicThrottleGuard,
     AuditService,
   ],
-  exports: [AdmissionsService, PublicAdmissionsService, DecisionsService],
+  exports: [
+    AdmissionsService,
+    PublicAdmissionsService,
+    DecisionsService,
+    OtpService,
+    ApplicantGuard,
+    PublicThrottleGuard,
+  ],
 })
 export class AdmissionsModule implements OnModuleInit {
   constructor(
