@@ -3904,6 +3904,14 @@ a.ep-tabs__tab {
   display: flex;
   gap: var(--sp-2);
 }
+.ep-hd__listhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
 .ep-cdash__num {
   color: var(--text-link);
   text-decoration: underline;
@@ -4167,9 +4175,72 @@ a.ep-tabs__tab {
 .ep-qmenu__late {
   color: var(--status-danger);
 }
-.ep-qmenu__all {
+.ep-qmenu__all,
+.ep-qmenu__links a {
   font-weight: var(--fw-semibold);
   color: var(--text-link);
+}
+.ep-qmenu__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-small);
+}
+.ep-qmenu__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Ratings are shown and picked as stars. The picker is plain radio buttons, so it posts without scripts. */
+.ep-star {
+  width: 1.15em;
+  height: 1.15em;
+  fill: currentColor;
+  vertical-align: text-bottom;
+}
+.ep-stars {
+  display: inline-flex;
+  color: var(--status-warning);
+  white-space: nowrap;
+}
+.ep-star--off {
+  color: var(--border-strong);
+}
+.ep-starinput {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.ep-starinput__row {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+.ep-starinput__star {
+  cursor: pointer;
+  font-size: var(--fs-h2);
+  line-height: 1;
+  padding: var(--sp-1);
+  border-radius: var(--radius-sm);
+  color: var(--border-strong);
+}
+/* a star is lit when it, or any star after it, is the chosen one */
+.ep-starinput__star:has(input:checked),
+.ep-starinput__star:has(~ .ep-starinput__star input:checked) {
+  color: var(--status-warning);
+}
+.ep-starinput__row:hover .ep-starinput__star {
+  color: var(--status-warning);
+}
+.ep-starinput__row:hover .ep-starinput__star:hover ~ .ep-starinput__star {
+  color: var(--border-strong);
+}
+.ep-starinput__star:has(input:focus-visible) {
+  outline: 3px solid var(--focus-ring);
 }
 .ep-dlog__filters {
   display: flex;

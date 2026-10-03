@@ -1,4 +1,4 @@
-import { Badge, Card, PageHeader } from '@edupro/ui';
+import { Badge, Card, PageHeader, Stars } from '@edupro/ui';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   DESKS,
@@ -273,7 +273,13 @@ export default async function HelpdeskDashboardPage() {
                       <td className="ep-num">
                         {x.withinSla === null ? '—' : `${String(x.withinSla)}%`}
                       </td>
-                      <td className="ep-num">{x.rating ?? '—'}</td>
+                      <td>
+                        {x.rating ? (
+                          <Stars value={x.rating} label={`${String(x.rating)} out of 5`} />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   );
                 }),

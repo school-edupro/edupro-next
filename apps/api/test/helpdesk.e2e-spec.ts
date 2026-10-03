@@ -643,6 +643,113 @@ describe('helpdesk (e2e)', () => {
     expect(acc.you.canReply).toBe(false);
   });
 
+  it('the desk list is latest first, pages, and downloads as Excel or a queued PDF with the same filters', async () => {
+    const all = (
+      await inject({ method: 'GET', url: '/helpdesk/tickets?desk=staff&size=100', headers: h() })
+    ).json();
+    expect(all.page.total).toBeGreaterThanOrEqual(2);
+    const opened = all.data.map((t: { openedAt: string }) => t.openedAt);
+    expect(opened).toEqual([...opened].sort().reverse());
+    // pages: the second page starts where the first one ends
+    const p1 = (
+      await inject({ method: 'GET', url: '/helpdesk/tickets?size=5&page=1', headers: h() })
+    ).json();
+    const p2 = (
+      await inject({ method: 'GET', url: '/helpdesk/tickets?size=5&page=2', headers: h() })
+    ).json();
+    expect(p1.data).toHaveLength(5);
+    expect(p2.data[0].id).not.toBe(p1.data[4].id);
+    // Excel: one row per ticket of the filter, in the same order
+    const x = await inject({
+      method: 'GET',
+      url: '/helpdesk/tickets.xlsx?desk=staff',
+      headers: h(),
+    });
+    expect(x.statusCode).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(x.rawPayload as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    expect(ws.rowCount).toBe(2 + all.page.total);
+    expect(ws.getRow(3).getCell(1).value).toBe(all.data[0].number);
+    // a person sees only their own tickets in the file too
+    const mine = (
+      await inject({ method: 'GET', url: '/helpdesk/tickets?desk=staff', headers: h(other) })
+    ).json();
+    const xo = await inject({
+      method: 'GET',
+      url: '/helpdesk/tickets.xlsx?desk=staff',
+      headers: h(other),
+    });
+    const wo = new ExcelJS.Workbook();
+    await wo.xlsx.load(xo.rawPayload as unknown as ArrayBuffer);
+    expect(wo.worksheets[0]!.rowCount).toBe(2 + mine.page.total);
+    // PDF: queued for the workers with exactly the tickets the caller may see
+    const pdf = await inject({
+      method: 'POST',
+      url: '/helpdesk/tickets/export-pdf',
+      headers: h(),
+      json: { desk: 'staff' },
+    });
+    expect(pdf.statusCode).toBe(202);
+    const row = await withMigrator((c) =>
+      c.query<{ dataset: string; format: string; params: { ids: string[] } }>(
+        `SELECT dataset, format, params FROM exports WHERE id = $1`,
+        [pdf.json().id],
+      ),
+    );
+    expect(row.rows[0]).toMatchObject({ dataset: 'helpdesk_tickets', format: 'pdf' });
+    expect(row.rows[0]!.params.ids).toEqual(all.data.map((t: { id: string }) => t.id));
+    const none = await inject({
+      method: 'POST',
+      url: '/helpdesk/tickets/export-pdf',
+      headers: h(),
+      json: { desk: 'staff', q: 'no-such-ticket-zz' },
+    });
+    expect(none.statusCode).toBe(400);
+    // the general export route does not hand the dataset to someone who cannot see every ticket
+    const sneak = await inject({
+      method: 'POST',
+      url: '/reports/exports',
+      headers: h(other),
+      json: {
+        dataset: 'helpdesk_tickets',
+        format: 'pdf',
+        params: { ids: row.rows[0]!.params.ids },
+      },
+    });
+    expect(sneak.statusCode).toBe(403);
+  });
+
+  it("a family's own list filters by status and text, latest first", async () => {
+    const list = (
+      await inject({
+        method: 'GET',
+        url: '/engagement/mine/queries?order=latest&size=50',
+        headers: h(parent),
+      })
+    ).json();
+    expect(list.page.total).toBeGreaterThanOrEqual(1);
+    const opened = list.data.map((q: { openedAt: string }) => q.openedAt);
+    expect(opened).toEqual([...opened].sort().reverse());
+    const first = list.data[0] as { number: string; status: string };
+    const found = (
+      await inject({
+        method: 'GET',
+        url: `/engagement/mine/queries?q=${encodeURIComponent(first.number)}`,
+        headers: h(parent),
+      })
+    ).json();
+    expect(found.data.map((q: { number: string }) => q.number)).toEqual([first.number]);
+    const active = (
+      await inject({
+        method: 'GET',
+        url: '/engagement/mine/queries?status=active&size=50',
+        headers: h(parent),
+      })
+    ).json();
+    expect(active.data.every((q: { status: string }) => q.status !== 'closed')).toBe(true);
+  });
+
   it('a sign-in is recorded and the user card shows roles, school, contact and the last sign-in', async () => {
     for (let i = 0; i < 2; i += 1)
       expect(

@@ -1,4 +1,4 @@
-import { Badge, Card, DataTable, KpiTile, PageHeader } from '@edupro/ui';
+import { Card, DataTable, KpiTile, PageHeader, Stars } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { apiFetch } from '@/lib/api';
 import type { FeedbackEntry } from '@/lib/types';
@@ -60,11 +60,7 @@ export default async function FeedbackPage({
             {
               key: 'rating',
               header: e('rating'),
-              render: (f) => (
-                <Badge tone={f.rating >= 4 ? 'success' : f.rating === 3 ? 'warning' : 'danger'}>
-                  {'★'.repeat(f.rating)}
-                </Badge>
-              ),
+              render: (f) => <Stars value={f.rating} />,
             },
             { key: 'comment', header: e('comment'), render: (f) => f.comment ?? '' },
             {

@@ -32,6 +32,10 @@ export const ListTicketsSchema = z.object({
 });
 export class ListTicketsDto extends createZodDto(ListTicketsSchema) {}
 
+/** The desk list as a file: the same filters, no paging. */
+export const ExportTicketsSchema = ListTicketsSchema.omit({ page: true, size: true });
+export class ExportTicketsDto extends createZodDto(ExportTicketsSchema) {}
+
 export const CreateTicketSchema = z.object({
   desk: z.enum(['staff', 'provider']),
   categoryCode: Code,

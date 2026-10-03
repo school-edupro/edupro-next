@@ -891,6 +891,46 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       };
     },
   },
+  helpdesk_tickets: {
+    id: 'helpdesk_tickets',
+    title: 'Helpdesk tickets',
+    // The helpdesk API picks the tickets a person may see and queues this itself (params.ids); asking
+    // for it through the general export route needs the see-everything permission.
+    permission: 'helpdesk.ticket.viewall',
+    maxRows: 5000,
+    columns: [
+      { key: 'number', header: 'Number', width: 13 },
+      { key: 'opened_at', header: 'Raised', type: 'datetime', width: 16 },
+      { key: 'head', header: 'Query type', width: 18 },
+      { key: 'subject', header: 'Subject', width: 30 },
+      { key: 'about', header: 'Student / raised by', width: 26 },
+      { key: 'owner', header: 'With', width: 20 },
+      { key: 'status', header: 'Status', width: 11 },
+      { key: 'level', header: 'Level', type: 'number', width: 6 },
+      { key: 'due_at', header: 'Due', type: 'datetime', width: 16 },
+      { key: 'closed_at', header: 'Closed', type: 'datetime', width: 16 },
+      { key: 'rating', header: 'Rating', width: 8 },
+    ],
+    /** The chosen tickets (params.ids), latest first. */
+    query: (p) => ({
+      text: `SELECT q.id::text AS id, q.number, q.opened_at, COALESCE(k.name, q.category_code) AS head, q.subject,
+                    concat_ws(' · ', s.display_name, s.admission_no,
+                              COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = q.raised_by_user_id LIMIT 1), ru.display_name)) AS about,
+                    COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = q.assigned_user_id LIMIT 1), au.display_name,
+                             (SELECT r.name FROM roles r WHERE r.code = q.assigned_role AND (r.school_id IS NULL OR r.school_id = q.school_id) AND r.deleted_at IS NULL
+                               ORDER BY r.school_id NULLS LAST LIMIT 1), q.assigned_role) AS owner,
+                    replace(q.status::text, '_', ' ') AS status, q.level, q.due_at, q.closed_at,
+                    repeat('★', COALESCE(q.rating, 0)) AS rating
+               FROM parent_queries q
+               LEFT JOIN students s ON s.id = q.student_id
+               LEFT JOIN users ru ON ru.id = q.raised_by_user_id
+               LEFT JOIN users au ON au.id = q.assigned_user_id
+               LEFT JOIN query_categories k ON k.school_id = q.school_id AND k.desk = q.desk AND k.code = q.category_code
+              WHERE q.id = ANY($1::bigint[]) AND q.kind <> 'leave'
+              ORDER BY q.opened_at DESC, q.id DESC`,
+      values: [(idList(p.ids) ?? []).filter((x) => /^\d{1,18}$/.test(x))],
+    }),
+  },
   comms_failures: {
     id: 'comms_failures',
     title: 'Communication failures by reason',

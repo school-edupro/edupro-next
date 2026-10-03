@@ -44,10 +44,15 @@ export const CreateQuerySchema = z
 export class CreateQueryDto extends createZodDto(CreateQuerySchema) {}
 
 export const ListQueriesSchema = z.object({
-  status: z.enum(['open', 'in_progress', 'answered', 'closed']).optional(),
+  /** `active` = everything not closed. */
+  status: z.enum(['open', 'in_progress', 'answered', 'closed', 'active']).optional(),
   kind: z.enum(['query', 'complaint', 'leave']).optional(),
   categoryCode: z.string().trim().max(40).optional(),
   studentId: IdSchema.optional(),
+  /** Number or subject contains. */
+  q: z.string().trim().max(80).optional(),
+  /** `latest` = newest first; the default keeps the open ones on top. */
+  order: z.enum(['open_first', 'latest']).default('open_first'),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });

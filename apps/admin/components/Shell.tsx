@@ -386,28 +386,32 @@ export async function Shell({
     'engagement.change_request.approve',
     'workflow.inbox.act',
     'people.withdrawal.clear',
-    'helpdesk.ticket.respond',
-    'helpdesk.provider.respond',
   ].some((p) => allowed.has(p));
-  // queries with me now (header icon) and the user card: best effort, never block the page
+  // queries with me now (header icon) and the user card: best effort, never block the page.
+  // Queries are not approvals, so they show only here; people who may only raise still get the icon.
   const mayAnswer = ['helpdesk.ticket.respond', 'helpdesk.provider.respond'].some((p) =>
     allowed.has(p),
   );
+  const mayRaise = allowed.has('helpdesk.ticket.raise');
+  interface Waiting {
+    total: number;
+    overdue: number;
+    latest: Array<{
+      id: string;
+      number: string;
+      desk: string;
+      subject: string;
+      overdue: boolean;
+      level: number;
+    }>;
+  }
+  const none: Waiting = { total: 0, overdue: 0, latest: [] };
   const [queries, card] = await Promise.all([
-    mayAnswer
-      ? apiFetch<{
-          total: number;
-          overdue: number;
-          latest: Array<{
-            id: string;
-            number: string;
-            desk: string;
-            subject: string;
-            overdue: boolean;
-            level: number;
-          }>;
-        }>('/helpdesk/waiting').catch(() => null)
-      : Promise.resolve(null),
+    !mayAnswer && !mayRaise
+      ? Promise.resolve(null)
+      : !mayAnswer
+        ? Promise.resolve(none)
+        : apiFetch<Waiting>('/helpdesk/waiting').catch(() => (mayRaise ? none : null)),
     apiFetch<{
       name: string;
       roles: string[];
@@ -612,9 +616,33 @@ export async function Shell({
                 ) : (
                   <p className="ep-qmenu__empty">Nothing waiting for you.</p>
                 )}
-                <a className="ep-qmenu__all" href="/approvals">
-                  See all
-                </a>
+                <div className="ep-qmenu__links">
+                  {mayAnswer ? (
+                    <>
+                      <a href="/engagement/helpdesk/parent?view=assigned">Parent queries</a>
+                      <a href="/engagement/helpdesk/staff?view=assigned">Staff queries</a>
+                      <a href="/engagement/helpdesk/provider?view=assigned">ERP tickets</a>
+                    </>
+                  ) : (
+                    <a href="/engagement/helpdesk/staff?view=mine">Queries I raised</a>
+                  )}
+                </div>
+                {mayRaise ? (
+                  <div className="ep-qmenu__actions">
+                    <a
+                      className="ep-btn ep-btn--primary ep-btn--sm"
+                      href="/engagement/helpdesk/staff/new"
+                    >
+                      Raise a query
+                    </a>
+                    <a
+                      className="ep-btn ep-btn--ghost ep-btn--sm"
+                      href="/engagement/helpdesk/provider/new"
+                    >
+                      Raise an ERP ticket
+                    </a>
+                  </div>
+                ) : null}
               </div>
             </details>
           ) : null}

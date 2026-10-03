@@ -13,6 +13,7 @@ export { SearchableSelects } from './components/SearchableSelects';
 export { installSearchableSelects } from './components/searchable-select';
 export { Checkbox, type CheckboxProps } from './components/Checkbox';
 export { RadioGroup, type RadioGroupProps, type RadioOption } from './components/Radio';
+export { Stars, StarInput, type StarsProps, type StarInputProps } from './components/Stars';
 export { Switch, type SwitchProps } from './components/Switch';
 export { Tabs, type TabsProps, type TabItem } from './components/Tabs';
 export { Dialog, type DialogProps } from './components/Dialog';

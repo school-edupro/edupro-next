@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
-import type { PoolClient } from '@edupro/db';
+import { QUEUES, type PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { OutboxService } from '../../common/jobs/outbox.service';
 import { ViewerService, type Viewer } from '../academics/daily/viewer.service';
 import { FilesService } from '../files/files.service';
 import {
@@ -16,6 +17,7 @@ import {
   type HeadDto,
   type HelpdeskReportDto,
   type HelpdeskSettingsDto,
+  type ExportTicketsDto,
   type ListTicketsDto,
   type RateTicketDto,
   type ReopenTicketDto,
@@ -23,6 +25,8 @@ import {
 } from './helpdesk.dto';
 
 type Row = Record<string, unknown>;
+/** Most tickets one Excel or PDF of the desk list carries. */
+const EXPORT_MAX = 5000;
 
 const iso = (d: unknown): string | null => (d instanceof Date ? d.toISOString() : null);
 const esc = (s: string) =>
@@ -149,6 +153,7 @@ export class HelpdeskService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly files: FilesService,
+    private readonly outbox: OutboxService,
   ) {}
 
   // ---- who is looking -------------------------------------------------------------------------------
@@ -302,38 +307,48 @@ export class HelpdeskService {
   }
 
   // ---- reading --------------------------------------------------------------------------------------
+  /** The list filters as SQL (what I may see, desk, status, mine / assigned, query type, search). */
+  private filterSql(
+    me: Me,
+    q: Pick<ListTicketsDto, 'desk' | 'status' | 'view' | 'head' | 'q'>,
+    params: unknown[],
+  ): string {
+    const where = [`q.kind <> 'leave'`, this.visible(me, params)];
+    if (q.desk) {
+      params.push(q.desk);
+      where.push(`q.desk = $${params.length}`);
+    }
+    if (q.status === 'active') where.push(`q.status <> 'closed'`);
+    else if (q.status === 'overdue')
+      where.push(`q.status IN ('open', 'in_progress') AND q.due_at < now()`);
+    else if (q.status) {
+      params.push(q.status);
+      where.push(`q.status = $${params.length}::query_status`);
+    }
+    if (q.view === 'mine') {
+      params.push(me.userId);
+      where.push(`q.raised_by_user_id = $${params.length}`);
+    } else if (q.view === 'assigned') where.push(this.ownerSql(me, params));
+    if (q.head) {
+      params.push(q.head);
+      where.push(`q.category_code = $${params.length}`);
+    }
+    if (q.q) {
+      params.push(q.q);
+      where.push(
+        `concat_ws(' ', q.number, q.subject, s.display_name, s.admission_no, ru.display_name) ILIKE '%' || $${params.length} || '%'`,
+      );
+    }
+    return where.join(' AND ');
+  }
+
+  /** Tickets latest first, a page at a time. */
   async list(ctx: RequestContext, q: ListTicketsDto) {
     const v = await this.viewerOf(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const me = await this.me(ctx, c, v);
       const params: unknown[] = [];
-      const where = [`q.kind <> 'leave'`, this.visible(me, params)];
-      if (q.desk) {
-        params.push(q.desk);
-        where.push(`q.desk = $${params.length}`);
-      }
-      if (q.status === 'active') where.push(`q.status <> 'closed'`);
-      else if (q.status === 'overdue')
-        where.push(`q.status IN ('open', 'in_progress') AND q.due_at < now()`);
-      else if (q.status) {
-        params.push(q.status);
-        where.push(`q.status = $${params.length}::query_status`);
-      }
-      if (q.view === 'mine') {
-        params.push(me.userId);
-        where.push(`q.raised_by_user_id = $${params.length}`);
-      } else if (q.view === 'assigned') where.push(this.ownerSql(me, params));
-      if (q.head) {
-        params.push(q.head);
-        where.push(`q.category_code = $${params.length}`);
-      }
-      if (q.q) {
-        params.push(q.q);
-        where.push(
-          `concat_ws(' ', q.number, q.subject, s.display_name, s.admission_no, ru.display_name) ILIKE '%' || $${params.length} || '%'`,
-        );
-      }
-      const w = where.join(' AND ');
+      const w = this.filterSql(me, q, params);
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments with numbered placeholders; values bound
         `SELECT count(*)::int AS n FROM parent_queries q LEFT JOIN students s ON s.id = q.student_id LEFT JOIN users ru ON ru.id = q.raised_by_user_id WHERE ${w}`,
@@ -343,7 +358,7 @@ export class HelpdeskService {
       const r = await c.query<Row>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w holds fixed fragments; values bound
         `${SELECT} WHERE ${w}
-          ORDER BY (q.status = 'closed'), (q.status IN ('open', 'in_progress') AND q.due_at < now()) DESC, q.opened_at DESC
+          ORDER BY q.opened_at DESC, q.id DESC
           LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
@@ -1206,33 +1221,8 @@ export class HelpdeskService {
     });
   }
 
-  /** The tickets behind a dashboard count, as Excel. */
-  async report(
-    ctx: RequestContext,
-    q: HelpdeskReportDto,
-  ): Promise<{ bytes: Buffer; filename: string }> {
-    const v = await this.viewerOf(ctx);
-    const rows = await this.db.tenant(requireTenant(ctx), async (c) => {
-      const me = await this.me(ctx, c, v);
-      const params: unknown[] = [q.month];
-      const cond = this.visible(me, params);
-      const inMonth = (col: string) =>
-        `${col} >= ($1 || '-01')::date::timestamp AT TIME ZONE 'Asia/Kolkata' AND ${col} < (($1 || '-01')::date + interval '1 month')::date::timestamp AT TIME ZONE 'Asia/Kolkata'`;
-      const bucket = {
-        raised: inMonth('q.opened_at'),
-        resolved: inMonth('q.closed_at'),
-        escalated: `${inMonth('q.opened_at')} AND (q.level > 1 OR q.escalated_at IS NOT NULL)`,
-        breached: `${inMonth('q.opened_at')} AND q.breached_at IS NOT NULL`,
-        open: `${inMonth('q.opened_at')} AND q.status <> 'closed'`,
-      }[q.bucket];
-      if (q.desk) params.push(q.desk);
-      const r = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; bucket and cond are fixed fragments; values bound
-        `${SELECT} WHERE q.kind <> 'leave' AND ${bucket} AND ${cond} ${q.desk ? `AND q.desk = $${params.length}` : ''} ORDER BY q.opened_at`,
-        params,
-      );
-      return r.rows.map(toTicket);
-    });
+  /** One sheet of tickets (the dashboard counts and the desk list share it). */
+  private workbook(rows: TicketRow[], title: string): ExcelJS.Workbook {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Helpdesk');
     const ist = (v: string | null) =>
@@ -1242,9 +1232,7 @@ export class HelpdeskService {
             .slice(0, 16)
             .replace('T', ' ')
         : '';
-    ws.addRow([
-      `Helpdesk · ${q.month} · ${q.desk ? DESK_LABEL[q.desk] : 'All desks'} · ${q.bucket} · ${String(rows.length)} tickets`,
-    ]);
+    ws.addRow([title]);
     ws.getRow(1).font = { bold: true, size: 13 };
     const header = ws.addRow([
       'Number',
@@ -1292,6 +1280,116 @@ export class HelpdeskService {
       ws.getColumn(i + 1).width = w;
     });
     ws.views = [{ state: 'frozen', ySplit: 2 }];
+    return wb;
+  }
+
+  /** The desk list as it is filtered on screen, as Excel straight away (latest first). */
+  async listXlsx(
+    ctx: RequestContext,
+    q: ExportTicketsDto,
+  ): Promise<{ bytes: Buffer; filename: string }> {
+    const v = await this.viewerOf(ctx);
+    const rows = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = await this.me(ctx, c, v);
+      const params: unknown[] = [];
+      const w = this.filterSql(me, q, params);
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w holds fixed fragments; the limit is a number; values bound
+        `${SELECT} WHERE ${w} ORDER BY q.opened_at DESC, q.id DESC LIMIT ${String(EXPORT_MAX)}`,
+        params,
+      );
+      return r.rows.map(toTicket);
+    });
+    const wb = this.workbook(rows, this.exportTitle(q, rows.length));
+    const out = await wb.xlsx.writeBuffer();
+    return {
+      bytes: Buffer.from(out as ArrayBuffer),
+      filename: `helpdesk-${q.desk ?? 'all'}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    };
+  }
+
+  /**
+   * The same list as a PDF through the export queue. What a person may see depends on who they are, so
+   * the tickets are chosen here and the worker only prints those ids.
+   */
+  async listPdf(ctx: RequestContext, q: ExportTicketsDto): Promise<{ id: string }> {
+    const v = await this.viewerOf(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = await this.me(ctx, c, v);
+      const params: unknown[] = [];
+      const w = this.filterSql(me, q, params);
+      const ids = await c.query<{ id: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- w holds fixed fragments; the limit is a number; values bound
+        `SELECT q.id::text FROM parent_queries q LEFT JOIN students s ON s.id = q.student_id LEFT JOIN users ru ON ru.id = q.raised_by_user_id
+          WHERE ${w} ORDER BY q.opened_at DESC, q.id DESC LIMIT ${String(EXPORT_MAX)}`,
+        params,
+      );
+      if (!ids.rows.length)
+        throw new DomainError('validation-failed', 'There are no tickets for these filters.', {
+          status: 400,
+        });
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id)
+         VALUES (app.current_school_id(), 'helpdesk_tickets', 'pdf', $1::jsonb, $2, app.current_user_id(), app.current_request_id())
+         RETURNING id::text`,
+        [JSON.stringify({ ids: ids.rows.map((x) => x.id) }), this.exportTitle(q, ids.rows.length)],
+      );
+      const id = r.rows[0]!.id;
+      await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: id });
+      await this.audit.stage(ctx, c, {
+        action: 'helpdesk.ticket.list_export',
+        entityType: 'exports',
+        entityId: id,
+        after: { format: 'pdf', tickets: ids.rows.length, desk: q.desk ?? null },
+      });
+      return { id };
+    });
+  }
+
+  private exportTitle(q: ExportTicketsDto, n: number): string {
+    const status = { active: 'not closed', overdue: 'past due' }[q.status as string] ?? q.status;
+    return [
+      q.desk ? DESK_LABEL[q.desk] : 'Helpdesk',
+      status,
+      q.view === 'mine' ? 'raised by me' : q.view === 'assigned' ? 'assigned to me' : null,
+      q.q ? `"${q.q}"` : null,
+      `${String(n)} tickets`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  /** The tickets behind a dashboard count, as Excel. */
+  async report(
+    ctx: RequestContext,
+    q: HelpdeskReportDto,
+  ): Promise<{ bytes: Buffer; filename: string }> {
+    const v = await this.viewerOf(ctx);
+    const rows = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = await this.me(ctx, c, v);
+      const params: unknown[] = [q.month];
+      const cond = this.visible(me, params);
+      const inMonth = (col: string) =>
+        `${col} >= ($1 || '-01')::date::timestamp AT TIME ZONE 'Asia/Kolkata' AND ${col} < (($1 || '-01')::date + interval '1 month')::date::timestamp AT TIME ZONE 'Asia/Kolkata'`;
+      const bucket = {
+        raised: inMonth('q.opened_at'),
+        resolved: inMonth('q.closed_at'),
+        escalated: `${inMonth('q.opened_at')} AND (q.level > 1 OR q.escalated_at IS NOT NULL)`,
+        breached: `${inMonth('q.opened_at')} AND q.breached_at IS NOT NULL`,
+        open: `${inMonth('q.opened_at')} AND q.status <> 'closed'`,
+      }[q.bucket];
+      if (q.desk) params.push(q.desk);
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; bucket and cond are fixed fragments; values bound
+        `${SELECT} WHERE q.kind <> 'leave' AND ${bucket} AND ${cond} ${q.desk ? `AND q.desk = $${params.length}` : ''} ORDER BY q.opened_at`,
+        params,
+      );
+      return r.rows.map(toTicket);
+    });
+    const wb = this.workbook(
+      rows,
+      `Helpdesk · ${q.month} · ${q.desk ? DESK_LABEL[q.desk] : 'All desks'} · ${q.bucket} · ${String(rows.length)} tickets`,
+    );
     const out = await wb.xlsx.writeBuffer();
     return {
       bytes: Buffer.from(out as ArrayBuffer),

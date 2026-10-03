@@ -7,6 +7,7 @@ import {
   FormRow,
   InputField,
   PageHeader,
+  Stars,
   SelectField,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
@@ -65,11 +66,7 @@ export default async function QueryPage({
                 {e(`decisions.${q.decision}`)}
               </Badge>
             ) : null}
-            {q.rating ? (
-              <Badge tone="info">
-                {e('rating')} {q.rating}/5
-              </Badge>
-            ) : null}
+            {q.rating ? <Stars value={q.rating} /> : null}
           </span>
         }
       />
@@ -116,7 +113,7 @@ export default async function QueryPage({
           </ul>
           {q.ratingComment ? (
             <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
-              {e('rating')}: {q.rating}/5 · {q.ratingComment}
+              {e('rating')}: <Stars value={q.rating ?? 0} /> · {q.ratingComment}
             </p>
           ) : null}
         </Card>

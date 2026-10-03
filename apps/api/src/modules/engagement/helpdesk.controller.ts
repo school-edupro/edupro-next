@@ -9,6 +9,7 @@ import {
   CloseTicketDto,
   CreateTicketDto,
   DeskSchema,
+  ExportTicketsDto,
   HELPDESK,
   HeadDto,
   HelpdeskReportDto,
@@ -37,6 +38,31 @@ export class HelpdeskController {
   list(@ReqCtx() ctx: RequestContext, @Query() q: ListTicketsDto) {
     this.helpdesk.assertAny(ctx);
     return this.helpdesk.list(ctx, q);
+  }
+
+  @Get('tickets.xlsx')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'The filtered ticket list as Excel, latest first' })
+  async listXlsx(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: ExportTicketsDto,
+    @Res() reply: FastifyReply,
+  ) {
+    this.helpdesk.assertAny(ctx);
+    const { bytes, filename } = await this.helpdesk.listXlsx(ctx, q);
+    void reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(bytes);
+  }
+
+  @Post('tickets/export-pdf')
+  @HttpCode(202)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Queue the filtered ticket list as a PDF; returns the export id' })
+  listPdf(@ReqCtx() ctx: RequestContext, @Body() q: ExportTicketsDto) {
+    this.helpdesk.assertAny(ctx);
+    return this.helpdesk.listPdf(ctx, q);
   }
 
   @Post('tickets')

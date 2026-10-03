@@ -1,4 +1,4 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Button, Card, PageHeader, StarInput, Stars } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
@@ -238,13 +238,11 @@ export default async function QueryPage({
         <Card title={t(lang, 'How was this handled?')} style={{ marginTop: 'var(--sp-3)' }}>
           <form action={rateQuery} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
             <input type="hidden" name="id" value={q.id} />
-            <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <label key={n} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                  <input type="radio" name="rating" value={n} defaultChecked={n === 5} /> {n}
-                </label>
-              ))}
-            </div>
+            <StarInput
+              name="rating"
+              label={t(lang, 'Rating')}
+              starLabel={(n) => `${String(n)} / 5`}
+            />
             <input
               className="ep-input"
               name="comment"
@@ -261,8 +259,8 @@ export default async function QueryPage({
         </Card>
       ) : q.rating ? (
         <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
-          {t(lang, 'You rated this')} {q.rating}/5
-          {q.ratingComment ? ` · ${q.ratingComment}` : ''}.
+          {t(lang, 'You rated this')} <Stars value={q.rating} />
+          {q.ratingComment ? ` · ${q.ratingComment}` : ''}
         </p>
       ) : null}
     </main>

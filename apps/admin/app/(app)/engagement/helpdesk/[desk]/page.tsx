@@ -1,5 +1,6 @@
 import { Badge, Button, Card, PageHeader, SelectField } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import {
@@ -12,6 +13,7 @@ import {
   when,
   type TicketList,
 } from '@/lib/helpdesk';
+import { exportTicketsPdf } from '@/lib/helpdesk-actions';
 
 type Search = {
   status?: string;
@@ -19,6 +21,8 @@ type Search = {
   head?: string;
   q?: string;
   page?: string;
+  size?: string;
+  export?: string;
   ok?: string;
   error?: string;
   detail?: string;
@@ -32,7 +36,9 @@ const INTRO: Record<string, string> = {
     'Tickets from school staff to the ERP provider. The provider answers here; late tickets reach the provider’s senior person.',
 };
 
-/** One helpdesk desk: tickets with filters, the SLA status and paging. */
+const SIZES = ['10', '25', '50', '100'];
+
+/** One helpdesk desk: tickets latest first, with filters, the SLA status, pages and Excel / PDF. */
 export default async function DeskPage({
   params,
   searchParams,
@@ -49,11 +55,12 @@ export default async function DeskPage({
   const filters = Object.fromEntries(
     Object.entries({ desk, status, view, head: sp.head, q: sp.q?.trim() }).filter(([, v]) => v),
   ) as Record<string, string>;
+  const size = SIZES.includes(sp.size ?? '') ? sp.size! : '25';
   const qs = (extra: Record<string, string>) =>
-    new URLSearchParams({ ...filters, ...extra }).toString();
+    new URLSearchParams({ ...filters, ...(size === '25' ? {} : { size }), ...extra }).toString();
   const [me, list, heads] = await Promise.all([
     getMe(),
-    apiFetch<TicketList>(`/helpdesk/tickets?${qs({ page: String(page), size: '25' })}`),
+    apiFetch<TicketList>(`/helpdesk/tickets?${qs({ page: String(page), size })}`),
     apiFetch<{ data: Array<{ code: string; name: string }> }>(`/helpdesk/heads/${desk}`),
   ]);
   const canRaise = desk !== 'parent' && me.permissions.includes('helpdesk.ticket.raise');
@@ -77,6 +84,19 @@ export default async function DeskPage({
         }
       />
       <Notice params={sp} />
+      {sp.export ? (
+        <ExportWatcher
+          id={sp.export}
+          format="pdf"
+          labels={{
+            queued: 'PDF requested',
+            ready: 'Download',
+            pending: 'Preparing the PDF…',
+            failed: 'The PDF could not be made',
+            stuck: 'Still waiting: the workers service makes the files; check that it is running.',
+          }}
+        />
+      ) : null}
       <div className="ep-filter-band">
         <form method="get" className="ep-dlog__filters">
           <SelectField
@@ -125,13 +145,43 @@ export default async function DeskPage({
               maxLength={80}
             />
           </label>
+          <SelectField
+            id="hd-size"
+            name="size"
+            label="Rows per page"
+            defaultValue={size}
+            options={SIZES.map((v) => ({ value: v, label: v }))}
+          />
           <Button type="submit">Show</Button>
         </form>
       </div>
       <Card>
-        <p className="ep-field__help" style={{ marginTop: 0 }} aria-live="polite">
-          {list.page.total ? `${String(list.page.total)} tickets` : 'No tickets for these filters.'}
-        </p>
+        <div className="ep-hd__listhead">
+          <p className="ep-field__help" style={{ margin: 0 }} aria-live="polite">
+            {list.page.total
+              ? `${String(list.page.total)} tickets · latest first`
+              : 'No tickets for these filters.'}
+          </p>
+          {list.page.total ? (
+            <span className="ep-cdash__export">
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/api/helpdesk/list?${new URLSearchParams(filters).toString()}`}
+                download
+              >
+                Excel
+              </a>
+              <form action={exportTicketsPdf}>
+                {Object.entries(filters).map(([k, v]) => (
+                  <input key={k} type="hidden" name={k} value={v} />
+                ))}
+                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                  PDF
+                </button>
+              </form>
+            </span>
+          ) : null}
+        </div>
         {list.data.length ? (
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={DESK_LABEL[desk]}>
             <table className="ep-table ep-table--dense">

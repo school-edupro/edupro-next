@@ -1,4 +1,14 @@
-import { Alert, Badge, Breadcrumbs, Button, Card, PageHeader, SelectField } from '@edupro/ui';
+import {
+  Alert,
+  Badge,
+  Breadcrumbs,
+  Button,
+  Card,
+  PageHeader,
+  SelectField,
+  StarInput,
+  Stars,
+} from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
@@ -147,7 +157,13 @@ export default async function TicketPage({
     ...(t.closedAt ? ([['Closed', when(t.closedAt)]] as Array<[string, React.ReactNode]>) : []),
     ...(t.rating
       ? ([
-          ['Rating', `${'★'.repeat(t.rating)}${t.ratingComment ? ` · ${t.ratingComment}` : ''}`],
+          [
+            'Rating',
+            <>
+              <Stars value={t.rating} />
+              {t.ratingComment ? ` · ${t.ratingComment}` : ''}
+            </>,
+          ],
         ] as Array<[string, React.ReactNode]>)
       : []),
   ];
@@ -305,16 +321,7 @@ export default async function TicketPage({
             <Card title="How was it handled?" style={{ marginTop: 'var(--sp-4)' }}>
               <form action={rateTicket} className="ep-hd__form ep-hd__row">
                 {hidden}
-                <SelectField
-                  id="rating"
-                  name="rating"
-                  label="Rating"
-                  defaultValue="5"
-                  options={[5, 4, 3, 2, 1].map((n) => ({
-                    value: String(n),
-                    label: `${'★'.repeat(n)} (${String(n)})`,
-                  }))}
-                />
+                <StarInput name="rating" label="Rating" />
                 <label className="ep-field" htmlFor="rate-c">
                   <span className="ep-field__label">Comment (optional)</span>
                   <input id="rate-c" name="comment" className="ep-input" maxLength={500} />

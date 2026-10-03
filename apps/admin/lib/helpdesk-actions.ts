@@ -233,3 +233,27 @@ export async function saveHead(
     }),
   );
 }
+
+/** Queues the desk list (with the filters on screen) as a PDF and returns to the desk to watch it. */
+export async function exportTicketsPdf(fd: FormData) {
+  const desk = str(fd, 'desk');
+  const path = `/engagement/helpdesk/${['parent', 'staff', 'provider'].includes(desk) ? desk : 'staff'}`;
+  const filters: Record<string, string> = {};
+  for (const k of ['status', 'view', 'head', 'q']) {
+    const v = str(fd, k);
+    if (v) filters[k] = v;
+  }
+  const here = `${path}?${new URLSearchParams(filters).toString()}`;
+  let id = '';
+  try {
+    id = (
+      await apiFetch<{ id: string }>('/helpdesk/tickets/export-pdf', {
+        method: 'POST',
+        body: JSON.stringify({ desk, ...filters }),
+      })
+    ).id;
+  } catch (error) {
+    back(here, error);
+  }
+  redirect(`${here}&export=${id}`);
+}

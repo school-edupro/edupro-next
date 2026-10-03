@@ -1,4 +1,4 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Button, Card, PageHeader, StarInput } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { FileLinks } from '@/components/FileLinks';
@@ -337,11 +337,11 @@ export default async function TicketPage({
             style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', alignItems: 'center' }}
           >
             <input type="hidden" name="id" value={q.id} />
-            {[1, 2, 3, 4, 5].map((n) => (
-              <label key={n} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                <input type="radio" name="rating" value={n} defaultChecked={n === 5} /> {n}
-              </label>
-            ))}
+            <StarInput
+              name="rating"
+              label={t(lang, 'Rating')}
+              starLabel={(n) => `${String(n)} / 5`}
+            />
             <Button type="submit" variant="secondary">
               {t(lang, 'Rate')}
             </Button>

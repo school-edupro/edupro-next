@@ -146,9 +146,14 @@ export class QueriesService {
       const params: unknown[] = [];
       const where: string[] = [];
       this.visibility(v, where, params);
-      if (q.status) {
+      if (q.status === 'active') where.push(`q.status <> 'closed'`);
+      else if (q.status) {
         params.push(q.status);
         where.push(`q.status = $${params.length}::query_status`);
+      }
+      if (q.q) {
+        params.push(q.q);
+        where.push(`concat_ws(' ', q.number, q.subject) ILIKE '%' || $${params.length} || '%'`);
       }
       if (q.kind) {
         params.push(q.kind);
@@ -170,8 +175,8 @@ export class QueriesService {
       );
       params.push(q.size, (q.page - 1) * q.size);
       const r = await c.query<Record<string, unknown>>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; whereSql holds fixed fragments; values are bound parameters
-        `${SELECT} WHERE ${whereSql} ORDER BY (q.status IN ('open', 'in_progress')) DESC, q.opened_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; whereSql and the order are fixed fragments; values are bound parameters
+        `${SELECT} WHERE ${whereSql} ORDER BY ${q.order === 'latest' ? '' : `(q.status IN ('open', 'in_progress')) DESC, `}q.opened_at DESC, q.id DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
       return {

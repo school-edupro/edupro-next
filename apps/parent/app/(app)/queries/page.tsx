@@ -1,4 +1,13 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  InputField,
+  PageHeader,
+  SelectField,
+  StarInput,
+  Stars,
+} from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
@@ -43,21 +52,70 @@ const KIND: Record<Query['kind'], string> = {
   leave: 'Leave request',
 };
 
-/** S10: the family's queries, complaints and leave requests, plus quick feedback. */
+const PAGE_SIZE = 10;
+const STATUSES = ['active', 'open', 'in_progress', 'answered', 'closed'];
+const KINDS = ['query', 'complaint', 'leave'];
+
+/**
+ * S10: the family's queries, complaints and leave requests, latest first, with filters (status, type,
+ * child, search) and pages, plus quick feedback.
+ */
 export default async function QueriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    kind?: string;
+    student?: string;
+    q?: string;
+    page?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  const filters = Object.fromEntries(
+    Object.entries({
+      status: STATUSES.includes(sp.status ?? '') ? sp.status : undefined,
+      kind: KINDS.includes(sp.kind ?? '') ? sp.kind : undefined,
+      studentId: /^\d{1,18}$/.test(sp.student ?? '') ? sp.student : undefined,
+      q: sp.q?.trim().slice(0, 80) || undefined,
+    }).filter(([, v]) => v),
+  ) as Record<string, string>;
+  const filtered = Object.keys(filters).length > 0;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const api = new URLSearchParams({
+    ...filters,
+    order: 'latest',
+    size: String(PAGE_SIZE),
+    page: String(page),
+  });
+  /** A link to another page that keeps the filters. */
+  const href = (n: number) => {
+    const u = new URLSearchParams({
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.kind ? { kind: filters.kind } : {}),
+      ...(filters.studentId ? { student: filters.studentId } : {}),
+      ...(filters.q ? { q: filters.q } : {}),
+      page: String(n),
+    });
+    return `/queries?${u.toString()}`;
+  };
   let queries: Query[];
+  let total: number;
   let viewer: Viewer;
   try {
-    [queries, viewer] = await Promise.all([
-      bff.api.fetch<{ data: Query[] }>('/engagement/mine/queries?size=50').then((r) => r.data),
+    const [list, v] = await Promise.all([
+      bff.api.fetch<{ data: Query[]; page: { total: number } }>(
+        `/engagement/mine/queries?${api.toString()}`,
+      ),
       bff.api.fetch<Viewer>('/academics/daily-work/viewer'),
     ]);
+    queries = list.data;
+    total = list.page.total;
+    viewer = v;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -79,7 +137,7 @@ export default async function QueriesPage({
       <PageHeader
         kicker={t(lang, 'Queries')}
         title={t(lang, 'Queries, complaints and leave')}
-        description={`${queries.filter((q) => q.status !== 'closed').length} ${t(lang, 'open')} · ${queries.length} ${t(lang, 'in all')}`}
+        description={`${String(total)} ${t(lang, filtered ? 'found' : 'in all')} · ${t(lang, 'latest first')}`}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             <a className="ep-btn ep-btn--primary ep-btn--sm" href="/queries/new">
@@ -109,12 +167,76 @@ export default async function QueriesPage({
           {sp.detail || sp.error}
         </div>
       ) : null}
+      <Card style={{ marginBottom: 'var(--sp-3)' }}>
+        <form
+          method="get"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
+        >
+          <SelectField
+            id="f-status"
+            name="status"
+            label={t(lang, 'Status')}
+            defaultValue={filters.status ?? ''}
+            options={[
+              { value: '', label: t(lang, 'All') },
+              { value: 'active', label: t(lang, 'Not closed') },
+              ...(['open', 'in_progress', 'answered', 'closed'] as const).map((v) => ({
+                value: v,
+                label: t(lang, LABEL[v]),
+              })),
+            ]}
+          />
+          <SelectField
+            id="f-kind"
+            name="kind"
+            label={t(lang, 'Type')}
+            defaultValue={filters.kind ?? ''}
+            options={[
+              { value: '', label: t(lang, 'All') },
+              ...(['query', 'complaint', 'leave'] as const).map((v) => ({
+                value: v,
+                label: t(lang, KIND[v]),
+              })),
+            ]}
+          />
+          {viewer.students.length > 1 ? (
+            <SelectField
+              id="f-student"
+              name="student"
+              label={t(lang, 'Child')}
+              defaultValue={filters.studentId ?? ''}
+              options={[
+                { value: '', label: t(lang, 'All') },
+                ...viewer.students.map((s) => ({ value: s.id, label: s.name })),
+              ]}
+            />
+          ) : null}
+          <InputField
+            id="f-q"
+            name="q"
+            type="search"
+            label={t(lang, 'Number or subject')}
+            defaultValue={filters.q ?? ''}
+            maxLength={80}
+          />
+          <Button type="submit" variant="secondary">
+            {t(lang, 'Show')}
+          </Button>
+          {filtered ? (
+            <a className="ep-btn ep-btn--ghost" href="/queries">
+              {t(lang, 'Clear')}
+            </a>
+          ) : null}
+        </form>
+      </Card>
       {queries.length === 0 ? (
         <Card>
-          {t(
-            lang,
-            'No queries yet. Use New request to ask the school something, report a problem or apply for leave.',
-          )}
+          {filtered
+            ? t(lang, 'Nothing matches these filters.')
+            : t(
+                lang,
+                'No queries yet. Use New request to ask the school something, report a problem or apply for leave.',
+              )}
         </Card>
       ) : null}
       {queries.map((q) => (
@@ -150,12 +272,37 @@ export default async function QueriesPage({
                     {t(lang, q.decision)}
                   </Badge>
                 ) : null}
-                {q.rating ? <Badge tone="info">{'★'.repeat(q.rating)}</Badge> : null}
+                {q.rating ? <Stars value={q.rating} /> : null}
               </span>
             </div>
           </Card>
         </a>
       ))}
+      {total > PAGE_SIZE ? (
+        <nav
+          aria-label={t(lang, 'Pages')}
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {page > 1 ? (
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={href(page - 1)}>
+              ← {t(lang, 'Previous')}
+            </a>
+          ) : null}
+          <span className="ep-field__help">
+            {t(lang, 'Page')} {page} / {Math.ceil(total / PAGE_SIZE)}
+          </span>
+          {page * PAGE_SIZE < total ? (
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={href(page + 1)}>
+              {t(lang, 'Next')} →
+            </a>
+          ) : null}
+        </nav>
+      ) : null}
       <Card title={t(lang, 'Quick feedback')} style={{ marginTop: 'var(--sp-4)' }}>
         <form action={giveFeedback} style={{ display: 'grid', gap: 'var(--sp-2)' }}>
           <input type="hidden" name="studentId" value={viewer.students[0]?.id ?? ''} />
@@ -176,16 +323,12 @@ export default async function QueriesPage({
               ))}
             </select>
           </label>
-          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend className="ep-field__label">{t(lang, 'Rating')}</legend>
-            <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <label key={n} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                  <input type="radio" name="rating" value={n} defaultChecked={n === 5} /> {n}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <StarInput
+            id="fb-rating"
+            name="rating"
+            label={t(lang, 'Rating')}
+            starLabel={(n) => `${String(n)} / 5`}
+          />
           <label className="ep-field">
             <span className="ep-field__label">{t(lang, 'Comment (optional)')}</span>
             <input className="ep-input" name="comment" maxLength={1000} />
