@@ -1,10 +1,22 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
-import { PublicApiError, VISIT_STATE, langOf, t, visitFetch, whenIst, type Visit } from '@/lib/api';
+import {
+  PublicApiError,
+  VISIT_STATE,
+  langOf,
+  svgSrc,
+  t,
+  visitFetch,
+  whenIst,
+  type Visit,
+} from '@/lib/api';
 
-type Pass = Visit & { school: string; instructions: string | null };
+type Pass = Visit & { school: string; instructions: string | null; visitorOrg: string | null };
 
-/** The gate pass behind the link in the confirmation message: the QR code the gate scans. */
+/**
+ * The gate pass behind the link in the confirmation message, laid out like the visitor card: who is
+ * coming, from where, how many, why and to whom, with the barcode and the QR the gate scans.
+ */
 export default async function PassPage({
   params,
   searchParams,
@@ -31,11 +43,45 @@ export default async function PassPage({
       />
       <Card>
         <div className="ep-appt__poster">
+          <p className="ep-kicker" style={{ margin: 0 }}>
+            {t(lang, 'VISITOR', 'आगंतुक')} · {pass.number}
+          </p>
+          <p className="ep-pass__name">
+            {pass.visitorName}
+            {pass.partySize > 1 ? ` + ${String(pass.partySize - 1)}` : ''}
+          </p>
+          <dl className="ep-hd__facts ep-pass__facts">
+            {(
+              [
+                [t(lang, 'Coming from', 'कहाँ से'), pass.visitorOrg],
+                [t(lang, 'To meet', 'किससे मिलना है'), pass.host],
+                [t(lang, 'When', 'कब'), pass.startsAt ? whenIst(pass.startsAt, lang) : null],
+                [t(lang, 'Where', 'कहाँ'), pass.place],
+                [t(lang, 'Purpose', 'कारण'), pass.purpose],
+              ] as Array<[string, string | null]>
+            )
+              .filter(([, v]) => v)
+              .map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+          </dl>
           {pass.passQr ? (
-            <img
-              src={`data:image/svg+xml;utf8,${encodeURIComponent(pass.passQr)}`}
-              alt={t(lang, 'QR code of this pass', 'इस पास का क्यूआर कोड')}
-            />
+            <>
+              <img
+                src={svgSrc(pass.passQr)}
+                alt={t(lang, 'QR code of this pass', 'इस पास का क्यूआर कोड')}
+              />
+              {pass.barcode ? (
+                <img
+                  className="ep-appt__barcode"
+                  src={svgSrc(pass.barcode)}
+                  alt={t(lang, 'Barcode of this pass', 'इस पास का बारकोड')}
+                />
+              ) : null}
+            </>
           ) : (
             <p className="ep-alert ep-alert--warning" role="status">
               {pass.state === 'requested'
@@ -47,21 +93,12 @@ export default async function PassPage({
                 : t(lang, 'This pass is no longer valid.', 'यह पास अब मान्य नहीं है।')}
             </p>
           )}
-          <p style={{ margin: 0 }}>
-            <strong>{pass.number}</strong> · {pass.visitorName}
-            {pass.partySize > 1 ? ` + ${String(pass.partySize - 1)}` : ''}
-          </p>
-          <p style={{ margin: 0 }}>
-            {pass.host}
-            {pass.startsAt ? ` · ${whenIst(pass.startsAt, lang)}` : ''}
-            {pass.place ? ` · ${pass.place}` : ''}
-          </p>
           {pass.instructions ? <p className="ep-field__help">{pass.instructions}</p> : null}
           <p className="ep-field__help">
             {t(
               lang,
-              'Show this code at the gate with the ID proof you named.',
-              'गेट पर यह कोड और बताया हुआ पहचान पत्र दिखाएँ।',
+              'Show this at the gate on the day of the appointment with the ID proof you named.',
+              'मुलाक़ात के दिन गेट पर यह और बताया हुआ पहचान पत्र दिखाएँ।',
             )}
           </p>
         </div>

@@ -94,6 +94,8 @@ describe('permission coverage', () => {
       'PublicAppointmentsController.cancel (public/appointments)',
       'PublicAppointmentsController.info (public/appointments)',
       'PublicAppointmentsController.mine (public/appointments)',
+      'PublicAppointmentsController.mineGet (public/appointments)',
+      'PublicAppointmentsController.minePhoto (public/appointments)',
       'PublicAppointmentsController.pass (public/appointments)',
       'PublicAppointmentsController.slots (public/appointments)',
       'PunchController.ingest (attendance/punch)',

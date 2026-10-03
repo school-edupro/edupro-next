@@ -22,10 +22,10 @@ import {
 } from './helpers';
 
 /** The next school day (Monday to Friday, India time) at least `min` days ahead, as YYYY-MM-DD. */
-function schoolDay(min: number): string {
+function schoolDay(min: number, anyDay = false): string {
   for (let i = min; i < min + 7; i += 1) {
     const d = new Date(Date.now() + 330 * 60_000 + i * 86_400_000);
-    if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5) return d.toISOString().slice(0, 10);
+    if (anyDay || (d.getUTCDay() >= 1 && d.getUTCDay() <= 5)) return d.toISOString().slice(0, 10);
   }
   throw new Error('no school day');
 }
@@ -44,6 +44,8 @@ describe('appointments v2 (e2e)', () => {
   let school: SeededSchool;
   let other: SeededSchool;
   let admin: SeededUser;
+  let principal: SeededUser;
+  let guard: SeededUser;
   let teacher: SeededUser;
   let parent: SeededUser;
   let s: string;
@@ -97,6 +99,14 @@ describe('appointments v2 (e2e)', () => {
       school = await seedSchool(c, `${s}A`);
       other = await seedSchool(c, `${s}B`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
+      // the admin here also works the front desk and the gate; the principal is a plain school admin
+      await c.query(
+        `INSERT INTO user_roles (school_id, user_id, role_id, reason)
+         SELECT $1, $2, id, 'e2e' FROM roles WHERE school_id IS NULL AND code IN ('front_desk', 'gate_security')`,
+        [school.id, admin.id],
+      );
+      principal = await seedUser(c, school, `${s}-principal`, 'school_admin');
+      guard = await seedUser(c, school, `${s}-guard`, 'gate_security');
       teacher = await seedUser(c, school, `${s}-teacher`, 'class_teacher');
       parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
       await c.query(
@@ -245,6 +255,24 @@ describe('appointments v2 (e2e)', () => {
     expect(
       (await inject({ method: 'GET', url: '/appointments/setup', headers: h(teacher) })).statusCode,
     ).toBe(403);
+    // the principal (a school admin) keeps the set-up but is not the front desk or the gate
+    expect(
+      (await inject({ method: 'GET', url: '/appointments/setup', headers: h(principal) }))
+        .statusCode,
+    ).toBe(200);
+    for (const url of ['/appointments', '/appointments/dashboard', '/appointments/gate/board'])
+      expect((await inject({ method: 'GET', url, headers: h(principal) })).statusCode).toBe(403);
+    expect(
+      (await inject({ method: 'GET', url: '/appointments/with-me', headers: h(principal) })).json(),
+    ).toEqual({ data: [] });
+    // the gate sees its own screen only
+    expect(
+      (await inject({ method: 'GET', url: '/appointments/gate/board', headers: h(guard) }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await inject({ method: 'GET', url: '/appointments', headers: h(guard) })).statusCode,
+    ).toBe(403);
     // a teacher is not the front desk: no queue, no decisions
     expect(
       (await inject({ method: 'GET', url: '/appointments', headers: h(teacher) })).statusCode,
@@ -347,6 +375,11 @@ describe('appointments v2 (e2e)', () => {
       hostName: 'Class teacher',
       withName: 'Tanvi Rao',
     });
+    // the teacher does not see it until the front desk has confirmed it
+    expect(
+      (await inject({ method: 'GET', url: '/appointments/with-me', headers: h(teacher) })).json()
+        .data,
+    ).toEqual([]);
     const ok = await inject({
       method: 'POST',
       url: `/appointments/${ids.parent}/approve`,
@@ -366,6 +399,25 @@ describe('appointments v2 (e2e)', () => {
     ).json();
     expect(mine.data[0]).toMatchObject({ id: ids.parent, state: 'approved', place: 'Staff room' });
     expect(mine.data[0].passLink).toContain(`/${school.code.toLowerCase()}/pass/`);
+    expect(mine.page).toMatchObject({ total: 1, size: 10 });
+    // the parent's list filters; one appointment opens with what was asked and what happened
+    const none = (
+      await inject({ method: 'GET', url: '/appointments/mine?state=past', headers: h(parent) })
+    ).json();
+    expect(none.page.total).toBe(0);
+    const found = (
+      await inject({
+        method: 'GET',
+        url: `/appointments/mine?state=open&q=reading&studentId=${studentId}`,
+        headers: h(parent),
+      })
+    ).json();
+    expect(found.data.map((x: { id: string }) => x.id)).toEqual([ids.parent]);
+    const detail = (
+      await inject({ method: 'GET', url: `/appointments/mine/${ids.parent}`, headers: h(parent) })
+    ).json();
+    expect(detail).toMatchObject({ purpose: 'Discuss reading progress', withName: 'Tanvi Rao' });
+    expect(detail.events.map((e: { kind: string }) => e.kind)).toEqual(['requested', 'approved']);
     // the teacher sees it among the appointments with her, without the parent's contact details
     const withMe = (
       await inject({ method: 'GET', url: '/appointments/with-me', headers: h(teacher) })
@@ -577,9 +629,39 @@ describe('appointments v2 (e2e)', () => {
         headers: {},
       })
     ).json();
+    expect(pass.barcode).toContain('<svg');
+    expect(pass.idProofLast4).toBeUndefined();
+    // the visitor opens the appointment and sees everything they filled in
+    const own = (
+      await inject({
+        method: 'GET',
+        url: `/public/appointments/${school.code}/mine/${ids.public}`,
+        headers: visitor,
+      })
+    ).json();
+    expect(own).toMatchObject({
+      visitorName: 'Vikram Mehta',
+      visitorOrg: 'Pune',
+      visitorEmail: 'vikram@example.com',
+      idProofKind: 'PAN',
+      idProofLast4: '123F',
+      partySize: 2,
+      hasPhoto: true,
+    });
+    expect(own.events.map((e: { kind: string }) => e.kind)).toEqual(['requested', 'rescheduled']);
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/public/appointments/${school.code}/mine/${ids.public}/photo`,
+          headers: visitor,
+        })
+      ).headers['content-type'],
+    ).toBe('image/png');
     expect(pass).toMatchObject({
       state: 'approved',
-      visitorName: 'Vikram',
+      visitorName: 'Vikram Mehta',
+      visitorOrg: 'Pune',
       instructions: 'Carry the ID you named.',
     });
     expect(
@@ -640,10 +722,37 @@ describe('appointments v2 (e2e)', () => {
         })
       ).json(),
     ).toMatchObject({ type: 'appointment.not_confirmed' });
+    // the appointment is for another day: no check-in before its day
+    const early = await inject({
+      method: 'POST',
+      url: `/appointments/${ids.public}/check-in`,
+      headers: h(guard),
+      json: {},
+    });
+    expect(early.json()).toMatchObject({ type: 'appointment.not_today' });
+    await withMigrator((c) =>
+      c.query(`UPDATE appointments SET starts_at = now() + interval '5 minutes' WHERE id = $1`, [
+        ids.public,
+      ]),
+    );
+    // the card the gate prints: what the visitor gave, the barcode and the QR
+    const card = (
+      await inject({ method: 'GET', url: `/appointments/${ids.public}/card`, headers: h(guard) })
+    ).json();
+    expect(card).toMatchObject({
+      visitorName: 'Vikram Mehta',
+      visitorOrg: 'Pune',
+      purpose: 'Admission enquiry',
+      idProofKind: 'PAN',
+      hostName: 'Admissions desk',
+      passCode: ids.pass,
+    });
+    expect(card.barcode).toContain('<svg');
+    expect(card.qr).toContain('<svg');
     const inn = await inject({
       method: 'POST',
       url: `/appointments/${ids.public}/check-in`,
-      headers: h(),
+      headers: h(guard),
       json: { badgeNo: 'V-07' },
     });
     expect(inn.statusCode).toBe(200);
@@ -736,7 +845,24 @@ describe('appointments v2 (e2e)', () => {
       })
     ).json();
     expect(free.slots[0]).toMatchObject({ time: '09:00', free: 1, available: true });
-    // about a pupil: the guardian on record is the one told
+    // about a pupil: found by name or admission number, with class and guardian to be sure who it is
+    const hits = (
+      await inject({ method: 'GET', url: '/appointments/students?q=aany', headers: h() })
+    ).json();
+    expect(hits.data).toEqual([
+      expect.objectContaining({
+        id: studentId,
+        name: 'Aanya Slot',
+        section: 'VI-A',
+        guardian: 'Rohit Slot',
+        mobileEnd: '0111',
+      }),
+    ]);
+    expect(
+      (await inject({ method: 'GET', url: `/appointments/students?q=${s}-1`, headers: h() })).json()
+        .data,
+    ).toHaveLength(1);
+    // the guardian on record is the one told
     const pupil = await inject({
       method: 'POST',
       url: '/appointments',
@@ -825,7 +951,7 @@ describe('appointments v2 (e2e)', () => {
     const cal = (
       await inject({
         method: 'GET',
-        url: `/appointments/calendar?from=${day}&to=${later}`,
+        url: `/appointments/calendar?from=${schoolDay(0, true)}&to=${later}`,
         headers: h(),
       })
     ).json();

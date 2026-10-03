@@ -4,18 +4,23 @@ import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { bookAppointment } from '@/lib/appointment-actions';
 import { hoursLine, today, type BookableHost, type SlotList } from '@/lib/appointments';
-import type { Page } from '@/lib/types';
 
 interface StudentHit {
   id: string;
+  name: string;
   admissionNo: string;
-  displayName: string;
+  section: string | null;
+  guardian: string | null;
+  relation: string | null;
+  mobileEnd: string | null;
 }
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The front desk books for a walk-in, a caller or a parent: pick whom to meet and the day, then a free
- * slot and the visitor's details. It is confirmed at once unless left as a request.
+ * slot and the visitor's details. A booking about a pupil starts with a search by name or admission
+ * number; the desk checks the class and the guardian and selects the pupil before any slot shows. It is
+ * confirmed at once unless left as a request.
  */
 export default async function NewAppointmentPage({
   searchParams,
@@ -23,7 +28,8 @@ export default async function NewAppointmentPage({
   searchParams: Promise<{
     host?: string;
     date?: string;
-    adm?: string;
+    sq?: string;
+    student?: string;
     error?: string;
     detail?: string;
   }>;
@@ -40,27 +46,40 @@ export default async function NewAppointmentPage({
   ]);
   const host = setup.data.find((h) => h.id === sp.host) ?? null;
   const date = DATE.test(sp.date ?? '') ? sp.date! : today();
-  const adm = sp.adm?.trim() ?? '';
-  // about a pupil: the admission number finds the pupil, the guardian on record is told
-  const student = adm
-    ? await apiFetch<Page<StudentHit>>(`/people/students?search=${encodeURIComponent(adm)}&size=5`)
-        .then((r) => r.data.find((x) => x.admissionNo.toLowerCase() === adm.toLowerCase()) ?? null)
-        .catch(() => null)
-    : null;
-  const slots = host
-    ? await apiFetch<SlotList>(
-        `/appointments/slots?${new URLSearchParams({
-          hostId: host.id,
-          date,
-          ...(student ? { studentId: student.id } : {}),
-        }).toString()}`,
-      )
-    : null;
+  const sq = sp.sq?.trim().slice(0, 80) ?? '';
+  // about a pupil: search, check who it is, select; the guardian on record is then the one told
+  const hits =
+    sq.length >= 2
+      ? await apiFetch<{ data: StudentHit[] }>(`/appointments/students?q=${encodeURIComponent(sq)}`)
+          .then((r) => r.data)
+          .catch(() => [])
+      : [];
+  const student = hits.find((x) => x.id === sp.student) ?? null;
+  // a search that is not yet settled on one pupil holds the slots back
+  const choosing = sq.length >= 2 && !student;
+  const slots =
+    host && !choosing
+      ? await apiFetch<SlotList>(
+          `/appointments/slots?${new URLSearchParams({
+            hostId: host.id,
+            date,
+            ...(student ? { studentId: student.id } : {}),
+          }).toString()}`,
+        )
+      : null;
   const here = `/engagement/appointments/new?${new URLSearchParams({
     ...(host ? { host: host.id } : {}),
     date,
-    ...(adm ? { adm } : {}),
+    ...(sq ? { sq } : {}),
+    ...(student ? { student: student.id } : {}),
   }).toString()}`;
+  /** This page with the search kept and one pupil selected (or the selection dropped). */
+  const pick = (id: string | null) =>
+    `/engagement/appointments/new?${new URLSearchParams({
+      ...(host ? { host: host.id } : {}),
+      date,
+      ...(id ? { sq, student: id } : {}),
+    }).toString()}`;
   return (
     <>
       <Breadcrumbs
@@ -100,10 +119,20 @@ export default async function NewAppointmentPage({
               defaultValue={date}
             />
           </label>
-          <label className="ep-field" htmlFor="nb-adm">
-            <span className="ep-field__label">Student admission no. (if about a pupil)</span>
-            <input id="nb-adm" name="adm" className="ep-input" maxLength={30} defaultValue={adm} />
+          <label className="ep-field" htmlFor="nb-sq">
+            <span className="ep-field__label">
+              Student name or admission no. (if about a pupil)
+            </span>
+            <input
+              id="nb-sq"
+              name="sq"
+              type="search"
+              className="ep-input"
+              maxLength={80}
+              defaultValue={sq}
+            />
           </label>
+          {student ? <input type="hidden" name="student" value={student.id} /> : null}
           <div>
             <Button type="submit" variant="secondary">
               Show slots
@@ -111,19 +140,77 @@ export default async function NewAppointmentPage({
           </div>
         </form>
         {host ? <p className="ep-field__help">Visiting hours: {hoursLine(host.hours)}</p> : null}
-        {adm && !student ? (
-          <Alert tone="warning">No student has the admission number {adm}.</Alert>
+        {sq.length === 1 ? (
+          <Alert tone="warning">Type at least two letters of the name or admission number.</Alert>
+        ) : null}
+        {choosing && hits.length === 0 ? (
+          <Alert tone="warning">No active student matches “{sq}”.</Alert>
+        ) : null}
+        {choosing && hits.length ? (
+          <div
+            className="ep-table-wrap"
+            tabIndex={0}
+            role="region"
+            aria-label="Matching students"
+            style={{ marginTop: 'var(--sp-3)' }}
+          >
+            <table className="ep-table ep-table--dense">
+              <caption>Check the class and the guardian, then select the student</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Student</th>
+                  <th scope="col">Admission no.</th>
+                  <th scope="col">Class</th>
+                  <th scope="col">Guardian</th>
+                  <th scope="col">
+                    <span className="ep-sr-only">Select</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {hits.map((x) => (
+                  <tr key={x.id}>
+                    <td>{x.name}</td>
+                    <td>{x.admissionNo}</td>
+                    <td>{x.section ?? '—'}</td>
+                    <td>
+                      {x.guardian ?? '—'}
+                      {x.relation || x.mobileEnd ? (
+                        <div className="ep-field__help">
+                          {[x.relation, x.mobileEnd ? `mobile ending ${x.mobileEnd}` : null]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <a
+                        className="ep-btn ep-btn--secondary ep-btn--sm"
+                        href={pick(x.id)}
+                        aria-label={`Select ${x.name}, ${x.admissionNo}`}
+                      >
+                        Select
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : null}
         {student ? (
-          <p className="ep-field__help">
-            About {student.displayName} ({student.admissionNo}). The guardian on record is told
-            unless you type another name and mobile below.
-          </p>
+          <Alert tone="success">
+            About <strong>{student.name}</strong> · {student.section ?? 'no class'} ·{' '}
+            {student.admissionNo}
+            {student.guardian
+              ? ` · ${student.guardian}${student.relation ? ` (${student.relation})` : ''}${student.mobileEnd ? `, mobile ending ${student.mobileEnd}` : ''}`
+              : ''}
+            . The guardian on record is told unless you type another name and mobile below.{' '}
+            <a href={pick(null)}>Change</a>
+          </Alert>
         ) : null}
         {host?.kind === 'class_teacher' && !student ? (
-          <Alert tone="warning">
-            Give the student’s admission number to find the class teacher.
-          </Alert>
+          <Alert tone="warning">Search and select the student to find the class teacher.</Alert>
         ) : null}
       </Card>
       {slots?.closed ? (

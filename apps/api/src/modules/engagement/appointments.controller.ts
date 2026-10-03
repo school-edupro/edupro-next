@@ -17,6 +17,7 @@ import {
   GateFindDto,
   HostDto,
   ListAppointmentsDto,
+  MineQueryDto,
   RejectDto,
   RescheduleDto,
   SlotsQueryDto,
@@ -38,8 +39,8 @@ export class AppointmentsController {
   @Get('mine')
   @RequirePermission(P.family)
   @ApiOperation({ summary: "My children's appointments, latest first" })
-  mine(@ReqCtx() ctx: RequestContext) {
-    return this.svc.familyList(ctx);
+  mine(@ReqCtx() ctx: RequestContext, @Query() q: MineQueryDto) {
+    return this.svc.familyList(ctx, q);
   }
 
   @Get('mine/hosts')
@@ -61,6 +62,13 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'A parent asks for a slot' })
   mineBook(@ReqCtx() ctx: RequestContext, @Body() dto: FamilyBookDto) {
     return this.svc.familyBook(ctx, dto);
+  }
+
+  @Get('mine/:id')
+  @RequirePermission(P.family)
+  @ApiOperation({ summary: "One of my children's appointments with its history" })
+  mineGet(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.familyGet(ctx, id);
   }
 
   @Post('mine/:id/cancel')
@@ -146,6 +154,13 @@ export class AppointmentsController {
     return this.svc.deskSlots(ctx, q, except && /^\d{1,18}$/.test(except) ? except : undefined);
   }
 
+  @Get('students')
+  @RequirePermission(P.decide)
+  @ApiOperation({ summary: 'Pupils by name or admission number, to book about one of them' })
+  students(@ReqCtx() ctx: RequestContext, @Query('q') q?: string) {
+    return this.svc.students(ctx, (q ?? '').slice(0, 80));
+  }
+
   @Get('calendar')
   @RequirePermission(P.view)
   @ApiOperation({ summary: 'Appointments between two dates for the calendar' })
@@ -182,6 +197,13 @@ export class AppointmentsController {
   gateBoard(@ReqCtx() ctx: RequestContext, @Query('found') found?: string) {
     const ids = (found ?? '').split(',').filter((x) => /^\d{1,18}$/.test(x));
     return this.svc.gateBoard(ctx, ids.slice(0, 10));
+  }
+
+  @Get(':id/card')
+  @RequirePermission(P.checkin)
+  @ApiOperation({ summary: 'The visitor card to print at the gate, with barcode and QR' })
+  card(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.card(ctx, id);
   }
 
   @Get(':id/gate-photo')

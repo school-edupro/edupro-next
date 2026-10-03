@@ -1,12 +1,13 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { cookies } from 'next/headers';
 import { OtpSignIn } from '@/components/OtpSignIn';
-import { VisitorPhoto } from '@/components/VisitorPhoto';
+import { VisitorCamera } from '@/components/VisitorCamera';
 import {
   COOKIE,
   PublicApiError,
   VISIT_STATE,
   langOf,
+  maskMobile,
   publicFetch,
   t,
   todayIst,
@@ -42,6 +43,8 @@ export default async function AppointmentPage({
     lang?: string;
     host?: string;
     date?: string;
+    kiosk?: string;
+    no?: string;
     ok?: string;
     error?: string;
   }>;
@@ -49,6 +52,8 @@ export default async function AppointmentPage({
   const { school } = await params;
   const sp = await searchParams;
   const lang = langOf(sp.lang);
+  // the school's own tablet at the gate: each visitor is signed out as soon as the request is in
+  const kiosk = sp.kiosk === '1';
   const info = await visitFetch<VisitInfo>(`/${school}`, {}, null);
   const token = (await cookies()).get(COOKIE)?.value;
   let me: { name: string | null; mobile: string } | null = null;
@@ -95,7 +100,7 @@ export default async function AppointmentPage({
       })
       .join(' · ');
   };
-  const self = `/${school}/appointment?lang=${lang}`;
+  const self = `/${school}/appointment?lang=${lang}${kiosk ? '&kiosk=1' : ''}`;
   return (
     <>
       <PageHeader
@@ -109,7 +114,7 @@ export default async function AppointmentPage({
         actions={
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"
-            href={`/${school}/appointment?lang=${lang === 'hi' ? 'en' : 'hi'}`}
+            href={`/${school}/appointment?lang=${lang === 'hi' ? 'en' : 'hi'}${kiosk ? '&kiosk=1' : ''}`}
           >
             {lang === 'hi' ? 'English' : 'हिन्दी'}
           </a>
@@ -123,11 +128,17 @@ export default async function AppointmentPage({
         >
           {sp.ok === 'cancelled'
             ? t(lang, 'Appointment cancelled.', 'मुलाक़ात रद्द की गई।')
-            : t(
-                lang,
-                'Request sent. You will get a message when the school confirms it; your pass will show below.',
-                'अनुरोध भेज दिया गया। विद्यालय की पुष्टि पर संदेश आएगा; आपका पास नीचे दिखेगा।',
-              )}
+            : kiosk
+              ? `${t(lang, 'Request sent. Your appointment number is', 'अनुरोध भेज दिया गया। आपका मुलाक़ात नंबर है')} ${(sp.no ?? '').replace(/[^A-Za-z0-9-]/g, '')}. ${t(
+                  lang,
+                  'You will get a message with your gate pass when the school confirms it. You have been signed out of this device.',
+                  'विद्यालय की पुष्टि पर गेट पास के साथ संदेश आएगा। इस डिवाइस से आपको साइन आउट कर दिया गया है।',
+                )}`
+              : t(
+                  lang,
+                  'Request sent. You will get a message when the school confirms it; your pass will show below.',
+                  'अनुरोध भेज दिया गया। विद्यालय की पुष्टि पर संदेश आएगा; आपका पास नीचे दिखेगा।',
+                )}
         </div>
       ) : null}
       {sp.error ? (
@@ -172,12 +183,32 @@ export default async function AppointmentPage({
         </>
       ) : (
         <>
+          <form
+            method="post"
+            action={`/api/logout?to=${encodeURIComponent(self)}`}
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-2)',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              marginBottom: 'var(--sp-3)',
+            }}
+          >
+            <span className="ep-field__help">
+              {t(lang, 'Signed in with mobile', 'इस मोबाइल से साइन इन')} {maskMobile(me.mobile)}.{' '}
+              {t(lang, 'Not you?', 'यह आप नहीं हैं?')}
+            </span>
+            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+              {t(lang, 'Sign out', 'साइन आउट')}
+            </button>
+          </form>
           <Card
             title={t(lang, 'Whom to meet and when', 'किससे और कब मिलना है')}
             style={{ marginBottom: 'var(--sp-4)' }}
           >
             <form method="get" style={{ display: 'grid', gap: 'var(--sp-3)' }}>
               <input type="hidden" name="lang" value={lang} />
+              {kiosk ? <input type="hidden" name="kiosk" value="1" /> : null}
               <label className="ep-field" htmlFor="v-host">
                 <span className="ep-field__label">{t(lang, 'To meet', 'किससे मिलना है')}</span>
                 <select
@@ -240,6 +271,7 @@ export default async function AppointmentPage({
                 <form action={bookVisit} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
                   <input type="hidden" name="school" value={school} />
                   <input type="hidden" name="lang" value={lang} />
+                  {kiosk ? <input type="hidden" name="kiosk" value="1" /> : null}
                   <input type="hidden" name="hostId" value={host.id} />
                   <input type="hidden" name="date" value={date} />
                   <fieldset className="ep-slots">
@@ -281,7 +313,8 @@ export default async function AppointmentPage({
                     />
                   </label>
                   <p className="ep-field__help" style={{ margin: 0 }}>
-                    {t(lang, 'Mobile', 'मोबाइल')}: {me.mobile} {t(lang, '(confirmed)', '(पुष्ट)')}
+                    {t(lang, 'Mobile', 'मोबाइल')}: {maskMobile(me.mobile)}{' '}
+                    {t(lang, '(confirmed)', '(पुष्ट)')}
                   </p>
                   <label className="ep-field" htmlFor="v-purpose">
                     <span className="ep-field__label">
@@ -388,7 +421,7 @@ export default async function AppointmentPage({
                     </>
                   ) : null}
                   {info.ask.photo !== 'off' ? (
-                    <VisitorPhoto lang={lang} required={info.ask.photo === 'required'} />
+                    <VisitorCamera lang={lang} required={info.ask.photo === 'required'} />
                   ) : null}
                   <label className="ep-field" htmlFor="v-email">
                     <span className="ep-field__label">
@@ -432,73 +465,84 @@ export default async function AppointmentPage({
               )}
             </Card>
           ) : null}
-          <Card title={t(lang, 'Your appointments', 'आपकी मुलाक़ातें')}>
-            {visits.length === 0 ? (
-              <p className="ep-field__help">{t(lang, 'None yet.', 'अभी कोई नहीं।')}</p>
-            ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {visits.map((v) => {
-                  const [en, hi, tone] = VISIT_STATE[v.state];
-                  return (
-                    <li
-                      key={v.id}
-                      style={{
-                        padding: 'var(--sp-3) 0',
-                        borderTop: '1px solid var(--border-subtle)',
-                      }}
-                    >
-                      <div
+          {kiosk ? null : (
+            <Card title={t(lang, 'Your appointments', 'आपकी मुलाक़ातें')}>
+              {visits.length === 0 ? (
+                <p className="ep-field__help">{t(lang, 'None yet.', 'अभी कोई नहीं।')}</p>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {visits.map((v) => {
+                    const [en, hi, tone] = VISIT_STATE[v.state];
+                    return (
+                      <li
+                        key={v.id}
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          gap: 'var(--sp-2)',
+                          padding: 'var(--sp-3) 0',
+                          borderTop: '1px solid var(--border-subtle)',
                         }}
                       >
-                        <strong>
-                          {v.host ?? ''}
-                          {v.startsAt ? ` · ${whenIst(v.startsAt, lang)}` : ''}
-                        </strong>
-                        <Badge tone={tone}>{t(lang, en, hi)}</Badge>
-                      </div>
-                      <div>{v.purpose}</div>
-                      <div className="ep-kicker">
-                        {v.number}
-                        {v.place ? ` · ${v.place}` : ''}
-                        {v.note ? ` · ${v.note}` : ''}
-                      </div>
-                      <div
-                        style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}
-                      >
-                        {v.passLink ? (
-                          <a
-                            className="ep-btn ep-btn--secondary ep-btn--sm"
-                            href={`${v.passLink}?lang=${lang}`}
-                          >
-                            {t(lang, 'Open the gate pass', 'गेट पास खोलें')}
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 'var(--sp-2)',
+                          }}
+                        >
+                          <a href={`/${school}/appointment/${v.id}?lang=${lang}`}>
+                            <strong>
+                              {v.host ?? ''}
+                              {v.startsAt ? ` · ${whenIst(v.startsAt, lang)}` : ''}
+                            </strong>
                           </a>
-                        ) : null}
-                        {['requested', 'approved'].includes(v.state) ? (
-                          <form action={cancelVisit}>
-                            <input type="hidden" name="school" value={school} />
-                            <input type="hidden" name="lang" value={lang} />
-                            <input type="hidden" name="id" value={v.id} />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                              aria-label={`${t(lang, 'Cancel', 'रद्द करें')} ${v.number}`}
+                          <Badge tone={tone}>{t(lang, en, hi)}</Badge>
+                        </div>
+                        <div>{v.purpose}</div>
+                        <div className="ep-kicker">
+                          {v.number}
+                          {v.place ? ` · ${v.place}` : ''}
+                          {v.note ? ` · ${v.note}` : ''}
+                        </div>
+                        <div
+                          style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}
+                        >
+                          <a
+                            className="ep-btn ep-btn--ghost ep-btn--sm"
+                            href={`/${school}/appointment/${v.id}?lang=${lang}`}
+                            aria-label={`${t(lang, 'Details', 'विवरण')} ${v.number}`}
+                          >
+                            {t(lang, 'Details', 'विवरण')}
+                          </a>
+                          {v.passLink ? (
+                            <a
+                              className="ep-btn ep-btn--secondary ep-btn--sm"
+                              href={`${v.passLink}?lang=${lang}`}
                             >
-                              {t(lang, 'Cancel', 'रद्द करें')}
-                            </Button>
-                          </form>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
+                              {t(lang, 'Open the gate pass', 'गेट पास खोलें')}
+                            </a>
+                          ) : null}
+                          {['requested', 'approved'].includes(v.state) ? (
+                            <form action={cancelVisit}>
+                              <input type="hidden" name="school" value={school} />
+                              <input type="hidden" name="lang" value={lang} />
+                              <input type="hidden" name="id" value={v.id} />
+                              <Button
+                                type="submit"
+                                variant="ghost"
+                                size="sm"
+                                aria-label={`${t(lang, 'Cancel', 'रद्द करें')} ${v.number}`}
+                              >
+                                {t(lang, 'Cancel', 'रद्द करें')}
+                              </Button>
+                            </form>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          )}
         </>
       )}
     </>

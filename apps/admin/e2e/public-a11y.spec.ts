@@ -42,7 +42,24 @@ for (const width of [1280, 375]) {
       `${BASE}/alpha/appointment?lang=hi&host=${host ?? ''}&date=${d.toISOString().slice(0, 10)}`,
     );
     await expect(page.locator('.ep-slots__slot').first()).toBeVisible();
+    // the photo is taken live: there is a camera button and no file picker anywhere on the page
+    await expect(page.locator('input[type=file]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'कैमरा खोलें' })).toBeVisible();
     await check('slots and form (Hindi)');
+    // the visitor's own list is there on a personal phone and hidden on the school's tablet (kiosk)
+    await page.goto(`${BASE}/alpha/appointment?lang=en`);
+    await expect(page.getByText('Your appointments')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    await page.goto(`${BASE}/alpha/appointment?lang=en&kiosk=1`);
+    await expect(page.getByText('Your appointments')).toHaveCount(0);
+    await check('kiosk');
+    // the pass of a confirmed appointment, laid out like the visitor card
+    await page.goto(`${BASE}/alpha/pass/UBEV3EDGVY`);
+    await check('pass');
+    // signing out leaves the sign-in step
+    await page.goto(`${BASE}/alpha/appointment?lang=en`);
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page.getByRole('button', { name: 'Send code' })).toBeVisible();
     expect(problems).toEqual([]);
   });
 }

@@ -51,11 +51,104 @@ const KIND = {
   person: 'A named person',
   class_teacher: 'The child’s class teacher',
 };
-const lines = (v: string) =>
-  v
-    .split('\n')
-    .map((x) => x.trim())
-    .filter(Boolean);
+/** What a finished save says, shown right next to the button that was pressed. */
+function Saved({ msg }: { msg: { ok: boolean; text: string } | null }) {
+  return msg ? (
+    <span
+      className={`ep-alert ${msg.ok ? 'ep-alert--success' : 'ep-alert--danger'}`}
+      role={msg.ok ? 'status' : 'alert'}
+    >
+      {msg.text}
+    </span>
+  ) : null;
+}
+
+/** A short list the admin builds one entry at a time: type (or pick a date), Add, and remove with ×. */
+function ListEditor({
+  id,
+  label,
+  help,
+  items,
+  onChange,
+  type = 'text',
+  show = (v) => v,
+}: {
+  id: string;
+  label: string;
+  help?: string;
+  items: string[];
+  onChange: (next: string[]) => void;
+  type?: 'text' | 'date';
+  show?: (v: string) => string;
+}) {
+  const [draft, setDraft] = useState('');
+  const value = draft.trim();
+  const add = () => {
+    if (!value || items.includes(value)) return;
+    onChange(type === 'date' ? [...items, value].sort() : [...items, value]);
+    setDraft('');
+  };
+  return (
+    <fieldset className="ep-slots">
+      <legend className="ep-field__label">{label}</legend>
+      {items.length ? (
+        <ul className="ep-chips">
+          {items.map((x) => (
+            <li key={x}>
+              {show(x)}
+              <button
+                type="button"
+                className="ep-chips__x"
+                aria-label={`Remove ${show(x)}`}
+                onClick={() => onChange(items.filter((y) => y !== x))}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="ep-field__help" style={{ margin: 0 }}>
+          None yet.
+        </p>
+      )}
+      <div className="ep-chips__add">
+        <input
+          id={id}
+          type={type}
+          className="ep-input"
+          maxLength={60}
+          aria-label={`${label}: new entry`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          disabled={!value || items.includes(value)}
+          onClick={add}
+        >
+          Add
+        </button>
+      </div>
+      {help ? <span className="ep-field__help">{help}</span> : null}
+    </fieldset>
+  );
+}
+const dateLabel = (d: string) =>
+  new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 const MESSAGE: Record<string, string> = {
   appointment_otp: 'One-time code',
   appointment_requested: 'Request received',
@@ -74,28 +167,20 @@ const MESSAGE: Record<string, string> = {
 export function AppointmentSetup({ initial }: { initial: Setup }) {
   const [setup, setSetup] = useState(initial);
   const [s, setS] = useState<AppointmentSettings>(initial.settings);
-  const [purposes, setPurposes] = useState(initial.settings.purposes.join('\n'));
-  const [idKinds, setIdKinds] = useState(initial.settings.idProofKinds.join('\n'));
-  const [closed, setClosed] = useState(initial.settings.closedDates.join('\n'));
   const [draft, setDraft] = useState<Draft | null>(null);
+  // each save reports next to its own button (a message at the top of a long page is never seen)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [hostMsg, setHostMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
   const set = <K extends keyof AppointmentSettings>(k: K, v: AppointmentSettings[K]) =>
     setS({ ...s, [k]: v });
 
   const saveSettings = () =>
     start(async () => {
-      const dates = lines(closed);
-      if (dates.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d)))
-        return setMsg({
-          ok: false,
-          text: 'Closed days must be dates like 2026-10-20, one per line.',
-        });
+      if (!s.purposes.length || !s.idProofKinds.length)
+        return setMsg({ ok: false, text: 'Keep at least one purpose and one ID proof.' });
       const r = await saveAppointmentSettings({
         ...s,
-        purposes: lines(purposes),
-        idProofKinds: lines(idKinds),
-        closedDates: dates,
         instructions: s.instructions?.trim() || null,
       });
       if (r.ok) {
@@ -113,8 +198,8 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
       if (r.ok) {
         setSetup(r.data);
         setDraft(null);
-        setMsg({ ok: true, text: `${host.name} saved.` });
-      } else setMsg({ ok: false, text: r.error });
+        setHostMsg({ ok: true, text: `${host.name} saved.` });
+      } else setHostMsg({ ok: false, text: r.error });
     });
 
   const num = (
@@ -173,15 +258,6 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
 
   return (
     <div className="ep-hd__form">
-      {msg ? (
-        <p
-          className={`ep-alert ${msg.ok ? 'ep-alert--success' : 'ep-alert--danger'}`}
-          role="status"
-        >
-          {msg.text}
-        </p>
-      ) : null}
-
       <section className="ep-card" aria-labelledby="as-qr">
         <h2 id="as-qr" className="ep-cdash__h3" style={{ marginTop: 0 }}>
           Booking QR code for outside visitors
@@ -222,6 +298,19 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
               >
                 Open the booking page
               </a>
+              <a
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                href={`${setup.booking.url}?kiosk=1`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open on the school’s tablet (kiosk)
+              </a>
+            </p>
+            <p className="ep-field__help">
+              On a visitor’s own phone the page stays signed in for two hours and shows their
+              appointments. On the school’s own tablet use the kiosk link: each visitor is signed
+              out as soon as the request is sent.
             </p>
           </div>
         </div>
@@ -252,40 +341,28 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
           {ask('askIdProof', 'ID proof')}
           {ask('askPhoto', 'Photo')}
         </div>
-        <div className="ep-hd__row">
-          <label className="ep-field" htmlFor="as-purposes">
-            <span className="ep-field__label">Purposes to choose from (one per line)</span>
-            <textarea
-              id="as-purposes"
-              className="ep-input"
-              rows={6}
-              value={purposes}
-              onChange={(e) => setPurposes(e.target.value)}
-            />
-          </label>
-          <label className="ep-field" htmlFor="as-idkinds">
-            <span className="ep-field__label">ID proofs accepted (one per line)</span>
-            <textarea
-              id="as-idkinds"
-              className="ep-input"
-              rows={6}
-              value={idKinds}
-              onChange={(e) => setIdKinds(e.target.value)}
-            />
-          </label>
-          <label className="ep-field" htmlFor="as-closed">
-            <span className="ep-field__label">
-              Days with no appointments (YYYY-MM-DD, one per line)
-            </span>
-            <textarea
-              id="as-closed"
-              className="ep-input"
-              rows={6}
-              value={closed}
-              onChange={(e) => setClosed(e.target.value)}
-            />
-            <span className="ep-field__help">School holidays are closed already.</span>
-          </label>
+        <div className="ep-hd__row ep-hd__row--top">
+          <ListEditor
+            id="as-purposes"
+            label="Purposes a visitor chooses from"
+            items={s.purposes}
+            onChange={(next) => set('purposes', next)}
+          />
+          <ListEditor
+            id="as-idkinds"
+            label="ID proofs accepted"
+            items={s.idProofKinds}
+            onChange={(next) => set('idProofKinds', next)}
+          />
+          <ListEditor
+            id="as-closed"
+            label="Days with no appointments"
+            type="date"
+            show={dateLabel}
+            help="School holidays are closed already."
+            items={s.closedDates}
+            onChange={(next) => set('closedDates', next)}
+          />
         </div>
         <label className="ep-field" htmlFor="as-instructions">
           <span className="ep-field__label">
@@ -306,7 +383,7 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
           {tick('notifyWhatsapp', 'WhatsApp')}
           {tick('notifyEmail', 'Email')}
         </div>
-        <div>
+        <div className="ep-save">
           <button
             type="button"
             className="ep-btn ep-btn--primary"
@@ -315,6 +392,7 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
           >
             Save the rules
           </button>
+          <Saved msg={msg} />
         </div>
       </section>
 
@@ -376,7 +454,7 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
           </table>
         </div>
         {draft ? null : (
-          <div style={{ marginTop: 'var(--sp-3)' }}>
+          <div className="ep-save" style={{ marginTop: 'var(--sp-3)' }}>
             <button
               type="button"
               className="ep-btn ep-btn--secondary"
@@ -384,6 +462,7 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
             >
               Add a person or desk
             </button>
+            <Saved msg={hostMsg} />
           </div>
         )}
         {draft ? (
@@ -627,7 +706,7 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
                 ) : null}
               </div>
             </fieldset>
-            <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+            <div className="ep-save">
               <button
                 type="button"
                 className="ep-btn ep-btn--primary"
@@ -639,6 +718,7 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
               <button type="button" className="ep-btn ep-btn--ghost" onClick={() => setDraft(null)}>
                 Close without saving
               </button>
+              <Saved msg={hostMsg} />
             </div>
           </div>
         ) : null}

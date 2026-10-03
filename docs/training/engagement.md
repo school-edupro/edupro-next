@@ -14,11 +14,20 @@
 
 - **Approvals → Inbox** first thing: gate passes wait there with their SLA; a pass approved gets a
   number and the family a WhatsApp.
-- **Appointments → Front desk**: requests from parents (the app) and outside visitors (the school's
-  QR code, after a mobile one-time code) wait under _Waiting_. Confirm, decline with a reason, or give
-  a new time; the visitor is told by SMS, WhatsApp and email and gets a pass. **Gate** checks the
-  visitor in from the pass (this writes the visitor log) and out again. **Set-up** holds who can be
-  met, visiting hours, slot length, what a visitor must give and the booking QR to print.
+- **Appointments** (its own menu): each person sees only the pages of their role. Give the role
+  **Front Desk (appointments)** to whoever runs the queue and **Gate / Security** to the gate staff
+  under Access; the school admin keeps **Set-up**; everyone else, the principal included, sees only
+  **My appointments** (their own, once the front desk has confirmed them).
+- **Front desk**: requests from parents (the app) and outside visitors (the school's QR code, after a
+  mobile one-time code and a photo taken live with the camera) wait under _Waiting_. Confirm, decline
+  with a reason, or give a new time; the visitor is told by SMS, WhatsApp and email and gets a pass.
+  To book about a pupil, search by name or admission number and select the pupil after checking the
+  class and guardian.
+- **Gate**: scan the pass barcode or QR (or type the code). Check-in works only on the day of the
+  appointment and writes the visitor log; **Card** prints the ID-card size visitor card with photo,
+  details, barcode and QR.
+- **Set-up**: who can be met, visiting hours, slot length, what a visitor must give, the booking QR to
+  print, and the kiosk link for the school's own tablet (each visitor is signed out after booking).
 - **Engagement → Visitors**: sign visitors in with purpose and whom to meet; the kind of id proof only,
   never the number; sign out on exit.
 - **Engagement → Clinic**: record every visit; sent-home and referrals notify the family at once.

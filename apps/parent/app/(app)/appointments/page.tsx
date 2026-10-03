@@ -42,6 +42,7 @@ const STATE: Record<State, [string, 'warning' | 'success' | 'danger' | 'info' | 
   completed: ['Completed', 'neutral'],
   no_show: ['Did not come', 'danger'],
 };
+const PAGE_SIZE = 10;
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 /** The school day (India) of now, as YYYY-MM-DD. */
 const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
@@ -81,6 +82,10 @@ export default async function AppointmentsPage({
     student?: string;
     host?: string;
     date?: string;
+    st?: string;
+    child?: string;
+    q?: string;
+    page?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -88,7 +93,25 @@ export default async function AppointmentsPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  // the list below the form: its own filters and pages, kept apart from the booking choices
+  const filters = Object.fromEntries(
+    Object.entries({
+      state: ['open', 'past'].includes(sp.st ?? '') ? sp.st : undefined,
+      studentId: /^\d{1,18}$/.test(sp.child ?? '') ? sp.child : undefined,
+      q: sp.q?.trim().slice(0, 80) || undefined,
+    }).filter(([, v]) => v),
+  ) as Record<string, string>;
+  const filtered = Object.keys(filters).length > 0;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const pageHref = (n: number) =>
+    `/appointments?${new URLSearchParams({
+      ...(filters.state ? { st: filters.state } : {}),
+      ...(filters.studentId ? { child: filters.studentId } : {}),
+      ...(filters.q ? { q: filters.q } : {}),
+      page: String(n),
+    }).toString()}#list`;
   let appointments: Appointment[];
+  let total: number;
   let passes: GatePass[];
   let viewer: Viewer;
   let hosts: Host[];
@@ -96,7 +119,9 @@ export default async function AppointmentsPage({
   let instructions: string | null;
   try {
     const [mine, gate, v, h] = await Promise.all([
-      bff.api.fetch<{ data: Appointment[] }>('/appointments/mine'),
+      bff.api.fetch<{ data: Appointment[]; page: { total: number } }>(
+        `/appointments/mine?${new URLSearchParams({ ...filters, size: String(PAGE_SIZE), page: String(page) }).toString()}`,
+      ),
       bff.api.fetch<{ data: GatePass[] }>('/engagement/mine/gate-passes'),
       bff.api.fetch<Viewer>('/academics/daily-work/viewer'),
       bff.api.fetch<{ data: Host[]; maxDaysAhead: number; instructions: string | null }>(
@@ -104,6 +129,7 @@ export default async function AppointmentsPage({
       ),
     ]);
     appointments = mine.data;
+    total = mine.page.total;
     passes = gate.data;
     viewer = v;
     hosts = h.data;
@@ -291,9 +317,63 @@ export default async function AppointmentsPage({
           )
         ) : null}
       </Card>
-      <Card title={t(lang, 'Your appointments')} style={{ marginBottom: 'var(--sp-3)' }}>
+      <Card
+        id="list"
+        title={`${t(lang, 'Your appointments')} · ${String(total)}`}
+        style={{ marginBottom: 'var(--sp-3)' }}
+      >
+        <form
+          method="get"
+          action="/appointments#list"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 'var(--sp-2)',
+            alignItems: 'flex-end',
+            marginBottom: 'var(--sp-3)',
+          }}
+        >
+          <SelectField
+            id="f-st"
+            name="st"
+            label={t(lang, 'Status')}
+            defaultValue={filters.state ?? ''}
+            options={[
+              { value: '', label: t(lang, 'All') },
+              { value: 'open', label: t(lang, 'Still to come') },
+              { value: 'past', label: t(lang, 'Over or closed') },
+            ]}
+          />
+          {viewer.students.length > 1 ? (
+            <SelectField
+              id="f-child"
+              name="child"
+              label={t(lang, 'Child')}
+              defaultValue={filters.studentId ?? ''}
+              options={[{ value: '', label: t(lang, 'All') }, ...students]}
+            />
+          ) : null}
+          <InputField
+            id="f-q"
+            name="q"
+            type="search"
+            label={t(lang, 'Number, purpose or whom to meet')}
+            defaultValue={filters.q ?? ''}
+            maxLength={80}
+          />
+          <Button type="submit" variant="secondary">
+            {t(lang, 'Show')}
+          </Button>
+          {filtered ? (
+            <a className="ep-btn ep-btn--ghost" href="/appointments#list">
+              {t(lang, 'Clear')}
+            </a>
+          ) : null}
+        </form>
         {appointments.length === 0 ? (
-          <p className="ep-field__help">{t(lang, 'No appointments yet.')}</p>
+          <p className="ep-field__help">
+            {filtered ? t(lang, 'Nothing matches these filters.') : t(lang, 'No appointments yet.')}
+          </p>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {appointments.map((a) => (
@@ -304,9 +384,11 @@ export default async function AppointmentsPage({
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-2)' }}
                 >
-                  <strong>
-                    {[a.student, a.withName ?? a.hostName].filter(Boolean).join(' · ')}
-                  </strong>
+                  <a href={`/appointments/${a.id}`}>
+                    <strong>
+                      {[a.student, a.withName ?? a.hostName].filter(Boolean).join(' · ')}
+                    </strong>
+                  </a>
                   <Badge tone={STATE[a.state][1]}>{t(lang, STATE[a.state][0])}</Badge>
                 </div>
                 <div>{a.purpose}</div>
@@ -314,11 +396,15 @@ export default async function AppointmentsPage({
                   {a.number}
                   {a.startsAt ? ` · ${when(a.startsAt)}` : ''}
                   {a.place ? ` · ${a.place}` : ''}
-                  {a.decisionNote || a.cancelReason
-                    ? ` · ${a.decisionNote ?? a.cancelReason ?? ''}`
-                    : ''}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-1)' }}>
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`/appointments/${a.id}`}
+                    aria-label={`${t(lang, 'Details')} ${a.number}`}
+                  >
+                    {t(lang, 'Details')}
+                  </a>
                   {a.passLink ? (
                     <a
                       className="ep-btn ep-btn--secondary ep-btn--sm"
@@ -347,6 +433,32 @@ export default async function AppointmentsPage({
             ))}
           </ul>
         )}
+        {total > PAGE_SIZE ? (
+          <nav
+            aria-label={t(lang, 'Pages')}
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: 'var(--sp-3)',
+            }}
+          >
+            {page > 1 ? (
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={pageHref(page - 1)}>
+                ← {t(lang, 'Previous')}
+              </a>
+            ) : null}
+            <span className="ep-field__help">
+              {t(lang, 'Page')} {page} / {Math.ceil(total / PAGE_SIZE)}
+            </span>
+            {page * PAGE_SIZE < total ? (
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={pageHref(page + 1)}>
+                {t(lang, 'Next')} →
+              </a>
+            ) : null}
+          </nav>
+        ) : null}
       </Card>
       <Card title={t(lang, 'Request a gate pass')} style={{ marginBottom: 'var(--sp-3)' }}>
         <form action={requestGatePass}>

@@ -4684,3 +4684,201 @@ a.ep-tabs__tab {
     display: none !important;
   }
 }
+
+/* short lists built one entry at a time (appointment set-up) and a save message next to its button */
+.ep-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ep-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+  font-size: var(--fs-small);
+}
+.ep-chips__x {
+  border: 0;
+  background: transparent;
+  color: var(--text-body);
+  cursor: pointer;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  font-size: var(--fs-body);
+  line-height: 1;
+}
+.ep-chips__x:hover,
+.ep-chips__x:focus-visible {
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+}
+.ep-chips__add {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-chips__add .ep-input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.ep-hd__row--top {
+  align-items: start;
+}
+.ep-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+.ep-save .ep-alert {
+  margin: 0;
+}
+
+/* the visitor card the gate prints: ID-card size, 86 x 54 mm */
+.ep-vcard__page {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: start;
+}
+.ep-vcard {
+  width: 86mm;
+  height: 54mm;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 3mm;
+  overflow: hidden;
+  background: var(--mob-white);
+  color: var(--text-heading);
+  font-size: 7pt;
+  line-height: 1.25;
+}
+.ep-vcard__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2mm;
+  padding: 1.2mm 2.5mm;
+  background: var(--action-primary);
+  color: var(--text-inverse);
+  font-size: 7.5pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ep-vcard__head span {
+  letter-spacing: 0.12em;
+  font-weight: var(--fw-semibold);
+}
+.ep-vcard__body {
+  display: grid;
+  grid-template-columns: 17mm 1fr 15mm;
+  gap: 2mm;
+  padding: 1.5mm 2.5mm 0;
+  min-height: 0;
+}
+.ep-vcard__photo {
+  width: 17mm;
+  height: 21mm;
+  object-fit: cover;
+  border: 1px solid var(--border-default);
+  border-radius: 1mm;
+}
+.ep-vcard__photo--none {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 6pt;
+}
+.ep-vcard__who {
+  min-width: 0;
+  overflow: hidden;
+}
+.ep-vcard__name {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  font-size: 9.5pt;
+  line-height: 1.15;
+  margin-bottom: 0.6mm;
+}
+.ep-vcard__facts {
+  margin: 0;
+  display: grid;
+  gap: 0.2mm;
+}
+.ep-vcard__facts div {
+  display: grid;
+  grid-template-columns: 11mm 1fr;
+  gap: 1mm;
+}
+.ep-vcard__facts dt {
+  color: var(--text-muted);
+}
+.ep-vcard__facts dd {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ep-vcard__qr {
+  width: 15mm;
+  height: 15mm;
+}
+.ep-vcard__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 2mm;
+  padding: 0.8mm 2.5mm 1.2mm;
+  font-size: 6.5pt;
+}
+.ep-vcard__barcode {
+  height: 7mm;
+  width: 46mm;
+}
+@media print {
+  @page {
+    margin: 6mm;
+  }
+  body:has(.ep-vcard) .ep-sidebar,
+  body:has(.ep-vcard) .ep-header,
+  body:has(.ep-vcard) nextjs-portal {
+    display: none !important;
+  }
+}
+
+/* the live camera of the public booking page, and the pass shown on the visitor's phone */
+.ep-appt__camera {
+  display: block;
+  width: min(100%, 20rem);
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-dark-deep);
+  transform: scaleX(-1);
+}
+.ep-appt__poster .ep-appt__barcode {
+  width: min(18rem, 80vw);
+  height: 3.5rem;
+}
+.ep-pass__name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-h3);
+  color: var(--text-heading);
+}
+.ep-pass__facts {
+  text-align: left;
+  justify-self: stretch;
+}

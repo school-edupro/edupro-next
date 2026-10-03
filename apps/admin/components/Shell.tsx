@@ -210,26 +210,6 @@ const NAV: Array<{
         label: 'leaveRequests',
         permission: 'engagement.query.view',
       },
-      {
-        href: '/engagement/appointments',
-        label: 'appointments',
-        permission: 'engagement.appointment.view',
-      },
-      {
-        href: '/engagement/appointments/calendar',
-        label: 'appointmentCalendar',
-        permission: 'engagement.appointment.view',
-      },
-      {
-        href: '/engagement/appointments/gate',
-        label: 'appointmentGate',
-        permission: 'engagement.appointment.checkin',
-      },
-      {
-        href: '/engagement/appointments/setup',
-        label: 'appointmentSetup',
-        permission: 'engagement.appointment_setup.manage',
-      },
       { href: '/engagement/visitors', label: 'visitors', permission: 'engagement.visitor.manage' },
       {
         href: '/engagement/gate-passes',
@@ -249,6 +229,44 @@ const NAV: Array<{
       { href: '/engagement/clinic', label: 'clinic', permission: 'engagement.clinic.manage' },
       { href: '/engagement/cctv', label: 'cctv', permission: 'engagement.cctv.decide' },
       { href: '/engagement/feedback', label: 'feedback', permission: 'engagement.feedback.view' },
+    ],
+  },
+  // appointments have their own menu: each person sees only the pages of their role (front desk, gate,
+  // set-up); every member of staff sees the confirmed appointments with them
+  {
+    section: 'appointments',
+    items: [
+      {
+        href: '/engagement/appointments',
+        label: 'appointmentDesk',
+        permission: 'engagement.appointment.view',
+      },
+      {
+        href: '/engagement/appointments/new',
+        label: 'appointmentBook',
+        permission: 'engagement.appointment.decide',
+      },
+      {
+        href: '/engagement/appointments/calendar',
+        label: 'appointmentCalendar',
+        permission: 'engagement.appointment.view',
+      },
+      {
+        href: '/engagement/appointments/dashboard',
+        label: 'appointmentDashboard',
+        permission: 'engagement.appointment.view',
+      },
+      {
+        href: '/engagement/appointments/gate',
+        label: 'appointmentGate',
+        permission: 'engagement.appointment.checkin',
+      },
+      { href: '/engagement/appointments/mine', label: 'appointmentMine', permission: null },
+      {
+        href: '/engagement/appointments/setup',
+        label: 'appointmentSetup',
+        permission: 'engagement.appointment_setup.manage',
+      },
     ],
   },
   {
@@ -461,7 +479,12 @@ export async function Shell({
   })).filter(
     (g) =>
       g.items.length > 0 &&
-      (g.section === 'overview' || g.section === 'system' || !features || features.has(g.section)),
+      (g.section === 'overview' ||
+        g.section === 'system' ||
+        !features ||
+        features.has(g.section) ||
+        // appointments ride on the engagement module switch
+        (g.section === 'appointments' && features.has('engagement'))),
   );
   const portal =
     me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??

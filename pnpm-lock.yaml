@@ -166,6 +166,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: ^0.222.0
         version: 0.222.0(@opentelemetry/api@1.9.1)
+      bwip-js:
+        specifier: 4.11.4
+        version: 4.11.4
       exceljs:
         specifier: 4.4.0
         version: 4.4.0
@@ -4642,6 +4645,10 @@ packages:
   bundle-name@4.1.1:
     resolution: {integrity: sha512-DdH81/zPLVS11EUgWq3tEu/xn+EzljlMYooDNdzWEnFha3R3NBMpMV1UqYIpjYHV/SgpFKMIX1Oh7o06SjM/oA==}
     engines: {node: '>=18'}
+
+  bwip-js@4.11.4:
+    resolution: {integrity: sha512-FOXnOQkinxog8FwxdnPB+8k2wRqwPnqXwxX37KcXOtMNW+9CinOkGv9MtIoRC4HX/UyogT0/9lIp6FDm2DcquQ==}
+    hasBin: true
 
   cac@6.7.14:
     resolution: {integrity: sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==}
@@ -13240,6 +13247,8 @@ snapshots:
   bundle-name@4.1.1:
     dependencies:
       run-applescript: 7.1.0
+
+  bwip-js@4.11.4: {}
 
   cac@6.7.14: {}
 

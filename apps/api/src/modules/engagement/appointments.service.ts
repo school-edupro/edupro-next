@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
+import bwipjs from 'bwip-js';
 import QRCode from 'qrcode';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -22,6 +23,7 @@ import type {
   FamilyBookDto,
   HostDto,
   ListAppointmentsDto,
+  MineQueryDto,
   PublicBookDto,
   RejectDto,
   RescheduleDto,
@@ -805,8 +807,13 @@ export class AppointmentsService {
       with_employee_id: string | null;
       student_id: string | null;
       has_slot: boolean;
+      on_day: boolean;
+      day: string | null;
     }>(
-      `SELECT state, host_id::text, with_employee_id::text, student_id::text, starts_at IS NOT NULL AS has_slot
+      // eslint-disable-next-line no-restricted-syntax -- DAY and TODAY are constants; the id is bound
+      `SELECT state, host_id::text, with_employee_id::text, student_id::text, starts_at IS NOT NULL AS has_slot,
+              COALESCE(${DAY('starts_at')} = ${TODAY}, false) AS on_day,
+              to_char(starts_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') AS day
          FROM appointments WHERE id = $1 FOR UPDATE`,
       [id],
     );
@@ -1025,6 +1032,55 @@ export class AppointmentsService {
     });
   }
 
+  /** The visitor card the gate prints: everything the visitor gave, the barcode and the QR of the pass. */
+  async card(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.find(c, id);
+      const school = await c.query<{ name: string }>(
+        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+      );
+      const link = await this.passLink(c, a.passCode);
+      return {
+        ...a,
+        school: school.rows[0]!.name,
+        barcode: a.passCode ? this.barcodeSvg(a.passCode) : null,
+        qr: link ? await this.qrSvg(link) : null,
+      };
+    });
+  }
+
+  /** Pupils by name or admission number for a booking at the desk, with what is needed to be sure who it is. */
+  async students(ctx: RequestContext, q: string) {
+    const term = q.trim();
+    if (term.length < 2) return { data: [] };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        `SELECT s.id::text, s.display_name AS name, s.admission_no,
+                (SELECT k.code || '-' || cs.name FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN classes k ON k.id = cs.class_id
+                  WHERE en.student_id = s.id AND en.status = 'active' ORDER BY en.academic_year_id DESC LIMIT 1) AS section,
+                g.display_name AS guardian, g.relation, right(g.mobile, 4) AS mobile_end
+           FROM students s
+           LEFT JOIN LATERAL (SELECT gd.display_name, sg.relation::text AS relation, gd.mobile FROM student_guardians sg JOIN guardians gd ON gd.id = sg.guardian_id
+                               WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC, gd.id LIMIT 1) g ON true
+          WHERE s.deleted_at IS NULL AND s.status = 'active'
+            AND (s.admission_no ILIKE $1 || '%' OR s.display_name ILIKE '%' || $1 || '%')
+          ORDER BY (lower(s.admission_no) = lower($1)) DESC, s.display_name LIMIT 12`,
+        [term],
+      );
+      return {
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          name: String(x.name),
+          admissionNo: String(x.admission_no),
+          section: text(x.section),
+          guardian: text(x.guardian),
+          relation: text(x.relation),
+          mobileEnd: text(x.mobile_end),
+        })),
+      };
+    });
+  }
+
   /** Arrival: the appointment becomes the visitor-log entry (in time now). */
   async checkIn(ctx: RequestContext, id: string, dto: CheckInDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1036,6 +1092,12 @@ export class AppointmentsService {
           { status: 409 },
         );
       if (a.state !== 'approved') this.wrongState(a.state, 'checked in');
+      if (!a.on_day)
+        throw new DomainError(
+          'appointment.not_today',
+          `This appointment is for ${a.day ?? 'another day'}; a visitor is checked in only on the day of the appointment. The front desk can give a new time.`,
+          { status: 409 },
+        );
       const v = await c.query<{ id: string }>(
         `INSERT INTO visitor_log (school_id, visitor_name, mobile, organisation, purpose, to_meet, id_proof_kind, badge_no, logged_by)
          SELECT app.current_school_id(), COALESCE(ap.visitor_name, st.display_name, 'Visitor'), ap.visitor_mobile, ap.visitor_org,
@@ -1100,8 +1162,9 @@ export class AppointmentsService {
   }
 
   /**
-   * The appointments with me, for the person to be met (any member of staff): today and the next 30
-   * days, without the visitor's contact or ID details, which stay with the front desk.
+   * The appointments with me, for the person to be met (the principal, a teacher, any member of staff):
+   * only those the front desk has confirmed, today and the next 30 days, without the visitor's contact
+   * or ID details, which stay with the front desk.
    */
   async withMe(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1109,7 +1172,7 @@ export class AppointmentsService {
         // eslint-disable-next-line no-restricted-syntax -- SELECT, DAY and TODAY are constants
         `${SELECT} WHERE COALESCE(a.with_employee_id, h.employee_id) = (SELECT me.id FROM employees me WHERE me.user_id = app.current_user_id() AND me.deleted_at IS NULL LIMIT 1)
             AND a.starts_at IS NOT NULL AND ${DAY('a.starts_at')} BETWEEN ${TODAY} AND ${TODAY} + 30
-            AND a.state NOT IN ('rejected', 'cancelled')
+            AND a.state IN ('approved', 'checked_in', 'completed', 'no_show')
           ORDER BY a.starts_at, a.id LIMIT 300`,
       );
       return {
@@ -1334,6 +1397,17 @@ export class AppointmentsService {
   }
 
   // ---- set-up (admin) -------------------------------------------------------------------------------
+  /** The pass code as a Code 128 barcode (what a gate scanner reads), drawn as SVG. */
+  private barcodeSvg(value: string): string {
+    return bwipjs.toSVG({
+      bcid: 'code128',
+      text: value,
+      height: 10,
+      includetext: false,
+      paddingwidth: 2,
+    });
+  }
+
   private qrSvg(value: string): Promise<string> {
     return QRCode.toString(value, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
   }
@@ -1573,24 +1647,88 @@ export class AppointmentsService {
     });
   }
 
-  async familyList(ctx: RequestContext) {
+  /** The states one filter word stands for. */
+  private stateSql(state: string | undefined): string | null {
+    if (state === 'open') return `a.state IN ('requested', 'approved', 'checked_in')`;
+    if (state === 'past') return `a.state IN ('completed', 'no_show', 'rejected', 'cancelled')`;
+    return null;
+  }
+
+  /** A family's appointments, latest first, with filters and pages. */
+  async familyList(ctx: RequestContext, q: MineQueryDto) {
     const v = await this.family(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values bound
-        `${SELECT} WHERE a.student_id = ANY($1::bigint[]) ORDER BY a.created_at DESC, a.id DESC LIMIT 50`,
-        [v.students.map((s) => s.id)],
+      const params: unknown[] = [v.students.map((s) => s.id)];
+      const where = [`a.student_id = ANY($1::bigint[])`];
+      const group = this.stateSql(q.state);
+      if (group) where.push(group);
+      else if (q.state) {
+        params.push(q.state);
+        where.push(`a.state = $${String(params.length)}`);
+      }
+      if (q.studentId) {
+        params.push(q.studentId);
+        where.push(`a.student_id = $${String(params.length)}`);
+      }
+      if (q.q) {
+        params.push(q.q);
+        where.push(
+          `concat_ws(' ', a.number, a.purpose, h.name, s.display_name) ILIKE '%' || $${String(params.length)} || '%'`,
+        );
+      }
+      const w = where.join(' AND ');
+      const total = await c.query<{ n: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- w holds fixed fragments with numbered placeholders; values bound
+        `SELECT count(*)::int AS n FROM appointments a LEFT JOIN appointment_hosts h ON h.id = a.host_id LEFT JOIN students s ON s.id = a.student_id WHERE ${w}`,
+        params,
       );
-      const rows = r.rows.map(toRow);
+      params.push(q.size, (q.page - 1) * q.size);
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w holds fixed fragments; values bound
+        `${SELECT} WHERE ${w} ORDER BY a.created_at DESC, a.id DESC LIMIT $${String(params.length - 1)} OFFSET $${String(params.length)}`,
+        params,
+      );
+      const data = [];
+      for (const a of r.rows.map(toRow))
+        data.push({
+          ...a,
+          passLink: ['approved', 'checked_in'].includes(a.state)
+            ? await this.passLink(c, a.passCode)
+            : null,
+        });
+      return { data, page: { number: q.page, size: q.size, total: total.rows[0]?.n ?? 0 } };
+    });
+  }
+
+  /** One of the family's appointments with everything that was filled in and what happened to it. */
+  async familyGet(ctx: RequestContext, id: string) {
+    const v = await this.family(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.find(c, id);
+      if (!a.studentId || !v.students.some((s) => s.id === a.studentId))
+        throw new DomainError('not-found', 'Appointment not found');
+      const live = ['approved', 'checked_in'].includes(a.state);
       return {
-        data: await Promise.all(
-          rows.map(async (a) => {
-            const link = ['approved', 'checked_in'].includes(a.state)
-              ? await this.passLink(c, a.passCode)
-              : null;
-            return { ...a, passLink: link };
-          }),
-        ),
+        ...a,
+        passLink: live ? await this.passLink(c, a.passCode) : null,
+        events: await this.history(c, id),
+      };
+    });
+  }
+
+  /** What happened to an appointment, in order, without naming the staff who did it. */
+  private async history(c: PoolClient, id: string) {
+    const r = await c.query<Row>(
+      `SELECT kind, at, detail FROM appointment_events WHERE appointment_id = $1 ORDER BY at, id`,
+      [id],
+    );
+    return r.rows.map((x) => {
+      const d = (x.detail as Record<string, unknown>) ?? {};
+      return {
+        kind: String(x.kind),
+        at: iso(x.at)!,
+        startsAt: typeof d.startsAt === 'string' ? d.startsAt : null,
+        reason: typeof d.reason === 'string' ? d.reason : null,
       };
     });
   }
@@ -1733,6 +1871,7 @@ export class AppointmentsService {
 
   private publicView(a: AppointmentRow, link: string | null, qr: string | null) {
     return {
+      barcode: link && a.passCode ? this.barcodeSvg(a.passCode) : null,
       id: a.id,
       number: a.number,
       state: a.state,
@@ -1767,6 +1906,45 @@ export class AppointmentsService {
     });
   }
 
+  /** One of the visitor's own appointments with everything they filled in. */
+  async publicGet(schoolCode: string, applicant: Applicant, id: string) {
+    const tenant = await this.ownSchool(schoolCode, applicant);
+    return this.db.tenant(tenant, async (c) => {
+      // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values bound
+      const r = await c.query<Row>(`${SELECT} WHERE a.id = $1 AND a.applicant_id = $2`, [
+        id,
+        applicant.id,
+      ]);
+      if (!r.rows[0]) throw new DomainError('not-found', 'Appointment not found');
+      const a = toRow(r.rows[0]);
+      const live = ['approved', 'checked_in'].includes(a.state);
+      const link = live ? await this.passLink(c, a.passCode) : null;
+      return {
+        ...this.publicView(a, link, link ? await this.qrSvg(link) : null),
+        visitorMobile: a.visitorMobile,
+        visitorEmail: a.visitorEmail,
+        visitorOrg: a.visitorOrg,
+        idProofKind: a.idProofKind,
+        idProofLast4: a.idProofLast4,
+        hasPhoto: a.hasPhoto,
+        events: await this.history(c, id),
+      };
+    });
+  }
+
+  async publicPhoto(schoolCode: string, applicant: Applicant, id: string) {
+    const tenant = await this.ownSchool(schoolCode, applicant);
+    return this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{ content_type: string; bytes: Buffer }>(
+        `SELECT p.content_type, p.bytes FROM appointment_photos p JOIN appointments a ON a.id = p.appointment_id
+          WHERE a.id = $1 AND a.applicant_id = $2`,
+        [id, applicant.id],
+      );
+      if (!r.rows[0]) throw new DomainError('not-found', 'No photo for this appointment');
+      return { contentType: r.rows[0].content_type, bytes: r.rows[0].bytes };
+    });
+  }
+
   async publicCancel(schoolCode: string, applicant: Applicant, id: string, dto: CancelDto) {
     const tenant = await this.ownSchool(schoolCode, applicant);
     return this.db.tenant(tenant, async (c) => {
@@ -1797,8 +1975,9 @@ export class AppointmentsService {
       const live = ['approved', 'checked_in'].includes(a.state);
       return {
         ...this.publicView(a, link, live && link ? await this.qrSvg(link) : null),
-        // a pass shows the first name only; the gate sees the full record on its own screen
-        visitorName: (a.visitorName ?? '').split(' ')[0] ?? '',
+        // the card on the phone: who, from where, how many and why; the ID proof and the photo stay with
+        // the gate's own screen because this link can be forwarded
+        visitorOrg: a.visitorOrg,
         school: school.rows[0]!.name,
         instructions: s.instructions,
       };

@@ -9,6 +9,8 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
   { sub: 'dev-auditor', label: 'Auditor (read-only, audit export)' },
   { sub: 'dev-support', label: 'Support Engineer' },
   { sub: 'dev-clerk', label: 'Front Office (school role)' },
+  { sub: 'dev-frontdesk', label: 'Front Desk (appointments)' },
+  { sub: 'dev-gate', label: 'Gate / Security (visitor check-in)' },
   { sub: 'dev-accounts', label: 'Accountant (fee masters and demands)' },
   { sub: 'dev-parent', label: 'Parent (guardian of two children; opens the parent app)' },
   { sub: 'dev-student', label: 'Student (VI-A; opens the parent app)' },

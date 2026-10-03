@@ -7,9 +7,11 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { FastifyReply } from 'fastify';
 import { Public } from '../../common/auth/decorators';
 import { ApplicantGuard, type ApplicantRequest } from '../admissions/public/applicant.guard';
 import { PublicThrottle, PublicThrottleGuard } from '../admissions/public/public-throttle.guard';
@@ -35,6 +37,36 @@ export class PublicAppointmentsController {
   @ApiOperation({ summary: "The visitor's own appointments with the pass of the confirmed ones" })
   mine(@Req() req: ApplicantRequest, @Param('schoolCode') schoolCode: string) {
     return this.svc.publicMine(schoolCode, req.applicant!);
+  }
+
+  @Get(':schoolCode/mine/:id')
+  @Public()
+  @UseGuards(ApplicantGuard)
+  @PublicThrottle(60)
+  @ApiOperation({ summary: "One of the visitor's own appointments with everything they filled in" })
+  mineGet(
+    @Req() req: ApplicantRequest,
+    @Param('schoolCode') schoolCode: string,
+    @Param('id') id: string,
+  ) {
+    return this.svc.publicGet(schoolCode, req.applicant!, id);
+  }
+
+  @Get(':schoolCode/mine/:id/photo')
+  @Public()
+  @UseGuards(ApplicantGuard)
+  @PublicThrottle(60)
+  async minePhoto(
+    @Req() req: ApplicantRequest,
+    @Param('schoolCode') schoolCode: string,
+    @Param('id') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, contentType } = await this.svc.publicPhoto(schoolCode, req.applicant!, id);
+    void reply
+      .header('content-type', contentType)
+      .header('cache-control', 'private, max-age=300')
+      .send(bytes);
   }
 
   @Post(':schoolCode')

@@ -49,6 +49,16 @@ export class ListAppointmentsDto extends createZodDto(ListAppointmentsSchema) {}
 export const ExportAppointmentsSchema = ListAppointmentsSchema.omit({ page: true, size: true });
 export class ExportAppointmentsDto extends createZodDto(ExportAppointmentsSchema) {}
 
+/** A family's own list: open = still to happen, past = over or closed, or one state. */
+export const MineQuerySchema = z.object({
+  state: z.enum([...STATES, 'open', 'past']).optional(),
+  studentId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(50).default(10),
+});
+export class MineQueryDto extends createZodDto(MineQuerySchema) {}
+
 export const SlotsQuerySchema = z.object({
   hostId: IdSchema,
   date: DateSchema,

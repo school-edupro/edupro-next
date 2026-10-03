@@ -219,7 +219,10 @@ export default async function AppointmentPage({
                 </form>
               </div>
               {a.startsAt && dayOf(a.startsAt) !== today() ? (
-                <p className="ep-field__help">This visit is for {when(a.startsAt)}, not today.</p>
+                <p className="ep-field__help">
+                  This visit is for {when(a.startsAt)}. A visitor is checked in only on the day of
+                  the appointment; give a new time below if they have come on another day.
+                </p>
               ) : null}
             </Card>
           ) : null}
@@ -377,6 +380,16 @@ export default async function AppointmentPage({
                 Pass code <strong>{a.passCode}</strong>. The visitor has this pass in the
                 confirmation message.
               </p>
+              {a.you.canCheckIn ? (
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/engagement/appointments/${a.id}/card`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Print the visitor card
+                </a>
+              ) : null}
             </Card>
           ) : null}
         </aside>

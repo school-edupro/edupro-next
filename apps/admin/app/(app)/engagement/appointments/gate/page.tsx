@@ -3,7 +3,16 @@ import { AppointmentNav } from '@/components/appointments/AppointmentNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { checkInAppointment, checkOutAppointment, findAtGate } from '@/lib/appointment-actions';
-import { STATE_LABEL, STATE_TONE, timeOf, when, whoOf, type Appointment } from '@/lib/appointments';
+import {
+  STATE_LABEL,
+  STATE_TONE,
+  timeOf,
+  when,
+  whoOf,
+  type Appointment,
+  dayOf,
+  today,
+} from '@/lib/appointments';
 
 interface Board {
   found: Appointment[];
@@ -57,7 +66,7 @@ export default async function AppointmentGatePage({
         {a.withName ? <div className="ep-field__help">{a.withName}</div> : null}
       </td>
       <td>
-        {timeOf(a.startsAt)}
+        {a.startsAt && dayOf(a.startsAt) !== today() ? when(a.startsAt) : timeOf(a.startsAt)}
         {a.place ? <div className="ep-field__help">{a.place}</div> : null}
       </td>
       <td>
@@ -78,11 +87,29 @@ export default async function AppointmentGatePage({
             <Button type="submit" size="sm" aria-label={`Check in ${a.number}`}>
               Check in
             </Button>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/engagement/appointments/${a.id}/card`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Visitor card of ${a.number}`}
+            >
+              Card
+            </a>
           </form>
         ) : a.state === 'checked_in' ? (
-          <form action={checkOutAppointment}>
+          <form action={checkOutAppointment} className="ep-gate__act">
             <input type="hidden" name="id" value={a.id} />
             <input type="hidden" name="returnTo" value={back} />
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/engagement/appointments/${a.id}/card`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Visitor card of ${a.number}`}
+            >
+              Card
+            </a>
             <Button
               type="submit"
               size="sm"
@@ -94,6 +121,9 @@ export default async function AppointmentGatePage({
           </form>
         ) : a.state === 'requested' ? (
           <span className="ep-field__help">Not confirmed yet</span>
+        ) : null}
+        {a.state === 'approved' && a.startsAt && dayOf(a.startsAt) !== today() ? (
+          <div className="ep-field__help">Not today: check-in opens on the day of the visit.</div>
         ) : null}
       </td>
     </tr>

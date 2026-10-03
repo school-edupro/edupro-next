@@ -37,8 +37,30 @@ const DEMO_USERS: DemoUser[] = [
     mobile: '9999999999',
     email: 'dev-admin@example.test',
     personType: 'employee',
-    roles: { ALPHA: ['school_admin'], BETA: ['school_admin'] },
+    // the developer's own login also works the appointment front desk and the gate
+    roles: {
+      ALPHA: ['school_admin', 'front_desk', 'gate_security'],
+      BETA: ['school_admin', 'front_desk', 'gate_security'],
+    },
     description: 'School Admin of both schools (everything except audit export and impersonation)',
+  },
+  {
+    sub: 'dev-frontdesk',
+    name: 'Farah Front Desk',
+    mobile: '9999999915',
+    email: 'frontdesk@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['front_desk'] },
+    description: 'Front Desk: the appointment queue, booking, calendar, dashboard and the gate',
+  },
+  {
+    sub: 'dev-gate',
+    name: 'Gopal Gate',
+    mobile: '9999999916',
+    email: 'gate@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['gate_security'] },
+    description: 'Gate / Security: checks appointment visitors in and out, keeps the visitor log',
   },
   {
     sub: 'dev-group',

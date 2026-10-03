@@ -157,7 +157,32 @@ export interface Visit {
   createdAt: string;
   passLink: string | null;
   passQr: string | null;
+  barcode: string | null;
 }
+export interface VisitDetail extends Visit {
+  visitorMobile: string | null;
+  visitorEmail: string | null;
+  visitorOrg: string | null;
+  idProofKind: string | null;
+  idProofLast4: string | null;
+  hasPhoto: boolean;
+  events: Array<{ kind: string; at: string; startsAt: string | null; reason: string | null }>;
+}
+export const VISIT_EVENT: Record<string, [string, string]> = {
+  requested: ['Requested', 'अनुरोध किया'],
+  approved: ['Confirmed', 'पुष्ट'],
+  rejected: ['Declined', 'अस्वीकृत'],
+  rescheduled: ['Moved to a new time', 'नया समय दिया गया'],
+  cancelled: ['Cancelled', 'रद्द'],
+  checked_in: ['Checked in', 'पहुँचे (चेक-इन)'],
+  checked_out: ['Checked out', 'गए (चेक-आउट)'],
+  no_show: ['Did not come', 'नहीं आए'],
+  reminded: ['Reminder sent', 'अनुस्मारक भेजा गया'],
+};
+/** A mobile shown back to its owner on a screen others may see: ******4824. */
+export const maskMobile = (m: string) => `******${m.slice(-4)}`;
+/** An inline SVG (QR, barcode) as an image source. */
+export const svgSrc = (v: string) => `data:image/svg+xml;utf8,${encodeURIComponent(v)}`;
 export const VISIT_STATE: Record<
   VisitState,
   [string, string, 'neutral' | 'info' | 'success' | 'warning' | 'danger']
