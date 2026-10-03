@@ -246,8 +246,13 @@ export class CommsSettingsService {
         dto.text?.trim() || `Test message from ${school ?? 'EduPro'}: your ${channel} setup works.`;
       let params: string[] | null = null;
       if (dto.templateId) {
-        const t = await c.query<{ channel: string; body: string; wa_params: string[] }>(
-          `SELECT channel::text, body, wa_params FROM comms_templates WHERE id = $1 AND deleted_at IS NULL`,
+        const t = await c.query<{
+          channel: string;
+          body: string;
+          wa_params: string[];
+          dlt_template_id: string | null;
+        }>(
+          `SELECT channel::text, body, wa_params, dlt_template_id FROM comms_templates WHERE id = $1 AND deleted_at IS NULL`,
           [dto.templateId],
         );
         const tpl = t.rows[0];
@@ -255,9 +260,26 @@ export class CommsSettingsService {
           throw new DomainError('validation-failed', `Choose a ${channel} template`, {
             status: 400,
           });
+        if (channel === 'sms' && !tpl.dlt_template_id?.trim())
+          throw new DomainError(
+            'validation-failed',
+            'That SMS template has no DLT template id; add it in the template master',
+            { status: 400 },
+          );
         const vars: Record<string, string> = { ...SAMPLE_VARIABLES, school: school ?? '' };
         body = renderLenient(tpl.body, vars);
         params = (tpl.wa_params ?? []).map((k) => vars[k] ?? 'test');
+      } else if (channel === 'sms') {
+        const real = await c.query(
+          `SELECT 1 FROM comms_providers WHERE channel = 'sms' AND provider <> 'console' AND active`,
+        );
+        // a DLT gateway refuses text that is not an approved template
+        if (real.rowCount)
+          throw new DomainError(
+            'validation-failed',
+            'Choose an SMS template that has its DLT template id',
+            { status: 400 },
+          );
       }
       const r = await c.query<{ id: string }>(
         `INSERT INTO comms_messages (school_id, template_id, channel, recipient_address, subject, body, variables, params, request_id, created_by)

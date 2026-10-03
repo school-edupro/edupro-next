@@ -5,7 +5,7 @@ import type { Balance, CommsSettings } from '@/lib/comms';
 
 /** Communication settings (v2): SMS / WhatsApp / email providers, approval rule, quiet hours, credits. */
 export default async function CommsSettingsPage() {
-  const [me, settings, credits, wa] = await Promise.all([
+  const [me, settings, credits, wa, sms] = await Promise.all([
     getMe(),
     apiFetch<CommsSettings>('/comms/settings'),
     apiFetch<{
@@ -25,6 +25,12 @@ export default async function CommsSettingsPage() {
     )
       .then((r) => r.data.filter((t) => t.waTemplateName))
       .catch(() => []),
+    // an SMS can be tested only from a template that carries its DLT template id
+    apiFetch<{ data: Array<{ id: string; name: string; dltTemplateId: string | null }> }>(
+      '/comms/templates?channel=sms&status=active',
+    )
+      .then((r) => r.data.filter((t) => t.dltTemplateId?.trim()))
+      .catch(() => []),
   ]);
   return (
     <>
@@ -38,6 +44,7 @@ export default async function CommsSettingsPage() {
         credits={credits}
         canCredit={me.permissions.includes('comms.credit.manage')}
         whatsappTemplates={wa.map((t) => ({ id: t.id, name: t.name }))}
+        smsTemplates={sms.map((t) => ({ id: t.id, name: t.name }))}
       />
     </>
   );

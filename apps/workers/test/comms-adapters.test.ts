@@ -104,7 +104,7 @@ describe('smsbhejo adapter', () => {
     const r = await a.send({ ...base, body: 'Dear parent,\nfee due' });
     expect(r.providerMessageId).toBe('MsgID:123456789');
     const url = new URL(f.calls[0]!.url);
-    expect(url.origin + url.pathname).toBe('https://smsbhejo.org/submitsms.jsp');
+    expect(url.origin + url.pathname).toBe('http://smsbhejo.org/submitsms.jsp');
     expect(Object.fromEntries(url.searchParams)).toMatchObject({
       user: 'school',
       key: 'k',
@@ -125,6 +125,25 @@ describe('smsbhejo adapter', () => {
     await expect(a.send({ ...base, body: 'x' })).rejects.toThrow(/Invalid template/);
     const b = new SmsBhejoAdapter({ user: 'u', entityId: 'e' }, 'k', fake(200, '').fn);
     await expect(b.send({ ...base, body: 'x' })).rejects.toThrow(/smsbhejo/);
+    // a gateway that cannot be reached says why (not just "fetch failed")
+    const down = new SmsBhejoAdapter(
+      {
+        user: 'school',
+        senderId: 'ALPHAS',
+        entityId: '1101',
+        url: 'https://smsbhejo.org/submitsms.jsp',
+      },
+      'k',
+      (() =>
+        Promise.reject(
+          Object.assign(new TypeError('fetch failed'), {
+            cause: { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' },
+          }),
+        )) as unknown as typeof fetch,
+    );
+    await expect(down.send({ ...base, body: 'x' })).rejects.toThrow(
+      /could not reach the gateway at https:\/\/smsbhejo\.org \(UNABLE_TO_VERIFY_LEAF_SIGNATURE\); its https certificate is not valid/,
+    );
   });
 });
 

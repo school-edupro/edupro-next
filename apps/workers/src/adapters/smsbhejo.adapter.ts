@@ -9,6 +9,9 @@ export interface SmsBhejoConfig {
   countryPrefix?: boolean;
 }
 
+/** The gateway answers on http only: on https it serves another host's certificate (as of 2026-10). */
+const DEFAULT_URL = 'http://smsbhejo.org/submitsms.jsp';
+
 const FAILURE = ['error', 'fail', 'invalid', 'denied', 'reject', 'unauthor', 'expired'];
 
 /**
@@ -44,10 +47,26 @@ export class SmsBhejoAdapter implements ChannelAdapter {
       entityid: entity,
       tempid: message.dlt.templateId,
     });
-    const res = await this.fetchImpl(
-      `${this.config.url ?? 'https://smsbhejo.org/submitsms.jsp'}?${params.toString()}`,
-      { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(15_000) },
-    );
+    const url = this.config.url ?? DEFAULT_URL;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${url}?${params.toString()}`, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (error) {
+      // "fetch failed" alone hides the cause (a certificate the gateway serves for another host, DNS, a timeout)
+      const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+      const why = cause?.code ?? cause?.message ?? (error as Error).message;
+      throw new Error(
+        `smsbhejo: could not reach the gateway at ${new URL(url).origin} (${why})${
+          url.startsWith('https:')
+            ? '; its https certificate is not valid, use the http address'
+            : ''
+        }`,
+      );
+    }
     const body = (await res.text()).trim();
     if (!res.ok || !body || FAILURE.some((w) => body.toLowerCase().includes(w)))
       throw new Error(`smsbhejo: ${body.slice(0, 200) || `HTTP ${String(res.status)}`}`);

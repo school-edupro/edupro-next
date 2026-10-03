@@ -61,13 +61,13 @@ const PROVIDERS: Record<Ch, ProviderDef[]> = {
     {
       id: 'smsbhejo',
       label: 'smsbhejo.org (DLT)',
-      help: 'The gateway your current ERP uses: account user and key, the default DLT sender id (header) and principal entity id. Each SMS template carries its DLT template id.',
+      help: 'The gateway your current ERP uses: account user and key, the default DLT sender id (header) and principal entity id. Each SMS template carries its DLT template id. The gateway answers on http:// only (its https certificate is not valid).',
       fields: [
         { key: 'user', label: 'Account user' },
         { key: 'key', label: 'API key', secret: true },
         { key: 'senderId', label: 'Default sender id (header)', placeholder: 'e.g. DPSNOI' },
         { key: 'entityId', label: 'DLT principal entity id' },
-        { key: 'url', label: 'Gateway address', placeholder: 'https://smsbhejo.org/submitsms.jsp' },
+        { key: 'url', label: 'Gateway address', placeholder: 'http://smsbhejo.org/submitsms.jsp' },
         { key: 'countryPrefix', label: 'Send numbers with 91 in front', type: 'checkbox' },
       ],
     },
@@ -320,16 +320,26 @@ function ProviderCard({
               onChange={(e) => setTo(e.target.value)}
             />
           </label>
-          {channel === 'whatsapp' ? (
+          {channel === 'whatsapp' || channel === 'sms' ? (
             <label className="ep-field" htmlFor={`prov-${channel}-tpl`}>
-              <span className="ep-field__label">Approved template (sample values)</span>
+              <span className="ep-field__label">
+                {channel === 'sms'
+                  ? 'DLT template (sample values)'
+                  : 'Approved template (sample values)'}
+              </span>
               <select
                 id={`prov-${channel}-tpl`}
                 className="ep-select"
                 value={testTpl}
                 onChange={(e) => setTestTpl(e.target.value)}
               >
-                {templates.length ? null : <option value="">No WhatsApp template yet</option>}
+                {templates.length ? null : (
+                  <option value="">
+                    {channel === 'sms'
+                      ? 'No SMS template with a DLT id yet'
+                      : 'No WhatsApp template yet'}
+                  </option>
+                )}
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -341,12 +351,12 @@ function ProviderCard({
           <button
             type="button"
             className="ep-btn ep-btn--secondary ep-btn--sm"
-            disabled={!to}
+            disabled={!to || (channel === 'sms' && !testTpl)}
             onClick={async () => {
               const r = await testProvider(
                 channel,
                 to,
-                channel === 'whatsapp' ? testTpl : undefined,
+                channel === 'whatsapp' || channel === 'sms' ? testTpl : undefined,
               );
               setMsg(
                 r.ok
@@ -359,6 +369,12 @@ function ProviderCard({
           </button>
         </div>
       )}
+      {channel === 'sms' && real ? (
+        <p className="ep-field__help">
+          An SMS goes out only from a template with a DLT template id; add it in the Template
+          master.
+        </p>
+      ) : null}
       {channel === 'whatsapp' && real ? (
         <p className="ep-field__help">
           A test outside a template only reaches a number that messaged the school in the last 24
@@ -702,8 +718,10 @@ export function CommsSettingsForm({
   credits,
   canCredit,
   whatsappTemplates,
+  smsTemplates,
 }: {
   whatsappTemplates: Array<{ id: string; name: string }>;
+  smsTemplates: Array<{ id: string; name: string }>;
   settings: CommsSettings;
   credits: { balances: Balance[]; ledger: Parameters<typeof Credits>[0]['ledger'] };
   canCredit: boolean;
@@ -716,7 +734,7 @@ export function CommsSettingsForm({
             key={c}
             channel={c}
             settings={settings}
-            templates={c === 'whatsapp' ? whatsappTemplates : []}
+            templates={c === 'whatsapp' ? whatsappTemplates : c === 'sms' ? smsTemplates : []}
           />
         ))}
       </div>
