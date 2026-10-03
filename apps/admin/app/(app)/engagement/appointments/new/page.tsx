@@ -1,5 +1,6 @@
 import { Alert, Breadcrumbs, Button, Card, PageHeader, SelectField } from '@edupro/ui';
 import { AppointmentNav } from '@/components/appointments/AppointmentNav';
+import { AutoSubmit } from '@/components/appointments/AutoSubmit';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { bookAppointment } from '@/lib/appointment-actions';
@@ -93,7 +94,8 @@ export default async function NewAppointmentPage({
       <AppointmentNav current="" permissions={me.permissions} />
       <Notice params={{ error: sp.error, detail: sp.detail }} />
       <Card title="1. Whom to meet and when">
-        <form method="get" className="ep-hd__row">
+        <form id="nb-form" method="get" className="ep-hd__row">
+          <AutoSubmit />
           <SelectField
             id="nb-host"
             name="host"
@@ -184,13 +186,16 @@ export default async function NewAppointmentPage({
                       ) : null}
                     </td>
                     <td>
-                      <a
+                      <button
+                        type="submit"
+                        form="nb-form"
+                        name="student"
+                        value={x.id}
                         className="ep-btn ep-btn--secondary ep-btn--sm"
-                        href={pick(x.id)}
                         aria-label={`Select ${x.name}, ${x.admissionNo}`}
                       >
                         Select
-                      </a>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -208,6 +213,9 @@ export default async function NewAppointmentPage({
             . The guardian on record is told unless you type another name and mobile below.{' '}
             <a href={pick(null)}>Change</a>
           </Alert>
+        ) : null}
+        {!host && !choosing ? (
+          <Alert tone="info">Choose whom to meet to see the free slots.</Alert>
         ) : null}
         {host?.kind === 'class_teacher' && !student ? (
           <Alert tone="warning">Search and select the student to find the class teacher.</Alert>
