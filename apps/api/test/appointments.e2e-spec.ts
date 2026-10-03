@@ -583,6 +583,16 @@ describe('appointments v2 (e2e)', () => {
       headers: visitor,
     });
     expect(elsewhere.statusCode).toBe(401);
+    // the open days of a desk
+    const open = (
+      await inject({
+        method: 'GET',
+        url: `/public/appointments/${school.code}/days?hostId=${hosts['Admissions desk']}`,
+        headers: {},
+      })
+    ).json();
+    expect(open.data.length).toBe(10);
+    expect(open.data[0]).toEqual({ date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
     // the visitor sees the request, no pass yet
     const mine = (
       await inject({
@@ -596,6 +606,15 @@ describe('appointments v2 (e2e)', () => {
       state: 'requested',
       passLink: null,
       passQr: null,
+    });
+    // what the visitor gave comes back to fill the next form (the photo is taken fresh each time)
+    expect(mine.profile).toMatchObject({
+      visitorName: 'Vikram Mehta',
+      visitorOrg: 'Pune',
+      visitorEmail: 'vikram@example.com',
+      idProofKind: 'PAN',
+      idProofLast4: '123F',
+      partySize: 2,
     });
     // the front desk sees who is coming, with the photo and the masked ID
     const one = (

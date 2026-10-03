@@ -15,7 +15,7 @@ import type { FastifyReply } from 'fastify';
 import { Public } from '../../common/auth/decorators';
 import { ApplicantGuard, type ApplicantRequest } from '../admissions/public/applicant.guard';
 import { PublicThrottle, PublicThrottleGuard } from '../admissions/public/public-throttle.guard';
-import { CancelDto, PublicBookDto, SlotsQueryDto } from './appointments.dto';
+import { CancelDto, DaysQueryDto, PublicBookDto, SlotsQueryDto } from './appointments.dto';
 import { AppointmentsService } from './appointments.service';
 
 /**
@@ -102,6 +102,14 @@ export class PublicAppointmentsController {
   @ApiOperation({ summary: 'Whom an outside visitor can meet, the purposes and what is asked' })
   info(@Param('schoolCode') schoolCode: string) {
     return this.svc.publicInfo(schoolCode);
+  }
+
+  @Get(':schoolCode/days')
+  @Public()
+  @PublicThrottle(120)
+  @ApiOperation({ summary: 'The next days a desk has a free time' })
+  days(@Param('schoolCode') schoolCode: string, @Query() q: DaysQueryDto) {
+    return this.svc.publicDays(schoolCode, q.hostId);
   }
 
   @Get(':schoolCode/slots')

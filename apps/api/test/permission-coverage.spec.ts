@@ -92,6 +92,7 @@ describe('permission coverage', () => {
       // booking, the visitor's own list and cancelling need the OTP-issued applicant token
       'PublicAppointmentsController.book (public/appointments)',
       'PublicAppointmentsController.cancel (public/appointments)',
+      'PublicAppointmentsController.days (public/appointments)',
       'PublicAppointmentsController.info (public/appointments)',
       'PublicAppointmentsController.mine (public/appointments)',
       'PublicAppointmentsController.mineGet (public/appointments)',

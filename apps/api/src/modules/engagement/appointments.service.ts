@@ -1624,21 +1624,31 @@ export class AppointmentsService {
           : null;
       if (host.kind === 'class_teacher' && !withEmployee)
         return { data: [], note: 'No class teacher is set for this class yet.' };
-      const start = Date.now() + 330 * 60_000;
-      const data: Array<{ date: string; free: number }> = [];
-      for (let i = 0; i <= s.maxDaysAhead && data.length < 10; i += 1) {
-        const date = new Date(start + i * 86_400_000).toISOString().slice(0, 10);
-        const day = await this.slots(c, s, host, date, withEmployee, { byDesk: false });
-        const free = day.slots.filter((x) => x.available).length;
-        if (free > 0) data.push({ date, free });
-      }
-      return {
-        data,
-        note: data.length
-          ? null
-          : `No free time in the next ${String(s.maxDaysAhead)} days. Please try another person or desk.`,
-      };
+      return this.openDays(c, s, host, withEmployee);
     });
+  }
+
+  /** The next (up to ten) days with a time still free, for someone booking from outside the office. */
+  private async openDays(
+    c: PoolClient,
+    s: AppointmentSettings,
+    host: Host,
+    withEmployee: string | null,
+  ) {
+    const start = Date.now() + 330 * 60_000;
+    const data: Array<{ date: string; free: number }> = [];
+    for (let i = 0; i <= s.maxDaysAhead && data.length < 10; i += 1) {
+      const date = new Date(start + i * 86_400_000).toISOString().slice(0, 10);
+      const day = await this.slots(c, s, host, date, withEmployee, { byDesk: false });
+      const free = day.slots.filter((x) => x.available).length;
+      if (free > 0) data.push({ date, free });
+    }
+    return {
+      data,
+      note: data.length
+        ? null
+        : `No free time in the next ${String(s.maxDaysAhead)} days. Please try another person or desk.`,
+    };
   }
 
   async familyBook(ctx: RequestContext, dto: FamilyBookDto) {
@@ -1860,6 +1870,20 @@ export class AppointmentsService {
     return tenant;
   }
 
+  /** The next open days of a desk for an outside visitor (the days only, not how busy the desk is). */
+  async publicDays(schoolCode: string, hostId: string) {
+    const tenant = await this.publicSchool(schoolCode);
+    return this.db.tenant(tenant, async (c) => {
+      const s = await this.settings(c);
+      if (!s.publicEnabled) return { data: [], note: 'Online booking is closed.' };
+      const host = await this.host(c, hostId);
+      if (!host.openPublic || host.status !== 'active')
+        throw new DomainError('not-found', 'That person or desk was not found');
+      const out = await this.openDays(c, s, host, null);
+      return { data: out.data.map((d) => ({ date: d.date })), note: out.note };
+    });
+  }
+
   async publicBook(schoolCode: string, applicant: Applicant, dto: PublicBookDto) {
     const tenant = await this.ownSchool(schoolCode, applicant);
     return this.db.tenant(tenant, async (c) => {
@@ -1942,7 +1966,21 @@ export class AppointmentsService {
         const link = live ? await this.passLink(c, a.passCode) : null;
         data.push(this.publicView(a, link, link ? await this.qrSvg(link) : null));
       }
-      return { data };
+      // what this visitor gave last time, so the form comes filled in (the photo is taken fresh each time)
+      const last = r.rows[0] ? toRow(r.rows[0]) : null;
+      return {
+        data,
+        profile: last
+          ? {
+              visitorName: last.visitorName,
+              visitorEmail: last.visitorEmail,
+              visitorOrg: last.visitorOrg,
+              idProofKind: last.idProofKind,
+              idProofLast4: last.idProofLast4,
+              partySize: last.partySize,
+            }
+          : null,
+      };
     });
   }
 

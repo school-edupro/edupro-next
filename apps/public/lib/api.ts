@@ -159,6 +159,23 @@ export interface Visit {
   passQr: string | null;
   barcode: string | null;
 }
+/** What the visitor gave last time, to fill the next form. */
+export interface VisitProfile {
+  visitorName: string | null;
+  visitorEmail: string | null;
+  visitorOrg: string | null;
+  idProofKind: string | null;
+  idProofLast4: string | null;
+  partySize: number;
+}
+/** A plain date (YYYY-MM-DD) as "Mon, 05 Oct". */
+export const dateLabel = (d: string, lang: Lang) =>
+  new Date(`${d}T00:00:00Z`).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  });
 export interface VisitDetail extends Visit {
   visitorMobile: string | null;
   visitorEmail: string | null;

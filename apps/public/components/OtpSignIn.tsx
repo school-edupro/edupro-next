@@ -10,10 +10,13 @@ export function OtpSignIn({
   school,
   lang,
   returnTo,
+  askName = true,
 }: {
   school: string;
   lang: 'en' | 'hi';
   returnTo: string;
+  /** Applicants give their name here; an appointment visitor gives it later, in the booking form. */
+  askName?: boolean;
 }) {
   const t = (en: string, hi: string) => (lang === 'hi' ? hi : en);
   const [mobile, setMobile] = useState('');
@@ -85,15 +88,17 @@ export function OtpSignIn({
     <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
       {stage === 'mobile' ? (
         <>
-          <label className="ep-field">
-            <span className="ep-field__label">{t('Your name', 'आपका नाम')}</span>
-            <input
-              className="ep-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-            />
-          </label>
+          {askName ? (
+            <label className="ep-field">
+              <span className="ep-field__label">{t('Your name', 'आपका नाम')}</span>
+              <input
+                className="ep-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+              />
+            </label>
+          ) : null}
           <label className="ep-field">
             <span className="ep-field__label">{t('Mobile number', 'मोबाइल नंबर')}</span>
             <input

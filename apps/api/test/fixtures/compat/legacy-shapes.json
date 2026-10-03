@@ -1,9 +1,7 @@
 {
   "_comment": "Recorded from the legacy PHP endpoints (s-webservices) on 2026-09-27: keys per item, not values. Contract tests assert the new responses carry the same keys. Sprint 20 (2026-09-29): the parity endpoints of design note 17 were recorded from t-webservices-21-03-2026; asserted by sprint20.e2e-spec.ts.",
   "GetMenuDetail": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "menu_name",
       "menu_link",
@@ -18,9 +16,7 @@
     ]
   },
   "GetSchoolConfig": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "SchoolId",
       "PREFIX",
@@ -41,103 +37,39 @@
     ]
   },
   "GetDirectory": {
-    "envelope": [
-      "channel"
-    ],
-    "item": [
-      "EmpId",
-      "Name",
-      "Designation",
-      "Department",
-      "MobileNo",
-      "Email_Id"
-    ]
+    "envelope": ["channel"],
+    "item": ["EmpId", "Name", "Designation", "Department", "MobileNo", "Email_Id"]
   },
   "GetHolidays": {
-    "envelope": [
-      "channel"
-    ],
-    "item": [
-      "srno",
-      "holidaydate",
-      "holidayname",
-      "datetime"
-    ]
+    "envelope": ["channel"],
+    "item": ["srno", "holidaydate", "holidayname", "datetime"]
   },
   "GetNotice": {
-    "envelope": [
-      "channels"
-    ],
-    "item": [
-      "srno",
-      "noticetitle",
-      "notice",
-      "datetime"
-    ]
+    "envelope": ["channels"],
+    "item": ["srno", "noticetitle", "notice", "datetime"]
   },
   "GetHomework": {
-    "envelope": [
-      "status",
-      "info",
-      "msg",
-      "items"
-    ],
-    "item": [
-      "subject",
-      "homework",
-      "homeworkdate",
-      "datetime"
-    ]
+    "envelope": ["status", "info", "msg", "items"],
+    "item": ["subject", "homework", "homeworkdate", "datetime"]
   },
   "GetClasswork": {
-    "envelope": [
-      "channels"
-    ],
-    "item": [
-      "subject",
-      "classworkdate",
-      "classwork",
-      "datetime"
-    ]
+    "envelope": ["channels"],
+    "item": ["subject", "classworkdate", "classwork", "datetime"]
   },
   "GetTimetable": {
-    "envelope": [
-      "channels"
-    ],
-    "item": [
-      "srno",
-      "sclass",
-      "subject",
-      "weekday",
-      "daytime",
-      "datetime"
-    ]
+    "envelope": ["channels"],
+    "item": ["srno", "sclass", "subject", "weekday", "daytime", "datetime"]
   },
   "GetAttendance": {
-    "envelope": [
-      "channels"
-    ],
-    "item": [
-      "year",
-      "attendance"
-    ]
+    "envelope": ["channels"],
+    "item": ["year", "attendance"]
   },
   "GetFee": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "fees_amount",
-      "month",
-      "status",
-      "due_date",
-      "datetime"
-    ]
+    "envelope": ["items"],
+    "item": ["fees_amount", "month", "status", "due_date", "datetime"]
   },
   "GetTransport": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "routeno",
       "bus_no",
@@ -158,9 +90,7 @@
     ]
   },
   "GetLibraryTrasaction": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "sadmission",
       "sname",
@@ -178,9 +108,7 @@
     ]
   },
   "GetHealthrecord": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "sadmission",
       "sname",
@@ -195,9 +123,7 @@
     ]
   },
   "GetClinicExamination": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "SrNo",
       "sadmission",
@@ -216,32 +142,15 @@
     ]
   },
   "GetDatesheet": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "subject",
-      "testdate",
-      "testtype",
-      "datetime"
-    ]
+    "envelope": ["items"],
+    "item": ["subject", "testdate", "testtype", "datetime"]
   },
   "GetStudentDateSheet": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "srno",
-      "sclass",
-      "NoticeDate",
-      "examtype",
-      "notice"
-    ]
+    "envelope": ["items"],
+    "item": ["srno", "sclass", "NoticeDate", "examtype", "notice"]
   },
   "GetReportCard": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "sadmission",
       "sname",
@@ -257,9 +166,7 @@
     ]
   },
   "GetAcademicCalander": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "class",
       "AcademicCalenderdate",
@@ -271,52 +178,23 @@
     ]
   },
   "GetSchoolnews": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "srno",
-      "news",
-      "datetime",
-      "imageurl",
-      "newstitle"
-    ]
+    "envelope": ["items"],
+    "item": ["srno", "news", "datetime", "imageurl", "newstitle"]
   },
   "get_app_banner_news": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "type",
-      "messeage",
-      "url",
-      "order_priority",
-      "status"
-    ]
+    "envelope": ["items"],
+    "item": ["type", "messeage", "url", "order_priority", "status"]
   },
   "GetAlbum": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "album_id",
-      "album_title",
-      "ThumbNailImg"
-    ]
+    "envelope": ["items"],
+    "item": ["album_id", "album_title", "ThumbNailImg"]
   },
   "GetAlbumImages": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "photo_name"
-    ]
+    "envelope": ["items"],
+    "item": ["photo_name"]
   },
   "GetGatePass": {
-    "envelope": [
-      "gatepass_data",
-      "image"
-    ],
+    "envelope": ["gatepass_data", "image"],
     "item": [
       "slip_no",
       "gt_admission_id",
@@ -331,24 +209,15 @@
     ]
   },
   "SubmitGatePass": {
-    "envelope": [
-      "status",
-      "info"
-    ],
+    "envelope": ["status", "info"],
     "item": []
   },
   "UpdateGetPassStatus": {
-    "envelope": [
-      "status",
-      "info"
-    ],
+    "envelope": ["status", "info"],
     "item": []
   },
   "GetVistorEntry": {
-    "envelope": [
-      "status",
-      "info"
-    ],
+    "envelope": ["status", "info"],
     "item": [
       "srno",
       "name",
@@ -362,19 +231,11 @@
     ]
   },
   "SubmitVisitorEntry": {
-    "envelope": [
-      "status",
-      "info",
-      "name"
-    ],
+    "envelope": ["status", "info", "name"],
     "item": []
   },
   "student_apply_Leave": {
-    "envelope": [
-      "status",
-      "message",
-      "data"
-    ],
+    "envelope": ["status", "message", "data"],
     "item": [
       "srno",
       "student_id",
@@ -388,10 +249,7 @@
     ]
   },
   "student_leave_list": {
-    "envelope": [
-      "status",
-      "data"
-    ],
+    "envelope": ["status", "data"],
     "item": [
       "srno",
       "student_id",
@@ -405,9 +263,7 @@
     ]
   },
   "GetUserDetail": {
-    "envelope": [
-      "items"
-    ],
+    "envelope": ["items"],
     "item": [
       "EmpId",
       "Name",
@@ -434,32 +290,15 @@
     "item": []
   },
   "show_student_for_mark_entry": {
-    "envelope": [
-      "status",
-      "info_student",
-      "EntryLockStatus"
-    ],
-    "item": [
-      "student_id",
-      "sadmission",
-      "sname",
-      "srollno",
-      "marks",
-      "absent"
-    ]
+    "envelope": ["status", "info_student", "EntryLockStatus"],
+    "item": ["student_id", "sadmission", "sname", "srollno", "marks", "absent"]
   },
   "submit_mark_entry": {
-    "envelope": [
-      "status",
-      "msg"
-    ],
+    "envelope": ["status", "msg"],
     "item": []
   },
   "GetAssignment": {
-    "envelope": [
-      "status",
-      "info_student"
-    ],
+    "envelope": ["status", "info_student"],
     "item": [
       "assignmentdate",
       "assignmentcompletiondate",
@@ -470,10 +309,7 @@
     ]
   },
   "GetParentQuery": {
-    "envelope": [
-      "status",
-      "info"
-    ],
+    "envelope": ["status", "info"],
     "item": [
       "srno",
       "sadmission",
@@ -487,40 +323,19 @@
     ]
   },
   "SendQuery": {
-    "envelope": [
-      "status",
-      "info"
-    ],
+    "envelope": ["status", "info"],
     "item": []
   },
   "GetQueryResponse": {
-    "envelope": [
-      "items"
-    ],
-    "item": [
-      "EmpId",
-      "Employeequery",
-      "queryresponse",
-      "query_type",
-      "datetime"
-    ]
+    "envelope": ["items"],
+    "item": ["EmpId", "Employeequery", "queryresponse", "query_type", "datetime"]
   },
   "GetLeaveHistory": {
-    "envelope": [
-      "status",
-      "info"
-    ],
+    "envelope": ["status", "info"],
     "item": []
   },
   "app_version": {
-    "envelope": [
-      "isview",
-      "version",
-      "message",
-      "forceupdate",
-      "versionupdate",
-      "error"
-    ],
+    "envelope": ["isview", "version", "message", "forceupdate", "versionupdate", "error"],
     "item": []
   }
 }

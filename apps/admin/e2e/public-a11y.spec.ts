@@ -31,9 +31,9 @@ for (const width of [1280, 375]) {
     await check('signed out');
     // a fresh mobile each run: at most three live codes are kept per mobile
     const mobile = `9${String(Date.now()).slice(-9)}`;
-    const boxes = page.locator('main input.ep-input');
-    await boxes.nth(0).fill('Axe Visitor');
-    await boxes.nth(1).fill(mobile);
+    // only the mobile number is asked before the one-time code (the name comes in the booking form)
+    await expect(page.locator('main input.ep-input')).toHaveCount(1);
+    await page.locator('main input.ep-input').fill(mobile);
     await page.getByRole('button', { name: 'Send code' }).click();
     const code = /(\d{6})/.exec(
       (await page.locator('.ep-kicker', { hasText: 'Development code' }).textContent()) ?? '',
@@ -41,14 +41,14 @@ for (const width of [1280, 375]) {
     await page.locator('main input.ep-input').first().fill(code);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForURL(/lang=en/);
-    await check('signed in');
-    // a school day a week ahead, so the slots and the visitor form show
-    const d = new Date(Date.now() + 7 * 86_400_000);
-    while (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1);
-    const host = await page.locator('#v-host option').nth(1).getAttribute('value');
-    await page.goto(
-      `${BASE}/alpha/appointment?lang=hi&host=${host ?? ''}&date=${d.toISOString().slice(0, 10)}`,
-    );
+    // a new visitor goes straight to booking: whom to meet, an open day, then the time and the form
+    await check('whom to meet');
+    await page.locator('.ep-choice').first().click();
+    await page.waitForURL(/host=/);
+    await check('open days');
+    await page.locator('.ep-choice').first().click();
+    await page.waitForURL(/date=/);
+    await page.goto(page.url().replace('lang=en', 'lang=hi'));
     await expect(page.locator('.ep-slots__slot').first()).toBeVisible();
     // the photo is taken live: there is a camera button and no file picker anywhere on the page
     await expect(page.locator('input[type=file]')).toHaveCount(0);
@@ -65,12 +65,12 @@ for (const width of [1280, 375]) {
     );
     await check('photo taken');
     await check('slots and form (Hindi)');
-    // the visitor's own list is there on a personal phone and hidden on the school's tablet (kiosk)
+    // on the school's tablet (kiosk) the visitor's own list is never shown
     await page.goto(`${BASE}/alpha/appointment?lang=en`);
-    await expect(page.getByText('Your appointments')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
     await page.goto(`${BASE}/alpha/appointment?lang=en&kiosk=1`);
     await expect(page.getByText('Your appointments')).toHaveCount(0);
+    await expect(page.locator('.ep-choice').first()).toBeVisible();
     await check('kiosk');
     // the pass of a confirmed appointment, laid out like the visitor card
     await page.goto(`${BASE}/alpha/pass/UBEV3EDGVY`);
