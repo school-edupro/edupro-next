@@ -10,6 +10,7 @@ const PAGES = [
   '/queries?tab=mine',
   '/queries/new?desk=provider',
   '/queries/t/208',
+  '/appointments',
 ];
 
 for (const sub of ['dev-teacher']) {

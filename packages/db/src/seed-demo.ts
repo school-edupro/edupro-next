@@ -351,7 +351,8 @@ async function main(): Promise<void> {
       `INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN
         ('people.student.view','people.student.create','people.student.edit','people.guardian.view','people.guardian.edit','people.enrolment.manage','people.employee.view','people.document.view','people.person.search',
          'academics.class.view','academics.class_section.view','academics.subject.view','academics.teacher_assignment.view','academics.timetable.view','people.import.run',
-         'academics.daily_work.view','academics.notice.view','academics.calendar.view','academics.gallery.view','people.tc.view','people.tc.issue','people.withdrawal.view','people.withdrawal.manage','people.withdrawal.clear','platform.template.view','comms.message.send','comms.template.view','reports.export.create','reports.export.view','platform.files.upload','platform.files.view')
+         'academics.daily_work.view','academics.notice.view','academics.calendar.view','academics.gallery.view','people.tc.view','people.tc.issue','people.withdrawal.view','people.withdrawal.manage','people.withdrawal.clear','platform.template.view','comms.message.send','comms.template.view','reports.export.create','reports.export.view','platform.files.upload','platform.files.view',
+         'engagement.appointment.view','engagement.appointment.decide','engagement.appointment.checkin','engagement.visitor.manage')
        ON CONFLICT DO NOTHING`,
       [frontOffice.rows[0]!.id],
     );

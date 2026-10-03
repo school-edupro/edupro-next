@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Res } from '@
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   APPOINTMENTS as P,
@@ -67,6 +68,16 @@ export class AppointmentsController {
   @RequirePermission(P.family)
   mineCancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CancelDto) {
     return this.svc.familyCancel(ctx, id, dto);
+  }
+
+  // ---- the person to be met ----------------------------------------------------------------------------
+  @Get('with-me')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary: 'Appointments with me today and in the next 30 days (no visitor contact details)',
+  })
+  withMe(@ReqCtx() ctx: RequestContext) {
+    return this.svc.withMe(ctx);
   }
 
   // ---- set-up (admin) ---------------------------------------------------------------------------------
@@ -163,6 +174,29 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Find an appointment from a scanned pass, its number or a mobile' })
   gateFind(@ReqCtx() ctx: RequestContext, @Body() dto: GateFindDto) {
     return this.svc.gateFind(ctx, dto.code);
+  }
+
+  @Get('gate/board')
+  @RequirePermission(P.checkin)
+  @ApiOperation({ summary: 'The gate screen: appointments just found, inside now, expected today' })
+  gateBoard(@ReqCtx() ctx: RequestContext, @Query('found') found?: string) {
+    const ids = (found ?? '').split(',').filter((x) => /^\d{1,18}$/.test(x));
+    return this.svc.gateBoard(ctx, ids.slice(0, 10));
+  }
+
+  @Get(':id/gate-photo')
+  @RequirePermission(P.checkin)
+  @ApiOperation({ summary: "The visitor's photo, for the gate" })
+  async gatePhoto(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, contentType } = await this.svc.photo(ctx, id);
+    void reply
+      .header('content-type', contentType)
+      .header('cache-control', 'private, max-age=300')
+      .send(bytes);
   }
 
   @Get(':id')

@@ -3390,19 +3390,6 @@ const decideBody = (fd: FormData) => ({
   note: opt(fd, 'note'),
 });
 
-export async function decideAppointment(fd: FormData) {
-  return run('/engagement/appointments', () =>
-    apiFetch(`/engagement/appointments/${str(fd, 'id')}/decide`, {
-      method: 'POST',
-      body: JSON.stringify({
-        ...decideBody(fd),
-        confirmedAt: opt(fd, 'confirmedAt'),
-        location: opt(fd, 'location'),
-      }),
-    }),
-  );
-}
-
 export async function visitorIn(fd: FormData) {
   return run('/engagement/visitors', () =>
     apiFetch('/engagement/visitors', {

@@ -215,6 +215,21 @@ const NAV: Array<{
         label: 'appointments',
         permission: 'engagement.appointment.view',
       },
+      {
+        href: '/engagement/appointments/calendar',
+        label: 'appointmentCalendar',
+        permission: 'engagement.appointment.view',
+      },
+      {
+        href: '/engagement/appointments/gate',
+        label: 'appointmentGate',
+        permission: 'engagement.appointment.checkin',
+      },
+      {
+        href: '/engagement/appointments/setup',
+        label: 'appointmentSetup',
+        permission: 'engagement.appointment_setup.manage',
+      },
       { href: '/engagement/visitors', label: 'visitors', permission: 'engagement.visitor.manage' },
       {
         href: '/engagement/gate-passes',

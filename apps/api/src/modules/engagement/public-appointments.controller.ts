@@ -19,7 +19,8 @@ import { AppointmentsService } from './appointments.service';
 /**
  * Appointments for outside visitors (0059): the page behind the school's QR code. Anyone may read the
  * desks and free slots; booking, the visitor's own list and cancelling need the mobile-OTP token the
- * public admissions sign-in issues (the same person, the same cookie). No EduPro user is involved.
+ * public admissions sign-in issues (the same person, the same cookie) for this very school. No EduPro
+ * user is involved.
  */
 @ApiTags('public')
 @Controller('public/appointments')
@@ -27,31 +28,40 @@ import { AppointmentsService } from './appointments.service';
 export class PublicAppointmentsController {
   constructor(private readonly svc: AppointmentsService) {}
 
-  @Get('mine')
+  @Get(':schoolCode/mine')
   @Public()
   @UseGuards(ApplicantGuard)
   @PublicThrottle(60)
   @ApiOperation({ summary: "The visitor's own appointments with the pass of the confirmed ones" })
-  mine(@Req() req: ApplicantRequest) {
-    return this.svc.publicMine(req.applicant!);
+  mine(@Req() req: ApplicantRequest, @Param('schoolCode') schoolCode: string) {
+    return this.svc.publicMine(schoolCode, req.applicant!);
   }
 
-  @Post()
+  @Post(':schoolCode')
   @Public()
   @UseGuards(ApplicantGuard)
   @PublicThrottle(10)
   @ApiOperation({ summary: 'An OTP-verified visitor asks for a slot' })
-  book(@Req() req: ApplicantRequest, @Body() dto: PublicBookDto) {
-    return this.svc.publicBook(req.applicant!, dto);
+  book(
+    @Req() req: ApplicantRequest,
+    @Param('schoolCode') schoolCode: string,
+    @Body() dto: PublicBookDto,
+  ) {
+    return this.svc.publicBook(schoolCode, req.applicant!, dto);
   }
 
-  @Post(':id/cancel')
+  @Post(':schoolCode/:id/cancel')
   @HttpCode(200)
   @Public()
   @UseGuards(ApplicantGuard)
   @PublicThrottle(20)
-  cancel(@Req() req: ApplicantRequest, @Param('id') id: string, @Body() dto: CancelDto) {
-    return this.svc.publicCancel(req.applicant!, id, dto);
+  cancel(
+    @Req() req: ApplicantRequest,
+    @Param('schoolCode') schoolCode: string,
+    @Param('id') id: string,
+    @Body() dto: CancelDto,
+  ) {
+    return this.svc.publicCancel(schoolCode, req.applicant!, id, dto);
   }
 
   @Get(':schoolCode')

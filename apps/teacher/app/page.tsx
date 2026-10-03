@@ -55,6 +55,12 @@ export default async function HomePage() {
       '/queries',
     ],
     [
+      t(lang, 'Appointments with me'),
+      t(lang, 'Parents and visitors coming to meet you'),
+      true,
+      '/appointments',
+    ],
+    [
       t(lang, 'Students'),
       t(lang, 'Your sections and student profiles'),
       can('people.student.view'),

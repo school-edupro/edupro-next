@@ -17,7 +17,7 @@ const FAQ: Array<[string, string]> = [
   ],
   [
     'How do I ask to meet a teacher?',
-    'Appointments → Request an appointment with up to three slots. The class teacher confirms one and you receive a WhatsApp.',
+    'Appointments → pick the child, whom to meet and the day, then a free time. The school confirms it and sends you the gate pass.',
   ],
   [
     'Why did I not get an absence alert?',

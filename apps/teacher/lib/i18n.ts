@@ -17,6 +17,19 @@ const DICT: Record<string, string> = {
   'Only they can answer and close it.': 'केवल वही इसका उत्तर देकर बंद कर सकते हैं।',
   'Raised, sent to': 'भेजा गया, प्राप्तकर्ता',
   'Queries and helpdesk': 'प्रश्न और हेल्पडेस्क',
+  Appointments: 'भेंट',
+  'Appointments with me': 'मुझसे भेंट',
+  'Parents and visitors coming to meet you': 'आपसे मिलने आने वाले अभिभावक और आगंतुक',
+  'Today and the next 30 days. The front desk confirms and moves appointments.':
+    'आज और अगले 30 दिन। भेंट की पुष्टि और समय बदलना फ्रंट डेस्क करता है।',
+  'Nobody has an appointment with you in the next 30 days.':
+    'अगले 30 दिनों में आपसे किसी की भेंट तय नहीं है।',
+  'Waiting for the front desk': 'फ्रंट डेस्क की प्रतीक्षा',
+  Confirmed: 'पुष्ट',
+  Arrived: 'पहुँचे',
+  Completed: 'पूर्ण',
+  'Did not come': 'नहीं आए',
+  Visitor: 'आगंतुक',
   'Family queries, leave requests, your own queries and ERP tickets':
     'अभिभावकों के प्रश्न, अवकाश अनुरोध, आपके प्रश्न और ईआरपी टिकट',
   'Raise a ticket to the ERP provider': 'ईआरपी प्रदाता को टिकट भेजें',
@@ -128,8 +141,8 @@ const DICT: Record<string, string> = {
   'Delete it from Daily work the same day; families see the update at once.':
     'उसी दिन दैनिक कार्य से हटाएँ; परिवार तुरंत अद्यतन देखते हैं।',
   'A family asks for an appointment.': 'परिवार भेंट माँगता है।',
-  'The request reaches your approvals inbox; confirm a slot and place and the family gets a WhatsApp.':
-    'अनुरोध आपके अनुमोदन इनबॉक्स में आता है; समय और स्थान की पुष्टि करें और परिवार को WhatsApp मिलता है।',
+  'The family books a free slot in the parent app and the front desk confirms it. Appointments with me on the home screen shows who is coming and when.':
+    'परिवार अभिभावक ऐप में खाली समय चुनता है और फ्रंट डेस्क पुष्टि करता है। होम स्क्रीन पर “मुझसे भेंट” में दिखता है कि कौन कब आ रहा है।',
   'Something is broken or slow.': 'कुछ टूटा या धीमा है।',
   'Use Report an issue on the home page: the support desk sees it at once, with a severity and a due time.':
     'होम पेज पर समस्या दर्ज करें का उपयोग करें: सपोर्ट डेस्क तुरंत देखता है, गंभीरता और नियत समय सहित।',

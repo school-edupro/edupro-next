@@ -349,8 +349,8 @@ export class YearsService {
           WHERE status = 'active' RETURNING id::text, code`,
       );
       await c.query(
-        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
         // the promoted year becomes the working year with every stage open; lock stages again as needed
+        // eslint-disable-next-line no-restricted-syntax -- table name comes from a two-value enum
         `UPDATE ${table(kind)} SET status = 'active', locks = '{}'::jsonb, updated_by = app.current_user_id() WHERE id = $1`,
         [id],
       );

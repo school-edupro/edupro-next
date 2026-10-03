@@ -114,8 +114,8 @@ const DICT: Record<string, string> = {
   'Queries \u2192 New request \u2192 Leave, with the dates and the reason. The class teacher approves it and the attendance shows leave for those days.':
     'प्रश्न → नया अनुरोध → अवकाश, तिथियाँ और कारण सहित। कक्षा शिक्षक स्वीकृत करते हैं और उपस्थिति में वे दिन अवकाश दिखते हैं।',
   'How do I ask to meet a teacher?': 'शिक्षक से मिलने का अनुरोध कैसे करूँ?',
-  'Appointments \u2192 Request an appointment with up to three slots. The class teacher confirms one and you receive a WhatsApp.':
-    'भेंट → तीन तक समय के साथ अनुरोध करें। कक्षा शिक्षक एक की पुष्टि करते हैं और आपको WhatsApp मिलता है।',
+  'Appointments \u2192 pick the child, whom to meet and the day, then a free time. The school confirms it and sends you the gate pass.':
+    'भेंट → बच्चा, किससे मिलना है और दिन चुनें, फिर खाली समय। विद्यालय पुष्टि करके गेट पास भेजता है।',
   'Why did I not get an absence alert?': 'मुझे अनुपस्थिति अलर्ट क्यों नहीं मिला?',
   'Alerts go once a day per child after the attendance time. Check Profile \u2192 Your consents; safety and attendance alerts are always sent, but the mobile number on record must be current.':
     'अलर्ट उपस्थिति समय के बाद प्रति बच्चा दिन में एक बार जाते हैं। प्रोफ़ाइल → आपकी सहमतियाँ देखें; सुरक्षा और उपस्थिति अलर्ट हमेशा जाते हैं, पर दर्ज मोबाइल नंबर सही होना चाहिए।',
@@ -162,6 +162,25 @@ const DICT: Record<string, string> = {
   'Alternative slot': 'वैकल्पिक समय',
   Request: 'अनुरोध',
   'Your appointments': 'आपकी भेंटें',
+  'Show free times': 'खाली समय दिखाएँ',
+  'Visiting hours': 'मिलने का समय',
+  'No visiting hours': 'मिलने का समय तय नहीं',
+  'Free times on': 'खाली समय',
+  'No free time on this day. Please try another day.':
+    'इस दिन कोई समय खाली नहीं है। कृपया दूसरा दिन चुनें।',
+  'Appointment cancelled.': 'भेंट रद्द की गई।',
+  'Appointment requested. The school will confirm it and send you the pass.':
+    'भेंट का अनुरोध भेजा गया। विद्यालय पुष्टि करके पास भेजेगा।',
+  'Book a time to meet the class teacher or the school office, or request a gate pass.':
+    'कक्षा अध्यापक या विद्यालय कार्यालय से मिलने का समय लें, या गेट पास माँगें।',
+  'Waiting for the school': 'विद्यालय की प्रतीक्षा',
+  'Not confirmed': 'पुष्टि नहीं हुई',
+  Arrived: 'पहुँचे',
+  Completed: 'पूर्ण',
+  'Did not come': 'नहीं आए',
+  'Gate pass': 'गेट पास',
+  Choose: 'चुनें',
+  Day: 'दिन',
   'No appointments yet.': 'अभी कोई भेंट नहीं।',
   Confirmed: 'पुष्ट',
   Preferred: 'पसंदीदा',

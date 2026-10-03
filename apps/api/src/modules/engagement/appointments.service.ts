@@ -997,6 +997,34 @@ export class AppointmentsService {
     });
   }
 
+  /** What the gate screen shows: the appointments just found, who is inside, who is still expected today. */
+  async gateBoard(ctx: RequestContext, ids: string[]) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT, DAY and TODAY are constants; the ids are bound
+        `${SELECT} WHERE a.id = ANY($1::bigint[]) OR a.state = 'checked_in'
+            OR (${DAY('a.starts_at')} = ${TODAY} AND a.state IN ('requested', 'approved'))
+          ORDER BY a.starts_at NULLS LAST, a.id LIMIT 500`,
+        [ids],
+      );
+      const rows = r.rows.map(toRow);
+      const schoolDay = (v: number) => new Date(v + 330 * 60_000).toISOString().slice(0, 10);
+      const today = schoolDay(Date.now());
+      return {
+        found: rows.filter((a) => ids.includes(a.id)),
+        inside: rows.filter((a) => a.state === 'checked_in'),
+        // the found ones are listed above; a found visit for another day is not "expected today"
+        expected: rows.filter(
+          (a) =>
+            ['requested', 'approved'].includes(a.state) &&
+            !ids.includes(a.id) &&
+            a.startsAt !== null &&
+            schoolDay(Date.parse(a.startsAt)) === today,
+        ),
+      };
+    });
+  }
+
   /** Arrival: the appointment becomes the visitor-log entry (in time now). */
   async checkIn(ctx: RequestContext, id: string, dto: CheckInDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1068,6 +1096,39 @@ export class AppointmentsService {
         entityId: id,
       });
       return { ok: true };
+    });
+  }
+
+  /**
+   * The appointments with me, for the person to be met (any member of staff): today and the next 30
+   * days, without the visitor's contact or ID details, which stay with the front desk.
+   */
+  async withMe(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT, DAY and TODAY are constants
+        `${SELECT} WHERE COALESCE(a.with_employee_id, h.employee_id) = (SELECT me.id FROM employees me WHERE me.user_id = app.current_user_id() AND me.deleted_at IS NULL LIMIT 1)
+            AND a.starts_at IS NOT NULL AND ${DAY('a.starts_at')} BETWEEN ${TODAY} AND ${TODAY} + 30
+            AND a.state NOT IN ('rejected', 'cancelled')
+          ORDER BY a.starts_at, a.id LIMIT 300`,
+      );
+      return {
+        data: r.rows.map(toRow).map((a) => ({
+          id: a.id,
+          number: a.number,
+          state: a.state,
+          startsAt: a.startsAt,
+          endsAt: a.endsAt,
+          place: a.place,
+          hostName: a.hostName,
+          purpose: a.purpose,
+          visitorName: a.visitorName,
+          visitorOrg: a.visitorOrg,
+          partySize: a.partySize,
+          student: a.student,
+          section: a.section,
+        })),
+      };
     });
   }
 
@@ -1609,8 +1670,21 @@ export class AppointmentsService {
     });
   }
 
-  async publicBook(applicant: Applicant, dto: PublicBookDto) {
-    return this.db.tenant(publicTenant(applicant.schoolId), async (c) => {
+  /** The one-time code was for one school: a visitor signed in elsewhere signs in again here. */
+  private async ownSchool(schoolCode: string, applicant: Applicant): Promise<TenantContext> {
+    const tenant = await this.publicSchool(schoolCode);
+    if (tenant.schoolId !== applicant.schoolId)
+      throw new DomainError(
+        'applicant-unauthenticated',
+        'Confirm your mobile number for this school first',
+        { status: 401 },
+      );
+    return tenant;
+  }
+
+  async publicBook(schoolCode: string, applicant: Applicant, dto: PublicBookDto) {
+    const tenant = await this.ownSchool(schoolCode, applicant);
+    return this.db.tenant(tenant, async (c) => {
       const s = await this.settings(c);
       if (!s.publicEnabled)
         throw new DomainError('appointment.public_closed', 'Online booking is closed', {
@@ -1675,8 +1749,9 @@ export class AppointmentsService {
     };
   }
 
-  async publicMine(applicant: Applicant) {
-    return this.db.tenant(publicTenant(applicant.schoolId), async (c) => {
+  async publicMine(schoolCode: string, applicant: Applicant) {
+    const tenant = await this.ownSchool(schoolCode, applicant);
+    return this.db.tenant(tenant, async (c) => {
       const r = await c.query<Row>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values bound
         `${SELECT} WHERE a.applicant_id = $1 ORDER BY a.created_at DESC, a.id DESC LIMIT 30`,
@@ -1692,8 +1767,9 @@ export class AppointmentsService {
     });
   }
 
-  async publicCancel(applicant: Applicant, id: string, dto: CancelDto) {
-    return this.db.tenant(publicTenant(applicant.schoolId), async (c) => {
+  async publicCancel(schoolCode: string, applicant: Applicant, id: string, dto: CancelDto) {
+    const tenant = await this.ownSchool(schoolCode, applicant);
+    return this.db.tenant(tenant, async (c) => {
       const own = await c.query(`SELECT 1 FROM appointments WHERE id = $1 AND applicant_id = $2`, [
         id,
         applicant.id,

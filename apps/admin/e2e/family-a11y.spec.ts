@@ -14,6 +14,8 @@ const PAGES = [
   '/queries',
   '/queries/new?kind=query',
   '/queries/16',
+  '/appointments',
+  '/appointments?host=47&date=2026-10-12',
 ];
 
 for (const sub of ['dev-parent', 'dev-student']) {

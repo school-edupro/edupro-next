@@ -29,7 +29,7 @@ const FAQ: Array<[string, string]> = [
   ],
   [
     'A family asks for an appointment.',
-    'The request reaches your approvals inbox; confirm a slot and place and the family gets a WhatsApp.',
+    'The family books a free slot in the parent app and the front desk confirms it. Appointments with me on the home screen shows who is coming and when.',
   ],
   [
     'Something is broken or slow.',

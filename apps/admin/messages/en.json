@@ -94,6 +94,9 @@
     "adjustments": "Adjustments",
     "miscReceipts": "Misc receipts",
     "appointments": "Appointments",
+    "appointmentCalendar": "Appointment calendar",
+    "appointmentGate": "Gate check-in",
+    "appointmentSetup": "Appointment set-up",
     "visitors": "Visitors",
     "gatePasses": "Gate passes",
     "consentForms": "Consent forms",
@@ -768,7 +771,7 @@
     "engagement_appointments": {
       "kicker": "Engagement",
       "title": "Appointments",
-      "description": "Families ask to meet a teacher, the coordinator or the principal; the class teacher confirms a slot (on the approval workflow when installed)."
+      "description": "Parents and outside visitors book a free slot; the front desk confirms, declines or gives a new time, and the pass checks the visitor in at the gate."
     },
     "engagement_visitors": {
       "kicker": "Engagement",

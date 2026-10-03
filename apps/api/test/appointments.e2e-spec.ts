@@ -42,6 +42,7 @@ describe('appointments v2 (e2e)', () => {
   let app: NestFastifyApplication;
   let inject: ReturnType<typeof injector>;
   let school: SeededSchool;
+  let other: SeededSchool;
   let admin: SeededUser;
   let teacher: SeededUser;
   let parent: SeededUser;
@@ -94,6 +95,7 @@ describe('appointments v2 (e2e)', () => {
     s = stamp('APT');
     await withMigrator(async (c) => {
       school = await seedSchool(c, `${s}A`);
+      other = await seedSchool(c, `${s}B`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       teacher = await seedUser(c, school, `${s}-teacher`, 'class_teacher');
       parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
@@ -188,6 +190,16 @@ describe('appointments v2 (e2e)', () => {
     expect(approved.map((t) => t.channel).sort()).toEqual(['email', 'sms', 'whatsapp']);
     expect(approved.find((t) => t.channel === 'email')!.ready).toBe(true);
     expect(approved.find((t) => t.channel === 'sms')!.ready).toBe(false);
+    // until then nothing is queued on those channels; the school adds its DLT ids and WhatsApp names
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE comms_templates SET dlt_template_id = '1707' || id, wa_template_name = code WHERE school_id = $1 AND code LIKE 'appointment\\_%'`,
+        [school.id],
+      ),
+    );
+    const ready = (await inject({ method: 'GET', url: '/appointments/setup', headers: h() })).json()
+      .templates as Array<{ ready: boolean }>;
+    expect(ready.every((t) => t.ready)).toBe(true);
     const save = await inject({
       method: 'PUT',
       url: '/appointments/setup/settings',
@@ -232,6 +244,10 @@ describe('appointments v2 (e2e)', () => {
     // the set-up is the admin's
     expect(
       (await inject({ method: 'GET', url: '/appointments/setup', headers: h(teacher) })).statusCode,
+    ).toBe(403);
+    // a teacher is not the front desk: no queue, no decisions
+    expect(
+      (await inject({ method: 'GET', url: '/appointments', headers: h(teacher) })).statusCode,
     ).toBe(403);
   });
 
@@ -350,6 +366,27 @@ describe('appointments v2 (e2e)', () => {
     ).json();
     expect(mine.data[0]).toMatchObject({ id: ids.parent, state: 'approved', place: 'Staff room' });
     expect(mine.data[0].passLink).toContain(`/${school.code.toLowerCase()}/pass/`);
+    // the teacher sees it among the appointments with her, without the parent's contact details
+    const withMe = (
+      await inject({ method: 'GET', url: '/appointments/with-me', headers: h(teacher) })
+    ).json();
+    expect(withMe.data).toHaveLength(1);
+    expect(withMe.data[0]).toMatchObject({
+      id: ids.parent,
+      state: 'approved',
+      student: 'Aanya Slot',
+    });
+    expect(withMe.data[0].visitorMobile).toBeUndefined();
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: `/appointments/${ids.parent}/cancel`,
+          headers: h(teacher),
+          json: {},
+        })
+      ).statusCode,
+    ).toBe(403);
     // the teacher to be met is told by mail; a parent cannot decide
     const mail = await withMigrator((c) =>
       c.query<{ subject: string }>(
@@ -391,7 +428,7 @@ describe('appointments v2 (e2e)', () => {
     // booking needs the OTP sign-in
     const anon = await inject({
       method: 'POST',
-      url: '/public/appointments',
+      url: `/public/appointments/${school.code}`,
       headers: {},
       json: {
         hostId: hosts['Admissions desk'],
@@ -439,7 +476,7 @@ describe('appointments v2 (e2e)', () => {
     // the school asks for an ID proof and a photo
     const bare = await inject({
       method: 'POST',
-      url: '/public/appointments',
+      url: `/public/appointments/${school.code}`,
       headers: visitor,
       json: base,
     });
@@ -447,7 +484,7 @@ describe('appointments v2 (e2e)', () => {
     // a desk that is not open to the public cannot be booked from outside
     const closed = await inject({
       method: 'POST',
-      url: '/public/appointments',
+      url: `/public/appointments/${school.code}`,
       headers: visitor,
       json: {
         ...base,
@@ -461,7 +498,7 @@ describe('appointments v2 (e2e)', () => {
     expect(closed.statusCode).toBe(404);
     const book = await inject({
       method: 'POST',
-      url: '/public/appointments',
+      url: `/public/appointments/${school.code}`,
       headers: visitor,
       json: { ...base, idProofKind: 'PAN', idProofLast4: '123f', photo: PHOTO },
     });
@@ -469,9 +506,20 @@ describe('appointments v2 (e2e)', () => {
     expect(book.json().state).toBe('requested');
     ids.public = book.json().id;
     expect((await queued(mobile, 'appointment_requested')).length).toBe(2);
+    // the one-time code was for this school: the same token books nothing at another school
+    const elsewhere = await inject({
+      method: 'GET',
+      url: `/public/appointments/${other.code}/mine`,
+      headers: visitor,
+    });
+    expect(elsewhere.statusCode).toBe(401);
     // the visitor sees the request, no pass yet
     const mine = (
-      await inject({ method: 'GET', url: '/public/appointments/mine', headers: visitor })
+      await inject({
+        method: 'GET',
+        url: `/public/appointments/${school.code}/mine`,
+        headers: visitor,
+      })
     ).json();
     expect(mine.data[0]).toMatchObject({
       id: ids.public,
@@ -512,7 +560,11 @@ describe('appointments v2 (e2e)', () => {
     expect(told[0]!.body).toContain(`/${school.code.toLowerCase()}/pass/`);
     expect((await queued('vikram@example.com', 'appointment_rescheduled')).length).toBe(1);
     const now = (
-      await inject({ method: 'GET', url: '/public/appointments/mine', headers: visitor })
+      await inject({
+        method: 'GET',
+        url: `/public/appointments/${school.code}/mine`,
+        headers: visitor,
+      })
     ).json();
     expect(now.data[0]).toMatchObject({ state: 'approved', host: 'Admissions desk' });
     expect(now.data[0].passQr).toContain('<svg');
@@ -551,6 +603,17 @@ describe('appointments v2 (e2e)', () => {
       })
     ).json();
     expect(found.data.map((x: { id: string }) => x.id)).toEqual([ids.public]);
+    // the gate screen: what was found, with who is inside and who is expected today
+    const board = (
+      await inject({
+        method: 'GET',
+        url: `/appointments/gate/board?found=${ids.public}`,
+        headers: h(),
+      })
+    ).json();
+    expect(board.found.map((x: { id: string }) => x.id)).toEqual([ids.public]);
+    expect(board.inside).toEqual([]);
+    expect(board.expected).toEqual([]); // the found visit is for another day
     // a request that is not confirmed cannot come in
     const walk = await inject({
       method: 'POST',
@@ -617,7 +680,7 @@ describe('appointments v2 (e2e)', () => {
       (
         await inject({
           method: 'POST',
-          url: `/public/appointments/${ids.public}/cancel`,
+          url: `/public/appointments/${school.code}/${ids.public}/cancel`,
           headers: visitor,
           json: {},
         })
@@ -826,7 +889,7 @@ describe('appointments v2 (e2e)', () => {
     });
     const book = await inject({
       method: 'POST',
-      url: '/public/appointments',
+      url: `/public/appointments/${school.code}`,
       headers: visitor,
       json: {
         hostId: hosts['Front office'],
@@ -842,7 +905,7 @@ describe('appointments v2 (e2e)', () => {
     expect((await queued(mobile, 'appointment_approved')).length).toBe(2);
     const cancel = await inject({
       method: 'POST',
-      url: `/public/appointments/${book.json().id}/cancel`,
+      url: `/public/appointments/${school.code}/${book.json().id}/cancel`,
       headers: visitor,
       json: { reason: 'Plans changed' },
     });
@@ -859,7 +922,7 @@ describe('appointments v2 (e2e)', () => {
     expect(info).toMatchObject({ enabled: false, hosts: [] });
     const shut = await inject({
       method: 'POST',
-      url: '/public/appointments',
+      url: `/public/appointments/${school.code}`,
       headers: visitor,
       json: {
         hostId: hosts['Front office'],

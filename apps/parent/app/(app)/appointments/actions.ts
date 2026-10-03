@@ -15,23 +15,40 @@ function fail(back: string, error: unknown): never {
   throw error;
 }
 
-/** Sprint 19: a guardian asks to meet the class teacher, the coordinator or the principal. */
+/** A guardian books a free slot with a person or desk the school has opened to parents (0059). */
 export async function requestAppointment(fd: FormData) {
-  const slots = ['slot1', 'slot2', 'slot3'].map((k) => str(fd, k)).filter(Boolean);
+  const back = `/appointments?${new URLSearchParams({
+    student: str(fd, 'studentId'),
+    host: str(fd, 'hostId'),
+    date: str(fd, 'date'),
+  }).toString()}`;
   try {
-    await bff.api.fetch('/engagement/mine/appointments', {
+    await bff.api.fetch('/appointments/mine', {
       method: 'POST',
       body: JSON.stringify({
         studentId: str(fd, 'studentId'),
-        withKind: str(fd, 'withKind') || 'class_teacher',
+        hostId: str(fd, 'hostId'),
+        startsAt: str(fd, 'startsAt'),
         purpose: str(fd, 'purpose'),
-        preferredSlots: slots,
       }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect('/appointments?ok=1');
+}
+
+/** A guardian cancels an appointment that has not happened yet. */
+export async function cancelAppointment(fd: FormData) {
+  try {
+    await bff.api.fetch(`/appointments/mine/${str(fd, 'id')}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   } catch (error) {
     fail('/appointments', error);
   }
-  redirect('/appointments?ok=1');
+  redirect('/appointments?ok=cancelled');
 }
 
 /** Sprint 19: a guardian asks for an early-leave or late-arrival pass. */

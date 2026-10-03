@@ -27,7 +27,13 @@ export default async function SchoolPage({
           'ऑनलाइन आवेदन करें। आप अपने मोबाइल पर भेजे गए एक बार के कोड से साइन इन करेंगे।',
         )}
         actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/${school}/appointment?lang=${lang}`}
+            >
+              {t(lang, 'Book an appointment', 'मुलाक़ात का समय लें')}
+            </a>
             <a
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/${school}/status?lang=${lang}`}
