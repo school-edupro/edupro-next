@@ -170,6 +170,9 @@ export const AppointmentSettingsSchema = z.object({
   noShowMinutes: z.number().int().min(10).max(600),
   closedDates: z.array(DateSchema).max(200).default([]),
   instructions: z.string().trim().max(1000).nullish(),
+  visitorTypes: Words(20),
+  gates: Words(12),
+  visitorSelfEnabled: z.boolean(),
 });
 export class AppointmentSettingsDto extends createZodDto(AppointmentSettingsSchema) {}
 

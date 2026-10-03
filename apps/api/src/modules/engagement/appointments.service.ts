@@ -158,6 +158,10 @@ export interface AppointmentSettings {
   noShowMinutes: number;
   closedDates: string[];
   instructions: string | null;
+  /** The visitor gate pass: the kinds of visitor, the gates, and whether a visitor may register on their own phone. */
+  visitorTypes: string[];
+  gates: string[];
+  visitorSelfEnabled: boolean;
 }
 
 interface Host {
@@ -271,7 +275,8 @@ export class AppointmentsService {
     const r = await c.query<Row>(
       `SELECT public_enabled, auto_approve, min_notice_hours, max_days_ahead, max_party, ask_organisation, ask_id_proof, ask_photo,
               id_proof_kinds, purposes, notify_sms, notify_whatsapp, notify_email, reminder_hours, no_show_minutes,
-              ARRAY(SELECT to_char(d, 'YYYY-MM-DD') FROM unnest(closed_dates) AS d ORDER BY d) AS closed_dates, instructions
+              ARRAY(SELECT to_char(d, 'YYYY-MM-DD') FROM unnest(closed_dates) AS d ORDER BY d) AS closed_dates, instructions,
+              visitor_types, gates, visitor_self_enabled
          FROM appointment_settings WHERE school_id = app.current_school_id()`,
     );
     const x = r.rows[0]!;
@@ -293,6 +298,9 @@ export class AppointmentsService {
       noShowMinutes: Number(x.no_show_minutes),
       closedDates: x.closed_dates as string[],
       instructions: text(x.instructions),
+      visitorTypes: x.visitor_types as string[],
+      gates: x.gates as string[],
+      visitorSelfEnabled: Boolean(x.visitor_self_enabled),
     };
   }
 
@@ -1251,9 +1259,12 @@ export class AppointmentsService {
           { status: 409 },
         );
       const v = await c.query<{ id: string }>(
-        `INSERT INTO visitor_log (school_id, visitor_name, mobile, organisation, purpose, to_meet, id_proof_kind, badge_no, logged_by)
+        `INSERT INTO visitor_log (school_id, visitor_name, mobile, organisation, purpose, to_meet, id_proof_kind, badge_no, logged_by,
+                source, state, appointment_id, host_id, with_employee_id, party_size, id_proof_last4, email, pass_code, visitor_type)
          SELECT app.current_school_id(), COALESCE(ap.visitor_name, st.display_name, 'Visitor'), ap.visitor_mobile, ap.visitor_org,
-                left(ap.purpose, 300) || ' (' || ap.number || ')', COALESCE(e.display_name, he.display_name, h.name), ap.id_proof_kind, $2, app.current_user_id()
+                left(ap.purpose, 300) || ' (' || ap.number || ')', COALESCE(e.display_name, he.display_name, h.name), ap.id_proof_kind, $2, app.current_user_id(),
+                'appointment', 'inside', ap.id, ap.host_id, ap.with_employee_id, ap.party_size, ap.id_proof_last4, ap.visitor_email, ap.pass_code,
+                CASE WHEN ap.student_id IS NOT NULL THEN 'Parent' END
            FROM appointments ap LEFT JOIN appointment_hosts h ON h.id = ap.host_id LEFT JOIN employees e ON e.id = ap.with_employee_id
            LEFT JOIN employees he ON he.id = h.employee_id LEFT JOIN students st ON st.id = ap.student_id
           WHERE ap.id = $1 RETURNING id::text`,
@@ -1279,7 +1290,7 @@ export class AppointmentsService {
       const a = await this.locked(c, id);
       if (a.state !== 'checked_in') this.wrongState(a.state, 'checked out');
       await c.query(
-        `UPDATE visitor_log SET out_at = now() WHERE id = (SELECT visitor_log_id FROM appointments WHERE id = $1) AND out_at IS NULL`,
+        `UPDATE visitor_log SET out_at = now(), state = 'left', out_by = app.current_user_id() WHERE id = (SELECT visitor_log_id FROM appointments WHERE id = $1) AND out_at IS NULL`,
         [id],
       );
       await c.query(
@@ -1627,7 +1638,8 @@ export class AppointmentsService {
         `UPDATE appointment_settings SET public_enabled = $1, auto_approve = $2, min_notice_hours = $3, max_days_ahead = $4, max_party = $5,
                 ask_organisation = $6, ask_id_proof = $7, ask_photo = $8, id_proof_kinds = $9::text[], purposes = $10::text[],
                 notify_sms = $11, notify_whatsapp = $12, notify_email = $13, reminder_hours = $14, no_show_minutes = $15,
-                closed_dates = $16::date[], instructions = $17, updated_at = now(), updated_by = app.current_user_id()
+                closed_dates = $16::date[], instructions = $17, visitor_types = $18::text[], gates = $19::text[], visitor_self_enabled = $20,
+                updated_at = now(), updated_by = app.current_user_id()
           WHERE school_id = app.current_school_id()`,
         [
           dto.publicEnabled,
@@ -1647,6 +1659,9 @@ export class AppointmentsService {
           dto.noShowMinutes,
           dto.closedDates,
           dto.instructions ?? null,
+          dto.visitorTypes,
+          dto.gates,
+          dto.visitorSelfEnabled,
         ],
       );
       await this.audit.stage(ctx, c, {

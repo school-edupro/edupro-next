@@ -476,7 +476,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         const r = await db.withTenant(
           { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
           (c) =>
-            c.query<{ n: number }>('SELECT app.appointment_tick($1) AS n', [
+            c.query<{ n: number }>('SELECT app.appointment_tick($1) + app.visitor_tick() AS n', [
               process.env.PUBLIC_APP_URL ?? 'http://localhost:3003',
             ]),
         );

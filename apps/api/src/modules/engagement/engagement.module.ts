@@ -22,6 +22,8 @@ import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
 import { PortalProfileController } from './portal-profile.controller';
 import { PublicAppointmentsController } from './public-appointments.controller';
+import { PublicVisitorsController, VisitorsController } from './visitors.controller';
+import { VisitorsService } from './visitors.service';
 import { PortalProfileService } from './portal-profile.service';
 import { PrivacyService } from './privacy.service';
 import { QueriesService } from './queries.service';
@@ -50,11 +52,14 @@ import { QueriesService } from './queries.service';
     HelpdeskController,
     AppointmentsController,
     PublicAppointmentsController,
+    VisitorsController,
+    PublicVisitorsController,
   ],
   providers: [
     QueriesService,
     HelpdeskService,
     AppointmentsService,
+    VisitorsService,
     FamilyService,
     PortalProfileService,
     PrivacyService,

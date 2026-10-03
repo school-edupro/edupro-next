@@ -200,7 +200,7 @@ export class EngagementPlusService {
   async visitorOut(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query(
-        `UPDATE visitor_log SET out_at = now() WHERE id = $1 AND out_at IS NULL`,
+        `UPDATE visitor_log SET out_at = now(), state = 'left', out_by = app.current_user_id() WHERE id = $1 AND out_at IS NULL AND state = 'inside'`,
         [id],
       );
       if (!r.rowCount)

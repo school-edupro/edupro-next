@@ -101,6 +101,11 @@ describe('permission coverage', () => {
       'PublicAppointmentsController.pass (public/appointments)',
       'PublicAppointmentsController.passCard (public/appointments)',
       'PublicAppointmentsController.slots (public/appointments)',
+      // walk-in visitors registering on their own phone (0065): the lists are read-only and throttled;
+      // registering and the visitor's own entry need the OTP-issued applicant token
+      'PublicVisitorsController.mine (public/visitors)',
+      'PublicVisitorsController.options (public/visitors)',
+      'PublicVisitorsController.register (public/visitors)',
       'PunchController.ingest (attendance/punch)',
       'RfidController.ingest (attendance/rfid)',
       'ShadowController.ingest (shadow)',
