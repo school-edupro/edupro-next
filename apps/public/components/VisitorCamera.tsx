@@ -60,12 +60,29 @@ export function VisitorCamera({ lang, required }: { lang: 'en' | 'hi'; required:
           void video.current.play();
         }
       });
-    } catch {
+    } catch (e) {
+      // the browser asks the visitor once; a refusal, or a device with no camera, each need their own words
+      const name = e instanceof DOMException ? e.name : '';
       setError(
-        t(
-          'The camera could not be opened. Allow the camera for this page and try again, or book at the front desk.',
-          'कैमरा नहीं खुल सका। इस पेज के लिए कैमरे की अनुमति दें और फिर कोशिश करें, या फ्रंट डेस्क पर बुक करें।',
-        ),
+        name === 'NotAllowedError' || name === 'SecurityError'
+          ? t(
+              'The camera is blocked for this page. Tap the lock or camera icon next to the address, choose Allow for Camera, then press Open camera again.',
+              'इस पेज के लिए कैमरा बंद है। पते के पास ताले या कैमरे के चिह्न पर टैप करें, कैमरा के लिए “अनुमति दें” चुनें, फिर “कैमरा खोलें” दबाएँ।',
+            )
+          : name === 'NotFoundError' || name === 'OverconstrainedError'
+            ? t(
+                'No camera was found on this device. Please use a phone, or book at the front desk.',
+                'इस डिवाइस पर कैमरा नहीं मिला। कृपया फ़ोन से करें या फ्रंट डेस्क पर बुक करें।',
+              )
+            : name === 'NotReadableError'
+              ? t(
+                  'The camera is in use by another app. Close that app and press Open camera again.',
+                  'कैमरा किसी और ऐप में चल रहा है। उसे बंद करें और फिर “कैमरा खोलें” दबाएँ।',
+                )
+              : t(
+                  'The camera could not be opened. Please try again, or book at the front desk.',
+                  'कैमरा नहीं खुल सका। कृपया फिर कोशिश करें या फ्रंट डेस्क पर बुक करें।',
+                ),
       );
     }
   }

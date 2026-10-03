@@ -8,6 +8,14 @@ import { expect, test } from '@playwright/test';
 
 const BASE = 'http://localhost:3003';
 
+// a stand-in camera, so the live photo can be taken in the test browser
+test.use({
+  permissions: ['camera'],
+  launchOptions: {
+    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+  },
+});
+
 for (const width of [1280, 375]) {
   test(`public appointment booking @${width}`, async ({ page }) => {
     test.setTimeout(90_000);
@@ -44,7 +52,18 @@ for (const width of [1280, 375]) {
     await expect(page.locator('.ep-slots__slot').first()).toBeVisible();
     // the photo is taken live: there is a camera button and no file picker anywhere on the page
     await expect(page.locator('input[type=file]')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'कैमरा खोलें' })).toBeVisible();
+    await page.getByRole('button', { name: 'कैमरा खोलें' }).click();
+    // the site's own security header must let this page use the camera
+    await expect(page.locator('video.ep-appt__camera')).toBeVisible();
+    await page.waitForFunction(
+      () => (document.querySelector('video.ep-appt__camera') as HTMLVideoElement).videoWidth > 0,
+    );
+    await page.getByRole('button', { name: 'फ़ोटो लें' }).click();
+    await expect(page.locator('img.ep-appt__photo')).toBeVisible();
+    expect(await page.locator('input[name=photo]').inputValue()).toMatch(
+      /^data:image\/jpeg;base64,/,
+    );
+    await check('photo taken');
     await check('slots and form (Hindi)');
     // the visitor's own list is there on a personal phone and hidden on the school's tablet (kiosk)
     await page.goto(`${BASE}/alpha/appointment?lang=en`);

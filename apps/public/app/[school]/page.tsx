@@ -1,6 +1,7 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { cookies } from 'next/headers';
-import { COOKIE, langOf, publicFetch, t, type Cycle } from '@/lib/api';
+import { notFound } from 'next/navigation';
+import { COOKIE, PublicApiError, langOf, publicFetch, t, type Cycle } from '@/lib/api';
 
 /** Open cycles of one school with classes, age windows and the application fee (S8-05). */
 export default async function SchoolPage({
@@ -12,9 +13,13 @@ export default async function SchoolPage({
 }) {
   const { school } = await params;
   const lang = langOf((await searchParams).lang);
-  const cycles = await publicFetch<{ data: Cycle[] }>(`/${school}/cycles`, {}, null).then(
-    (r) => r.data,
-  );
+  const cycles = await publicFetch<{ data: Cycle[] }>(`/${school}/cycles`, {}, null)
+    .then((r) => r.data)
+    .catch((error: unknown) => {
+      // an address that is not a school (a mistyped code, /favicon.ico) is a plain "not found"
+      if (error instanceof PublicApiError && error.status === 404) notFound();
+      throw error;
+    });
   const signedIn = Boolean((await cookies()).get(COOKIE)?.value);
   return (
     <>
