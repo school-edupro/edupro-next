@@ -79,6 +79,29 @@ export class AppointmentsController {
     return this.svc.familyGet(ctx, id);
   }
 
+  @Get('mine/:id/card')
+  @RequirePermission(P.family)
+  @ApiOperation({ summary: 'The same card for the parent app (the bytes as base64)' })
+  async mineCardData(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    const { bytes, filename } = await this.svc.familyCardPdf(ctx, id);
+    return { filename, base64: bytes.toString('base64') };
+  }
+
+  @Get('mine/:id/card.pdf')
+  @RequirePermission(P.family)
+  @ApiOperation({ summary: 'The gate pass card of my confirmed appointment as a PDF' })
+  async mineCard(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, filename } = await this.svc.familyCardPdf(ctx, id);
+    void reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(bytes);
+  }
+
   @Post('mine/:id/cancel')
   @HttpCode(200)
   @RequirePermission(P.family)
@@ -212,6 +235,21 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'The visitor card to print at the gate, with barcode and QR' })
   card(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.card(ctx, id);
+  }
+
+  @Get(':id/card.pdf')
+  @RequirePermission(P.checkin)
+  @ApiOperation({ summary: 'The visitor card as a PDF (ID-card size)' })
+  async cardPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, filename } = await this.svc.cardPdfFor(ctx, id);
+    void reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(bytes);
   }
 
   @Get(':id/gate-photo')

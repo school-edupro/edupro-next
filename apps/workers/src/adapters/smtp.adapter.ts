@@ -25,7 +25,15 @@ export class SmtpAdapter implements ChannelAdapter {
       ...(this.replyTo ? { replyTo: this.replyTo } : {}),
       attachments: (message.attachments ?? [])
         .filter((a) => a.bytes)
-        .map((a) => ({ filename: a.name, content: a.bytes, contentType: a.contentType })),
+        .map((a) => ({
+          filename: a.name,
+          content: a.bytes,
+          contentType: a.contentType,
+          // an image the HTML shows (src="cid:<file name>") travels inline with that id
+          ...(message.html?.includes(`cid:${a.name}`)
+            ? { cid: a.name, contentDisposition: 'inline' as const }
+            : {}),
+        })),
     });
     return { providerMessageId: info.messageId ?? null, delivered: false };
   }

@@ -648,6 +648,57 @@ describe('appointments v2 (e2e)', () => {
     expect(told.length).toBe(2);
     expect(told[0]!.body).toContain(`/${school.code.toLowerCase()}/pass/`);
     expect((await queued('vikram@example.com', 'appointment_rescheduled')).length).toBe(1);
+    // the mail is designed HTML with the QR shown inside it and the visitor card attached as a PDF
+    const mail = await withMigrator((c) =>
+      c.query<{
+        format: string;
+        body: string;
+        attachments: Array<{ fileId: string; name: string }>;
+      }>(
+        `SELECT m.format, m.body, m.attachments FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+          WHERE m.school_id = $1 AND m.recipient_address = 'vikram@example.com' AND t.code = 'appointment_rescheduled'`,
+        [school.id],
+      ),
+    );
+    expect(mail.rows[0]!.format).toBe('html');
+    expect(mail.rows[0]!.body).toContain('cid:appointment-qr.png');
+    expect(mail.rows[0]!.body).toContain('Appointment moved to a new time');
+    expect(mail.rows[0]!.body).toContain('Vikram Mehta');
+    expect(mail.rows[0]!.attachments.map((a) => a.name.replace(/APT-\d+-\d+/, 'N'))).toEqual([
+      'appointment-qr.png',
+      'visitor-card-N.pdf',
+    ]);
+    const stored = await withMigrator((c) =>
+      c.query<{ content_type: string; size_bytes: string; status: string }>(
+        `SELECT content_type, size_bytes::text, status::text FROM files WHERE id = ANY($1::bigint[]) ORDER BY id`,
+        [mail.rows[0]!.attachments.map((a) => a.fileId)],
+      ),
+    );
+    expect(stored.rows.map((f) => [f.content_type, f.status])).toEqual([
+      ['image/png', 'ready'],
+      ['application/pdf', 'ready'],
+    ]);
+    expect(Number(stored.rows[1]!.size_bytes)).toBeGreaterThan(1500);
+    // the request-received mail has no pass yet
+    const first = await withMigrator((c) =>
+      c.query<{ body: string; attachments: unknown[] }>(
+        `SELECT m.body, m.attachments FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+          WHERE m.school_id = $1 AND m.recipient_address = 'vikram@example.com' AND t.code = 'appointment_requested'`,
+        [school.id],
+      ),
+    );
+    expect(first.rows[0]!.attachments).toEqual([]);
+    expect(first.rows[0]!.body).not.toContain('cid:');
+    // the card downloads as a PDF: the owner's copy, the copy behind the pass link, the gate's copy
+    for (const [url, headers] of [
+      [`/public/appointments/${school.code}/mine/${ids.public}/card.pdf`, visitor],
+      [`/appointments/${ids.public}/card.pdf`, h()],
+    ] as Array<[string, Record<string, string>]>) {
+      const pdf = await inject({ method: 'GET', url, headers });
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    }
     const now = (
       await inject({
         method: 'GET',
@@ -667,6 +718,12 @@ describe('appointments v2 (e2e)', () => {
       })
     ).json();
     expect(pass.barcode).toContain('<svg');
+    const passPdf = await inject({
+      method: 'GET',
+      url: `/public/appointments/${school.code}/pass/${ids.pass}/card.pdf`,
+      headers: {},
+    });
+    expect(passPdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
     expect(pass.idProofLast4).toBeUndefined();
     // the visitor opens the appointment and sees everything they filled in
     const own = (

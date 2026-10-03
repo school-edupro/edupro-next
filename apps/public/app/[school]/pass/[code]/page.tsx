@@ -81,6 +81,12 @@ export default async function PassPage({
                   alt={t(lang, 'Barcode of this pass', 'इस पास का बारकोड')}
                 />
               ) : null}
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/api/pass-card/${school}/${encodeURIComponent(code)}`}
+              >
+                {t(lang, 'Download the visitor card (PDF)', 'आगंतुक कार्ड डाउनलोड करें (PDF)')}
+              </a>
             </>
           ) : (
             <p className="ep-alert ep-alert--warning" role="status">

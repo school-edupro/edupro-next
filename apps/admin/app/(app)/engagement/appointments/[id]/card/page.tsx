@@ -32,6 +32,9 @@ export default async function VisitorCardPage({ params }: { params: Promise<{ id
         Visitor card for {a.number}. Use the browser’s Print (card size 86 × 54 mm, or any paper).{' '}
         <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/engagement/appointments/gate">
           Back to the gate
+        </a>{' '}
+        <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/api/appointments/${a.id}/card`}>
+          Download PDF
         </a>
       </p>
       <article className="ep-vcard" aria-label={`Visitor card ${a.number}`}>

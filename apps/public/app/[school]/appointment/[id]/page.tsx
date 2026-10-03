@@ -114,6 +114,12 @@ export default async function VisitDetailPage({
                 alt={t(lang, 'Barcode of the pass', 'पास का बारकोड')}
               />
             ) : null}
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/visit-card/${school}/${v.id}`}
+            >
+              {t(lang, 'Download the visitor card (PDF)', 'आगंतुक कार्ड डाउनलोड करें (PDF)')}
+            </a>
             <p className="ep-field__help">
               {t(
                 lang,

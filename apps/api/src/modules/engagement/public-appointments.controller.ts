@@ -69,6 +69,39 @@ export class PublicAppointmentsController {
       .send(bytes);
   }
 
+  @Get(':schoolCode/mine/:id/card.pdf')
+  @Public()
+  @UseGuards(ApplicantGuard)
+  @PublicThrottle(30)
+  async mineCard(
+    @Req() req: ApplicantRequest,
+    @Param('schoolCode') schoolCode: string,
+    @Param('id') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, filename } = await this.svc.publicCardPdf(schoolCode, req.applicant!, id);
+    void reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(bytes);
+  }
+
+  @Get(':schoolCode/pass/:code/card.pdf')
+  @Public()
+  @PublicThrottle(20)
+  @ApiOperation({ summary: 'The pass behind the link as a PDF card (no photo or ID proof)' })
+  async passCard(
+    @Param('schoolCode') schoolCode: string,
+    @Param('code') code: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const { bytes, filename } = await this.svc.publicPassPdf(schoolCode, code);
+    void reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(bytes);
+  }
+
   @Post(':schoolCode')
   @Public()
   @UseGuards(ApplicantGuard)

@@ -390,6 +390,14 @@ export default async function AppointmentPage({
                   Print the visitor card
                 </a>
               ) : null}
+              {a.you.canCheckIn ? (
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`/api/appointments/${a.id}/card`}
+                >
+                  Download the card (PDF)
+                </a>
+              ) : null}
             </Card>
           ) : null}
         </aside>

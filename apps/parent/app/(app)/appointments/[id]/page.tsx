@@ -135,6 +135,12 @@ export default async function AppointmentDetailPage({
             <p className="ep-field__help">
               {t(lang, 'Show this at the school gate on the day of the appointment.')}
             </p>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/appointment-card/${a.id}`}
+            >
+              {t(lang, 'Download the card (PDF)')}
+            </a>
           </div>
         </Card>
       ) : null}

@@ -162,6 +162,7 @@ const DICT: Record<string, string> = {
   'Alternative slot': 'वैकल्पिक समय',
   Request: 'अनुरोध',
   'Your appointments': 'आपकी भेंटें',
+  'Download the card (PDF)': 'कार्ड डाउनलोड करें (PDF)',
   'Gate passes': 'गेट पास',
   'Ask for an early leave or a late arrival for your child.':
     'अपने बच्चे के लिए जल्दी छुट्टी या देर से आने की अनुमति माँगें।',

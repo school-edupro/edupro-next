@@ -1,9 +1,10 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import bwipjs from 'bwip-js';
 import QRCode from 'qrcode';
 import type { PoolClient, TenantContext } from '@edupro/db';
+import { objectKeyFor, type StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -11,6 +12,8 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ENV, type Env } from '../../config/env';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { publicTenant, type Applicant } from '../admissions/public/otp.service';
+import { STORAGE_DRIVER } from '../files/storage';
+import { qrPng, visitorCardPdf } from './visitor-card';
 import type {
   AppointmentSettingsDto,
   AppointmentState,
@@ -259,6 +262,7 @@ export class AppointmentsService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     @Inject(ENV) private readonly env: Env,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   // ---- set-up read by every flow --------------------------------------------------------------------
@@ -420,6 +424,151 @@ export class AppointmentsService {
     return `${this.env.PUBLIC_APP_URL.replace(/\/$/, '')}/${r.rows[0]!.code}/pass/${code}`;
   }
 
+  /** The visitor card of an appointment as a PDF (full: with the photo and the ID proof). */
+  private async cardPdf(c: PoolClient, a: AppointmentRow, full: boolean): Promise<Buffer> {
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    const photo = full
+      ? await c.query<{ content_type: string; bytes: Buffer }>(
+          `SELECT content_type, bytes FROM appointment_photos WHERE appointment_id = $1`,
+          [a.id],
+        )
+      : null;
+    const code = a.passCode ?? a.number;
+    return visitorCardPdf({
+      school: school.rows[0]!.name,
+      kind: 'Visitor',
+      name: a.visitorName ?? a.student ?? 'Visitor',
+      rows: [
+        ['From', a.visitorOrg],
+        ['Mobile', full ? a.visitorMobile : null],
+        ['People', a.partySize > 1 ? String(a.partySize) : null],
+        [
+          'ID proof',
+          full && a.idProofKind
+            ? `${a.idProofKind}${a.idProofLast4 ? ` ...${a.idProofLast4}` : ''}`
+            : null,
+        ],
+        ['Student', a.student ? `${a.student}${a.section ? ` (${a.section})` : ''}` : null],
+        ['To meet', [a.hostName, a.withName].filter(Boolean).join(', ') || null],
+        ['Purpose', a.purpose],
+        ['Visit', ist(a.startsAt) || null],
+        ['Where', a.place],
+      ],
+      number: a.number,
+      code,
+      qrText: (await this.passLink(c, a.passCode)) ?? code,
+      photo: photo?.rows[0]
+        ? { contentType: photo.rows[0].content_type, bytes: photo.rows[0].bytes }
+        : null,
+    });
+  }
+
+  /** One generated file of an appointment, stored and registered so a mail can attach it. */
+  private async store(c: PoolClient, id: string, name: string, type: string, bytes: Buffer) {
+    const school = await c.query<{ id: string }>(`SELECT app.current_school_id()::text AS id`);
+    const ext = name.split('.').pop()!;
+    const key = objectKeyFor(
+      school.rows[0]!.id,
+      ext,
+      `appointment-${id}-${randomBytes(6).toString('hex')}`,
+    );
+    await this.storage.write(key, bytes, type);
+    const f = await c.query<{ id: string }>(
+      `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name, owner_entity_type, owner_entity_id,
+                          classification, storage_driver, status, scanned_at, scan_result, created_by, updated_by)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, 'appointments', $7, 'internal', $8, 'ready', now(), 'generated',
+               app.current_user_id(), app.current_user_id())
+       RETURNING id::text`,
+      [
+        this.storage.bucket,
+        key,
+        type,
+        bytes.length,
+        createHash('sha256').update(bytes).digest('hex'),
+        name,
+        id,
+        this.storage.name,
+      ],
+    );
+    return f.rows[0]!.id;
+  }
+
+  /** The QR image and the card PDF a confirmed appointment's mail carries (made again when the time moves). */
+  private async passFiles(c: PoolClient, id: string, link: string) {
+    const a = await this.find(c, id);
+    if (!a.visitorEmail) return;
+    const qr = await this.store(c, id, 'appointment-qr.png', 'image/png', await qrPng(link));
+    const card = await this.store(
+      c,
+      id,
+      `visitor-card-${a.number}.pdf`,
+      'application/pdf',
+      await this.cardPdf(c, a, true),
+    );
+    await c.query(`UPDATE appointments SET qr_file_id = $2, card_file_id = $3 WHERE id = $1`, [
+      id,
+      qr,
+      card,
+    ]);
+  }
+
+  /** The card as a PDF to download: at the gate and for the owner in full, by pass link without photo and ID. */
+  async cardPdfFor(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.find(c, id);
+      return { bytes: await this.cardPdf(c, a, true), filename: `visitor-card-${a.number}.pdf` };
+    });
+  }
+
+  async familyCardPdf(ctx: RequestContext, id: string) {
+    const v = await this.family(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.find(c, id);
+      if (!a.studentId || !v.students.some((s) => s.id === a.studentId))
+        throw new DomainError('not-found', 'Appointment not found');
+      if (!['approved', 'checked_in'].includes(a.state))
+        throw new DomainError(
+          'appointment.wrong_state',
+          'The pass is ready once the school confirms',
+          {
+            status: 409,
+          },
+        );
+      return { bytes: await this.cardPdf(c, a, true), filename: `visitor-card-${a.number}.pdf` };
+    });
+  }
+
+  async publicCardPdf(schoolCode: string, applicant: Applicant, id: string) {
+    const tenant = await this.ownSchool(schoolCode, applicant);
+    return this.db.tenant(tenant, async (c) => {
+      // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values bound
+      const r = await c.query<Row>(`${SELECT} WHERE a.id = $1 AND a.applicant_id = $2`, [
+        id,
+        applicant.id,
+      ]);
+      const a = r.rows[0] ? toRow(r.rows[0]) : null;
+      if (!a || !['approved', 'checked_in'].includes(a.state))
+        throw new DomainError('not-found', 'No pass for this appointment yet');
+      return { bytes: await this.cardPdf(c, a, true), filename: `visitor-card-${a.number}.pdf` };
+    });
+  }
+
+  async publicPassPdf(schoolCode: string, code: string) {
+    if (!/^[A-Za-z0-9]{8,16}$/.test(code)) throw new DomainError('not-found', 'Pass not found');
+    const tenant = await this.publicSchool(schoolCode);
+    return this.db.tenant(tenant, async (c) => {
+      // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; the code is bound
+      const r = await c.query<Row>(`${SELECT} WHERE upper(a.pass_code) = upper($1)`, [code]);
+      const a = r.rows[0] ? toRow(r.rows[0]) : null;
+      if (!a || !['approved', 'checked_in'].includes(a.state))
+        throw new DomainError('not-found', 'Pass not found');
+      // the link can be forwarded: no photo, mobile or ID proof on this copy
+      return { bytes: await this.cardPdf(c, a, false), filename: `visitor-card-${a.number}.pdf` };
+    });
+  }
+
   private async event(
     c: PoolClient,
     id: string,
@@ -441,6 +590,8 @@ export class AppointmentsService {
     const link = ['approved', 'rescheduled'].includes(event)
       ? await this.passLink(c, code.rows[0]?.pass_code ?? null)
       : null;
+    // a confirmed appointment's mails carry the QR and the visitor card: make them for this time and place
+    if (link) await this.passFiles(c, id, link);
     await c.query(`SELECT app.appointment_notify($1, $2, $3, $4)`, [
       id,
       event,
