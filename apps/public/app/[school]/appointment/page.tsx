@@ -214,6 +214,15 @@ export default async function AppointmentPage({
             </p>
             <OtpSignIn school={school} lang={lang} returnTo={self} askName={false} />
           </Card>
+          <p className="ep-field__help" style={{ marginBottom: 'var(--sp-4)' }}>
+            {t(lang, 'At the gate now without an appointment?', 'अभी बिना अपॉइंटमेंट गेट पर हैं?')}{' '}
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/${school}/visitor?lang=${lang}`}
+            >
+              {t(lang, 'Get a visitor pass', 'आगंतुक पास लें')}
+            </a>
+          </p>
           <Card title={t(lang, 'Whom you can meet', 'आप किससे मिल सकते हैं')}>
             <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
               {info.hosts.map((h) => (

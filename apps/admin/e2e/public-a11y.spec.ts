@@ -75,6 +75,10 @@ for (const width of [1280, 375]) {
     // the pass of a confirmed appointment, laid out like the visitor card
     await page.goto(`${BASE}/alpha/pass/UBEV3EDGVY`);
     await check('pass');
+        // a walk-in visitor's own form (not sent: the entry would mail the person being met)
+    await page.goto(`${BASE}/alpha/visitor?lang=en`);
+    await expect(page.getByRole('button', { name: 'Get my visitor pass' })).toBeVisible();
+    await check('visitor pass form');
     // signing out leaves the sign-in step
     await page.goto(`${BASE}/alpha/appointment?lang=en`);
     await page.getByRole('button', { name: 'Sign out' }).click();

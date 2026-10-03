@@ -210,7 +210,7 @@ const NAV: Array<{
         label: 'leaveRequests',
         permission: 'engagement.query.view',
       },
-      { href: '/engagement/visitors', label: 'visitors', permission: 'engagement.visitor.manage' },
+
       {
         href: '/engagement/gate-passes',
         label: 'gatePasses',
@@ -261,6 +261,7 @@ const NAV: Array<{
         label: 'appointmentGate',
         permission: 'engagement.appointment.checkin',
       },
+      { href: '/engagement/visitors', label: 'visitors', permission: 'engagement.visitor.manage' },
       { href: '/engagement/appointments/mine', label: 'appointmentMine', permission: null },
       {
         href: '/engagement/appointments/setup',

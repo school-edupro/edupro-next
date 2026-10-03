@@ -3390,29 +3390,6 @@ const decideBody = (fd: FormData) => ({
   note: opt(fd, 'note'),
 });
 
-export async function visitorIn(fd: FormData) {
-  return run('/engagement/visitors', () =>
-    apiFetch('/engagement/visitors', {
-      method: 'POST',
-      body: JSON.stringify({
-        visitorName: str(fd, 'visitorName'),
-        mobile: opt(fd, 'mobile'),
-        organisation: opt(fd, 'organisation'),
-        purpose: str(fd, 'purpose'),
-        toMeet: opt(fd, 'toMeet'),
-        idProofKind: opt(fd, 'idProofKind'),
-        badgeNo: opt(fd, 'badgeNo'),
-      }),
-    }),
-  );
-}
-
-export async function visitorOut(fd: FormData) {
-  return run('/engagement/visitors', () =>
-    apiFetch(`/engagement/visitors/${str(fd, 'id')}/out`, { method: 'POST' }),
-  );
-}
-
 export async function officeGatePass(fd: FormData) {
   return run('/engagement/gate-passes', () =>
     apiFetch('/engagement/gate-passes', {

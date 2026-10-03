@@ -22,6 +22,15 @@ export async function publicFetch<T>(
 }
 
 /** The same for the public appointment pages (the visitor signs in with the same mobile OTP). */
+/** The same for a walk-in visitor registering on their own phone. */
+export async function gateFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  token?: string | null,
+): Promise<T> {
+  return call<T>('/public/visitors', path, init, token);
+}
+
 export async function visitFetch<T>(
   path: string,
   init: RequestInit = {},

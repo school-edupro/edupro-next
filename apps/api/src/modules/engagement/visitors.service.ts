@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import bwipjs from 'bwip-js';
 import ExcelJS from 'exceljs';
+import QRCode from 'qrcode';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -377,8 +379,27 @@ export class VisitorsService {
     return toRow(r.rows[0]);
   }
 
+  /** One entry with the barcode and QR of its pass (drawn as SVG) for the card on screen. */
   async get(ctx: RequestContext, id: string) {
-    return this.db.tenant(requireTenant(ctx), (c) => this.find(c, id));
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const v = await this.find(c, id);
+      const school = await c.query<{ name: string }>(
+        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+      );
+      const code = v.passCode ?? v.number;
+      return {
+        ...v,
+        school: school.rows[0]!.name,
+        barcode: bwipjs.toSVG({
+          bcid: 'code128',
+          text: code,
+          height: 10,
+          includetext: false,
+          paddingwidth: 2,
+        }),
+        qr: await QRCode.toString(code, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }),
+      };
+    });
   }
 
   private async photoWith(c: PoolClient, v: VisitorRow) {
@@ -651,6 +672,14 @@ export class VisitorsService {
               toMeet: live.toMeet,
               purpose: live.purpose,
               createdAt: live.createdAt,
+              // what the guard scans to find this entry
+              barcode: bwipjs.toSVG({
+                bcid: 'code128',
+                text: live.passCode ?? live.number,
+                height: 10,
+                includetext: false,
+                paddingwidth: 2,
+              }),
             }
           : null,
         profile: last

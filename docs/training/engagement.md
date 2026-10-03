@@ -28,8 +28,15 @@
   details, barcode and QR.
 - **Set-up**: who can be met, visiting hours, slot length, what a visitor must give, the booking QR to
   print, and the kiosk link for the school's own tablet (each visitor is signed out after booking).
-- **Engagement → Visitors**: sign visitors in with purpose and whom to meet; the kind of id proof only,
-  never the number; sign out on exit.
+- **Appointments → Visitors** (walk-in, no appointment): **Register a visitor** — type the mobile
+  (a returning visitor's details are filled in), take the photo with the camera, note whom they meet,
+  the purpose and any equipment carried in (one line), then save: the visitor is let in, the person
+  being met gets an email, and the ID-card size pass (photo, barcode, QR) can be printed or downloaded
+  as PDF. A visitor may instead scan the visitor QR, confirm the mobile by a one-time code and fill
+  the form on their own phone; the entry shows under **Waiting at the gate** until the guard checks
+  the ID and presses **Let in** (or **Refuse**). **Exit** records the time out and a note (equipment
+  taken back). The register has filters and Excel / PDF. Only the kind of ID proof and its last 4
+  characters are kept. Visitor types, gates and the own-phone switch are under **Set-up**.
 - **Engagement → Clinic**: record every visit; sent-home and referrals notify the family at once.
 - **Engagement → Queries**: answer within the category's SLA; internal notes stay internal.
 

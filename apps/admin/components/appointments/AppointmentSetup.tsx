@@ -177,8 +177,11 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
 
   const saveSettings = () =>
     start(async () => {
-      if (!s.purposes.length || !s.idProofKinds.length)
-        return setMsg({ ok: false, text: 'Keep at least one purpose and one ID proof.' });
+      if (!s.purposes.length || !s.idProofKinds.length || !s.visitorTypes.length || !s.gates.length)
+        return setMsg({
+          ok: false,
+          text: 'Keep at least one purpose, one ID proof, one visitor type and one gate.',
+        });
       const r = await saveAppointmentSettings({
         ...s,
         instructions: s.instructions?.trim() || null,
@@ -239,7 +242,13 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
     </label>
   );
   const tick = (
-    k: 'publicEnabled' | 'autoApprove' | 'notifySms' | 'notifyWhatsapp' | 'notifyEmail',
+    k:
+      | 'publicEnabled'
+      | 'autoApprove'
+      | 'notifySms'
+      | 'notifyWhatsapp'
+      | 'notifyEmail'
+      | 'visitorSelfEnabled',
     label: string,
   ) => (
     <label className="ep-check" htmlFor={`as-${k}`}>
@@ -377,6 +386,37 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
             onChange={(e) => set('instructions', e.target.value)}
           />
         </label>
+        <h3 className="ep-cdash__h3">Walk-in visitors at the gate (no appointment)</h3>
+        <p className="ep-field__help">
+          The guard registers a walk-in visitor under Visitors. A visitor may also fill their own
+          details on their phone from{' '}
+          <a
+            style={{ textDecoration: 'underline' }}
+            href={setup.booking.url.replace(/\/appointment$/, '/visitor')}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {setup.booking.url.replace(/\/appointment$/, '/visitor')}
+          </a>{' '}
+          and wait for the guard to let them in.
+        </p>
+        <div className="ep-hd__row">
+          {tick('visitorSelfEnabled', 'Visitors may register on their own phone')}
+        </div>
+        <div className="ep-hd__row ep-hd__row--top">
+          <ListEditor
+            id="as-vtypes"
+            label="Types of visitor"
+            items={s.visitorTypes}
+            onChange={(next) => set('visitorTypes', next)}
+          />
+          <ListEditor
+            id="as-gates"
+            label="Gates"
+            items={s.gates}
+            onChange={(next) => set('gates', next)}
+          />
+        </div>
         <h3 className="ep-cdash__h3">Messages to the visitor</h3>
         <div className="ep-hd__row">
           {tick('notifySms', 'SMS')}

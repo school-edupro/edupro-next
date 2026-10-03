@@ -27,6 +27,7 @@ const TABS: Array<{ href: string; label: string; permission: string | null }> = 
     label: 'Gate',
     permission: 'engagement.appointment.checkin',
   },
+  { href: '/engagement/visitors', label: 'Visitors', permission: 'engagement.visitor.manage' },
   { href: '/engagement/appointments/mine', label: 'My appointments', permission: null },
   {
     href: '/engagement/appointments/setup',

@@ -99,6 +99,9 @@ export interface AppointmentSettings {
   noShowMinutes: number;
   closedDates: string[];
   instructions: string | null;
+  visitorTypes: string[];
+  gates: string[];
+  visitorSelfEnabled: boolean;
 }
 export interface SetupHost {
   id: string;

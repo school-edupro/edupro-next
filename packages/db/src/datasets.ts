@@ -931,6 +931,49 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [(idList(p.ids) ?? []).filter((x) => /^\d{1,18}$/.test(x))],
     }),
   },
+    visitor_register: {
+    id: 'visitor_register',
+    title: 'Visitor register',
+    permission: 'engagement.visitor.manage',
+    maxRows: 5000,
+    columns: [
+      { key: 'number', header: 'Pass no.', width: 12 },
+      { key: 'visitor', header: 'Visitor', width: 22 },
+      { key: 'visitor_type', header: 'Type', width: 14 },
+      { key: 'mobile', header: 'Mobile', width: 12 },
+      { key: 'organisation', header: 'Coming from', width: 18 },
+      { key: 'party_size', header: 'People', type: 'number', width: 6 },
+      { key: 'to_meet', header: 'To meet', width: 18 },
+      { key: 'purpose', header: 'Purpose', width: 24 },
+      { key: 'equipment', header: 'Carrying', width: 18 },
+      { key: 'in_at', header: 'In', type: 'datetime', width: 15 },
+      { key: 'out_at', header: 'Out', type: 'datetime', width: 15 },
+      { key: 'status', header: 'Status', width: 10 },
+    ],
+    /** The register for a period, a status (inside, waiting, today, left) and a search. */
+    query: (p) => ({
+      text: `SELECT v.id::text AS id, v.number, v.visitor_name AS visitor, v.visitor_type, v.mobile, v.organisation, v.party_size,
+                    COALESCE(NULLIF(concat_ws(' · ', h.name, COALESCE(e.display_name, he.display_name)), ''), v.to_meet) AS to_meet,
+                    v.purpose, v.equipment, v.in_at, v.out_at,
+                    (CASE v.state WHEN 'waiting' THEN 'Waiting' WHEN 'inside' THEN 'Inside' WHEN 'left' THEN 'Left' ELSE 'Not let in' END) AS status
+               FROM visitor_log v
+               LEFT JOIN appointment_hosts h ON h.id = v.host_id
+               LEFT JOIN employees e ON e.id = v.with_employee_id
+               LEFT JOIN employees he ON he.id = h.employee_id
+              WHERE (CASE $1::text
+                       WHEN 'inside' THEN v.state = 'inside'
+                       WHEN 'waiting' THEN v.state = 'waiting'
+                       WHEN 'left' THEN v.state = 'left'
+                       WHEN 'today' THEN (COALESCE(v.in_at, v.created_at) AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date AND v.state <> 'cancelled'
+                       ELSE true END)
+                AND ($2::date IS NULL OR (COALESCE(v.in_at, v.created_at) AT TIME ZONE 'Asia/Kolkata')::date >= $2::date)
+                AND ($3::date IS NULL OR (COALESCE(v.in_at, v.created_at) AT TIME ZONE 'Asia/Kolkata')::date <= $3::date)
+                AND ($4::text IS NULL OR v.visitor_type = $4)
+                AND ($5::text IS NULL OR concat_ws(' ', v.number, v.visitor_name, v.mobile, v.organisation, v.vehicle_no, v.purpose, v.to_meet) ILIKE '%' || $5 || '%')
+              ORDER BY COALESCE(v.in_at, v.created_at) DESC, v.id DESC`,
+      values: [str(p.state), str(p.from), str(p.to), str(p.type), str(p.q)],
+    }),
+  },
   comms_failures: {
     id: 'comms_failures',
     title: 'Communication failures by reason',
