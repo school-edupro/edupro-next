@@ -1645,7 +1645,9 @@ export class AppointmentsService {
         `SELECT host_id::text, count(*)::int AS n FROM appointments WHERE host_id IS NOT NULL GROUP BY 1`,
       );
       const staff = await c.query<{ id: string; name: string }>(
-        `SELECT e.id::text, e.display_name || COALESCE(' · ' || e.designation, '') || COALESCE(' · ' || e.employee_code, '') AS name
+        // someone without a sign-in can be met, but cannot open My appointments: the picker says so
+        `SELECT e.id::text, e.display_name || COALESCE(' · ' || e.designation, '') || COALESCE(' · ' || e.employee_code, '')
+                  || CASE WHEN e.user_id IS NULL THEN ' · no login' ELSE '' END AS name
            FROM employees e WHERE e.deleted_at IS NULL AND e.status = 'active' ORDER BY 2 LIMIT 3000`,
       );
       // which messages can go out: a channel needs an active template (SMS also its DLT id, WhatsApp its approved name)

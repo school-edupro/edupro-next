@@ -411,6 +411,38 @@ export class VisitorsService {
     return r.rows[0] ? { contentType: r.rows[0].content_type, bytes: r.rows[0].bytes } : null;
   }
 
+  /**
+   * The walk-in visitors who came to meet me (I am named on the entry, or I am the person in charge of
+   * the desk they came to): the ones inside now and today's, without their contact or ID details.
+   */
+  async withMe(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT, DAY and TODAY are constants
+        `${SELECT} WHERE v.source <> 'appointment'
+            AND COALESCE(v.with_employee_id, h.employee_id) = (SELECT me.id FROM employees me WHERE me.user_id = app.current_user_id() AND me.deleted_at IS NULL LIMIT 1)
+            AND (v.state IN ('waiting', 'inside') OR ${DAY('COALESCE(v.in_at, v.created_at)')} = ${TODAY})
+          ORDER BY COALESCE(v.in_at, v.created_at) DESC LIMIT 100`,
+      );
+      return {
+        data: r.rows.map(toRow).map((v) => ({
+          id: v.id,
+          number: v.number,
+          state: v.state,
+          visitorName: v.visitorName,
+          visitorType: v.visitorType,
+          organisation: v.organisation,
+          partySize: v.partySize,
+          purpose: v.purpose,
+          equipment: v.equipment,
+          toMeet: v.toMeet,
+          inAt: v.inAt,
+          outAt: v.outAt,
+        })),
+      };
+    });
+  }
+
   async photo(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const photo = await this.photoWith(c, await this.find(c, id));

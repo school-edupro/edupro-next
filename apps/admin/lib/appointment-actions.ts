@@ -179,7 +179,8 @@ export async function saveAppointmentHost(id: string | null, h: HostInput) {
       method: id ? 'PUT' : 'POST',
       body: JSON.stringify({
         ...h,
-        employeeId: h.kind === 'person' ? h.employeeId : null,
+        // a desk may name its person in charge (0067); only the class-teacher entry has nobody fixed
+        employeeId: h.kind === 'class_teacher' ? null : h.employeeId,
         openPublic: h.kind === 'class_teacher' ? false : h.openPublic,
       }),
     }),

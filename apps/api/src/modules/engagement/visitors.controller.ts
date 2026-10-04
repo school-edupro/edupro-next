@@ -13,7 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
-import { Public } from '../../common/auth/decorators';
+import { AuthenticatedOnly, Public } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { ApplicantGuard, type ApplicantRequest } from '../admissions/public/applicant.guard';
 import { PublicThrottle, PublicThrottleGuard } from '../admissions/public/public-throttle.guard';
@@ -44,6 +44,13 @@ export class VisitorsController {
   @ApiOperation({ summary: 'The visitor register with filters, pages and counts' })
   list(@ReqCtx() ctx: RequestContext, @Query() q: ListVisitorsDto) {
     return this.svc.list(ctx, q);
+  }
+
+  @Get('with-me')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Walk-in visitors who came to meet me: inside now and today' })
+  withMe(@ReqCtx() ctx: RequestContext) {
+    return this.svc.withMe(ctx);
   }
 
   @Get('options')

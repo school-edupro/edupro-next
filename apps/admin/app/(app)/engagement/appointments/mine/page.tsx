@@ -33,6 +33,25 @@ interface WithMe {
   page: { number: number; size: number; total: number };
   counts: { today: number; upcoming: number; past: number };
 }
+interface WalkIn {
+  id: string;
+  number: string;
+  state: 'waiting' | 'inside' | 'left' | 'cancelled';
+  visitorName: string;
+  visitorType: string | null;
+  organisation: string | null;
+  partySize: number;
+  purpose: string;
+  equipment: string | null;
+  inAt: string | null;
+  outAt: string | null;
+}
+const WALK_STATE: Record<WalkIn['state'], [string, 'warning' | 'success' | 'neutral']> = {
+  waiting: ['Waiting at the gate', 'warning'],
+  inside: ['Inside now', 'success'],
+  left: ['Left', 'neutral'],
+  cancelled: ['Not let in', 'neutral'],
+};
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const WHEN = ['today', 'upcoming', 'past', 'all'] as const;
 type When = (typeof WHEN)[number];
@@ -80,9 +99,13 @@ export default async function MyAppointmentsPage({
         page: String(page),
         size: String(PAGE_SIZE),
       };
-  const [me, list] = await Promise.all([
+  const [me, list, walkIns] = await Promise.all([
     getMe(),
     apiFetch<WithMe>(`/appointments/with-me?${new URLSearchParams(query).toString()}`),
+    // walk-in visitors (no appointment) who came to meet me: inside now and today
+    apiFetch<{ data: WalkIn[] }>('/visitors/with-me')
+      .then((r) => r.data)
+      .catch(() => [] as WalkIn[]),
   ]);
   const listHref = (over: Record<string, string>) =>
     `?${new URLSearchParams({
@@ -127,6 +150,50 @@ export default async function MyAppointmentsPage({
         }
       />
       <AppointmentNav current="/engagement/appointments/mine" permissions={me.permissions} />
+      {walkIns.length ? (
+        <Card
+          title={`Walk-in visitors for you · ${String(walkIns.length)}`}
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Visitors without an appointment whom the gate registered to meet you: inside now and
+            today’s.
+          </p>
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Walk-in visitors">
+            <table className="ep-table ep-table--dense">
+              <caption className="ep-sr-only">Walk-in visitors who came to meet me</caption>
+              <thead>
+                <tr>
+                  <th scope="col">In</th>
+                  <th scope="col">Visitor</th>
+                  <th scope="col">Purpose</th>
+                  <th scope="col">Carrying</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {walkIns.map((v) => (
+                  <tr key={v.id}>
+                    <td>{v.inAt ? timeOf(v.inAt) : '—'}</td>
+                    <td>
+                      {v.visitorName}
+                      {v.partySize > 1 ? ` + ${String(v.partySize - 1)}` : ''}
+                      <div className="ep-field__help">
+                        {[v.number, v.visitorType, v.organisation].filter(Boolean).join(' · ')}
+                      </div>
+                    </td>
+                    <td>{v.purpose}</td>
+                    <td>{v.equipment ?? '—'}</td>
+                    <td>
+                      <Badge tone={WALK_STATE[v.state][1]}>{WALK_STATE[v.state][0]}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
       {calendar ? (
         <>
           <div className="ep-filter-band">
