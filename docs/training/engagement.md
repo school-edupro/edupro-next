@@ -13,7 +13,17 @@
 ## Daily routine
 
 - **Front office and gate → Dashboard** first thing: appointments, gate passes and visitors in one
-  place; the numbers open the lists behind them, and "Waiting on you" shows what you must decide.
+  place. Top: today's numbers (they open the lists behind them). **Waiting for approval**: gate
+  passes by the level that holds them (with how long the oldest has waited; over 4 hours shows
+  "Slow"), by department (staff) and class (pupils), and appointment requests by desk. Then the
+  **last six months** and a **day by day** chart (choose the dates, up to 92 days) for appointments,
+  pupil passes, staff passes and walk-in visitors, and **gate passes month by month** (asked,
+  approved, hours to approve, went out, came back, back late, minutes outside).
+- **An RGP from start to finish**: the employee applies → the levels approve → at the gate the keeper
+  finds the pass and presses **Let out** (gate-out time) → when the employee returns the keeper opens
+  the same pass, ticks the items that came back and presses **Mark back in** (gate-in time). The pass
+  then reads "Back in: completed". Gate out, gate in, time outside and "Late" (back after the allowed
+  time) show on the register, the pass, My gate passes, the Excel and the PDF card.
 - **Gate passes** (same menu). A pupil's pass (leaving early, arriving late) is asked by the parent in
   the portal, saying who takes the child (father, mother or guardian on record, or someone else), or
   made by the front desk under **New pupil pass**. It then goes through the approval levels the admin

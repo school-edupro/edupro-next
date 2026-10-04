@@ -9,6 +9,8 @@ import {
   KIND_LABEL,
   STATE_TONE,
   escortLine,
+  gateOut,
+  lateBack,
   whoOfPass,
   type GatePass,
   type GatePassDetail,
@@ -107,6 +109,8 @@ export default async function GatePassGatePage({
                     : null,
                 ],
                 ['Front desk remark', found.handoverRemark],
+                ['Gate out', found.outAt ? when(found.outAt) : null],
+                ['Gate in', found.inAt ? when(found.inAt) : null],
                 [
                   'Items',
                   found.itemList.length
@@ -208,6 +212,7 @@ export default async function GatePassGatePage({
                     <th scope="col">Pass</th>
                     <th scope="col">For</th>
                     <th scope="col">Time</th>
+                    <th scope="col">Gate out</th>
                     <th scope="col">With / going to</th>
                     <th scope="col">Status</th>
                     <th scope="col">
@@ -227,6 +232,14 @@ export default async function GatePassGatePage({
                         {p.atTime ?? '—'}
                         {p.returnBy ? (
                           <div className="ep-field__help">back by {when(p.returnBy)}</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {gateOut(p)}
+                        {lateBack(p) ? (
+                          <div>
+                            <Badge tone="danger">Late</Badge>
+                          </div>
                         ) : null}
                       </td>
                       <td>

@@ -13,7 +13,8 @@ import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
 import { EngagementController } from './engagement.controller';
 import { FamilyService } from './family.service';
-import { GatePassController } from './gatepass.controller';
+import { FrontOfficeService } from './front-office.service';
+import { FrontOfficeController, GatePassController } from './gatepass.controller';
 import { GatePassService } from './gatepass.service';
 import { HelpdeskController } from './helpdesk.controller';
 import { HelpdeskService } from './helpdesk.service';
@@ -57,6 +58,7 @@ import { QueriesService } from './queries.service';
     VisitorsController,
     PublicVisitorsController,
     GatePassController,
+    FrontOfficeController,
   ],
   providers: [
     QueriesService,
@@ -64,6 +66,7 @@ import { QueriesService } from './queries.service';
     AppointmentsService,
     VisitorsService,
     GatePassService,
+    FrontOfficeService,
     FamilyService,
     PortalProfileService,
     PrivacyService,

@@ -23,6 +23,9 @@ export interface Pass {
   cancelReason: string | null;
   passNo: string | null;
   passCode: string | null;
+  handoverAt?: string | null;
+  outAt?: string | null;
+  inAt?: string | null;
 }
 /** What the family reads for each state (and for a late arrival, where "out" never happens). */
 export function stateOf(

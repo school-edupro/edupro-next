@@ -4,7 +4,14 @@ import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { when } from '@/lib/appointments';
 import { cancelStaffPass } from '@/lib/gate-pass-actions';
-import { KIND_LABEL, STATE_TONE, approvalLine, type GatePass } from '@/lib/gate-passes';
+import {
+  KIND_LABEL,
+  STATE_TONE,
+  approvalLine,
+  lateBack,
+  outsideFor,
+  type GatePass,
+} from '@/lib/gate-passes';
 
 interface Mine {
   data: GatePass[];
@@ -87,6 +94,10 @@ export default async function MyGatePassesPage({
               p.destination ? `Going to ${p.destination}` : null,
               p.items ? `${String(p.items)} item(s)` : null,
               approvalLine(p),
+              p.outAt ? `Gate out ${when(p.outAt)}` : null,
+              p.inAt ? `Gate in ${when(p.inAt)}` : null,
+              outsideFor(p) ? `${outsideFor(p)!} outside` : null,
+              lateBack(p) ? 'back late' : null,
               p.decisionNote ?? p.cancelReason,
             ]
               .filter(Boolean)

@@ -144,7 +144,7 @@ function stageOf(x: { state: string; audience: string; kind: string }): string {
       : 'Approved: show at the gate';
   if (x.state === 'handed_over') return 'Handed over: going to the gate';
   if (x.state === 'out') return x.kind === 'rgp' ? 'Out: to come back' : 'Left the campus';
-  if (x.state === 'returned') return x.kind === 'late_arrival' ? 'Came in' : 'Back in the campus';
+  if (x.state === 'returned') return x.kind === 'late_arrival' ? 'Came in' : 'Back in: completed';
   return x.state === 'rejected' ? 'Not approved' : 'Cancelled';
 }
 
@@ -985,8 +985,11 @@ export class GatePassService {
       'Status',
       'Approvals',
       'Handed over',
-      'Out',
-      'In',
+      'Gate out',
+      'Gate in',
+      'Minutes outside',
+      'Late return',
+      'Front desk remark',
       'Requested by',
     ]).font = { bold: true };
     for (const p of rows)
@@ -1010,13 +1013,20 @@ export class GatePassService {
         ist(p.handoverAt),
         ist(p.outAt),
         ist(p.inAt),
+        p.outAt && p.inAt ? Math.round((Date.parse(p.inAt) - Date.parse(p.outAt)) / 60_000) : '',
+        p.kind === 'rgp' && p.returnBy && p.outAt
+          ? Date.parse(p.inAt ?? new Date().toISOString()) > Date.parse(p.returnBy)
+            ? 'Yes'
+            : 'No'
+          : '',
+        p.handoverRemark ?? '',
         p.requestedBy ?? '',
       ]);
-    [16, 20, 9, 24, 18, 16, 12, 8, 18, 24, 32, 22, 7, 12, 30, 11, 18, 18, 18, 20].forEach(
-      (w, i) => {
-        ws.getColumn(i + 1).width = w;
-      },
-    );
+    [
+      16, 20, 9, 24, 18, 16, 12, 8, 18, 24, 32, 22, 7, 12, 30, 11, 18, 18, 18, 14, 11, 30, 20,
+    ].forEach((w, i) => {
+      ws.getColumn(i + 1).width = w;
+    });
     ws.views = [{ state: 'frozen', ySplit: 2 }];
     const out = await wb.xlsx.writeBuffer();
     return {
@@ -1728,6 +1738,8 @@ export class GatePassService {
               ['Going to', p.destination],
               ['Purpose', p.reason],
               ['Carrying', p.items ? `${String(p.items)} item(s)` : null],
+              ['Gate out', p.outAt ? ist(p.outAt) : null],
+              ['Gate in', p.inAt ? ist(p.inAt) : null],
               ['Approved by', last.rows[0]?.name ?? null],
             ],
       number: p.number,

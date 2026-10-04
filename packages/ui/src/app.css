@@ -5105,3 +5105,17 @@ a.ep-tabs__tab {
 .ep-pass-photos__one[data-party='collector'] img {
   border: 2px solid var(--border-accent);
 }
+
+/* Front office dashboard: one colour per series in the stacked charts and their legend. */
+[data-fo='appointments'] {
+  background: var(--action-primary);
+}
+[data-fo='pupil'] {
+  background: var(--status-success);
+}
+[data-fo='staff'] {
+  background: var(--action-accent);
+}
+[data-fo='visitors'] {
+  background: var(--status-warning);
+}

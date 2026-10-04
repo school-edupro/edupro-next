@@ -19,6 +19,7 @@ import {
   StaffPassDto,
   StudentPassDto,
 } from './gatepass.dto';
+import { FrontOfficeService } from './front-office.service';
 import { GatePassService } from './gatepass.service';
 
 const pdf = (reply: FastifyReply, out: { bytes: Buffer; filename: string }) =>
@@ -280,5 +281,24 @@ export class GatePassController {
     @Param('party') party: string,
   ) {
     return this.svc.recordPhoto(ctx, id, party);
+  }
+}
+
+/** The common dashboard of the front office and the gate (appointments, gate passes, visitors). */
+@ApiTags('front-office')
+@ApiBearerAuth()
+@Controller('front-office')
+export class FrontOfficeController {
+  constructor(private readonly svc: FrontOfficeService) {}
+
+  @Get('dashboard')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary:
+      'Six months, day by day, and what waits for approval; each part only for who may see it',
+  })
+  dashboard(@ReqCtx() ctx: RequestContext, @Query('from') from?: string, @Query('to') to?: string) {
+    const date = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    return this.svc.overview(ctx, { from: date(from), to: date(to) });
   }
 }

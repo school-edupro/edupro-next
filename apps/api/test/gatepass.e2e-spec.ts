@@ -425,6 +425,22 @@ describe('gate pass v2 (e2e)', () => {
       items: [{ id: laptop.id, returnedQty: 1 }],
     });
     expect(back.json()).toMatchObject({ state: 'returned', itemsDue: 0 });
+    // gate out and in are on the pass, and the outing counts on the common dashboard
+    expect(back.json().outAt).toBeTruthy();
+    expect(back.json().inAt).toBeTruthy();
+    expect(back.json().stage).toBe('Back in: completed');
+    const ov = await get('/front-office/dashboard', desk);
+    expect(ov.see).toMatchObject({ passes: true });
+    expect(ov.months).toHaveLength(6);
+    expect(ov.days).toHaveLength(30);
+    expect(ov.months[5].staff).toBeGreaterThanOrEqual(1);
+    expect(
+      (ov.passMonths as Array<{ audience: string; cameBack: number }>).find(
+        (m) => m.audience === 'staff',
+      )?.cameBack,
+    ).toBe(1);
+    // someone with none of the three modules gets no figures
+    expect((await get('/front-office/dashboard', teacher)).months).toEqual([]);
     // the register as Excel
     const xl = await inject({
       method: 'GET',

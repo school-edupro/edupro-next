@@ -170,3 +170,26 @@ export const approvalLine = (p: GatePass): string => {
 };
 export const escortLine = (p: GatePass): string | null =>
   p.escortName ? `${p.escortName}${p.escortRelation ? ` (${p.escortRelation})` : ''}` : null;
+
+const hm = (v: string) =>
+  new Date(v).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+/** Time outside as "1 h 45 min". */
+export const outsideFor = (p: Pick<GatePass, 'outAt' | 'inAt'>): string | null => {
+  if (!p.outAt || !p.inAt) return null;
+  const min = Math.max(0, Math.round((Date.parse(p.inAt) - Date.parse(p.outAt)) / 60_000));
+  return min >= 60
+    ? `${String(Math.floor(min / 60))} h ${String(min % 60)} min`
+    : `${String(min)} min`;
+};
+/** Came back (or is still out) after the time the pass allowed. */
+export const lateBack = (p: Pick<GatePass, 'kind' | 'returnBy' | 'outAt' | 'inAt'>): boolean =>
+  p.kind === 'rgp' &&
+  Boolean(p.returnBy && p.outAt) &&
+  Date.parse(p.inAt ?? new Date().toISOString()) > Date.parse(p.returnBy!);
+/** The gate times of a pass as the keeper recorded them. */
+export const gateOut = (p: Pick<GatePass, 'outAt'>): string => (p.outAt ? hm(p.outAt) : '—');
+export const gateIn = (p: Pick<GatePass, 'inAt'>): string => (p.inAt ? hm(p.inAt) : '—');

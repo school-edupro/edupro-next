@@ -8,6 +8,10 @@ import {
   STATE_TONE,
   approvalLine,
   escortLine,
+  gateIn,
+  gateOut,
+  lateBack,
+  outsideFor,
   type GatePass,
   type PassCounts,
 } from '@/lib/gate-passes';
@@ -171,6 +175,8 @@ export default async function GatePassRegisterPage({
                   <th scope="col">For</th>
                   <th scope="col">When</th>
                   <th scope="col">Reason</th>
+                  <th scope="col">Gate out</th>
+                  <th scope="col">Gate in</th>
                   <th scope="col">Approval</th>
                   <th scope="col">Status</th>
                   <th scope="col">
@@ -217,6 +223,25 @@ export default async function GatePassRegisterPage({
                           .filter(Boolean)
                           .join(' · ')}
                       </div>
+                    </td>
+                    <td>
+                      {gateOut(p)}
+                      {p.outGate ? <div className="ep-field__help">{p.outGate}</div> : null}
+                    </td>
+                    <td>
+                      {p.kind === 'nrgp' || (p.audience === 'student' && p.kind === 'early_leave')
+                        ? p.outAt
+                          ? 'Not returning'
+                          : '—'
+                        : gateIn(p)}
+                      {outsideFor(p) ? (
+                        <div className="ep-field__help">{outsideFor(p)} outside</div>
+                      ) : null}
+                      {lateBack(p) ? (
+                        <div>
+                          <Badge tone="danger">Late</Badge>
+                        </div>
+                      ) : null}
                     </td>
                     <td>{approvalLine(p)}</td>
                     <td>

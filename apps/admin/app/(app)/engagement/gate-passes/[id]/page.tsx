@@ -7,7 +7,13 @@ import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { when } from '@/lib/appointments';
 import { decidePass, gateInPass, gateOutPass } from '@/lib/gate-pass-actions';
-import { STATE_TONE, escortLine, type GatePassDetail } from '@/lib/gate-passes';
+import {
+  STATE_TONE,
+  escortLine,
+  lateBack,
+  outsideFor,
+  type GatePassDetail,
+} from '@/lib/gate-passes';
 
 /**
  * One gate pass with everything on it: who and why, the approval matrix, the photos to compare, the
@@ -59,8 +65,14 @@ export default async function GatePassPage({
     ],
     ['Front desk remark', p.handoverRemark],
     ['Parent’s code', p.otpVerified ? 'Confirmed' : null],
-    ['Out at the gate', p.outAt ? `${when(p.outAt)}${p.outGate ? ` · ${p.outGate}` : ''}` : null],
-    ['In at the gate', p.inAt ? when(p.inAt) : null],
+    ['Gate out', p.outAt ? `${when(p.outAt)}${p.outGate ? ` · ${p.outGate}` : ''}` : null],
+    ['Gate in', p.inAt ? when(p.inAt) : null],
+    [
+      'Time outside',
+      outsideFor(p)
+        ? `${outsideFor(p)!}${lateBack(p) ? ' · back after the allowed time' : ''}`
+        : null,
+    ],
     ['Gate note', p.gateNote],
     ['Note', p.decisionNote ?? p.cancelReason],
   ];

@@ -60,6 +60,8 @@ const DICT: Record<string, string> = {
   'Still to come': 'आने वाली',
   'Nothing booked': 'कुछ बुक नहीं',
   'Adm. no.': 'प्रवेश सं.',
+  'Gate out': 'गेट से बाहर',
+  'Gate in': 'गेट से अंदर',
   List: 'सूची',
   Earlier: 'पहले',
   Later: 'आगे',

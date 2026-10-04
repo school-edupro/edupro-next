@@ -235,6 +235,8 @@ const DICT: Record<string, string> = {
   'Not needed': 'आवश्यक नहीं',
   'No appointments in this month.': 'इस माह कोई भेंट नहीं है।',
   'Adm. no.': 'प्रवेश सं.',
+  'Gate out': 'गेट से बाहर',
+  'Gate in': 'गेट से अंदर',
   List: 'सूची',
   Earlier: 'पहले',
   Later: 'आगे',

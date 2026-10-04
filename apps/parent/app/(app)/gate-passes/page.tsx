@@ -3,7 +3,7 @@ import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { DAYS, dayOf, studentLabel } from '../appointments/shared';
+import { DAYS, dayOf, studentLabel, timeOf } from '../appointments/shared';
 import { cancelGatePass } from './actions';
 import { KIND, dateParts, stateOf, type Pass } from './shared';
 
@@ -305,6 +305,8 @@ export default async function GatePassesPage({
                     p.state === 'pending' && p.waitingOn
                       ? `${t(lang, 'Waiting on')} ${p.waitingOn}`
                       : null,
+                    p.outAt ? `${t(lang, 'Gate out')} ${timeOf(p.outAt)}` : null,
+                    p.inAt ? `${t(lang, 'Gate in')} ${timeOf(p.inAt)}` : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}

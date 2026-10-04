@@ -32,6 +32,8 @@ interface Pass {
   passNo: string | null;
   items: number;
   decisionNote: string | null;
+  outAt: string | null;
+  inAt: string | null;
 }
 const KIND: Record<Pass['kind'], string> = {
   early_leave: 'Early leave',
@@ -192,6 +194,8 @@ export default async function GatePassesPage({
               p.state === 'pending' && p.waitingOn
                 ? `${t(lang, 'Waiting on')} ${p.waitingOn}`
                 : null,
+              p.outAt ? `${t(lang, 'Gate out')} ${timeOf(p.outAt)}` : null,
+              p.inAt ? `${t(lang, 'Gate in')} ${timeOf(p.inAt)}` : null,
               p.decisionNote,
             ]
               .filter(Boolean)
