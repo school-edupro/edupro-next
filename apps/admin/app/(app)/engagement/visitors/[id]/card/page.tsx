@@ -31,8 +31,8 @@ export default async function WalkInCardPage({ params }: { params: Promise<{ id:
     <div className="ep-vcard__page">
       <p className="ep-field__help ep-appt__noprint">
         Visitor card for {v.number}. Use the browser’s Print (card size 86 × 54 mm, or any paper).{' '}
-        <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/engagement/visitors">
-          Back to the register
+        <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/engagement/visitors/${v.id}`}>
+          Back to the pass
         </a>{' '}
         <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/api/visitors/${v.id}/card`}>
           Download PDF

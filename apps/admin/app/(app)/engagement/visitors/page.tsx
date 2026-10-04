@@ -281,10 +281,8 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
                   <tr key={v.id}>
                     <td>
                       <a
-                        href={`/engagement/visitors/${v.id}/card`}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`Visitor card ${v.number}`}
+                        href={`/engagement/visitors/${v.id}`}
+                        aria-label={`Details of visitor pass ${v.number}`}
                       >
                         {v.number}
                       </a>

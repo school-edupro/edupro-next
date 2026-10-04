@@ -89,6 +89,7 @@ const PAGES = [
   '/engagement/visitors',
   '/engagement/visitors?state=all',
   '/engagement/visitors/new',
+  '/engagement/visitors/7',
   '/engagement/visitors/7/card',
   '/engagement/front-office',
   '/engagement/gate-passes',
