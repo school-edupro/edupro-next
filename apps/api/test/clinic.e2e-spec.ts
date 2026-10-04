@@ -351,6 +351,131 @@ describe('clinic management (e2e)', () => {
     expect(legacy.rows[0]!.n).toBe(1);
   });
 
+  it('set-up lists are paged, exported and uploaded from Excel; the check-up form takes new sections and fields', async () => {
+    const list = await get('/clinic/setup/list?kind=disease&size=5', admin);
+    expect(list.page).toMatchObject({ total: 2, size: 5 });
+    expect((await get('/clinic/setup/list?kind=disease&q=fev', admin)).data).toHaveLength(1);
+    for (const url of [
+      '/clinic/setup/export.xlsx?kind=doctor',
+      '/clinic/setup/export.pdf?kind=medicine',
+    ]) {
+      const r = await inject({ method: 'GET', url, headers: h(admin) });
+      expect(r.statusCode).toBe(200);
+    }
+    // the sample file filled in is what the upload reads: one new disease, one that exists, one bad row
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Diseases');
+    ws.addRow(['Name', 'Note', 'In use']);
+    ws.addRow(['Asthma', 'Carries an inhaler', 'Yes']);
+    ws.addRow(['Fever', 'Updated note', 'Yes']);
+    ws.addRow(['', 'no name', 'Yes']);
+    const file = Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer).toString('base64');
+    const up = await post('/clinic/setup/import', admin, { kind: 'disease', fileBase64: file });
+    expect(up.json()).toMatchObject({ rows: 3, added: 1, updated: 1, errors: [{ row: 4 }] });
+    expect((await get('/clinic/setup/list?kind=disease', admin)).page.total).toBe(3);
+    // opening stock from Excel: an unknown medicine is reported, the known one goes in
+    const wb2 = new ExcelJS.Workbook();
+    const ws2 = wb2.addWorksheet('Stock');
+    ws2.addRow([
+      'Medicine',
+      'Strength',
+      'Batch no.',
+      'Expiry (YYYY-MM-DD)',
+      'Quantity',
+      'Received on (YYYY-MM-DD)',
+      'Supplier',
+    ]);
+    ws2.addRow(['Paracetamol', '500 mg', 'XL-1', '2030-01-31', 30, '', 'City Medicos']);
+    ws2.addRow(['Unknownol', '', 'XL-2', '2030-01-31', 5, '', '']);
+    const stockFile = Buffer.from((await wb2.xlsx.writeBuffer()) as ArrayBuffer).toString('base64');
+    const st = await post('/clinic/stock/import', doctor, { kind: 'stock', fileBase64: stockFile });
+    expect(st.json()).toMatchObject({ added: 1, errors: [{ row: 3 }] });
+    const batches = await get('/clinic/stock/list?view=batches&q=XL-1');
+    expect(batches.data[0]).toMatchObject({ batchNo: 'XL-1', qtyLeft: 30, state: 'in_stock' });
+    expect((await get('/clinic/stock/list?view=moves&state=given')).page.total).toBe(3);
+    expect((await get('/clinic/stock/list?view=medicines&state=low')).page.total).toBe(0);
+    for (const url of [
+      '/clinic/stock/export.xlsx?view=moves',
+      '/clinic/stock/export.pdf?view=batches',
+    ]) {
+      const r = await inject({ method: 'GET', url, headers: h(doctor) });
+      expect(r.statusCode).toBe(200);
+    }
+    // a new section with a number field and a choice field
+    const f1 = await post('/clinic/setup/fields', admin, {
+      label: 'Chest',
+      section: 'Orthopaedic',
+      kind: 'number',
+      unit: 'cm',
+    });
+    expect(f1.statusCode).toBe(201);
+    const f2 = await post('/clinic/setup/fields', admin, {
+      label: 'Posture',
+      section: 'Orthopaedic',
+      kind: 'choice',
+      options: ['Normal', 'Needs attention'],
+    });
+    const fields = f2.json().fields as Array<{
+      key: string;
+      label: string;
+      group: string;
+      custom: boolean;
+    }>;
+    const chest = fields.find((f) => f.label === 'Chest')!;
+    const posture = fields.find((f) => f.label === 'Posture')!;
+    expect(chest).toMatchObject({ group: 'Orthopaedic', custom: true });
+    // a choice needs its choices
+    expect(
+      (
+        await post('/clinic/setup/fields', admin, {
+          label: 'Gait',
+          section: 'Orthopaedic',
+          kind: 'choice',
+        })
+      ).statusCode,
+    ).toBe(400);
+    const camps = await get('/clinic/camps');
+    const campId = camps.data[0].id;
+    const wrong = await put(`/clinic/camps/${campId}/students/${studentId}`, doctor, {
+      heightCm: 140,
+      weightKg: 35,
+      findings: { [chest.key]: 'wide', [posture.key]: 'Normal' },
+    });
+    expect(wrong.statusCode).toBe(400);
+    const ok = await put(`/clinic/camps/${campId}/students/${studentId}`, doctor, {
+      heightCm: 140,
+      weightKg: 35,
+      bloodGroup: 'B+',
+      findings: { vision_right: '6/6', [chest.key]: '68', [posture.key]: 'Needs attention' },
+      remarks: 'Please see a dentist.',
+      needsAttention: true,
+    });
+    expect(ok.statusCode).toBe(200);
+    // the family: one list of visits and cards, and each entry in full
+    const mine = await get('/clinic/mine/list', parent);
+    expect(mine.page.total).toBe(4);
+    expect((await get('/clinic/mine/list?kind=card', parent)).data).toHaveLength(1);
+    const card = (await get('/clinic/mine/list?kind=card', parent)).data[0].card;
+    const detail = await get(`/clinic/mine/cards/${card.id}/detail`, parent);
+    const ortho = (detail.groups as Array<{ title: string; rows: string[][] }>).find(
+      (g) => g.title === 'Orthopaedic',
+    )!;
+    expect(ortho.rows).toEqual([
+      ['Chest', '68 cm'],
+      ['Posture', 'Needs attention'],
+    ]);
+    const visit = (await get('/clinic/mine/list?kind=visit&q=fever', parent)).data[0].visit;
+    const full = await get(`/clinic/mine/visits/${visit.id}`, parent);
+    expect(full).toMatchObject({ temperatureC: 38.4, bp: '110/70', doctor: 'Dr. Asha Rao' });
+    expect(full.medicines[0]).toMatchObject({ name: 'Paracetamol', qty: 6 });
+    // not another family's
+    expect(
+      (await inject({ method: 'GET', url: `/clinic/mine/visits/${visit.id}`, headers: h(doctor) }))
+        .statusCode,
+    ).toBe(403);
+  });
+
   it('the dashboard counts visits, diseases, classes, medicines and check-up coverage', async () => {
     const d = await get('/clinic/dashboard');
     expect(d.today).toMatchObject({ visits: 4, sentHome: 1 });
@@ -361,7 +486,8 @@ describe('clinic management (e2e)', () => {
     expect(d.classes[0]).toMatchObject({ name: 'VI-A', count: 3, people: 1 });
     expect(d.departments[0]).toMatchObject({ name: 'Science', count: 1 });
     expect(d.frequent[0]).toMatchObject({ name: 'Aanya Clinic', count: 3 });
-    expect(d.lowStock[0]).toMatchObject({ name: 'Paracetamol', stock: 7 });
+    // 7 left on the shelf plus the 30 uploaded from Excel: no longer low
+    expect(d.lowStock).toHaveLength(0);
     expect(d.given[0]).toMatchObject({ qty: 7, visits: 2 });
     expect(d.camps[0]).toMatchObject({ examined: 1, published: 1, attention: 1 });
   });

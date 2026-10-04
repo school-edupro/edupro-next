@@ -95,7 +95,8 @@ export const WriteOffSchema = z.object({
 export class WriteOffDto extends createZodDto(WriteOffSchema) {}
 
 export const ClinicSettingsSchema = z.object({
-  checkupHidden: z.array(z.enum(CHECKUP_FIELDS.map((f) => f.key) as [string, ...string[]])).max(30),
+  /** Keys of built-in fields the school does not use (added fields have their own on/off). */
+  checkupHidden: z.array(z.string().regex(/^[a-z0-9_]{1,40}$/)).max(60),
   expiryAlertDays: z.coerce.number().int().min(7).max(365),
   cardNote: Text(500),
 });
@@ -190,7 +191,8 @@ export const CheckupSchema = z.object({
   heightCm: blank(z.coerce.number().min(40).max(230)),
   weightKg: blank(z.coerce.number().min(5).max(200)),
   bloodGroup: blank(z.enum(BLOOD_GROUPS)),
-  findings: z.record(z.enum(FINDING_KEYS as [string, ...string[]]), Finding).default({}),
+  /** Built-in findings and the school's own fields (x<id>); the service checks the keys. */
+  findings: z.record(z.string().regex(/^[a-z0-9_]{1,40}$/), Finding).default({}),
   diseaseId: blank(IdSchema),
   description: Text(500),
   remarks: Text(500),
@@ -203,3 +205,70 @@ export const DashboardQuerySchema = z.object({
   to: DateSchema.optional(),
 });
 export class ClinicDashboardDto extends createZodDto(DashboardQuerySchema) {}
+
+/** A field the school adds to the health check-up form, in an existing section or a new one. */
+export const FieldSchema = z
+  .object({
+    label: z.string().trim().min(2).max(60),
+    section: z.string().trim().min(2).max(40),
+    kind: z.enum(['text', 'number', 'choice']).default('text'),
+    unit: Text(20),
+    options: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
+    sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+    active: z.boolean().default(true),
+  })
+  .refine((v) => v.kind !== 'choice' || v.options.length >= 2, {
+    message: 'Give at least two choices',
+    path: ['options'],
+  });
+export class FieldDto extends createZodDto(FieldSchema) {}
+
+export const SETUP_KINDS = ['clinic', 'doctor', 'nurse', 'disease', 'medicine'] as const;
+export const SetupListSchema = z.object({
+  kind: z.enum(SETUP_KINDS),
+  q: z.string().trim().max(80).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(100).default(10),
+});
+export class SetupListDto extends createZodDto(SetupListSchema) {}
+export const SetupExportSchema = SetupListSchema.omit({ page: true, size: true });
+export class SetupExportDto extends createZodDto(SetupExportSchema) {}
+
+/** An Excel file as base64 (the API reads it; nothing is stored). */
+export const ImportSchema = z.object({
+  kind: z.enum([...SETUP_KINDS, 'stock']),
+  // the API takes 1 MB of JSON: an Excel of about 700 KB
+  fileBase64: z.string().min(100).max(950_000),
+});
+export class ImportDto extends createZodDto(ImportSchema) {}
+
+export const StockListSchema = z.object({
+  view: z.enum(['medicines', 'batches', 'moves']).default('medicines'),
+  q: z.string().trim().max(80).optional(),
+  medicineId: IdSchema.optional(),
+  /** medicines: low | expiring | expired | ok; batches: in_stock | expiring | expired | empty; moves: received | given | written_off. */
+  state: z
+    .string()
+    .regex(/^[a-z_]{2,20}$/)
+    .optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(100).default(15),
+});
+export class StockListDto extends createZodDto(StockListSchema) {}
+export const StockExportSchema = StockListSchema.omit({ page: true, size: true });
+export class StockExportDto extends createZodDto(StockExportSchema) {}
+
+/** The family's Health list: visits and published cards together, latest first. */
+export const MineHealthSchema = z.object({
+  studentId: IdSchema.optional(),
+  kind: z.enum(['visit', 'card']).optional(),
+  q: z.string().trim().max(80).optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(50).default(10),
+});
+export class MineHealthDto extends createZodDto(MineHealthSchema) {}

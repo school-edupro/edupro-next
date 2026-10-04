@@ -12,6 +12,13 @@ import {
   CLINIC,
   FINDING_KEYS,
   type CampDto,
+  type FieldDto,
+  type ImportDto,
+  type MineHealthDto,
+  type SetupExportDto,
+  type SetupListDto,
+  type StockExportDto,
+  type StockListDto,
   type CheckupDto,
   type ClinicSettingsDto,
   type ExportVisitsDto,
@@ -24,6 +31,7 @@ import {
   type WriteOffDto,
 } from './clinic.dto';
 import { healthCardPdf } from './health-card';
+import { tablePdf } from './table-pdf';
 import { templateStatus } from './template-status';
 
 type Row = Record<string, unknown>;
@@ -74,6 +82,20 @@ const VISIT = `SELECT v.id::text, COALESCE(v.number, 'CV-' || v.id::text) AS num
   LEFT JOIN clinic_masters nu ON nu.id = v.nurse_id
   LEFT JOIN users au ON au.id = v.attended_by`;
 const VISIT_FROM = `FROM clinic_visits v LEFT JOIN students s ON s.id = v.student_id LEFT JOIN employees e ON e.id = v.employee_id`;
+
+export interface CheckupField {
+  key: string;
+  label: string;
+  group: string;
+  kind: 'text' | 'number' | 'choice';
+  unit: string | null;
+  options: string[];
+  /** Added by the school (can be edited and switched off); built-in fields are only hidden. */
+  custom: boolean;
+  id: string | null;
+  active: boolean;
+  sortOrder: number;
+}
 
 export interface VisitRow {
   id: string;
@@ -322,7 +344,7 @@ export class ClinicService {
         settings: await this.settings(c),
         masters: await this.masters(c),
         medicines: await this.medicines(c),
-        fields: CHECKUP_FIELDS,
+        fields: await this.fields(c, true),
         staff: staff.rows,
         templates: await templateStatus(c, 'clinic'),
       };
@@ -335,8 +357,93 @@ export class ClinicService {
       settings: await this.settings(c),
       masters: await this.masters(c, true),
       medicines: await this.medicines(c, true),
-      fields: CHECKUP_FIELDS,
+      fields: await this.fields(c),
     }));
+  }
+
+  /**
+   * The health check-up form: the built-in fields and the ones the school added (key x<id>), in section
+   * order. With `all`, fields that are switched off come too (for the set-up).
+   */
+  private async fields(c: PoolClient, all = false): Promise<CheckupField[]> {
+    const r = await c.query<Row>(
+      `SELECT id::text, label, section, kind, unit, options, sort_order, status::text FROM health_checkup_fields
+        WHERE ($1::boolean OR status = 'active') ORDER BY sort_order, id`,
+      [all],
+    );
+    const builtIn: CheckupField[] = CHECKUP_FIELDS.map((f) => ({
+      key: f.key,
+      label: f.label,
+      group: f.group,
+      kind:
+        f.key === 'height_cm' || f.key === 'weight_kg'
+          ? 'number'
+          : f.key === 'blood_group'
+            ? 'choice'
+            : 'text',
+      unit: f.key === 'height_cm' ? 'cm' : f.key === 'weight_kg' ? 'kg' : null,
+      options: [],
+      custom: false,
+      id: null,
+      active: true,
+      sortOrder: 0,
+    }));
+    const added: CheckupField[] = r.rows.map((x) => ({
+      key: `x${String(x.id)}`,
+      label: String(x.label),
+      group: String(x.section),
+      kind: x.kind as CheckupField['kind'],
+      unit: text(x.unit),
+      options: (x.options as string[]) ?? [],
+      custom: true,
+      id: String(x.id),
+      active: x.status === 'active',
+      sortOrder: Number(x.sort_order),
+    }));
+    // a section keeps its built-in fields first, then the added ones; new sections follow in the order added
+    const groups = [...new Set([...builtIn, ...added].map((f) => f.group))];
+    return groups.flatMap((g) => [...builtIn, ...added].filter((f) => f.group === g));
+  }
+
+  async saveField(ctx: RequestContext, id: string | null, dto: FieldDto) {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const values = [
+        dto.label,
+        dto.section,
+        dto.kind,
+        dto.kind === 'number' ? (dto.unit ?? null) : null,
+        dto.kind === 'choice' ? [...new Set(dto.options)] : [],
+        dto.sortOrder,
+        dto.active ? 'active' : 'inactive',
+      ];
+      const r = await (
+        id
+          ? c.query<{ id: string }>(
+              `UPDATE health_checkup_fields SET label = $1, section = $2, kind = $3, unit = $4, options = $5, sort_order = $6, status = $7::row_status,
+                    updated_at = now() WHERE id = $8 RETURNING id::text`,
+              [...values, id],
+            )
+          : c.query<{ id: string }>(
+              `INSERT INTO health_checkup_fields (school_id, label, section, kind, unit, options, sort_order, status, created_by)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7::row_status, app.current_user_id()) RETURNING id::text`,
+              values,
+            )
+      ).catch((e: { code?: string }) => {
+        if (e.code === '23505')
+          throw new DomainError('conflict', `"${dto.label}" is already in ${dto.section}`, {
+            status: 409,
+          });
+        throw e;
+      });
+      if (!r.rows[0]) throw new DomainError('not-found', 'Field not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: `engagement.clinic_setup.field_${id ? 'update' : 'create'}`,
+        entityType: 'health_checkup_fields',
+        entityId: r.rows[0].id,
+        after: dto,
+      });
+    });
+    return this.setup(ctx);
   }
 
   async saveSettings(ctx: RequestContext, dto: ClinicSettingsDto) {
@@ -1107,9 +1214,28 @@ export class ClinicService {
         [studentId],
       );
       if (!en.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
-      const findings = Object.fromEntries(
-        Object.entries(dto.findings).filter(([k, v]) => FINDING_KEYS.includes(k as never) && v),
-      );
+      // only what is on the school's form: the built-in findings and the fields it added
+      const form = await this.fields(c);
+      const findings: Record<string, string> = {};
+      for (const [k, v] of Object.entries(dto.findings)) {
+        if (!v) continue;
+        const f = form.find((x) => x.key === k);
+        if (!f || !(f.custom || FINDING_KEYS.includes(k as never)))
+          throw new DomainError('validation-failed', `"${k}" is not on the check-up form`, {
+            status: 400,
+          });
+        if (f.kind === 'number' && !/^-?\d+(\.\d+)?$/.test(v))
+          throw new DomainError('validation-failed', `${f.label} must be a number`, {
+            status: 400,
+          });
+        if (f.kind === 'choice' && f.custom && !f.options.includes(v))
+          throw new DomainError(
+            'validation-failed',
+            `${f.label}: choose one of the listed values`,
+            { status: 400 },
+          );
+        findings[k] = v;
+      }
       const r = await c.query<{ id: string }>(
         `INSERT INTO health_checkups (school_id, camp_id, student_id, class_section_id, exam_date, doctor_id, place, height_cm, weight_kg, blood_group,
                                       findings, disease_id, description, remarks, needs_attention, created_by, updated_by)
@@ -1198,24 +1324,17 @@ export class ClinicService {
     });
   }
 
-  private async cardOf(c: PoolClient, h: CheckupRow) {
+  /** A card's findings section by section, as the form shows them (hidden and empty fields left out). */
+  private async groupsOf(c: PoolClient, h: CheckupRow) {
     const s = await this.settings(c);
-    const school = await c.query<{ name: string }>(
-      `SELECT name FROM schools WHERE id = app.current_school_id()`,
-    );
-    const shown = CHECKUP_FIELDS.filter((f) => !s.checkupHidden.includes(f.key));
-    const value = (key: string): string | null =>
-      key === 'height_cm'
-        ? h.heightCm !== null
-          ? `${String(h.heightCm)} cm`
-          : null
-        : key === 'weight_kg'
-          ? h.weightKg !== null
-            ? `${String(h.weightKg)} kg`
-            : null
-          : key === 'blood_group'
-            ? h.bloodGroup
-            : (h.findings[key] ?? null);
+    const shown = (await this.fields(c)).filter((f) => !s.checkupHidden.includes(f.key));
+    const value = (f: CheckupField): string | null => {
+      if (f.key === 'height_cm') return h.heightCm !== null ? `${String(h.heightCm)} cm` : null;
+      if (f.key === 'weight_kg') return h.weightKg !== null ? `${String(h.weightKg)} kg` : null;
+      if (f.key === 'blood_group') return h.bloodGroup;
+      const v = h.findings[f.key] ?? null;
+      return v && f.unit ? `${v} ${f.unit}` : v;
+    };
     const groups: Array<{ title: string; rows: Array<[string, string | null]> }> = [
       ...new Set<string>(shown.map((f) => f.group)),
     ].map((title) => ({
@@ -1223,7 +1342,7 @@ export class ClinicService {
       rows: [
         ...shown
           .filter((f) => f.group === title)
-          .map((f): [string, string | null] => [f.label, value(f.key)]),
+          .map((f): [string, string | null] => [f.label.replace(/ \((cm|kg)\)$/, ''), value(f)]),
         ...(title === 'General' && h.bmi !== null
           ? ([['BMI', String(h.bmi)]] as Array<[string, string]>)
           : []),
@@ -1238,6 +1357,19 @@ export class ClinicService {
         ],
       });
     return {
+      note: s.cardNote,
+      groups: groups
+        .map((g) => ({ title: g.title, rows: g.rows.filter(([, v]) => v && v.trim()) }))
+        .filter((g) => g.rows.length),
+    };
+  }
+
+  private async cardOf(c: PoolClient, h: CheckupRow) {
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    const { groups, note } = await this.groupsOf(c, h);
+    return {
       bytes: await healthCardPdf({
         school: school.rows[0]?.name ?? '',
         camp: h.camp,
@@ -1251,7 +1383,7 @@ export class ClinicService {
         groups,
         remarks: h.remarks,
         needsAttention: h.needsAttention,
-        note: s.cardNote,
+        note,
       }),
       filename: `health-card-${(h.admissionNo ?? h.studentId).replace(/[^\w-]+/g, '-')}.pdf`,
     };
@@ -1271,9 +1403,10 @@ export class ClinicService {
 
   /** Everything examined in one camp, a row per pupil. */
   async campExcel(ctx: RequestContext, id: string) {
-    const { camp, rows, hidden } = await this.db.tenant(requireTenant(ctx), async (c) => ({
+    const { camp, rows, hidden, form } = await this.db.tenant(requireTenant(ctx), async (c) => ({
       camp: await this.camp(c, id),
       hidden: (await this.settings(c)).checkupHidden,
+      form: await this.fields(c),
       rows: (
         await c.query<Row>(
           `${CHECKUP} WHERE h.camp_id = $1 ORDER BY section, s.display_name LIMIT ${String(EXPORT_MAX)}`,
@@ -1281,7 +1414,7 @@ export class ClinicService {
         )
       ).rows.map(toCheckup),
     }));
-    const fields = CHECKUP_FIELDS.filter(
+    const fields = form.filter(
       (f) => !hidden.includes(f.key) && !['height_cm', 'weight_kg', 'blood_group'].includes(f.key),
     );
     const wb = new ExcelJS.Workbook();
@@ -1296,7 +1429,7 @@ export class ClinicService {
       'Weight (kg)',
       'BMI',
       'Blood group',
-      ...fields.map((f) => f.label),
+      ...fields.map((f) => `${f.label}${f.unit ? ` (${f.unit})` : ''}`),
       'Specific condition',
       'Details',
       'Remarks for parents',
@@ -1560,6 +1693,719 @@ export class ClinicService {
       if (h.status !== 'published' || !v.students.some((s) => s.id === h.studentId))
         throw new DomainError('not-found', 'Health card not found', { status: 404 });
       return this.cardOf(c, h);
+    });
+  }
+
+  // ---- set-up lists: pages, search, Excel / PDF, upload from Excel ------------------------------------
+  private static readonly COLUMNS: Record<string, string[]> = {
+    clinic: ['Name', 'Note', 'In use'],
+    disease: ['Name', 'Note', 'In use'],
+    doctor: ['Name', 'Qualification', 'Registration no.', 'Mobile', 'Employee code', 'In use'],
+    nurse: ['Name', 'Qualification', 'Registration no.', 'Mobile', 'Employee code', 'In use'],
+    medicine: ['Name', 'Form', 'Strength', 'Counted in', 'Low-stock mark', 'In use'],
+    stock: [
+      'Medicine',
+      'Strength',
+      'Batch no.',
+      'Expiry (YYYY-MM-DD)',
+      'Quantity',
+      'Received on (YYYY-MM-DD)',
+      'Supplier',
+    ],
+  };
+  private static readonly KIND_TITLE: Record<string, string> = {
+    clinic: 'Clinics',
+    doctor: 'Doctors',
+    nurse: 'Nurses',
+    disease: 'Diseases and complaints',
+    medicine: 'Medicines',
+    stock: 'Medicine stock',
+  };
+
+  private async setupRows(
+    c: PoolClient,
+    q: SetupExportDto,
+    page?: { size: number; offset: number },
+  ) {
+    const like = q.q ? `%${q.q}%` : null;
+    const limit = page
+      ? `LIMIT ${String(page.size)} OFFSET ${String(page.offset)}`
+      : `LIMIT ${String(EXPORT_MAX)}`;
+    if (q.kind === 'medicine') {
+      const r = await c.query<Row>(
+        `SELECT count(*) OVER ()::int AS total, m.id::text, m.name, m.form, m.strength, m.unit, m.low_stock_at, m.status::text,
+                COALESCE((SELECT sum(k.qty_left) FROM clinic_stock k WHERE k.medicine_id = m.id AND (k.expiry_on IS NULL OR k.expiry_on >= ${TODAY})), 0)::int AS stock
+           FROM clinic_medicines m
+          WHERE ($1::text IS NULL OR concat_ws(' ', m.name, m.strength, m.form) ILIKE $1) AND ($2::text IS NULL OR m.status::text = $2)
+          ORDER BY m.name, m.strength ${limit}`,
+        [like, q.status ?? null],
+      );
+      return {
+        total: n(r.rows[0]?.total),
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          name: String(x.name),
+          form: String(x.form),
+          strength: text(x.strength),
+          unit: String(x.unit),
+          lowStockAt: Number(x.low_stock_at),
+          active: x.status === 'active',
+          stock: n(x.stock),
+        })),
+      };
+    }
+    const r = await c.query<Row>(
+      `SELECT count(*) OVER ()::int AS total, m.id::text, m.kind, m.name, m.qualification, m.reg_no, m.mobile, m.employee_id::text,
+              e.display_name AS employee, e.employee_code, m.note, m.status::text, m.sort_order
+         FROM clinic_masters m LEFT JOIN employees e ON e.id = m.employee_id
+        WHERE m.kind = $1 AND ($2::text IS NULL OR concat_ws(' ', m.name, m.qualification, m.reg_no, m.mobile, m.note) ILIKE $2)
+          AND ($3::text IS NULL OR m.status::text = $3)
+        ORDER BY m.sort_order, m.name ${limit}`,
+      [q.kind, like, q.status ?? null],
+    );
+    return {
+      total: n(r.rows[0]?.total),
+      data: r.rows.map((x) => ({
+        id: String(x.id),
+        kind: String(x.kind),
+        name: String(x.name),
+        qualification: text(x.qualification),
+        regNo: text(x.reg_no),
+        mobile: text(x.mobile),
+        employeeId: text(x.employee_id),
+        employee: text(x.employee),
+        employeeCode: text(x.employee_code),
+        note: text(x.note),
+        active: x.status === 'active',
+        sortOrder: Number(x.sort_order),
+      })),
+    };
+  }
+
+  /** One set-up list, a page at a time, with search and the in-use filter. */
+  async setupList(ctx: RequestContext, q: SetupListDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const out = await this.setupRows(c, q, { size: q.size, offset: (q.page - 1) * q.size });
+      return { data: out.data, page: { number: q.page, size: q.size, total: out.total } };
+    });
+  }
+
+  private rowOf(kind: string, x: Record<string, unknown>): Array<string | number> {
+    const yes = x.active ? 'Yes' : 'No';
+    if (kind === 'medicine')
+      return [
+        String(x.name),
+        String(x.form),
+        String(x.strength ?? ''),
+        String(x.unit),
+        Number(x.lowStockAt),
+        yes,
+      ];
+    if (kind === 'doctor' || kind === 'nurse')
+      return [
+        String(x.name),
+        String(x.qualification ?? ''),
+        String(x.regNo ?? ''),
+        String(x.mobile ?? ''),
+        String(x.employeeCode ?? ''),
+        yes,
+      ];
+    return [String(x.name), String(x.note ?? ''), yes];
+  }
+
+  private async sheet(
+    title: string,
+    columns: string[],
+    rows: Array<Array<string | number>>,
+    name: string,
+  ) {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(title.slice(0, 30));
+    ws.addRow(columns).font = { bold: true };
+    for (const r of rows) ws.addRow(r);
+    ws.columns.forEach((col, i) => {
+      col.width = i === 0 ? 30 : 20;
+    });
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    const out = await wb.xlsx.writeBuffer();
+    return { bytes: Buffer.from(out as ArrayBuffer), filename: `${name}.xlsx` };
+  }
+
+  /** A set-up list as Excel (the same columns the upload reads) or as a PDF. */
+  async setupExport(ctx: RequestContext, q: SetupExportDto, format: 'xlsx' | 'pdf') {
+    const { rows, school } = await this.db.tenant(requireTenant(ctx), async (c) => ({
+      rows: (await this.setupRows(c, q)).data,
+      school:
+        (
+          await c.query<{ name: string }>(
+            `SELECT name FROM schools WHERE id = app.current_school_id()`,
+          )
+        ).rows[0]?.name ?? '',
+    }));
+    const columns = ClinicService.COLUMNS[q.kind]!;
+    const title = ClinicService.KIND_TITLE[q.kind]!;
+    const body = rows.map((x) => this.rowOf(q.kind, x));
+    const name = `clinic-${q.kind}s-${new Date().toISOString().slice(0, 10)}`;
+    if (format === 'xlsx') return this.sheet(title, columns, body, name);
+    return {
+      bytes: await tablePdf({
+        school,
+        title: `Clinic set-up: ${title}`,
+        subtitle: [
+          q.q ? `Search: ${q.q}` : null,
+          q.status ? (q.status === 'active' ? 'In use' : 'Not in use') : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        columns: columns.map((label, i) => ({ label, width: i === 0 ? 3 : 2 })),
+        rows: body,
+      }),
+      filename: `${name}.pdf`,
+    };
+  }
+
+  /** An empty Excel with the right headings and one example row, to fill and upload. */
+  async sample(kind: string) {
+    const columns = ClinicService.COLUMNS[kind]!;
+    const example: Record<string, Array<string | number>> = {
+      clinic: ['Main clinic', 'Ground floor, block A', 'Yes'],
+      disease: ['Fever', '', 'Yes'],
+      doctor: ['Dr. Asha Rao', 'MBBS, DCH', 'DMC 45821', '9876500021', '', 'Yes'],
+      nurse: ['Sr. Mary Thomas', 'GNM', '', '9876500022', 'E021', 'Yes'],
+      medicine: ['Paracetamol', 'Tablet', '500 mg', 'tablet', 20, 'Yes'],
+      stock: [
+        'Paracetamol',
+        '500 mg',
+        'PCM-2401',
+        '2027-12-31',
+        100,
+        new Date().toISOString().slice(0, 10),
+        'City Medicos',
+      ],
+    };
+    return this.sheet(
+      ClinicService.KIND_TITLE[kind]!,
+      columns,
+      [example[kind]!],
+      `clinic-${kind}-sample`,
+    );
+  }
+
+  /** The rows of the first sheet of an uploaded Excel, keyed by the heading (lower case, letters only). */
+  private async readSheet(fileBase64: string): Promise<Array<Record<string, string>>> {
+    const wb = new ExcelJS.Workbook();
+    try {
+      await wb.xlsx.load(Buffer.from(fileBase64, 'base64') as unknown as ArrayBuffer);
+    } catch {
+      throw new DomainError('validation-failed', 'This is not an Excel (.xlsx) file', {
+        status: 400,
+      });
+    }
+    const ws = wb.worksheets[0];
+    if (!ws)
+      throw new DomainError('validation-failed', 'The Excel file has no sheet', { status: 400 });
+    const cell = (v: unknown): string => {
+      if (v === null || v === undefined) return '';
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      if (typeof v === 'object') {
+        const o = v as { text?: unknown; result?: unknown; richText?: Array<{ text: string }> };
+        if (o.richText)
+          return o.richText
+            .map((t) => t.text)
+            .join('')
+            .trim();
+        return cell(o.text ?? o.result ?? '');
+      }
+      return String(v).trim();
+    };
+    const key = (v: string) =>
+      v
+        .toLowerCase()
+        .replace(/\(.*?\)/g, '')
+        .replace(/[^a-z]/g, '');
+    const heads: string[] = [];
+    ws.getRow(1).eachCell({ includeEmpty: true }, (c, i) => {
+      heads[i] = key(cell(c.value));
+    });
+    const rows: Array<Record<string, string>> = [];
+    ws.eachRow((row, i) => {
+      if (i === 1 || rows.length >= 2000) return;
+      const o: Record<string, string> = { __row: String(i) };
+      row.eachCell({ includeEmpty: false }, (c, k) => {
+        if (heads[k]) o[heads[k]] = cell(c.value);
+      });
+      if (Object.keys(o).length > 1) rows.push(o);
+    });
+    if (!rows.length)
+      throw new DomainError('validation-failed', 'The Excel file has no rows under the headings', {
+        status: 400,
+      });
+    return rows;
+  }
+
+  /**
+   * A set-up list or the opening stock from Excel. A row whose name is already on the list updates it;
+   * a row that cannot be read is reported with its line number and the rest still go in.
+   */
+  async importExcel(ctx: RequestContext, dto: ImportDto) {
+    const rows = await this.readSheet(dto.fileBase64);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      let added = 0;
+      let updated = 0;
+      const errors: Array<{ row: number; message: string }> = [];
+      const yes = (v: string | undefined) => !v || !/^(no|n|0|false|inactive|not in use)$/i.test(v);
+      const date = (v: string | undefined): string | null | false => {
+        if (!v) return null;
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) ?? /^(\d{2})[/-](\d{2})[/-](\d{4})$/.exec(v);
+        if (!m) return false;
+        return m[1]!.length === 4 ? `${m[1]}-${m[2]}-${m[3]}` : `${m[3]}-${m[2]}-${m[1]}`;
+      };
+      for (const r of rows) {
+        const line = Number(r.__row);
+        const fail = (message: string) => errors.push({ row: line, message });
+        const name = (dto.kind === 'stock' ? r.medicine : r.name)?.trim() ?? '';
+        if (name.length < 2) {
+          fail(dto.kind === 'stock' ? 'The medicine name is missing' : 'The name is missing');
+          continue;
+        }
+        await c.query('SAVEPOINT clinic_import');
+        try {
+          if (dto.kind === 'stock') {
+            const qty = Number(r.quantity);
+            const expiry = date(r.expiry);
+            const received = date(r.receivedon);
+            if (!Number.isInteger(qty) || qty < 1)
+              throw new Error('Quantity must be a whole number above 0');
+            if (expiry === false || received === false) throw new Error('Dates must be YYYY-MM-DD');
+            const m = await c.query<{ id: string }>(
+              `SELECT id::text FROM clinic_medicines WHERE lower(name) = lower($1) AND lower(COALESCE(strength, '')) = lower($2) LIMIT 1`,
+              [name, r.strength ?? ''],
+            );
+            if (!m.rows[0])
+              throw new Error(
+                `Medicine "${name}${r.strength ? ` ${r.strength}` : ''}" is not in the set-up`,
+              );
+            const s = await c.query<{ id: string }>(
+              `INSERT INTO clinic_stock (school_id, medicine_id, batch_no, expiry_on, qty_in, qty_left, received_on, supplier, created_by)
+               VALUES (app.current_school_id(), $1, $2, $3::date, $4, $4, COALESCE($5::date, ${TODAY}), $6, app.current_user_id()) RETURNING id::text`,
+              [m.rows[0].id, r.batchno || null, expiry, qty, received, r.supplier || null],
+            );
+            await c.query(
+              `INSERT INTO clinic_stock_moves (school_id, medicine_id, stock_id, kind, qty, note, by_user)
+               VALUES (app.current_school_id(), $1, $2, 'received', $3, 'Excel upload', app.current_user_id())`,
+              [m.rows[0].id, s.rows[0]!.id, qty],
+            );
+            added += 1;
+          } else if (dto.kind === 'medicine') {
+            const low = r.lowstockmark ? Number(r.lowstockmark) : 10;
+            if (!Number.isInteger(low) || low < 0)
+              throw new Error('Low-stock mark must be a whole number');
+            const u = await c.query(
+              `UPDATE clinic_medicines SET form = $3, unit = $4, low_stock_at = $5, status = $6::row_status, updated_at = now()
+                WHERE lower(name) = lower($1) AND lower(COALESCE(strength, '')) = lower($2)`,
+              [
+                name,
+                r.strength ?? '',
+                r.form || 'Tablet',
+                r.countedin || 'tablet',
+                low,
+                yes(r.inuse) ? 'active' : 'inactive',
+              ],
+            );
+            if (u.rowCount) updated += 1;
+            else {
+              await c.query(
+                `INSERT INTO clinic_medicines (school_id, name, form, strength, unit, low_stock_at, status, created_by)
+                 VALUES (app.current_school_id(), $1, $2, NULLIF($3, ''), $4, $5, $6::row_status, app.current_user_id())`,
+                [
+                  name,
+                  r.form || 'Tablet',
+                  r.strength ?? '',
+                  r.countedin || 'tablet',
+                  low,
+                  yes(r.inuse) ? 'active' : 'inactive',
+                ],
+              );
+              added += 1;
+            }
+          } else {
+            const person = dto.kind === 'doctor' || dto.kind === 'nurse';
+            if (r.mobile && !/^[6-9]\d{9}$/.test(r.mobile))
+              throw new Error('Mobile must be 10 digits');
+            let employee: string | null = null;
+            if (person && r.employeecode) {
+              const e = await c.query<{ id: string }>(
+                `SELECT id::text FROM employees WHERE lower(employee_code) = lower($1) AND deleted_at IS NULL`,
+                [r.employeecode],
+              );
+              if (!e.rows[0]) throw new Error(`Employee code "${r.employeecode}" was not found`);
+              employee = e.rows[0].id;
+            }
+            const values = [
+              dto.kind,
+              name,
+              person ? r.qualification || null : null,
+              person ? r.registrationno || null : null,
+              person ? r.mobile || null : null,
+              employee,
+              r.note || null,
+              yes(r.inuse) ? 'active' : 'inactive',
+            ];
+            const u = await c.query(
+              `UPDATE clinic_masters SET qualification = $3, reg_no = $4, mobile = $5, employee_id = $6, note = $7, status = $8::row_status, updated_at = now()
+                WHERE kind = $1 AND lower(name) = lower($2)`,
+              values,
+            );
+            if (u.rowCount) updated += 1;
+            else {
+              await c.query(
+                `INSERT INTO clinic_masters (school_id, kind, name, qualification, reg_no, mobile, employee_id, note, status, created_by)
+                 VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::row_status, app.current_user_id())`,
+                values,
+              );
+              added += 1;
+            }
+          }
+          await c.query('RELEASE SAVEPOINT clinic_import');
+        } catch (e) {
+          await c.query('ROLLBACK TO SAVEPOINT clinic_import');
+          fail(e instanceof Error ? e.message.slice(0, 200) : 'Could not be read');
+        }
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'engagement.clinic.import',
+        entityType:
+          dto.kind === 'stock'
+            ? 'clinic_stock'
+            : dto.kind === 'medicine'
+              ? 'clinic_medicines'
+              : 'clinic_masters',
+        entityId: requireTenant(ctx).schoolId,
+        after: { kind: dto.kind, rows: rows.length, added, updated, errors: errors.length },
+      });
+      return { rows: rows.length, added, updated, errors: errors.slice(0, 50) };
+    });
+  }
+
+  // ---- stock lists: filters, pages, Excel / PDF -------------------------------------------------------
+  private async stockRows(
+    c: PoolClient,
+    q: StockExportDto,
+    page?: { size: number; offset: number },
+  ) {
+    const s = await this.settings(c);
+    const limit = page
+      ? `LIMIT ${String(page.size)} OFFSET ${String(page.offset)}`
+      : `LIMIT ${String(EXPORT_MAX)}`;
+    const like = q.q ? `%${q.q}%` : null;
+    if (q.view === 'batches') {
+      const r = await c.query<Row>(
+        `SELECT count(*) OVER ()::int AS total, k.id::text, k.medicine_id::text, m.name, m.strength, m.unit, k.batch_no, k.expiry_on::text, k.qty_in, k.qty_left,
+                k.received_on::text, k.supplier,
+                CASE WHEN k.qty_left = 0 THEN 'empty' WHEN k.expiry_on < ${TODAY} THEN 'expired'
+                     WHEN k.expiry_on <= ${TODAY} + $5::int THEN 'expiring' ELSE 'in_stock' END AS state
+           FROM clinic_stock k JOIN clinic_medicines m ON m.id = k.medicine_id
+          WHERE ($1::text IS NULL OR concat_ws(' ', m.name, m.strength, k.batch_no, k.supplier) ILIKE $1)
+            AND ($2::bigint IS NULL OR k.medicine_id = $2)
+            AND ($3::date IS NULL OR k.received_on >= $3::date) AND ($4::date IS NULL OR k.received_on <= $4::date)
+            AND ($6::text IS NULL OR $6 = CASE WHEN k.qty_left = 0 THEN 'empty' WHEN k.expiry_on < ${TODAY} THEN 'expired'
+                     WHEN k.expiry_on <= ${TODAY} + $5::int THEN 'expiring' ELSE 'in_stock' END
+                 OR ($6 = 'on_shelf' AND k.qty_left > 0))
+          ORDER BY (k.qty_left = 0), k.expiry_on NULLS LAST, k.id ${limit}`,
+        [
+          like,
+          q.medicineId ?? null,
+          q.from ?? null,
+          q.to ?? null,
+          s.expiryAlertDays,
+          q.state ?? 'on_shelf',
+        ],
+      );
+      return {
+        total: n(r.rows[0]?.total),
+        columns: [
+          'Medicine',
+          'Batch no.',
+          'Expiry',
+          'Received',
+          'Left',
+          'Received on',
+          'Supplier',
+          'State',
+        ],
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          medicineId: String(x.medicine_id),
+          medicine: `${String(x.name)}${x.strength ? ` ${String(x.strength)}` : ''}`,
+          unit: String(x.unit),
+          batchNo: text(x.batch_no),
+          expiryOn: text(x.expiry_on),
+          qtyIn: n(x.qty_in),
+          qtyLeft: n(x.qty_left),
+          receivedOn: String(x.received_on),
+          supplier: text(x.supplier),
+          state: String(x.state),
+        })),
+      };
+    }
+    if (q.view === 'moves') {
+      const r = await c.query<Row>(
+        `SELECT count(*) OVER ()::int AS total, mv.id::text, m.name, m.strength, m.unit, mv.kind, mv.qty, mv.note, mv.at, mv.visit_id::text,
+                k.batch_no, (SELECT COALESCE(v.number, 'CV-' || v.id::text) FROM clinic_visits v WHERE v.id = mv.visit_id) AS visit_no,
+                COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = mv.by_user LIMIT 1), u.display_name) AS by_name
+           FROM clinic_stock_moves mv JOIN clinic_medicines m ON m.id = mv.medicine_id LEFT JOIN clinic_stock k ON k.id = mv.stock_id
+           LEFT JOIN users u ON u.id = mv.by_user
+          WHERE ($1::text IS NULL OR concat_ws(' ', m.name, m.strength, k.batch_no, mv.note) ILIKE $1)
+            AND ($2::bigint IS NULL OR mv.medicine_id = $2)
+            AND ($3::date IS NULL OR ${DAY('mv.at')} >= $3::date) AND ($4::date IS NULL OR ${DAY('mv.at')} <= $4::date)
+            AND ($5::text IS NULL OR mv.kind = $5)
+          ORDER BY mv.id DESC ${limit}`,
+        [like, q.medicineId ?? null, q.from ?? null, q.to ?? null, q.state ?? null],
+      );
+      return {
+        total: n(r.rows[0]?.total),
+        columns: ['When', 'Medicine', 'Batch no.', 'What', 'Quantity', 'Visit', 'Note', 'By'],
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          medicine: `${String(x.name)}${x.strength ? ` ${String(x.strength)}` : ''}`,
+          unit: String(x.unit),
+          batchNo: text(x.batch_no),
+          kind: String(x.kind),
+          qty: n(x.qty),
+          note: text(x.note),
+          at: iso(x.at)!,
+          visitId: text(x.visit_id),
+          visitNo: text(x.visit_no),
+          by: text(x.by_name),
+        })),
+      };
+    }
+    const r = await c.query<Row>(
+      `SELECT count(*) OVER ()::int AS total, x.* FROM (
+         SELECT m.id::text, m.name, m.form, m.strength, m.unit, m.low_stock_at, m.status::text,
+                COALESCE((SELECT sum(k.qty_left) FROM clinic_stock k WHERE k.medicine_id = m.id AND (k.expiry_on IS NULL OR k.expiry_on >= ${TODAY})), 0)::int AS stock,
+                COALESCE((SELECT sum(k.qty_left) FROM clinic_stock k WHERE k.medicine_id = m.id AND k.expiry_on < ${TODAY}), 0)::int AS expired,
+                COALESCE((SELECT sum(k.qty_left) FROM clinic_stock k WHERE k.medicine_id = m.id AND k.expiry_on >= ${TODAY} AND k.expiry_on <= ${TODAY} + $3::int), 0)::int AS expiring,
+                (SELECT min(k.expiry_on)::text FROM clinic_stock k WHERE k.medicine_id = m.id AND k.qty_left > 0 AND k.expiry_on >= ${TODAY}) AS next_expiry
+           FROM clinic_medicines m
+          WHERE m.status = 'active' AND ($1::text IS NULL OR concat_ws(' ', m.name, m.strength, m.form) ILIKE $1) AND ($2::bigint IS NULL OR m.id = $2)) x
+        WHERE $4::text IS NULL OR ($4 = 'low' AND x.stock <= x.low_stock_at) OR ($4 = 'expired' AND x.expired > 0)
+           OR ($4 = 'expiring' AND x.expiring > 0) OR ($4 = 'ok' AND x.stock > x.low_stock_at AND x.expired = 0 AND x.expiring = 0)
+        ORDER BY x.name, x.strength ${limit}`,
+      [like, q.medicineId ?? null, s.expiryAlertDays, q.state ?? null],
+    );
+    return {
+      total: n(r.rows[0]?.total),
+      columns: [
+        'Medicine',
+        'Form',
+        'In stock',
+        'Counted in',
+        'Low-stock mark',
+        'Expiring soon',
+        'Expired',
+        'Next expiry',
+      ],
+      data: r.rows.map((x) => ({
+        id: String(x.id),
+        medicine: `${String(x.name)}${x.strength ? ` ${String(x.strength)}` : ''}`,
+        form: String(x.form),
+        unit: String(x.unit),
+        lowStockAt: Number(x.low_stock_at),
+        stock: n(x.stock),
+        expired: n(x.expired),
+        expiring: n(x.expiring),
+        nextExpiry: text(x.next_expiry),
+        low: n(x.stock) <= Number(x.low_stock_at),
+      })),
+    };
+  }
+
+  /** In stock, batches or movements: a page with the filters, and the shelf's alert counts. */
+  async stockList(ctx: RequestContext, q: StockListDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const out = await this.stockRows(c, q, { size: q.size, offset: (q.page - 1) * q.size });
+      const s = await this.settings(c);
+      const alerts = await c.query<Row>(
+        `SELECT (SELECT count(*) FROM clinic_medicines m WHERE m.status = 'active' AND COALESCE((SELECT sum(k.qty_left) FROM clinic_stock k
+                   WHERE k.medicine_id = m.id AND (k.expiry_on IS NULL OR k.expiry_on >= ${TODAY})), 0) <= m.low_stock_at)::int AS low,
+                (SELECT count(*) FROM clinic_stock k WHERE k.qty_left > 0 AND k.expiry_on >= ${TODAY} AND k.expiry_on <= ${TODAY} + $1::int)::int AS expiring,
+                (SELECT count(*) FROM clinic_stock k WHERE k.qty_left > 0 AND k.expiry_on < ${TODAY})::int AS expired`,
+        [s.expiryAlertDays],
+      );
+      const meds = await c.query<{ id: string; name: string }>(
+        `SELECT id::text, name || COALESCE(' ' || strength, '') AS name FROM clinic_medicines WHERE status = 'active' ORDER BY 2`,
+      );
+      return {
+        view: q.view,
+        data: out.data,
+        page: { number: q.page, size: q.size, total: out.total },
+        alerts: {
+          low: n(alerts.rows[0]?.low),
+          expiring: n(alerts.rows[0]?.expiring),
+          expired: n(alerts.rows[0]?.expired),
+          days: s.expiryAlertDays,
+        },
+        medicines: meds.rows,
+      };
+    });
+  }
+
+  async stockExport(ctx: RequestContext, q: StockExportDto, format: 'xlsx' | 'pdf') {
+    const { out, school } = await this.db.tenant(requireTenant(ctx), async (c) => ({
+      out: await this.stockRows(c, q),
+      school:
+        (
+          await c.query<{ name: string }>(
+            `SELECT name FROM schools WHERE id = app.current_school_id()`,
+          )
+        ).rows[0]?.name ?? '',
+    }));
+    const STATE: Record<string, string> = {
+      in_stock: 'In stock',
+      expiring: 'Expiring soon',
+      expired: 'Expired',
+      empty: 'Used up',
+    };
+    const WHAT: Record<string, string> = {
+      received: 'Received',
+      given: 'Given at a visit',
+      written_off: 'Written off',
+    };
+    const body = (out.data as Array<Record<string, unknown>>).map((x): Array<string | number> =>
+      q.view === 'batches'
+        ? [
+            String(x.medicine),
+            String(x.batchNo ?? ''),
+            String(x.expiryOn ?? ''),
+            Number(x.qtyIn),
+            Number(x.qtyLeft),
+            String(x.receivedOn),
+            String(x.supplier ?? ''),
+            STATE[String(x.state)] ?? String(x.state),
+          ]
+        : q.view === 'moves'
+          ? [
+              ist(String(x.at)),
+              String(x.medicine),
+              String(x.batchNo ?? ''),
+              WHAT[String(x.kind)] ?? String(x.kind),
+              Number(x.qty),
+              String(x.visitNo ?? ''),
+              String(x.note ?? ''),
+              String(x.by ?? ''),
+            ]
+          : [
+              String(x.medicine),
+              String(x.form),
+              Number(x.stock),
+              String(x.unit),
+              Number(x.lowStockAt),
+              Number(x.expiring),
+              Number(x.expired),
+              String(x.nextExpiry ?? ''),
+            ],
+    );
+    const title = {
+      medicines: 'Medicines in stock',
+      batches: 'Medicine batches',
+      moves: 'Stock movements',
+    }[q.view];
+    const name = `clinic-stock-${q.view}-${new Date().toISOString().slice(0, 10)}`;
+    if (format === 'xlsx') return this.sheet(title, out.columns, body, name);
+    return {
+      bytes: await tablePdf({
+        school,
+        title,
+        subtitle: [
+          q.q ? `Search: ${q.q}` : null,
+          q.state ? `Filter: ${q.state.replace('_', ' ')}` : null,
+          q.from ? `From ${q.from}` : null,
+          q.to ? `To ${q.to}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        columns: out.columns.map((label, i) => ({ label, width: i <= 1 ? 3 : 2 })),
+        rows: body,
+      }),
+      filename: `${name}.pdf`,
+    };
+  }
+
+  // ---- the family: one list, and each entry in full ---------------------------------------------------
+  /** Clinic visits and published health cards of my children together, latest first, with filters. */
+  async mineList(ctx: RequestContext, q: MineHealthDto) {
+    const v = await this.family(ctx);
+    if (q.studentId && !v.students.some((s) => s.id === q.studentId))
+      throw new DomainError('not-found', 'Student not found', { status: 404 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        `WITH x AS (
+           SELECT 'visit' AS kind, v.id, v.student_id, v.in_at AS at, concat_ws(' ', v.number, v.complaint, v.treatment, v.remark, v.diagnosis) AS txt
+             FROM clinic_visits v WHERE v.student_id = ANY($1::bigint[])
+           UNION ALL
+           SELECT 'card', h.id, h.student_id, (h.exam_date::text || ' 12:00:00+05:30')::timestamptz, concat_ws(' ', cp.name, h.remarks, h.description)
+             FROM health_checkups h JOIN health_camps cp ON cp.id = h.camp_id WHERE h.status = 'published' AND h.student_id = ANY($1::bigint[]))
+         SELECT kind, id::text, count(*) OVER ()::int AS total,
+                (SELECT count(*) FROM x y WHERE y.kind = 'visit')::int AS visits, (SELECT count(*) FROM x y WHERE y.kind = 'card')::int AS cards
+           FROM x
+          WHERE ($2::bigint IS NULL OR student_id = $2) AND ($3::text IS NULL OR kind = $3) AND ($4::text IS NULL OR txt ILIKE '%' || $4 || '%')
+            AND ($5::date IS NULL OR ${DAY('at')} >= $5::date) AND ($6::date IS NULL OR ${DAY('at')} <= $6::date)
+          ORDER BY at DESC, id DESC LIMIT $7 OFFSET $8`,
+        [
+          v.students.map((s) => s.id),
+          q.studentId ?? null,
+          q.kind ?? null,
+          q.q ?? null,
+          q.from ?? null,
+          q.to ?? null,
+          q.size,
+          (q.page - 1) * q.size,
+        ],
+      );
+      const ids = (k: string) => r.rows.filter((x) => x.kind === k).map((x) => String(x.id));
+      const visits = ids('visit').length
+        ? (await c.query<Row>(`${VISIT} WHERE v.id = ANY($1::bigint[])`, [ids('visit')])).rows.map(
+            toVisit,
+          )
+        : [];
+      const cards = ids('card').length
+        ? (await c.query<Row>(`${CHECKUP} WHERE h.id = ANY($1::bigint[])`, [ids('card')])).rows.map(
+            toCheckup,
+          )
+        : [];
+      return {
+        data: r.rows.map((x) =>
+          x.kind === 'visit'
+            ? { kind: 'visit' as const, visit: visits.find((y) => y.id === String(x.id))! }
+            : { kind: 'card' as const, card: cards.find((y) => y.id === String(x.id))! },
+        ),
+        page: { number: q.page, size: q.size, total: n(r.rows[0]?.total) },
+        students: v.students.map((s) => ({ id: s.id, name: s.name })),
+      };
+    });
+  }
+
+  /** One clinic visit of my child with everything the clinic recorded. */
+  async mineVisit(ctx: RequestContext, id: string) {
+    const v = await this.family(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const x = await this.findVisit(c, id);
+      if (!x.studentId || !v.students.some((s) => s.id === x.studentId))
+        throw new DomainError('not-found', 'Clinic visit not found', { status: 404 });
+      return x;
+    });
+  }
+
+  /** One published health card of my child, section by section as on the PDF. */
+  async mineCardDetail(ctx: RequestContext, id: string) {
+    const v = await this.family(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const h = await this.findCheckup(c, id);
+      if (h.status !== 'published' || !v.students.some((s) => s.id === h.studentId))
+        throw new DomainError('not-found', 'Health card not found', { status: 404 });
+      const { groups, note } = await this.groupsOf(c, h);
+      return { ...h, groups, note };
     });
   }
 }

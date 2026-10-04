@@ -10,6 +10,14 @@ import {
   ClinicDashboardDto,
   ClinicSettingsDto,
   ExportVisitsDto,
+  FieldDto,
+  ImportDto,
+  MineHealthDto,
+  SETUP_KINDS,
+  SetupExportDto,
+  SetupListDto,
+  StockExportDto,
+  StockListDto,
   ListVisitsDto,
   MasterDto,
   MedicineDto,
@@ -45,6 +53,27 @@ export class ClinicController {
     return this.svc.mine(ctx);
   }
 
+  @Get('mine/list')
+  @RequirePermission(P.family)
+  @ApiOperation({
+    summary: 'Clinic visits and health cards of my children together, with filters and pages',
+  })
+  mineList(@ReqCtx() ctx: RequestContext, @Query() q: MineHealthDto) {
+    return this.svc.mineList(ctx, q);
+  }
+
+  @Get('mine/visits/:id')
+  @RequirePermission(P.family)
+  mineVisit(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.mineVisit(ctx, id);
+  }
+
+  @Get('mine/cards/:id/detail')
+  @RequirePermission(P.family)
+  mineCardDetail(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.mineCardDetail(ctx, id);
+  }
+
   @Get('mine/cards/:id')
   @RequirePermission(P.family)
   @ApiOperation({ summary: 'A published health card as base64 (the portal speaks JSON)' })
@@ -60,6 +89,66 @@ export class ClinicController {
   })
   setup(@ReqCtx() ctx: RequestContext) {
     return this.svc.setup(ctx);
+  }
+
+  @Get('setup/list')
+  @RequirePermission(P.setup)
+  @ApiOperation({
+    summary: 'One set-up list (clinics, doctors, nurses, diseases, medicines) a page at a time',
+  })
+  setupList(@ReqCtx() ctx: RequestContext, @Query() q: SetupListDto) {
+    return this.svc.setupList(ctx, q);
+  }
+
+  @Get('setup/export.xlsx')
+  @RequirePermission(P.setup)
+  async setupExcel(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: SetupExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    file(reply, XLSX, await this.svc.setupExport(ctx, q, 'xlsx'));
+  }
+
+  @Get('setup/export.pdf')
+  @RequirePermission(P.setup)
+  async setupPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: SetupExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    file(reply, 'application/pdf', await this.svc.setupExport(ctx, q, 'pdf'));
+  }
+
+  @Get('setup/sample.xlsx')
+  @RequirePermission(P.view)
+  @ApiOperation({ summary: 'An Excel with the headings and one example row, to fill and upload' })
+  async sample(@Query('kind') kind: string, @Res() reply: FastifyReply) {
+    const k = ([...SETUP_KINDS, 'stock'] as string[]).includes(kind) ? kind : 'disease';
+    file(reply, XLSX, await this.svc.sample(k));
+  }
+
+  @Post('setup/import')
+  @HttpCode(200)
+  @RequirePermission(P.setup)
+  @ApiOperation({ summary: 'Upload a set-up list from Excel (existing names are updated)' })
+  importSetup(@ReqCtx() ctx: RequestContext, @Body() dto: ImportDto) {
+    return this.svc.importExcel(ctx, dto.kind === 'stock' ? { ...dto, kind: 'medicine' } : dto);
+  }
+
+  @Post('setup/fields')
+  @RequirePermission(P.setup)
+  @ApiOperation({
+    summary: 'Add a field (in an existing or a new section) to the health check-up form',
+  })
+  addField(@ReqCtx() ctx: RequestContext, @Body() dto: FieldDto) {
+    return this.svc.saveField(ctx, null, dto);
+  }
+
+  @Put('setup/fields/:id')
+  @RequirePermission(P.setup)
+  saveField(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FieldDto) {
+    return this.svc.saveField(ctx, id, dto);
   }
 
   @Put('setup/settings')
@@ -111,6 +200,33 @@ export class ClinicController {
   @RequirePermission(P.view)
   stock(@ReqCtx() ctx: RequestContext) {
     return this.svc.stock(ctx);
+  }
+
+  @Get('stock/list')
+  @RequirePermission(P.view)
+  @ApiOperation({ summary: 'In stock, batches or movements: filters and pages' })
+  stockList(@ReqCtx() ctx: RequestContext, @Query() q: StockListDto) {
+    return this.svc.stockList(ctx, q);
+  }
+
+  @Get('stock/export.xlsx')
+  @RequirePermission(P.view)
+  async stockExcel(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: StockExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    file(reply, XLSX, await this.svc.stockExport(ctx, q, 'xlsx'));
+  }
+
+  @Get('stock/export.pdf')
+  @RequirePermission(P.view)
+  async stockPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: StockExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    file(reply, 'application/pdf', await this.svc.stockExport(ctx, q, 'pdf'));
   }
 
   @Get('visits')
@@ -209,6 +325,14 @@ export class ClinicController {
   @ApiOperation({ summary: 'Receive a batch of a medicine' })
   receive(@ReqCtx() ctx: RequestContext, @Body() dto: StockInDto) {
     return this.svc.receiveStock(ctx, dto);
+  }
+
+  @Post('stock/import')
+  @HttpCode(200)
+  @RequirePermission(P.manage)
+  @ApiOperation({ summary: 'Upload stock batches from Excel (opening stock)' })
+  importStock(@ReqCtx() ctx: RequestContext, @Body() dto: ImportDto) {
+    return this.svc.importExcel(ctx, { ...dto, kind: 'stock' });
   }
 
   @Post('stock/write-off')
