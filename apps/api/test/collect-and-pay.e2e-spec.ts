@@ -75,7 +75,6 @@ describe('collect and pay (e2e, Sprint 13)', () => {
   let classId: string;
   let sectionId: string;
   let routeId: string;
-  let stopId: string;
   let vehicleId: string;
   let uid: string;
   const students = {} as Record<'full' | 'partial' | 'short' | 'many' | 'child' | 'refund', string>;
@@ -212,7 +211,7 @@ describe('collect and pay (e2e, Sprint 13)', () => {
       json: { stops: [{ name: 'Karve Nagar', pickupTime: '07:20', dropTime: '14:40' }] },
     });
     expect(stops.statusCode).toBe(200);
-    stopId = (stops.json().data as Array<{ id: string }>)[0]!.id;
+    expect(stops.json().data as unknown[]).toHaveLength(1);
     const veh = await inject({
       method: 'POST',
       url: '/transport/vehicles',
@@ -710,126 +709,7 @@ describe('collect and pay (e2e, Sprint 13)', () => {
   });
 
   // ---- transport ---------------------------------------------------------------------------------
-  it('a family asks for a bus seat; the office decides directly or through the workflow', async () => {
-    const mine0 = await inject({
-      method: 'GET',
-      url: '/transport/requests/mine',
-      headers: h(parent),
-    });
-    expect(mine0.statusCode).toBe(200);
-    expect(mine0.json().routes[0]).toMatchObject({ code: 'R1' });
-    const leaveFirst = await inject({
-      method: 'POST',
-      url: '/transport/requests/mine',
-      headers: h(parent),
-      json: { studentId: students.child, kind: 'leave' },
-    });
-    expect(leaveFirst.statusCode).toBe(409); // not riding yet
-    const join = await inject({
-      method: 'POST',
-      url: '/transport/requests/mine',
-      headers: h(parent),
-      json: { studentId: students.child, kind: 'join', routeId, stopId, note: 'From July' },
-    });
-    expect(join.statusCode).toBe(201);
-    expect(join.json()).toMatchObject({
-      status: 'pending',
-      routeCode: 'R1',
-      stopName: 'Karve Nagar',
-      workflowInstanceId: null,
-    });
-    const twice = await inject({
-      method: 'POST',
-      url: '/transport/requests/mine',
-      headers: h(parent),
-      json: { studentId: students.child, kind: 'join', routeId },
-    });
-    expect(twice.statusCode).toBe(409);
-    const list = await inject({
-      method: 'GET',
-      url: '/transport/requests?status=pending',
-      headers: h(),
-    });
-    expect((list.json().data as Array<{ id: string }>).map((r) => r.id)).toContain(join.json().id);
-    const denied = await inject({
-      method: 'POST',
-      url: `/transport/requests/${join.json().id}/decide`,
-      headers: h(teacher),
-      json: { outcome: 'approved' },
-    });
-    expect(denied.statusCode).toBe(403);
-    const ok = await inject({
-      method: 'POST',
-      url: `/transport/requests/${join.json().id}/decide`,
-      headers: h(),
-      json: { outcome: 'approved', note: 'Seat available' },
-    });
-    expect(ok.statusCode).toBe(201);
-    expect(ok.json().status).toBe('approved');
-    const riders = await inject({
-      method: 'GET',
-      url: `/transport/routes/${routeId}/students`,
-      headers: h(),
-    });
-    expect(
-      riders.json().data as Array<{ studentId: string; stopName: string; pickupTime: string }>,
-    ).toContainEqual(
-      expect.objectContaining({
-        studentId: students.child,
-        stopName: 'Karve Nagar',
-        pickupTime: '07:20',
-      }),
-    );
-    // with the default workflow installed, the request waits in the inbox and the completion applies it
-    const defaults = await inject({
-      method: 'POST',
-      url: '/workflow/definitions/defaults',
-      headers: h(),
-    });
-    expect(defaults.statusCode).toBe(201);
-    const leave = await inject({
-      method: 'POST',
-      url: '/transport/requests/mine',
-      headers: h(parent),
-      json: { studentId: students.child, kind: 'leave', note: 'Moving house' },
-    });
-    expect(leave.statusCode).toBe(201);
-    expect(leave.json().workflowInstanceId).not.toBeNull();
-    const direct = await inject({
-      method: 'POST',
-      url: `/transport/requests/${leave.json().id}/decide`,
-      headers: h(),
-      json: { outcome: 'approved' },
-    });
-    expect(direct.statusCode).toBe(409);
-    const step = await withMigrator(async (c) => {
-      const r = await c.query<{ id: string }>(
-        `SELECT id::text FROM workflow_steps WHERE instance_id = $1 AND status = 'pending' ORDER BY level LIMIT 1`,
-        [leave.json().workflowInstanceId],
-      );
-      return r.rows[0]!.id;
-    });
-    const approve = await inject({
-      method: 'POST',
-      url: `/workflow/steps/${step}/approve`,
-      headers: h(),
-      json: { note: 'ok' },
-    });
-    expect([200, 201]).toContain(approve.statusCode);
-    const mine = await inject({
-      method: 'GET',
-      url: '/transport/requests/mine',
-      headers: h(parent),
-    });
-    const child = (
-      mine.json().children as Array<{
-        assignment: unknown;
-        requests: Array<{ status: string; kind: string }>;
-      }>
-    )[0]!;
-    expect(child.assignment).toBeNull();
-    expect(child.requests[0]).toMatchObject({ kind: 'leave', status: 'approved' });
-  });
+  // a family's transport request, its approvals and the fees: transport-desk.e2e-spec.ts (transport v2)
 
   it('records vehicle logs per day and lists them', async () => {
     const bad = await inject({

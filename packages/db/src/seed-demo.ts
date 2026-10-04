@@ -63,6 +63,16 @@ const DEMO_USERS: DemoUser[] = [
     description: 'Gate / Security: checks appointment visitors in and out, keeps the visitor log',
   },
   {
+    sub: 'dev-transport',
+    name: 'Tarun Transport',
+    mobile: '9999999917',
+    email: 'transport@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['transport_incharge'] },
+    description:
+      'Transport In-charge: routes, stoppages, vehicles, transport requests (first approval), applying for a pupil, history',
+  },
+  {
     sub: 'dev-group',
     name: 'Gita Group Admin',
     mobile: '9999999901',

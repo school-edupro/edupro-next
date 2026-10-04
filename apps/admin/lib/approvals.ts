@@ -6,7 +6,7 @@ import type { SchoolTransfer } from './types';
  * and tickets are not approvals: they live only under the header Queries icon.
  */
 export interface ApprovalGroup {
-  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'gate_pass';
+  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'gate_pass' | 'transport';
   title: string;
   help: string;
   href: string;
@@ -172,6 +172,37 @@ export async function myApprovals(
                 detail: `${p.kind.replace('_', ' ')} · ${p.onDate}${p.atTime ? `, ${p.atTime}` : ''} · ${p.reason}`,
                 href: `/engagement/gate-passes/${p.id}`,
                 since: p.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // transport requests wait on the people of a level (transport in-charge, fee department)
+    apiFetch<{
+      data: Array<{
+        id: string;
+        number: string;
+        kindLabel: string;
+        student: string;
+        section: string | null;
+        what: string;
+        requestedAt: string;
+      }>;
+    }>('/transport/requests/inbox')
+      .then((r): ApprovalGroup | null =>
+        r.data.length
+          ? {
+              key: 'transport',
+              title: 'Transport requests',
+              help: 'New transport, changes and withdrawals waiting for your approval',
+              href: '/transport/requests/approvals',
+              count: r.data.length,
+              items: r.data.slice(0, size).map((p) => ({
+                id: p.id,
+                title: `${p.student}${p.section ? ` · ${p.section}` : ''}`,
+                detail: `${p.kindLabel} · ${p.what}`,
+                href: `/transport/requests/${p.id}`,
+                since: p.requestedAt,
               })),
             }
           : null,

@@ -13,6 +13,34 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'Transport request': 'परिवहन अनुरोध',
+  'Back to transport': 'परिवहन पर वापस',
+  'Apply for transport': 'परिवहन के लिए आवेदन',
+  'Change or stop': 'बदलें या बंद करें',
+  'Transport history': 'परिवहन इतिहास',
+  'Not on a bus this month.': 'इस महीने बस में नहीं।',
+  'Cancel this request': 'यह अनुरोध रद्द करें',
+  'Request cancelled.': 'अनुरोध रद्द किया गया।',
+  'Service, stoppage and months': 'सेवा, स्टॉपेज और महीने',
+  'a month': 'प्रति माह',
+  'valid until the end of': 'इस महीने के अंत तक मान्य:',
+  'waiting with': 'इनके पास लंबित:',
+  'Riding now': 'अभी चालू',
+  'To start': 'शुरू होना है',
+  Over: 'समाप्त',
+  Months: 'महीने',
+  'Service and stoppage': 'सेवा और स्टॉपेज',
+  Monthly: 'मासिक',
+  'Request sent. The transport office and the fee department will approve it.':
+    'अनुरोध भेजा गया। परिवहन कार्यालय और शुल्क विभाग इसे स्वीकृत करेंगे।',
+  'The route, the stoppage and the live bus position stay here until then.':
+    'तब तक मार्ग, स्टॉपेज और बस की लाइव स्थिति यहाँ दिखेगी।',
+  'Please ask the transport office to make this request for your child.':
+    'कृपया परिवहन कार्यालय से यह अनुरोध करवाएँ।',
+  'The school has not published its bus routes yet.':
+    'विद्यालय ने अभी बस मार्ग प्रकाशित नहीं किए हैं।',
+  'The transport in-charge and then the fee department approve the request. The transport fee follows the approval.':
+    'परिवहन प्रभारी और फिर शुल्क विभाग अनुरोध स्वीकृत करते हैं। परिवहन शुल्क स्वीकृति के अनुसार लगता है।',
   'Notifications are on for this device.': 'इस डिवाइस पर सूचनाएँ चालू हैं।',
   'Get a notification when the school sends you something.': 'विद्यालय कुछ भेजे तो सूचना पाएँ।',
   'Turn on notifications': 'सूचनाएँ चालू करें',

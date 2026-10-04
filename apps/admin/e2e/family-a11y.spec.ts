@@ -21,6 +21,8 @@ const PAGES = [
   '/health?kind=visit',
   '/health/visits/39',
   '/health/cards/2',
+  '/transport',
+  '/transport/apply?student=12307',
   '/gate-passes',
   '/gate-passes?view=calendar',
   '/gate-passes/new?student=12307&kind=early_leave',

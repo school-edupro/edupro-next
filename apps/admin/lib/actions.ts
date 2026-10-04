@@ -2445,19 +2445,6 @@ export async function uploadSettlement(fd: FormData) {
   );
 }
 
-export async function decideTransportRequest(fd: FormData) {
-  const id = str(fd, 'id');
-  return run('/transport/requests', () =>
-    apiFetch(`/transport/requests/${id}/decide`, {
-      method: 'POST',
-      body: JSON.stringify({
-        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
-        note: opt(fd, 'note'),
-      }),
-    }),
-  );
-}
-
 export async function addVehicleLog(fd: FormData) {
   const vehicleId = str(fd, 'vehicleId');
   const num = (k: string) => (opt(fd, k) ? Number(str(fd, k)) : undefined);

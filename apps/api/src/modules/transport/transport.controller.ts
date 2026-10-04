@@ -1,15 +1,37 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+} from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { FleetService } from './fleet.service';
+import {
+  ApplyDto,
+  DeskDecideDto,
+  DeskExportDto,
+  DeskListDto,
+  HistoryDto,
+  HistoryExportDto,
+  QuoteDto,
+  TransportSetupDto,
+} from './transport-desk.dto';
+import { TransportDeskService } from './transport-desk.service';
 import { TransportRequestsService } from './transport-requests.service';
 import {
   AssignStudentsDto,
   CreateRouteDto,
-  CreateTransportRequestDto,
-  DecideTransportRequestDto,
-  ListTransportRequestsQueryDto,
   SetStopsDto,
   TRANSPORT,
   UpdateRouteDto,
@@ -169,46 +191,160 @@ export class FleetController {
   }
 }
 
-/** Sprint 13: a family's bus requests and the office's decisions. */
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const file = (reply: FastifyReply, f: { bytes: Buffer; filename: string }) =>
+  reply
+    .header('content-type', XLSX)
+    .header('content-disposition', `attachment; filename="${f.filename}"`)
+    .send(f.bytes);
+
+/** Transport v2: a pupil's request (from the family or made by the office) and its approvals. */
 @ApiTags('transport')
 @ApiBearerAuth()
 @Controller('transport/requests')
 export class TransportRequestsController {
-  constructor(private readonly requests: TransportRequestsService) {}
+  constructor(private readonly desk: TransportDeskService) {}
 
+  // ---- the family ----
   @Get('mine')
-  @ApiOperation({ summary: "My children's bus assignment, requests and the routes to choose from" })
+  @ApiOperation({ summary: "My children's transport: what runs now, the history and the requests" })
   @RequirePermission(TRANSPORT.requestView, { description: 'View transport requests' })
   mine(@ReqCtx() ctx: RequestContext) {
-    return this.requests.mine(ctx);
+    return this.desk.familyHistory(ctx);
+  }
+
+  @Get('mine/options')
+  @ApiOperation({ summary: 'Routes, stoppages with their slab, and the months to choose from' })
+  @RequirePermission(TRANSPORT.requestView)
+  mineOptions(@ReqCtx() ctx: RequestContext, @Query('studentId') studentId?: string) {
+    return this.desk.familyOptions(ctx, studentId && /^\d+$/.test(studentId) ? studentId : null);
   }
 
   @Post('mine')
-  @ApiOperation({ summary: 'Ask for a seat, a stop or route change, or to leave the bus' })
+  @ApiOperation({ summary: 'Ask for transport, a change, or to stop from a month' })
   @RequirePermission(TRANSPORT.requestCreate, {
-    description: "Request a bus seat, a stop change or leaving the bus for one's own children",
+    description: "Request transport, a change or a withdrawal for one's own children",
   })
-  create(@ReqCtx() ctx: RequestContext, @Body() dto: CreateTransportRequestDto) {
-    return this.requests.create(ctx, dto);
+  create(@ReqCtx() ctx: RequestContext, @Body() dto: ApplyDto) {
+    return this.desk.familyApply(ctx, dto);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Transport requests of the working year (pending first)' })
+  @Post('mine/:id/cancel')
+  @HttpCode(200)
+  @RequirePermission(TRANSPORT.requestCreate)
+  cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.desk.familyCancel(ctx, id);
+  }
+
+  @Get('quote')
+  @ApiOperation({ summary: "The monthly charge for a way of riding, by the school's rule" })
   @RequirePermission(TRANSPORT.requestView)
-  async list(@ReqCtx() ctx: RequestContext, @Query() q: ListTransportRequestsQueryDto) {
-    return { data: await this.requests.list(ctx, q) };
+  quote(@ReqCtx() ctx: RequestContext, @Query() q: QuoteDto) {
+    return this.desk.quote(ctx, q);
+  }
+
+  // ---- the office ----
+  @Get()
+  @ApiOperation({ summary: 'Transport requests of the working year' })
+  @RequirePermission(TRANSPORT.requestView)
+  list(@ReqCtx() ctx: RequestContext, @Query() q: DeskListDto) {
+    return this.desk.list(ctx, q);
+  }
+
+  @Get('export.xlsx')
+  @RequirePermission(TRANSPORT.requestView)
+  async excel(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: DeskExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    file(reply, await this.desk.listExcel(ctx, q));
+  }
+
+  @Get('inbox')
+  @ApiOperation({ summary: 'Requests waiting for my approval, and the ones I decided' })
+  @AuthenticatedOnly()
+  inbox(@ReqCtx() ctx: RequestContext) {
+    return this.desk.inbox(ctx);
+  }
+
+  @Get('options')
+  @RequirePermission(TRANSPORT.requestApply, {
+    description: 'Make a transport request for a pupil at the transport office',
+  })
+  options(@ReqCtx() ctx: RequestContext, @Query('studentId') studentId?: string) {
+    return this.desk.deskOptions(ctx, studentId && /^\d+$/.test(studentId) ? studentId : null);
+  }
+
+  @Get('students')
+  @RequirePermission(TRANSPORT.requestApply)
+  students(@ReqCtx() ctx: RequestContext, @Query('q') q?: string) {
+    return this.desk.students(ctx, q ?? '');
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'The transport office asks for a pupil; it goes to the fee department' })
+  @RequirePermission(TRANSPORT.requestApply)
+  apply(@ReqCtx() ctx: RequestContext, @Body() dto: ApplyDto) {
+    return this.desk.deskApply(ctx, dto);
+  }
+
+  @Get(':id')
+  @AuthenticatedOnly()
+  get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.desk.get(ctx, id);
   }
 
   @Post(':id/decide')
-  @ApiOperation({ summary: 'Approve or reject a request that is not in a workflow' })
-  @RequirePermission(TRANSPORT.requestDecide, {
-    description: 'Approve or reject transport requests',
-  })
-  decide(
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Approve or reject at my level' })
+  @AuthenticatedOnly()
+  decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: DeskDecideDto) {
+    return this.desk.decide(ctx, id, dto);
+  }
+}
+
+/** Transport v2: the dashboard, the student transport history and the set-up. */
+@ApiTags('transport')
+@ApiBearerAuth()
+@Controller('transport/desk')
+export class TransportDeskController {
+  constructor(private readonly desk: TransportDeskService) {}
+
+  @Get('dashboard')
+  @RequirePermission(TRANSPORT.requestView)
+  dashboard(@ReqCtx() ctx: RequestContext) {
+    return this.desk.dashboard(ctx);
+  }
+
+  @Get('history')
+  @ApiOperation({ summary: 'Student transport history: every period a pupil rode' })
+  @RequirePermission(TRANSPORT.requestView)
+  history(@ReqCtx() ctx: RequestContext, @Query() q: HistoryDto) {
+    return this.desk.history(ctx, q);
+  }
+
+  @Get('history/export.xlsx')
+  @RequirePermission(TRANSPORT.requestView)
+  async historyExcel(
     @ReqCtx() ctx: RequestContext,
-    @Param('id') id: string,
-    @Body() dto: DecideTransportRequestDto,
+    @Query() q: HistoryExportDto,
+    @Res() reply: FastifyReply,
   ) {
-    return this.requests.decide(ctx, id, dto);
+    file(reply, await this.desk.historyExcel(ctx, q));
+  }
+
+  @Get('setup')
+  @RequirePermission(TRANSPORT.setup, {
+    description: 'Transport settings: charge rule and approval levels',
+  })
+  setup(@ReqCtx() ctx: RequestContext) {
+    return this.desk.setup(ctx);
+  }
+
+  @Put('setup')
+  @RequirePermission(TRANSPORT.setup)
+  saveSetup(@ReqCtx() ctx: RequestContext, @Body() dto: TransportSetupDto) {
+    return this.desk.saveSetup(ctx, dto);
   }
 }

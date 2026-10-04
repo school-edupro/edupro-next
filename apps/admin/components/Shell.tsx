@@ -332,6 +332,7 @@ const NAV: Array<{
   {
     section: 'transport',
     items: [
+      { href: '/transport', label: 'transportDashboard', permission: 'transport.request.view' },
       { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
       { href: '/transport/vehicles', label: 'vehicles', permission: 'transport.fleet.view' },
       { href: '/masters/transport', label: 'transportSetup', permission: 'transport.route.view' },
@@ -341,6 +342,16 @@ const NAV: Array<{
         href: '/transport/requests',
         label: 'transportRequests',
         permission: 'transport.request.view',
+      },
+      {
+        href: '/transport/history',
+        label: 'transportHistory',
+        permission: 'transport.request.view',
+      },
+      {
+        href: '/transport/setup',
+        label: 'transportSettings',
+        permission: 'transport.setup.manage',
       },
     ],
   },

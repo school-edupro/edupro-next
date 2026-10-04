@@ -223,6 +223,13 @@ export class TransportService {
             a.dropTime ?? stop?.drop ?? null,
           ],
         );
+        // the student transport history follows a direct mapping too
+        await c.query(`SELECT app.transport_direct($1, $2, $3, $4)`, [
+          a.studentId,
+          yearId,
+          routeId,
+          a.stopId ?? null,
+        ]);
       }
       await this.audit.stage(ctx, c, {
         action: 'transport.route.assign',
@@ -243,6 +250,7 @@ export class TransportService {
       );
       if (!r.rowCount)
         throw new DomainError('not-found', 'The student is not on this route', { status: 404 });
+      await c.query(`SELECT app.transport_direct_end($1, $2)`, [studentId, yearId]);
       await this.audit.stage(ctx, c, {
         action: 'transport.route.unassign',
         entityType: 'transport_routes',

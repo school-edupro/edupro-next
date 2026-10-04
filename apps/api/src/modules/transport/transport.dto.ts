@@ -11,6 +11,8 @@ export const TRANSPORT = {
   requestCreate: 'transport.request.create',
   requestView: 'transport.request.view',
   requestDecide: 'transport.request.decide',
+  requestApply: 'transport.request.apply',
+  setup: 'transport.setup.manage',
   logView: 'transport.log.view',
   logManage: 'transport.log.manage',
 } as const;
@@ -130,32 +132,6 @@ export const SetStopsSchema = z.object({
 export class SetStopsDto extends createZodDto(SetStopsSchema) {}
 
 // ---- Sprint 13: family requests and vehicle logs ----------------------------------------------------
-export const CreateTransportRequestSchema = z
-  .object({
-    studentId: IdSchema,
-    kind: z.enum(['join', 'change', 'leave']),
-    routeId: IdSchema.optional(),
-    stopId: IdSchema.optional(),
-    effectiveFrom: DateSchema.optional(),
-    note: z.string().trim().max(300).optional(),
-  })
-  .refine((v) => v.kind === 'leave' || v.routeId !== undefined, {
-    message: 'routeId is required unless leaving the bus',
-    path: ['routeId'],
-  });
-export class CreateTransportRequestDto extends createZodDto(CreateTransportRequestSchema) {}
-
-export const DecideTransportRequestSchema = z.object({
-  outcome: z.enum(['approved', 'rejected']),
-  note: z.string().trim().max(300).optional(),
-});
-export class DecideTransportRequestDto extends createZodDto(DecideTransportRequestSchema) {}
-
-export const ListTransportRequestsQuerySchema = z.object({
-  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
-});
-export class ListTransportRequestsQueryDto extends createZodDto(ListTransportRequestsQuerySchema) {}
-
 export const UpsertVehicleLogSchema = z
   .object({
     logDate: DateSchema,
