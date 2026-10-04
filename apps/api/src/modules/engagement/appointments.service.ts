@@ -1686,7 +1686,8 @@ export class AppointmentsService {
       const values = [
         dto.name,
         dto.kind,
-        dto.kind === 'person' ? dto.employeeId : null,
+        // a desk may name the person in charge, who then sees its confirmed appointments
+        dto.kind === 'class_teacher' ? null : (dto.employeeId ?? null),
         dto.location ?? null,
         dto.openPublic,
         dto.openParent,

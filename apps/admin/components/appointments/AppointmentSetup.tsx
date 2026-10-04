@@ -464,7 +464,11 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
                       <span className="ep-field__help">(closed)</span>
                     )}
                     <div className="ep-field__help">
-                      {h.kind === 'person' ? (h.employeeName ?? 'person') : KIND[h.kind]}
+                      {h.kind === 'person'
+                        ? (h.employeeName ?? 'person')
+                        : h.kind === 'desk' && h.employeeName
+                          ? `${KIND[h.kind]} · ${h.employeeName}`
+                          : KIND[h.kind]}
                       {h.location ? ` · ${h.location}` : ''}
                     </div>
                   </td>
@@ -542,22 +546,27 @@ export function AppointmentSetup({ initial }: { initial: Setup }) {
                   ))}
                 </select>
               </label>
-              {draft.kind === 'person' ? (
+              {draft.kind !== 'class_teacher' ? (
                 <label className="ep-field" htmlFor="ah-emp">
-                  <span className="ep-field__label">Employee</span>
+                  <span className="ep-field__label">
+                    {draft.kind === 'person' ? 'Employee' : 'Person in charge (optional)'}
+                  </span>
                   <select
                     id="ah-emp"
                     className="ep-select"
                     value={draft.employeeId ?? ''}
                     onChange={(e) => setDraft({ ...draft, employeeId: e.target.value || null })}
                   >
-                    <option value="">Choose</option>
+                    <option value="">{draft.kind === 'person' ? 'Choose' : 'Nobody'}</option>
                     {setup.staff.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
                   </select>
+                  <span className="ep-field__help">
+                    This person sees the confirmed appointments under My appointments.
+                  </span>
                 </label>
               ) : null}
               <label className="ep-field" htmlFor="ah-loc">
