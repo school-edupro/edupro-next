@@ -2,6 +2,8 @@ import { FileLinks } from '@/components/FileLinks';
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { queueMyReportCardPdf } from './actions';
@@ -52,6 +54,7 @@ export default async function ResultsPage({
       );
     throw error;
   }
+  const kid = await chosenChild();
   const exportStatus = sp.export
     ? await bff.api
         .fetch<{
@@ -75,6 +78,7 @@ export default async function ResultsPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/results" />
       {sp.error ? (
         <div
           className="ep-alert ep-alert--danger"
@@ -111,93 +115,95 @@ export default async function ResultsPage({
           )}
         </div>
       ) : null}
-      {res.children.map((c) => (
-        <Card
-          key={c.student.id}
-          title={`${c.student.name}${c.student.section ? ` · ${c.student.section}` : ''}`}
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {c.terms.length === 0 ? (
-            <p className="ep-field__help">{t(lang, 'No results released yet.')}</p>
-          ) : null}
-          {c.terms.map((term) => (
-            <div
-              key={term.releaseId}
-              style={{
-                borderTop: '1px solid var(--border-default)',
-                paddingTop: 'var(--sp-2)',
-                marginTop: 'var(--sp-2)',
-              }}
-            >
+      {res.children
+        .filter((c) => !kid || c.student.id === kid.id)
+        .map((c) => (
+          <Card
+            key={c.student.id}
+            title={`${c.student.name}${c.student.section ? ` · ${c.student.section}` : ''}`}
+            style={{ marginBottom: 'var(--sp-3)' }}
+          >
+            {c.terms.length === 0 ? (
+              <p className="ep-field__help">{t(lang, 'No results released yet.')}</p>
+            ) : null}
+            {c.terms.map((term) => (
               <div
+                key={term.releaseId}
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 'var(--sp-2)',
+                  borderTop: '1px solid var(--border-default)',
+                  paddingTop: 'var(--sp-2)',
+                  marginTop: 'var(--sp-2)',
                 }}
               >
-                <strong>{term.name}</strong>
-                <form action={queueMyReportCardPdf}>
-                  <input type="hidden" name="releaseId" value={term.releaseId} />
-                  <input type="hidden" name="studentId" value={c.student.id} />
-                  <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                    {t(lang, 'Report card PDF')}
-                  </button>
-                </form>
-              </div>
-              <table
-                className="ep-table ep-table--dense"
-                style={{ width: '100%', marginTop: 'var(--sp-2)' }}
-              >
-                <thead>
-                  <tr>
-                    <th>{t(lang, 'Exam')}</th>
-                    <th style={{ textAlign: 'right' }}>%</th>
-                    <th>{t(lang, 'Grade')}</th>
-                    <th>{t(lang, 'Result')}</th>
-                    <th style={{ textAlign: 'right' }}>{t(lang, 'Rank')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {term.exams.map((ex) => (
-                    <tr key={ex.code}>
-                      <td>{ex.name}</td>
-                      <td style={{ textAlign: 'right' }}>{ex.pct ?? '—'}</td>
-                      <td>{ex.grade ?? ''}</td>
-                      <td>
-                        {ex.result ? (
-                          <Badge
-                            tone={
-                              ex.result === 'pass'
-                                ? 'success'
-                                : ex.result === 'fail'
-                                  ? 'danger'
-                                  : 'warning'
-                            }
-                          >
-                            {t(
-                              lang,
-                              ex.result === 'pass'
-                                ? 'Pass'
-                                : ex.result === 'fail'
-                                  ? 'Needs improvement'
-                                  : 'Incomplete',
-                            )}
-                          </Badge>
-                        ) : (
-                          ''
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>{ex.rank ?? ''}</td>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 'var(--sp-2)',
+                  }}
+                >
+                  <strong>{term.name}</strong>
+                  <form action={queueMyReportCardPdf}>
+                    <input type="hidden" name="releaseId" value={term.releaseId} />
+                    <input type="hidden" name="studentId" value={c.student.id} />
+                    <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                      {t(lang, 'Report card PDF')}
+                    </button>
+                  </form>
+                </div>
+                <table
+                  className="ep-table ep-table--dense"
+                  style={{ width: '100%', marginTop: 'var(--sp-2)' }}
+                >
+                  <thead>
+                    <tr>
+                      <th>{t(lang, 'Exam')}</th>
+                      <th style={{ textAlign: 'right' }}>%</th>
+                      <th>{t(lang, 'Grade')}</th>
+                      <th>{t(lang, 'Result')}</th>
+                      <th style={{ textAlign: 'right' }}>{t(lang, 'Rank')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-        </Card>
-      ))}
+                  </thead>
+                  <tbody>
+                    {term.exams.map((ex) => (
+                      <tr key={ex.code}>
+                        <td>{ex.name}</td>
+                        <td style={{ textAlign: 'right' }}>{ex.pct ?? '—'}</td>
+                        <td>{ex.grade ?? ''}</td>
+                        <td>
+                          {ex.result ? (
+                            <Badge
+                              tone={
+                                ex.result === 'pass'
+                                  ? 'success'
+                                  : ex.result === 'fail'
+                                    ? 'danger'
+                                    : 'warning'
+                              }
+                            >
+                              {t(
+                                lang,
+                                ex.result === 'pass'
+                                  ? 'Pass'
+                                  : ex.result === 'fail'
+                                    ? 'Needs improvement'
+                                    : 'Incomplete',
+                              )}
+                            </Badge>
+                          ) : (
+                            ''
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{ex.rank ?? ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </Card>
+        ))}
     </main>
   );
 }

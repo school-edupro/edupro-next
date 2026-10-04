@@ -1,6 +1,8 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 
@@ -56,6 +58,7 @@ export default async function AttendancePage({
       /* the fetch below reports session problems */
     }
   }
+  const kid = await chosenChild();
   const month = monthOf(sp.month ?? defaultMonth);
   let data: { month: string; children: Child[] };
   try {
@@ -109,70 +112,75 @@ export default async function AttendancePage({
           </span>
         }
       />
-      {data.children.map((c) => {
-        const pct = c.summary.days ? Math.round((c.summary.present / c.summary.days) * 100) : null;
-        return (
-          <Card
-            key={c.id}
-            title={`${c.name}${c.section ? ` · ${c.section}` : ''}`}
-            actions={
-              <Badge
-                tone={
-                  pct === null
-                    ? 'neutral'
-                    : pct >= 90
-                      ? 'success'
-                      : pct >= 75
-                        ? 'warning'
-                        : 'danger'
-                }
-              >
-                {pct === null
-                  ? t(lang, 'No school days yet')
-                  : `${pct}% · ${c.summary.present}/${c.summary.days} ${t(lang, 'days')}`}
-              </Badge>
-            }
-            style={{ marginBottom: 'var(--sp-3)' }}
-          >
-            {c.days.length === 0 ? (
-              <p className="ep-field__help">{t(lang, 'No attendance marked in this month.')}</p>
-            ) : (
-              <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th>{t(lang, 'Date')}</th>
-                    <th>{t(lang, 'Status')}</th>
-                    <th>{t(lang, 'In')}</th>
-                    <th>{t(lang, 'Out')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...c.days].reverse().map((d) => {
-                    const [label, tone] = LABEL[d.code] ?? [d.code, 'neutral'];
-                    return (
-                      <tr key={d.date}>
-                        <td>
-                          {new Date(`${d.date}T00:00:00Z`).toLocaleDateString('en-IN', {
-                            weekday: 'short',
-                            day: '2-digit',
-                            month: 'short',
-                            timeZone: 'UTC',
-                          })}
-                        </td>
-                        <td>
-                          <Badge tone={tone}>{t(lang, label)}</Badge>
-                        </td>
-                        <td>{time(d.inAt)}</td>
-                        <td>{time(d.outAt)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </Card>
-        );
-      })}
+      <ChildSwitch lang={lang} back="/attendance" />
+      {data.children
+        .filter((c) => !kid || c.id === kid.id)
+        .map((c) => {
+          const pct = c.summary.days
+            ? Math.round((c.summary.present / c.summary.days) * 100)
+            : null;
+          return (
+            <Card
+              key={c.id}
+              title={`${c.name}${c.section ? ` · ${c.section}` : ''}`}
+              actions={
+                <Badge
+                  tone={
+                    pct === null
+                      ? 'neutral'
+                      : pct >= 90
+                        ? 'success'
+                        : pct >= 75
+                          ? 'warning'
+                          : 'danger'
+                  }
+                >
+                  {pct === null
+                    ? t(lang, 'No school days yet')
+                    : `${pct}% · ${c.summary.present}/${c.summary.days} ${t(lang, 'days')}`}
+                </Badge>
+              }
+              style={{ marginBottom: 'var(--sp-3)' }}
+            >
+              {c.days.length === 0 ? (
+                <p className="ep-field__help">{t(lang, 'No attendance marked in this month.')}</p>
+              ) : (
+                <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>{t(lang, 'Date')}</th>
+                      <th>{t(lang, 'Status')}</th>
+                      <th>{t(lang, 'In')}</th>
+                      <th>{t(lang, 'Out')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...c.days].reverse().map((d) => {
+                      const [label, tone] = LABEL[d.code] ?? [d.code, 'neutral'];
+                      return (
+                        <tr key={d.date}>
+                          <td>
+                            {new Date(`${d.date}T00:00:00Z`).toLocaleDateString('en-IN', {
+                              weekday: 'short',
+                              day: '2-digit',
+                              month: 'short',
+                              timeZone: 'UTC',
+                            })}
+                          </td>
+                          <td>
+                            <Badge tone={tone}>{t(lang, label)}</Badge>
+                          </td>
+                          <td>{time(d.inAt)}</td>
+                          <td>{time(d.outAt)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Card>
+          );
+        })}
     </main>
   );
 }

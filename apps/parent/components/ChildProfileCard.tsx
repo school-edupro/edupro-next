@@ -12,15 +12,7 @@ export interface FamilyChild {
 }
 
 /** Home-page summary of the chosen child: photo, class, roll, admission no and links. */
-export async function ChildProfileCard({
-  kids,
-  child,
-  lang,
-}: {
-  kids: FamilyChild[];
-  child: FamilyChild;
-  lang: Lang;
-}) {
+export async function ChildProfileCard({ child, lang }: { child: FamilyChild; lang: Lang }) {
   let p: PortalProfile;
   try {
     p = await bff.api.fetch<PortalProfile>(`/engagement/mine/profile/${child.id}`);
@@ -30,24 +22,6 @@ export async function ChildProfileCard({
   }
   return (
     <section aria-label={t(lang, 'Student profile')}>
-      {kids.length > 1 ? (
-        <nav
-          className="pp-kids"
-          aria-label={t(lang, 'Choose a child')}
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {kids.map((c) => (
-            <a
-              key={c.id}
-              href={`/?child=${c.id}`}
-              aria-current={c.id === child.id ? 'page' : undefined}
-            >
-              {c.name}
-              {c.section ? <span> · {c.section}</span> : null}
-            </a>
-          ))}
-        </nav>
-      ) : null}
       <Card elevated>
         <div className="pp-hero">
           {p.photos.student ? (

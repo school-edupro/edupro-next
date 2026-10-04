@@ -2,6 +2,8 @@ import { FileLinks } from '@/components/FileLinks';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { queueMyReceiptPdf } from './actions';
@@ -95,6 +97,8 @@ export default async function FeesPage({
       );
     throw error;
   }
+  const kid = await chosenChild(sp.student);
+  const shown = children.filter((c) => !kid || c.student.id === kid.id);
   // Sprint 16: the Pay button follows the permission, not whether the intents call answered
   const canPay = permissions.includes('payments.family.pay');
   // Sprint 14: a queued receipt PDF; the worker renders it and the link appears when ready
@@ -121,6 +125,7 @@ export default async function FeesPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/fees" current={kid?.id} />
       {sp.paid === '1' ? (
         <div
           className="ep-alert ep-alert--success"
@@ -176,8 +181,8 @@ export default async function FeesPage({
           )}
         </div>
       ) : null}
-      {children.length === 0 ? <Card>{t(lang, 'No fee demand has been raised yet.')}</Card> : null}
-      {children.map((c) => (
+      {shown.length === 0 ? <Card>{t(lang, 'No fee demand has been raised yet.')}</Card> : null}
+      {shown.map((c) => (
         <Card
           key={c.student.id}
           title={`${c.student.name}${c.student.section ? ` · ${c.student.section}` : ''} · ${c.year.code}`}

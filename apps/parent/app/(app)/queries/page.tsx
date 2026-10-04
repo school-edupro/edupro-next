@@ -10,6 +10,8 @@ import {
 } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { giveFeedback } from './actions';
@@ -76,11 +78,12 @@ export default async function QueriesPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  // the child comes from the switch under the title, the same on every page
+  const kid = await chosenChild(sp.student);
   const filters = Object.fromEntries(
     Object.entries({
       status: STATUSES.includes(sp.status ?? '') ? sp.status : undefined,
       kind: KINDS.includes(sp.kind ?? '') ? sp.kind : undefined,
-      studentId: /^\d{1,18}$/.test(sp.student ?? '') ? sp.student : undefined,
       q: sp.q?.trim().slice(0, 80) || undefined,
     }).filter(([, v]) => v),
   ) as Record<string, string>;
@@ -88,6 +91,7 @@ export default async function QueriesPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const api = new URLSearchParams({
     ...filters,
+    ...(kid ? { studentId: kid.id } : {}),
     order: 'latest',
     size: String(PAGE_SIZE),
     page: String(page),
@@ -97,7 +101,6 @@ export default async function QueriesPage({
     const u = new URLSearchParams({
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.kind ? { kind: filters.kind } : {}),
-      ...(filters.studentId ? { student: filters.studentId } : {}),
       ...(filters.q ? { q: filters.q } : {}),
       page: String(n),
     });
@@ -149,6 +152,7 @@ export default async function QueriesPage({
           </span>
         }
       />
+      <ChildSwitch lang={lang} back="/queries" current={kid?.id} />
       {sp.ok === 'feedback' ? (
         <div
           className="ep-alert ep-alert--success"
@@ -199,18 +203,6 @@ export default async function QueriesPage({
               })),
             ]}
           />
-          {viewer.students.length > 1 ? (
-            <SelectField
-              id="f-student"
-              name="student"
-              label={t(lang, 'Child')}
-              defaultValue={filters.studentId ?? ''}
-              options={[
-                { value: '', label: t(lang, 'All') },
-                ...viewer.students.map((s) => ({ value: s.id, label: s.name })),
-              ]}
-            />
-          ) : null}
           <InputField
             id="f-q"
             name="q"

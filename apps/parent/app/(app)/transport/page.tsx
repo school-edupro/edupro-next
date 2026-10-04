@@ -1,6 +1,8 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { cancelTransportRequest } from './actions';
@@ -151,6 +153,9 @@ export default async function TransportPage({
       );
     throw error;
   }
+  const kid = await chosenChild();
+  const mineOf = <T,>(list: T[], id: (x: T) => string) =>
+    list.filter((x) => !kid || id(x) === kid.id);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
@@ -163,6 +168,7 @@ export default async function TransportPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/transport" />
       {sp.requested ? (
         <div
           className="ep-alert ep-alert--success"
@@ -190,7 +196,7 @@ export default async function TransportPage({
           {sp.detail || sp.error}
         </div>
       ) : null}
-      {track.children
+      {mineOf(track.children, (c) => c.student.id)
         .filter((c) => c.route)
         .map((c) => (
           <Card
@@ -224,7 +230,7 @@ export default async function TransportPage({
             )}
           </Card>
         ))}
-      {mine.children.map((c) => {
+      {mineOf(mine.children, (c) => c.id).map((c) => {
         const pending = c.requests.find((r) => r.status === 'pending') ?? null;
         const next = c.periods.find((p) => p.phase === 'upcoming') ?? null;
         // cut short by a withdrawal: the bus stays until the end of that month
@@ -379,7 +385,7 @@ export default async function TransportPage({
           </Card>
         );
       })}
-      {res.children.map((c) => (
+      {mineOf(res.children, (c) => c.id).map((c) => (
         <Card
           key={c.id}
           title={`${c.name}${c.section ? ` · ${c.section}` : ''}`}

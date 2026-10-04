@@ -2,6 +2,8 @@ import { FileLinks } from '@/components/FileLinks';
 import { Button, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild, familyKids } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { queueMyCertificatePdf } from '../appointments/actions';
@@ -43,6 +45,11 @@ export default async function CertificatesPage({
       );
     throw error;
   }
+  // rows carry the child's name: one child at a time, as chosen in the switch under the title
+  const kid = await chosenChild();
+  const names = new Set((await familyKids()).map((k) => k.name));
+  if (kid && rows.some((r) => names.has(r.student)))
+    rows = rows.filter((r) => r.student === kid.name);
   const exportStatus = sp.export
     ? await bff.api
         .fetch<{
@@ -63,6 +70,7 @@ export default async function CertificatesPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/certificates" />
       {sp.error ? (
         <div
           className="ep-alert ep-alert--danger"

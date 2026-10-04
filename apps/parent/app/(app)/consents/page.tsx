@@ -1,6 +1,8 @@
 import { Badge, Button, Card, InputField, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { respondConsent } from '../appointments/actions';
@@ -46,6 +48,7 @@ export default async function ConsentsPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  const kid = await chosenChild();
   let forms: Form[];
   try {
     forms = (await bff.api.fetch<{ forms: Form[] }>('/engagement/mine/consent-forms')).forms;
@@ -80,6 +83,7 @@ export default async function ConsentsPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/consents" />
       {sp.ok ? (
         <div
           className="ep-alert ep-alert--success"
@@ -145,114 +149,116 @@ export default async function ConsentsPage({
               {t(lang, 'Closes on')} {f.closesOn}
             </p>
           ) : null}
-          {f.children.map((ch) => (
-            <div
-              key={ch.student.id}
-              style={{ padding: 'var(--sp-2) 0', borderTop: '1px solid var(--border-subtle)' }}
-            >
+          {f.children
+            .filter((ch) => !kid || ch.student.id === kid.id)
+            .map((ch) => (
               <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 'var(--sp-2)',
-                  alignItems: 'center',
-                }}
+                key={ch.student.id}
+                style={{ padding: 'var(--sp-2) 0', borderTop: '1px solid var(--border-subtle)' }}
               >
-                <strong>{ch.student.name}</strong>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 'var(--sp-2)',
+                    alignItems: 'center',
+                  }}
+                >
+                  <strong>{ch.student.name}</strong>
+                  {ch.response ? (
+                    <Badge tone={f.feeAmount && !ch.response.paidAt ? 'warning' : 'success'}>
+                      {t(lang, 'Signed')} {ch.response.signedAt.slice(0, 10)}
+                      {f.feeAmount
+                        ? ch.response.paidAt
+                          ? ` · ${t(lang, 'paid')}`
+                          : ` · ${t(lang, 'fee pending')}`
+                        : ''}
+                    </Badge>
+                  ) : (
+                    <Badge tone="neutral">{t(lang, 'Not signed')}</Badge>
+                  )}
+                </div>
                 {ch.response ? (
-                  <Badge tone={f.feeAmount && !ch.response.paidAt ? 'warning' : 'success'}>
-                    {t(lang, 'Signed')} {ch.response.signedAt.slice(0, 10)}
-                    {f.feeAmount
-                      ? ch.response.paidAt
-                        ? ` · ${t(lang, 'paid')}`
-                        : ` · ${t(lang, 'fee pending')}`
-                      : ''}
-                  </Badge>
+                  f.feeAmount && !ch.response.paidAt && ch.response.paymentIntentId ? (
+                    <form method="post" action="/consents/pay" style={{ marginTop: 'var(--sp-2)' }}>
+                      <input type="hidden" name="intentId" value={ch.response.paymentIntentId} />
+                      <Button type="submit" size="sm">
+                        {t(lang, 'Pay the fee')}
+                      </Button>
+                    </form>
+                  ) : null
                 ) : (
-                  <Badge tone="neutral">{t(lang, 'Not signed')}</Badge>
-                )}
-              </div>
-              {ch.response ? (
-                f.feeAmount && !ch.response.paidAt && ch.response.paymentIntentId ? (
-                  <form method="post" action="/consents/pay" style={{ marginTop: 'var(--sp-2)' }}>
-                    <input type="hidden" name="intentId" value={ch.response.paymentIntentId} />
+                  <form action={respondConsent} style={{ marginTop: 'var(--sp-2)' }}>
+                    <input type="hidden" name="formId" value={f.id} />
+                    <input type="hidden" name="studentId" value={ch.student.id} />
+                    <input
+                      type="hidden"
+                      name="yesnoKeys"
+                      value={f.fields
+                        .filter((x) => x.type === 'yesno')
+                        .map((x) => x.key)
+                        .join(',')}
+                    />
+                    {f.fields.map((x) =>
+                      x.type === 'yesno' ? (
+                        <label
+                          key={x.key}
+                          style={{
+                            display: 'flex',
+                            gap: 'var(--sp-1)',
+                            alignItems: 'center',
+                            margin: 'var(--sp-1) 0',
+                          }}
+                        >
+                          <input type="checkbox" name={`a.${x.key}`} required={x.required} />{' '}
+                          {x.label}
+                        </label>
+                      ) : x.type === 'choice' ? (
+                        <label key={x.key} className="ep-field">
+                          <span className="ep-field__label">{x.label}</span>
+                          <select
+                            className="ep-input"
+                            name={`a.${x.key}`}
+                            required={x.required}
+                            defaultValue=""
+                          >
+                            <option value="" disabled>
+                              —
+                            </option>
+                            {(x.options ?? []).map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
+                        <InputField
+                          key={x.key}
+                          id={`${ch.student.id}-${x.key}`}
+                          name={`a.${x.key}`}
+                          label={x.label}
+                          type={x.type === 'date' ? 'date' : 'text'}
+                          required={x.required}
+                          maxLength={x.type === 'signature' ? 120 : 500}
+                        />
+                      ),
+                    )}
+                    <InputField
+                      id={`${ch.student.id}-signed`}
+                      name="signedName"
+                      label={t(lang, 'Your full name (as signature)')}
+                      required
+                      minLength={2}
+                      maxLength={120}
+                    />
                     <Button type="submit" size="sm">
-                      {t(lang, 'Pay the fee')}
+                      {f.feeAmount ? t(lang, 'Sign and pay') : t(lang, 'Sign')}
                     </Button>
                   </form>
-                ) : null
-              ) : (
-                <form action={respondConsent} style={{ marginTop: 'var(--sp-2)' }}>
-                  <input type="hidden" name="formId" value={f.id} />
-                  <input type="hidden" name="studentId" value={ch.student.id} />
-                  <input
-                    type="hidden"
-                    name="yesnoKeys"
-                    value={f.fields
-                      .filter((x) => x.type === 'yesno')
-                      .map((x) => x.key)
-                      .join(',')}
-                  />
-                  {f.fields.map((x) =>
-                    x.type === 'yesno' ? (
-                      <label
-                        key={x.key}
-                        style={{
-                          display: 'flex',
-                          gap: 'var(--sp-1)',
-                          alignItems: 'center',
-                          margin: 'var(--sp-1) 0',
-                        }}
-                      >
-                        <input type="checkbox" name={`a.${x.key}`} required={x.required} />{' '}
-                        {x.label}
-                      </label>
-                    ) : x.type === 'choice' ? (
-                      <label key={x.key} className="ep-field">
-                        <span className="ep-field__label">{x.label}</span>
-                        <select
-                          className="ep-input"
-                          name={`a.${x.key}`}
-                          required={x.required}
-                          defaultValue=""
-                        >
-                          <option value="" disabled>
-                            —
-                          </option>
-                          {(x.options ?? []).map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : (
-                      <InputField
-                        key={x.key}
-                        id={`${ch.student.id}-${x.key}`}
-                        name={`a.${x.key}`}
-                        label={x.label}
-                        type={x.type === 'date' ? 'date' : 'text'}
-                        required={x.required}
-                        maxLength={x.type === 'signature' ? 120 : 500}
-                      />
-                    ),
-                  )}
-                  <InputField
-                    id={`${ch.student.id}-signed`}
-                    name="signedName"
-                    label={t(lang, 'Your full name (as signature)')}
-                    required
-                    minLength={2}
-                    maxLength={120}
-                  />
-                  <Button type="submit" size="sm">
-                    {f.feeAmount ? t(lang, 'Sign and pay') : t(lang, 'Sign')}
-                  </Button>
-                </form>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            ))}
         </Card>
       ))}
     </main>

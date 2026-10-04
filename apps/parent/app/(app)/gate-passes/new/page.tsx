@@ -1,6 +1,7 @@
 import { Button, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { dayOf } from '../../appointments/shared';
@@ -34,8 +35,9 @@ export default async function NewGatePassPage({
     if (error instanceof ApiError && error.status === 403) redirect('/gate-passes');
     throw error;
   }
+  const chosen = await chosenChild(sp.student);
   const student =
-    options.data.find((s) => s.id === sp.student) ??
+    options.data.find((s) => s.id === chosen?.id) ??
     (options.data.length === 1 ? options.data[0]! : null);
   const kind =
     sp.kind === 'late_arrival' ? 'late_arrival' : sp.kind === 'early_leave' ? 'early_leave' : null;

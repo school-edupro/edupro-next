@@ -1,6 +1,7 @@
 import { Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { raiseQuery } from '../actions';
@@ -71,7 +72,12 @@ export default async function NewQueryPage({
           <input type="hidden" name="kind" value={kind} />
           <label className="ep-field">
             <span className="ep-field__label">{t(lang, 'Child')}</span>
-            <select className="ep-input" name="studentId" required>
+            <select
+              className="ep-input"
+              name="studentId"
+              required
+              defaultValue={(await chosenChild())?.id}
+            >
               {viewer.students.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}

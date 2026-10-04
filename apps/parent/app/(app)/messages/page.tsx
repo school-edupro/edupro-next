@@ -1,6 +1,8 @@
 import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild, familyKids } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { EnablePush } from './EnablePush';
@@ -26,7 +28,10 @@ export default async function MessagesPage({
   const lang = await currentLang();
   const page = Math.max(1, Number(sp.page) || 1);
   const q = new URLSearchParams({ page: String(page), size: '20' });
-  if (sp.child && /^\d+$/.test(sp.child)) q.set('studentId', sp.child);
+  const kid = await chosenChild(sp.child);
+  const kids = await familyKids();
+  // a family with several children reads one child's messages at a time (the switch is under the title)
+  if (kid && kids.length > 1) q.set('studentId', kid.id);
   let inbox: Inbox;
   try {
     inbox = await bff.api.fetch<Inbox>(`/comms/inbox?${q.toString()}`);
@@ -41,8 +46,7 @@ export default async function MessagesPage({
       );
     throw error;
   }
-  const link = (p: number) =>
-    `/messages?page=${String(p)}${sp.child ? `&child=${encodeURIComponent(sp.child)}` : ''}`;
+  const link = (p: number) => `/messages?page=${String(p)}`;
   const status: Record<string, string> = {
     delivered: t(lang, 'Delivered'),
     sent: t(lang, 'Sent'),
@@ -58,22 +62,7 @@ export default async function MessagesPage({
         title={t(lang, 'Messages from school')}
         description={t(lang, 'SMS, WhatsApp and email the school sent you')}
       />
-      {inbox.children.length > 1 ? (
-        <nav className="fp-msg__children" aria-label={t(lang, 'All children')}>
-          <a href="/messages" aria-current={!sp.child ? 'page' : undefined}>
-            {t(lang, 'All children')}
-          </a>
-          {inbox.children.map((c) => (
-            <a
-              key={c.id}
-              href={`/messages?child=${c.id}`}
-              aria-current={sp.child === c.id ? 'page' : undefined}
-            >
-              {c.name}
-            </a>
-          ))}
-        </nav>
-      ) : null}
+      <ChildSwitch lang={lang} back="/messages" current={kid?.id} />
       <EnablePush
         labels={{
           on: t(lang, 'Notifications are on for this device.'),

@@ -2,6 +2,8 @@ import { FileLinks } from '@/components/FileLinks';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t, type Lang } from '@/lib/i18n';
 import { setConsent } from '../queries/actions';
@@ -179,7 +181,8 @@ export default async function ProfilePage({
       return notLinked;
     throw error;
   }
-  const child = fam.children.find((c) => c.id === sp.child) ?? fam.children[0];
+  const chosen = await chosenChild(sp.child);
+  const child = fam.children.find((c) => c.id === chosen?.id) ?? fam.children[0];
   if (!child) return notLinked;
   const [p, reqs, exp] = await Promise.all([
     bff.api.fetch<PortalProfile>(`/engagement/mine/profile/${child.id}`),
@@ -269,20 +272,7 @@ export default async function ProfilePage({
           </a>
         }
       />
-      {fam.children.length > 1 ? (
-        <nav className="pp-kids" aria-label={t(lang, 'Choose a child')}>
-          {fam.children.map((c) => (
-            <a
-              key={c.id}
-              href={`/profile?child=${c.id}`}
-              aria-current={c.id === child.id ? 'page' : undefined}
-            >
-              {c.name}
-              {c.section ? <span> · {c.section}</span> : null}
-            </a>
-          ))}
-        </nav>
-      ) : null}
+      <ChildSwitch lang={lang} back="/profile" current={child?.id} />
       {sp.ok && OK_TEXT[sp.ok] ? (
         <div className="ep-alert ep-alert--success" role="status">
           {t(lang, OK_TEXT[sp.ok] ?? '')}

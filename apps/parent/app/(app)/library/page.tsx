@@ -1,6 +1,8 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 
@@ -56,6 +58,7 @@ export default async function LibraryPage() {
       );
     throw error;
   }
+  const kid = await chosenChild();
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
@@ -68,57 +71,60 @@ export default async function LibraryPage() {
           </a>
         }
       />
-      {res.children.map((c) => (
-        <Card key={c.student.id} title={c.student.name} style={{ marginBottom: 'var(--sp-3)' }}>
-          {c.loans.length === 0 ? (
-            <p className="ep-field__help">{t(lang, 'No books on loan.')}</p>
-          ) : (
-            <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th>{t(lang, 'Book')}</th>
-                  <th>{t(lang, 'Due on')}</th>
-                  <th>{t(lang, 'Status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {c.loans.map((l) => {
-                  const fine = Number(l.fineAmount) - Number(l.fineWaived);
-                  return (
-                    <tr key={l.id}>
-                      <td>
-                        {l.title}
-                        <div className="ep-kicker">
-                          {l.author ?? ''} · {l.accessionNo}
-                        </div>
-                      </td>
-                      <td>{l.dueOn}</td>
-                      <td>
-                        {l.returnedOn ? (
-                          <Badge tone="neutral">
-                            {t(lang, 'Returned')} {l.returnedOn}
-                          </Badge>
-                        ) : l.daysOverdue > 0 ? (
-                          <Badge tone="danger">
-                            {t(lang, 'Overdue')} · {l.daysOverdue} {t(lang, 'days')}
-                          </Badge>
-                        ) : (
-                          <Badge tone="success">{t(lang, 'On loan')}</Badge>
-                        )}
-                        {fine > 0 && !l.finePaidOn ? (
+      <ChildSwitch lang={lang} back="/library" />
+      {res.children
+        .filter((c) => !kid || c.student.id === kid.id)
+        .map((c) => (
+          <Card key={c.student.id} title={c.student.name} style={{ marginBottom: 'var(--sp-3)' }}>
+            {c.loans.length === 0 ? (
+              <p className="ep-field__help">{t(lang, 'No books on loan.')}</p>
+            ) : (
+              <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>{t(lang, 'Book')}</th>
+                    <th>{t(lang, 'Due on')}</th>
+                    <th>{t(lang, 'Status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {c.loans.map((l) => {
+                    const fine = Number(l.fineAmount) - Number(l.fineWaived);
+                    return (
+                      <tr key={l.id}>
+                        <td>
+                          {l.title}
                           <div className="ep-kicker">
-                            {t(lang, 'Fine')} ₹{fine.toFixed(2)}
+                            {l.author ?? ''} · {l.accessionNo}
                           </div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </Card>
-      ))}
+                        </td>
+                        <td>{l.dueOn}</td>
+                        <td>
+                          {l.returnedOn ? (
+                            <Badge tone="neutral">
+                              {t(lang, 'Returned')} {l.returnedOn}
+                            </Badge>
+                          ) : l.daysOverdue > 0 ? (
+                            <Badge tone="danger">
+                              {t(lang, 'Overdue')} · {l.daysOverdue} {t(lang, 'days')}
+                            </Badge>
+                          ) : (
+                            <Badge tone="success">{t(lang, 'On loan')}</Badge>
+                          )}
+                          {fine > 0 && !l.finePaidOn ? (
+                            <div className="ep-kicker">
+                              {t(lang, 'Fine')} ₹{fine.toFixed(2)}
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        ))}
       {digital.length ? (
         <Card title={t(lang, 'Digital library')} style={{ marginBottom: 'var(--sp-3)' }}>
           <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>

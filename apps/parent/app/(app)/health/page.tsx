@@ -1,6 +1,8 @@
 import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { OUTCOME, dateParts, medName, timeOf, type HealthCard, type Visit } from './shared';
@@ -32,9 +34,10 @@ export default async function HealthPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  // the child comes from the switch under the title, the same on every page
+  const kid = await chosenChild(sp.child);
   const filters = Object.fromEntries(
     Object.entries({
-      studentId: /^\d{1,18}$/.test(sp.child ?? '') ? sp.child : undefined,
       kind: ['visit', 'card'].includes(sp.kind ?? '') ? sp.kind : undefined,
       q: sp.q?.trim().slice(0, 80) || undefined,
       from: DATE.test(sp.from ?? '') ? sp.from : undefined,
@@ -45,7 +48,6 @@ export default async function HealthPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const href = (n: number) =>
     `/health?${new URLSearchParams({
-      ...(filters.studentId ? { child: filters.studentId } : {}),
       ...(filters.kind ? { kind: filters.kind } : {}),
       ...(filters.q ? { q: filters.q } : {}),
       ...(filters.from ? { from: filters.from } : {}),
@@ -55,7 +57,7 @@ export default async function HealthPage({
   let list: List;
   try {
     list = await bff.api.fetch<List>(
-      `/clinic/mine/list?${new URLSearchParams({ ...filters, size: String(PAGE_SIZE), page: String(page) }).toString()}`,
+      `/clinic/mine/list?${new URLSearchParams({ ...filters, ...(kid ? { studentId: kid.id } : {}), size: String(PAGE_SIZE), page: String(page) }).toString()}`,
     );
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -86,6 +88,7 @@ export default async function HealthPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/health" current={kid?.id} />
       <Card style={{ marginBottom: 'var(--sp-3)' }}>
         <form
           method="get"
@@ -102,18 +105,6 @@ export default async function HealthPage({
               { value: 'card', label: t(lang, 'Health check-up cards') },
             ]}
           />
-          {list.students.length > 1 ? (
-            <SelectField
-              id="h-child"
-              name="child"
-              label={t(lang, 'Child')}
-              defaultValue={filters.studentId ?? ''}
-              options={[
-                { value: '', label: t(lang, 'All') },
-                ...list.students.map((s) => ({ value: s.id, label: s.name })),
-              ]}
-            />
-          ) : null}
           <label className="ep-field" htmlFor="h-from">
             <span className="ep-field__label">{t(lang, 'From')}</span>
             <input

@@ -2,6 +2,7 @@ import { Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { RideForm } from '@/components/transport/RideForm';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { applyTransport } from '../actions';
@@ -40,7 +41,8 @@ export default async function ApplyTransportPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  const wanted = /^\d+$/.test(sp.student ?? '') ? sp.student! : '';
+  // the child chosen in the portal's sibling switch is the starting point
+  const wanted = (await chosenChild(sp.student))?.id ?? '';
   let options: Options;
   try {
     options = await bff.api.fetch<Options>(

@@ -1,6 +1,8 @@
 import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 
@@ -57,7 +59,8 @@ export default async function TimetablePage({
     throw error;
   }
   const kids = viewer.students.filter((s) => s.classSectionId);
-  const child = kids.find((k) => k.id === sp.child) ?? kids[0];
+  const chosen = await chosenChild(sp.child);
+  const child = kids.find((k) => k.id === chosen?.id) ?? kids[0];
   const [periods, slots] = child
     ? await Promise.all([
         bff.api.fetch<{ data: Period[] }>('/academics/timetable/periods').then((r) => r.data),
@@ -83,23 +86,13 @@ export default async function TimetablePage({
         }
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-            {kids.length > 1
-              ? kids.map((k) => (
-                  <a
-                    key={k.id}
-                    className={`ep-btn ep-btn--sm ${k.id === child?.id ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
-                    href={`/timetable?child=${k.id}`}
-                  >
-                    {k.name.split(' ')[0]}
-                  </a>
-                ))
-              : null}
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
               {t(lang, 'Home')}
             </a>
           </span>
         }
       />
+      <ChildSwitch lang={lang} back="/timetable" current={child?.id} />
       <Card>
         {slots.length === 0 ? (
           <p className="ep-field__help">{t(lang, 'The timetable has not been published yet.')}</p>

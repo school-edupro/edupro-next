@@ -2,6 +2,8 @@ import { FileLinks } from '@/components/FileLinks';
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 
@@ -56,7 +58,8 @@ export default async function HomeworkPage({
     throw error;
   }
   const kids = viewer.students.filter((s) => s.classSectionId);
-  const child = kids.find((k) => k.id === sp.child) ?? kids[0];
+  const chosen = await chosenChild(sp.child);
+  const child = kids.find((k) => k.id === chosen?.id) ?? kids[0];
   const work = child
     ? await bff.api
         .fetch<{ data: Work[] }>(
@@ -82,26 +85,7 @@ export default async function HomeworkPage({
           </a>
         }
       />
-      {kids.length > 1 ? (
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-2)',
-            marginBottom: 'var(--sp-4)',
-            flexWrap: 'wrap',
-          }}
-        >
-          {kids.map((k) => (
-            <a
-              key={k.id}
-              href={`/homework?child=${k.id}`}
-              className={`ep-btn ep-btn--sm ${k.id === child?.id ? '' : 'ep-btn--secondary'}`}
-            >
-              {k.name} ({k.section})
-            </a>
-          ))}
-        </div>
-      ) : null}
+      <ChildSwitch lang={lang} back="/homework" current={child?.id} />
       {[...byDate.entries()].map(([date, items]) => (
         <Card
           key={date}

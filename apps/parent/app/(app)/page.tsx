@@ -1,6 +1,8 @@
 import { Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { ChildProfileCard, type FamilyChild } from '@/components/ChildProfileCard';
@@ -167,7 +169,8 @@ export default async function HomePage({
         .then((r) => r.children)
         .catch(() => [])
     : [];
-  const child = kids.find((c) => c.id === sp.child) ?? kids[0];
+  const chosen = await chosenChild(sp.child);
+  const child = kids.find((c) => c.id === chosen?.id) ?? kids[0];
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
   return (
     <main className="fp-home">
@@ -202,7 +205,8 @@ export default async function HomePage({
       ) : null}
       {child ? (
         <>
-          <ChildProfileCard kids={kids} child={child} lang={lang} />
+          <ChildSwitch lang={lang} back="/" current={child.id} />
+          <ChildProfileCard child={child} lang={lang} />
           <HomeDashboard childId={child.id} audience={audience} lang={lang} />
         </>
       ) : isFamily ? (

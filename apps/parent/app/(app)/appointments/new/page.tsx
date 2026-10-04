@@ -1,6 +1,7 @@
 import { Button, Card, InputField, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { requestAppointment } from '../actions';
@@ -62,7 +63,9 @@ export default async function BookAppointmentPage({
     throw error;
   }
   const only = viewer.students.length === 1 ? viewer.students[0]! : null;
-  const student = viewer.students.find((s) => s.id === sp.student) ?? only;
+  // the child chosen in the portal's sibling switch is the starting point
+  const chosen = await chosenChild(sp.student);
+  const student = viewer.students.find((s) => s.id === chosen?.id) ?? only;
   const host = student ? (hosts.find((x) => x.id === sp.host) ?? null) : null;
   const days =
     student && host

@@ -1,14 +1,13 @@
 import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
+import { ChildSwitch } from '@/components/ChildSwitch';
+import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { cancelAppointment } from './actions';
 import { DAYS, STATE, dayOf, dayParts, studentLabel, timeOf, type Appointment } from './shared';
 
-interface Viewer {
-  students: Array<{ id: string; name: string }>;
-}
 const PAGE_SIZE = 10;
 
 /**
@@ -32,10 +31,11 @@ export default async function AppointmentsPage({
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
+  // the child comes from the switch under the title, the same on every page
+  const kid = await chosenChild(sp.child);
   const filters = Object.fromEntries(
     Object.entries({
       state: ['open', 'past'].includes(sp.st ?? '') ? sp.st : undefined,
-      studentId: /^\d{1,18}$/.test(sp.child ?? '') ? sp.child : undefined,
       q: sp.q?.trim().slice(0, 80) || undefined,
     }).filter(([, v]) => v),
   ) as Record<string, string>;
@@ -44,7 +44,6 @@ export default async function AppointmentsPage({
   const pageHref = (n: number) =>
     `/appointments?${new URLSearchParams({
       ...(filters.state ? { st: filters.state } : {}),
-      ...(filters.studentId ? { child: filters.studentId } : {}),
       ...(filters.q ? { q: filters.q } : {}),
       page: String(n),
     }).toString()}`;
@@ -61,22 +60,20 @@ export default async function AppointmentsPage({
     lang === 'hi' ? 'hi-IN' : 'en-IN',
     { timeZone: 'UTC', month: 'long', year: 'numeric' },
   );
-  const query: Record<string, string> = calendar
-    ? { from: `${month}-01`, to: `${month}-${String(monthDays).padStart(2, '0')}`, size: '100' }
-    : { ...filters, size: String(PAGE_SIZE), page: String(page) };
+  const query: Record<string, string> = {
+    ...(kid ? { studentId: kid.id } : {}),
+    ...(calendar
+      ? { from: `${month}-01`, to: `${month}-${String(monthDays).padStart(2, '0')}`, size: '100' }
+      : { ...filters, size: String(PAGE_SIZE), page: String(page) }),
+  };
   let appointments: Appointment[];
   let total: number;
-  let viewer: Viewer;
   try {
-    const [mine, v] = await Promise.all([
-      bff.api.fetch<{ data: Appointment[]; page: { total: number } }>(
-        `/appointments/mine?${new URLSearchParams(query).toString()}`,
-      ),
-      bff.api.fetch<Viewer>('/academics/daily-work/viewer'),
-    ]);
+    const mine = await bff.api.fetch<{ data: Appointment[]; page: { total: number } }>(
+      `/appointments/mine?${new URLSearchParams(query).toString()}`,
+    );
     appointments = mine.data;
     total = mine.page.total;
-    viewer = v;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -125,6 +122,7 @@ export default async function AppointmentsPage({
           </span>
         }
       />
+      <ChildSwitch lang={lang} back="/appointments" current={kid?.id} />
       {sp.ok ? (
         <div
           className="ep-alert ep-alert--success"
@@ -227,18 +225,6 @@ export default async function AppointmentsPage({
                 { value: 'past', label: t(lang, 'Over or closed') },
               ]}
             />
-            {viewer.students.length > 1 ? (
-              <SelectField
-                id="f-child"
-                name="child"
-                label={t(lang, 'Child')}
-                defaultValue={filters.studentId ?? ''}
-                options={[
-                  { value: '', label: t(lang, 'All') },
-                  ...viewer.students.map((s) => ({ value: s.id, label: s.name })),
-                ]}
-              />
-            ) : null}
             <InputField
               id="f-q"
               name="q"
