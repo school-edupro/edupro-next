@@ -19,6 +19,18 @@ const DICT: Record<string, string> = {
   'Queries and helpdesk': 'प्रश्न और हेल्पडेस्क',
   Appointments: 'भेंट',
   'Appointments with me': 'मुझसे भेंट',
+  'Confirmed by the front desk. The front desk confirms and moves appointments.':
+    'फ्रंट डेस्क द्वारा पुष्ट। भेंट की पुष्टि और समय बदलना फ्रंट डेस्क करता है।',
+  'Nobody has a confirmed appointment with you here.': 'यहाँ आपसे कोई पुष्ट भेंट नहीं है।',
+  'Still to come': 'आने वाली',
+  'Nothing booked': 'कुछ बुक नहीं',
+  'Adm. no.': 'प्रवेश सं.',
+  List: 'सूची',
+  Earlier: 'पहले',
+  Later: 'आगे',
+  Past: 'बीती हुई',
+  Week: 'सप्ताह',
+  Lists: 'सूचियाँ',
   'Parents and visitors coming to meet you': 'आपसे मिलने आने वाले अभिभावक और आगंतुक',
   'Today and the next 30 days. The front desk confirms and moves appointments.':
     'आज और अगले 30 दिन। भेंट की पुष्टि और समय बदलना फ्रंट डेस्क करता है।',

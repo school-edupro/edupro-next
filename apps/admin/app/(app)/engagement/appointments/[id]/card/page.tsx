@@ -1,5 +1,5 @@
 import { apiFetch } from '@/lib/api';
-import { timeOf, when, type Appointment } from '@/lib/appointments';
+import { studentLabel, timeOf, when, type Appointment } from '@/lib/appointments';
 
 type CardData = Appointment & { school: string; barcode: string | null; qr: string | null };
 const svg = (v: string) => `data:image/svg+xml;utf8,${encodeURIComponent(v)}`;
@@ -19,7 +19,7 @@ export default async function VisitorCardPage({ params }: { params: Promise<{ id
       'ID proof',
       a.idProofKind ? `${a.idProofKind}${a.idProofLast4 ? ` …${a.idProofLast4}` : ''}` : null,
     ],
-    ['Student', a.student ? `${a.student}${a.section ? ` (${a.section})` : ''}` : null],
+    ['Student', studentLabel(a)],
     ['To meet', [a.hostName, a.withName].filter(Boolean).join(' · ') || null],
     ['Purpose', a.purpose],
     ['Visit', a.startsAt ? when(a.startsAt) : null],

@@ -5010,3 +5010,70 @@ a.ep-tabs__tab {
   border-color: var(--border-accent);
   background: var(--surface-band);
 }
+
+/* A month at a glance (parent app appointments): Monday first, one cell a day, a chip per appointment. */
+.ep-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--sp-1);
+}
+.ep-month__wd {
+  text-align: center;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-month__cell {
+  min-height: 3.5rem;
+  padding: var(--sp-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+}
+.ep-month__cell--out {
+  border-color: transparent;
+  background: transparent;
+}
+.ep-month__cell--today {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px var(--border-accent);
+}
+.ep-month__num {
+  display: block;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+.ep-month__item {
+  display: block;
+  margin-top: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-default);
+  background: var(--surface-subtle);
+  color: var(--text-body);
+  font-size: var(--fs-small);
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ep-month__item:hover,
+.ep-month__item:focus-visible {
+  text-decoration: underline;
+}
+.ep-month__item[data-state='requested'] {
+  border-left-color: var(--status-warning);
+  background: var(--status-warning-bg);
+}
+.ep-month__item[data-state='approved'] {
+  border-left-color: var(--status-success);
+  background: var(--status-success-bg);
+}
+.ep-month__item[data-state='checked_in'] {
+  border-left-color: var(--status-info);
+  background: var(--status-info-bg);
+}
+.ep-month__item[data-state='rejected'],
+.ep-month__item[data-state='cancelled'],
+.ep-month__item[data-state='no_show'] {
+  border-left-color: var(--status-danger);
+  background: var(--status-danger-bg);
+}

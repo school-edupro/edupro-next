@@ -55,9 +55,23 @@ export const MineQuerySchema = z.object({
   studentId: IdSchema.optional(),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  size: z.coerce.number().int().min(5).max(50).default(10),
+  /** For the calendar: appointments whose visit falls between two days, in time order. */
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  size: z.coerce.number().int().min(5).max(100).default(10),
 });
 export class MineQueryDto extends createZodDto(MineQuerySchema) {}
+
+/** The person to be met: confirmed appointments with me, as a list (pages) or between two days (calendar). */
+export const WithMeQuerySchema = z.object({
+  when: z.enum(['today', 'upcoming', 'past', 'all']).default('upcoming'),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(200).default(50),
+});
+export class WithMeQueryDto extends createZodDto(WithMeQuerySchema) {}
 
 export const SlotsQuerySchema = z.object({
   hostId: IdSchema,

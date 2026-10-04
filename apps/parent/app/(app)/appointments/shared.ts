@@ -6,6 +6,8 @@ export interface Appointment {
   number: string;
   state: State;
   student: string | null;
+  section?: string | null;
+  admissionNo?: string | null;
   hostName: string | null;
   withName: string | null;
   purpose: string;
@@ -68,3 +70,15 @@ export function hoursLine(hours: Array<{ weekday: number; starts: string; ends: 
     })
     .join(' · ');
 }
+
+/** A pupil wherever an appointment names one: name, class and the admission number. */
+export const studentLabel = (
+  a: { student: string | null; section?: string | null; admissionNo?: string | null },
+  admWord = 'Adm. no.',
+): string | null =>
+  a.student
+    ? `${a.student}${a.section ? ` (${a.section})` : ''}${a.admissionNo ? ` · ${admWord} ${a.admissionNo}` : ''}`
+    : null;
+/** The day (YYYY-MM-DD, school time) of a moment. */
+export const dayOf = (v: string) =>
+  new Date(new Date(v).getTime() + 330 * 60_000).toISOString().slice(0, 10);

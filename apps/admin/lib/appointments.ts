@@ -225,10 +225,18 @@ export const dayLabel = (day: string) =>
     month: 'short',
   });
 /** The person behind the appointment: the visitor, or the pupil's guardian with the pupil. */
+/** A pupil wherever an appointment names one: name, class and the admission number. */
+export const studentLabel = (a: {
+  student: string | null;
+  section: string | null;
+  admissionNo?: string | null;
+}): string | null =>
+  a.student
+    ? `${a.student}${a.section ? ` (${a.section})` : ''}${a.admissionNo ? ` · Adm. no. ${a.admissionNo}` : ''}`
+    : null;
 export const whoOf = (a: Appointment) =>
-  [a.visitorName, a.student ? `for ${a.student}${a.section ? ` (${a.section})` : ''}` : null]
-    .filter(Boolean)
-    .join(' ') || 'Visitor';
+  [a.visitorName, a.student ? `for ${studentLabel(a) ?? ''}` : null].filter(Boolean).join(' ') ||
+  'Visitor';
 /** Visiting hours on one line: Mon–Fri 09:30–12:30. */
 export function hoursLine(hours: HostHours[]): string {
   const groups = new Map<string, number[]>();

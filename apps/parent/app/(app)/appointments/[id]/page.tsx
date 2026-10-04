@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { cancelAppointment } from '../actions';
+import { studentLabel } from '../shared';
 
 type State =
   'requested' | 'approved' | 'rejected' | 'cancelled' | 'checked_in' | 'completed' | 'no_show';
@@ -13,6 +14,7 @@ interface Detail {
   state: State;
   student: string | null;
   section: string | null;
+  admissionNo: string | null;
   hostName: string | null;
   withName: string | null;
   purpose: string;
@@ -81,7 +83,7 @@ export default async function AppointmentDetailPage({
     throw error;
   }
   const facts: Array<[string, string | null]> = [
-    [t(lang, 'Child'), a.student ? `${a.student}${a.section ? ` (${a.section})` : ''}` : null],
+    [t(lang, 'Child'), studentLabel(a, t(lang, 'Adm. no.'))],
     [t(lang, 'To meet'), [a.hostName, a.withName].filter(Boolean).join(' · ') || null],
     [t(lang, 'When'), a.startsAt ? when(a.startsAt) : t(lang, 'Not decided yet')],
     [t(lang, 'Moved from'), a.previousStartsAt ? when(a.previousStartsAt) : null],
@@ -119,6 +121,7 @@ export default async function AppointmentDetailPage({
         <Card title={t(lang, 'Gate pass')} style={{ marginBottom: 'var(--sp-3)' }}>
           <div className="ep-appt__poster">
             <p className="ep-pass__name">{a.visitorName ?? a.student}</p>
+            {a.student ? <p style={{ margin: 0 }}>{studentLabel(a, t(lang, 'Adm. no.'))}</p> : null}
             <p style={{ margin: 0 }}>
               {[a.number, a.withName ?? a.hostName, a.startsAt ? when(a.startsAt) : null, a.place]
                 .filter(Boolean)

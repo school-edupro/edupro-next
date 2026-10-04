@@ -23,6 +23,7 @@ import {
   type AppointmentDetail,
   type BookableHost,
   type SlotList,
+  studentLabel,
 } from '@/lib/appointments';
 
 const EVENT: Record<string, string> = {
@@ -83,12 +84,7 @@ export default async function AppointmentPage({
   const facts: Array<[string, React.ReactNode]> = [
     ['Visitor', a.visitorName ?? '—'],
     ...(a.student
-      ? ([
-          [
-            'Student',
-            `${a.student}${a.section ? ` · ${a.section}` : ''}${a.admissionNo ? ` · ${a.admissionNo}` : ''}`,
-          ],
-        ] as Array<[string, React.ReactNode]>)
+      ? ([['Student', studentLabel(a) ?? '']] as Array<[string, React.ReactNode]>)
       : []),
     ['Mobile', a.visitorMobile ?? '—'],
     ...(a.visitorEmail ? ([['Email', a.visitorEmail]] as Array<[string, React.ReactNode]>) : []),

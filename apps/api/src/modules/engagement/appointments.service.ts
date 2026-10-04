@@ -28,6 +28,7 @@ import type {
   HostDto,
   ListAppointmentsDto,
   MineQueryDto,
+  WithMeQueryDto,
   PublicBookDto,
   RejectDto,
   RescheduleDto,
@@ -101,6 +102,16 @@ export interface AppointmentRow {
   decidedBy: string | null;
   hasPhoto: boolean;
 }
+
+/** A pupil wherever an appointment names one: name, class and the admission number. */
+export const studentLabel = (a: {
+  student: string | null;
+  section: string | null;
+  admissionNo: string | null;
+}): string | null =>
+  a.student
+    ? `${a.student}${a.section ? ` (${a.section})` : ''}${a.admissionNo ? ` · Adm. no. ${a.admissionNo}` : ''}`
+    : null;
 
 const toRow = (x: Row): AppointmentRow => ({
   id: String(x.id),
@@ -458,7 +469,7 @@ export class AppointmentsService {
             ? `${a.idProofKind}${a.idProofLast4 ? ` ...${a.idProofLast4}` : ''}`
             : null,
         ],
-        ['Student', a.student ? `${a.student}${a.section ? ` (${a.section})` : ''}` : null],
+        ['Student', studentLabel(a)],
         ['To meet', [a.hostName, a.withName].filter(Boolean).join(', ') || null],
         ['Purpose', a.purpose],
         ['Visit', ist(a.startsAt) || null],
@@ -1221,7 +1232,7 @@ export class AppointmentsService {
                 g.display_name AS guardian, g.relation, right(g.mobile, 4) AS mobile_end
            FROM students s
            LEFT JOIN LATERAL (SELECT gd.display_name, sg.relation::text AS relation, gd.mobile FROM student_guardians sg JOIN guardians gd ON gd.id = sg.guardian_id
-                               WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC, gd.id LIMIT 1) g ON true
+                               WHERE sg.student_id = s.id ORDER BY sg.receives_notifications DESC, sg.is_primary DESC NULLS LAST, gd.id LIMIT 1) g ON true
           WHERE s.deleted_at IS NULL AND s.status = 'active'
             AND (s.admission_no ILIKE $1 || '%' OR s.display_name ILIKE '%' || $1 || '%')
           ORDER BY (lower(s.admission_no) = lower($1)) DESC, s.display_name LIMIT 12`,
@@ -1325,18 +1336,54 @@ export class AppointmentsService {
   }
 
   /**
-   * The appointments with me, for the person to be met (the principal, a teacher, any member of staff):
-   * only those the front desk has confirmed, today and the next 30 days, without the visitor's contact
-   * or ID details, which stay with the front desk.
+   * The appointments with me, for the person to be met (the principal, a teacher, a desk's person in
+   * charge): only those the front desk has confirmed, as a list (today, still to come, past) or between
+   * two days for the calendar, without the visitor's contact or ID details, which stay with the front desk.
    */
-  async withMe(ctx: RequestContext) {
+  async withMe(ctx: RequestContext, q: WithMeQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const base = `COALESCE(a.with_employee_id, h.employee_id) = (SELECT me.id FROM employees me WHERE me.user_id = app.current_user_id() AND me.deleted_at IS NULL LIMIT 1)
+            AND a.starts_at IS NOT NULL AND a.state IN ('approved', 'checked_in', 'completed', 'no_show')`;
+      const FROM = `FROM appointments a LEFT JOIN appointment_hosts h ON h.id = a.host_id LEFT JOIN students s ON s.id = a.student_id`;
+      const day = DAY('a.starts_at');
+      const params: unknown[] = [];
+      const where = [base];
+      const calendar = Boolean(q.from && q.to);
+      if (!calendar && q.when === 'today') where.push(`${day} = ${TODAY}`);
+      if (!calendar && q.when === 'upcoming') where.push(`${day} >= ${TODAY}`);
+      if (!calendar && q.when === 'past') where.push(`${day} < ${TODAY}`);
+      if (q.from) {
+        params.push(q.from);
+        where.push(`${day} >= $${String(params.length)}::date`);
+      }
+      if (q.to) {
+        params.push(q.to);
+        where.push(`${day} <= $${String(params.length)}::date`);
+      }
+      if (q.q) {
+        params.push(q.q);
+        where.push(
+          `concat_ws(' ', a.number, a.visitor_name, a.visitor_org, s.display_name, s.admission_no, a.purpose) ILIKE '%' || $${String(params.length)} || '%'`,
+        );
+      }
+      const w = where.join(' AND ');
+      const counts = await c.query<{ today: number; upcoming: number; past: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- FROM, base, DAY and TODAY are constants
+        `SELECT count(*) FILTER (WHERE ${day} = ${TODAY})::int AS today, count(*) FILTER (WHERE ${day} >= ${TODAY})::int AS upcoming,
+                count(*) FILTER (WHERE ${day} < ${TODAY})::int AS past ${FROM} WHERE ${base}`,
+      );
+      const total = await c.query<{ n: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- FROM is a constant; w holds fixed fragments; values bound
+        `SELECT count(*)::int AS n ${FROM} WHERE ${w}`,
+        params,
+      );
+      // what is still to come reads forward in time; the past and "everything" read latest first
+      const order = calendar || q.when === 'today' || q.when === 'upcoming' ? 'ASC' : 'DESC';
+      params.push(q.size, (q.page - 1) * q.size);
       const r = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT, DAY and TODAY are constants
-        `${SELECT} WHERE COALESCE(a.with_employee_id, h.employee_id) = (SELECT me.id FROM employees me WHERE me.user_id = app.current_user_id() AND me.deleted_at IS NULL LIMIT 1)
-            AND a.starts_at IS NOT NULL AND ${DAY('a.starts_at')} BETWEEN ${TODAY} AND ${TODAY} + 30
-            AND a.state IN ('approved', 'checked_in', 'completed', 'no_show')
-          ORDER BY a.starts_at, a.id LIMIT 300`,
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w and order are fixed fragments; values bound
+        `${SELECT} WHERE ${w} ORDER BY a.starts_at ${order}, a.id ${order} LIMIT $${String(params.length - 1)} OFFSET $${String(params.length)}`,
+        params,
       );
       return {
         data: r.rows.map(toRow).map((a) => ({
@@ -1353,7 +1400,10 @@ export class AppointmentsService {
           partySize: a.partySize,
           student: a.student,
           section: a.section,
+          admissionNo: a.admissionNo,
         })),
+        page: { number: q.page, size: q.size, total: total.rows[0]?.n ?? 0 },
+        counts: counts.rows[0] ?? { today: 0, upcoming: 0, past: 0 },
       };
     });
   }
@@ -1515,6 +1565,7 @@ export class AppointmentsService {
       'Organisation',
       'People',
       'Student',
+      'Admission no.',
       'Class',
       'To meet',
       'Purpose',
@@ -1537,6 +1588,7 @@ export class AppointmentsService {
         a.visitorOrg ?? '',
         a.partySize,
         a.student ?? '',
+        a.admissionNo ?? '',
         a.section ?? '',
         [a.hostName, a.withName].filter(Boolean).join(' · '),
         a.purpose,
@@ -1548,7 +1600,7 @@ export class AppointmentsService {
         ist(a.checkedOutAt),
         a.decisionNote ?? a.cancelReason ?? '',
       ]);
-    [15, 18, 13, 24, 13, 22, 7, 24, 9, 26, 36, 18, 14, 20, 11, 18, 18, 34].forEach((w, i) => {
+    [15, 18, 13, 24, 13, 22, 7, 24, 14, 9, 26, 36, 18, 14, 20, 11, 18, 18, 34].forEach((w, i) => {
       ws.getColumn(i + 1).width = w;
     });
     ws.views = [{ state: 'frozen', ySplit: 2 }];
@@ -1890,16 +1942,26 @@ export class AppointmentsService {
           `concat_ws(' ', a.number, a.purpose, h.name, s.display_name) ILIKE '%' || $${String(params.length)} || '%'`,
         );
       }
+      if (q.from) {
+        params.push(q.from);
+        where.push(`${DAY('a.starts_at')} >= $${String(params.length)}::date`);
+      }
+      if (q.to) {
+        params.push(q.to);
+        where.push(`${DAY('a.starts_at')} <= $${String(params.length)}::date`);
+      }
       const w = where.join(' AND ');
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- w holds fixed fragments with numbered placeholders; values bound
         `SELECT count(*)::int AS n FROM appointments a LEFT JOIN appointment_hosts h ON h.id = a.host_id LEFT JOIN students s ON s.id = a.student_id WHERE ${w}`,
         params,
       );
+      // between two days (the calendar) in time order; otherwise latest first
+      const order = q.from || q.to ? 'a.starts_at, a.id' : 'a.created_at DESC, a.id DESC';
       params.push(q.size, (q.page - 1) * q.size);
       const r = await c.query<Row>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w holds fixed fragments; values bound
-        `${SELECT} WHERE ${w} ORDER BY a.created_at DESC, a.id DESC LIMIT $${String(params.length - 1)} OFFSET $${String(params.length)}`,
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w and order hold fixed fragments; values bound
+        `${SELECT} WHERE ${w} ORDER BY ${order} LIMIT $${String(params.length - 1)} OFFSET $${String(params.length)}`,
         params,
       );
       const data = [];

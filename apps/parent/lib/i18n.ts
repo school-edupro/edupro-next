@@ -191,6 +191,12 @@ const DICT: Record<string, string> = {
   'Show this at the school gate on the day of the appointment.':
     'भेंट के दिन विद्यालय के गेट पर यह दिखाएँ।',
   'Still to come': 'आने वाली',
+  'No appointments in this month.': 'इस माह कोई भेंट नहीं है।',
+  'Adm. no.': 'प्रवेश सं.',
+  List: 'सूची',
+  Earlier: 'पहले',
+  Later: 'आगे',
+  Month: 'माह',
   'Over or closed': 'हो चुकी या बंद',
   'Number, purpose or whom to meet': 'संख्या, कारण या किससे मिलना है',
   Appointment: 'भेंट',

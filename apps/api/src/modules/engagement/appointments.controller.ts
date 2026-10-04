@@ -19,6 +19,7 @@ import {
   HostDto,
   ListAppointmentsDto,
   MineQueryDto,
+  WithMeQueryDto,
   RejectDto,
   RescheduleDto,
   SlotsQueryDto,
@@ -113,10 +114,11 @@ export class AppointmentsController {
   @Get('with-me')
   @AuthenticatedOnly()
   @ApiOperation({
-    summary: 'Appointments with me today and in the next 30 days (no visitor contact details)',
+    summary:
+      'Confirmed appointments with me: list or between two days (no visitor contact details)',
   })
-  withMe(@ReqCtx() ctx: RequestContext) {
-    return this.svc.withMe(ctx);
+  withMe(@ReqCtx() ctx: RequestContext, @Query() q: WithMeQueryDto) {
+    return this.svc.withMe(ctx, q);
   }
 
   // ---- set-up (admin) ---------------------------------------------------------------------------------

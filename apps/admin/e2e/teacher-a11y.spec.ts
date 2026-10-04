@@ -11,6 +11,7 @@ const PAGES = [
   '/queries/new?desk=provider',
   '/queries/t/208',
   '/appointments',
+  '/appointments?view=calendar',
 ];
 
 for (const sub of ['dev-teacher']) {

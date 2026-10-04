@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { cancelAppointment } from './actions';
-import { STATE, dayParts, timeOf, type Appointment } from './shared';
+import { DAYS, STATE, dayOf, dayParts, studentLabel, timeOf, type Appointment } from './shared';
 
 interface Viewer {
   students: Array<{ id: string; name: string }>;
@@ -23,6 +23,8 @@ export default async function AppointmentsPage({
     child?: string;
     q?: string;
     page?: string;
+    view?: string;
+    month?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -46,13 +48,29 @@ export default async function AppointmentsPage({
       ...(filters.q ? { q: filters.q } : {}),
       page: String(n),
     }).toString()}`;
+  // the calendar: one month (school time), every appointment of the family whose visit falls in it
+  const calendar = sp.view === 'calendar';
+  const nowDay = dayOf(new Date().toISOString());
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : nowDay.slice(0, 7);
+  const [my, mm] = month.split('-').map(Number) as [number, number];
+  const monthDays = new Date(Date.UTC(my, mm, 0)).getUTCDate();
+  const monthOf = (n: number) => new Date(Date.UTC(my, mm - 1 + n, 1)).toISOString().slice(0, 7);
+  // Monday first: how many blank cells before the 1st
+  const lead = (new Date(Date.UTC(my, mm - 1, 1)).getUTCDay() + 6) % 7;
+  const monthLabel = new Date(Date.UTC(my, mm - 1, 1)).toLocaleDateString(
+    lang === 'hi' ? 'hi-IN' : 'en-IN',
+    { timeZone: 'UTC', month: 'long', year: 'numeric' },
+  );
+  const query: Record<string, string> = calendar
+    ? { from: `${month}-01`, to: `${month}-${String(monthDays).padStart(2, '0')}`, size: '100' }
+    : { ...filters, size: String(PAGE_SIZE), page: String(page) };
   let appointments: Appointment[];
   let total: number;
   let viewer: Viewer;
   try {
     const [mine, v] = await Promise.all([
       bff.api.fetch<{ data: Appointment[]; page: { total: number } }>(
-        `/appointments/mine?${new URLSearchParams({ ...filters, size: String(PAGE_SIZE), page: String(page) }).toString()}`,
+        `/appointments/mine?${new URLSearchParams(query).toString()}`,
       ),
       bff.api.fetch<Viewer>('/academics/daily-work/viewer'),
     ]);
@@ -80,11 +98,31 @@ export default async function AppointmentsPage({
       <PageHeader
         kicker={t(lang, 'Appointments')}
         title={t(lang, 'Meet the school')}
-        description={`${String(total)} ${t(lang, filtered ? 'found' : 'in all')} · ${t(lang, 'latest first')}`}
+        description={
+          calendar
+            ? `${monthLabel} · ${String(total)}`
+            : `${String(total)} ${t(lang, filtered ? 'found' : 'in all')} · ${t(lang, 'latest first')}`
+        }
         actions={
-          <a className="ep-btn ep-btn--primary ep-btn--sm" href="/appointments/new">
-            {t(lang, 'Book an appointment')}
-          </a>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a
+              className={`ep-btn ep-btn--sm ${calendar ? 'ep-btn--secondary' : 'ep-btn--primary'}`}
+              href="/appointments"
+              aria-current={calendar ? undefined : 'page'}
+            >
+              {t(lang, 'List')}
+            </a>
+            <a
+              className={`ep-btn ep-btn--sm ${calendar ? 'ep-btn--primary' : 'ep-btn--secondary'}`}
+              href="/appointments?view=calendar"
+              aria-current={calendar ? 'page' : undefined}
+            >
+              {t(lang, 'Calendar')}
+            </a>
+            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/appointments/new">
+              {t(lang, 'Book an appointment')}
+            </a>
+          </span>
         }
       />
       {sp.ok ? (
@@ -105,60 +143,131 @@ export default async function AppointmentsPage({
           {sp.detail || sp.error}
         </div>
       ) : null}
-      <Card style={{ marginBottom: 'var(--sp-3)' }}>
-        <form
-          method="get"
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
-        >
-          <SelectField
-            id="f-st"
-            name="st"
-            label={t(lang, 'Status')}
-            defaultValue={filters.state ?? ''}
-            options={[
-              { value: '', label: t(lang, 'All') },
-              { value: 'open', label: t(lang, 'Still to come') },
-              { value: 'past', label: t(lang, 'Over or closed') },
-            ]}
-          />
-          {viewer.students.length > 1 ? (
+      {calendar ? (
+        <Card style={{ marginBottom: 'var(--sp-3)' }}>
+          <nav
+            aria-label={t(lang, 'Month')}
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-2)',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 'var(--sp-3)',
+            }}
+          >
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/appointments?view=calendar&month=${monthOf(-1)}`}
+            >
+              ← {t(lang, 'Earlier')}
+            </a>
+            <strong>{monthLabel}</strong>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/appointments?view=calendar&month=${monthOf(1)}`}
+            >
+              {t(lang, 'Later')} →
+            </a>
+          </nav>
+          <div className="ep-month">
+            {DAYS.map((d) => (
+              <div key={d} className="ep-month__wd" aria-hidden="true">
+                {t(lang, d)}
+              </div>
+            ))}
+            {Array.from({ length: lead }, (_, i) => (
+              <div key={`b${String(i)}`} className="ep-month__cell ep-month__cell--out" />
+            ))}
+            {Array.from({ length: monthDays }, (_, i) => {
+              const d = `${month}-${String(i + 1).padStart(2, '0')}`;
+              const rows = appointments.filter((a) => a.startsAt && dayOf(a.startsAt) === d);
+              return (
+                <div
+                  key={d}
+                  className={
+                    d === nowDay ? 'ep-month__cell ep-month__cell--today' : 'ep-month__cell'
+                  }
+                >
+                  <span className="ep-month__num">{i + 1}</span>
+                  {rows.map((a) => (
+                    <a
+                      key={a.id}
+                      className="ep-month__item"
+                      data-state={a.state}
+                      href={`/appointments/${a.id}`}
+                      aria-label={`${timeOf(a.startsAt!)} ${a.withName ?? a.hostName ?? ''} ${a.number} ${t(lang, STATE[a.state][0])}`}
+                    >
+                      {timeOf(a.startsAt!)}
+                    </a>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card style={{ marginBottom: 'var(--sp-3)' }}>
+          <form
+            method="get"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 'var(--sp-2)',
+              alignItems: 'flex-end',
+            }}
+          >
             <SelectField
-              id="f-child"
-              name="child"
-              label={t(lang, 'Child')}
-              defaultValue={filters.studentId ?? ''}
+              id="f-st"
+              name="st"
+              label={t(lang, 'Status')}
+              defaultValue={filters.state ?? ''}
               options={[
                 { value: '', label: t(lang, 'All') },
-                ...viewer.students.map((s) => ({ value: s.id, label: s.name })),
+                { value: 'open', label: t(lang, 'Still to come') },
+                { value: 'past', label: t(lang, 'Over or closed') },
               ]}
             />
-          ) : null}
-          <InputField
-            id="f-q"
-            name="q"
-            type="search"
-            label={t(lang, 'Number, purpose or whom to meet')}
-            defaultValue={filters.q ?? ''}
-            maxLength={80}
-          />
-          <Button type="submit" variant="secondary">
-            {t(lang, 'Show')}
-          </Button>
-          {filtered ? (
-            <a className="ep-btn ep-btn--ghost" href="/appointments">
-              {t(lang, 'Clear')}
-            </a>
-          ) : null}
-        </form>
-      </Card>
+            {viewer.students.length > 1 ? (
+              <SelectField
+                id="f-child"
+                name="child"
+                label={t(lang, 'Child')}
+                defaultValue={filters.studentId ?? ''}
+                options={[
+                  { value: '', label: t(lang, 'All') },
+                  ...viewer.students.map((s) => ({ value: s.id, label: s.name })),
+                ]}
+              />
+            ) : null}
+            <InputField
+              id="f-q"
+              name="q"
+              type="search"
+              label={t(lang, 'Number, purpose or whom to meet')}
+              defaultValue={filters.q ?? ''}
+              maxLength={80}
+            />
+            <Button type="submit" variant="secondary">
+              {t(lang, 'Show')}
+            </Button>
+            {filtered ? (
+              <a className="ep-btn ep-btn--ghost" href="/appointments">
+                {t(lang, 'Clear')}
+              </a>
+            ) : null}
+          </form>
+        </Card>
+      )}
       {appointments.length === 0 ? (
         <Card>
-          {filtered
-            ? t(lang, 'Nothing matches these filters.')
-            : t(
-                lang,
-                'No appointments yet. Use Book an appointment to meet a teacher or the office.',
-              )}
+          {calendar
+            ? t(lang, 'No appointments in this month.')
+            : filtered
+              ? t(lang, 'Nothing matches these filters.')
+              : t(
+                  lang,
+                  'No appointments yet. Use Book an appointment to meet a teacher or the office.',
+                )}
         </Card>
       ) : null}
       {appointments.map((a) => {
@@ -186,7 +295,12 @@ export default async function AppointmentsPage({
                 </div>
                 <div>{a.purpose}</div>
                 <div className="ep-kicker">
-                  {[a.number, a.student, a.withName ? a.hostName : null, a.place]
+                  {[
+                    a.number,
+                    studentLabel(a, t(lang, 'Adm. no.')),
+                    a.withName ? a.hostName : null,
+                    a.place,
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
                 </div>
@@ -222,7 +336,7 @@ export default async function AppointmentsPage({
           </Card>
         );
       })}
-      {total > PAGE_SIZE ? (
+      {!calendar && total > PAGE_SIZE ? (
         <nav
           aria-label={t(lang, 'Pages')}
           style={{

@@ -56,6 +56,8 @@ export default async function NewAppointmentPage({
           .catch(() => [])
       : [];
   const student = hits.find((x) => x.id === sp.student) ?? null;
+  // a pupil's guardian on record is the visitor: nothing more to ask (an outside visitor fills the form)
+  const forGuardian = Boolean(student?.guardian);
   // a search that is not yet settled on one pupil holds the slots back
   const choosing = sq.length >= 2 && !student;
   const slots =
@@ -210,7 +212,10 @@ export default async function NewAppointmentPage({
             {student.guardian
               ? ` · ${student.guardian}${student.relation ? ` (${student.relation})` : ''}${student.mobileEnd ? `, mobile ending ${student.mobileEnd}` : ''}`
               : ''}
-            . The guardian on record is told unless you type another name and mobile below.{' '}
+            .{' '}
+            {student.guardian
+              ? 'The guardian on record is the visitor and gets the confirmation.'
+              : 'No guardian is on record: enter the visitor below.'}{' '}
             <a href={pick(null)}>Change</a>
           </Alert>
         ) : null}
@@ -254,47 +259,47 @@ export default async function NewAppointmentPage({
                   ))}
                 </div>
               </fieldset>
-              <div className="ep-hd__row">
-                <label className="ep-field" htmlFor="nb-name">
-                  <span className="ep-field__label">
-                    Visitor name{student ? ' (blank = the guardian)' : ''}
-                  </span>
-                  <input
-                    id="nb-name"
-                    name="visitorName"
-                    className="ep-input"
-                    required={!student}
-                    minLength={2}
-                    maxLength={120}
-                  />
-                </label>
-                <label className="ep-field" htmlFor="nb-mobile">
-                  <span className="ep-field__label">Mobile (for the confirmation)</span>
-                  <input
-                    id="nb-mobile"
-                    name="visitorMobile"
-                    className="ep-input"
-                    inputMode="numeric"
-                    pattern="[6-9][0-9]{9}"
-                    title="A 10-digit mobile number"
-                    maxLength={10}
-                  />
-                </label>
-                <label className="ep-field" htmlFor="nb-email">
-                  <span className="ep-field__label">Email (optional)</span>
-                  <input
-                    id="nb-email"
-                    name="visitorEmail"
-                    type="email"
-                    className="ep-input"
-                    maxLength={200}
-                  />
-                </label>
-                <label className="ep-field" htmlFor="nb-org">
-                  <span className="ep-field__label">Coming from (optional)</span>
-                  <input id="nb-org" name="visitorOrg" className="ep-input" maxLength={120} />
-                </label>
-              </div>
+              {forGuardian ? null : (
+                <div className="ep-hd__row">
+                  <label className="ep-field" htmlFor="nb-name">
+                    <span className="ep-field__label">Visitor name</span>
+                    <input
+                      id="nb-name"
+                      name="visitorName"
+                      className="ep-input"
+                      required
+                      minLength={2}
+                      maxLength={120}
+                    />
+                  </label>
+                  <label className="ep-field" htmlFor="nb-mobile">
+                    <span className="ep-field__label">Mobile (for the confirmation)</span>
+                    <input
+                      id="nb-mobile"
+                      name="visitorMobile"
+                      className="ep-input"
+                      inputMode="numeric"
+                      pattern="[6-9][0-9]{9}"
+                      title="A 10-digit mobile number"
+                      maxLength={10}
+                    />
+                  </label>
+                  <label className="ep-field" htmlFor="nb-email">
+                    <span className="ep-field__label">Email (optional)</span>
+                    <input
+                      id="nb-email"
+                      name="visitorEmail"
+                      type="email"
+                      className="ep-input"
+                      maxLength={200}
+                    />
+                  </label>
+                  <label className="ep-field" htmlFor="nb-org">
+                    <span className="ep-field__label">Coming from (optional)</span>
+                    <input id="nb-org" name="visitorOrg" className="ep-input" maxLength={120} />
+                  </label>
+                </div>
+              )}
               <div className="ep-hd__row">
                 <label className="ep-field" htmlFor="nb-purpose">
                   <span className="ep-field__label">Purpose</span>
@@ -313,39 +318,43 @@ export default async function NewAppointmentPage({
                     ))}
                   </datalist>
                 </label>
-                <label className="ep-field" htmlFor="nb-party">
-                  <span className="ep-field__label">People coming</span>
-                  <input
-                    id="nb-party"
-                    name="partySize"
-                    type="number"
-                    className="ep-input"
-                    min={1}
-                    max={setup.maxParty}
-                    defaultValue={1}
-                  />
-                </label>
-                <SelectField
-                  id="nb-idkind"
-                  name="idProofKind"
-                  label="ID proof (optional)"
-                  defaultValue=""
-                  options={[
-                    { value: '', label: 'None' },
-                    ...setup.idProofKinds.map((k) => ({ value: k, label: k })),
-                  ]}
-                />
-                <label className="ep-field" htmlFor="nb-id4">
-                  <span className="ep-field__label">Last 4 characters of the ID</span>
-                  <input
-                    id="nb-id4"
-                    name="idProofLast4"
-                    className="ep-input"
-                    pattern="[A-Za-z0-9]{4}"
-                    title="Only the last 4 characters; the full number is never kept"
-                    maxLength={4}
-                  />
-                </label>
+                {forGuardian ? null : (
+                  <>
+                    <label className="ep-field" htmlFor="nb-party">
+                      <span className="ep-field__label">People coming</span>
+                      <input
+                        id="nb-party"
+                        name="partySize"
+                        type="number"
+                        className="ep-input"
+                        min={1}
+                        max={setup.maxParty}
+                        defaultValue={1}
+                      />
+                    </label>
+                    <SelectField
+                      id="nb-idkind"
+                      name="idProofKind"
+                      label="ID proof (optional)"
+                      defaultValue=""
+                      options={[
+                        { value: '', label: 'None' },
+                        ...setup.idProofKinds.map((k) => ({ value: k, label: k })),
+                      ]}
+                    />
+                    <label className="ep-field" htmlFor="nb-id4">
+                      <span className="ep-field__label">Last 4 characters of the ID</span>
+                      <input
+                        id="nb-id4"
+                        name="idProofLast4"
+                        className="ep-input"
+                        pattern="[A-Za-z0-9]{4}"
+                        title="Only the last 4 characters; the full number is never kept"
+                        maxLength={4}
+                      />
+                    </label>
+                  </>
+                )}
               </div>
               <div className="ep-hd__row">
                 <SelectField

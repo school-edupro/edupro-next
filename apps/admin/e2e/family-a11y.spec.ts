@@ -19,6 +19,7 @@ const PAGES = [
   '/appointments/new?student=12307&host=47',
   '/gate-passes',
   '/appointments?st=open&q=progress',
+  '/appointments?view=calendar',
 ];
 
 for (const sub of ['dev-parent', 'dev-student']) {

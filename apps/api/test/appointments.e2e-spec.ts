@@ -264,7 +264,7 @@ describe('appointments v2 (e2e)', () => {
       expect((await inject({ method: 'GET', url, headers: h(principal) })).statusCode).toBe(403);
     expect(
       (await inject({ method: 'GET', url: '/appointments/with-me', headers: h(principal) })).json(),
-    ).toEqual({ data: [] });
+    ).toMatchObject({ data: [], counts: { today: 0, upcoming: 0, past: 0 }, page: { total: 0 } });
     // the gate sees its own screen only
     expect(
       (await inject({ method: 'GET', url: '/appointments/gate/board', headers: h(guard) }))
@@ -447,6 +447,23 @@ describe('appointments v2 (e2e)', () => {
       student: 'Aanya Slot',
     });
     expect(withMe.data[0].visitorMobile).toBeUndefined();
+    // with the admission number, counted under "still to come", absent from the past, and on the calendar
+    expect(withMe.data[0].admissionNo).toBeTruthy();
+    expect(withMe.counts).toMatchObject({ upcoming: 1, past: 0 });
+    expect(
+      (
+        await inject({ method: 'GET', url: '/appointments/with-me?when=past', headers: h(teacher) })
+      ).json().data,
+    ).toHaveLength(0);
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/appointments/with-me?from=${day}&to=${day}&when=all&size=200`,
+          headers: h(teacher),
+        })
+      ).json().data,
+    ).toHaveLength(1);
     expect(
       (
         await inject({
@@ -1089,7 +1106,9 @@ describe('appointments v2 (e2e)', () => {
     const ws = wb.worksheets[0]!;
     expect(ws.rowCount).toBe(3);
     expect(ws.getRow(3).getCell(4).value).toBe('Vikram Mehta');
-    expect(ws.getRow(3).getCell(13).value).toBe('Completed');
+    // the admission number has its own column beside the student
+    expect(ws.getRow(2).getCell(9).value).toBe('Admission no.');
+    expect(ws.getRow(3).getCell(14).value).toBe('Completed');
     // search and paging on the queue
     const q = (
       await inject({ method: 'GET', url: '/appointments?q=Meena&size=5', headers: h() })
