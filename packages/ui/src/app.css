@@ -5077,3 +5077,31 @@ a.ep-tabs__tab {
   border-left-color: var(--status-danger);
   background: var(--status-danger-bg);
 }
+
+/* Gate pass: the photos on record and the one taken at the front desk, side by side to compare faces. */
+.ep-pass-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.ep-pass-photos__one {
+  margin: 0;
+  width: 9rem;
+  text-align: center;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-pass-photos__one img {
+  display: block;
+  width: 9rem;
+  height: 9rem;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  margin-bottom: var(--sp-1);
+  background: var(--surface-subtle);
+}
+.ep-pass-photos__one[data-party='collector'] img {
+  border: 2px solid var(--border-accent);
+}

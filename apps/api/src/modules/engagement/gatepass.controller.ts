@@ -75,6 +75,22 @@ export class GatePassController {
     pdf(reply, await this.svc.familyCard(ctx, id));
   }
 
+  @Get('mine/:id/card')
+  @RequirePermission(P.family)
+  @ApiOperation({ summary: 'The pass card as base64 (for the portal, which speaks JSON)' })
+  async mineCardJson(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    const out = await this.svc.familyCard(ctx, id);
+    return { filename: out.filename, base64: out.bytes.toString('base64') };
+  }
+
+  @Get('staff/:id/card')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'My own pass card as base64 (teacher app)' })
+  async staffCardJson(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    const out = await this.svc.cardFor(ctx, id);
+    return { filename: out.filename, base64: out.bytes.toString('base64') };
+  }
+
   @Post('mine/:id/cancel')
   @HttpCode(200)
   @RequirePermission(P.family)
@@ -168,6 +184,13 @@ export class GatePassController {
   @ApiOperation({ summary: 'The front desk makes a pupil pass; it is approved like any other' })
   deskCreate(@ReqCtx() ctx: RequestContext, @Body() dto: StudentPassDto) {
     return this.svc.deskCreate(ctx, dto);
+  }
+
+  @Get('students')
+  @RequirePermission(P.issue)
+  @ApiOperation({ summary: 'Pupils by name or admission number, to make a pass at the desk' })
+  students(@ReqCtx() ctx: RequestContext, @Query('q') q?: string) {
+    return this.svc.deskStudents(ctx, (q ?? '').slice(0, 80));
   }
 
   @Get('guardians/:studentId')

@@ -1148,6 +1148,31 @@ export class GatePassService {
     );
   }
 
+  /** Pupils by name or admission number for a pass made at the desk. */
+  async deskStudents(ctx: RequestContext, q: string) {
+    const term = q.trim();
+    if (term.length < 2) return { data: [] };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        `SELECT s.id::text, s.display_name AS name, s.admission_no,
+                (SELECT k.code || '-' || cs.name FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN classes k ON k.id = cs.class_id
+                  WHERE en.student_id = s.id AND en.status = 'active' ORDER BY en.academic_year_id DESC LIMIT 1) AS section
+           FROM students s
+          WHERE s.deleted_at IS NULL AND (s.admission_no ILIKE $1 || '%' OR s.display_name ILIKE '%' || $1 || '%')
+          ORDER BY (lower(s.admission_no) = lower($1)) DESC, s.display_name LIMIT 12`,
+        [term],
+      );
+      return {
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          name: String(x.name),
+          admissionNo: String(x.admission_no),
+          section: text(x.section),
+        })),
+      };
+    });
+  }
+
   /** For the front-desk form: the pupil with the guardians on record. */
   async deskGuardians(ctx: RequestContext, studentId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => ({

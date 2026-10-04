@@ -194,11 +194,7 @@ export default async function MyAppointmentsPage({
         </>
       ) : (
         <>
-          <nav
-            className="ep-tabs-links"
-            aria-label="Lists"
-            style={{ marginBottom: 'var(--sp-3)' }}
-          >
+          <nav className="ep-tabs-links" aria-label="Lists" style={{ marginBottom: 'var(--sp-3)' }}>
             {TABS.map(([k, label]) => (
               <a key={k} href={`?when=${k}`} aria-current={k === when ? 'page' : undefined}>
                 {label}

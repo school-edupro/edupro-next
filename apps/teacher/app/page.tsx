@@ -61,6 +61,12 @@ export default async function HomePage() {
       '/appointments',
     ],
     [
+      t(lang, 'Gate passes'),
+      t(lang, 'Approve the passes that wait on you, and ask for your own'),
+      true,
+      '/gate-passes',
+    ],
+    [
       t(lang, 'Students'),
       t(lang, 'Your sections and student profiles'),
       can('people.student.view'),

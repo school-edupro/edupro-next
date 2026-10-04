@@ -3390,33 +3390,6 @@ const decideBody = (fd: FormData) => ({
   note: opt(fd, 'note'),
 });
 
-export async function officeGatePass(fd: FormData) {
-  return run('/engagement/gate-passes', () =>
-    apiFetch('/engagement/gate-passes', {
-      method: 'POST',
-      body: JSON.stringify({
-        studentId: str(fd, 'studentId'),
-        kind: str(fd, 'kind') === 'late_arrival' ? 'late_arrival' : 'early_leave',
-        onDate: opt(fd, 'onDate'),
-        atTime: opt(fd, 'atTime'),
-        reason: str(fd, 'reason'),
-        escortName: opt(fd, 'escortName'),
-        escortRelation: opt(fd, 'escortRelation'),
-        escortMobile: opt(fd, 'escortMobile'),
-      }),
-    }),
-  );
-}
-
-export async function decideGatePass(fd: FormData) {
-  return run('/engagement/gate-passes', () =>
-    apiFetch(`/engagement/gate-passes/${str(fd, 'id')}/decide`, {
-      method: 'POST',
-      body: JSON.stringify(decideBody(fd)),
-    }),
-  );
-}
-
 export async function saveConsentForm(fd: FormData) {
   const id = opt(fd, 'id');
   const back = `/engagement/consent-forms${id ? `?form=${id}` : ''}`;

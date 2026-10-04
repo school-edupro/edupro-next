@@ -212,11 +212,6 @@ const NAV: Array<{
       },
 
       {
-        href: '/engagement/gate-passes',
-        label: 'gatePasses',
-        permission: 'engagement.gate_pass.view',
-      },
-      {
         href: '/engagement/consent-forms',
         label: 'consentForms',
         permission: 'engagement.consent_form.manage',
@@ -236,6 +231,8 @@ const NAV: Array<{
   {
     section: 'appointments',
     items: [
+      // one dashboard for appointments, gate passes and visitors: each person sees the parts of their role
+      { href: '/engagement/front-office', label: 'frontOfficeDashboard', permission: null },
       {
         href: '/engagement/appointments',
         label: 'appointmentDesk',
@@ -267,6 +264,24 @@ const NAV: Array<{
         href: '/engagement/appointments/setup',
         label: 'appointmentSetup',
         permission: 'engagement.appointment_setup.manage',
+      },
+      // gate passes: the front desk register and hand-over, each approver's list, the gate, one's own passes
+      {
+        href: '/engagement/gate-passes',
+        label: 'gatePassDesk',
+        permission: 'engagement.gate_pass.view',
+      },
+      { href: '/engagement/gate-passes/approvals', label: 'gatePassApprove', permission: null },
+      {
+        href: '/engagement/gate-passes/gate',
+        label: 'gatePassGate',
+        permission: 'engagement.gate_pass.gate',
+      },
+      { href: '/engagement/gate-passes/mine', label: 'gatePassMine', permission: null },
+      {
+        href: '/engagement/gate-passes/setup',
+        label: 'gatePassSetup',
+        permission: 'engagement.gate_pass_setup.manage',
       },
     ],
   },

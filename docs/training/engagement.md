@@ -5,15 +5,33 @@
 | Person        | Does                                                                                                                                                       |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Front office  | Appointments (confirm, decline, move, book walk-ins), gate check-in, visitor log, gate passes, consent forms, certificates, clinic register, CCTV requests |
-| Class teacher | Confirms gate passes from the approvals inbox; answers queries of their sections; sees the appointments with them                                          |
+| Class teacher | Approves gate passes under Gate passes · to approve; answers queries of their sections; sees the appointments with them                                    |
 | Coordinator   | Answers employee queries; escalations                                                                                                                      |
 | School admin  | Decides CCTV requests; owns the privacy queue                                                                                                              |
 | Families      | Appointments, gate passes, consent forms (with online payment when a fee applies), certificates, health                                                    |
 
 ## Daily routine
 
-- **Approvals → Inbox** first thing: gate passes wait there with their SLA; a pass approved gets a
-  number and the family a WhatsApp.
+- **Front office and gate → Dashboard** first thing: appointments, gate passes and visitors in one
+  place; the numbers open the lists behind them, and "Waiting on you" shows what you must decide.
+- **Gate passes** (same menu). A pupil's pass (leaving early, arriving late) is asked by the parent in
+  the portal, saying who takes the child (father, mother or guardian on record, or someone else), or
+  made by the front desk under **New pupil pass**. It then goes through the approval levels the admin
+  set (to start with: class teacher → coordinator → vice principal → principal; a level nobody holds
+  is skipped). Each approver finds it under **Gate passes · to approve** (ERP or teacher app) and gets
+  an email. The front desk's register shows where every approval stands ("2 of 3 · waiting on
+  Principal"). Once approved the family gets the pass by email (QR and PDF card).
+  - **Hand-over (front desk)**: open the pass, compare the person with the photos on record (pupil,
+    father, mother, guardian), take a live photo, and for someone not on the record press **Send code
+    to the parent** and type the code the parent tells. Only then can the gate let the child out.
+  - **Gate**: scan or type the pass, see all the photos including the one the front desk took, and
+    press **Let out**. Late arrivals are **Let in** against their pass.
+  - **Staff passes**: an employee applies under **My gate passes** (ERP or teacher app): **RGP** (comes
+    back today, with the return time) or **NRGP** (does not come back), listing each item carried out
+    and whether it comes back. After approval the gate marks **out**, and for RGP **back in** with the
+    items returned; what is still outside shows on the dashboard.
+  - **Set-up (admin)**: the levels for pupil and for staff passes (class teacher, a role, a
+    designation or one employee), "one after another" or "any N are enough", and the parent's code.
 - **Appointments** (its own menu): each person sees only the pages of their role. Give the role
   **Front Desk (appointments)** to whoever runs the queue and **Gate / Security** to the gate staff
   under Access; the school admin keeps **Set-up**; everyone else, the principal included, sees only

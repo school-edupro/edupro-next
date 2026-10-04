@@ -55,28 +55,6 @@ export async function cancelAppointment(fd: FormData) {
   redirect('/appointments?ok=cancelled#list');
 }
 
-/** Sprint 19: a guardian asks for an early-leave or late-arrival pass. */
-export async function requestGatePass(fd: FormData) {
-  try {
-    await bff.api.fetch('/engagement/mine/gate-passes', {
-      method: 'POST',
-      body: JSON.stringify({
-        studentId: str(fd, 'studentId'),
-        kind: str(fd, 'kind') === 'late_arrival' ? 'late_arrival' : 'early_leave',
-        onDate: str(fd, 'onDate') || undefined,
-        atTime: str(fd, 'atTime') || undefined,
-        reason: str(fd, 'reason'),
-        escortName: str(fd, 'escortName') || undefined,
-        escortRelation: str(fd, 'escortRelation') || undefined,
-        escortMobile: str(fd, 'escortMobile') || undefined,
-      }),
-    });
-  } catch (error) {
-    fail('/gate-passes', error);
-  }
-  redirect('/gate-passes?ok=1');
-}
-
 /** Sprint 19: a guardian signs a consent form for one child (a fee opens the pay flow). */
 export async function respondConsent(fd: FormData) {
   const formId = str(fd, 'formId');
