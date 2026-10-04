@@ -1,4 +1,5 @@
 import { Button, PageHeader } from '@edupro/ui';
+import { MessageTemplates, type TemplateStatus } from '@/components/MessageTemplates';
 import { Notice } from '@/components/Notice';
 import { HelpdeskSetup } from '@/components/helpdesk/HelpdeskSetup';
 import { apiFetch } from '@/lib/api';
@@ -12,7 +13,7 @@ export default async function HelpdeskSetupPage({
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
-  const setup = await apiFetch<Setup>('/helpdesk/setup');
+  const setup = await apiFetch<Setup & { templates?: TemplateStatus[] }>('/helpdesk/setup');
   return (
     <>
       <PageHeader
@@ -33,6 +34,11 @@ export default async function HelpdeskSetupPage({
         <Notice params={sp} />
       )}
       <HelpdeskSetup initial={setup} />
+      <MessageTemplates
+        templates={setup.templates ?? []}
+        search="helpdesk"
+        builtInEmail="Built-in design"
+      />
     </>
   );
 }

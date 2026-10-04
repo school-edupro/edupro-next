@@ -1,3 +1,4 @@
+import { templateStatus } from './template-status';
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { QUEUES, type PoolClient } from '@edupro/db';
@@ -668,7 +669,7 @@ export class HelpdeskService {
         entityId: id,
         after: { level: t.level },
       });
-      await this.notifyRaiser(c, t, `${t.number} resolved`, dto.resolution);
+      await this.notifyRaiser(c, t, `${t.number} resolved`, dto.resolution, 'helpdesk_resolved');
     });
     return this.get(ctx, id);
   }
@@ -867,10 +868,51 @@ export class HelpdeskService {
       `${t.number} · ${t.subject}`.slice(0, 200),
       `/queries/${id}`,
     ]);
+    // SMS and WhatsApp to the same people, when the school has made the template ready
+    // (a family's own reply does not text the whole role, as with the mail)
+    if (!(why === 'reply' && t.desk === 'parent'))
+      await this.text(
+        c,
+        `helpdesk_${why}`,
+        t,
+        people.rows.map((p) => p.user_id),
+      );
+  }
+
+  /** One helpdesk template on SMS and WhatsApp to people by their sign-in (0074). */
+  private async text(c: PoolClient, code: string, t: TicketRow, users: string[]) {
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    await c.query(`SELECT app.template_to_users($1, $2::bigint[], $3::jsonb)`, [
+      code,
+      users,
+      JSON.stringify({
+        desk: DESK_LABEL[t.desk].toLowerCase(),
+        number: t.number,
+        subject: t.subject.slice(0, 80),
+        due: t.dueAt
+          ? new Date(t.dueAt).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : '',
+        school: school.rows[0]?.name ?? '',
+      }),
+    ]);
   }
 
   /** The person who raised it (staff: mail + push; family: push, the WhatsApp reply stays with queries). */
-  private async notifyRaiser(c: PoolClient, t: TicketRow, title: string, text: string) {
+  private async notifyRaiser(
+    c: PoolClient,
+    t: TicketRow,
+    title: string,
+    text: string,
+    code: 'helpdesk_reply' | 'helpdesk_resolved' = 'helpdesk_reply',
+  ) {
     const email =
       t.desk === 'parent'
         ? null
@@ -899,6 +941,7 @@ export class HelpdeskService {
       text.slice(0, 200),
       `/queries/${t.id}`,
     ]);
+    await this.text(c, code, t, users);
   }
 
   private mail(t: TicketRow, title: string, text?: string): string {
@@ -1018,6 +1061,7 @@ export class HelpdeskService {
         })),
         roles: roles.rows,
         staff: staff.rows,
+        templates: await templateStatus(c, 'helpdesk'),
       };
     });
   }

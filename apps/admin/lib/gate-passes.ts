@@ -121,6 +121,13 @@ export interface GatePassSetup {
   roles: Array<{ code: string; name: string }>;
   staff: Array<{ id: string; name: string }>;
   designations: string[];
+  templates: Array<{
+    code: string;
+    channel: string;
+    name: string;
+    active: boolean;
+    ready: boolean;
+  }>;
 }
 
 export const KIND_LABEL: Record<PassKind, string> = {

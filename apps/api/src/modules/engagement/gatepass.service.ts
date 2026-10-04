@@ -28,6 +28,7 @@ import {
   type StaffPassDto,
   type StudentPassDto,
 } from './gatepass.dto';
+import { templateStatus } from './template-status';
 import { qrPng, visitorCardPdf } from './visitor-card';
 
 type Row = Record<string, unknown>;
@@ -331,6 +332,7 @@ export class GatePassService {
         roles: roles.rows,
         staff: staff.rows,
         designations: designations.rows.map((x) => x.d),
+        templates: await templateStatus(c, 'gate_pass'),
       };
     });
   }
@@ -490,11 +492,78 @@ export class GatePassService {
     await this.tellApprovers(c, id);
   }
 
+  /** What the SMS / WhatsApp templates of a pass may use. */
+  private vars(p: PassRow, more: Record<string, string> = {}): Record<string, string> {
+    const now = new Date().toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return {
+      who: p.student ?? p.employee ?? '',
+      kind: KIND_LABEL[p.kind] ?? p.kind,
+      date: p.onDate,
+      time: p.atTime ?? '',
+      number: p.number,
+      code: p.passCode ?? '',
+      escort: p.escortName ?? '',
+      reason: p.decisionNote ?? '',
+      now,
+      ...more,
+    };
+  }
+
+  /**
+   * SMS and WhatsApp to the people a pass belongs to: the guardians who take the school's notices, or
+   * the employee. Each goes out only when its template is ready (Communication → Templates).
+   */
+  private async textOwners(
+    c: PoolClient,
+    code: string,
+    p: PassRow,
+    more: Record<string, string> = {},
+  ) {
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    const to =
+      p.audience === 'student'
+        ? await c.query<{ mobile: string }>(
+            `SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+              WHERE sg.student_id = $1 AND sg.receives_notifications AND g.mobile IS NOT NULL`,
+            [p.studentId],
+          )
+        : await c.query<{ mobile: string }>(
+            `SELECT mobile FROM employees WHERE id = $1 AND mobile IS NOT NULL`,
+            [p.employeeId],
+          );
+    await c.query(`SELECT app.template_to_mobiles($1, $2::text[], $3::jsonb)`, [
+      code,
+      to.rows.map((x) => x.mobile),
+      JSON.stringify(this.vars(p, { school: school.rows[0]?.name ?? '', ...more })),
+    ]);
+  }
+
   /** A mail to everyone who may act on the pass now. */
   private async tellApprovers(c: PoolClient, id: string): Promise<void> {
     const s = await this.settings(c);
-    if (!s.notifyEmail) return;
     const p = await this.find(c, id);
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    const levels = await c.query<{ label: string; users: string[] }>(
+      `SELECT label, approver_user_ids::text[] AS users FROM gate_pass_approvals WHERE pass_id = $1 AND status = 'pending' AND acted_at IS NULL`,
+      [id],
+    );
+    for (const l of levels.rows)
+      await c.query(
+        `SELECT app.template_to_users('gate_pass_to_approve', $1::bigint[], $2::jsonb)`,
+        [
+          l.users,
+          JSON.stringify(this.vars(p, { level: l.label, school: school.rows[0]?.name ?? '' })),
+        ],
+      );
+    if (!s.notifyEmail) return;
     const to = await c.query<{ email: string; label: string }>(
       `SELECT DISTINCT COALESCE(e.email::text, u.email::text) AS email, a.label
          FROM gate_pass_approvals a CROSS JOIN LATERAL unnest(a.approver_user_ids) AS x(uid)
@@ -617,6 +686,14 @@ export class GatePassService {
       );
     const p = await this.find(c, id);
     const s = await this.settings(c);
+    await this.textOwners(
+      c,
+      outcome === 'approved' ? 'gate_pass_approved' : 'gate_pass_rejected',
+      p,
+      {
+        reason: note ?? '',
+      },
+    );
     if (!s.notifyEmail) return;
     const to = await this.ownersMail(c, p);
     if (!to.length) return;
@@ -1528,6 +1605,10 @@ export class GatePassService {
         entityId: id,
         after: { escort: p.escortName, otp: p.escortKind === 'other' && s.handoverOtp },
       });
+      await this.textOwners(c, 'gate_pass_handed_over', p, {
+        time: this.vars(p).now!,
+        escort: p.escortName ?? 'the person collecting',
+      });
       return { ok: true as const, pass: await this.detail(c, ctx, id) };
     });
   }
@@ -1596,6 +1677,7 @@ export class GatePassService {
         `UPDATE gate_passes SET state = 'out', out_at = now(), out_by = app.current_user_id(), out_gate = $2, gate_note = $3, updated_at = now() WHERE id = $1`,
         [id, dto.gate ?? null, dto.note ?? null],
       );
+      if (student) await this.textOwners(c, 'gate_pass_out', p, { time: this.vars(p).now! });
       await this.audit.stage(ctx, c, {
         action: 'engagement.gate_pass.out',
         entityType: 'gate_passes',
@@ -1623,6 +1705,7 @@ export class GatePassService {
                 gate_note = COALESCE(NULLIF(concat_ws(' · ', gate_note, $2::text), ''), gate_note), updated_at = now() WHERE id = $1`,
         [id, dto.note ?? null],
       );
+      if (late) await this.textOwners(c, 'gate_pass_in', p, { time: this.vars(p).now! });
       await this.audit.stage(ctx, c, {
         action: 'engagement.gate_pass.in',
         entityType: 'gate_passes',

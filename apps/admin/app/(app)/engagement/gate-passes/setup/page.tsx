@@ -1,6 +1,7 @@
 import { Card, PageHeader } from '@edupro/ui';
 import { GatePassNav } from '@/components/gate-passes/GatePassNav';
 import { GatePassSetupForm } from '@/components/gate-passes/GatePassSetupForm';
+import { MessageTemplates } from '@/components/MessageTemplates';
 import { apiFetch, getMe } from '@/lib/api';
 import type { GatePassSetup } from '@/lib/gate-passes';
 
@@ -18,6 +19,11 @@ export default async function GatePassSetupPage() {
       <Card>
         <GatePassSetupForm setup={setup} />
       </Card>
+      <MessageTemplates
+        templates={setup.templates}
+        search="gate pass"
+        builtInEmail="Built-in design (QR and PDF)"
+      />
     </>
   );
 }
