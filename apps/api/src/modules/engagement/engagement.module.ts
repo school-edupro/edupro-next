@@ -13,6 +13,8 @@ import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
 import { EngagementController } from './engagement.controller';
 import { FamilyService } from './family.service';
+import { ClinicController } from './clinic.controller';
+import { ClinicService } from './clinic.service';
 import { FrontOfficeService } from './front-office.service';
 import { FrontOfficeController, GatePassController } from './gatepass.controller';
 import { GatePassService } from './gatepass.service';
@@ -59,6 +61,7 @@ import { QueriesService } from './queries.service';
     PublicVisitorsController,
     GatePassController,
     FrontOfficeController,
+    ClinicController,
   ],
   providers: [
     QueriesService,
@@ -67,6 +70,7 @@ import { QueriesService } from './queries.service';
     VisitorsService,
     GatePassService,
     FrontOfficeService,
+    ClinicService,
     FamilyService,
     PortalProfileService,
     PrivacyService,
