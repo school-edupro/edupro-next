@@ -6,36 +6,52 @@ import { currentLang, t } from '@/lib/i18n';
 
 interface Visit {
   id: string;
+  number: string;
   inAt: string;
-  outAt: string | null;
   complaint: string;
   treatment: string | null;
-  temperatureC: string | null;
+  medicines: string[];
+  remark: string | null;
+  outcome: 'back_to_class' | 'rest' | 'sent_home' | 'referred';
   referredTo: string | null;
-  sentHome: boolean;
 }
-interface Record_ {
-  recorded_on: string;
-  height_cm: string | null;
-  weight_kg: string | null;
-  bmi: string | null;
-  blood_group: string | null;
-  vision_left: string | null;
-  vision_right: string | null;
-  dental: string | null;
+interface HealthCard {
+  id: string;
+  camp: string;
+  examDate: string;
+  heightCm: number | null;
+  weightKg: number | null;
+  bmi: number | null;
+  bloodGroup: string | null;
+  remarks: string | null;
+  needsAttention: boolean;
+  doctor: string | null;
 }
 interface Health {
-  children: Array<{ student: { id: string; name: string }; visits: Visit[]; records: Record_[] }>;
+  data: Array<{ id: string; name: string; visits: Visit[]; cards: HealthCard[] }>;
 }
 const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+const OUTCOME: Record<Visit['outcome'], [string, 'success' | 'info' | 'warning' | 'danger']> = {
+  back_to_class: ['Back to class', 'success'],
+  rest: ['Rested in the clinic', 'info'],
+  sent_home: ['Sent home', 'warning'],
+  referred: ['Referred', 'danger'],
+};
 
-/** Sprint 19: clinic visits and health records of the family's children. */
+/**
+ * Health (0075): each child's health check-up cards (once the school doctor has published them, with the
+ * PDF to download) and visits to the school clinic (what was wrong, what was done and given).
+ */
 export default async function HealthPage() {
   const lang = await currentLang();
   let h: Health;
   try {
-    h = await bff.api.fetch<Health>('/engagement/mine/health');
+    h = await bff.api.fetch<Health>('/clinic/mine');
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -57,75 +73,112 @@ export default async function HealthPage() {
       <PageHeader
         kicker="EduPro"
         title={t(lang, 'Health')}
-        description={t(lang, 'Clinic visits and the annual health check of each child.')}
+        description={t(lang, 'Health check-up cards and visits to the school clinic.')}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
             {t(lang, 'Home')}
           </a>
         }
       />
-      {h.children.map((ch) => (
-        <Card key={ch.student.id} title={ch.student.name} style={{ marginBottom: 'var(--sp-3)' }}>
-          <h3 style={{ fontSize: 'var(--fs-body)', margin: '0 0 var(--sp-1)' }}>
-            {t(lang, 'Clinic visits')}
+      {h.data.map((ch) => (
+        <Card key={ch.id} title={ch.name} style={{ marginBottom: 'var(--sp-3)' }}>
+          <h3 className="ep-cdash__h3" style={{ marginTop: 0 }}>
+            {t(lang, 'Health check-up cards')}
           </h3>
+          {ch.cards.length === 0 ? (
+            <p className="ep-field__help">
+              {t(lang, 'No health card yet. It shows here when the school doctor publishes it.')}
+            </p>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: '0 0 var(--sp-3)', padding: 0 }}>
+              {ch.cards.map((c) => (
+                <li
+                  key={c.id}
+                  style={{ padding: 'var(--sp-2) 0', borderTop: '1px solid var(--border-subtle)' }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 'var(--sp-2)',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <strong>{c.camp}</strong>
+                    <span className="ep-kicker">{c.examDate}</span>
+                  </div>
+                  <div>
+                    {[
+                      c.heightCm ? `${t(lang, 'Height')} ${String(c.heightCm)} cm` : null,
+                      c.weightKg ? `${t(lang, 'Weight')} ${String(c.weightKg)} kg` : null,
+                      c.bmi ? `BMI ${String(c.bmi)}` : null,
+                      c.bloodGroup ? `${t(lang, 'Blood group')} ${c.bloodGroup}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                  {c.remarks ? <p style={{ margin: 'var(--sp-1) 0' }}>{c.remarks}</p> : null}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 'var(--sp-2)',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {c.needsAttention ? (
+                      <Badge tone="warning">{t(lang, 'Please see a doctor')}</Badge>
+                    ) : null}
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/api/health-card/${c.id}`}
+                      aria-label={`${t(lang, 'Download the health card (PDF)')}: ${c.camp}, ${ch.name}`}
+                    >
+                      {t(lang, 'Download the health card (PDF)')}
+                    </a>
+                    {c.doctor ? <span className="ep-field__help">{c.doctor}</span> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3 className="ep-cdash__h3">{t(lang, 'Clinic visits')}</h3>
           {ch.visits.length === 0 ? (
             <p className="ep-field__help">{t(lang, 'No clinic visits.')}</p>
           ) : (
-            <ul style={{ listStyle: 'none', margin: '0 0 var(--sp-3)', padding: 0 }}>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {ch.visits.map((v) => (
                 <li
                   key={v.id}
                   style={{ padding: 'var(--sp-2) 0', borderTop: '1px solid var(--border-subtle)' }}
                 >
                   <div
-                    style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-2)' }}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 'var(--sp-2)',
+                      flexWrap: 'wrap',
+                    }}
                   >
                     <strong>{v.complaint}</strong>
                     <span className="ep-kicker">{when(v.inAt)}</span>
                   </div>
                   <div className="ep-kicker">
-                    {v.treatment ?? ''}
-                    {v.temperatureC ? ` · ${v.temperatureC} °C` : ''}
-                    {v.referredTo ? ` · ${t(lang, 'Referred to')} ${v.referredTo}` : ''}
+                    {[
+                      v.treatment,
+                      v.medicines.length
+                        ? `${t(lang, 'Medicine given')}: ${v.medicines.join(', ')}`
+                        : null,
+                      v.remark,
+                      v.referredTo ? `${t(lang, 'Referred to')} ${v.referredTo}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </div>
-                  {v.sentHome ? <Badge tone="warning">{t(lang, 'Sent home')}</Badge> : null}
+                  <Badge tone={OUTCOME[v.outcome][1]}>{t(lang, OUTCOME[v.outcome][0])}</Badge>
                 </li>
               ))}
             </ul>
-          )}
-          <h3 style={{ fontSize: 'var(--fs-body)', margin: '0 0 var(--sp-1)' }}>
-            {t(lang, 'Health records')}
-          </h3>
-          {ch.records.length === 0 ? (
-            <p className="ep-field__help">{t(lang, 'No health check recorded.')}</p>
-          ) : (
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th>{t(lang, 'Date')}</th>
-                  <th>{t(lang, 'Height')}</th>
-                  <th>{t(lang, 'Weight')}</th>
-                  <th>BMI</th>
-                  <th>{t(lang, 'Blood group')}</th>
-                  <th>{t(lang, 'Vision')}</th>
-                  <th>{t(lang, 'Dental')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ch.records.map((r) => (
-                  <tr key={r.recorded_on}>
-                    <td>{r.recorded_on}</td>
-                    <td>{r.height_cm ?? ''}</td>
-                    <td>{r.weight_kg ?? ''}</td>
-                    <td>{r.bmi ?? ''}</td>
-                    <td>{r.blood_group ?? ''}</td>
-                    <td>{[r.vision_left, r.vision_right].filter(Boolean).join(' / ')}</td>
-                    <td>{r.dental ?? ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           )}
         </Card>
       ))}

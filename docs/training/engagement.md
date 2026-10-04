@@ -72,7 +72,21 @@
   the ID and presses **Let in** (or **Refuse**). **Exit** records the time out and a note (equipment
   taken back). The register has filters and Excel / PDF. Only the kind of ID proof and its last 4
   characters are kept. Visitor types, gates and the own-phone switch are under **Set-up**.
-- **Engagement → Clinic**: record every visit; sent-home and referrals notify the family at once.
+- **Clinic** (its own menu; give the roles **School Doctor** and **School Nurse** under Access):
+  - **Set-up (admin)**: clinics, doctors, nurses, diseases / complaints, medicines (with the low-stock
+    mark), which fields the health check-up form shows, the note on the health card, the messages.
+  - **Medicine stock**: receive each batch with its expiry; a medicine given at a visit comes out of the
+    batch that expires first; write off what expired or broke. Low and expiring stock shows on the
+    dashboard.
+  - **New visit**: find the pupil (admission no. or name) or the member of staff, note the complaint
+    and vitals, what the doctor found, the treatment, the medicines given, the prescription, and how the
+    visit ends (back to class, rest, sent home, referred). Parents are told when a medicine is given,
+    the child is sent home or referred. **Time out** closes the visit.
+  - **Health check-ups**: start a check-up ("Annual check-up, first term"), open a class, examine each
+    pupil on the form (saving moves to the next pupil), then **Publish** the class: the parents see the
+    health card in the portal under Health and download it as PDF. Excel of the whole check-up.
+  - **Dashboard**: today, six months and day by day (pupils and staff), what they came for, classes and
+    departments, outcomes, frequent visitors, medicines, and how far each check-up has got.
 - **Engagement → Queries**: answer within the category's SLA; internal notes stay internal.
 
 ## Periodic routine

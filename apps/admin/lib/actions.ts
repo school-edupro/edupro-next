@@ -3444,30 +3444,6 @@ export async function issueCertificates(fd: FormData) {
   );
 }
 
-export async function recordClinicVisit(fd: FormData) {
-  const temp = str(fd, 'temperatureC');
-  return run('/engagement/clinic', () =>
-    apiFetch('/engagement/clinic', {
-      method: 'POST',
-      body: JSON.stringify({
-        studentId: str(fd, 'studentId'),
-        complaint: str(fd, 'complaint'),
-        treatment: opt(fd, 'treatment'),
-        temperatureC: temp ? Number(temp) : undefined,
-        referredTo: opt(fd, 'referredTo'),
-        sentHome: fd.get('sentHome') === 'on',
-        notify: fd.get('notify') !== null ? fd.get('notify') === 'on' : true,
-      }),
-    }),
-  );
-}
-
-export async function clinicOut(fd: FormData) {
-  return run('/engagement/clinic', () =>
-    apiFetch(`/engagement/clinic/${str(fd, 'id')}/out`, { method: 'POST' }),
-  );
-}
-
 export async function requestCctv(fd: FormData) {
   return run('/engagement/cctv', () =>
     apiFetch('/engagement/cctv', {

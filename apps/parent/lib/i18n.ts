@@ -235,6 +235,17 @@ const DICT: Record<string, string> = {
   'Not needed': 'आवश्यक नहीं',
   'No appointments in this month.': 'इस माह कोई भेंट नहीं है।',
   'Adm. no.': 'प्रवेश सं.',
+  'Health check-up cards and visits to the school clinic.':
+    'स्वास्थ्य जाँच कार्ड और विद्यालय क्लिनिक की विज़िट।',
+  'Health check-up cards': 'स्वास्थ्य जाँच कार्ड',
+  'No health card yet. It shows here when the school doctor publishes it.':
+    'अभी कोई स्वास्थ्य कार्ड नहीं। विद्यालय के डॉक्टर के प्रकाशित करने पर यहाँ दिखेगा।',
+  'Please see a doctor': 'कृपया डॉक्टर को दिखाएँ',
+  'Download the health card (PDF)': 'स्वास्थ्य कार्ड डाउनलोड करें (PDF)',
+  'Medicine given': 'दी गई दवा',
+  'Back to class': 'कक्षा में वापस',
+  'Rested in the clinic': 'क्लिनिक में आराम किया',
+  Referred: 'रेफ़र किया गया',
   'Gate out': 'गेट से बाहर',
   'Gate in': 'गेट से अंदर',
   List: 'सूची',

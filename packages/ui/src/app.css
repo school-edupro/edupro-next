@@ -5119,3 +5119,18 @@ a.ep-tabs__tab {
 [data-fo='visitors'] {
   background: var(--status-warning);
 }
+
+/* Clinic dashboard: a thin bar under each ranked row (what they came for, by class, medicines given). */
+.ep-clinic__bar {
+  height: 0.4rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  overflow: hidden;
+  margin-top: var(--sp-1);
+}
+.ep-clinic__bar span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--action-accent);
+}

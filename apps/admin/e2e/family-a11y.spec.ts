@@ -17,6 +17,7 @@ const PAGES = [
   '/appointments',
   '/appointments/new',
   '/appointments/new?student=12307&host=47',
+  '/health',
   '/gate-passes',
   '/gate-passes?view=calendar',
   '/gate-passes/new?student=12307&kind=early_leave',

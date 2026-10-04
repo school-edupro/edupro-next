@@ -221,7 +221,6 @@ const NAV: Array<{
         label: 'certificates',
         permission: 'engagement.certificate.issue',
       },
-      { href: '/engagement/clinic', label: 'clinic', permission: 'engagement.clinic.manage' },
       { href: '/engagement/cctv', label: 'cctv', permission: 'engagement.cctv.decide' },
       { href: '/engagement/feedback', label: 'feedback', permission: 'engagement.feedback.view' },
     ],
@@ -282,6 +281,37 @@ const NAV: Array<{
         href: '/engagement/gate-passes/setup',
         label: 'gatePassSetup',
         permission: 'engagement.gate_pass_setup.manage',
+      },
+    ],
+  },
+  // the clinic has its own menu: the doctor and nurse work here, the admin sets it up
+  {
+    section: 'clinic',
+    items: [
+      {
+        href: '/engagement/clinic',
+        label: 'clinicDashboard',
+        permission: 'engagement.clinic.view',
+      },
+      {
+        href: '/engagement/clinic/visits',
+        label: 'clinicVisits',
+        permission: 'engagement.clinic.view',
+      },
+      {
+        href: '/engagement/clinic/checkups',
+        label: 'clinicCheckups',
+        permission: 'engagement.clinic.view',
+      },
+      {
+        href: '/engagement/clinic/stock',
+        label: 'clinicStock',
+        permission: 'engagement.clinic.view',
+      },
+      {
+        href: '/engagement/clinic/setup',
+        label: 'clinicSetup',
+        permission: 'engagement.clinic_setup.manage',
       },
     ],
   },
@@ -499,7 +529,7 @@ export async function Shell({
         !features ||
         features.has(g.section) ||
         // appointments ride on the engagement module switch
-        (g.section === 'appointments' && features.has('engagement'))),
+        ((g.section === 'appointments' || g.section === 'clinic') && features.has('engagement'))),
   );
   const portal =
     me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??
