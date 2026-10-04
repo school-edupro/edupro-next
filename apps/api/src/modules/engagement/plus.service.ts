@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { OutboxService } from '../../common/jobs/outbox.service';
+import { GatePassService } from './gatepass.service';
 import { ENV, type Env } from '../../config/env';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -44,6 +45,7 @@ export class EngagementPlusService {
     private readonly outbox: OutboxService,
     private readonly payments: PaymentsService,
     private readonly reports: ReportsService,
+    private readonly gate: GatePassService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -265,52 +267,22 @@ export class EngagementPlusService {
     };
   }
 
-  /** A family asks for a pass (early leave); the office may also raise one directly. */
+  /**
+   * The legacy mobile app's way in (compat): the pass itself is made, approved and numbered by gate pass
+   * v2 (GatePassService); this only answers in the old shape.
+   */
   async requestGatePass(ctx: RequestContext, dto: GatePassDto, byFamily: boolean) {
-    if (byFamily) await this.familyStudent(ctx, dto.studentId);
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const s = await c.query<{ name: string; section: string | null }>(
-        `SELECT s.display_name AS name, (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id WHERE e.student_id = s.id AND e.status = 'active' AND e.academic_year_id = app.current_academic_year_id() LIMIT 1) AS section
-           FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL`,
-        [dto.studentId],
-      );
-      if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO gate_passes (school_id, student_id, kind, on_date, at_time, reason, escort_name, escort_relation, escort_mobile, requested_by, request_id)
-         VALUES (app.current_school_id(), $1, $2, COALESCE($3::date, CURRENT_DATE), $4::time, $5, $6, $7, $8, app.current_user_id(), app.current_request_id()) RETURNING id::text`,
-        [
-          dto.studentId,
-          dto.kind,
-          dto.onDate ?? null,
-          dto.atTime ?? null,
-          dto.reason,
-          dto.escortName ?? null,
-          dto.escortRelation ?? null,
-          dto.escortMobile ?? null,
-        ],
-      );
-      const id = r.rows[0]!.id;
-      const wf = await this.startIfDefined(
-        c,
-        ctx,
-        'gate_pass',
-        id,
-        `Gate pass (${dto.kind.replace('_', ' ')}): ${s.rows[0].name}${s.rows[0].section ? ` (${s.rows[0].section})` : ''}`,
-        { kind: dto.kind, reason: dto.reason },
-      );
-      if (wf)
-        await c.query(`UPDATE gate_passes SET workflow_instance_id = $2 WHERE id = $1`, [id, wf]);
-      await this.audit.stage(ctx, c, {
-        action: 'engagement.gate_pass.request',
-        entityType: 'gate_passes',
-        entityId: id,
-        after: dto,
-      });
-      return this.toPass(
+    const made = await this.gate.legacyCreate(ctx, dto, byFamily);
+    return this.passById(ctx, made.id);
+  }
+
+  private async passById(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) =>
+      this.toPass(
         // eslint-disable-next-line no-restricted-syntax -- fixed SELECT fragment constant; values are bound parameters
         (await c.query<Row>(`${EngagementPlusService.PASS} WHERE p.id = $1`, [id])).rows[0]!,
-      );
-    });
+      ),
+    );
   }
 
   async myGatePasses(ctx: RequestContext) {
@@ -343,71 +315,13 @@ export class EngagementPlusService {
     });
   }
 
+  /** The legacy app's approve / reject: only for someone the pass waits on (the v2 approval levels). */
   async decideGatePass(ctx: RequestContext, id: string, dto: GatePassDecideDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const cur = await c.query<{ status: string; workflow_instance_id: string | null }>(
-        `SELECT status::text, workflow_instance_id::text FROM gate_passes WHERE id = $1 FOR UPDATE`,
-        [id],
-      );
-      if (!cur.rows[0]) throw new DomainError('not-found', 'Gate pass not found', { status: 404 });
-      if (cur.rows[0].status !== 'pending')
-        throw new DomainError('conflict', `Already ${cur.rows[0].status}`, { status: 409 });
-      if (cur.rows[0].workflow_instance_id)
-        throw new DomainError('engagement.in_workflow', 'Decide it from the approvals inbox', {
-          status: 409,
-        });
-      await this.applyGatePass(c, ctx, id, dto.outcome, dto.note ?? null);
-      return this.toPass(
-        // eslint-disable-next-line no-restricted-syntax -- fixed SELECT fragment constant; values are bound parameters
-        (await c.query<Row>(`${EngagementPlusService.PASS} WHERE p.id = $1`, [id])).rows[0]!,
-      );
+    await this.gate.decide(ctx, id, {
+      outcome: dto.outcome,
+      note: dto.note ?? (dto.outcome === 'rejected' ? 'Not approved' : undefined),
     });
-  }
-
-  async applyGatePass(
-    c: PoolClient,
-    ctx: RequestContext,
-    id: string,
-    outcome: 'approved' | 'rejected',
-    note: string | null,
-  ) {
-    if (outcome === 'approved') {
-      const seq = await c.query<{ n: string }>(
-        `SELECT (count(*) + 1)::text AS n FROM gate_passes WHERE status = 'approved' AND on_date >= date_trunc('year', CURRENT_DATE)`,
-      );
-      await c.query(
-        `UPDATE gate_passes SET status = 'approved', pass_no = 'GP/' || to_char(CURRENT_DATE, 'YYYY') || '/' || lpad($2, 5, '0'), issued_at = now(), issued_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
-        [id, seq.rows[0]!.n],
-      );
-    } else
-      await c.query(
-        `UPDATE gate_passes SET status = 'rejected', updated_at = now() WHERE id = $1`,
-        [id],
-      );
-    const row = await c.query<{
-      student_id: string;
-      student: string;
-      pass_no: string | null;
-      kind: string;
-    }>(
-      `SELECT p.student_id::text, s.display_name AS student, p.pass_no, p.kind FROM gate_passes p JOIN students s ON s.id = p.student_id WHERE p.id = $1`,
-      [id],
-    );
-    if (row.rows[0])
-      await this.notifyFamily(
-        c,
-        ctx,
-        row.rows[0].student_id,
-        outcome === 'approved'
-          ? `Gate pass ${row.rows[0].pass_no} issued for ${row.rows[0].student} (${row.rows[0].kind.replace('_', ' ')}). Please show it at the gate.`
-          : `Gate pass for ${row.rows[0].student} was not approved${note ? `: ${note}` : '.'}`,
-      );
-    await this.audit.stage(ctx, c, {
-      action: `engagement.gate_pass.${outcome}`,
-      entityType: 'gate_passes',
-      entityId: id,
-      after: { note, passNo: row.rows[0]?.pass_no ?? null },
-    });
+    return this.passById(ctx, id);
   }
 
   // ---- consent forms ------------------------------------------------------------------------------
@@ -1100,8 +1014,6 @@ export class EngagementPlusService {
     switch (instance.entityType) {
       case 'appointment_request':
         return this.applyAppointment(c, ctx, instance.entityId, outcome, note);
-      case 'gate_pass':
-        return this.applyGatePass(c, ctx, instance.entityId, outcome, note);
       case 'cctv_request':
         return this.applySimple(c, ctx, 'cctv_requests', instance.entityId, outcome, note);
       case 'employee_query':

@@ -13,6 +13,8 @@ import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
 import { EngagementController } from './engagement.controller';
 import { FamilyService } from './family.service';
+import { GatePassController } from './gatepass.controller';
+import { GatePassService } from './gatepass.service';
 import { HelpdeskController } from './helpdesk.controller';
 import { HelpdeskService } from './helpdesk.service';
 import { EngagementPlusController } from './plus.controller';
@@ -54,12 +56,14 @@ import { QueriesService } from './queries.service';
     PublicAppointmentsController,
     VisitorsController,
     PublicVisitorsController,
+    GatePassController,
   ],
   providers: [
     QueriesService,
     HelpdeskService,
     AppointmentsService,
     VisitorsService,
+    GatePassService,
     FamilyService,
     PortalProfileService,
     PrivacyService,
@@ -92,7 +96,7 @@ export class EngagementModule implements OnModuleInit {
         [intent.entityId],
       );
     });
-    for (const entityType of ['appointment_request', 'gate_pass', 'cctv_request', 'employee_query'])
+    for (const entityType of ['appointment_request', 'cctv_request', 'employee_query'])
       this.workflow.onComplete(entityType, (c, ctx, instance, outcome) =>
         this.plus.onWorkflowComplete(c, ctx, instance, outcome),
       );

@@ -175,18 +175,19 @@ describe('compat parity, DPDP tooling and the release gate (e2e, Sprint 20)', ()
       );
       expect(mine.items.length).toBe(1);
       expect((mine.items[0] as { status: string }).status).toBe('Pending');
-      // the teacher (class teacher of the section) cannot issue: issuing needs engagement.gate_pass.issue
+      // gate pass v2 (0069): the pass waits on its approval levels, not on the office; here the class
+      // teacher is the only level that someone holds
       const denied = await inject({
         method: 'POST',
         url: '/compat/v1/UpdateGetPassStatus',
-        headers: h(teacher),
+        headers: h(admin),
         json: { slip_no: raised.json().slip_no, gate_pass_status: 'Approved' },
       });
       expect(denied.json()).toMatchObject({ status: false });
       const issued = await inject({
         method: 'POST',
         url: '/compat/v1/UpdateGetPassStatus',
-        headers: h(admin),
+        headers: h(teacher),
         json: { slip_no: raised.json().slip_no, gate_pass_status: 'Approved' },
       });
       expect(issued.json()).toMatchObject({ status: true });

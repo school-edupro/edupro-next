@@ -122,54 +122,44 @@ describe('engagement plus, scheduled reports, MIS and the shadow close (e2e, Spr
       });
       expect(r.statusCode).toBe(201);
       const codes = (r.json().data as Array<{ code: string }>).map((d) => d.code);
-      for (const code of ['appointment_request', 'gate_pass', 'cctv_request', 'employee_query'])
+      for (const code of ['appointment_request', 'cctv_request', 'employee_query'])
         expect(codes).toContain(code);
     });
 
     // appointments moved to slots and the front desk in 0059: see appointments.e2e-spec.ts
 
-    it('a gate pass raised by the family is numbered once the class teacher issues it', async () => {
+    // gate passes moved to their own approval levels in 0069: see gatepass.e2e-spec.ts
+    it('a gate pass raised by the family is numbered once its levels approve (class teacher, coordinator)', async () => {
       const req = await inject({
         method: 'POST',
-        url: '/engagement/mine/gate-passes',
+        url: '/gate-passes/mine',
         headers: h(parent),
-        json: {
-          studentId,
-          kind: 'early_leave',
-          reason: 'Dentist',
-          escortName: 'Rohit Nineteen',
-          escortRelation: 'father',
-          escortMobile: '9876519001',
-        },
+        json: { studentId, kind: 'early_leave', reason: 'Dentist', escortKind: 'father' },
       });
       expect(req.statusCode).toBe(201);
       expect(req.json().passNo).toBeNull();
-      const item = (await inboxOf(teacher)).find(
-        (i) => i.instance.entityType === 'gate_pass' && i.instance.entityId === req.json().id,
-      );
-      expect(item).toBeDefined();
-      await inject({
-        method: 'POST',
-        url: `/workflow/steps/${item!.id}/approve`,
-        headers: h(teacher),
-        json: {},
-      });
-      const list = await inject({
-        method: 'GET',
-        url: '/engagement/gate-passes?status=approved',
-        headers: h(),
-      });
+      // it no longer rides the workflow inbox
+      expect(
+        (await inboxOf(teacher)).find((i) => i.instance.entityType === 'gate_pass'),
+      ).toBeUndefined();
+      for (const u of [teacher, coordinator])
+        await inject({
+          method: 'POST',
+          url: `/gate-passes/${req.json().id}/decide`,
+          headers: h(u),
+          json: { outcome: 'approved' },
+        });
       const p = (
-        list.json().data as Array<{ id: string; passNo: string | null; status: string }>
-      ).find((x) => x.id === req.json().id);
-      expect(p?.status).toBe('approved');
-      expect(p?.passNo).toMatch(/^GP\/\d{4}\/\d{5}$/);
+        await inject({ method: 'GET', url: `/gate-passes/${req.json().id}`, headers: h() })
+      ).json();
+      expect(p.state).toBe('approved');
+      expect(p.passNo).toMatch(/^GP\/\d{4}\/\d{5}$/);
       // the family cannot raise a pass for a pupil that is not theirs
       const other = await inject({
         method: 'POST',
-        url: '/engagement/mine/gate-passes',
+        url: '/gate-passes/mine',
         headers: h(parent),
-        json: { studentId: '999999999', kind: 'early_leave', reason: 'x' },
+        json: { studentId: '999999999', kind: 'early_leave', reason: 'xyz', escortKind: 'father' },
       });
       expect([400, 403, 404]).toContain(other.statusCode);
     });

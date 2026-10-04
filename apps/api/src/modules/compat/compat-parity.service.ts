@@ -604,7 +604,7 @@ export class CompatParityService {
   }
 
   async updateGatePass(ctx: RequestContext, body: UpdateGatePassStatusDto) {
-    if (!this.may(ctx, 'engagement.gate_pass.issue')) return fail('Not permitted');
+    // gate pass v2: whoever the pass waits on (class teacher, coordinator...) decides, not the office
     const outcome = /approv|issue|allow|yes/i.test(body.gate_pass_status) ? 'approved' : 'rejected';
     try {
       const p = await this.plus.decideGatePass(ctx, body.slip_no, { outcome } as GatePassDecideDto);

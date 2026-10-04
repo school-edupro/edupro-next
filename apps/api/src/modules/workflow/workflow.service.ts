@@ -337,20 +337,7 @@ export class WorkflowService {
           },
         ],
       },
-      {
-        code: 'gate_pass',
-        name: 'Gate pass',
-        entityType: 'gate_pass',
-        levels: [
-          {
-            level: 1,
-            name: 'Class teacher',
-            resolver: { kind: 'role', roleCode: 'class_teacher' },
-            slaHours: 2,
-            escalateTo: { kind: 'role', roleCode: 'school_admin' },
-          },
-        ],
-      },
+      // gate passes keep their own approval levels since 0069 (GatePassService)
       {
         code: 'cctv_request',
         name: 'CCTV footage request',

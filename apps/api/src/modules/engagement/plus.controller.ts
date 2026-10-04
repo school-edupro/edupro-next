@@ -11,8 +11,6 @@ import {
   DecideDto,
   EmployeeQueryDto,
   ENGAGEMENT_PLUS as P,
-  GatePassDecideDto,
-  GatePassDto,
   IssueCertificatesDto,
   ListQueryDto,
   VisitorInDto,
@@ -55,42 +53,6 @@ export class EngagementPlusController {
   @RequirePermission(P.visitorManage)
   visitorOut(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.visitorOut(ctx, id);
-  }
-
-  // ---- gate passes ----
-  @Get('gate-passes')
-  @RequirePermission(P.gatePassView, { description: 'View gate passes' })
-  gatePasses(@ReqCtx() ctx: RequestContext, @Query() q: ListQueryDto) {
-    return this.svc.gatePasses(ctx, q);
-  }
-
-  @Post('gate-passes')
-  @ApiOperation({ summary: 'The office raises a pass (a family raises its own under mine/)' })
-  @RequirePermission(P.gatePassIssue, { description: 'Issue gate passes' })
-  officeGatePass(@ReqCtx() ctx: RequestContext, @Body() body: GatePassDto) {
-    return this.svc.requestGatePass(ctx, body, false);
-  }
-
-  @Post('gate-passes/:id/decide')
-  @RequirePermission(P.gatePassIssue)
-  decideGatePass(
-    @ReqCtx() ctx: RequestContext,
-    @Param('id') id: string,
-    @Body() body: GatePassDecideDto,
-  ) {
-    return this.svc.decideGatePass(ctx, id, body);
-  }
-
-  @Get('mine/gate-passes')
-  @RequirePermission(P.familyView)
-  myGatePasses(@ReqCtx() ctx: RequestContext) {
-    return this.svc.myGatePasses(ctx);
-  }
-
-  @Post('mine/gate-passes')
-  @RequirePermission(P.familyView)
-  familyGatePass(@ReqCtx() ctx: RequestContext, @Body() body: GatePassDto) {
-    return this.svc.requestGatePass(ctx, body, true);
   }
 
   // ---- consent forms ----
