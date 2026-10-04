@@ -47,6 +47,13 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
             ok: false,
             text: `Keep at least one approval level for ${a === 'student' ? 'pupil' : 'staff'} passes.`,
           });
+        const mode = a === 'student' ? s.studentMode : s.staffMode;
+        const need = a === 'student' ? s.studentNeed : s.staffNeed;
+        if (mode === 'any' && need > active.length)
+          return setMsg({
+            ok: false,
+            text: `${a === 'student' ? 'Pupil' : 'Staff'} passes: ${String(need)} approvals are asked but only ${String(active.length)} levels are in use.`,
+          });
         const bad = active.find(
           (l) =>
             l.label.trim().length < 2 ||
@@ -117,6 +124,17 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
             </label>
           ) : null}
         </div>
+        {mode === 'any' ? (
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            Tick <strong>Must approve</strong> on a level (for example the Principal) to make it
+            compulsory: the pass is approved only when {need} have approved <em>and</em> every
+            ticked level has. If a ticked level rejects, the pass is rejected at once.
+          </p>
+        ) : (
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            Every level in use must approve, in this order.
+          </p>
+        )}
         {list.map((l, i) => (
           <div key={`${a}-${String(i)}`} className="ep-hd__row">
             <label className="ep-field" htmlFor={`gl-label-${a}-${String(i)}`}>
@@ -195,6 +213,17 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
                 </select>
               </label>
             ) : null}
+            {mode === 'any' ? (
+              <label className="ep-check" htmlFor={`gl-must-${a}-${String(i)}`}>
+                <input
+                  id={`gl-must-${a}-${String(i)}`}
+                  type="checkbox"
+                  checked={l.mandatory}
+                  onChange={(e) => patch(a, i, { mandatory: e.target.checked })}
+                />{' '}
+                Must approve
+              </label>
+            ) : null}
             <label className="ep-check" htmlFor={`gl-on-${a}-${String(i)}`}>
               <input
                 id={`gl-on-${a}-${String(i)}`}
@@ -255,6 +284,7 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
                   designation: '',
                   employeeId: null,
                   active: true,
+                  mandatory: false,
                 },
               ])
             }

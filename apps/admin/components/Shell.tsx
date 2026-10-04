@@ -426,16 +426,15 @@ export async function Shell({
         .then((r) => r.data.length)
         .catch(() => 0)
     : 0;
-  // approvals waiting for me (profile changes, workflow steps, withdrawal clearances): best effort
+  // approvals waiting for me (profile changes, workflow steps, withdrawal clearances, gate passes): best effort
   const waiting = (await myApprovals(me.permissions).catch(() => [])).reduce(
     (n, g) => n + g.count,
     0,
   );
-  const mayApprove = [
-    'engagement.change_request.approve',
-    'workflow.inbox.act',
-    'people.withdrawal.clear',
-  ].some((p) => allowed.has(p));
+  const mayApprove =
+    ['engagement.change_request.approve', 'workflow.inbox.act', 'people.withdrawal.clear'].some(
+      (p) => allowed.has(p),
+    ) || waiting > 0;
   // queries with me now (header icon) and the user card: best effort, never block the page.
   // Queries are not approvals, so they show only here; people who may only raise still get the icon.
   const mayAnswer = ['helpdesk.ticket.respond', 'helpdesk.provider.respond'].some((p) =>

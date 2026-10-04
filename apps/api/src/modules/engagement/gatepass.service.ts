@@ -58,7 +58,7 @@ const SELECT = `SELECT p.id::text, p.audience, p.kind, p.source, p.state, p.on_d
          WHERE en.student_id = s.id AND en.status = 'active' ORDER BY en.academic_year_id DESC LIMIT 1) AS section,
        p.employee_id::text, e.display_name AS employee, e.employee_code, e.designation,
        p.escort_kind, p.escort_name, p.escort_relation, p.escort_mobile, p.pass_no, p.pass_code, p.approval_mode, p.approval_need,
-       p.decided_at, p.decision_note, p.handover_at, hu.display_name AS handover_by, p.otp_verified_at, p.out_at, p.out_gate, p.in_at,
+       p.decided_at, p.decision_note, p.handover_at, p.handover_remark, hu.display_name AS handover_by, p.otp_verified_at, p.out_at, p.out_gate, p.in_at,
        p.gate_note, p.cancel_reason, ru.display_name AS requested_by, p.requested_by::text AS requested_by_id, p.created_at,
        EXISTS (SELECT 1 FROM gate_pass_photos ph WHERE ph.pass_id = p.id) AS has_photo,
        (SELECT count(*) FROM gate_pass_approvals a WHERE a.pass_id = p.id AND a.status = 'approved')::int AS approved_n,
@@ -121,6 +121,7 @@ export interface PassRow {
   decisionNote: string | null;
   handoverAt: string | null;
   handoverBy: string | null;
+  handoverRemark: string | null;
   otpVerified: boolean;
   outAt: string | null;
   outGate: string | null;
@@ -183,6 +184,7 @@ const toRow = (x: Row): PassRow => ({
   decisionNote: text(x.decision_note),
   handoverAt: iso(x.handover_at),
   handoverBy: text(x.handover_by),
+  handoverRemark: text(x.handover_remark),
   otpVerified: Boolean(x.otp_verified_at),
   outAt: iso(x.out_at),
   outGate: text(x.out_gate),
@@ -228,6 +230,7 @@ export interface Level {
   employeeId: string | null;
   employeeName: string | null;
   active: boolean;
+  mandatory: boolean;
 }
 
 /**
@@ -288,7 +291,7 @@ export class GatePassService {
 
   private async levels(c: PoolClient, audience?: Audience): Promise<Level[]> {
     const r = await c.query<Row>(
-      `SELECT l.id::text, l.audience, l.seq, l.label, l.kind, l.role_code, l.designation, l.employee_id::text, e.display_name AS employee_name, l.active
+      `SELECT l.id::text, l.audience, l.seq, l.label, l.kind, l.role_code, l.designation, l.employee_id::text, e.display_name AS employee_name, l.active, l.mandatory
          FROM gate_pass_levels l LEFT JOIN employees e ON e.id = l.employee_id
         WHERE ($1::text IS NULL OR l.audience = $1) ORDER BY l.audience, l.seq, l.id`,
       [audience ?? null],
@@ -304,6 +307,7 @@ export class GatePassService {
       employeeId: text(x.employee_id),
       employeeName: text(x.employee_name),
       active: Boolean(x.active),
+      mandatory: Boolean(x.mandatory),
     }));
   }
 
@@ -361,8 +365,8 @@ export class GatePassService {
       for (const l of dto.levels) {
         seq[l.audience] += 1;
         await c.query(
-          `INSERT INTO gate_pass_levels (school_id, audience, seq, label, kind, role_code, designation, employee_id, active)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8)`,
+          `INSERT INTO gate_pass_levels (school_id, audience, seq, label, kind, role_code, designation, employee_id, active, mandatory)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             l.audience,
             seq[l.audience],
@@ -372,6 +376,7 @@ export class GatePassService {
             l.kind === 'designation' ? l.designation : null,
             l.kind === 'employee' ? l.employeeId : null,
             l.active,
+            l.mandatory,
           ],
         );
       }
@@ -434,12 +439,12 @@ export class GatePassService {
     const p = await this.find(c, id);
     const mode = p.audience === 'student' ? s.studentMode : s.staffMode;
     const need = p.audience === 'student' ? s.studentNeed : s.staffNeed;
-    const rows: Array<{ label: string; users: string[] }> = [];
+    const rows: Array<{ label: string; users: string[]; mandatory: boolean }> = [];
     for (const l of (await this.levels(c, p.audience)).filter((x) => x.active)) {
       const users = (await this.approversOf(c, l, p.studentId)).filter(
         (u) => u !== p.requestedById || p.audience === 'student',
       );
-      rows.push({ label: l.label, users });
+      rows.push({ label: l.label, users, mandatory: l.mandatory });
     }
     if (!rows.some((r) => r.users.length)) {
       // nobody holds any level: the school admins decide, so a request is never stuck
@@ -448,7 +453,7 @@ export class GatePassService {
           WHERE ur.school_id = app.current_school_id() AND r.code = 'school_admin' AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE
             AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)`,
       );
-      rows.push({ label: 'School admin', users: admins.rows.map((x) => x.id) });
+      rows.push({ label: 'School admin', users: admins.rows.map((x) => x.id), mandatory: false });
     }
     const holders = rows.filter((r) => r.users.length).length;
     let opened = false;
@@ -462,8 +467,8 @@ export class GatePassService {
           : 'waiting';
       if (status === 'pending') opened = true;
       await c.query(
-        `INSERT INTO gate_pass_approvals (school_id, pass_id, seq, label, approver_user_ids, status, note)
-         VALUES (app.current_school_id(), $1, $2, $3, $4::bigint[], $5, $6)`,
+        `INSERT INTO gate_pass_approvals (school_id, pass_id, seq, label, approver_user_ids, status, note, mandatory)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::bigint[], $5, $6, $7)`,
         [
           id,
           seq,
@@ -471,6 +476,8 @@ export class GatePassService {
           r.users,
           status,
           status === 'skipped' ? 'Nobody holds this level' : null,
+          // a mandatory level counts only in "any N" mode and only when someone holds it
+          mode === 'any' && r.mandatory && r.users.length > 0,
         ],
       );
     }
@@ -680,14 +687,28 @@ export class GatePassService {
         entityId: id,
         after: { note: dto.note ?? null },
       });
-      if (dto.outcome === 'rejected') await this.finish(c, id, 'rejected', dto.note ?? null);
-      else if (p.approvalMode === 'any') {
-        const n = await c.query<{ n: number }>(
-          `SELECT count(*)::int AS n FROM gate_pass_approvals WHERE pass_id = $1 AND status = 'approved'`,
+      if (p.approvalMode === 'any') {
+        // approved when N have approved and every mandatory level has; a mandatory level's rejection
+        // ends it at once, another rejection only when N can no longer be reached
+        const n = await c.query<{
+          approved: number;
+          open: number;
+          must_open: number;
+          must_rejected: number;
+        }>(
+          `SELECT count(*) FILTER (WHERE status = 'approved')::int AS approved, count(*) FILTER (WHERE status = 'pending')::int AS open,
+                  count(*) FILTER (WHERE mandatory AND status = 'pending')::int AS must_open,
+                  count(*) FILTER (WHERE mandatory AND status = 'rejected')::int AS must_rejected
+             FROM gate_pass_approvals WHERE pass_id = $1`,
           [id],
         );
-        if ((n.rows[0]?.n ?? 0) >= p.approvalNeed) await this.finish(c, id, 'approved', null);
-      } else {
+        const x = n.rows[0]!;
+        if (x.must_rejected > 0 || x.approved + x.open < p.approvalNeed)
+          await this.finish(c, id, 'rejected', dto.note ?? null);
+        else if (x.approved >= p.approvalNeed && x.must_open === 0)
+          await this.finish(c, id, 'approved', null);
+      } else if (dto.outcome === 'rejected') await this.finish(c, id, 'rejected', dto.note ?? null);
+      else {
         const next = await c.query<{ id: string }>(
           `UPDATE gate_pass_approvals SET status = 'pending' WHERE id = (
              SELECT id FROM gate_pass_approvals WHERE pass_id = $1 AND status = 'waiting' ORDER BY seq LIMIT 1) RETURNING id::text`,
@@ -730,7 +751,7 @@ export class GatePassService {
   private async detail(c: PoolClient, ctx: RequestContext, id: string) {
     const p = await this.find(c, id);
     const trail = await c.query<Row>(
-      `SELECT a.seq, a.label, a.status, a.acted_at, a.note, u.display_name AS acted_by,
+      `SELECT a.seq, a.label, a.status, a.mandatory, a.acted_at, a.note, u.display_name AS acted_by,
               (SELECT string_agg(x.display_name, ', ' ORDER BY x.display_name) FROM users x WHERE x.id = ANY(a.approver_user_ids)) AS approvers,
               app.current_user_id() = ANY(a.approver_user_ids) AS mine
          FROM gate_pass_approvals a LEFT JOIN users u ON u.id = a.acted_by WHERE a.pass_id = $1 ORDER BY a.seq`,
@@ -764,6 +785,7 @@ export class GatePassService {
         actedAt: iso(x.acted_at),
         note: text(x.note),
         mine: Boolean(x.mine),
+        mandatory: Boolean(x.mandatory),
       })),
       /** I may approve or reject now. */
       canDecide:
@@ -1474,6 +1496,12 @@ export class GatePassService {
           [id],
         );
       }
+      if (p.escortKind === 'other' && !dto.remark)
+        throw new DomainError(
+          'gate_pass.remark_needed',
+          'Add a remark: this person is not on the pupil’s record',
+          { status: 400 },
+        );
       const photo = this.photoOf(dto.photo);
       await c.query(
         `INSERT INTO gate_pass_photos (pass_id, school_id, content_type, bytes, taken_by) VALUES ($1, app.current_school_id(), $2, $3, app.current_user_id())
@@ -1481,8 +1509,8 @@ export class GatePassService {
         [id, photo.contentType, photo.bytes],
       );
       await c.query(
-        `UPDATE gate_passes SET state = 'handed_over', handover_at = now(), handover_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
-        [id],
+        `UPDATE gate_passes SET state = 'handed_over', handover_at = now(), handover_by = app.current_user_id(), handover_remark = $2, updated_at = now() WHERE id = $1`,
+        [id, dto.remark ?? null],
       );
       await this.audit.stage(ctx, c, {
         action: 'engagement.gate_pass.handover',

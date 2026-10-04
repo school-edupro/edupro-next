@@ -103,11 +103,12 @@ export async function handoverPass(
   id: string,
   photo: string,
   otp: string,
+  remark: string,
 ): Promise<HandoverResult> {
   try {
     const out = await apiFetch<{ ok: boolean; error?: string }>(`/gate-passes/${id}/handover`, {
       method: 'POST',
-      body: JSON.stringify({ photo, otp: otp || undefined }),
+      body: JSON.stringify({ photo, otp: otp || undefined, remark: remark.trim() || undefined }),
     });
     if (!out.ok) return { ok: false, error: out.error ?? 'The code is not right' };
     revalidatePath(BASE);

@@ -6,7 +6,7 @@ import type { SchoolTransfer } from './types';
  * and tickets are not approvals: they live only under the header Queries icon.
  */
 export interface ApprovalGroup {
-  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer';
+  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'gate_pass';
   title: string;
   help: string;
   href: string;
@@ -138,6 +138,45 @@ export async function myApprovals(
           })
           .catch(() => null)
       : null,
+    // gate passes wait on a person by name (class teacher, coordinator, principal...), not on a
+    // permission: everyone is asked, and the group shows only when something waits
+    apiFetch<{
+      data: Array<{
+        id: string;
+        number: string;
+        kind: string;
+        audience: string;
+        student: string | null;
+        section: string | null;
+        employee: string | null;
+        onDate: string;
+        atTime: string | null;
+        reason: string;
+        createdAt: string;
+      }>;
+    }>('/gate-passes/inbox')
+      .then((r): ApprovalGroup | null =>
+        r.data.length
+          ? {
+              key: 'gate_pass',
+              title: 'Gate passes',
+              help: 'Pupil and staff gate passes waiting for your approval',
+              href: '/engagement/gate-passes/approvals',
+              count: r.data.length,
+              items: r.data.slice(0, size).map((p) => ({
+                id: p.id,
+                title:
+                  p.audience === 'student'
+                    ? `${p.student ?? 'Student'}${p.section ? ` · ${p.section}` : ''}`
+                    : (p.employee ?? 'Employee'),
+                detail: `${p.kind.replace('_', ' ')} · ${p.onDate}${p.atTime ? `, ${p.atTime}` : ''} · ${p.reason}`,
+                href: `/engagement/gate-passes/${p.id}`,
+                since: p.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
   ]);
   return groups.filter((g): g is ApprovalGroup => g !== null);
 }

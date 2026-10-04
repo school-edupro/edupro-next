@@ -57,6 +57,7 @@ export default async function GatePassPage({
       'Handed over',
       p.handoverAt ? `${when(p.handoverAt)}${p.handoverBy ? ` by ${p.handoverBy}` : ''}` : null,
     ],
+    ['Front desk remark', p.handoverRemark],
     ['Parent’s code', p.otpVerified ? 'Confirmed' : null],
     ['Out at the gate', p.outAt ? `${when(p.outAt)}${p.outGate ? ` · ${p.outGate}` : ''}` : null],
     ['In at the gate', p.inAt ? when(p.inAt) : null],
@@ -127,6 +128,7 @@ export default async function GatePassPage({
             id={p.id}
             collector={escortLine(p) ?? 'the person collecting'}
             otpNeeded={p.otpNeeded}
+            outsider={p.escortKind === 'other'}
           />
         </Card>
       ) : null}

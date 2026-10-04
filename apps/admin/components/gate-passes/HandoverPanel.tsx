@@ -12,14 +12,18 @@ export function HandoverPanel({
   id,
   collector,
   otpNeeded,
+  outsider,
 }: {
   id: string;
   collector: string;
   otpNeeded: boolean;
+  /** Someone not on the pupil's record collects: the remark is then required. */
+  outsider: boolean;
 }) {
   const router = useRouter();
   const [photo, setPhoto] = useState('');
   const [otp, setOtp] = useState('');
+  const [remark, setRemark] = useState('');
   const [sent, setSent] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, start] = useTransition();
@@ -39,7 +43,9 @@ export function HandoverPanel({
       if (!photo) return setMsg('Take the photo of the person collecting the child.');
       if (otpNeeded && !/^\d{6}$/.test(otp))
         return setMsg('Enter the 6-digit code the parent got.');
-      const r = await handoverPass(id, photo, otp);
+      if (outsider && remark.trim().length < 3)
+        return setMsg('Add a remark: this person is not on the pupil’s record.');
+      const r = await handoverPass(id, photo, otp, remark);
       if (!r.ok) return setMsg(r.error);
       router.push(`/engagement/gate-passes/${id}?ok=handed_over`);
       router.refresh();
@@ -87,6 +93,20 @@ export function HandoverPanel({
           </label>
         </div>
       ) : null}
+      <label className="ep-field" htmlFor="ho-remark">
+        <span className="ep-field__label">
+          Remark by the front desk{outsider ? ' *' : ' (optional)'}
+        </span>
+        <input
+          id="ho-remark"
+          className="ep-input"
+          maxLength={300}
+          required={outsider}
+          placeholder={outsider ? 'ID proof seen, parent spoken to…' : 'Anything to note'}
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+        />
+      </label>
       {msg ? (
         <p className="ep-field__error" role="alert">
           {msg}

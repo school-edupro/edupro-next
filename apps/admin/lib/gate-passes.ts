@@ -38,6 +38,7 @@ export interface GatePass {
   decisionNote: string | null;
   handoverAt: string | null;
   handoverBy: string | null;
+  handoverRemark: string | null;
   otpVerified: boolean;
   outAt: string | null;
   outGate: string | null;
@@ -59,6 +60,7 @@ export interface PassApproval {
   actedAt: string | null;
   note: string | null;
   mine: boolean;
+  mandatory: boolean;
 }
 export interface PassItem {
   id: string;
@@ -104,6 +106,7 @@ export interface GatePassLevel {
   employeeId: string | null;
   employeeName?: string | null;
   active: boolean;
+  mandatory: boolean;
 }
 export interface GatePassSetup {
   settings: {

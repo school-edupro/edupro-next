@@ -106,6 +106,7 @@ export default async function GatePassGatePage({
                     ? `${when(found.handoverAt)}${found.handoverBy ? ` by ${found.handoverBy}` : ''}`
                     : null,
                 ],
+                ['Front desk remark', found.handoverRemark],
                 [
                   'Items',
                   found.itemList.length

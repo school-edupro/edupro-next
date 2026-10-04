@@ -8,7 +8,7 @@ export function ApprovalTrail({ pass }: { pass: GatePassDetail }) {
     <>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
         {pass.approvalMode === 'any'
-          ? `Any ${String(pass.approvalNeed)} of these approve.`
+          ? `Any ${String(pass.approvalNeed)} of these approve${pass.approvals.some((a) => a.mandatory) ? ', and every level marked “must approve”' : ''}.`
           : 'One after another, in this order.'}
       </p>
       <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Approval levels">
@@ -28,6 +28,7 @@ export function ApprovalTrail({ pass }: { pass: GatePassDetail }) {
               <tr key={a.seq}>
                 <td>
                   {a.seq}. {a.label}
+                  {a.mandatory ? <div className="ep-field__help">Must approve</div> : null}
                 </td>
                 <td>{a.approvers ?? '—'}</td>
                 <td>

@@ -213,10 +213,23 @@ describe('gate pass v2 (e2e)', () => {
       otp: code === '000000' ? '000001' : '000000',
     });
     expect(wrong.json()).toMatchObject({ ok: false });
-    const done = await post(`/gate-passes/${passId}/handover`, desk, { photo: PHOTO, otp: code });
+    // someone not on the record: the front desk's remark is needed too
+    expect(
+      (await post(`/gate-passes/${passId}/handover`, desk, { photo: PHOTO, otp: code })).json(),
+    ).toMatchObject({ type: expect.stringContaining('gate_pass.remark_needed') });
+    const done = await post(`/gate-passes/${passId}/handover`, desk, {
+      photo: PHOTO,
+      otp: code,
+      remark: 'Aadhaar seen; father confirmed on the phone',
+    });
     expect(done.json()).toMatchObject({
       ok: true,
-      pass: { state: 'handed_over', otpVerified: true, photos: { collector: true } },
+      pass: {
+        state: 'handed_over',
+        otpVerified: true,
+        photos: { collector: true },
+        handoverRemark: 'Aadhaar seen; father confirmed on the phone',
+      },
     });
     // the gate sees it with the photo taken at the desk, and lets the child out
     const board = await get('/gate-passes/gate/board', guard);
@@ -278,17 +291,86 @@ describe('gate pass v2 (e2e)', () => {
     // the father is on record: photo only, no code
     const done = await post(`/gate-passes/${made.json().id}/handover`, desk, { photo: PHOTO });
     expect(done.json()).toMatchObject({ ok: true, pass: { state: 'handed_over' } });
-    // a rejected one ends there, with the reason
+    // one rejection does not end it while one approval is still possible; all three do
     const second = await post('/gate-passes/mine', parent, {
       studentId,
       kind: 'late_arrival',
       reason: 'Traffic',
     });
-    const no = await post(`/gate-passes/${second.json().id}/decide`, teacher, {
+    const first = await post(`/gate-passes/${second.json().id}/decide`, teacher, {
+      outcome: 'rejected',
+      note: 'Exam today',
+    });
+    expect(first.json().state).toBe('pending');
+    await post(`/gate-passes/${second.json().id}/decide`, coordinator, {
+      outcome: 'rejected',
+      note: 'Exam today',
+    });
+    const no = await post(`/gate-passes/${second.json().id}/decide`, principal, {
       outcome: 'rejected',
       note: 'Exam today',
     });
     expect(no.json()).toMatchObject({ state: 'rejected', decisionNote: 'Exam today' });
+  });
+
+  it('any 2 with the principal mandatory: two others are not enough, and a non-mandatory rejection does not end it', async () => {
+    const setup = await get('/gate-passes/setup');
+    const levels = (setup.levels as Array<{ audience: string; label: string }>).map((l) => ({
+      ...l,
+      mandatory: l.audience === 'student' && l.label === 'Principal',
+    }));
+    const save = await inject({
+      method: 'PUT',
+      url: '/gate-passes/setup',
+      headers: h(),
+      json: { ...setup.settings, studentMode: 'any', studentNeed: 2, levels },
+    });
+    expect(save.statusCode).toBe(200);
+    const ask = () =>
+      post('/gate-passes', desk, {
+        studentId,
+        kind: 'early_leave',
+        reason: 'Family function',
+        escortKind: 'father',
+      });
+    // teacher + coordinator = 2, but the principal has not approved
+    const a = (await ask()).json();
+    expect(
+      (a.approvals as Array<{ label: string; mandatory: boolean }>).find(
+        (x) => x.label === 'Principal',
+      )?.mandatory,
+    ).toBe(true);
+    await post(`/gate-passes/${a.id}/decide`, teacher, { outcome: 'approved' });
+    const two = await post(`/gate-passes/${a.id}/decide`, coordinator, { outcome: 'approved' });
+    expect(two.json()).toMatchObject({ state: 'pending', waitingOn: 'Principal' });
+    const ok = await post(`/gate-passes/${a.id}/decide`, principal, { outcome: 'approved' });
+    expect(ok.json().state).toBe('approved');
+    // the teacher rejects: 2 are still reachable (coordinator + principal), so it goes on
+    const b = (await ask()).json();
+    const no = await post(`/gate-passes/${b.id}/decide`, teacher, {
+      outcome: 'rejected',
+      note: 'Test tomorrow',
+    });
+    expect(no.json().state).toBe('pending');
+    await post(`/gate-passes/${b.id}/decide`, coordinator, { outcome: 'approved' });
+    expect(
+      (await post(`/gate-passes/${b.id}/decide`, principal, { outcome: 'approved' })).json().state,
+    ).toBe('approved');
+    // the mandatory level rejects: it ends at once
+    const c3 = (await ask()).json();
+    const end = await post(`/gate-passes/${c3.id}/decide`, principal, {
+      outcome: 'rejected',
+      note: 'Not today',
+    });
+    expect(end.json()).toMatchObject({ state: 'rejected', decisionNote: 'Not today' });
+    // two non-mandatory rejections: 2 can no longer be reached
+    const d = (await ask()).json();
+    await post(`/gate-passes/${d.id}/decide`, teacher, { outcome: 'rejected', note: 'No' });
+    const gone = await post(`/gate-passes/${d.id}/decide`, coordinator, {
+      outcome: 'rejected',
+      note: 'No again',
+    });
+    expect(gone.json().state).toBe('rejected');
   });
 
   it('a member of staff takes an RGP with items; the gate marks out and what came back', async () => {

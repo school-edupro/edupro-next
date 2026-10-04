@@ -32,6 +32,13 @@
     items returned; what is still outside shows on the dashboard.
   - **Set-up (admin)**: the levels for pupil and for staff passes (class teacher, a role, a
     designation or one employee), "one after another" or "any N are enough", and the parent's code.
+    In "any N" mode tick **Must approve** on a level (say the Principal): the pass is approved only
+    when N have approved and every ticked level has; a ticked level's rejection ends it at once, any
+    other rejection only when N can no longer be reached.
+  - **Remark at hand-over**: the front desk may add a remark; it is compulsory when someone not on
+    the pupil's record collects the child. The gate sees it.
+  - A pass that waits on you also counts in the **approvals icon** in the header and lists under
+    My approvals.
 - **Appointments** (its own menu): each person sees only the pages of their role. Give the role
   **Front Desk (appointments)** to whoever runs the queue and **Gate / Security** to the gate staff
   under Access; the school admin keeps **Set-up**; everyone else, the principal included, sees only

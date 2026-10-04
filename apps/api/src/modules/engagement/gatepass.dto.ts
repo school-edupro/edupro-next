@@ -102,6 +102,8 @@ export const HandoverSchema = z.object({
   /** The person collecting, taken live at the front desk (a small image as a data URL). */
   photo: z.string().min(100).max(420_000),
   otp: blank(z.string().regex(/^\d{6}$/, 'the 6-digit code')),
+  /** What the front desk noted (ID seen, parent spoken to); needed when an outsider collects. */
+  remark: blank(z.string().trim().min(3).max(300)),
 });
 export class HandoverDto extends createZodDto(HandoverSchema) {}
 
@@ -159,6 +161,8 @@ const LevelSchema = z
     designation: blank(z.string().trim().max(80)),
     employeeId: blank(IdSchema),
     active: z.boolean().default(true),
+    /** In "any N" mode: this level must approve whatever the others do. */
+    mandatory: z.boolean().default(false),
   })
   .refine((v) => v.kind !== 'class_teacher' || v.audience === 'student', {
     message: 'The class teacher approves pupil passes only',
