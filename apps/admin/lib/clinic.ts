@@ -30,6 +30,14 @@ export interface CheckupField {
   key: string;
   label: string;
   group: string;
+  kind: 'text' | 'number' | 'choice';
+  unit: string | null;
+  options: string[];
+  /** Added by the school: can be edited and switched off. Built-in fields are only hidden. */
+  custom: boolean;
+  id: string | null;
+  active: boolean;
+  sortOrder: number;
 }
 export interface ClinicSettings {
   checkupHidden: string[];
@@ -186,3 +194,43 @@ export const MASTER_LABEL: Record<ClinicMaster['kind'], [string, string]> = {
 };
 export const medName = (m: { name: string; strength: string | null }) =>
   `${m.name}${m.strength ? ` ${m.strength}` : ''}`;
+
+export type SetupKind = 'clinic' | 'doctor' | 'nurse' | 'disease' | 'medicine';
+export interface SetupRow {
+  id: string;
+  name: string;
+  active: boolean;
+  // people
+  qualification?: string | null;
+  regNo?: string | null;
+  mobile?: string | null;
+  employeeId?: string | null;
+  employee?: string | null;
+  employeeCode?: string | null;
+  note?: string | null;
+  sortOrder?: number;
+  // medicines
+  form?: string;
+  strength?: string | null;
+  unit?: string;
+  lowStockAt?: number;
+  stock?: number;
+}
+export const SETUP_TITLE: Record<SetupKind, [string, string]> = {
+  clinic: ['Clinics', 'clinic'],
+  doctor: ['Doctors', 'doctor'],
+  nurse: ['Nurses', 'nurse'],
+  disease: ['Diseases and complaints', 'disease or complaint'],
+  medicine: ['Medicines', 'medicine'],
+};
+export const MEDICINE_FORMS = [
+  'Tablet',
+  'Capsule',
+  'Syrup',
+  'Ointment',
+  'Drops',
+  'Spray',
+  'Injection',
+  'Dressing',
+  'Other',
+];

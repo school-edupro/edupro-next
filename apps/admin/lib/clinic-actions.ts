@@ -111,7 +111,7 @@ export async function closeClinicVisit(fd: FormData) {
 
 // ---- stock --------------------------------------------------------------------------------------------
 export async function receiveClinicStock(fd: FormData) {
-  const here = `${BASE}/stock`;
+  const here = `${BASE}/stock?view=batches`;
   try {
     await apiFetch('/clinic/stock', {
       method: 'POST',
@@ -131,7 +131,7 @@ export async function receiveClinicStock(fd: FormData) {
   redirect(withOk(here, 'received'));
 }
 export async function writeOffClinicStock(fd: FormData) {
-  const here = `${BASE}/stock`;
+  const here = returnTo(fd, `${BASE}/stock?view=batches`);
   try {
     await apiFetch('/clinic/stock/write-off', {
       method: 'POST',
@@ -221,4 +221,102 @@ export async function publishHealthCards(fd: FormData) {
   }
   revalidatePath(BASE);
   redirect(`${sheet}?ok=published&n=${String(n)}`);
+}
+
+// ---- set-up lists: add / edit from a plain form, upload from Excel ------------------------------------
+const SETUP = `${BASE}/setup`;
+export async function saveClinicEntry(fd: FormData) {
+  const kind = str(fd, 'kind');
+  const id = str(fd, 'id');
+  const here = `${SETUP}?tab=${kind}`;
+  const active = fd.get('active') !== null;
+  try {
+    if (kind === 'medicine')
+      await apiFetch(id ? `/clinic/setup/medicines/${id}` : '/clinic/setup/medicines', {
+        method: id ? 'PUT' : 'POST',
+        body: JSON.stringify({
+          name: str(fd, 'name'),
+          form: str(fd, 'form') || 'Tablet',
+          strength: str(fd, 'strength'),
+          unit: str(fd, 'unit') || 'tablet',
+          lowStockAt: Number(str(fd, 'lowStockAt') || 10),
+          active,
+        }),
+      });
+    else
+      await apiFetch(id ? `/clinic/setup/masters/${id}` : '/clinic/setup/masters', {
+        method: id ? 'PUT' : 'POST',
+        body: JSON.stringify({
+          kind,
+          name: str(fd, 'name'),
+          qualification: str(fd, 'qualification'),
+          regNo: str(fd, 'regNo'),
+          mobile: str(fd, 'mobile'),
+          employeeId: str(fd, 'employeeId'),
+          note: str(fd, 'note'),
+          active,
+          sortOrder: Number(str(fd, 'sortOrder') || 0),
+        }),
+      });
+  } catch (error) {
+    back(id ? `${here}&edit=${id}` : `${here}&add=1`, error);
+  }
+  revalidatePath(BASE);
+  redirect(withOk(here, 'saved'));
+}
+
+/** An Excel file from the browser goes to the API as base64; the answer says what went in and what did not. */
+async function upload(fd: FormData, kind: string, url: string, here: string) {
+  const f = fd.get('file');
+  if (!(f instanceof File) || f.size === 0)
+    redirect(
+      `${here}${here.includes('?') ? '&' : '?'}error=validation-failed&detail=${encodeURIComponent('Choose the Excel file first.')}`,
+    );
+  if (f.size > 700_000)
+    redirect(
+      `${here}${here.includes('?') ? '&' : '?'}error=validation-failed&detail=${encodeURIComponent('The file is too large (700 KB at most). Split it into smaller files.')}`,
+    );
+  let out: {
+    rows: number;
+    added: number;
+    updated: number;
+    errors: Array<{ row: number; message: string }>;
+  };
+  try {
+    out = await apiFetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind,
+        fileBase64: Buffer.from(await f.arrayBuffer()).toString('base64'),
+      }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath(BASE);
+  const bad = out.errors
+    .slice(0, 8)
+    .map((e) => `row ${String(e.row)}: ${e.message}`)
+    .join(' | ');
+  redirect(
+    `${here}${here.includes('?') ? '&' : '?'}ok=imported&added=${String(out.added)}&updated=${String(out.updated)}&failed=${String(out.errors.length)}${bad ? `&bad=${encodeURIComponent(bad.slice(0, 600))}` : ''}`,
+  );
+}
+export async function importClinicSetup(fd: FormData) {
+  const kind = str(fd, 'kind');
+  await upload(fd, kind, '/clinic/setup/import', `${SETUP}?tab=${kind}`);
+}
+export async function importClinicStock(fd: FormData) {
+  await upload(fd, 'stock', '/clinic/stock/import', `${BASE}/stock?view=batches`);
+}
+
+export async function saveCheckupField(id: string | null, body: Record<string, unknown>) {
+  const r = await result(() =>
+    apiFetch<ClinicSetup>(id ? `/clinic/setup/fields/${id}` : '/clinic/setup/fields', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(body),
+    }),
+  );
+  revalidatePath(`${BASE}/setup`);
+  return r;
 }

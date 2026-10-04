@@ -204,6 +204,38 @@ export default async function HealthSheetPage({
                               ))}
                             </select>
                           </label>
+                        ) : f.kind === 'choice' ? (
+                          <label key={f.key} className="ep-field" htmlFor={`hk-${f.key}`}>
+                            <span className="ep-field__label">{f.label}</span>
+                            <select
+                              id={`hk-${f.key}`}
+                              name={`f.${f.key}`}
+                              className="ep-select"
+                              defaultValue={h?.findings[f.key] ?? ''}
+                            >
+                              <option value="">Not examined</option>
+                              {f.options.map((o) => (
+                                <option key={o} value={o}>
+                                  {o}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : f.kind === 'number' ? (
+                          <label key={f.key} className="ep-field" htmlFor={`hk-${f.key}`}>
+                            <span className="ep-field__label">
+                              {f.label}
+                              {f.unit ? ` (${f.unit})` : ''}
+                            </span>
+                            <input
+                              id={`hk-${f.key}`}
+                              name={`f.${f.key}`}
+                              type="number"
+                              step="any"
+                              className="ep-input"
+                              defaultValue={h?.findings[f.key] ?? ''}
+                            />
+                          </label>
                         ) : (
                           <label key={f.key} className="ep-field" htmlFor={`hk-${f.key}`}>
                             <span className="ep-field__label">{f.label}</span>

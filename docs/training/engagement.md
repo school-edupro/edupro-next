@@ -87,6 +87,16 @@
     health card in the portal under Health and download it as PDF. Excel of the whole check-up.
   - **Dashboard**: today, six months and day by day (pupils and staff), what they came for, classes and
     departments, outcomes, frequent visitors, medicines, and how far each check-up has got.
+  - **Lists everywhere**: each set-up list (doctors, nurses, diseases, medicines, clinics) and each
+    stock list (in stock, batches, movements) has search and filters, pages, **Excel** and **PDF**.
+    **Upload from Excel**: download the sample, fill it, upload; a name already on the list is updated,
+    and rows that cannot be read are listed with their row number. Opening stock uploads the same way
+    under Medicine stock → Receive stock.
+  - **Your own check-up fields**: Set-up → Check-up form and card → add a field to a section or start
+    a new section; a field is short text, a number with a unit, or a choice list. It shows on the
+    form, the health card (PDF and portal) and the Excel.
+  - **Parents** see one Health list (visits and cards, with filters and pages); each entry opens in
+    full: everything recorded at the visit, or the card section by section with the PDF.
 - **Engagement → Queries**: answer within the category's SLA; internal notes stay internal.
 
 ## Periodic routine
