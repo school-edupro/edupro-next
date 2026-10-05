@@ -997,7 +997,7 @@ export interface PaymentIntent {
   events?: Array<{ id: string; kind: string; providerRef: string | null; createdAt: string }>;
 }
 
-export type AttendanceCode = 'P' | 'A' | 'L' | 'SR' | 'H' | 'OD' | 'SB';
+export type AttendanceCode = 'P' | 'A' | 'L' | 'SR' | 'H' | 'OD' | 'SB' | 'LV';
 export interface AttendanceRosterRow {
   studentId: string;
   name: string;
@@ -1008,6 +1008,11 @@ export interface AttendanceRosterRow {
   inAt: string | null;
   outAt: string | null;
   source: string | null;
+  suggested?: string | null;
+  hint?: {
+    leave: { number: string } | null;
+    pass: { kind: 'early_leave' | 'late_arrival'; number: string; atTime: string | null } | null;
+  } | null;
 }
 export interface AttendanceSession {
   id: string | null;
@@ -1021,6 +1026,14 @@ export interface AttendanceSession {
   markedBy: string | null;
   markedAt: string | null;
   locked: boolean;
+  markedLate?: boolean;
+  window?: {
+    open: boolean;
+    late: boolean;
+    from: string | null;
+    to: string | null;
+    note: string | null;
+  };
   roster: AttendanceRosterRow[];
   counts: Record<string, number>;
 }
@@ -1036,6 +1049,7 @@ export interface AttendanceSummaryRow {
   absent: number;
   late: number;
   codes: Record<string, number>;
+  leave?: number;
 }
 export interface AttendanceSummary {
   date: string;

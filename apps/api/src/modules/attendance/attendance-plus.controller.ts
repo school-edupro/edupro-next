@@ -7,9 +7,11 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { AttendanceDeskService } from './attendance-desk.service';
 import {
   AttendanceSetupDto,
+  BusRegisterFileDto,
   BusRegisterQueryDto,
   BusRollMarkDto,
   BusRollQueryDto,
+  ClassRegisterFileDto,
   ClassRegisterQueryDto,
   DayQueryDto,
   MonthQueryDto,
@@ -74,6 +76,16 @@ export class AttendanceDeskController {
   @RequirePermission(ATTENDANCE.view)
   classRegister(@ReqCtx() ctx: RequestContext, @Query() q: ClassRegisterQueryDto) {
     return this.desk.classRegister(ctx, q.classSectionId, q.month);
+  }
+
+  @Get('class-register/file')
+  @ApiOperation({
+    summary: 'The class register as a file in JSON (for the teacher app’s own download route)',
+  })
+  @RequirePermission(ATTENDANCE.view)
+  async classRegisterJson(@ReqCtx() ctx: RequestContext, @Query() q: ClassRegisterFileDto) {
+    const f = await this.desk.classRegisterFile(ctx, q.classSectionId, q.month, q.format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get('class-register.xlsx')
@@ -145,6 +157,13 @@ export class BusRollController {
   @AuthenticatedOnly()
   register(@ReqCtx() ctx: RequestContext, @Query() q: BusRegisterQueryDto) {
     return this.roll.register(ctx, q);
+  }
+
+  @Get('register/file')
+  @AuthenticatedOnly()
+  async registerJson(@ReqCtx() ctx: RequestContext, @Query() q: BusRegisterFileDto) {
+    const f = await this.roll.registerFile(ctx, q, q.format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get('register.xlsx')

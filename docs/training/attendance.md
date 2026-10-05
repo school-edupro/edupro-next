@@ -36,3 +36,25 @@
    days count as leave.
 5. _A family disputes an absence._ The pupil's attendance history shows the source of each mark (teacher,
    gate, bus, biometric) with the time.
+
+## Attendance, completed (October 2026)
+
+- **Set-up (coordinator or admin).** Attendance → Set-up: the **marking windows** for class attendance,
+  the bus morning trip and the bus afternoon trip (blank = any time), how many days back a teacher may
+  still mark, and the **teacher of each bus route** for the morning and the afternoon trip. The class
+  teacher of each class is mapped under Academics → Teacher assignments; the page lists classes without one.
+- **Leave and gate passes show by themselves.** An approved leave pre-fills the pupil as **LV (leave)**
+  in class and on the bus. A gate pass to leave early pre-fills _short leave_ in class and _gate pass_
+  on the afternoon bus; a late-arrival pass pre-fills _late_ in class and _gate pass_ on the morning
+  bus. The teacher sees the tag and can change the mark if the child did come.
+- **Bus attendance.** Teacher app → Bus attendance: choose the route and trip, the list is the route's
+  approved riders in stop order; mark P on the bus, A not on the bus, LV leave, GP gate pass, OT other
+  arrangement. The list also shows today's class attendance and the bus card reader time when there is one.
+- **After the window.** A teacher can read but not mark. The coordinator or admin marks from the ERP
+  (flagged _marked late_) or reopens the day for that class or route under Set-up → Reopen a day.
+- **Registers.** Attendance → Monthly registers: a class, or a route and trip, for a month with totals;
+  Excel and PDF. A teacher downloads the register of their own class or route from the teacher app.
+- **Dashboard.** Attendance → Dashboard: in-school percentage, absent, on leave, gate passes, classes and
+  bus trips not yet marked (with the teacher's name), both bus trips, and the last 14 days.
+- **Families** see class attendance and the bus (morning and afternoon) under Attendance, and today's
+  status on the home page.

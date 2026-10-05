@@ -39,6 +39,11 @@ export const BusRegisterQuerySchema = z.object({ routeId: IdSchema, trip: Trip, 
 export class BusRegisterQueryDto extends createZodDto(BusRegisterQuerySchema) {}
 export const ClassRegisterQuerySchema = z.object({ classSectionId: IdSchema, month: Month });
 export class ClassRegisterQueryDto extends createZodDto(ClassRegisterQuerySchema) {}
+const Format = z.enum(['xlsx', 'pdf']).default('xlsx');
+export const BusRegisterFileSchema = BusRegisterQuerySchema.extend({ format: Format });
+export class BusRegisterFileDto extends createZodDto(BusRegisterFileSchema) {}
+export const ClassRegisterFileSchema = ClassRegisterQuerySchema.extend({ format: Format });
+export class ClassRegisterFileDto extends createZodDto(ClassRegisterFileSchema) {}
 export const DayQuerySchema = z.object({ date: DateSchema.optional() });
 export class DayQueryDto extends createZodDto(DayQuerySchema) {}
 export const MonthQuerySchema = z.object({ month: Month.optional() });

@@ -44,8 +44,23 @@ interface Birthday {
   self: boolean;
 }
 
+interface DayOf {
+  id: string;
+  rides: boolean;
+  busPick: string | null;
+  busDrop: string | null;
+  hint: { leave: unknown; pass: { kind: 'early_leave' | 'late_arrival' } | null } | null;
+}
+const BUS: Record<string, string> = {
+  P: 'On the bus',
+  A: 'Not on the bus',
+  LV: 'On leave',
+  GP: 'Gate pass',
+  OT: 'Other arrangement',
+};
 const CODE: Record<string, [string, 'success' | 'danger' | 'warning' | 'info']> = {
   P: ['Present', 'success'],
+  LV: ['On leave', 'info'],
   A: ['Absent', 'danger'],
   L: ['Late', 'warning'],
   SR: ['Short leave', 'warning'],
@@ -108,7 +123,7 @@ export async function HomeDashboard({
 }) {
   const today = istToday();
   const tomorrow = addDays(today, 1);
-  const [att, fees, viewer, notices, cal, birthdays] = await Promise.all([
+  const [att, fees, viewer, notices, cal, birthdays, dayOf] = await Promise.all([
     bff.api.fetch<Attendance>(`/attendance/mine?month=${today.slice(0, 7)}`).catch(() => null),
     audience === 'parent' ? bff.api.fetch<Fees>('/fees/mine').catch(() => null) : null,
     bff.api.fetch<Viewer>('/academics/daily-work/viewer').catch(() => null),
@@ -121,6 +136,11 @@ export async function HomeDashboard({
       .fetch<{ data: Birthday[] }>(`/engagement/mine/birthdays/${childId}`)
       .then((r) => r.data)
       .catch(() => [] as Birthday[]),
+    // today on the bus, and what the school already knows of the day (approved leave, gate pass)
+    bff.api
+      .fetch<{ children: DayOf[] }>('/attendance/desk/mine/today')
+      .then((r) => r.children.find((c) => c.id === childId) ?? null)
+      .catch(() => null),
   ]);
   const section = viewer?.students.find((s) => s.id === childId)?.classSectionId ?? null;
   const work = section
@@ -186,6 +206,45 @@ export async function HomeDashboard({
             }
             href="/attendance"
           />
+          {dayOf?.rides ? (
+            <Glance
+              icon="bus"
+              label={t(lang, 'School bus today')}
+              value={
+                dayOf.busPick || dayOf.busDrop ? (
+                  <Badge
+                    tone={dayOf.busPick === 'A' || dayOf.busDrop === 'A' ? 'warning' : 'success'}
+                  >
+                    {[
+                      dayOf.busPick
+                        ? `${t(lang, 'Morning')}: ${t(lang, BUS[dayOf.busPick] ?? dayOf.busPick)}`
+                        : null,
+                      dayOf.busDrop
+                        ? `${t(lang, 'Afternoon')}: ${t(lang, BUS[dayOf.busDrop] ?? dayOf.busDrop)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Badge>
+                ) : (
+                  t(lang, 'Not marked yet')
+                )
+              }
+              note={
+                dayOf.hint?.leave
+                  ? t(lang, 'Leave is approved for today')
+                  : dayOf.hint?.pass
+                    ? t(
+                        lang,
+                        dayOf.hint.pass.kind === 'early_leave'
+                          ? 'Gate pass: leaves early today'
+                          : 'Gate pass: comes late today',
+                      )
+                    : t(lang, 'Marked by the bus teacher, morning and afternoon')
+              }
+              href="/attendance"
+            />
+          ) : null}
           {isParent ? (
             <Glance
               icon="wallet"

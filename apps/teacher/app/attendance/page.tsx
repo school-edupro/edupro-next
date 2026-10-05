@@ -22,6 +22,11 @@ interface Roster {
   remarks: string | null;
   inAt: string | null;
   source: string | null;
+  hint: {
+    leave: { number: string } | null;
+    pass: { kind: 'early_leave' | 'late_arrival'; number: string; atTime: string | null } | null;
+  } | null;
+  suggested: string | null;
 }
 interface Session {
   id: string | null;
@@ -33,6 +38,14 @@ interface Session {
   markedBy: string | null;
   markedAt: string | null;
   locked: boolean;
+  markedLate: boolean;
+  window: {
+    open: boolean;
+    late: boolean;
+    from: string | null;
+    to: string | null;
+    note: string | null;
+  };
   roster: Roster[];
   counts: Record<string, number>;
 }
@@ -40,6 +53,7 @@ interface Session {
 const CODES: Array<[string, string]> = [
   ['P', 'Present'],
   ['A', 'Absent'],
+  ['LV', 'Leave'],
   ['L', 'Late'],
   ['SR', 'Short leave'],
   ['H', 'Half day'],
@@ -50,6 +64,7 @@ const ERRORS: Record<string, string> = {
   'attendance.future_date': 'Attendance cannot be marked for a future date.',
   'attendance.weekly_off': 'That day is a weekly off.',
   'attendance.holiday': 'That day is a holiday.',
+  'attendance.window_closed': 'Marking is closed for this day.',
   'attendance.locked': 'This register is locked; ask the coordinator to unlock it.',
   'attendance.year_closed': 'The academic year does not accept attendance any more.',
   'attendance.not_assigned': 'You are not assigned to mark this section.',
@@ -68,6 +83,7 @@ export default async function AttendancePage({
   searchParams: Promise<{
     section?: string;
     subject?: string;
+    pick?: string;
     date?: string;
     ok?: string;
     error?: string;
@@ -99,10 +115,13 @@ export default async function AttendancePage({
       classSectionId: a.classSectionId,
       subjectId: a.subjectId,
     }));
+  // the section box sends "section|subject"; older links carry them apart
+  const [pickSection, pickSubject] = (sp.pick ?? '').split('|');
+  const wantSection = pickSection || sp.section;
+  const wantSubject = sp.pick !== undefined ? (pickSubject ?? '') : (sp.subject ?? '');
   const chosen =
-    options.find(
-      (o) => o.classSectionId === sp.section && (o.subjectId ?? '') === (sp.subject ?? ''),
-    ) ?? options[0];
+    options.find((o) => o.classSectionId === wantSection && (o.subjectId ?? '') === wantSubject) ??
+    options[0];
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today();
   let session: Session | null = null;
   let loadError: string | null = null;
@@ -117,6 +136,8 @@ export default async function AttendancePage({
     }
   }
   const counts = session?.counts ?? {};
+  const closed = Boolean(session && (session.locked || !session.window.open));
+  const month = date.slice(0, 7);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
@@ -124,7 +145,7 @@ export default async function AttendancePage({
         title={chosen ? chosen.label : 'Attendance'}
         description={
           session?.id
-            ? `${counts.P ?? 0} present · ${counts.A ?? 0} absent · ${counts.L ?? 0} late · marked by ${session.markedBy ?? '—'}${session.source === 'rfid' ? ' (RFID gate)' : ''}`
+            ? `${counts.P ?? 0} present · ${counts.A ?? 0} absent · ${counts.LV ?? 0} leave · ${counts.L ?? 0} late · marked by ${session.markedBy ?? '—'}${session.source === 'rfid' ? ' (RFID gate)' : ''}${session.markedLate ? ' (late)' : ''}`
             : 'Not marked yet for this date.'
         }
         actions={
@@ -176,9 +197,28 @@ export default async function AttendancePage({
           </Button>
         </form>
         <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
-          Codes: P present · A absent · L late · SR short leave · H half day · OD on duty · SB stay
-          back.
+          Codes: P present · A absent · LV leave · L late · SR short leave · H half day · OD on duty
+          · SB stay back. An approved leave or a gate pass of the day is filled in already; change
+          it if the child did come.
         </p>
+        {chosen && !chosen.subjectId ? (
+          <p className="ep-field__help" style={{ marginBottom: 0 }}>
+            Register of {month}:{' '}
+            <a
+              href={`/api/register?section=${chosen.classSectionId}&month=${month}&format=xlsx`}
+              style={{ textDecoration: 'underline' }}
+            >
+              Excel
+            </a>{' '}
+            ·{' '}
+            <a
+              href={`/api/register?section=${chosen.classSectionId}&month=${month}&format=pdf`}
+              style={{ textDecoration: 'underline' }}
+            >
+              PDF
+            </a>
+          </p>
+        ) : null}
       </Card>
       {loadError ? <Card>{loadError}</Card> : null}
       {session && chosen ? (
@@ -192,6 +232,20 @@ export default async function AttendancePage({
             )
           }
         >
+          {session.window.note ? (
+            <div
+              className={`ep-alert ${session.window.open ? 'ep-alert--info' : 'ep-alert--warning'}`}
+              role="status"
+              style={{ marginBottom: 'var(--sp-3)' }}
+            >
+              {session.window.note}
+            </div>
+          ) : session.window.from || session.window.to ? (
+            <p className="ep-field__help">
+              Marking is open {session.window.from ?? 'from the start of the day'} –{' '}
+              {session.window.to ?? 'the end of the day'}.
+            </p>
+          ) : null}
           <form action={markAttendance}>
             <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
             <input type="hidden" name="subjectId" value={chosen.subjectId ?? ''} />
@@ -217,6 +271,15 @@ export default async function AttendancePage({
                           ? ` · in ${new Date(r.inAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
                           : ''}
                       </div>
+                      {r.hint?.leave ? <Badge tone="info">Leave approved</Badge> : null}{' '}
+                      {r.hint?.pass ? (
+                        <Badge tone="warning">
+                          {r.hint.pass.kind === 'early_leave'
+                            ? 'Gate pass: leaves early'
+                            : 'Gate pass: comes late'}
+                          {r.hint.pass.atTime ? ` ${r.hint.pass.atTime}` : ''}
+                        </Badge>
+                      ) : null}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
@@ -230,8 +293,8 @@ export default async function AttendancePage({
                               type="radio"
                               name={`code-${r.studentId}`}
                               value={code}
-                              defaultChecked={(r.code ?? 'P') === code}
-                              disabled={session.locked}
+                              defaultChecked={(r.code ?? r.suggested ?? 'P') === code}
+                              disabled={closed}
                             />
                             {code}
                           </label>
@@ -245,7 +308,7 @@ export default async function AttendancePage({
                         aria-label={`Remarks · ${r.name}`}
                         defaultValue={r.remarks ?? ''}
                         maxLength={200}
-                        disabled={session.locked}
+                        disabled={closed}
                         style={{ minWidth: 120 }}
                       />
                     </td>
@@ -253,7 +316,7 @@ export default async function AttendancePage({
                 ))}
               </tbody>
             </table>
-            {!session.locked ? (
+            {!closed ? (
               <div
                 style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--sp-3)' }}
               >
@@ -263,7 +326,9 @@ export default async function AttendancePage({
               </div>
             ) : (
               <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
-                This register was locked by the coordinator.
+                {session.locked
+                  ? 'This register was locked by the coordinator.'
+                  : 'Marking is closed for this day; the coordinator can mark it or reopen it for you.'}
               </p>
             )}
           </form>

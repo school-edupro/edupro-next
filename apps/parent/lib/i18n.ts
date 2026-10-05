@@ -13,6 +13,19 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'On leave': 'अवकाश पर',
+  'on leave': 'अवकाश पर',
+  'School bus today': 'आज स्कूल बस',
+  Morning: 'सुबह',
+  Afternoon: 'दोपहर',
+  'On the bus': 'बस में',
+  'Not on the bus': 'बस में नहीं',
+  'Other arrangement': 'अन्य व्यवस्था',
+  'trips on the bus': 'यात्राएँ बस से',
+  'Leave is approved for today': 'आज का अवकाश स्वीकृत है',
+  'Gate pass: leaves early today': 'गेट पास: आज जल्दी जाएगा',
+  'Gate pass: comes late today': 'गेट पास: आज देर से आएगा',
+  'Marked by the bus teacher, morning and afternoon': 'बस शिक्षक द्वारा सुबह और दोपहर दर्ज',
   'Replacement bus': 'वैकल्पिक बस',
   'runs this route in place of': 'इस मार्ग पर चल रही है, इसकी जगह:',
   till: 'तक:',

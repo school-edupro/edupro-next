@@ -5,7 +5,7 @@ import { lockAttendance, markAttendance } from '@/lib/actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { AttendanceCode, AttendanceSession, AttendanceSummary } from '@/lib/types';
 
-const CODES: AttendanceCode[] = ['P', 'A', 'L', 'SR', 'H', 'OD', 'SB'];
+const CODES: AttendanceCode[] = ['P', 'A', 'LV', 'L', 'SR', 'H', 'OD', 'SB'];
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 
 /** S9-06: the section register for a date; coordinators lock it once the day is closed. */
@@ -125,6 +125,15 @@ export default async function RegisterPage({
                     <td>
                       <a href={`/people/students/${r.studentId}`}>{r.name}</a>
                       <div className="ep-kicker">{r.admissionNo}</div>
+                      {r.hint?.leave ? <Badge tone="info">Leave approved</Badge> : null}{' '}
+                      {r.hint?.pass ? (
+                        <Badge tone="warning">
+                          {r.hint.pass.kind === 'early_leave'
+                            ? 'Gate pass: leaves early'
+                            : 'Gate pass: comes late'}
+                          {r.hint.pass.atTime ? ` ${r.hint.pass.atTime}` : ''}
+                        </Badge>
+                      ) : null}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
@@ -138,7 +147,7 @@ export default async function RegisterPage({
                               type="radio"
                               name={`code-${r.studentId}`}
                               value={code}
-                              defaultChecked={(r.code ?? 'P') === code}
+                              defaultChecked={(r.code ?? r.suggested ?? 'P') === code}
                               disabled={!canMark || session.locked}
                             />
                             {code}

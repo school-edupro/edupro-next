@@ -12,11 +12,24 @@ interface Child {
   section: string | null;
   month: string;
   days: Array<{ date: string; code: string; inAt: string | null; outAt: string | null }>;
-  summary: { days: number; present: number; absent: number };
+  summary: { days: number; present: number; absent: number; leave?: number };
 }
+interface BusChild {
+  id: string;
+  days: Array<{ date: string; pick: string | null; drop: string | null; route: string }>;
+  summary: { trips: number; onBus: number; notOnBus: number };
+}
+const BUS: Record<string, [string, 'success' | 'danger' | 'warning' | 'neutral' | 'info']> = {
+  P: ['On the bus', 'success'],
+  A: ['Not on the bus', 'danger'],
+  LV: ['On leave', 'info'],
+  GP: ['Gate pass', 'warning'],
+  OT: ['Other arrangement', 'neutral'],
+};
 const LABEL: Record<string, [string, 'success' | 'danger' | 'warning' | 'neutral' | 'info']> = {
   P: ['Present', 'success'],
   A: ['Absent', 'danger'],
+  LV: ['On leave', 'info'],
   L: ['Late', 'warning'],
   SR: ['Short leave', 'warning'],
   H: ['Half day', 'warning'],
@@ -86,6 +99,11 @@ export default async function AttendancePage({
     year: 'numeric',
     timeZone: 'UTC',
   });
+  // the bus of the same month: morning and afternoon, as the bus teacher marked it
+  const bus = await bff.api
+    .fetch<{ children: BusChild[] }>(`/attendance/bus-roll/mine?month=${month}`)
+    .then((r) => r.children)
+    .catch(() => [] as BusChild[]);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
@@ -137,7 +155,7 @@ export default async function AttendancePage({
                 >
                   {pct === null
                     ? t(lang, 'No school days yet')
-                    : `${pct}% · ${c.summary.present}/${c.summary.days} ${t(lang, 'days')}`}
+                    : `${pct}% · ${c.summary.present}/${c.summary.days} ${t(lang, 'days')}${c.summary.leave ? ` · ${String(c.summary.leave)} ${t(lang, 'on leave')}` : ''}`}
                 </Badge>
               }
               style={{ marginBottom: 'var(--sp-3)' }}
@@ -178,6 +196,64 @@ export default async function AttendancePage({
                   </tbody>
                 </table>
               )}
+              {(() => {
+                const b = bus.find((x) => x.id === c.id);
+                if (!b || b.days.length === 0) return null;
+                return (
+                  <>
+                    <h3 className="ep-cdash__h3" style={{ marginTop: 'var(--sp-4)' }}>
+                      {t(lang, 'School bus')} · {b.summary.onBus}/{b.summary.trips}{' '}
+                      {t(lang, 'trips on the bus')}
+                    </h3>
+                    <div
+                      className="ep-table-wrap"
+                      tabIndex={0}
+                      role="region"
+                      aria-label={`${t(lang, 'School bus')} · ${c.name}`}
+                    >
+                      <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
+                        <caption className="ep-sr-only">
+                          {t(lang, 'School bus')} · {c.name}
+                        </caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">{t(lang, 'Date')}</th>
+                            <th scope="col">{t(lang, 'Morning')}</th>
+                            <th scope="col">{t(lang, 'Afternoon')}</th>
+                            <th scope="col">{t(lang, 'Route')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...b.days].reverse().map((d) => (
+                            <tr key={d.date}>
+                              <td>
+                                {new Date(`${d.date}T00:00:00Z`).toLocaleDateString('en-IN', {
+                                  weekday: 'short',
+                                  day: '2-digit',
+                                  month: 'short',
+                                  timeZone: 'UTC',
+                                })}
+                              </td>
+                              {[d.pick, d.drop].map((code, i) => (
+                                <td key={String(i)}>
+                                  {code ? (
+                                    <Badge tone={BUS[code]?.[1] ?? 'neutral'}>
+                                      {t(lang, BUS[code]?.[0] ?? code)}
+                                    </Badge>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </td>
+                              ))}
+                              <td>{d.route}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
             </Card>
           );
         })}

@@ -37,6 +37,12 @@ export default async function HomePage() {
       '/attendance',
     ],
     [
+      t(lang, 'Bus attendance'),
+      t(lang, 'Mark the morning and afternoon trip of your route'),
+      can('attendance.bus.mark'),
+      '/bus-attendance',
+    ],
+    [
       t(lang, 'Daily work'),
       t(lang, 'Post homework and classwork'),
       can('academics.daily_work.post'),

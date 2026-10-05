@@ -12,6 +12,8 @@ const PAGES = [
   '/queries/t/208',
   '/appointments',
   '/appointments?view=calendar',
+  '/attendance',
+  '/bus-attendance',
   '/gate-passes',
   '/gate-passes/new',
 ];

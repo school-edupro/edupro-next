@@ -98,6 +98,17 @@ const NAV: Array<{
         label: 'attendanceRegister',
         permission: 'attendance.session.view',
       },
+      { href: '/attendance/bus-roll', label: 'busRoll', permission: 'attendance.bus.mark' },
+      {
+        href: '/attendance/registers',
+        label: 'attendanceRegisters',
+        permission: 'attendance.session.view',
+      },
+      {
+        href: '/attendance/setup',
+        label: 'attendanceSetup',
+        permission: 'attendance.setup.manage',
+      },
       { href: '/attendance/rfid', label: 'rfid', permission: 'attendance.rfid.manage' },
       {
         href: '/attendance/rfid/dashboard',
