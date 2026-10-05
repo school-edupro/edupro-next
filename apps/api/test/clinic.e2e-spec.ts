@@ -251,11 +251,27 @@ describe('clinic management (e2e)', () => {
       medicines: [{ medicineId: ids.para, qty: 1 }],
     });
     expect(staff.json()).toMatchObject({ audience: 'staff', employee: 'Tara Clinic', notified: 0 });
-    const out = await post(`/clinic/visits/${ids.visit}/out`, doctor);
+    // only the resting pupil is in the clinic; the visits that ended are closed as they are recorded
+    expect((await get('/clinic/visits?tab=in_clinic')).page.total).toBe(1);
+    expect(staff.json().outAt).toBeTruthy();
+    // the pupil was resting: leaving says how the visit ended, so it never stays "resting"
+    expect((await post(`/clinic/visits/${ids.visit}/out`, doctor)).statusCode).toBe(400);
+    const out = await post(`/clinic/visits/${ids.visit}/out`, doctor, { outcome: 'back_to_class' });
     expect(out.json().outAt).toBeTruthy();
+    expect(out.json()).toMatchObject({ outcome: 'back_to_class' });
+    expect((await post(`/clinic/visits/${ids.visit}/out`, doctor, {})).statusCode).toBe(409);
+    const restOut = await post('/clinic/visits', doctor, {
+      audience: 'staff',
+      employeeId,
+      complaint: 'Dizzy',
+      outcome: 'rest',
+      timeOut: '23:59',
+    });
+    expect(restOut.statusCode).toBe(400);
     const list = await get('/clinic/visits?tab=today');
     expect(list.page.total).toBe(4);
-    expect(list.counts).toMatchObject({ today: 4, inClinic: 3 });
+    // nobody is resting any more: nobody is in the clinic
+    expect(list.counts).toMatchObject({ today: 4, inClinic: 0 });
     expect((await get('/clinic/visits?tab=all&audience=staff')).page.total).toBe(1);
     expect((await get(`/clinic/visits?tab=all&diseaseId=${ids.headache}`)).page.total).toBe(2);
     const people = await get(`/clinic/people?audience=student&q=${s}-1`);
@@ -329,6 +345,18 @@ describe('clinic management (e2e)', () => {
     const card = await get(`/clinic/mine/cards/${mine.data[0].cards[0].id}`, parent);
     expect(Buffer.from(card.base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
     // the doctor's own PDF and the camp sheet
+    // find the pupil in the check-up by admission number or name; the card on screen has the PDF's sections
+    const found = await get(`/clinic/camps/${campId}/pupils?q=${s}-1`);
+    expect(found.data[0]).toMatchObject({
+      id: studentId,
+      sectionId,
+      section: 'VI-A',
+      checkupId: saved.json().id,
+    });
+    expect((await get(`/clinic/camps/${campId}/pupils?q=aany`)).data).toHaveLength(1);
+    const onScreen = await get(`/clinic/cards/${saved.json().id}`);
+    expect(onScreen.school).toBeTruthy();
+    expect(onScreen.groups.length).toBeGreaterThan(0);
     const pdf = await inject({
       method: 'GET',
       url: `/clinic/cards/${saved.json().id}/card.pdf`,
@@ -391,6 +419,38 @@ describe('clinic management (e2e)', () => {
     const stockFile = Buffer.from((await wb2.xlsx.writeBuffer()) as ArrayBuffer).toString('base64');
     const st = await post('/clinic/stock/import', doctor, { kind: 'stock', fileBase64: stockFile });
     expect(st.json()).toMatchObject({ added: 1, errors: [{ row: 3 }] });
+    // the Excel to fill: the Medicine column is a drop-down of the set-up; a filled copy uploads as it is
+    const tpl = await inject({
+      method: 'GET',
+      url: '/clinic/stock/template.xlsx',
+      headers: h(doctor),
+    });
+    expect(tpl.statusCode).toBe(200);
+    const wb3 = new ExcelJS.Workbook();
+    await wb3.xlsx.load(tpl.rawPayload as unknown as ArrayBuffer);
+    const fill = wb3.worksheets[0]!;
+    expect(fill.name).toBe('Opening stock');
+    expect(fill.getCell('A2').dataValidation).toMatchObject({ type: 'list', errorStyle: 'error' });
+    const offered: string[] = [];
+    wb3.getWorksheet('Medicines')!.eachRow((r, i) => {
+      if (i > 1) offered.push(String(r.getCell(1).value));
+    });
+    expect(offered).toContain('Paracetamol 500 mg');
+    fill.getRow(2).values = [
+      'Paracetamol 500 mg',
+      'TP-1',
+      new Date('2031-03-31'),
+      12,
+      null,
+      'Template',
+    ];
+    const filled = Buffer.from((await wb3.xlsx.writeBuffer()) as ArrayBuffer).toString('base64');
+    const st3 = await post('/clinic/stock/import', doctor, { kind: 'stock', fileBase64: filled });
+    expect(st3.json()).toMatchObject({ added: 1, errors: [] });
+    expect((await get('/clinic/stock/list?view=batches&q=TP-1')).data[0]).toMatchObject({
+      qtyLeft: 12,
+      expiryOn: '2031-03-31',
+    });
     const batches = await get('/clinic/stock/list?view=batches&q=XL-1');
     expect(batches.data[0]).toMatchObject({ batchNo: 'XL-1', qtyLeft: 30, state: 'in_stock' });
     expect((await get('/clinic/stock/list?view=moves&state=given')).page.total).toBe(3);

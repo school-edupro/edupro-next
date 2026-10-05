@@ -11,6 +11,8 @@ import {
   ClinicSettingsDto,
   ExportVisitsDto,
   FieldDto,
+  CampPupilsDto,
+  CloseVisitDto,
   ImportDto,
   MineHealthDto,
   SETUP_KINDS,
@@ -316,8 +318,30 @@ export class ClinicController {
   @Post('visits/:id/out')
   @HttpCode(200)
   @RequirePermission(P.manage)
-  closeVisit(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.svc.closeVisit(ctx, id);
+  @ApiOperation({ summary: 'The person leaves the clinic (after resting: how the visit ended)' })
+  closeVisit(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CloseVisitDto) {
+    return this.svc.closeVisit(ctx, id, dto);
+  }
+
+  @Get('stock/template.xlsx')
+  @RequirePermission(P.view)
+  @ApiOperation({ summary: 'The opening-stock Excel to fill, with the medicines as a drop-down' })
+  async stockTemplate(@ReqCtx() ctx: RequestContext, @Res() reply: FastifyReply) {
+    file(reply, XLSX, await this.svc.stockTemplate(ctx));
+  }
+
+  @Get('camps/:id/pupils')
+  @RequirePermission(P.view)
+  @ApiOperation({ summary: 'Find a pupil of the check-up by name or admission number' })
+  campPupils(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: CampPupilsDto) {
+    return this.svc.campPupils(ctx, id, q.q);
+  }
+
+  @Get('cards/:id')
+  @RequirePermission(P.view)
+  @ApiOperation({ summary: 'One health card, section by section as on the PDF' })
+  cardDetail(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.cardDetail(ctx, id);
   }
 
   @Post('stock')

@@ -53,7 +53,7 @@ export interface HealthCard {
 }
 export const OUTCOME: Record<Outcome, [string, 'success' | 'info' | 'warning' | 'danger']> = {
   back_to_class: ['Back to class', 'success'],
-  rest: ['Rested in the clinic', 'info'],
+  rest: ['Resting in the clinic', 'info'],
   sent_home: ['Sent home', 'warning'],
   referred: ['Referred', 'danger'],
 };

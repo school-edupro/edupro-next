@@ -112,6 +112,8 @@ export interface Checkup {
   studentId: string;
   student: string;
   admissionNo: string | null;
+  dob: string | null;
+  sectionId: string | null;
   section: string | null;
   examDate: string;
   doctorId: string | null;
@@ -181,7 +183,7 @@ export const OUTCOME_TONE: Record<Outcome, 'success' | 'info' | 'warning' | 'dan
 };
 export const OUTCOMES: Array<[Outcome, string]> = [
   ['back_to_class', 'Back to class / work'],
-  ['rest', 'Rest in the clinic'],
+  ['rest', 'Resting in the clinic'],
   ['sent_home', 'Sent home'],
   ['referred', 'Referred to a doctor or hospital'],
 ];

@@ -148,8 +148,29 @@ export const VisitSchema = z
   .refine((v) => v.outcome !== 'referred' || v.referredTo, {
     message: 'Say where the person is referred to',
     path: ['referredTo'],
+  })
+  .refine((v) => !(v.outcome === 'rest' && v.timeOut), {
+    message:
+      'Someone resting in the clinic has no time out yet: leave the time out blank, or choose how the visit ended',
+    path: ['timeOut'],
   });
 export class VisitDto extends createZodDto(VisitSchema) {}
+
+/** The person leaves the clinic. After resting, the clinic says how the visit ended. */
+export const CloseVisitSchema = z
+  .object({
+    outcome: blank(z.enum(['back_to_class', 'sent_home', 'referred'])),
+    referredTo: Text(160),
+    remark: Text(500),
+  })
+  .refine((v) => v.outcome !== 'referred' || v.referredTo, {
+    message: 'Say where the person is referred to',
+    path: ['referredTo'],
+  });
+export class CloseVisitDto extends createZodDto(CloseVisitSchema) {}
+
+export const CampPupilsSchema = z.object({ q: z.string().trim().min(2).max(80) });
+export class CampPupilsDto extends createZodDto(CampPupilsSchema) {}
 
 export const ListVisitsSchema = z.object({
   tab: z.enum(['today', 'in_clinic', 'all']).default('today'),

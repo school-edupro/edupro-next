@@ -119,3 +119,15 @@
 4. _Can we issue one certificate to one pupil?_ Yes: enter the pupil id instead of a section.
 5. _A family asks what data we hold._ Point them to **Profile → Your data** in the parent app or
    record the request in **System → Privacy**; the access report is generated for them.
+
+### Clinic: changes of October 2026
+
+- **Leaving the clinic.** Only someone _resting_ is "in the clinic". Every other visit is closed when it is
+  recorded. When a resting pupil or employee leaves, the visit page asks how it ended (back to class or
+  work, sent home, referred); parents are told when the child is sent home or referred.
+- **Opening stock from Excel.** Medicine stock → Receive → _Download the Excel to fill_: the Medicine
+  column is a drop-down of the set-up (the list is on the second sheet). Only listed medicines are accepted.
+- **Health check-up: find a pupil.** Open the check-up and type an admission number or a name; an admission
+  number opens the form at once, and saving returns to the search. The class-wise list still works.
+- **Record pages.** A clinic visit and a health card open as one sheet laid out like the printed card
+  (school band, who, sections in two columns, remarks, doctor), in the ERP and in the parent portal.

@@ -1,6 +1,7 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { ClinicNav } from '@/components/clinic/ClinicNav';
 import { Notice } from '@/components/Notice';
+import { RecordSheet } from '@/components/RecordSheet';
 import { apiFetch, getMe } from '@/lib/api';
 import { when } from '@/lib/appointments';
 import { closeClinicVisit } from '@/lib/clinic-actions';
@@ -16,39 +17,16 @@ export default async function ClinicVisitPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [me, v] = await Promise.all([getMe(), apiFetch<Visit>(`/clinic/visits/${id}`)]);
+  const [me, v] = await Promise.all([
+    getMe(),
+    apiFetch<Visit & { school: string }>(`/clinic/visits/${id}`),
+  ]);
   const history = await apiFetch<{ visits: Visit[]; checkups: Checkup[] }>(
     `/clinic/history/${v.audience}/${v.audience === 'student' ? v.studentId! : v.employeeId!}`,
   );
   const here = `/engagement/clinic/visits/${v.id}`;
-  const facts: Array<[string, string | null]> = [
-    [v.audience === 'student' ? 'Student' : 'Employee', v.who],
-    [
-      'Designation',
-      v.audience === 'staff'
-        ? [v.designation, v.department].filter(Boolean).join(' · ') || null
-        : null,
-    ],
-    ['Time in', when(v.inAt)],
-    ['Time out', v.outAt ? when(v.outAt) : null],
-    ['Clinic', v.clinic],
-    ['Doctor', v.doctor],
-    ['Nurse', v.nurse],
-    ['Complaint', v.complaint],
-    ['Disease', v.diseases.join(', ') || null],
-    ['Temperature', v.temperatureC !== null ? `${String(v.temperatureC)} °C` : null],
-    ['Pulse', v.pulse !== null ? `${String(v.pulse)} per minute` : null],
-    ['Blood pressure', v.bp],
-    ['SpO2', v.spo2 !== null ? `${String(v.spo2)}%` : null],
-    ['Weight', v.weightKg !== null ? `${String(v.weightKg)} kg` : null],
-    ['Diagnosis', v.diagnosis],
-    ['Treatment', v.treatment],
-    ['Prescription', v.prescription],
-    ['Remark', v.remark],
-    ['Referred to', v.referredTo],
-    ['Parents told', v.notifiedAt ? when(v.notifiedAt) : null],
-    ['Recorded by', v.recordedBy],
-  ];
+  const student = v.audience === 'student';
+  const manage = me.permissions.includes('engagement.clinic.manage');
   return (
     <>
       <PageHeader
@@ -56,65 +34,161 @@ export default async function ClinicVisitPage({
         title={v.student ?? v.employee ?? 'Visit'}
         description={v.complaint}
         actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            <Badge tone={OUTCOME_TONE[v.outcome]}>{v.outcomeLabel}</Badge>
-            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/engagement/clinic/visits">
-              Back to the visits
-            </a>
-          </span>
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/engagement/clinic/visits">
+            Back to the visits
+          </a>
         }
       />
       <ClinicNav current="/engagement/clinic/visits" permissions={me.permissions} ok={sp.ok} />
       <Notice params={{ error: sp.error, detail: sp.detail }} />
-      {!v.outAt && me.permissions.includes('engagement.clinic.manage') ? (
-        <Card style={{ marginBottom: 'var(--sp-4)' }}>
-          <form action={closeClinicVisit} className="ep-gate__act">
+      {!v.outAt && manage ? (
+        <Card
+          title={
+            v.outcome === 'rest'
+              ? 'Leaving the clinic: how did the visit end?'
+              : 'Still in the clinic'
+          }
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          <form action={closeClinicVisit} className="ep-hd__form" id="leave">
             <input type="hidden" name="id" value={v.id} />
             <input type="hidden" name="returnTo" value={here} />
-            <span>Still in the clinic.</span>
-            <Button type="submit">Record time out</Button>
+            {v.outcome === 'rest' ? (
+              <>
+                <fieldset className="ep-slots">
+                  <legend className="ep-field__label">
+                    {student ? 'The pupil' : 'The employee'} was resting. Now:
+                  </legend>
+                  <div className="ep-slots__grid">
+                    {(
+                      [
+                        ['back_to_class', student ? 'Goes back to class' : 'Goes back to work'],
+                        ['sent_home', student ? 'Is sent home (parents are told)' : 'Goes home'],
+                        [
+                          'referred',
+                          student
+                            ? 'Is referred to a doctor or hospital (parents are told)'
+                            : 'Is referred to a doctor or hospital',
+                        ],
+                      ] as const
+                    ).map(([value, label], i) => (
+                      <label key={value} className="ep-slots__slot">
+                        <input
+                          type="radio"
+                          name="outcome"
+                          value={value}
+                          defaultChecked={i === 0}
+                          required
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <div className="ep-hd__row">
+                  <label className="ep-field" htmlFor="cl-ref">
+                    <span className="ep-field__label">Referred to (when referred)</span>
+                    <input id="cl-ref" name="referredTo" className="ep-input" maxLength={160} />
+                  </label>
+                  <label className="ep-field" htmlFor="cl-remark">
+                    <span className="ep-field__label">Remark (optional)</span>
+                    <input id="cl-remark" name="remark" className="ep-input" maxLength={500} />
+                  </label>
+                </div>
+              </>
+            ) : null}
+            <div>
+              <Button type="submit">Record time out</Button>
+            </div>
           </form>
         </Card>
       ) : null}
-      <Card title="Details" style={{ marginBottom: 'var(--sp-4)' }}>
-        <dl className="ep-hd__facts">
-          {facts
-            .filter(([, x]) => x)
-            .map(([k, x]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{x}</dd>
-              </div>
-            ))}
-        </dl>
-      </Card>
-      {v.medicines.length ? (
-        <Card title="Medicines given" style={{ marginBottom: 'var(--sp-4)' }}>
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Medicines given">
-            <table className="ep-table ep-table--dense">
-              <caption className="ep-sr-only">Medicines given at {v.number}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Medicine</th>
-                  <th scope="col">Quantity</th>
-                  <th scope="col">Dosage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {v.medicines.map((m) => (
-                  <tr key={m.id}>
-                    <td>{medName(m)}</td>
-                    <td>
-                      {m.qty} {m.unit}
-                    </td>
-                    <td>{m.dosage ?? '—'}</td>
+      <RecordSheet
+        school={v.school}
+        doc={`Clinic visit · ${v.number}`}
+        name={v.student ?? v.employee ?? 'Visit'}
+        badge={
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+            <Badge tone={OUTCOME_TONE[v.outcome]}>{v.outcomeLabel}</Badge>
+            <Badge tone={v.outAt ? 'neutral' : 'info'}>
+              {v.outAt ? `Left ${when(v.outAt)}` : 'In the clinic'}
+            </Badge>
+          </span>
+        }
+        facts={[
+          [student ? 'Class' : 'Designation', student ? v.section : v.designation],
+          [student ? 'Admission no.' : 'Employee code', student ? v.admissionNo : v.employeeCode],
+          ['Department', student ? null : v.department],
+          ['Time in', when(v.inAt)],
+          ['Time out', v.outAt ? when(v.outAt) : null],
+          ['Clinic', v.clinic],
+          ['Nurse', v.nurse],
+        ]}
+        sections={[
+          {
+            title: 'Complaint and examination',
+            rows: [
+              ['Complaint', v.complaint],
+              ['Disease', v.diseases.join(', ') || null],
+              ['Temperature', v.temperatureC !== null ? `${String(v.temperatureC)} °C` : null],
+              ['Pulse', v.pulse !== null ? `${String(v.pulse)} per minute` : null],
+              ['Blood pressure', v.bp],
+              ['SpO2', v.spo2 !== null ? `${String(v.spo2)}%` : null],
+              ['Weight', v.weightKg !== null ? `${String(v.weightKg)} kg` : null],
+              ['Diagnosis', v.diagnosis],
+            ],
+          },
+          {
+            title: 'Treatment',
+            rows: [
+              ['Treatment', v.treatment],
+              ['Prescription', v.prescription],
+              ['Referred to', v.referredTo],
+            ],
+          },
+          {
+            title: 'Record',
+            rows: [
+              ['Parents told', v.notifiedAt ? when(v.notifiedAt) : null],
+              ['Recorded by', v.recordedBy],
+            ],
+          },
+        ]}
+        remarksTitle="Remark"
+        remarks={v.remark}
+        attention={v.outcome === 'sent_home' || v.outcome === 'referred'}
+        signedBy={v.doctor}
+        signLabel="Doctor"
+      >
+        {v.medicines.length ? (
+          <section className="ep-sheet__sec" aria-label="Medicines given">
+            <h3>Medicines given</h3>
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Medicines given">
+              <table className="ep-table ep-table--dense">
+                <caption className="ep-sr-only">Medicines given at {v.number}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Medicine</th>
+                    <th scope="col">Quantity</th>
+                    <th scope="col">Dosage</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : null}
+                </thead>
+                <tbody>
+                  {v.medicines.map((m) => (
+                    <tr key={m.id}>
+                      <th scope="row">{medName(m)}</th>
+                      <td>
+                        {m.qty} {m.unit}
+                      </td>
+                      <td>{m.dosage ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+      </RecordSheet>
       <Card title={`Earlier at the clinic · ${String(history.visits.length - 1)}`}>
         {history.visits.filter((x) => x.id !== v.id).length === 0 ? (
           <p className="ep-field__help" style={{ margin: 0 }}>
@@ -127,7 +201,13 @@ export default async function ClinicVisitPage({
               .map((x) => (
                 <li key={x.id}>
                   <span>
-                    <a href={`/engagement/clinic/visits/${x.id}`}>{x.number}</a> · {x.complaint}
+                    <a
+                      href={`/engagement/clinic/visits/${x.id}`}
+                      style={{ textDecoration: 'underline' }}
+                    >
+                      {x.number}
+                    </a>{' '}
+                    · {x.complaint}
                     {x.medicines.length
                       ? ` · ${x.medicines.map((m) => medName(m)).join(', ')}`
                       : ''}{' '}
@@ -151,6 +231,13 @@ export default async function ClinicVisitPage({
                     {h.bmi ? ` · BMI ${String(h.bmi)}` : ''}
                     {h.bloodGroup ? ` · ${h.bloodGroup}` : ''}
                     {h.remarks ? ` · ${h.remarks}` : ''}{' '}
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/engagement/clinic/cards/${h.id}`}
+                      aria-label={`Open the health card of ${h.camp}`}
+                    >
+                      Open
+                    </a>{' '}
                     <a
                       className="ep-btn ep-btn--secondary ep-btn--sm"
                       href={`/api/clinic/cards/${h.id}`}

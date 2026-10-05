@@ -250,8 +250,10 @@ export default async function ClinicStockPage({
           </Card>
           <Card title="Opening stock from Excel">
             <p className="ep-field__help" style={{ marginTop: 0 }}>
-              One row per batch: medicine (as in the set-up), strength, batch no., expiry, quantity,
-              received on, supplier. A medicine that is not in the set-up is reported and left out.
+              1. Download the Excel: the Medicine column is a drop-down of your medicines (the list
+              is also on its second sheet). 2. Fill one row per batch: medicine, batch no., expiry,
+              quantity, received on, supplier. 3. Upload it here. Only medicines from the drop-down
+              are accepted; add a new medicine under Set-up first.
             </p>
             <form action={importClinicStock} className="ep-gate__act">
               <label className="ep-field" htmlFor="cs-file">
@@ -266,8 +268,8 @@ export default async function ClinicStockPage({
                 />
               </label>
               <Button type="submit">Upload</Button>
-              <a className="ep-btn ep-btn--secondary" href="/api/clinic/sample?kind=stock">
-                Download the sample
+              <a className="ep-btn ep-btn--secondary" href="/api/clinic/stock-template">
+                Download the Excel to fill
               </a>
             </form>
           </Card>

@@ -238,24 +238,40 @@ export default async function ClinicVisitsPage({
                     <td>{v.outAt ? timeOf(v.outAt) : '—'}</td>
                     <td>
                       <Badge tone={OUTCOME_TONE[v.outcome as Outcome]}>{v.outcomeLabel}</Badge>
+                      <div className="ep-field__help">
+                        {v.outAt ? `Left ${timeOf(v.outAt)}` : 'In the clinic'}
+                      </div>
                       {v.referredTo ? <div className="ep-field__help">{v.referredTo}</div> : null}
                       {v.notifiedAt ? <div className="ep-field__help">Parents told</div> : null}
                     </td>
                     <td>
-                      {manage && !v.outAt ? (
-                        <form action={closeClinicVisit}>
-                          <input type="hidden" name="id" value={v.id} />
-                          <input type="hidden" name="returnTo" value={here} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="secondary"
-                            aria-label={`Record time out for ${v.number}`}
+                      <span
+                        style={{ display: 'inline-flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}
+                      >
+                        {manage && !v.outAt && v.outcome === 'rest' ? (
+                          // after resting the clinic says how the visit ended: asked on the visit's page
+                          <a
+                            className="ep-btn ep-btn--secondary ep-btn--sm"
+                            href={`/engagement/clinic/visits/${v.id}#leave`}
+                            aria-label={`${v.number}: leaving the clinic`}
                           >
-                            Time out
-                          </Button>
-                        </form>
-                      ) : null}
+                            Leaving
+                          </a>
+                        ) : manage && !v.outAt ? (
+                          <form action={closeClinicVisit}>
+                            <input type="hidden" name="id" value={v.id} />
+                            <input type="hidden" name="returnTo" value={here} />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Record time out for ${v.number}`}
+                            >
+                              Time out
+                            </Button>
+                          </form>
+                        ) : null}
+                      </span>
                     </td>
                   </tr>
                 ))}

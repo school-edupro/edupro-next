@@ -101,7 +101,15 @@ export async function createClinicVisit(body: Record<string, unknown>) {
 export async function closeClinicVisit(fd: FormData) {
   const here = returnTo(fd, `${BASE}/visits`);
   try {
-    await apiFetch(`/clinic/visits/${str(fd, 'id')}/out`, { method: 'POST', body: '{}' });
+    await apiFetch(`/clinic/visits/${str(fd, 'id')}/out`, {
+      method: 'POST',
+      // after resting, the form says how the visit ended
+      body: JSON.stringify({
+        outcome: str(fd, 'outcome') || undefined,
+        referredTo: str(fd, 'referredTo') || undefined,
+        remark: str(fd, 'remark') || undefined,
+      }),
+    });
   } catch (error) {
     back(here, error);
   }
@@ -199,9 +207,11 @@ export async function saveHealthCheckup(fd: FormData) {
       }),
     });
   } catch (error) {
-    back(`${sheet}?student=${student}`, error);
+    back(`${sheet}?student=${student}${str(fd, 'from') === 'search' ? '&from=search' : ''}`, error);
   }
   revalidatePath(BASE);
+  // found by search: back to the search for the next pupil
+  if (str(fd, 'from') === 'search') redirect(`${BASE}/checkups/${camp}?ok=saved&done=${student}`);
   // on to the next pupil of the class when there is one
   const next = str(fd, 'nextStudentId');
   redirect(withOk(next ? `${sheet}?student=${next}` : sheet, 'saved'));

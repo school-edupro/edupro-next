@@ -189,7 +189,7 @@ export default async function ClinicDashboardPage({
     [
       'In the clinic now',
       d.today.inClinic,
-      'came in today, time out not recorded',
+      'resting now; leaving records how the visit ended',
       '/engagement/clinic/visits?tab=in_clinic',
     ],
     [

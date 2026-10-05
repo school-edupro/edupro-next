@@ -8,6 +8,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
 import {
+  type CloseVisitDto,
   CHECKUP_FIELDS,
   CLINIC,
   FINDING_KEYS,
@@ -56,7 +57,7 @@ const ist = (v: string | null) =>
     : '';
 const OUTCOME_LABEL: Record<string, string> = {
   back_to_class: 'Back to class / work',
-  rest: 'Rested in the clinic',
+  rest: 'Resting in the clinic',
   sent_home: 'Sent home',
   referred: 'Referred',
 };
@@ -191,7 +192,7 @@ const toVisit = (x: Row): VisitRow => ({
   medicines: (x.medicines as VisitRow['medicines'] | null) ?? [],
 });
 
-const CHECKUP = `SELECT h.id::text, h.camp_id::text, c.name AS camp, h.student_id::text, s.display_name AS student, s.admission_no, s.dob::text AS dob,
+const CHECKUP = `SELECT h.id::text, h.camp_id::text, c.name AS camp, h.student_id::text, s.display_name AS student, s.admission_no, s.dob::text AS dob, h.class_section_id::text AS section_id,
        (SELECT k.code || '-' || cs.name FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = h.class_section_id) AS section,
        h.exam_date::text, h.doctor_id::text, d.name AS doctor, COALESCE(h.place, c.place) AS place, h.height_cm::float AS height_cm, h.weight_kg::float AS weight_kg,
        CASE WHEN h.height_cm > 0 AND h.weight_kg IS NOT NULL THEN round(h.weight_kg / ((h.height_cm / 100) * (h.height_cm / 100)), 1)::float END AS bmi,
@@ -206,6 +207,7 @@ export interface CheckupRow {
   student: string;
   admissionNo: string | null;
   dob: string | null;
+  sectionId: string | null;
   section: string | null;
   examDate: string;
   doctorId: string | null;
@@ -232,6 +234,7 @@ const toCheckup = (x: Row): CheckupRow => ({
   student: String(x.student),
   admissionNo: text(x.admission_no),
   dob: text(x.dob),
+  sectionId: text(x.section_id),
   section: text(x.section),
   examDate: String(x.exam_date),
   doctorId: text(x.doctor_id),
@@ -732,8 +735,94 @@ export class ClinicService {
     return toVisit(r.rows[0]);
   }
 
+  /** The opening-stock Excel to fill: the Medicine column is a drop-down of the school's medicines. */
+  async stockTemplate(ctx: RequestContext) {
+    const meds = await this.db.tenant(requireTenant(ctx), async (c) =>
+      (await this.medicines(c, true)).sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Opening stock');
+    const list = wb.addWorksheet('Medicines');
+    const guide = wb.addWorksheet('How to fill');
+    const columns = [
+      'Medicine',
+      'Batch no.',
+      'Expiry (YYYY-MM-DD)',
+      'Quantity',
+      'Received on (YYYY-MM-DD)',
+      'Supplier',
+    ];
+    ws.addRow(columns).font = { bold: true };
+    ws.columns.forEach((col, i) => {
+      col.width = i === 0 ? 36 : 24;
+    });
+    ws.getColumn(3).numFmt = 'yyyy-mm-dd';
+    ws.getColumn(5).numFmt = 'yyyy-mm-dd';
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    list.addRow(['Medicine (as in the drop-down)', 'Form', 'Counted in', 'In stock now']).font = {
+      bold: true,
+    };
+    for (const m of meds)
+      list.addRow([`${m.name}${m.strength ? ` ${m.strength}` : ''}`, m.form, m.unit, m.stock]);
+    list.columns.forEach((col, i) => {
+      col.width = i === 0 ? 36 : 16;
+    });
+    const last = Math.max(2, meds.length + 1);
+    const ROWS = 500;
+    for (let i = 2; i <= ROWS + 1; i += 1) {
+      ws.getCell(`A${String(i)}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`Medicines!$A$2:$A$${String(last)}`],
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Not on the list',
+        error:
+          'Choose the medicine from the drop-down. Add a new medicine under Clinic > Set-up first.',
+      };
+      ws.getCell(`D${String(i)}`).dataValidation = {
+        type: 'whole',
+        operator: 'greaterThan',
+        allowBlank: true,
+        formulae: [0],
+        showErrorMessage: true,
+        errorTitle: 'Quantity',
+        error: 'A whole number above 0, in the unit the medicine is counted in.',
+      };
+      for (const col of ['C', 'E'])
+        ws.getCell(`${col}${String(i)}`).dataValidation = {
+          type: 'date',
+          operator: 'greaterThan',
+          allowBlank: true,
+          formulae: [new Date('2000-01-01')],
+          showErrorMessage: true,
+          errorTitle: 'Date',
+          error: 'A date like 2027-12-31.',
+        };
+    }
+    for (const line of [
+      'One row per batch received. Do not change the headings of the first sheet.',
+      'Medicine: choose from the drop-down (the list is on the sheet "Medicines"). A medicine that is not there is added under Clinic > Set-up first.',
+      'Batch no. and Supplier: optional.',
+      'Expiry: the date printed on the pack (YYYY-MM-DD). Leave blank when there is none.',
+      'Quantity: a whole number, in the unit the medicine is counted in (see "Medicines").',
+      'Received on: blank means today.',
+      'Upload the file under Clinic > Medicine stock > Opening stock from Excel. Rows that cannot be read are listed with their line number; the rest go in.',
+    ])
+      guide.addRow([line]);
+    guide.getColumn(1).width = 140;
+    const out = await wb.xlsx.writeBuffer();
+    return {
+      bytes: Buffer.from(out as ArrayBuffer),
+      filename: `clinic-opening-stock-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    };
+  }
+
   async visit(ctx: RequestContext, id: string) {
-    return this.db.tenant(requireTenant(ctx), async (c) => this.findVisit(c, id));
+    return this.db.tenant(requireTenant(ctx), async (c) => ({
+      ...(await this.findVisit(c, id)),
+      school: await this.schoolName(c),
+    }));
   }
 
   async createVisit(ctx: RequestContext, dto: VisitDto) {
@@ -791,6 +880,12 @@ export class ClinicService {
         ],
       );
       const id = r.rows[0]!.id;
+      // only someone resting stays in the clinic: every other visit is over when it is recorded
+      await c.query(
+        `UPDATE clinic_visits SET out_at = CASE WHEN ${DAY('in_at')} = ${TODAY} THEN GREATEST(in_at, now()) ELSE in_at END
+          WHERE id = $1 AND out_at IS NULL AND outcome <> 'rest'`,
+        [id],
+      );
       await c.query(
         `UPDATE clinic_visits SET number = 'CV-' || to_char(in_at AT TIME ZONE ${TZ}, 'YYMM') || '-' || lpad(id::text, 4, '0') WHERE id = $1`,
         [id],
@@ -908,15 +1003,47 @@ export class ClinicService {
     return count;
   }
 
-  /** The person leaves the clinic. */
-  async closeVisit(ctx: RequestContext, id: string) {
+  /**
+   * The person leaves the clinic. Someone who was resting leaves as back to class / work, sent home or
+   * referred (the clinic says which), so the visit never stays "resting" after the time out; the parents
+   * are told when the child is sent home or referred.
+   */
+  async closeVisit(ctx: RequestContext, id: string, dto: CloseVisitDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query(
-        `UPDATE clinic_visits SET out_at = now() WHERE id = $1 AND out_at IS NULL`,
+      const cur = await c.query<{ outcome: string; out_at: Date | null }>(
+        `SELECT outcome, out_at FROM clinic_visits WHERE id = $1 FOR UPDATE`,
         [id],
       );
-      if (!r.rowCount)
+      if (!cur.rows[0])
+        throw new DomainError('not-found', 'Clinic visit not found', { status: 404 });
+      if (cur.rows[0].out_at)
         throw new DomainError('conflict', 'This visit is already closed', { status: 409 });
+      const rested = cur.rows[0].outcome === 'rest';
+      if (rested && !dto.outcome)
+        throw new DomainError(
+          'validation-failed',
+          'Say how the visit ended: back to class or work, sent home, or referred',
+          { status: 400 },
+        );
+      const outcome =
+        rested || dto.outcome ? (dto.outcome ?? cur.rows[0].outcome) : cur.rows[0].outcome;
+      await c.query(
+        `UPDATE clinic_visits SET out_at = now(), outcome = $2, sent_home = ($2 = 'sent_home'),
+                referred_to = CASE WHEN $2 = 'referred' THEN COALESCE($3, referred_to) ELSE referred_to END,
+                remark = CASE WHEN $4::text IS NULL THEN remark ELSE concat_ws(E'\n', remark, $4::text) END
+          WHERE id = $1`,
+        [id, outcome, dto.referredTo ?? null, dto.remark ?? null],
+      );
+      const v = await this.findVisit(c, id);
+      if (outcome !== cur.rows[0].outcome) {
+        if (outcome === 'sent_home' || outcome === 'referred') await this.tellFamily(c, v);
+        await this.audit.stage(ctx, c, {
+          action: 'engagement.clinic.visit_closed',
+          entityType: 'clinic_visits',
+          entityId: id,
+          after: { outcome, referredTo: dto.referredTo ?? null },
+        });
+      }
       return this.findVisit(c, id);
     });
   }
@@ -1202,6 +1329,38 @@ export class ClinicService {
     });
   }
 
+  /** Pupils of the camp's session by name or admission number, each with the class and how far the card is. */
+  async campPupils(ctx: RequestContext, id: string, q: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const camp = await this.camp(c, id);
+      const r = await c.query<Row>(
+        `SELECT s.id::text, s.display_name AS name, s.admission_no, en.roll_no, cs.id::text AS section_id, k.code || '-' || cs.name AS section,
+                h.id::text AS checkup_id, h.status, h.exam_date::text, h.needs_attention
+           FROM students s
+           JOIN enrolments en ON en.student_id = s.id AND en.status = 'active' AND en.academic_year_id = $2
+           JOIN class_sections cs ON cs.id = en.class_section_id JOIN classes k ON k.id = cs.class_id
+           LEFT JOIN health_checkups h ON h.camp_id = $1 AND h.student_id = s.id
+          WHERE s.deleted_at IS NULL AND (s.admission_no ILIKE $3 || '%' OR s.display_name ILIKE '%' || $3 || '%')
+          ORDER BY (lower(s.admission_no) = lower($3)) DESC, s.display_name LIMIT 15`,
+        [id, camp.yearId, q],
+      );
+      return {
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          name: String(x.name),
+          admissionNo: text(x.admission_no),
+          rollNo: text(x.roll_no),
+          sectionId: String(x.section_id),
+          section: String(x.section),
+          checkupId: text(x.checkup_id),
+          status: text(x.status),
+          examDate: text(x.exam_date),
+          needsAttention: Boolean(x.needs_attention),
+        })),
+      };
+    });
+  }
+
   async saveCheckup(ctx: RequestContext, campId: string, studentId: string, dto: CheckupDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const camp = await this.camp(c, campId);
@@ -1393,6 +1552,22 @@ export class ClinicService {
     const r = await c.query<Row>(`${CHECKUP} WHERE h.id = $1`, [id]);
     if (!r.rows[0]) throw new DomainError('not-found', 'Health card not found', { status: 404 });
     return toCheckup(r.rows[0]);
+  }
+
+  /** One health card on screen for the clinic staff: the same sections as the PDF. */
+  async cardDetail(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const h = await this.findCheckup(c, id);
+      const { groups, note } = await this.groupsOf(c, h);
+      return { ...h, groups, note, school: await this.schoolName(c) };
+    });
+  }
+
+  private async schoolName(c: PoolClient): Promise<string> {
+    const r = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    return r.rows[0]?.name ?? '';
   }
 
   async card(ctx: RequestContext, id: string) {
@@ -1978,7 +2153,10 @@ export class ClinicService {
               throw new Error('Quantity must be a whole number above 0');
             if (expiry === false || received === false) throw new Error('Dates must be YYYY-MM-DD');
             const m = await c.query<{ id: string }>(
-              `SELECT id::text FROM clinic_medicines WHERE lower(name) = lower($1) AND lower(COALESCE(strength, '')) = lower($2) LIMIT 1`,
+              `SELECT id::text FROM clinic_medicines
+                WHERE (lower(name) = lower($1) AND lower(COALESCE(strength, '')) = lower($2))
+                   OR ($2 = '' AND lower(btrim(name || ' ' || COALESCE(strength, ''))) = lower($1))
+                ORDER BY (lower(name) = lower($1)) DESC, (status = 'active') DESC LIMIT 1`,
               [name, r.strength ?? ''],
             );
             if (!m.rows[0])
@@ -2393,7 +2571,7 @@ export class ClinicService {
       const x = await this.findVisit(c, id);
       if (!x.studentId || !v.students.some((s) => s.id === x.studentId))
         throw new DomainError('not-found', 'Clinic visit not found', { status: 404 });
-      return x;
+      return { ...x, school: await this.schoolName(c) };
     });
   }
 
@@ -2405,7 +2583,7 @@ export class ClinicService {
       if (h.status !== 'published' || !v.students.some((s) => s.id === h.studentId))
         throw new DomainError('not-found', 'Health card not found', { status: 404 });
       const { groups, note } = await this.groupsOf(c, h);
-      return { ...h, groups, note };
+      return { ...h, groups, note, school: await this.schoolName(c) };
     });
   }
 }
