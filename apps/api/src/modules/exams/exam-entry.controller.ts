@@ -14,6 +14,7 @@ import {
   PutHealthDto,
   PutIndicatorsDto,
   PutMarksDto,
+  PutPartMarksDto,
   PutRemarksDto,
   SetExamIndicatorSetDto,
   UpsertIndicatorSetDto,
@@ -88,6 +89,20 @@ export class ExamEntryController {
   })
   putMarks(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PutMarksDto) {
     return this.entry.putMarks(ctx, id, dto);
+  }
+
+  @Put(':id/part-marks')
+  @ApiOperation({
+    summary:
+      'Enter one part of a subject (Theory, Practical, Physics …); the subject total follows',
+  })
+  @RequirePermission(EXAMS.marksEnter)
+  putPartMarks(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: PutPartMarksDto,
+  ) {
+    return this.entry.putPartMarks(ctx, id, dto);
   }
 
   @Get(':id/indicators')

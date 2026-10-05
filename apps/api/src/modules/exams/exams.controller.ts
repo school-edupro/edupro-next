@@ -7,6 +7,7 @@ import {
   EXAMS,
   LockExamSubjectsDto,
   SetExamSubjectsDto,
+  SetPartsDto,
   UpdateExamDto,
   UpdateExamTypeDto,
   UpsertExamTypeDto,
@@ -84,6 +85,21 @@ export class ExamsController {
   @RequirePermission(EXAMS.masterManage)
   update(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: UpdateExamDto) {
     return this.exams.updateExam(ctx, id, dto);
+  }
+
+  @Put(':id/subjects/:examSubjectId/parts')
+  @ApiOperation({
+    summary:
+      'The parts an exam subject is entered in (Theory / Practical, or one per teaching subject)',
+  })
+  @RequirePermission(EXAMS.masterManage)
+  setParts(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('examSubjectId') examSubjectId: string,
+    @Body() dto: SetPartsDto,
+  ) {
+    return this.exams.setParts(ctx, id, examSubjectId, dto);
   }
 
   @Put(':id/subjects')

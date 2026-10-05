@@ -12,6 +12,7 @@ import type {
   UpdateExamTypeDto,
   UpsertExamTypeDto,
   UpsertGradeScaleDto,
+  SetPartsDto,
 } from './exams.dto';
 
 export interface ExamTypeRow {
@@ -61,6 +62,18 @@ export interface ExamSubjectRow {
   entryLocked: boolean;
   lockedBy: string | null;
   lockedAt: string | null;
+  /** The parts the subject is entered in (empty = one figure for the subject). */
+  parts?: ExamPartRow[];
+  /** Teaching subjects under this subject (Physics, Chemistry, Biology under Science): ready-made parts. */
+  children?: Array<{ id: string; code: string; name: string }>;
+}
+export interface ExamPartRow {
+  id: string;
+  name: string;
+  subjectId: string | null;
+  subjectCode: string | null;
+  maxMarks: string;
+  entered: number;
 }
 export interface ExamRow {
   id: string;
@@ -267,7 +280,31 @@ export class ExamsService {
       `${SUBJECT_SELECT} WHERE es.exam_id = $1 ORDER BY es.class_id, sub.display_order, sub.code`,
       [id],
     );
-    return { ...r.rows[0], subjects: subjects.rows };
+    const parts = await c.query<ExamPartRow & { examSubjectId: string }>(
+      `SELECT p.id::text, p.exam_subject_id::text AS "examSubjectId", p.name, p.subject_id::text AS "subjectId", sub.code AS "subjectCode", p.max_marks::text AS "maxMarks",
+              (SELECT count(*)::int FROM mark_part_entries m WHERE m.part_id = p.id) AS entered
+         FROM exam_subject_parts p JOIN exam_subjects es ON es.id = p.exam_subject_id LEFT JOIN subjects sub ON sub.id = p.subject_id
+        WHERE es.exam_id = $1 ORDER BY p.sort_order, p.id`,
+      [id],
+    );
+    const children = await c.query<{ parent: string; id: string; code: string; name: string }>(
+      `SELECT k.parent_id::text AS parent, k.id::text, k.code, k.name FROM subjects k
+        WHERE k.deleted_at IS NULL AND k.status = 'active' AND k.parent_id IN (SELECT subject_id FROM exam_subjects WHERE exam_id = $1)
+        ORDER BY k.display_order, k.code`,
+      [id],
+    );
+    return {
+      ...r.rows[0],
+      subjects: subjects.rows.map((x) => ({
+        ...x,
+        parts: parts.rows
+          .filter((p) => p.examSubjectId === x.id)
+          .map(({ examSubjectId: _es, ...p }) => p),
+        children: children.rows
+          .filter((k) => k.parent === x.subjectId)
+          .map((k) => ({ id: k.id, code: k.code, name: k.name })),
+      })),
+    };
   }
 
   async exam(ctx: RequestContext, id: string): Promise<ExamRow> {
@@ -424,6 +461,114 @@ export class ExamsService {
         entityType: 'exams',
         entityId: examId,
         after: { classId: dto.classId, subjects: dto.subjects.length },
+      });
+      return this.findExam(c, examId, yearId);
+    });
+  }
+
+  /**
+   * The parts an exam subject is entered in: Theory and Practical, or one per teaching subject under it.
+   * The subject's maximum becomes the sum of its parts. A part that has marks cannot be removed, and a
+   * subject already marked as a whole cannot be split until those marks are cleared.
+   */
+  async setParts(
+    ctx: RequestContext,
+    examId: string,
+    examSubjectId: string,
+    dto: SetPartsDto,
+  ): Promise<ExamRow> {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      const exam = await this.findExam(c, examId, yearId);
+      const es = (exam.subjects ?? []).find((x) => x.id === examSubjectId);
+      if (!es)
+        throw new DomainError('not-found', 'The subject is not part of this exam', { status: 404 });
+      if (exam.marksLocked || es.entryLocked)
+        throw new DomainError(
+          'exams.locked',
+          'Marks entry is locked; unlock it to change the parts',
+          {
+            status: 409,
+          },
+        );
+      const names = dto.parts.map((p) => p.name.toLowerCase());
+      if (new Set(names).size !== names.length)
+        throw new DomainError('validation-failed', 'Two parts have the same name', { status: 400 });
+      const had = es.parts ?? [];
+      if (!had.length && dto.parts.length) {
+        const whole = await c.query(
+          `SELECT 1 FROM mark_entries WHERE exam_subject_id = $1 LIMIT 1`,
+          [es.id],
+        );
+        if (whole.rowCount)
+          throw new DomainError(
+            'exams.already_marked',
+            'Marks are already entered for this subject as one figure; clear them before splitting it into parts',
+            { status: 409 },
+          );
+      }
+      for (const p of dto.parts)
+        if (
+          p.subjectId &&
+          p.subjectId !== es.subjectId &&
+          !(es.children ?? []).some((k) => k.id === p.subjectId)
+        )
+          throw new DomainError(
+            'validation-failed',
+            `The teaching subject of "${p.name}" must be ${es.subjectName} or a subject under it`,
+            { status: 400 },
+          );
+      const keep = new Set(dto.parts.map((p) => p.id).filter(Boolean));
+      for (const old of had)
+        if (!keep.has(old.id)) {
+          if (old.entered)
+            throw new DomainError(
+              'exams.part_has_marks',
+              `"${old.name}" has marks entered; clear them before removing the part`,
+              { status: 409 },
+            );
+          await c.query(`DELETE FROM exam_subject_parts WHERE id = $1`, [old.id]);
+        }
+      for (const [i, p] of dto.parts.entries()) {
+        if (p.id) {
+          if (!had.some((x) => x.id === p.id))
+            throw new DomainError('not-found', 'A part does not belong to this subject', {
+              status: 404,
+            });
+          const over = await c.query(
+            `SELECT 1 FROM mark_part_entries WHERE part_id = $1 AND marks > $2 LIMIT 1`,
+            [p.id, p.maxMarks],
+          );
+          if (over.rowCount)
+            throw new DomainError(
+              'exams.marks_out_of_range',
+              `"${p.name}" has marks above ${String(p.maxMarks)}; the maximum cannot go below them`,
+              { status: 409 },
+            );
+          await c.query(
+            `UPDATE exam_subject_parts SET name = $2, subject_id = $3, max_marks = $4, sort_order = $5 WHERE id = $1`,
+            [p.id, p.name, p.subjectId ?? null, p.maxMarks, i],
+          );
+        } else
+          await c.query(
+            `INSERT INTO exam_subject_parts (school_id, exam_subject_id, name, subject_id, max_marks, sort_order, created_by)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id())`,
+            [es.id, p.name, p.subjectId ?? null, p.maxMarks, i],
+          );
+      }
+      if (dto.parts.length) {
+        const total = dto.parts.reduce((n, p) => n + p.maxMarks, 0);
+        await c.query(
+          `UPDATE exam_subjects SET max_marks = $2, pass_marks = CASE WHEN pass_marks > $2 THEN NULL ELSE pass_marks END WHERE id = $1`,
+          [es.id, total],
+        );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'exams.subject.parts',
+        entityType: 'exam_subjects',
+        entityId: es.id,
+        after: { parts: dto.parts.map((p) => `${p.name}:${String(p.maxMarks)}`) },
       });
       return this.findExam(c, examId, yearId);
     });

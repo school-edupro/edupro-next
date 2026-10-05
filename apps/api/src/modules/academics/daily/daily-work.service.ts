@@ -182,6 +182,29 @@ export class DailyWorkService {
             status: 409,
           },
         );
+      // a subject teacher gives work for the subjects mapped to them in this class (a class teacher, a
+      // coordinator and unscoped staff for any)
+      if ((await this.scopes.filter(tenant, DAILY.workPost, 'class_section')) !== null) {
+        const mine = await c.query<{ any: boolean; ids: string[] | null }>(
+          `SELECT COALESCE(bool_or(ta.kind IN ('class_teacher', 'coordinator')), false) AS any,
+                  array_agg(ta.subject_id::text) FILTER (WHERE ta.subject_id IS NOT NULL) AS ids
+             FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+            WHERE e.user_id = app.current_user_id() AND ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL`,
+          [dto.classSectionId, yearId],
+        );
+        const m = mine.rows[0];
+        if (
+          m &&
+          !m.any &&
+          (m.ids ?? []).length &&
+          (!dto.subjectId || !(m.ids ?? []).includes(dto.subjectId))
+        )
+          throw new DomainError(
+            'daily.subject_not_assigned',
+            'Choose one of the subjects you teach in this class',
+            { status: 403 },
+          );
+      }
       const r = await c.query<{ id: string }>(
         `INSERT INTO daily_work (school_id, academic_year_id, class_section_id, subject_id, kind, title, body, assigned_on, due_on, posted_by_employee_id, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2, $3, $4::daily_work_kind, $5, $6, COALESCE($7::date, CURRENT_DATE), $8::date, $9, app.current_user_id(), app.current_user_id())

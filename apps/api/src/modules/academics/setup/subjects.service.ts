@@ -19,6 +19,9 @@ export interface SubjectRow {
   displayOrder: number;
   status: 'active' | 'inactive';
   updatedAt: string;
+  /** The report-card subject this teaching subject belongs to. */
+  parentId: string | null;
+  parentCode: string | null;
 }
 
 export interface ClassSubjectRow {
@@ -40,15 +43,20 @@ interface SubjectDb {
   display_order: number;
   status: 'active' | 'inactive';
   updated_at: Date;
+  parent_id?: string | null;
+  parent_code?: string | null;
 }
 
-const SUBJECT_COLUMNS = `id::text, code, name, kind, display_order, status, updated_at`;
+const SUBJECT_COLUMNS = `id::text, code, name, kind, display_order, status, updated_at, parent_id::text,
+  (SELECT p.code FROM subjects p WHERE p.id = subjects.parent_id) AS parent_code`;
 const toSubject = (r: SubjectDb): SubjectRow => ({
   id: r.id,
   code: r.code,
   name: r.name,
   kind: r.kind,
   displayOrder: r.display_order,
+  parentId: r.parent_id ?? null,
+  parentCode: r.parent_code ?? null,
   status: r.status,
   updatedAt: r.updated_at.toISOString(),
 });
@@ -113,15 +121,56 @@ export class SubjectsService {
     return row;
   }
 
+  /** A parent is a subject of this school that has no parent itself, and a subject with children cannot get one. */
+  private async parentOf(
+    c: PoolClient,
+    id: string | null,
+    parentId: string | null | undefined,
+  ): Promise<string | null> {
+    if (!parentId) return null;
+    if (parentId === id)
+      throw new DomainError('validation-failed', 'A subject cannot be its own parent', {
+        status: 400,
+      });
+    const p = await c.query<{ parent_id: string | null }>(
+      `SELECT parent_id::text FROM subjects WHERE id = $1 AND deleted_at IS NULL`,
+      [parentId],
+    );
+    if (!p.rows[0]) throw new DomainError('not-found', 'Parent subject not found', { status: 404 });
+    if (p.rows[0].parent_id)
+      throw new DomainError('validation-failed', 'The parent is itself a part of another subject', {
+        status: 400,
+      });
+    if (id) {
+      const kids = await c.query(
+        `SELECT 1 FROM subjects WHERE parent_id = $1 AND deleted_at IS NULL LIMIT 1`,
+        [id],
+      );
+      if (kids.rowCount)
+        throw new DomainError(
+          'validation-failed',
+          'This subject has teaching subjects under it, so it cannot go under another subject',
+          { status: 400 },
+        );
+    }
+    return parentId;
+  }
+
   async create(ctx: RequestContext, dto: CreateSubjectDto): Promise<SubjectRow> {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<SubjectDb>(
         // eslint-disable-next-line no-restricted-syntax -- column list constant; values are bound parameters
-        `INSERT INTO subjects (school_id, code, name, kind, display_order, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3::subject_kind, $4, app.current_user_id(), app.current_user_id())
+        `INSERT INTO subjects (school_id, code, name, kind, display_order, parent_id, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3::subject_kind, $4, $5, app.current_user_id(), app.current_user_id())
          RETURNING ${SUBJECT_COLUMNS}`,
-        [dto.code, dto.name, dto.kind, dto.displayOrder],
+        [
+          dto.code,
+          dto.name,
+          dto.kind,
+          dto.displayOrder,
+          await this.parentOf(c, null, dto.parentId),
+        ],
       );
       const created = toSubject(r.rows[0]!);
       await this.audit.stage(ctx, c, {
@@ -150,6 +199,7 @@ export class SubjectsService {
       if (dto.kind !== undefined) set('kind', dto.kind, '::subject_kind');
       if (dto.displayOrder !== undefined) set('display_order', dto.displayOrder);
       if (dto.status !== undefined) set('status', dto.status, '::row_status');
+      if (dto.parentId !== undefined) set('parent_id', await this.parentOf(c, id, dto.parentId));
       params.push(id);
       const r = await c.query<SubjectDb>(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters

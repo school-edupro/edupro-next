@@ -12,6 +12,7 @@ import {
   type PutHealthDto,
   type PutIndicatorsDto,
   type PutMarksDto,
+  type PutPartMarksDto,
   type PutRemarksDto,
   type SetExamIndicatorSetDto,
   type UpsertIndicatorSetDto,
@@ -33,7 +34,18 @@ export interface EntrySection {
     passMarks: string | null;
     entryLocked: boolean;
     entered: number;
+    parts: PartRow[];
   }>;
+}
+
+export interface PartRow {
+  id: string;
+  name: string;
+  subjectId: string | null;
+  subjectCode: string | null;
+  maxMarks: string;
+  /** The caller may enter this part. */
+  mine: boolean;
 }
 
 export interface RosterStudent {
@@ -44,6 +56,8 @@ export interface RosterStudent {
 }
 
 export interface MarkRow extends RosterStudent {
+  /** Marks by part id, when the subject is entered in parts. */
+  parts: Record<string, { marks: string | null; absent: boolean }>;
   marks: string | null;
   absent: boolean;
   exempt: boolean;
@@ -60,6 +74,7 @@ export interface MarksSheet {
     maxMarks: string;
     passMarks: string | null;
     entryLocked: boolean;
+    parts: PartRow[];
   };
   section: { id: string; code: string };
   rows: MarkRow[];
@@ -236,7 +251,9 @@ export class ExamEntryService {
                   (SELECT count(*)::int FROM mark_entries m JOIN enrolments e ON e.student_id = m.student_id AND e.class_section_id = $3 AND e.academic_year_id = $4 AND e.status = 'active'
                     WHERE m.exam_subject_id = es.id) AS entered
              FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
-            WHERE es.exam_id = $1 AND es.class_id = $2 AND ($5::bigint[] IS NULL OR es.subject_id = ANY($5::bigint[]))
+            WHERE es.exam_id = $1 AND es.class_id = $2
+              AND ($5::bigint[] IS NULL OR es.subject_id = ANY($5::bigint[])
+                   OR EXISTS (SELECT 1 FROM exam_subject_parts p WHERE p.exam_subject_id = es.id AND p.subject_id = ANY($5::bigint[])))
             ORDER BY sub.display_order, sub.code`,
           [examId, s.class_id, s.id, yearId, s.subject_ids],
         );
@@ -246,20 +263,54 @@ export class ExamEntryService {
           classId: s.class_id,
           code: s.code,
           register: s.register,
-          subjects: subs.rows.map((x) => ({
-            examSubjectId: x.id,
-            subjectId: x.subject_id,
-            code: x.code,
-            name: x.name,
-            maxMarks: x.max_marks,
-            passMarks: x.pass_marks,
-            entryLocked: x.entry_locked,
-            entered: x.entered,
-          })),
+          subjects: await Promise.all(
+            subs.rows.map(async (x) => ({
+              parts: await this.partsOf(c, x.id, x.subject_id, s.subject_ids),
+              examSubjectId: x.id,
+              subjectId: x.subject_id,
+              code: x.code,
+              name: x.name,
+              maxMarks: x.max_marks,
+              passMarks: x.pass_marks,
+              entryLocked: x.entry_locked,
+              entered: x.entered,
+            })),
+          ),
         });
       }
       return out;
     });
+  }
+
+  /** The parts of an exam subject; `mine` says whether the caller (with these teaching subjects; null = any) enters it. */
+  private async partsOf(
+    c: PoolClient,
+    examSubjectId: string,
+    subjectId: string,
+    mySubjects: string[] | null,
+  ): Promise<PartRow[]> {
+    const r = await c.query<{
+      id: string;
+      name: string;
+      subject_id: string | null;
+      subject_code: string | null;
+      max_marks: string;
+    }>(
+      `SELECT p.id::text, p.name, p.subject_id::text, sub.code AS subject_code, p.max_marks::text
+         FROM exam_subject_parts p LEFT JOIN subjects sub ON sub.id = p.subject_id WHERE p.exam_subject_id = $1 ORDER BY p.sort_order, p.id`,
+      [examSubjectId],
+    );
+    return r.rows.map((x) => ({
+      id: x.id,
+      name: x.name,
+      subjectId: x.subject_id,
+      subjectCode: x.subject_code,
+      maxMarks: x.max_marks,
+      mine:
+        mySubjects === null ||
+        mySubjects.includes(subjectId) ||
+        (x.subject_id !== null && mySubjects.includes(x.subject_id)),
+    }));
   }
 
   // ---- marks -------------------------------------------------------------------------------------
@@ -312,9 +363,45 @@ export class ExamEntryService {
           ORDER BY e.roll_no NULLS LAST, s.display_name`,
         [section.id, yearId, es.id],
       );
+      const mine = await c.query<{ ids: string[] | null; all: boolean }>(
+        `SELECT array_agg(DISTINCT ta.subject_id::text) FILTER (WHERE ta.subject_id IS NOT NULL) AS ids,
+                COALESCE(bool_or(ta.kind IN ('class_teacher', 'coordinator')), false) AS all
+           FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+          WHERE e.user_id = app.current_user_id() AND ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL`,
+        [section.id, yearId],
+      );
+      const unscoped =
+        (await this.scopes.filter(tenant, EXAMS.marksEnter, 'class_section')) === null;
+      const parts = await this.partsOf(
+        c,
+        es.id,
+        es.subject_id,
+        unscoped || mine.rows[0]?.all ? null : (mine.rows[0]?.ids ?? []),
+      );
+      const partMarks = parts.length
+        ? await c.query<{
+            part_id: string;
+            student_id: string;
+            marks: string | null;
+            absent: boolean;
+          }>(
+            `SELECT part_id::text, student_id::text, marks::text, absent FROM mark_part_entries WHERE part_id = ANY($1::bigint[])`,
+            [parts.map((p) => p.id)],
+          )
+        : { rows: [] };
+      const byStudent = new Map<
+        string,
+        Record<string, { marks: string | null; absent: boolean }>
+      >();
+      for (const m of partMarks.rows)
+        byStudent.set(m.student_id, {
+          ...(byStudent.get(m.student_id) ?? {}),
+          [m.part_id]: { marks: m.marks, absent: m.absent },
+        });
       return {
         exam: { id: exam.id, code: exam.code, name: exam.name, marksLocked: exam.marks_locked },
         examSubject: {
+          parts,
           id: es.id,
           subjectId: es.subject_id,
           code: es.code,
@@ -329,6 +416,7 @@ export class ExamEntryService {
           name: x.name,
           admissionNo: x.admission_no,
           rollNo: x.roll_no,
+          parts: byStudent.get(x.student_id) ?? {},
           marks: x.marks,
           absent: x.absent ?? false,
           exempt: x.exempt ?? false,
@@ -344,8 +432,18 @@ export class ExamEntryService {
     return this.db.tenant(tenant, async (c) => {
       await this.exam(c, examId, yearId);
       const section = await this.section(c, dto.classSectionId, yearId, examId);
-      await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, dto.subjectId);
       const es = await this.examSubject(c, examId, section.class_id, dto.subjectId);
+      const inParts = await c.query(
+        `SELECT 1 FROM exam_subject_parts WHERE exam_subject_id = $1 LIMIT 1`,
+        [es.id],
+      );
+      if (inParts.rowCount)
+        throw new DomainError(
+          'exams.entered_in_parts',
+          'This subject is entered in parts; enter each part and the total is worked out',
+          { status: 409 },
+        );
+      await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, dto.subjectId);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       const r = await c.query<{ o_inserted: number; o_updated: number }>(
         `SELECT o_inserted, o_updated FROM app.enter_marks($1, $2::jsonb)`,
@@ -365,6 +463,113 @@ export class ExamEntryService {
         },
       });
       return { inserted: r.rows[0]!.o_inserted, updated: r.rows[0]!.o_updated };
+    });
+  }
+
+  /**
+   * One part of an exam subject for a section. The part's teacher enters it (the teacher of the part's
+   * teaching subject, or of the exam subject; the class teacher and coordinators any). The exam subject's
+   * marks are the sum of the parts entered so far; a pupil absent in every part is absent in the subject.
+   */
+  async putPartMarks(ctx: RequestContext, examId: string, dto: PutPartMarksDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      await this.exam(c, examId, yearId);
+      const section = await this.section(c, dto.classSectionId, yearId, examId);
+      const p = await c.query<{
+        id: string;
+        name: string;
+        subject_id: string | null;
+        max_marks: string;
+        es_id: string;
+        es_subject: string;
+      }>(
+        `SELECT p.id::text, p.name, p.subject_id::text, p.max_marks::text, es.id::text AS es_id, es.subject_id::text AS es_subject
+           FROM exam_subject_parts p JOIN exam_subjects es ON es.id = p.exam_subject_id
+          WHERE p.id = $1 AND es.exam_id = $2 AND es.class_id = $3`,
+        [dto.partId, examId, section.class_id],
+      );
+      const part = p.rows[0];
+      if (!part)
+        throw new DomainError('not-found', 'This part is not in the exam for this class', {
+          status: 404,
+        });
+      try {
+        await this.assertMayEnter(
+          c,
+          tenant,
+          yearId,
+          section.id,
+          MARKS,
+          part.subject_id ?? part.es_subject,
+        );
+      } catch (error) {
+        // the teacher of the report-card subject itself may enter any of its parts
+        if (!(error instanceof DomainError) || !part.subject_id) throw error;
+        await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, part.es_subject);
+      }
+      this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
+      for (const r of dto.rows) {
+        const marks = r.absent ? null : (r.marks ?? null);
+        if (!r.absent && marks === null) {
+          await c.query(`DELETE FROM mark_part_entries WHERE part_id = $1 AND student_id = $2`, [
+            part.id,
+            r.studentId,
+          ]);
+          continue;
+        }
+        if (marks !== null && marks > Number(part.max_marks))
+          throw new DomainError(
+            'exams.marks_out_of_range',
+            `Marks above the maximum of ${part.max_marks} for ${part.name}`,
+            { status: 422, extra: { studentId: r.studentId } },
+          );
+        await c.query(
+          `INSERT INTO mark_part_entries (school_id, part_id, student_id, marks, absent, entered_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())
+           ON CONFLICT (part_id, student_id) DO UPDATE SET marks = EXCLUDED.marks, absent = EXCLUDED.absent, entered_by = EXCLUDED.entered_by, updated_at = now()`,
+          [part.id, r.studentId, marks, r.absent],
+        );
+      }
+      // the subject's marks follow: the sum of the parts entered; absent in every part = absent
+      const totals = await c.query<{
+        student_id: string;
+        total: string | null;
+        n: number;
+        absent_n: number;
+      }>(
+        `SELECT m.student_id::text, sum(m.marks)::text AS total, count(*)::int AS n, count(*) FILTER (WHERE m.absent)::int AS absent_n
+           FROM mark_part_entries m JOIN exam_subject_parts p ON p.id = m.part_id
+          WHERE p.exam_subject_id = $1 AND m.student_id = ANY($2::bigint[]) GROUP BY m.student_id`,
+        [part.es_id, dto.rows.map((r) => r.studentId)],
+      );
+      const rows = totals.rows.map((t) =>
+        t.absent_n === t.n
+          ? { studentId: t.student_id, marks: null, absent: true, exempt: false }
+          : { studentId: t.student_id, marks: Number(t.total ?? 0), absent: false, exempt: false },
+      );
+      // app.enter_marks keeps the locks and the range of the whole subject
+      if (rows.length)
+        await c.query(`SELECT o_inserted FROM app.enter_marks($1, $2::jsonb)`, [
+          part.es_id,
+          JSON.stringify(rows),
+        ]);
+      const cleared = dto.rows
+        .map((r) => r.studentId)
+        .filter((id) => !totals.rows.some((t) => t.student_id === id));
+      if (cleared.length)
+        await c.query(
+          `DELETE FROM mark_entries WHERE exam_subject_id = $1 AND student_id = ANY($2::bigint[])`,
+          [part.es_id, cleared],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.marks.enter_part',
+        entityType: 'exam_subject_parts',
+        entityId: part.id,
+        after: { examId, classSectionId: section.id, part: part.name, rows: dto.rows.length },
+      });
+      return { saved: dto.rows.length };
     });
   }
 

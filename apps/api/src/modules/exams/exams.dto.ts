@@ -242,3 +242,34 @@ export const PromotionProposalsQuerySchema = z.object({
   maxFailed: z.coerce.number().int().min(0).max(10).default(0),
 });
 export class PromotionProposalsQueryDto extends createZodDto(PromotionProposalsQuerySchema) {}
+
+/** An exam subject entered in parts (Theory / Practical, or one part per teaching subject). An empty list removes the parts. */
+export const SetPartsSchema = z.object({
+  parts: z
+    .array(
+      z.object({
+        id: IdSchema.optional(),
+        name: z.string().trim().min(1).max(60),
+        subjectId: IdSchema.nullish(),
+        maxMarks: z.coerce.number().positive().max(1000),
+      }),
+    )
+    .max(8),
+});
+export class SetPartsDto extends createZodDto(SetPartsSchema) {}
+
+export const PutPartMarksSchema = z.object({
+  classSectionId: IdSchema,
+  partId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        marks: z.number().min(0).max(1000).nullable().optional(),
+        absent: z.boolean().default(false),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutPartMarksDto extends createZodDto(PutPartMarksSchema) {}

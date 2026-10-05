@@ -19,6 +19,8 @@ export const CreateSubjectSchema = z.object({
   name: z.string().trim().min(1).max(100),
   kind: SubjectKindSchema.default('scholastic'),
   displayOrder: z.number().int().min(0).max(10_000).default(0),
+  /** The report-card subject this teaching subject belongs to (Physics under Science). */
+  parentId: IdSchema.nullish(),
 });
 export class CreateSubjectDto extends createZodDto(CreateSubjectSchema) {}
 
