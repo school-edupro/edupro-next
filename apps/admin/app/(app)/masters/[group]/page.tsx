@@ -163,7 +163,11 @@ export default async function MasterGroupPage({
       ) : null}
 
       <div className="ep-tabs">
-        <div role="tablist" aria-label={t(`title.${groupKey}`)} className="ep-tabs__list">
+        <div
+          role="tablist"
+          aria-label={t(`title.${groupKey}`)}
+          className="ep-tabs__list ep-tabs__list--wrap"
+        >
           {listed.map((m) => (
             <a
               key={m.id}

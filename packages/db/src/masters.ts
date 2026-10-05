@@ -1036,8 +1036,9 @@ export const MASTERS: MasterDefinition[] = [
     uploadHelp: 'Dates shift by one year on clone; adjust the festival dates afterwards.',
   }),
   // ---- transport ----
-  // In working order: what a vehicle is, who owns it, the vehicles, the crew, the slabs (a fee master,
-  // shown here too), the stoppages, the routes, each route's stops, and which vehicle and crew run it.
+  // The route comes first (everything else hangs on a route), then what a vehicle is, who owns it, the
+  // vehicles, the crew, the slabs (a fee master, shown here too), the stoppages, each route's stops, and
+  // which vehicle and crew run the route.
   master({
     id: 'transport_vehicle_types',
     title: 'Vehicle types',
@@ -1340,7 +1341,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'transport_routes',
     title: 'Routes',
     group: 'transport',
-    order: 70,
+    order: 5,
     table: 'transport_routes',
     permission: { view: 'transport.route.view', manage: 'transport.route.manage' },
     naturalKey: ['code'],

@@ -16,7 +16,8 @@
    upload whose template has **drop-downs** for every choice (slab, route, vehicle, crew, yes / no).
    Every field is checked: 10-digit mobile, email, GSTIN, vehicle number like MH12AB1234, licence
    number, links, dates, distances.
-   1. _Vehicle types_ and _Vendors_.
+   1. _Routes_ first: the code and the name of each route (everything else hangs on a route).
+      **Stops and students** opens the route's own page. Then _Vehicle types_ and _Vendors_.
    2. _Vehicles_: number, name, make and model, type, category, vendor, seats, the in-charge
       employee, registration date, insurance / fitness / permit / PUC valid till, RC book, AIS device,
       GPS device, camera and tracking links. **Daily log** opens the vehicle's own page.
@@ -25,8 +26,7 @@
    4. _Transport slabs_ (the same list the fee office sees).
    5. _Stoppages_: each stoppage once, with its area, slab, radial and route distance, and its place
       on the map (search a location, click the map or drag the pin).
-   6. _Routes_, then _Route stops_: the stoppages a route calls at, in order, with pick and drop
-      time. **Stops and students** opens the route's own page.
+   6. _Route stops_: the stoppages a route calls at, in order, with pick and drop time.
    7. _Route and vehicle mapping_: which vehicle runs the route (pick, drop or both) with its
       driver, conductor and attendant, from and to date. The bus list, GPS and the dashboard follow it.
 2. **Transport → Transport settings**:
