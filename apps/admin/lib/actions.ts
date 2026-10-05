@@ -859,7 +859,18 @@ export async function createSubject(fd: FormData) {
         name: str(fd, 'name'),
         kind: str(fd, 'kind') || 'scholastic',
         displayOrder: Number(str(fd, 'displayOrder') || '0'),
+        parentId: opt(fd, 'parentId') ?? null,
       }),
+    }),
+  );
+}
+
+/** A teaching subject goes under a report-card subject (Physics under Science), or stands on its own again. */
+export async function setSubjectParent(fd: FormData) {
+  return run('/academics/subjects', () =>
+    apiFetch(`/academics/subjects/${str(fd, 'id')}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ parentId: opt(fd, 'parentId') ?? null }),
     }),
   );
 }
@@ -2671,6 +2682,30 @@ export async function setExamSubjects(fd: FormData) {
     apiFetch(`/exams/${id}/subjects`, {
       method: 'PUT',
       body: JSON.stringify({ classId, subjects }),
+    }),
+  );
+}
+
+/** The parts an exam subject is entered in (Theory / Practical, or one per teaching subject under it). */
+export async function setExamParts(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const classId = str(fd, 'classId');
+  const ids = fd.getAll('partId').map(String);
+  const names = fd.getAll('partName').map(String);
+  const subjects = fd.getAll('partSubject').map(String);
+  const max = fd.getAll('partMax').map(String);
+  const parts = names
+    .map((name, i) => ({
+      id: ids[i] || undefined,
+      name: name.trim(),
+      subjectId: subjects[i] || null,
+      maxMarks: Number(max[i] ?? ''),
+    }))
+    .filter((p) => p.name && p.maxMarks > 0);
+  return run(`/exams/${examId}?classId=${classId}`, () =>
+    apiFetch(`/exams/${examId}/subjects/${str(fd, 'examSubjectId')}/parts`, {
+      method: 'PUT',
+      body: JSON.stringify({ parts }),
     }),
   );
 }

@@ -10,7 +10,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { lockExamSubjects, setExamSubjects, updateExam } from '@/lib/actions';
+import { lockExamSubjects, setExamParts, setExamSubjects, updateExam } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Exam, ExamClass, ExamSubject, SubjectRow } from '@/lib/types';
 
@@ -227,6 +227,109 @@ export default async function ExamPage({
               </form>
             </>
           ) : null}
+        </Card>
+      ) : null}
+      {canManage && rows.length ? (
+        <Card title="Subjects entered in parts" style={{ marginTop: 'var(--sp-5)' }}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Leave a subject as one figure, or split it: <strong>Theory</strong> and{' '}
+            <strong>Practical</strong>, or one part per teaching subject under it (Science entered
+            as Physics, Chemistry and Biology, each by its own teacher). The subject’s maximum
+            becomes the sum of its parts, and the report card shows the total. Clear every row to go
+            back to one figure.
+          </p>
+          {rows.map((r) => {
+            const parts = r.parts ?? [];
+            const kids = r.children ?? [];
+            // what is there; else the teaching subjects under it as a suggestion; then blank rows up to four
+            const lines: Array<{ id: string; name: string; subjectId: string; max: string }> =
+              parts.length
+                ? parts.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    subjectId: p.subjectId ?? '',
+                    max: String(Number(p.maxMarks)),
+                  }))
+                : kids.map((k) => ({ id: '', name: k.name, subjectId: k.id, max: '' }));
+            while (lines.length < Math.max(4, parts.length + 1))
+              lines.push({ id: '', name: '', subjectId: '', max: '' });
+            return (
+              <form
+                key={r.id}
+                action={setExamParts}
+                className="ep-hd__form"
+                style={{ marginBottom: 'var(--sp-4)' }}
+              >
+                <input type="hidden" name="examId" value={exam.id} />
+                <input type="hidden" name="classId" value={classId} />
+                <input type="hidden" name="examSubjectId" value={r.id} />
+                <h3 className="ep-cdash__h3">
+                  {r.subjectCode} · {r.subjectName} · maximum {Number(r.maxMarks)}{' '}
+                  {parts.length ? (
+                    <Badge tone="info">{parts.length} parts</Badge>
+                  ) : (
+                    <Badge tone="neutral">One figure</Badge>
+                  )}
+                </h3>
+                {lines.map((l, n) => (
+                  <div key={String(n)} className="ep-hd__row">
+                    <input type="hidden" name="partId" value={l.id} />
+                    <label className="ep-field" htmlFor={`pt-name-${r.id}-${String(n)}`}>
+                      <span className="ep-field__label">Part {n + 1}</span>
+                      <input
+                        id={`pt-name-${r.id}-${String(n)}`}
+                        name="partName"
+                        className="ep-input"
+                        maxLength={60}
+                        defaultValue={l.name}
+                        placeholder={n === 0 ? 'Theory' : n === 1 ? 'Practical' : ''}
+                      />
+                    </label>
+                    <label className="ep-field" htmlFor={`pt-sub-${r.id}-${String(n)}`}>
+                      <span className="ep-field__label">Entered by the teacher of</span>
+                      <select
+                        id={`pt-sub-${r.id}-${String(n)}`}
+                        name="partSubject"
+                        className="ep-select"
+                        defaultValue={l.subjectId}
+                      >
+                        <option value="">{r.subjectName} (the subject itself)</option>
+                        {kids.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.code} · {k.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="ep-field" htmlFor={`pt-max-${r.id}-${String(n)}`}>
+                      <span className="ep-field__label">Maximum marks</span>
+                      <input
+                        id={`pt-max-${r.id}-${String(n)}`}
+                        name="partMax"
+                        type="number"
+                        className="ep-input"
+                        min={0}
+                        max={1000}
+                        step="0.5"
+                        defaultValue={l.max}
+                      />
+                    </label>
+                  </div>
+                ))}
+                <p className="ep-field__help" style={{ margin: 0 }}>
+                  A row counts when it has a name and a maximum.
+                  {parts.some((p) => p.entered)
+                    ? ' Marks are already entered: a part with marks cannot be removed.'
+                    : ''}
+                </p>
+                <div>
+                  <Button type="submit" variant="secondary" disabled={r.entryLocked}>
+                    Save the parts of {r.subjectCode}
+                  </Button>
+                </div>
+              </form>
+            );
+          })}
         </Card>
       ) : null}
     </>

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { saveMarks } from './actions';
+import { saveMarks, savePartMarks } from './actions';
 
 interface Exam {
   id: string;
@@ -25,7 +25,14 @@ interface EntrySection {
     passMarks: string | null;
     entryLocked: boolean;
     entered: number;
+    parts?: Part[];
   }>;
+}
+interface Part {
+  id: string;
+  name: string;
+  maxMarks: string;
+  mine: boolean;
 }
 interface Sheet {
   exam: { id: string; code: string; name: string; marksLocked: boolean };
@@ -36,6 +43,7 @@ interface Sheet {
     maxMarks: string;
     passMarks: string | null;
     entryLocked: boolean;
+    parts?: Part[];
   };
   section: { id: string; code: string };
   rows: Array<{
@@ -43,12 +51,14 @@ interface Sheet {
     name: string;
     admissionNo: string;
     rollNo: number | null;
+    parts?: Record<string, { marks: string | null; absent: boolean }>;
     marks: string | null;
     absent: boolean;
     exempt: boolean;
   }>;
 }
 const ERRORS: Record<string, string> = {
+  'exams.entered_in_parts': 'This subject is entered in parts; choose the part.',
   'exams.entry_locked': 'Entry for this subject is locked; ask the coordinator to reopen it.',
   'exams.marks_out_of_range': 'A mark is above the maximum for this subject.',
   'exams.not_assigned': 'You are not assigned to this section or subject.',
@@ -91,13 +101,30 @@ export default async function MarksPage({
     sections = await bff.api
       .fetch<{ data: EntrySection[] }>(`/exams/${exam.id}/entry/sections`)
       .then((r) => r.data);
+  // a subject entered in parts (Theory / Practical, or Physics / Chemistry / Biology under Science) is
+  // offered part by part: the parts this teacher enters
   const options = sections.flatMap((s) =>
-    s.subjects.map((sub) => ({
-      value: `${s.classSectionId}|${sub.subjectId}`,
-      label: `${s.code} · ${sub.name}${sub.entryLocked ? ` (${t(lang, 'locked')})` : ''} · ${sub.entered} ${t(lang, 'entered')}`,
-      classSectionId: s.classSectionId,
-      subjectId: sub.subjectId,
-    })),
+    s.subjects.flatMap((sub) =>
+      (sub.parts ?? []).length
+        ? (sub.parts ?? [])
+            .filter((p) => p.mine)
+            .map((p) => ({
+              value: `${s.classSectionId}|${sub.subjectId}|${p.id}`,
+              label: `${s.code} · ${sub.name} · ${p.name} (${String(Number(p.maxMarks))})${sub.entryLocked ? ` (${t(lang, 'locked')})` : ''}`,
+              classSectionId: s.classSectionId,
+              subjectId: sub.subjectId,
+              partId: p.id as string | null,
+            }))
+        : [
+            {
+              value: `${s.classSectionId}|${sub.subjectId}`,
+              label: `${s.code} · ${sub.name}${sub.entryLocked ? ` (${t(lang, 'locked')})` : ''} · ${sub.entered} ${t(lang, 'entered')}`,
+              classSectionId: s.classSectionId,
+              subjectId: sub.subjectId,
+              partId: null as string | null,
+            },
+          ],
+    ),
   );
   const chosen = options.find((o) => o.value === sp.pick) ?? options[0];
   let sheet: Sheet | null = null;
@@ -113,6 +140,10 @@ export default async function MarksPage({
     }
   }
   const locked = !!sheet && (sheet.exam.marksLocked || sheet.examSubject.entryLocked);
+  const part = chosen?.partId
+    ? ((sheet?.examSubject.parts ?? []).find((p) => p.id === chosen.partId) ?? null)
+    : null;
+  const others = part ? (sheet?.examSubject.parts ?? []).filter((p) => p.id !== part.id) : [];
   const entered = sheet
     ? sheet.rows.filter((r) => r.marks !== null || r.absent || r.exempt).length
     : 0;
@@ -193,7 +224,7 @@ export default async function MarksPage({
       {loadError ? <Card>{t(lang, loadError)}</Card> : null}
       {sheet && exam && chosen ? (
         <Card
-          title={`${sheet.section.code} · ${sheet.examSubject.name}`}
+          title={`${sheet.section.code} · ${sheet.examSubject.name}${part ? ` · ${part.name}` : ''}`}
           actions={
             locked ? (
               <Badge tone="warning">{t(lang, 'Locked')}</Badge>
@@ -204,7 +235,18 @@ export default async function MarksPage({
             )
           }
         >
-          <form action={saveMarks}>
+          {part ? (
+            <p className="ep-field__help">
+              {sheet.examSubject.name} {t(lang, 'is entered in parts')}:{' '}
+              {(sheet.examSubject.parts ?? [])
+                .map((p) => `${p.name} ${String(Number(p.maxMarks))}`)
+                .join(' + ')}{' '}
+              = {String(Number(sheet.examSubject.maxMarks))}.{' '}
+              {t(lang, 'The total is worked out from the parts.')}
+            </p>
+          ) : null}
+          <form action={part ? savePartMarks : saveMarks}>
+            {part ? <input type="hidden" name="partId" value={part.id} /> : null}
             <input type="hidden" name="examId" value={exam.id} />
             <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
             <input type="hidden" name="subjectId" value={chosen.subjectId} />
@@ -215,10 +257,18 @@ export default async function MarksPage({
                   <th>#</th>
                   <th>{t(lang, 'Pupil')}</th>
                   <th>
-                    {t(lang, 'Marks')} / {sheet.examSubject.maxMarks}
+                    {part
+                      ? `${part.name} / ${String(Number(part.maxMarks))}`
+                      : `${t(lang, 'Marks')} / ${sheet.examSubject.maxMarks}`}
                   </th>
                   <th>AB</th>
-                  <th>EX</th>
+                  {part ? (
+                    <th>
+                      {t(lang, 'Total')} / {String(Number(sheet.examSubject.maxMarks))}
+                    </th>
+                  ) : (
+                    <th>EX</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -237,9 +287,9 @@ export default async function MarksPage({
                         name={`marks-${r.studentId}`}
                         aria-label={`${t(lang, 'Marks')} · ${r.name}`}
                         min={0}
-                        max={Number(sheet!.examSubject.maxMarks)}
+                        max={Number(part ? part.maxMarks : sheet!.examSubject.maxMarks)}
                         step="0.5"
-                        defaultValue={r.marks ?? ''}
+                        defaultValue={part ? (r.parts?.[part.id]?.marks ?? '') : (r.marks ?? '')}
                         disabled={locked}
                         style={{ width: 110 }}
                       />
@@ -249,19 +299,33 @@ export default async function MarksPage({
                         type="checkbox"
                         name={`absent-${r.studentId}`}
                         aria-label={`${t(lang, 'Absent')} · ${r.name}`}
-                        defaultChecked={r.absent}
+                        defaultChecked={part ? (r.parts?.[part.id]?.absent ?? false) : r.absent}
                         disabled={locked}
                       />
                     </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        name={`exempt-${r.studentId}`}
-                        aria-label={`${t(lang, 'Exempt')} · ${r.name}`}
-                        defaultChecked={r.exempt}
-                        disabled={locked}
-                      />
-                    </td>
+                    {part ? (
+                      <td>
+                        {r.absent ? 'AB' : (r.marks ?? '—')}
+                        <div className="ep-field__help">
+                          {others
+                            .map((o) => {
+                              const m = r.parts?.[o.id];
+                              return `${o.name} ${m ? (m.absent ? 'AB' : (m.marks ?? '—')) : '—'}`;
+                            })
+                            .join(' · ')}
+                        </div>
+                      </td>
+                    ) : (
+                      <td>
+                        <input
+                          type="checkbox"
+                          name={`exempt-${r.studentId}`}
+                          aria-label={`${t(lang, 'Exempt')} · ${r.name}`}
+                          defaultChecked={r.exempt}
+                          disabled={locked}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

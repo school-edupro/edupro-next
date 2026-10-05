@@ -12,7 +12,13 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { createSubject, deleteSubject, setClassSubjects, setSubjectStatus } from '@/lib/actions';
+import {
+  createSubject,
+  deleteSubject,
+  setClassSubjects,
+  setSubjectParent,
+  setSubjectStatus,
+} from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ClassRow, ClassSubject, Page, Subject, SubjectKind } from '@/lib/types';
 
@@ -41,6 +47,8 @@ export default async function SubjectsPage({
         )
       : Promise.resolve<ClassSubject[]>([]),
   ]);
+  // a subject that is not itself a part can have parts under it
+  const parents = subjects.data.filter((x) => !x.parentId && x.status === 'active');
   const mappedById = new Map(mapped.map((m) => [m.subjectId, m]));
   const selectedClass = classes.data.find((k) => k.id === sp.classId);
 
@@ -56,6 +64,55 @@ export default async function SubjectsPage({
             { key: 'code', header: a('code'), render: (s) => <strong>{s.code}</strong> },
             { key: 'name', header: a('name'), render: (s) => s.name },
             { key: 'kind', header: a('kind'), render: (s) => a(`kinds.${s.kind}`) },
+            {
+              key: 'parent',
+              header: 'Part of',
+              render: (s) => {
+                const hasParts = subjects.data.some((x) => x.parentId === s.id);
+                if (hasParts)
+                  return (
+                    <span className="ep-field__help">
+                      {subjects.data
+                        .filter((x) => x.parentId === s.id)
+                        .map((x) => x.code)
+                        .join(', ')}{' '}
+                      are part of it
+                    </span>
+                  );
+                if (!canManage) return s.parentCode ?? '—';
+                return (
+                  <form
+                    action={setSubjectParent}
+                    style={{ display: 'inline-flex', gap: 'var(--sp-1)' }}
+                  >
+                    <input type="hidden" name="id" value={s.id} />
+                    <select
+                      name="parentId"
+                      className="ep-select"
+                      defaultValue={s.parentId ?? ''}
+                      aria-label={`${s.code} is part of`}
+                    >
+                      <option value="">On its own</option>
+                      {parents
+                        .filter((p) => p.id !== s.id)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.code} · {p.name}
+                          </option>
+                        ))}
+                    </select>
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Save what ${s.code} is part of`}
+                    >
+                      Save
+                    </Button>
+                  </form>
+                );
+              },
+            },
             { key: 'order', header: a('order'), numeric: true, render: (s) => s.displayOrder },
             {
               key: 'status',
@@ -114,6 +171,17 @@ export default async function SubjectsPage({
                 type="number"
                 min={0}
                 defaultValue={subjects.data.length + 1}
+              />
+              <SelectField
+                id="parentId"
+                name="parentId"
+                label="Part of (for a teaching subject)"
+                defaultValue=""
+                help="Physics, Chemistry and Biology are part of Science: teachers and daily work use the parts, the report card shows Science."
+                options={[
+                  { value: '', label: 'On its own' },
+                  ...parents.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
+                ]}
               />
             </FormRow>
             <FormActions>

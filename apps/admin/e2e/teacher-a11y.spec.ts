@@ -13,6 +13,7 @@ const PAGES = [
   '/appointments',
   '/appointments?view=calendar',
   '/attendance',
+  '/marks',
   '/bus-attendance',
   '/gate-passes',
   '/gate-passes/new',

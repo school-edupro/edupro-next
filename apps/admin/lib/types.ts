@@ -364,6 +364,9 @@ export interface Subject {
   displayOrder: number;
   status: 'active' | 'inactive';
   updatedAt: string;
+  /** The report-card subject this teaching subject is part of. */
+  parentId?: string | null;
+  parentCode?: string | null;
 }
 
 export interface ClassSubject {
@@ -1873,6 +1876,17 @@ export interface ExamSubject {
   entryLocked: boolean;
   lockedBy: string | null;
   lockedAt: string | null;
+  /** The parts the subject is entered in (empty = one figure). */
+  parts?: Array<{
+    id: string;
+    name: string;
+    subjectId: string | null;
+    subjectCode: string | null;
+    maxMarks: string;
+    entered: number;
+  }>;
+  /** Teaching subjects under this subject. */
+  children?: Array<{ id: string; code: string; name: string }>;
 }
 export interface Exam {
   id: string;

@@ -69,6 +69,8 @@ const PAGES = [
   '/fees/bank',
   '/exams',
   '/exams/masters',
+  '/academics/subjects',
+  '/exams/5',
   '/insights/assistant',
   '/insights/alerts',
   // Sprint 16

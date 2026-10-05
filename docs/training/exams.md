@@ -46,3 +46,20 @@
    recompute results and re-render the card.
 5. _Board results._ **Exams → Board results**: upload the CBSE file; pupils match by board roll number
    (kept on the enrolment) or by name; the analysis and the export are available at once.
+
+## Teaching subjects and marks-entry subjects (October 2026)
+
+- **Subject groups.** Academics → Subjects: a subject can be _part of_ another. Physics, Chemistry and
+  Biology are part of Science. Teachers are mapped to the parts, the timetable and daily work use the
+  parts, and the report card shows Science. One level only.
+- **Daily work.** A subject teacher gives homework and classwork only for the subjects mapped to them
+  in that class; the class teacher and coordinators for any.
+- **Exam parts.** Exams → open the exam → _Subjects entered in parts_: leave a subject as one figure,
+  or split it into parts with their own maximum: Theory and Practical, or one part per teaching
+  subject (the page suggests them). The subject's maximum becomes the sum of the parts.
+- **Entering.** In the teacher app, Marks lists each part the teacher may enter (Science · Physics);
+  each teacher enters their own part, the class teacher and coordinators any. The subject's marks are
+  the sum of the parts; a pupil absent in every part is absent in the subject. Registers, analysis,
+  report cards and promotion read that total.
+- **Rules.** A subject already marked as one figure cannot be split until those marks are cleared; a
+  part with marks cannot be removed, and its maximum cannot go below the marks entered.
