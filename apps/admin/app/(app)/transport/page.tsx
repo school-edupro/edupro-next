@@ -1,7 +1,7 @@
-import { Badge, Card, PageHeader } from '@edupro/ui';
+import { Alert, Badge, Card, PageHeader } from '@edupro/ui';
 import { TransportNav } from '@/components/transport/TransportNav';
 import { apiFetch, getMe } from '@/lib/api';
-import { monthLabel, rupees } from '@/lib/transport-desk';
+import { dayLabel as dateLabel, monthLabel, rupees, type Replacement } from '@/lib/transport-desk';
 
 interface Dashboard {
   kpis: {
@@ -165,7 +165,13 @@ const ASKED_NAMES = ['Family (portal)', 'Transport office'];
  * route is, the busiest stoppages, slabs and classes, and the vehicle and driver papers running out.
  */
 export default async function TransportDashboardPage() {
-  const [me, d] = await Promise.all([getMe(), apiFetch<Dashboard>('/transport/desk/dashboard')]);
+  const [me, d, replaced] = await Promise.all([
+    getMe(),
+    apiFetch<Dashboard>('/transport/desk/dashboard'),
+    apiFetch<{ data: Replacement[] }>('/transport/replacements?tab=now')
+      .then((r) => r.data)
+      .catch(() => [] as Replacement[]),
+  ]);
   const k = d.kpis;
   const full = k.seats ? Math.round((100 * k.riders) / k.seats) : null;
   const kpis: Array<[string, string, string, string]> = [
@@ -221,6 +227,23 @@ export default async function TransportDashboardPage() {
         }
       />
       <TransportNav current="/transport" permissions={me.permissions} />
+      {replaced.length ? (
+        <div style={{ marginBottom: 'var(--sp-4)' }}>
+          <Alert tone="warning">
+            Replacement bus today:{' '}
+            {replaced
+              .map(
+                (x) =>
+                  `${x.vehicle} → ${x.replacement}${x.routes ? ` (route ${x.routes})` : ''} till ${dateLabel(x.toDate)}`,
+              )
+              .join('; ')}
+            .{' '}
+            <a href="/transport/replacements" style={{ textDecoration: 'underline' }}>
+              Open
+            </a>
+          </Alert>
+        </div>
+      ) : null}
       <div className="ep-cdash__kpis">
         {kpis.map(([title, n, help, href]) => (
           <Card key={title} title={title}>
@@ -431,7 +454,14 @@ export default async function TransportDashboardPage() {
           rows={d.classes.map((s) => ({ name: s.name, count: s.count }))}
           empty="No pupil rides yet."
         />
-        <Card title="Papers running out (30 days)">
+        <Card
+          title="Papers running out (30 days)"
+          actions={
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/transport/papers">
+              All papers
+            </a>
+          }
+        >
           {d.fleet.length === 0 ? (
             <p className="ep-field__help" style={{ margin: 0 }}>
               No insurance, fitness, permit or driving licence runs out in the next 30 days.
@@ -443,10 +473,10 @@ export default async function TransportDashboardPage() {
                   <div
                     style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-2)' }}
                   >
-                    <span>
+                    <a href="/transport/papers" style={{ textDecoration: 'underline' }}>
                       {f.name}
                       <span className="ep-field__help"> · {f.what}</span>
-                    </span>
+                    </a>
                     <strong>{dayLabel(f.on)}</strong>
                   </div>
                 </li>

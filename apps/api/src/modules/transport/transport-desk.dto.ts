@@ -101,7 +101,8 @@ const LevelSchema = z
   .object({
     source: z.enum(['parent', 'office']),
     label: z.string().trim().min(2).max(60),
-    kind: z.enum(['role', 'designation', 'employee']),
+    /** route_incharge = the in-charge named for the request's route (else the school's in-charges). */
+    kind: z.enum(['role', 'designation', 'employee', 'route_incharge']),
     roleCode: blank(z.string().trim().max(60)),
     designation: blank(z.string().trim().max(80)),
     employeeId: blank(IdSchema),
@@ -123,5 +124,66 @@ export const TransportSetupSchema = z.object({
   notifyEmail: z.boolean(),
   /** In the order they approve; each source keeps its own order. */
   levels: z.array(LevelSchema).max(12),
+  /** Who is in charge of transport: `routeId` blank = of the whole school, else of that route. */
+  incharges: z
+    .array(z.object({ routeId: blank(IdSchema), employeeId: IdSchema }))
+    .max(200)
+    .default([]),
 });
 export class TransportSetupDto extends createZodDto(TransportSetupSchema) {}
+
+/** Several requests decided in one go (the fee department after an Excel upload). */
+export const DecideManySchema = z
+  .object({
+    ids: z.array(IdSchema).min(1).max(300),
+    outcome: z.enum(['approved', 'rejected']),
+    note: blank(z.string().trim().max(300)),
+  })
+  .refine((v) => v.outcome !== 'rejected' || v.note, {
+    message: 'Give the reason',
+    path: ['note'],
+  });
+export class DecideManyDto extends createZodDto(DecideManySchema) {}
+
+/** Requests for many pupils from one Excel sheet (the start of a session). */
+export const ImportRequestsSchema = z.object({
+  fileName: blank(z.string().trim().max(200)),
+  fileBase64: z.string().min(100).max(950_000),
+});
+export class ImportRequestsDto extends createZodDto(ImportRequestsSchema) {}
+
+export const PapersSchema = z.object({
+  state: z.enum(['expired', 'soon', 'valid', 'missing', 'all']).default('soon'),
+  kind: z.enum(['insurance', 'fitness', 'permit', 'puc', 'licence']).optional(),
+  days: z.coerce.number().int().min(1).max(365).default(30),
+  q: z.string().trim().max(80).optional(),
+});
+export class PapersDto extends createZodDto(PapersSchema) {}
+
+/** A vehicle is off the road: another vehicle (and crew) runs its routes for these days. */
+export const ReplacementSchema = z
+  .object({
+    vehicleId: IdSchema,
+    replacementVehicleId: IdSchema,
+    driverId: blank(IdSchema),
+    conductorId: blank(IdSchema),
+    attendantId: blank(IdSchema),
+    fromDate: DateSchema,
+    toDate: DateSchema,
+    reason: z.string().trim().min(3).max(300),
+  })
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: 'The last day cannot be before the first day',
+    path: ['toDate'],
+  })
+  .refine((v) => v.vehicleId !== v.replacementVehicleId, {
+    message: 'Choose a different vehicle as the replacement',
+    path: ['replacementVehicleId'],
+  });
+export class ReplacementDto extends createZodDto(ReplacementSchema) {}
+export const EndReplacementSchema = z.object({ note: blank(z.string().trim().max(300)) });
+export class EndReplacementDto extends createZodDto(EndReplacementSchema) {}
+export const ReplacementListSchema = z.object({
+  tab: z.enum(['now', 'upcoming', 'past', 'all']).default('now'),
+});
+export class ReplacementListDto extends createZodDto(ReplacementListSchema) {}

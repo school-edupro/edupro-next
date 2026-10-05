@@ -1,5 +1,6 @@
-import { Alert, Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
+import { RecordSheet } from '@/components/RecordSheet';
 import { PeriodTable } from '@/components/transport/PeriodTable';
 import { TransportNav } from '@/components/transport/TransportNav';
 import { apiFetch, getMe } from '@/lib/api';
@@ -12,7 +13,6 @@ import {
   STATUS_TONE,
   monthLabel,
   rupees,
-  whoLine,
   type TransportRequestDetail,
 } from '@/lib/transport-desk';
 
@@ -35,58 +35,25 @@ export default async function TransportRequestPage({
   ]);
   const here = `/transport/requests/${r.id}`;
   const leave = r.kind === 'leave';
-  const facts: Array<[string, string | null]> = [
-    ['Request', `${r.kindLabel} · ${r.number}`],
-    ['Student', `${r.student}${whoLine(r) ? ` · ${whoLine(r)}` : ''}`],
-    ['Service', leave ? null : r.serviceLabel],
-    [
-      'Pick',
-      !leave && r.service !== 'drop' && r.pickStop
-        ? `${r.pickStop} · ${r.pickRoute ?? ''}${r.pickTime ? ` · ${r.pickTime}` : ''}`
-        : null,
-    ],
-    [
-      'Drop',
-      !leave && r.service !== 'pick' && r.dropStop
-        ? `${r.dropStop} · ${r.dropRoute ?? ''}${r.dropTime ? ` · ${r.dropTime}` : ''}`
-        : null,
-    ],
-    [leave ? 'No transport from' : 'From month', monthLabel(r.fromMonth)],
-    ['To month', leave ? null : monthLabel(r.toMonth)],
-    ['Slab', leave ? null : r.slab],
-    ['Monthly charge', leave ? null : rupees(r.monthlyAmount)],
-    ['Made by', r.source === 'office' ? 'The transport office' : 'The family (portal)'],
-    [
-      'Asked by',
-      r.requestedBy ? `${r.requestedBy} on ${when(r.requestedAt)}` : when(r.requestedAt),
-    ],
-    ['Note', r.note],
-    ['Decided', r.decidedAt ? when(r.decidedAt) : null],
-    ['Decision note', r.decisionNote],
-  ];
+  const school =
+    me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??
+    me.memberships[0]?.schoolName ??
+    '';
+  const feesDone = Boolean(r.feeNote?.startsWith('Fees updated') && !r.feeNote.includes('except'));
   return (
     <>
       <PageHeader
         kicker="Transport request"
         title={`${r.student} · ${r.number}`}
         description={r.what}
-        actions={<Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>}
+        actions={
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/transport/requests">
+            All requests
+          </a>
+        }
       />
       <TransportNav current="" permissions={me.permissions} ok={sp.ok} />
       <Notice params={{ error: sp.error, detail: sp.detail }} />
-      {r.feeNote ? (
-        <div style={{ marginBottom: 'var(--sp-4)' }}>
-          <Alert
-            tone={
-              r.feeNote.startsWith('Fees updated') && !r.feeNote.includes('except')
-                ? 'success'
-                : 'warning'
-            }
-          >
-            {r.feeNote}.
-          </Alert>
-        </div>
-      ) : null}
       {r.canDecide ? (
         <Card title="Your approval" style={{ marginBottom: 'var(--sp-4)' }}>
           <form action={decideTransport} className="ep-hd__form">
@@ -107,56 +74,97 @@ export default async function TransportRequestPage({
           </form>
         </Card>
       ) : null}
-      <Card title="Details" style={{ marginBottom: 'var(--sp-4)' }}>
-        <dl className="ep-hd__facts">
-          {facts
-            .filter(([, v]) => v)
-            .map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
+      <RecordSheet
+        school={school}
+        doc={`Transport request · ${r.number}`}
+        name={r.student}
+        badge={
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+            <Badge tone="info">{r.kindLabel}</Badge>
+            <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+          </span>
+        }
+        facts={[
+          ['Class', r.section],
+          ['Admission no.', r.admissionNo],
+          ['Made by', r.source === 'office' ? 'Transport office' : 'Family (portal)'],
+          ['Asked by', r.requestedBy],
+          ['Asked on', when(r.requestedAt)],
+        ]}
+        sections={[
+          {
+            title: leave ? 'Withdrawal' : 'What is asked',
+            rows: [
+              ['Service', leave ? null : r.serviceLabel],
+              [
+                'Pick',
+                !leave && r.service !== 'drop' && r.pickStop
+                  ? `${r.pickStop}\n${r.pickRoute ?? ''}${r.pickTime ? ` · ${r.pickTime}` : ''}`
+                  : null,
+              ],
+              [
+                'Drop',
+                !leave && r.service !== 'pick' && r.dropStop
+                  ? `${r.dropStop}\n${r.dropRoute ?? ''}${r.dropTime ? ` · ${r.dropTime}` : ''}`
+                  : null,
+              ],
+              [leave ? 'No transport from' : 'From month', monthLabel(r.fromMonth)],
+              ['To month', leave ? null : monthLabel(r.toMonth)],
+            ],
+          },
+          {
+            title: 'Charge and fees',
+            rows: [
+              ['Slab', leave ? null : r.slab],
+              ['Monthly charge', leave ? null : rupees(r.monthlyAmount)],
+              [
+                'Fees',
+                r.feeNote
+                  ? `${r.feeNote}.`
+                  : r.status === 'pending'
+                    ? 'Updated on the last approval'
+                    : null,
+              ],
+            ],
+          },
+          {
+            title: 'Decision',
+            rows: [
+              ['Decided on', r.decidedAt ? when(r.decidedAt) : null],
+              ['Decision note', r.decisionNote],
+            ],
+          },
+        ]}
+        remarksTitle={
+          r.source === 'office' ? 'Note of the transport office' : 'Note from the family'
+        }
+        remarks={r.note}
+        attention={Boolean(r.feeNote) && !feesDone}
+      >
+        <section className="ep-sheet__sec" aria-label="Approval">
+          <h3>
+            Approval · {r.approvedLevels} of {r.levels}
+          </h3>
+          <ol className="ep-steps">
+            {r.approvals.map((a) => (
+              <li key={a.seq} data-state={a.status}>
+                <div className="ep-steps__head">
+                  <strong>{a.label}</strong>
+                  <Badge tone={APPROVAL_TONE[a.status]}>{APPROVAL_LABEL[a.status]}</Badge>
+                </div>
+                <div className="ep-field__help">
+                  {a.actedBy
+                    ? `${a.actedBy}${a.actedAt ? ` · ${when(a.actedAt)}` : ''}`
+                    : a.status === 'skipped'
+                      ? (a.note ?? 'Skipped')
+                      : `With ${a.approvers ?? 'nobody'}`}
+                </div>
+                {a.actedBy && a.note ? <div>{a.note}</div> : null}
+              </li>
             ))}
-        </dl>
-      </Card>
-      <Card title="Approval" style={{ marginBottom: 'var(--sp-4)' }}>
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          One after another, in this order. The last approval writes the transport period and
-          updates the fees.
-        </p>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Approval levels">
-          <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">Approval levels of {r.number}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Level</th>
-                <th scope="col">Who</th>
-                <th scope="col">Status</th>
-                <th scope="col">Decided by</th>
-                <th scope="col">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.approvals.map((a) => (
-                <tr key={a.seq}>
-                  <td>
-                    {a.seq}. {a.label}
-                  </td>
-                  <td>{a.approvers ?? '—'}</td>
-                  <td>
-                    <Badge tone={APPROVAL_TONE[a.status]}>{APPROVAL_LABEL[a.status]}</Badge>
-                  </td>
-                  <td>
-                    {a.actedBy ?? '—'}
-                    {a.actedAt ? <div className="ep-field__help">{when(a.actedAt)}</div> : null}
-                  </td>
-                  <td>{a.note ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+          </ol>
+        </section>
+      </RecordSheet>
       <Card
         title="Transport history of the student"
         actions={

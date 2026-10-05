@@ -107,7 +107,7 @@ export interface TransportLevel {
   id?: string;
   source: 'parent' | 'office';
   label: string;
-  kind: 'role' | 'designation' | 'employee';
+  kind: 'role' | 'designation' | 'employee' | 'route_incharge';
   roleCode: string | null;
   designation: string | null;
   employeeId: string | null;
@@ -121,6 +121,14 @@ export interface TransportSetup {
     notifyEmail: boolean;
   };
   levels: TransportLevel[];
+  incharges: Array<{
+    routeId: string | null;
+    employeeId: string;
+    name?: string;
+    mobile?: string | null;
+    login?: boolean;
+  }>;
+  routes: Array<{ id: string; name: string }>;
   roles: Array<{ code: string; name: string }>;
   staff: Array<{ id: string; name: string }>;
   designations: string[];
@@ -202,3 +210,52 @@ export const rideLines = (r: {
       ? `Drop: ${r.dropStop} · ${r.dropRoute ?? ''}${r.dropTime ? ` · ${r.dropTime}` : ''}`
       : null,
   ].filter((x): x is string => Boolean(x));
+
+export interface Replacement {
+  id: string;
+  number: string;
+  vehicleId: string;
+  vehicle: string;
+  vehicleName: string | null;
+  replacement: string;
+  replacementName: string | null;
+  seats: number | null;
+  replacementSeats: number | null;
+  replacementGps: boolean;
+  driver: string | null;
+  driverMobile: string | null;
+  conductor: string | null;
+  conductorMobile: string | null;
+  attendant: string | null;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  status: string;
+  phase: 'running' | 'upcoming' | 'over' | 'cancelled';
+  routes: string;
+  notified: number;
+  notifiedAt: string | null;
+  backNotifiedAt: string | null;
+  endedNote: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+export interface FleetPaper {
+  owner: 'vehicle' | 'crew';
+  ownerId: string;
+  name: string;
+  detail: string | null;
+  kind: string;
+  paper: string;
+  validTill: string | null;
+  daysLeft: number | null;
+}
+export const dayLabel = (d: string | null | undefined): string =>
+  d
+    ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      })
+    : '';

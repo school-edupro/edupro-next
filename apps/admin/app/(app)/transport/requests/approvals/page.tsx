@@ -3,7 +3,7 @@ import { Notice } from '@/components/Notice';
 import { TransportNav } from '@/components/transport/TransportNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { when } from '@/lib/appointments';
-import { decideTransport } from '@/lib/transport-desk-actions';
+import { decideManyTransport, decideTransport } from '@/lib/transport-desk-actions';
 import {
   STATUS_LABEL,
   STATUS_TONE,
@@ -49,6 +49,46 @@ export default async function TransportApprovalsPage({
           <p className="ep-field__help" style={{ margin: 0 }}>
             Nothing waits for you.
           </p>
+        </Card>
+      ) : null}
+      {inbox.data.length > 1 ? (
+        <Card title="Decide several in one go" style={{ marginBottom: 'var(--sp-4)' }}>
+          <form action={decideManyTransport} className="ep-hd__form">
+            <fieldset className="ep-slots">
+              <legend className="ep-field__label">
+                Tick the requests (all are ticked to start with)
+              </legend>
+              <div className="ep-slots__grid">
+                {inbox.data.map((r) => (
+                  <label key={r.id} className="ep-slots__slot">
+                    <input type="checkbox" name="ids" value={r.id} defaultChecked />
+                    <span>
+                      {r.student}
+                      {r.admissionNo ? ` (${r.admissionNo})` : ''} · {r.kindLabel} ·{' '}
+                      {r.kind === 'leave'
+                        ? `from ${monthLabel(r.fromMonth)}`
+                        : rupees(r.monthlyAmount)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="ep-gate__act">
+              <input
+                name="note"
+                className="ep-input"
+                maxLength={300}
+                placeholder="Note (needed to reject)"
+                aria-label="Note for the requests ticked"
+              />
+              <Button type="submit" name="outcome" value="approved" size="sm">
+                Approve the ticked
+              </Button>
+              <Button type="submit" name="outcome" value="rejected" size="sm" variant="secondary">
+                Reject the ticked
+              </Button>
+            </div>
+          </form>
         </Card>
       ) : null}
       {inbox.data.map((r) => (

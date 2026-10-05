@@ -19,15 +19,22 @@ import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { FleetService } from './fleet.service';
 import {
   ApplyDto,
+  DecideManyDto,
   DeskDecideDto,
   DeskExportDto,
   DeskListDto,
   HistoryDto,
+  EndReplacementDto,
   HistoryExportDto,
+  ImportRequestsDto,
+  PapersDto,
+  ReplacementDto,
+  ReplacementListDto,
   QuoteDto,
   TransportSetupDto,
 } from './transport-desk.dto';
 import { TransportDeskService } from './transport-desk.service';
+import { TransportOpsService } from './transport-ops.service';
 import { TransportRequestsService } from './transport-requests.service';
 import {
   AssignStudentsDto,
@@ -261,6 +268,33 @@ export class TransportRequestsController {
     file(reply, await this.desk.listExcel(ctx, q));
   }
 
+  @Get('template.xlsx')
+  @ApiOperation({
+    summary: 'The Excel to fill for many pupils at once (drop-downs for service, stoppage, month)',
+  })
+  @RequirePermission(TRANSPORT.requestApply)
+  async importTemplate(@ReqCtx() ctx: RequestContext, @Res() reply: FastifyReply) {
+    file(reply, await this.desk.importTemplate(ctx));
+  }
+
+  @Post('import')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Requests for many pupils from Excel; they wait for the fee department',
+  })
+  @RequirePermission(TRANSPORT.requestApply)
+  importRequests(@ReqCtx() ctx: RequestContext, @Body() dto: ImportRequestsDto) {
+    return this.desk.importRequests(ctx, dto);
+  }
+
+  @Post('decide-many')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Approve or reject several requests at my level in one go' })
+  @AuthenticatedOnly()
+  decideMany(@ReqCtx() ctx: RequestContext, @Body() dto: DecideManyDto) {
+    return this.desk.decideMany(ctx, dto);
+  }
+
   @Get('inbox')
   @ApiOperation({ summary: 'Requests waiting for my approval, and the ones I decided' })
   @AuthenticatedOnly()
@@ -309,12 +343,35 @@ export class TransportRequestsController {
 @ApiBearerAuth()
 @Controller('transport/desk')
 export class TransportDeskController {
-  constructor(private readonly desk: TransportDeskService) {}
+  constructor(
+    private readonly desk: TransportDeskService,
+    private readonly ops: TransportOpsService,
+  ) {}
 
   @Get('dashboard')
   @RequirePermission(TRANSPORT.requestView)
-  dashboard(@ReqCtx() ctx: RequestContext) {
+  async dashboard(@ReqCtx() ctx: RequestContext) {
+    await this.ops.runTick(ctx);
     return this.desk.dashboard(ctx);
+  }
+
+  @Get('papers')
+  @ApiOperation({
+    summary: 'Papers of the fleet: insurance, fitness, permit, PUC and driving licences',
+  })
+  @RequirePermission(TRANSPORT.fleetView)
+  papers(@ReqCtx() ctx: RequestContext, @Query() q: PapersDto) {
+    return this.ops.papers(ctx, q);
+  }
+
+  @Get('papers/export.xlsx')
+  @RequirePermission(TRANSPORT.fleetView)
+  async papersExcel(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: PapersDto,
+    @Res() reply: FastifyReply,
+  ) {
+    file(reply, await this.ops.papersExcel(ctx, q));
   }
 
   @Get('history')
@@ -346,5 +403,44 @@ export class TransportDeskController {
   @RequirePermission(TRANSPORT.setup)
   saveSetup(@ReqCtx() ctx: RequestContext, @Body() dto: TransportSetupDto) {
     return this.desk.saveSetup(ctx, dto);
+  }
+}
+
+/** A vehicle off the road: the replacement vehicle and crew for some days. */
+@ApiTags('transport')
+@ApiBearerAuth()
+@Controller('transport/replacements')
+export class TransportReplacementsController {
+  constructor(private readonly ops: TransportOpsService) {}
+
+  @Get()
+  @RequirePermission(TRANSPORT.fleetView)
+  list(@ReqCtx() ctx: RequestContext, @Query() q: ReplacementListDto) {
+    return this.ops.replacements(ctx, q);
+  }
+
+  @Get('options')
+  @RequirePermission(TRANSPORT.replacementManage, {
+    description: 'Arrange a replacement bus for a vehicle that is off the road',
+  })
+  options(@ReqCtx() ctx: RequestContext) {
+    return this.ops.replacementOptions(ctx);
+  }
+
+  @Post()
+  @ApiOperation({
+    summary: 'Map a replacement vehicle and crew; the parents of its routes are told',
+  })
+  @RequirePermission(TRANSPORT.replacementManage)
+  create(@ReqCtx() ctx: RequestContext, @Body() dto: ReplacementDto) {
+    return this.ops.createReplacement(ctx, dto);
+  }
+
+  @Post(':id/end')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'The regular bus is back (or the replacement is called off)' })
+  @RequirePermission(TRANSPORT.replacementManage)
+  end(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: EndReplacementDto) {
+    return this.ops.endReplacement(ctx, id, dto);
   }
 }

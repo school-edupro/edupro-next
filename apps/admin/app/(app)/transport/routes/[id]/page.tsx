@@ -7,43 +7,29 @@ import {
   FormRow,
   InputField,
   PageHeader,
-  SelectField,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import {
-  assignRouteStudents,
-  setRouteStops,
-  unassignRouteStudent,
-  updateRouteRules,
-} from '@/lib/actions';
+import { setRouteStops, updateRouteRules } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import { sectionOptions } from '@/lib/sections';
-import type {
-  Page,
-  RouteStudent,
-  Student,
-  TransportRoute,
-  TransportStop,
-} from '@/lib/types';
+import type { RouteStudent, TransportRoute, TransportStop } from '@/lib/types';
 
 export default async function RoutePage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; classSectionId?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, tr, a, me, routes, riders, sections] = await Promise.all([
+  const [t, tr, a, me, routes, riders] = await Promise.all([
     getTranslations('pages.transport_routes'),
     getTranslations('transport'),
     getTranslations('attendance'),
     getMe(),
     apiFetch<{ data: TransportRoute[] }>('/transport/routes').then((r) => r.data),
     apiFetch<{ data: RouteStudent[] }>(`/transport/routes/${id}/students`).then((r) => r.data),
-    sectionOptions(),
   ]);
   const route = routes.find((r) => r.id === id);
   const canManage = me.permissions.includes('transport.route.manage');
@@ -71,12 +57,6 @@ export default async function RoutePage({
       : Promise.resolve([] as Array<Record<string, string | null>>),
   ]);
   const stopRows = [...stops, ...Array.from({ length: canFleetManage ? 3 : 0 }, () => null)];
-  const students = sp.classSectionId
-    ? await apiFetch<Page<Student>>(
-        `/people/students?classSectionId=${sp.classSectionId}&size=200`,
-      ).then((r) => r.data)
-    : [];
-  const onRoute = new Set(riders.map((r) => r.studentId));
   return (
     <>
       <Breadcrumbs
@@ -282,7 +262,21 @@ export default async function RoutePage({
             )}
           </Card>
         ) : null}
-        <Card title={`${tr('riders')} · ${riders.length}`}>
+        <Card
+          title={`${tr('riders')} · ${riders.length}`}
+          actions={
+            me.permissions.includes('transport.request.apply') ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/transport/requests/new">
+                Apply for a student
+              </a>
+            ) : null
+          }
+        >
+          <p className="ep-field__help">
+            A pupil comes onto a route, changes stoppage or leaves through a transport request,
+            which is approved and updates the fees. Use Apply for a student (one pupil, or many from
+            Excel).
+          </p>
           <DataTable<RouteStudent>
             caption={tr('riders')}
             density="dense"
@@ -301,23 +295,6 @@ export default async function RoutePage({
                 header: tr('guardianMobile'),
                 render: (r) => r.guardianMobile ?? '',
               },
-              ...(canManage
-                ? [
-                    {
-                      key: 'remove',
-                      header: '',
-                      render: (r: RouteStudent) => (
-                        <form action={unassignRouteStudent}>
-                          <input type="hidden" name="id" value={id} />
-                          <input type="hidden" name="studentId" value={r.studentId} />
-                          <Button type="submit" variant="ghost" size="sm">
-                            {tr('remove')}
-                          </Button>
-                        </form>
-                      ),
-                    },
-                  ]
-                : []),
             ]}
             rows={riders}
             rowKey={(r) => r.studentId}
@@ -362,69 +339,6 @@ export default async function RoutePage({
                 </Button>
               </FormActions>
             </form>
-          </Card>
-        ) : null}
-        {canManage ? (
-          <Card title={tr('assign')}>
-            <p className="ep-field__help">{tr('assignHelp')}</p>
-            <form
-              method="get"
-              style={{
-                display: 'flex',
-                gap: 'var(--sp-3)',
-                alignItems: 'flex-end',
-                marginBottom: 'var(--sp-3)',
-              }}
-            >
-              <SelectField
-                id="classSectionId"
-                name="classSectionId"
-                label={tr('section')}
-                defaultValue={sp.classSectionId ?? ''}
-                options={[{ value: '', label: '—' }, ...sections]}
-              />
-              <Button type="submit" variant="secondary">
-                {tr('section')}
-              </Button>
-            </form>
-            {students.length ? (
-              <form action={assignRouteStudents}>
-                <input type="hidden" name="id" value={id} />
-                <label className="ep-field" htmlFor="studentId">
-                  <span className="ep-field__label">{tr('students')}</span>
-                  <select id="studentId" name="studentId" className="ep-input" multiple size={8}>
-                    {students.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.displayName} · {s.admissionNo}
-                        {onRoute.has(s.id) ? ' ✓' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <FormRow columns={4}>
-                  {stops.length ? (
-                    <SelectField
-                      id="stopId"
-                      name="stopId"
-                      label={tr('stopOnRoute')}
-                      options={[
-                        { value: '', label: tr('chooseStop') },
-                        ...stops.map((st) => ({
-                          value: st.id,
-                          label: `${st.sequence}. ${st.name}${st.pickupTime ? ` · ${st.pickupTime}` : ''}`,
-                        })),
-                      ]}
-                    />
-                  ) : null}
-                  <InputField id="stopName" name="stopName" label={tr('stop')} maxLength={80} />
-                  <InputField id="pickupTime" name="pickupTime" label={tr('pickup')} type="time" />
-                  <InputField id="dropTime" name="dropTime" label={tr('drop')} type="time" />
-                </FormRow>
-                <FormActions>
-                  <Button type="submit">{tr('assign')}</Button>
-                </FormActions>
-              </form>
-            ) : null}
           </Card>
         ) : null}
       </div>

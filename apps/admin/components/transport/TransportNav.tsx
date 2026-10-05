@@ -11,6 +11,12 @@ const TABS: Array<{ href: string; label: string; permission: string | null }> = 
   },
   { href: '/transport/requests/approvals', label: 'To approve', permission: null },
   { href: '/transport/history', label: 'Student history', permission: 'transport.request.view' },
+  {
+    href: '/transport/replacements',
+    label: 'Replacement bus',
+    permission: 'transport.fleet.view',
+  },
+  { href: '/transport/papers', label: 'Fleet papers', permission: 'transport.fleet.view' },
   { href: '/transport/setup', label: 'Settings', permission: 'transport.setup.manage' },
 ];
 
@@ -19,6 +25,9 @@ const OK: Record<string, string> = {
   approved: 'Approved at your level.',
   rejected: 'Not approved. The family has been told.',
   saved: 'Saved.',
+  replaced: 'Replacement bus saved. The parents of its routes have been told.',
+  ended: 'The regular bus is back. The parents have been told.',
+  many: 'Done for the requests ticked.',
 };
 
 /**

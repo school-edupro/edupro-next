@@ -4,6 +4,7 @@
  * (history) they leave, the fees of exactly those months, a withdrawal from a month, and the reports.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import {
   createApp,
   headersFor,
@@ -27,6 +28,7 @@ describe('transport desk (e2e)', () => {
   let parent: SeededUser;
   let s: string;
   let studentId: string;
+  let sectionId: string;
   let months: string[] = [];
   const route: Record<string, string> = {};
   const stop: Record<string, string> = {};
@@ -66,6 +68,7 @@ describe('transport desk (e2e)', () => {
       displayOrder: 6,
     });
     const sec = await post(`/academics/classes/${cls.json().id}/sections`, admin, { name: 'A' });
+    sectionId = sec.json().id;
     const tui = await post('/fees/heads', admin, { code: 'TUI', name: 'Tuition', sortOrder: 1 });
     await post('/fees/heads', admin, {
       code: 'TRN',
@@ -129,7 +132,7 @@ describe('transport desk (e2e)', () => {
           isPrimary: true,
         },
       ],
-      enrolment: { classSectionId: sec.json().id, rollNo: 1 },
+      enrolment: { classSectionId: sectionId, rollNo: 1 },
     });
     expect(st.statusCode).toBe(201);
     studentId = st.json().id;
@@ -437,5 +440,247 @@ describe('transport desk (e2e)', () => {
     expect(dash.json().kpis).toMatchObject({ routes: 2, pending: 0 });
     expect(dash.json().months).toHaveLength(6);
     expect(dash.json().days).toHaveLength(30);
+  });
+
+  it('a route can have its own in-charge: its requests wait on that person', async () => {
+    // the class teacher is an employee the school names in-charge of route R2
+    const employeeId = await withMigrator(async (c) => {
+      const e = await c.query<{ id: string }>(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id, mobile)
+         VALUES ($1, 'TI1', 'Tara', 'Incharge', $2, '9876511111') RETURNING id::text`,
+        [school.id, teacher.id],
+      );
+      return e.rows[0]!.id;
+    });
+    const setup = (await get('/transport/desk/setup')).json();
+    expect(setup.levels[0]).toMatchObject({ label: 'Transport in-charge', kind: 'route_incharge' });
+    const saved = await put('/transport/desk/setup', admin, {
+      ...setup.settings,
+      levels: setup.levels,
+      incharges: [{ routeId: route.R2, employeeId }],
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().incharges).toEqual([
+      expect.objectContaining({ routeId: route.R2, name: 'Tara Incharge', login: true }),
+    ]);
+    const ask = await post('/transport/requests/mine', parent, {
+      studentId,
+      kind: 'join',
+      service: 'both',
+      pickRouteId: route.R2,
+      pickStopId: stop['Baner Road'],
+      fromMonth: months[8],
+    });
+    expect(ask.statusCode).toBe(201);
+    // route R2 has its own in-charge: the role holder is not asked, the named person is
+    expect((await get('/transport/requests/inbox', incharge)).json().data).toHaveLength(0);
+    expect((await get('/transport/requests/inbox', teacher)).json().data).toHaveLength(1);
+    expect(
+      (await post(`/transport/requests/${ask.json().id}/decide`, incharge, { outcome: 'approved' }))
+        .statusCode,
+    ).toBe(403);
+    const first = await post(`/transport/requests/${ask.json().id}/decide`, teacher, {
+      outcome: 'approved',
+    });
+    expect(first.json()).toMatchObject({ status: 'pending', waitingOn: 'Fee department' });
+    await post(`/transport/requests/${ask.json().id}/decide`, accountant, { outcome: 'approved' });
+  });
+
+  it('many pupils from one Excel sheet become requests; the fee department approves them in one go', async () => {
+    const extra: string[] = [];
+    for (const n of [2, 3]) {
+      const r = await post('/people/students', admin, {
+        admissionNo: `${s}-${String(n)}`,
+        firstName: `Pupil${String(n)}`,
+        lastName: 'Rider',
+        enrolment: { classSectionId: sectionId, rollNo: n },
+      });
+      expect(r.statusCode).toBe(201);
+      extra.push(r.json().id);
+    }
+    expect((await get('/transport/requests/template.xlsx', teacher)).statusCode).toBe(403);
+    const tpl = await get('/transport/requests/template.xlsx', incharge);
+    expect(tpl.statusCode).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(tpl.rawPayload as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    expect(ws.getCell('C2').dataValidation?.type).toBe('list');
+    const offered: string[] = [];
+    wb.getWorksheet('Lists')!
+      .getColumn(2)
+      .eachCell((cell, n) => {
+        if (n > 1 && cell.value) offered.push(String(cell.value));
+      });
+    expect(offered).toEqual(expect.arrayContaining(['R1 · Karve Nagar', 'R2 · Baner Road']));
+    ws.getRow(2).values = [
+      `${s}-2`,
+      'Pick and drop',
+      'R1 · Karve Nagar',
+      null,
+      months[2],
+      null,
+      'New',
+    ];
+    ws.getRow(3).values = [`${s}-3`, 'Drop only', null, 'R2 · Baner Road', months[2], months[6]];
+    ws.getRow(4).values = ['NOBODY-9', 'Pick only', 'R1 · Karve Nagar', null, months[2]];
+    ws.getRow(5).values = [`${s}-2`, 'Pick only', 'R1 · Warje', null, months[2]]; // already waiting
+    const up = await post('/transport/requests/import', incharge, {
+      fileName: 'start.xlsx',
+      fileBase64: Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer).toString('base64'),
+    });
+    expect(up.statusCode).toBe(200);
+    expect(up.json()).toMatchObject({ created: 2, errors: [{ row: 4 }, { row: 5 }] });
+    const inbox = (await get('/transport/requests/inbox', accountant)).json().data as Array<{
+      id: string;
+      source: string;
+      monthlyAmount: number;
+    }>;
+    expect(inbox).toHaveLength(2);
+    expect(inbox.map((r) => [r.source, r.monthlyAmount]).sort()).toEqual([
+      ['office', 1000],
+      ['office', 900],
+    ]);
+    const all = await post('/transport/requests/decide-many', accountant, {
+      ids: [...inbox.map((r) => r.id), '999999999'],
+      outcome: 'approved',
+    });
+    expect(all.json()).toMatchObject({ done: 2, failed: [{ id: '999999999' }] });
+    expect((await get('/transport/requests/inbox', accountant)).json().data).toHaveLength(0);
+    expect(
+      (await get(`/transport/desk/history?when=all&studentId=${extra[0]!}`)).json().page.total,
+    ).toBe(1);
+  });
+
+  it('papers that run out, and a replacement bus the parents can track', async () => {
+    const save = (master: string, values: Record<string, unknown>) =>
+      post(`/masters/${master}/rows`, admin, { values });
+    const soon = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+    const gone = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
+    for (const v of [
+      {
+        reg_no: 'MH12AA1111',
+        name: 'Regular',
+        capacity: 40,
+        insurance_expiry: soon,
+        puc_expiry: gone,
+        gps_device_id: 'G1',
+      },
+      {
+        reg_no: 'MH12BB2222',
+        name: 'Spare',
+        capacity: 40,
+        insurance_expiry: '2031-01-01',
+        gps_device_id: 'G2',
+      },
+    ])
+      expect((await save('transport_vehicles', v)).statusCode).toBe(201);
+    for (const d of [
+      {
+        code: 'D1',
+        name: 'Ramesh Pawar',
+        role: 'driver',
+        mobile: '9876500001',
+        licence_expiry: soon,
+      },
+      { code: 'D2', name: 'Sanjay More', role: 'driver', mobile: '9876500002' },
+    ])
+      expect((await save('transport_drivers', d)).statusCode).toBe(201);
+    expect(
+      (
+        await save('transport_route_vehicles', {
+          route_id: 'R1',
+          vehicle_id: 'MH12AA1111',
+          shift: 'both',
+          driver_id: 'D1',
+        })
+      ).statusCode,
+    ).toBe(201);
+    // the papers page: what runs out in 30 days, what is over, what was never recorded
+    const papers = (await get('/transport/desk/papers?state=soon', incharge)).json();
+    expect(
+      papers.data.map((p: { name: string; kind: string }) => `${p.name}:${p.kind}`).sort(),
+    ).toEqual(['MH12AA1111:insurance', 'Ramesh Pawar:licence']);
+    expect(papers.data[0].daysLeft).toBe(10);
+    expect(papers.counts).toMatchObject({ expired: 1, soon: 2 });
+    expect((await get('/transport/desk/papers?state=expired')).json().data[0]).toMatchObject({
+      name: 'MH12AA1111',
+      kind: 'puc',
+      daysLeft: -5,
+    });
+    expect((await get('/transport/desk/papers/export.xlsx?state=all')).statusCode).toBe(200);
+
+    // the child rides R1 (mapped directly here, so the test does not depend on today's month)
+    const on = await put(`/transport/routes/${route.R1}/students`, admin, {
+      assignments: [{ studentId, stopId: stop['Karve Nagar'] }],
+    });
+    expect(on.statusCode).toBe(200);
+    const before = (await get('/transport/gps/mine', parent)).json().children[0];
+    expect(before).toMatchObject({ vehicle: { regNo: 'MH12AA1111' }, replacement: null });
+
+    const options = (await get('/transport/replacements/options', incharge)).json();
+    const vehicle = (regNo: string) =>
+      (options.vehicles as Array<{ id: string; regNo: string; routes: string }>).find(
+        (v) => v.regNo === regNo,
+      )!;
+    expect(vehicle('MH12AA1111').routes).toBe('R1');
+    const d2 = (options.crew as Array<{ id: string; name: string }>).find(
+      (p) => p.name === 'Sanjay More',
+    )!.id;
+    const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+    const till = new Date(Date.now() + 5.5 * 3600000 + 3 * 86400000).toISOString().slice(0, 10);
+    expect((await post('/transport/replacements', accountant, {})).statusCode).toBe(403);
+    const body = {
+      vehicleId: vehicle('MH12AA1111').id,
+      replacementVehicleId: vehicle('MH12BB2222').id,
+      driverId: d2,
+      fromDate: today,
+      toDate: till,
+      reason: 'Clutch repair',
+    };
+    expect(
+      (
+        await post('/transport/replacements', incharge, {
+          ...body,
+          replacementVehicleId: body.vehicleId,
+        })
+      ).statusCode,
+    ).toBe(400);
+    const rep = await post('/transport/replacements', incharge, body);
+    expect(rep.statusCode).toBe(201);
+    expect(rep.json()).toMatchObject({
+      vehicle: 'MH12AA1111',
+      replacement: 'MH12BB2222',
+      routes: 'R1',
+      phase: 'running',
+      driver: 'Sanjay More',
+    });
+    expect(rep.json().number).toMatch(/^RB-\d{4}-\d{4,}$/);
+    expect((await post('/transport/replacements', incharge, body)).statusCode).toBe(409);
+    // for these days the parent's live bus is the replacement, and the portal says so
+    const during = (await get('/transport/gps/mine', parent)).json().children[0];
+    expect(during).toMatchObject({
+      vehicle: { regNo: 'MH12BB2222' },
+      replacement: {
+        regular: 'MH12AA1111',
+        until: till,
+        driver: 'Sanjay More',
+        driverMobile: '9876500002',
+      },
+    });
+    expect((await get('/transport/replacements?tab=now', incharge)).json()).toMatchObject({
+      counts: { now: 1 },
+      data: [{ id: rep.json().id }],
+    });
+    // the regular bus is back early
+    const end = await post(`/transport/replacements/${rep.json().id}/end`, incharge, {
+      note: 'Repaired',
+    });
+    expect(end.statusCode).toBe(200);
+    expect(end.json().backNotifiedAt).toBeTruthy();
+    expect((await get('/transport/gps/mine', parent)).json().children[0]).toMatchObject({
+      vehicle: { regNo: 'MH12AA1111' },
+      replacement: null,
+    });
+    expect((await get('/transport/replacements?tab=now')).json().data).toHaveLength(0);
   });
 });

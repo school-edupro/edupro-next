@@ -13,6 +13,7 @@ export const TRANSPORT = {
   requestDecide: 'transport.request.decide',
   requestApply: 'transport.request.apply',
   setup: 'transport.setup.manage',
+  replacementManage: 'transport.replacement.manage',
   logView: 'transport.log.view',
   logManage: 'transport.log.manage',
 } as const;

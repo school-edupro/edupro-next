@@ -4,7 +4,7 @@ import { PeriodTable } from '@/components/transport/PeriodTable';
 import { RideForm } from '@/components/transport/RideForm';
 import { TransportNav } from '@/components/transport/TransportNav';
 import { apiFetch, getMe } from '@/lib/api';
-import { applyTransport } from '@/lib/transport-desk-actions';
+import { applyTransport, importTransportRequests } from '@/lib/transport-desk-actions';
 import type { RideOptions } from '@/lib/transport-desk';
 
 interface Hit {
@@ -22,7 +22,15 @@ interface Hit {
 export default async function ApplyTransportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sq?: string; student?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    sq?: string;
+    student?: string;
+    imported?: string;
+    skipped?: string;
+    problems?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const sq = (sp.sq ?? '').trim().slice(0, 80);
@@ -48,6 +56,20 @@ export default async function ApplyTransportPage({
       />
       <TransportNav current="/transport/requests/new" permissions={me.permissions} />
       <Notice params={{ error: sp.error, detail: sp.detail }} />
+      {sp.imported !== undefined ? (
+        <div style={{ marginBottom: 'var(--sp-4)' }}>
+          <Alert tone={Number(sp.skipped) ? 'warning' : 'success'}>
+            {sp.imported} request(s) made from the Excel; they wait for approval under{' '}
+            <a href="/transport/requests?tab=pending" style={{ textDecoration: 'underline' }}>
+              Requests
+            </a>
+            .
+            {Number(sp.skipped)
+              ? ` ${sp.skipped ?? '0'} row(s) were left out: ${sp.problems ?? ''}`
+              : ''}
+          </Alert>
+        </div>
+      ) : null}
       <Card title="1. The student">
         <form method="get" className="ep-hd__row">
           <label className="ep-field" htmlFor="ta-sq">
@@ -153,6 +175,33 @@ export default async function ApplyTransportPage({
             )}
           </Card>
         </>
+      ) : null}
+      {!student ? (
+        <Card title="Many students from Excel" style={{ marginTop: 'var(--sp-4)' }}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            For the start of a session. 1. Download the Excel: service, stoppage (route · stoppage)
+            and month are drop-downs. 2. Fill one row per pupil with the admission number. 3. Upload
+            it. Every row becomes a request made by the transport office; the fee department
+            approves them (one by one or all ticked together) and the fees follow.
+          </p>
+          <form action={importTransportRequests} className="ep-gate__act">
+            <label className="ep-field" htmlFor="ti-file">
+              <span className="ep-field__label">Excel file (.xlsx)</span>
+              <input
+                id="ti-file"
+                name="file"
+                type="file"
+                className="ep-input"
+                required
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              />
+            </label>
+            <Button type="submit">Upload</Button>
+            <a className="ep-btn ep-btn--secondary" href="/api/transport/request-template">
+              Download the Excel to fill
+            </a>
+          </form>
+        </Card>
       ) : null}
     </>
   );

@@ -13,6 +13,11 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'Replacement bus': 'वैकल्पिक बस',
+  'runs this route in place of': 'इस मार्ग पर चल रही है, इसकी जगह:',
+  till: 'तक:',
+  'The stops and timings do not change.': 'स्टॉप और समय नहीं बदलते।',
+  'Transport in-charge': 'परिवहन प्रभारी',
   'Transport request': 'परिवहन अनुरोध',
   'Back to transport': 'परिवहन पर वापस',
   'Apply for transport': 'परिवहन के लिए आवेदन',

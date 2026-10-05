@@ -5327,3 +5327,49 @@ a.ep-tabs__tab {
   overflow-x: visible;
   row-gap: var(--sp-1);
 }
+
+/* Steps of an approval, one under the other, joined by a line; the state colours the dot. */
+.ep-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.ep-steps li {
+  position: relative;
+  padding: 0 0 var(--sp-4) var(--sp-6);
+  border-left: 2px solid var(--border-default);
+  margin-left: var(--sp-2);
+}
+.ep-steps li:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+.ep-steps li::before {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--sp-2) - 1px);
+  top: 0.2rem;
+  width: var(--sp-4);
+  height: var(--sp-4);
+  border-radius: 50%;
+  background: var(--surface-card);
+  border: 3px solid var(--border-default);
+}
+.ep-steps li[data-state='approved']::before {
+  border-color: var(--status-success);
+  background: var(--status-success);
+}
+.ep-steps li[data-state='pending']::before {
+  border-color: var(--status-warning);
+}
+.ep-steps li[data-state='rejected']::before {
+  border-color: var(--status-danger);
+  background: var(--status-danger);
+}
+.ep-steps__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}

@@ -6,10 +6,12 @@ import { GpsController } from './gps.controller';
 import { GpsService } from './gps.service';
 import { FleetService } from './fleet.service';
 import { TransportDeskService } from './transport-desk.service';
+import { TransportOpsService } from './transport-ops.service';
 import { TransportRequestsService } from './transport-requests.service';
 import {
   FleetController,
   TransportDeskController,
+  TransportReplacementsController,
   TransportController,
   TransportRequestsController,
 } from './transport.controller';
@@ -26,6 +28,7 @@ import { TransportService } from './transport.service';
     FleetController,
     TransportRequestsController,
     TransportDeskController,
+    TransportReplacementsController,
     GpsController,
   ],
   providers: [
@@ -33,6 +36,7 @@ import { TransportService } from './transport.service';
     FleetService,
     TransportRequestsService,
     TransportDeskService,
+    TransportOpsService,
     GpsService,
     AuditService,
   ],

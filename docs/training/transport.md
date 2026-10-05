@@ -77,3 +77,21 @@
    or a designation holds several people; any one of them can approve).
 5. _A pupil was put on a route directly on the route page._ The history picks it up from this month
    at the stoppage's slab; no approval is recorded for it. Use a request when the fee must follow.
+
+## Operations (October 2026)
+
+- **Transport in-charge.** Transport settings → _Transport in-charge_: name the in-charge of the whole
+  school, and another per route where needed. A family's request waits on its route's in-charge (else
+  the school's, else everyone with the Transport In-charge role). Parents see the name and phone under
+  School bus.
+- **Pupils come onto a route by request only.** The route page lists the riders; it no longer adds or
+  removes them. Use **Apply for a student**: one pupil, or **many from Excel** (download the sheet with
+  drop-downs, one row per pupil; each row becomes an office request). The fee department approves them
+  one by one or ticks several under **To approve**.
+- **Replacement bus.** When a vehicle is off the road: Replacement bus → Arrange a replacement → the
+  vehicle, the replacement vehicle and crew, the days and the reason. Every route of that vehicle
+  follows the replacement on those days (the parents' live tracking too). Parents are told on saving
+  (email; SMS and WhatsApp when the templates are ready) and again when the days end or you press
+  **Regular bus is back**.
+- **Fleet papers.** Dashboard → Papers running out → All papers: insurance, fitness, permit, PUC and
+  driving licences with the days left; tabs for running out, expired, not recorded and valid; Excel.

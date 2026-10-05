@@ -180,11 +180,18 @@ export class GpsService {
         const r = await c.query<Record<string, unknown>>(
           `SELECT r.code AS route_code, r.name AS route_name, a.stop_name, st.lat::text AS stop_lat, st.lng::text AS stop_lng,
                   to_char(a.pickup_time, 'HH24:MI') AS pickup, v.id::text AS vehicle_id, v.reg_no,
+                  reg.reg_no AS regular_reg_no, rep.to_date AS rep_to, rep.reason AS rep_reason, rep.driver AS rep_driver, rep.driver_mobile AS rep_driver_mobile,
                   p.recorded_at, p.lat::text, p.lng::text, p.speed_kmh::text, p.heading::text, p.ignition, p.source,
                   EXTRACT(EPOCH FROM (now() - p.recorded_at))::int AS age_seconds
              FROM student_route_assignments a JOIN transport_routes r ON r.id = a.route_id
              LEFT JOIN transport_stops st ON st.id = a.stop_id
-             LEFT JOIN transport_vehicles v ON v.id = r.vehicle_id AND v.deleted_at IS NULL
+             -- the vehicle that runs the route today: the replacement while the regular bus is off the road
+             LEFT JOIN transport_vehicles v ON v.id = app.transport_vehicle_today(r.vehicle_id) AND v.deleted_at IS NULL
+             LEFT JOIN transport_vehicles reg ON reg.id = r.vehicle_id AND reg.id <> v.id
+             LEFT JOIN LATERAL (SELECT x.to_date::text, x.reason, d.name AS driver, d.mobile AS driver_mobile FROM transport_replacements x
+                                  LEFT JOIN transport_drivers d ON d.id = x.driver_id
+                                 WHERE reg.id IS NOT NULL AND x.vehicle_id = reg.id AND x.replacement_vehicle_id = v.id AND x.status = 'active'
+                                   AND (now() AT TIME ZONE 'Asia/Kolkata')::date BETWEEN x.from_date AND x.to_date ORDER BY x.id DESC LIMIT 1) rep ON true
              LEFT JOIN LATERAL (SELECT * FROM vehicle_positions p WHERE p.vehicle_id = v.id ORDER BY p.recorded_at DESC LIMIT 1) p ON true
             WHERE a.student_id = $1 AND a.academic_year_id = app.current_academic_year_id() LIMIT 1`,
           [s.id],
@@ -204,6 +211,16 @@ export class GpsService {
             : null,
           vehicle: row?.vehicle_id
             ? { id: String(row.vehicle_id), regNo: String(row.reg_no) }
+            : null,
+          // set while a replacement bus runs the route in place of the regular one
+          replacement: row?.regular_reg_no
+            ? {
+                regular: String(row.regular_reg_no),
+                until: (row.rep_to as string | null) ?? null,
+                reason: (row.rep_reason as string | null) ?? null,
+                driver: (row.rep_driver as string | null) ?? null,
+                driverMobile: (row.rep_driver_mobile as string | null) ?? null,
+              }
             : null,
           position: row?.recorded_at ? toRow({ ...row, vehicle_id: row.vehicle_id }) : null,
         });

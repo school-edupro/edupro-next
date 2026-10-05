@@ -47,6 +47,7 @@ interface Mine {
     name: string;
     section: string | null;
     current: Period | null;
+    incharge?: Array<{ name: string; mobile: string | null }>;
     periods: Period[];
     requests: Array<{
       id: string;
@@ -103,6 +104,14 @@ interface Track {
     student: { id: string; name: string };
     route: { code: string; name: string; stop: string | null; pickup: string | null } | null;
     vehicle: { id: string; regNo: string } | null;
+    /** set while a replacement bus runs the route */
+    replacement: {
+      regular: string;
+      until: string | null;
+      reason: string | null;
+      driver: string | null;
+      driverMobile: string | null;
+    } | null;
     position: {
       recordedAt: string;
       lat: string;
@@ -209,6 +218,24 @@ export default async function TransportPage({
               {c.route!.stop ? ` · ${c.route!.stop}` : ''}
               {c.route!.pickup ? ` · ${c.route!.pickup}` : ''}
             </div>
+            {c.replacement ? (
+              <div
+                className="ep-alert ep-alert--warning"
+                role="status"
+                style={{ marginTop: 'var(--sp-2)' }}
+              >
+                {t(lang, 'Replacement bus')} <strong>{c.vehicle?.regNo}</strong>{' '}
+                {t(lang, 'runs this route in place of')} {c.replacement.regular}
+                {c.replacement.until
+                  ? ` ${t(lang, 'till')} ${new Date(`${c.replacement.until}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' })}`
+                  : ''}
+                .
+                {c.replacement.driver
+                  ? ` ${t(lang, 'Driver')}: ${c.replacement.driver}${c.replacement.driverMobile ? ` · ${c.replacement.driverMobile}` : ''}.`
+                  : ''}{' '}
+                {t(lang, 'The stops and timings do not change.')}
+              </div>
+            ) : null}
             {c.position ? (
               <p style={{ margin: 'var(--sp-2) 0 0' }}>
                 <strong>{c.vehicle?.regNo}</strong> · {t(lang, 'seen')}{' '}
@@ -277,6 +304,12 @@ export default async function TransportPage({
             ) : (
               <p style={{ marginTop: 0 }}>{t(lang, 'Not on a bus this month.')}</p>
             )}
+            {c.incharge?.length ? (
+              <p className="ep-field__help">
+                {t(lang, 'Transport in-charge')}:{' '}
+                {c.incharge.map((i) => `${i.name}${i.mobile ? ` · ${i.mobile}` : ''}`).join('; ')}
+              </p>
+            ) : null}
             {next ? (
               <p className="ep-field__help">
                 {t(lang, 'From')} {monthLabel(next.fromMonth)}: {next.serviceLabel} ·{' '}

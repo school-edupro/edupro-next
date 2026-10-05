@@ -5,6 +5,7 @@ import type { TransportLevel, TransportSetup } from '@/lib/transport-desk';
 
 type Source = 'parent' | 'office';
 const KINDS: Array<[TransportLevel['kind'], string]> = [
+  ['route_incharge', 'The transport in-charge of the route (named below)'],
   ['role', 'Everyone with a role'],
   ['designation', 'Everyone with a designation'],
   ['employee', 'One employee'],
@@ -18,6 +19,10 @@ const KINDS: Array<[TransportLevel['kind'], string]> = [
 export function TransportSetupForm({ setup }: { setup: TransportSetup }) {
   const [s, setS] = useState(setup.settings);
   const [levels, setLevels] = useState<TransportLevel[]>(setup.levels);
+  // who is in charge: '' = of the whole school, else of one route
+  const [incharges, setIncharges] = useState(
+    setup.incharges.map((i) => ({ routeId: i.routeId ?? '', employeeId: i.employeeId })),
+  );
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, start] = useTransition();
 
@@ -57,9 +62,15 @@ export function TransportSetupForm({ setup }: { setup: TransportSetup }) {
         if (bad)
           return setMsg({ ok: false, text: `Complete the level “${bad.label || 'unnamed'}”.` });
       }
+      if (incharges.some((i) => !i.employeeId))
+        return setMsg({
+          ok: false,
+          text: 'Choose the employee on every in-charge row, or remove it.',
+        });
       const r = await saveTransportSetup({
         settings: s,
         levels: [...of('parent'), ...of('office')],
+        incharges: incharges.map((i) => ({ routeId: i.routeId || null, employeeId: i.employeeId })),
       });
       setMsg(
         r.ok
@@ -288,6 +299,79 @@ export function TransportSetupForm({ setup }: { setup: TransportSetup }) {
           </strong>{' '}
           a month.
         </p>
+      </section>
+      <section className="ep-hd__form" aria-label="Transport in-charge">
+        <h3 className="ep-cdash__h3">Transport in-charge</h3>
+        <p className="ep-field__help" style={{ margin: 0 }}>
+          Name who is in charge of transport. A row for <strong>the whole school</strong> covers
+          every route; a row for one route makes that person the in-charge of that route only. A
+          request waits on its route’s in-charge (else the school’s; else everyone with the
+          Transport In-charge role), and parents see the name and phone for their child’s route.
+        </p>
+        {incharges.map((i, n) => (
+          <div key={String(n)} className="ep-hd__row">
+            <label className="ep-field" htmlFor={`ti-route-${String(n)}`}>
+              <span className="ep-field__label">In charge of</span>
+              <select
+                id={`ti-route-${String(n)}`}
+                className="ep-select"
+                value={i.routeId}
+                onChange={(e) =>
+                  setIncharges(
+                    incharges.map((x, k) => (k === n ? { ...x, routeId: e.target.value } : x)),
+                  )
+                }
+              >
+                <option value="">The whole school</option>
+                {setup.routes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    Route {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ep-field" htmlFor={`ti-emp-${String(n)}`}>
+              <span className="ep-field__label">Employee</span>
+              <select
+                id={`ti-emp-${String(n)}`}
+                className="ep-select"
+                value={i.employeeId}
+                onChange={(e) =>
+                  setIncharges(
+                    incharges.map((x, k) => (k === n ? { ...x, employeeId: e.target.value } : x)),
+                  )
+                }
+              >
+                <option value="">Choose</option>
+                {setup.staff.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div>
+              <button
+                type="button"
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                onClick={() => setIncharges(incharges.filter((_, k) => k !== n))}
+                aria-label={`Remove in-charge row ${String(n + 1)}`}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+        <div>
+          <button
+            type="button"
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            disabled={incharges.length >= 100}
+            onClick={() => setIncharges([...incharges, { routeId: '', employeeId: '' }])}
+          >
+            Add an in-charge
+          </button>
+        </div>
       </section>
       {block(
         'parent',

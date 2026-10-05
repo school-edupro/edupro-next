@@ -84,11 +84,16 @@ export type SetupResult = { ok: true } | { ok: false; error: string };
 export async function saveTransportSetup(input: {
   settings: TransportSetup['settings'];
   levels: TransportSetup['levels'];
+  incharges: Array<{ routeId: string | null; employeeId: string }>;
 }): Promise<SetupResult> {
   try {
     await apiFetch('/transport/desk/setup', {
       method: 'PUT',
-      body: JSON.stringify({ ...input.settings, levels: input.levels }),
+      body: JSON.stringify({
+        ...input.settings,
+        levels: input.levels,
+        incharges: input.incharges,
+      }),
     });
     revalidatePath(`${BASE}/setup`);
     return { ok: true };
@@ -97,4 +102,108 @@ export async function saveTransportSetup(input: {
       return { ok: false, error: detailOf(error) || error.problem.type };
     throw error;
   }
+}
+
+/** Several requests at my level in one go (the fee department after an Excel upload). */
+export async function decideManyTransport(fd: FormData) {
+  const here = `${BASE}/requests/approvals`;
+  const ids = fd.getAll('ids').map(String).filter(Boolean);
+  if (!ids.length)
+    redirect(
+      `${here}?error=validation-failed&detail=${encodeURIComponent('Tick at least one request')}`,
+    );
+  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  let out: { done: number; failed: Array<{ id: string; message: string }> } = {
+    done: 0,
+    failed: [],
+  };
+  try {
+    out = await apiFetch('/transport/requests/decide-many', {
+      method: 'POST',
+      body: JSON.stringify({ ids, outcome, note: str(fd, 'note') || undefined }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath(BASE);
+  if (out.failed.length)
+    redirect(
+      `${here}?error=partly-done&detail=${encodeURIComponent(`${String(out.done)} done; ${String(out.failed.length)} not: ${out.failed[0]!.message}`.slice(0, 280))}`,
+    );
+  redirect(withOk(here, 'many'));
+}
+
+/** Requests for many pupils from one Excel sheet; the result says how many went in and which rows did not. */
+export async function importTransportRequests(fd: FormData) {
+  const here = `${BASE}/requests/new`;
+  const file = fd.get('file');
+  if (!(file instanceof File) || !file.size)
+    redirect(
+      `${here}?error=validation-failed&detail=${encodeURIComponent('Choose the Excel file')}`,
+    );
+  const f = file as File;
+  if (f.size > 700_000)
+    redirect(
+      `${here}?error=validation-failed&detail=${encodeURIComponent('The file is larger than 700 KB')}`,
+    );
+  let out: { created: number; errors: Array<{ row: number; message: string }> } = {
+    created: 0,
+    errors: [],
+  };
+  try {
+    out = await apiFetch('/transport/requests/import', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: f.name,
+        fileBase64: Buffer.from(await f.arrayBuffer()).toString('base64'),
+      }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath(BASE);
+  const problems = out.errors
+    .slice(0, 12)
+    .map((e) => `row ${String(e.row)}: ${e.message}`)
+    .join(' | ');
+  redirect(
+    `${here}?imported=${String(out.created)}&skipped=${String(out.errors.length)}${problems ? `&problems=${encodeURIComponent(problems.slice(0, 900))}` : ''}`,
+  );
+}
+
+/** A vehicle is off the road: the replacement vehicle and crew for some days. */
+export async function createReplacement(fd: FormData) {
+  const here = `${BASE}/replacements?add=1`;
+  try {
+    await apiFetch('/transport/replacements', {
+      method: 'POST',
+      body: JSON.stringify({
+        vehicleId: str(fd, 'vehicleId'),
+        replacementVehicleId: str(fd, 'replacementVehicleId'),
+        driverId: str(fd, 'driverId'),
+        conductorId: str(fd, 'conductorId'),
+        attendantId: str(fd, 'attendantId'),
+        fromDate: str(fd, 'fromDate'),
+        toDate: str(fd, 'toDate'),
+        reason: str(fd, 'reason'),
+      }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath(BASE);
+  redirect(`${BASE}/replacements?ok=replaced`);
+}
+export async function endReplacement(fd: FormData) {
+  const here = `${BASE}/replacements`;
+  try {
+    await apiFetch(`/transport/replacements/${str(fd, 'id')}/end`, {
+      method: 'POST',
+      body: JSON.stringify({ note: str(fd, 'note') || undefined }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath(BASE);
+  redirect(withOk(here, 'ended'));
 }

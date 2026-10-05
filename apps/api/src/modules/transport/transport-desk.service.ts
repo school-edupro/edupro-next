@@ -7,8 +7,11 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
+import { readFile } from '../masters/masters.service';
 import type {
   ApplyDto,
+  DecideManyDto,
+  ImportRequestsDto,
   DeskDecideDto,
   DeskExportDto,
   DeskListDto,
@@ -280,11 +283,11 @@ export class TransportDeskService {
     if (made.rowCount)
       await c.query(
         `INSERT INTO transport_approval_levels (school_id, source, seq, label, kind, role_code)
-         SELECT app.current_school_id(), x.source, x.seq, x.label, 'role', x.role_code FROM (VALUES
-           ('parent', 1, 'Transport in-charge', 'transport_incharge'),
-           ('parent', 2, 'Fee department', 'accountant'),
-           ('office', 1, 'Fee department', 'accountant')
-         ) AS x(source, seq, label, role_code)
+         SELECT app.current_school_id(), x.source, x.seq, x.label, x.kind, x.role_code FROM (VALUES
+           ('parent', 1, 'Transport in-charge', 'route_incharge', NULL),
+           ('parent', 2, 'Fee department', 'role', 'accountant'),
+           ('office', 1, 'Fee department', 'role', 'accountant')
+         ) AS x(source, seq, label, kind, role_code)
           WHERE NOT EXISTS (SELECT 1 FROM transport_approval_levels)`,
       );
     const r = await c.query<Row>(
@@ -311,7 +314,7 @@ export class TransportDeskService {
       source: x.source as 'parent' | 'office',
       seq: Number(x.seq),
       label: String(x.label),
-      kind: x.kind as 'role' | 'designation' | 'employee',
+      kind: x.kind as 'role' | 'designation' | 'employee' | 'route_incharge',
       roleCode: text(x.role_code),
       designation: text(x.designation),
       employeeId: text(x.employee_id),
@@ -343,6 +346,23 @@ export class TransportDeskService {
       return {
         settings,
         levels: await this.levels(c),
+        incharges: (
+          await c.query<Row>(
+            `SELECT i.route_id::text, i.employee_id::text, e.display_name AS name, e.mobile, (e.user_id IS NOT NULL) AS login
+               FROM transport_incharges i JOIN employees e ON e.id = i.employee_id ORDER BY i.route_id NULLS FIRST, e.display_name`,
+          )
+        ).rows.map((x) => ({
+          routeId: text(x.route_id),
+          employeeId: String(x.employee_id),
+          name: String(x.name),
+          mobile: text(x.mobile),
+          login: Boolean(x.login),
+        })),
+        routes: (
+          await c.query<{ id: string; name: string }>(
+            `SELECT id::text, code || ' · ' || name AS name FROM transport_routes WHERE deleted_at IS NULL AND status = 'active' ORDER BY code`,
+          )
+        ).rows,
         roles: roles.rows,
         staff: staff.rows,
         designations: designations.rows.map((x) => x.d),
@@ -392,6 +412,13 @@ export class TransportDeskService {
           ],
         );
       }
+      await c.query(`DELETE FROM transport_incharges`);
+      for (const i of dto.incharges)
+        await c.query(
+          `INSERT INTO transport_incharges (school_id, route_id, employee_id, created_by)
+           VALUES (app.current_school_id(), $1, $2, app.current_user_id()) ON CONFLICT DO NOTHING`,
+          [i.routeId ?? null, i.employeeId],
+        );
       await this.audit.stage(ctx, c, {
         action: 'transport.setup.update',
         entityType: 'transport_settings',
@@ -612,6 +639,8 @@ export class TransportDeskService {
     yearId: string,
     dto: ApplyDto,
     source: 'parent' | 'office',
+    /** many at once (an Excel upload): the approvers are not mailed one message per pupil */
+    quiet = false,
   ) {
     const months = await this.months(c, yearId);
     if (!months.includes(dto.fromMonth))
@@ -694,7 +723,7 @@ export class TransportDeskService {
       `UPDATE transport_requests SET number = 'TR-' || to_char(requested_at AT TIME ZONE ${TZ}, 'YYMM') || '-' || lpad(id::text, 4, '0') WHERE id = $1`,
       [id],
     );
-    await this.startApprovals(c, id, source);
+    await this.startApprovals(c, id, source, quiet);
     await this.audit.stage(ctx, c, {
       action: 'transport.request.create',
       entityType: 'transport_requests',
@@ -759,7 +788,24 @@ export class TransportDeskService {
       designation: string | null;
       employeeId: string | null;
     },
+    routeIds: string[] = [],
   ): Promise<string[]> {
+    if (l.kind === 'route_incharge') {
+      // the in-charge named for the route; else the school's in-charges; else whoever holds the role
+      for (const where of [
+        `i.route_id = ANY($1::bigint[])`,
+        `i.route_id IS NULL AND $1::bigint[] IS NOT NULL`,
+      ]) {
+        const r = await c.query<{ id: string }>(
+           
+          `SELECT DISTINCT e.user_id::text AS id FROM transport_incharges i JOIN employees e ON e.id = i.employee_id
+            WHERE ${where} AND e.user_id IS NOT NULL AND e.status = 'active' AND e.deleted_at IS NULL`,
+          [routeIds],
+        );
+        if (r.rows.length) return r.rows.map((x) => x.id);
+      }
+      return this.approversOf(c, { ...l, kind: 'role', roleCode: 'transport_incharge' });
+    }
     const r =
       l.kind === 'role'
         ? await c.query<{ id: string }>(
@@ -782,11 +828,25 @@ export class TransportDeskService {
   }
 
   /** One row per level, in order: the first that someone holds may act; a level nobody holds is skipped. */
-  private async startApprovals(c: PoolClient, id: string, source: 'parent' | 'office') {
+  private async startApprovals(
+    c: PoolClient,
+    id: string,
+    source: 'parent' | 'office',
+    quiet = false,
+  ) {
     await this.settings(c);
     const rows: Array<{ label: string; users: string[] }> = [];
+    // the routes the request is about (a withdrawal: the routes the pupil rides now)
+    const routes = await c.query<{ id: string }>(
+      `SELECT DISTINCT x.id::text FROM transport_requests q
+         LEFT JOIN student_route_assignments a ON a.student_id = q.student_id AND a.academic_year_id = q.academic_year_id
+         CROSS JOIN LATERAL unnest(ARRAY[q.pick_route_id, q.drop_route_id, a.route_id, a.drop_route_id]) AS x(id)
+        WHERE q.id = $1 AND x.id IS NOT NULL`,
+      [id],
+    );
+    const routeIds = routes.rows.map((x) => x.id);
     for (const l of (await this.levels(c, source)).filter((x) => x.active))
-      rows.push({ label: l.label, users: await this.approversOf(c, l) });
+      rows.push({ label: l.label, users: await this.approversOf(c, l, routeIds) });
     if (!rows.some((r) => r.users.length)) {
       const admins = await this.approversOf(c, {
         kind: 'role',
@@ -816,7 +876,7 @@ export class TransportDeskService {
       );
     }
     if (!opened) return this.finish(c, id, 'approved', 'No approver is set up');
-    await this.tellApprovers(c, id);
+    if (!quiet) await this.tellApprovers(c, id);
   }
 
   private async school(c: PoolClient): Promise<string> {
@@ -1110,6 +1170,226 @@ export class TransportDeskService {
         else await this.finish(c, id, 'approved', dto.note ?? null);
       }
       return this.detail(c, id);
+    });
+  }
+
+  /** Several requests at my level in one go; each is decided on its own, and the ones refused are named. */
+  async decideMany(ctx: RequestContext, dto: DecideManyDto) {
+    let done = 0;
+    const failed: Array<{ id: string; message: string }> = [];
+    for (const id of dto.ids) {
+      try {
+        await this.decide(ctx, id, { outcome: dto.outcome, note: dto.note });
+        done += 1;
+      } catch (error) {
+        if (!(error instanceof DomainError)) throw error;
+        failed.push({ id, message: error.message });
+      }
+    }
+    return { done, failed };
+  }
+
+  // ---- many pupils from Excel (the start of a session) -------------------------------------------------
+  private static readonly IMPORT_COLUMNS = [
+    'Admission no',
+    'Service',
+    'Pick stoppage',
+    'Drop stoppage',
+    'From month',
+    'To month',
+    'Note',
+  ];
+  private static readonly SERVICE_WORD: Record<string, Service> = {
+    pickanddrop: 'both',
+    both: 'both',
+    pickonly: 'pick',
+    pick: 'pick',
+    droponly: 'drop',
+    drop: 'drop',
+  };
+
+  /** The sheet to fill: service, stoppage (route · stoppage) and months are drop-downs. */
+  async importTemplate(ctx: RequestContext) {
+    const yearId = this.year(ctx);
+    const { stops, months } = await this.db.tenant(requireTenant(ctx), async (c) => ({
+      stops: (
+        await c.query<{ label: string }>(
+          `SELECT r.code || ' · ' || st.name AS label FROM transport_stops st JOIN transport_routes r ON r.id = st.route_id AND r.deleted_at IS NULL AND r.status = 'active'
+            ORDER BY r.code, st.sequence`,
+        )
+      ).rows.map((x) => x.label),
+      months: await this.months(c, yearId),
+    }));
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Transport requests');
+    const lists = wb.addWorksheet('Lists');
+    const guide = wb.addWorksheet('How to fill');
+    ws.addRow(TransportDeskService.IMPORT_COLUMNS).font = { bold: true };
+    ws.columns.forEach((col, i) => {
+      col.width = i === 2 || i === 3 ? 36 : 18;
+      if (i === 0 || i === 4 || i === 5) col.numFmt = '@';
+    });
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    const list = (col: string, title: string, values: string[]) => {
+      lists.getCell(`${col}1`).value = title;
+      lists.getCell(`${col}1`).font = { bold: true };
+      values.forEach((v, i) => {
+        lists.getCell(`${col}${String(i + 2)}`).value = v;
+      });
+      return `Lists!$${col}$2:$${col}$${String(Math.max(2, values.length + 1))}`;
+    };
+    const services = list('A', 'Service', ['Pick and drop', 'Pick only', 'Drop only']);
+    const stoppages = list('B', 'Stoppage (route · stoppage)', stops);
+    const monthList = list('C', 'Month', months);
+    lists.columns.forEach((col) => {
+      col.width = 36;
+    });
+    const refuse = (title: string) => ({
+      allowBlank: true,
+      showErrorMessage: true,
+      errorStyle: 'error' as const,
+      errorTitle: title,
+      error: 'Choose from the drop-down.',
+    });
+    for (let r = 2; r <= 1001; r += 1) {
+      ws.getCell(`B${String(r)}`).dataValidation = {
+        type: 'list',
+        formulae: [services],
+        ...refuse('Service'),
+      };
+      for (const col of ['C', 'D'])
+        ws.getCell(`${col}${String(r)}`).dataValidation = {
+          type: 'list',
+          formulae: [stoppages],
+          ...refuse('Stoppage'),
+        };
+      for (const col of ['E', 'F'])
+        ws.getCell(`${col}${String(r)}`).dataValidation = {
+          type: 'list',
+          formulae: [monthList],
+          ...refuse('Month'),
+        };
+    }
+    for (const line of [
+      'One row per pupil. Every row becomes a transport request made by the transport office; it waits for the fee department, and the fees follow the approval.',
+      'Admission no: as on the pupil’s record.',
+      'Service: Pick and drop, Pick only or Drop only.',
+      'Pick stoppage: choose "route · stoppage" (needed for Pick and drop and Pick only).',
+      'Drop stoppage: needed for Drop only; for Pick and drop fill it only when the drop is at a different stoppage or route.',
+      'From month and To month: like 2026-06. A blank To month means the end of the session.',
+      'A pupil who already rides gets a Change request; a pupil with a request still waiting is reported and left out.',
+    ])
+      guide.addRow([line]);
+    guide.getColumn(1).width = 150;
+    return {
+      bytes: Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer),
+      filename: `transport-requests-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    };
+  }
+
+  /** Each good row becomes an office request; a row that cannot be read is reported with its line. */
+  async importRequests(ctx: RequestContext, dto: ImportRequestsDto) {
+    const yearId = this.year(ctx);
+    const { header, rows, rowNumbers } = await readFile({ contentBase64: dto.fileBase64 });
+    const key = (v: unknown) =>
+      String(v ?? '')
+        .toLowerCase()
+        .replace(/[^a-z]/g, '');
+    const at = Object.fromEntries(header.map((h, i) => [key(h), i]));
+    for (const need of ['admissionno', 'service', 'frommonth'])
+      if (at[need] === undefined)
+        throw new DomainError(
+          'validation-failed',
+          'The sheet does not have the headings of the template (Admission no, Service, From month …)',
+          { status: 400 },
+        );
+    if (rows.length > 1000)
+      throw new DomainError('validation-failed', 'At most 1,000 rows per upload', { status: 400 });
+    const cell = (r: unknown[], name: string): string => {
+      const v = at[name] === undefined ? null : r[at[name]];
+      if (v instanceof Date) return v.toISOString().slice(0, 7);
+      return String(v ?? '').trim();
+    };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      let created = 0;
+      const errors: Array<{ row: number; message: string }> = [];
+      const stopOf = async (label: string) => {
+        const [route, ...rest] = label.split(' · ');
+        const r = await c.query<{ id: string; route_id: string }>(
+          `SELECT st.id::text, st.route_id::text FROM transport_stops st JOIN transport_routes r ON r.id = st.route_id AND r.deleted_at IS NULL
+            WHERE lower(r.code) = lower($1) AND lower(st.name) = lower($2) LIMIT 1`,
+          [(route ?? '').trim(), rest.join(' · ').trim()],
+        );
+        if (!r.rows[0])
+          throw new DomainError('validation-failed', `"${label}" is not a stoppage of a route`);
+        return r.rows[0];
+      };
+      for (const [i, r] of rows.entries()) {
+        const rowNo = rowNumbers[i] ?? i + 2;
+        const adm = cell(r, 'admissionno');
+        if (!adm && !cell(r, 'service') && !cell(r, 'pickstoppage')) continue;
+        await c.query('SAVEPOINT transport_import');
+        try {
+          const st = await c.query<{ id: string }>(
+            `SELECT id::text FROM students WHERE lower(admission_no) = lower($1) AND deleted_at IS NULL LIMIT 1`,
+            [adm],
+          );
+          if (!st.rows[0])
+            throw new DomainError('validation-failed', `No student with admission no. "${adm}"`);
+          const service = TransportDeskService.SERVICE_WORD[key(cell(r, 'service'))];
+          if (!service)
+            throw new DomainError(
+              'validation-failed',
+              'Service must be Pick and drop, Pick only or Drop only',
+            );
+          const from = cell(r, 'frommonth').slice(0, 7);
+          const to = cell(r, 'tomonth').slice(0, 7);
+          if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(from) || (to && !/^\d{4}-(0[1-9]|1[0-2])$/.test(to)))
+            throw new DomainError('validation-failed', 'Months must be like 2026-06');
+          const pick = service !== 'drop' ? await stopOf(cell(r, 'pickstoppage')) : null;
+          const dropLabel = cell(r, 'dropstoppage');
+          const drop =
+            service === 'drop' || (service === 'both' && dropLabel)
+              ? await stopOf(dropLabel)
+              : null;
+          const riding = await c.query(
+            `SELECT 1 FROM student_transport WHERE student_id = $1 AND academic_year_id = $2 AND status = 'active' AND to_month >= ${MONTH}`,
+            [st.rows[0].id, yearId],
+          );
+          await this.create(
+            c,
+            ctx,
+            yearId,
+            {
+              studentId: st.rows[0].id,
+              kind: riding.rowCount ? 'change' : 'join',
+              service,
+              pickRouteId: pick?.route_id,
+              pickStopId: pick?.id,
+              dropRouteId: drop?.route_id,
+              dropStopId: drop?.id,
+              fromMonth: from,
+              toMonth: to || undefined,
+              note: cell(r, 'note') || 'Excel upload',
+            },
+            'office',
+            true,
+          );
+          await c.query('RELEASE SAVEPOINT transport_import');
+          created += 1;
+        } catch (error) {
+          await c.query('ROLLBACK TO SAVEPOINT transport_import');
+          if (!(error instanceof DomainError)) throw error;
+          errors.push({ row: rowNo, message: error.message });
+        }
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'transport.request.import',
+        entityType: 'transport_requests',
+        entityId: requireTenant(ctx).schoolId,
+        after: { file: dto.fileName ?? null, created, errors: errors.length },
+      });
+      return { rows: created + errors.length, created, errors: errors.slice(0, 200) };
     });
   }
 
@@ -1464,12 +1744,24 @@ export class TransportDeskService {
           name: s.name,
           section: s.section,
           current: p.find((x) => x.phase === 'running') ?? null,
+          incharge: await this.inchargeOf(c, s.id, yearId),
           periods: p,
           requests: requests.rows.map(toRequest),
         });
       }
       return { children, canApply: (await this.settings(c)).parentCanApply };
     });
+  }
+
+  /** Who the family calls about the child's bus: the route's in-charge, else the school's. */
+  private async inchargeOf(c: PoolClient, studentId: string, yearId: string) {
+    const r = await c.query<{ name: string; mobile: string | null }>(
+      `SELECT e.display_name AS name, e.mobile FROM transport_incharges i JOIN employees e ON e.id = i.employee_id AND e.deleted_at IS NULL
+        WHERE i.route_id IS NULL OR i.route_id IN (SELECT a.route_id FROM student_route_assignments a WHERE a.student_id = $1 AND a.academic_year_id = $2)
+        ORDER BY (i.route_id IS NOT NULL) DESC, e.display_name LIMIT 2`,
+      [studentId, yearId],
+    );
+    return r.rows.map((x) => ({ name: x.name, mobile: x.mobile }));
   }
 
   // ---- dashboard ------------------------------------------------------------------------------------
