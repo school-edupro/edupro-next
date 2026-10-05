@@ -10,10 +10,13 @@ export const ATTENDANCE = {
   busView: 'attendance.bus.view',
   punchView: 'attendance.punch.view',
   ruleManage: 'attendance.rule.manage',
+  busMark: 'attendance.bus.mark',
+  setup: 'attendance.setup.manage',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
-export const CodeSchema = z.enum(['P', 'A', 'L', 'SR', 'H', 'OD', 'SB']);
+/** LV = on approved leave (not present, not counted as an unexplained absence). */
+export const CodeSchema = z.enum(['P', 'A', 'L', 'SR', 'H', 'OD', 'SB', 'LV']);
 
 export const MarkSessionSchema = z
   .object({

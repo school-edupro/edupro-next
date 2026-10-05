@@ -9,7 +9,11 @@ import {
   RfidController,
   RulesController,
 } from './attendance.controller';
+import { AttendanceDeskService } from './attendance-desk.service';
+import { AttendanceGate } from './attendance-gate';
+import { AttendanceDeskController, BusRollController } from './attendance-plus.controller';
 import { AttendanceService } from './attendance.service';
+import { BusRollService } from './bus-roll.service';
 import { BusService } from './bus.service';
 import { PunchService } from './punch.service';
 import { RfidService } from './rfid.service';
@@ -24,8 +28,20 @@ import { RulesService } from './rules.service';
     BusController,
     PunchController,
     RulesController,
+    AttendanceDeskController,
+    BusRollController,
   ],
-  providers: [AttendanceService, RfidService, BusService, PunchService, RulesService, AuditService],
+  providers: [
+    AttendanceGate,
+    AttendanceDeskService,
+    BusRollService,
+    AttendanceService,
+    RfidService,
+    BusService,
+    PunchService,
+    RulesService,
+    AuditService,
+  ],
   exports: [AttendanceService, RfidService, BusService, PunchService],
 })
 export class AttendanceModule {}

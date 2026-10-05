@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AttendanceGate, suggest, type Hint, type WindowState } from './attendance-gate';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
@@ -17,7 +18,7 @@ import type {
   SummaryQueryDto,
 } from './attendance.dto';
 
-export type Code = 'P' | 'A' | 'L' | 'SR' | 'H' | 'OD' | 'SB';
+export type Code = 'P' | 'A' | 'L' | 'SR' | 'H' | 'OD' | 'SB' | 'LV';
 
 export interface RosterRow {
   studentId: string;
@@ -29,6 +30,10 @@ export interface RosterRow {
   inAt: string | null;
   outAt: string | null;
   source: string | null;
+  /** An approved leave or a gate pass of the day. */
+  hint: Hint | null;
+  /** What the roster pre-fills while nobody has marked the pupil (from the leave or the gate pass). */
+  suggested: string | null;
 }
 
 export interface SessionRow {
@@ -43,6 +48,9 @@ export interface SessionRow {
   markedBy: string | null;
   markedAt: string | null;
   locked: boolean;
+  markedLate: boolean;
+  /** The marking window for the person asking. */
+  window: WindowState;
   roster: RosterRow[];
   counts: Record<string, number>;
 }
@@ -61,6 +69,7 @@ export class AttendanceService {
     private readonly scopes: ScopePolicy,
     private readonly viewer: ViewerService,
     private readonly messages: MessagesService,
+    private readonly gate: AttendanceGate,
   ) {}
 
   private year(tenant: TenantContext): string {
@@ -99,6 +108,11 @@ export class AttendanceService {
         status: 409,
         extra: { holiday: row.holiday },
       });
+  }
+
+  /** Coordinators and admins (not scoped to sections) run attendance: the teacher's window does not bind them. */
+  private async isManager(tenant: TenantContext): Promise<boolean> {
+    return (await this.scopes.filter(tenant, 'attendance.session.mark', 'class_section')) === null;
   }
 
   /** A scoped teacher may mark only sections assigned to them with the attendance flag (subject teachers their subject). */
@@ -162,6 +176,8 @@ export class AttendanceService {
       inAt: x.in_at ? x.in_at.toISOString() : null,
       outAt: x.out_at ? x.out_at.toISOString() : null,
       source: x.source,
+      hint: null,
+      suggested: null,
     }));
   }
 
@@ -184,6 +200,8 @@ export class AttendanceService {
       subjectId?: string;
       periodId?: string;
     },
+    /** The person asking runs attendance (not bound to the teacher's window). */
+    manager = false,
   ): Promise<SessionRow> {
     const s = await c.query<{
       id: string;
@@ -194,8 +212,9 @@ export class AttendanceService {
       marked_by: string | null;
       marked_at: Date | null;
       locked: boolean;
+      marked_late: boolean;
     }>(
-      `SELECT a.id::text, c.code || '-' || cs.name AS section, a.subject_id::text, sub.name AS subject_name, a.source::text, COALESCE((SELECT trim(e.first_name || ' ' || COALESCE(e.last_name, '')) FROM employees e WHERE e.user_id = a.marked_by LIMIT 1), u.display_name) AS marked_by, a.marked_at, a.locked
+      `SELECT a.id::text, a.marked_late, c.code || '-' || cs.name AS section, a.subject_id::text, sub.name AS subject_name, a.source::text, COALESCE((SELECT trim(e.first_name || ' ' || COALESCE(e.last_name, '')) FROM employees e WHERE e.user_id = a.marked_by LIMIT 1), u.display_name) AS marked_by, a.marked_at, a.locked
          FROM attendance_sessions a JOIN class_sections cs ON cs.id = a.class_section_id JOIN classes c ON c.id = cs.class_id
          LEFT JOIN subjects sub ON sub.id = a.subject_id LEFT JOIN users u ON u.id = a.marked_by
         WHERE a.class_section_id = $1 AND a.on_date = $2::date AND a.kind = $3::attendance_kind AND COALESCE(a.subject_id, 0) = COALESCE($4::bigint, 0) AND COALESCE(a.period_id, 0) = COALESCE($5::bigint, 0)`,
@@ -208,6 +227,23 @@ export class AttendanceService {
     );
     if (!label.rows[0]) throw new DomainError('not-found', 'Section not found');
     const roster = await this.roster(c, yearId, q.classSectionId, row?.id ?? null);
+    if (q.kind === 'day') {
+      const hints = await this.gate.hints(
+        c,
+        roster.map((x) => x.studentId),
+        q.date,
+      );
+      for (const x of roster) {
+        x.hint = hints.get(x.studentId) ?? null;
+        x.suggested = x.code ? null : suggest(x.hint ?? undefined, 'class');
+      }
+    }
+    const window = await this.gate.state(
+      c,
+      { scope: 'class', classSectionId: q.classSectionId },
+      q.date,
+      manager,
+    );
     return {
       id: row?.id ?? null,
       classSectionId: q.classSectionId,
@@ -220,6 +256,8 @@ export class AttendanceService {
       markedBy: row?.marked_by ?? null,
       markedAt: row?.marked_at ? row.marked_at.toISOString() : null,
       locked: row?.locked ?? false,
+      markedLate: row?.marked_late ?? false,
+      window,
       roster,
       counts: this.counts(roster),
     };
@@ -229,7 +267,8 @@ export class AttendanceService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     await this.scopes.assert(tenant, 'attendance.session.view', 'class_section', q.classSectionId);
-    return this.db.tenant(tenant, (c) => this.sessionWith(c, yearId, q));
+    const manager = await this.isManager(tenant);
+    return this.db.tenant(tenant, (c) => this.sessionWith(c, yearId, q, manager));
   }
 
   async mark(
@@ -252,6 +291,14 @@ export class AttendanceService {
         );
       await this.assertMayMark(c, tenant, yearId, dto.classSectionId, dto.kind, dto.subjectId);
       await this.assertMarkableDate(c, dto.date, yearId);
+      // the school's marking window: a teacher inside it; later the coordinator marks or reopens the day
+      const manager = await this.isManager(tenant);
+      const window = await this.gate.assertOpen(
+        c,
+        { scope: 'class', classSectionId: dto.classSectionId },
+        dto.date,
+        manager,
+      );
       const existing = await c.query<{ id: string; locked: boolean }>(
         `SELECT id::text, locked FROM attendance_sessions WHERE class_section_id = $1 AND on_date = $2::date AND kind = $3::attendance_kind AND COALESCE(subject_id, 0) = COALESCE($4::bigint, 0) AND COALESCE(period_id, 0) = COALESCE($5::bigint, 0) FOR UPDATE`,
         [dto.classSectionId, dto.date, dto.kind, dto.subjectId ?? null, dto.periodId ?? null],
@@ -261,8 +308,8 @@ export class AttendanceService {
       let sessionId = existing.rows[0]?.id;
       if (!sessionId) {
         const ins = await c.query<{ id: string }>(
-          `INSERT INTO attendance_sessions (school_id, academic_year_id, class_section_id, on_date, kind, subject_id, period_id, source, marked_by, marked_at, notes)
-           VALUES (app.current_school_id(), $1, $2, $3::date, $4::attendance_kind, $5, $6, 'manual', app.current_user_id(), now(), $7) RETURNING id::text`,
+          `INSERT INTO attendance_sessions (school_id, academic_year_id, class_section_id, on_date, kind, subject_id, period_id, source, marked_by, marked_at, notes, marked_late)
+           VALUES (app.current_school_id(), $1, $2, $3::date, $4::attendance_kind, $5, $6, 'manual', app.current_user_id(), now(), $7, $8) RETURNING id::text`,
           [
             yearId,
             dto.classSectionId,
@@ -271,13 +318,15 @@ export class AttendanceService {
             dto.subjectId ?? null,
             dto.periodId ?? null,
             dto.notes ?? null,
+            window.late,
           ],
         );
         sessionId = ins.rows[0]!.id;
       } else {
         await c.query(
-          `UPDATE attendance_sessions SET marked_by = app.current_user_id(), marked_at = now(), notes = COALESCE($2, notes), updated_at = now() WHERE id = $1`,
-          [sessionId, dto.notes ?? null],
+          `UPDATE attendance_sessions SET marked_by = app.current_user_id(), marked_at = now(), notes = COALESCE($2, notes), updated_at = now(),
+                  marked_late = marked_late OR $3 WHERE id = $1`,
+          [sessionId, dto.notes ?? null, window.late],
         );
       }
       const enrolled = await c.query<{ id: string }>(
@@ -299,12 +348,18 @@ export class AttendanceService {
           [sessionId, m.studentId, m.code, m.remarks ?? null],
         );
       }
-      const session = await this.sessionWith(c, yearId, dto);
+      const session = await this.sessionWith(c, yearId, dto, manager);
       await this.audit.stage(ctx, c, {
         action: 'attendance.session.mark',
         entityType: 'attendance_sessions',
         entityId: sessionId,
-        after: { date: dto.date, section: session.section, kind: dto.kind, counts: session.counts },
+        after: {
+          date: dto.date,
+          section: session.section,
+          kind: dto.kind,
+          counts: session.counts,
+          late: window.late,
+        },
       });
       return { session, sessionId };
     });
@@ -438,6 +493,7 @@ export class AttendanceService {
             (x.codes?.SB ?? 0) +
             (x.codes?.SR ?? 0),
           absent: x.codes?.A ?? 0,
+          leave: x.codes?.LV ?? 0,
           late: x.codes?.L ?? 0,
           codes: x.codes ?? {},
         })),
@@ -492,14 +548,16 @@ export class AttendanceService {
         source: x.source,
       }));
       const days = marks.filter((m) => m.kind === 'day');
-      const present = days.filter((m) => m.code !== 'A').length;
+      const present = days.filter((m) => m.code !== 'A' && m.code !== 'LV').length;
+      const leave = days.filter((m) => m.code === 'LV').length;
       return {
         studentId,
         marks,
         summary: {
           days: days.length,
           present,
-          absent: days.length - present,
+          absent: days.length - present - leave,
+          leave,
           percent: days.length ? Math.round((present / days.length) * 1000) / 10 : null,
         },
       };
@@ -532,12 +590,13 @@ export class AttendanceService {
           inAt: x.in_at ? x.in_at.toISOString() : null,
           outAt: x.out_at ? x.out_at.toISOString() : null,
         }));
-        const present = days.filter((d) => d.code !== 'A').length;
+        const present = days.filter((d) => d.code !== 'A' && d.code !== 'LV').length;
+        const leave = days.filter((d) => d.code === 'LV').length;
         children.push({
           ...s,
           month,
           days,
-          summary: { days: days.length, present, absent: days.length - present },
+          summary: { days: days.length, present, absent: days.length - present - leave, leave },
         });
       }
       return { month, children };
