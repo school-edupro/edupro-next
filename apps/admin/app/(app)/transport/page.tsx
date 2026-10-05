@@ -185,7 +185,7 @@ export default async function TransportDashboardPage() {
       'Seats used',
       full === null ? '—' : `${String(full)}%`,
       `${k.riders.toLocaleString('en-IN')} riders on ${k.seats.toLocaleString('en-IN')} seats · ${String(k.routes)} routes`,
-      '/transport/routes',
+      '/masters/transport?tab=transport_routes',
     ],
     [
       'Billed this month',

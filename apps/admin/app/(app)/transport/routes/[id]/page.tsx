@@ -13,7 +13,6 @@ import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import {
   assignRouteStudents,
-  setRouteFleet,
   setRouteStops,
   unassignRouteStudent,
   updateRouteRules,
@@ -24,11 +23,8 @@ import type {
   Page,
   RouteStudent,
   Student,
-  TransportDriver,
   TransportRoute,
-  TransportSlab,
   TransportStop,
-  TransportVehicle,
 } from '@/lib/types';
 
 export default async function RoutePage({
@@ -53,21 +49,26 @@ export default async function RoutePage({
   const canManage = me.permissions.includes('transport.route.manage');
   const canFleet = me.permissions.includes('transport.fleet.view');
   const canFleetManage = me.permissions.includes('transport.fleet.manage');
-  const [stops, vehicles, drivers, slabs] = await Promise.all([
+  const [stops, stoppages, mapping] = await Promise.all([
     canFleet
       ? apiFetch<{ data: TransportStop[] }>(`/transport/routes/${id}/stops`).then((r) => r.data)
       : Promise.resolve<TransportStop[]>([]),
+    // a stop is picked from the stoppage master, which owns its name, slab and place
     canFleetManage
-      ? apiFetch<{ data: TransportVehicle[] }>('/transport/vehicles').then((r) => r.data)
-      : Promise.resolve<TransportVehicle[]>([]),
-    canFleetManage
-      ? apiFetch<{ data: TransportDriver[] }>('/transport/drivers').then((r) => r.data)
-      : Promise.resolve<TransportDriver[]>([]),
-    canFleetManage
-      ? apiFetch<{ data: TransportSlab[] }>('/fees/slabs')
+      ? apiFetch<{ data: Array<Record<string, string | null>> }>(
+          '/masters/transport_stoppages/rows?size=200&page=1&status=active',
+        )
           .then((r) => r.data)
-          .catch(() => [] as TransportSlab[])
-      : Promise.resolve<TransportSlab[]>([]),
+          .catch(() => [])
+      : Promise.resolve([] as Array<Record<string, string | null>>),
+    // which vehicle and crew run the route: the Route and vehicle mapping master
+    canFleet && route
+      ? apiFetch<{ data: Array<Record<string, string | null>> }>(
+          `/masters/transport_route_vehicles/rows?size=50&page=1&q=${encodeURIComponent(route.code)}`,
+        )
+          .then((r) => r.data.filter((x) => x.route_id === route.code))
+          .catch(() => [])
+      : Promise.resolve([] as Array<Record<string, string | null>>),
   ]);
   const stopRows = [...stops, ...Array.from({ length: canFleetManage ? 3 : 0 }, () => null)];
   const students = sp.classSectionId
@@ -80,8 +81,8 @@ export default async function RoutePage({
     <>
       <Breadcrumbs
         items={[
-          { label: t('kicker'), href: '/transport/routes' },
-          { label: t('title'), href: '/transport/routes' },
+          { label: t('kicker'), href: '/transport' },
+          { label: t('title'), href: '/masters/transport?tab=transport_routes' },
           { label: route?.code ?? id },
         ]}
       />
@@ -104,7 +105,16 @@ export default async function RoutePage({
       >
         {canFleet ? (
           <Card title={`${tr('stops')} · ${stops.length}`}>
-            <p className="ep-field__help">{tr('stopsHelp')}</p>
+            <p className="ep-field__help">
+              Pick each stop from the stoppage master, in the order the bus calls, with its pick and
+              drop time. The name, the slab and the map position come from the stoppage.{' '}
+              <a
+                href="/masters/transport?tab=transport_stoppages"
+                style={{ textDecoration: 'underline' }}
+              >
+                Stoppage master
+              </a>
+            </p>
             {canFleetManage ? (
               <form action={setRouteStops}>
                 <input type="hidden" name="id" value={id} />
@@ -113,8 +123,6 @@ export default async function RoutePage({
                     <tr>
                       <th>{tr('sequence')}</th>
                       <th>{tr('stop')}</th>
-                      <th>{tr('lat')}</th>
-                      <th>{tr('lng')}</th>
                       <th>{tr('pickup')}</th>
                       <th>{tr('drop')}</th>
                       <th>{tr('slab')}</th>
@@ -127,33 +135,26 @@ export default async function RoutePage({
                         <td>{idx + 1}</td>
                         <td>
                           <input type="hidden" name="stopId" value={st?.id ?? ''} />
-                          <input
-                            className="ep-input"
+                          <select
+                            className="ep-select"
                             name="stopName"
                             defaultValue={st?.name ?? ''}
-                            maxLength={80}
                             aria-label={`${tr('stop')} ${idx + 1}`}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="ep-input"
-                            name="lat"
-                            type="number"
-                            step="0.000001"
-                            defaultValue={st?.lat ?? ''}
-                            aria-label={`${tr('lat')} ${idx + 1}`}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="ep-input"
-                            name="lng"
-                            type="number"
-                            step="0.000001"
-                            defaultValue={st?.lng ?? ''}
-                            aria-label={`${tr('lng')} ${idx + 1}`}
-                          />
+                          >
+                            <option value="">
+                              {st ? 'Remove this stop' : 'Choose the stoppage'}
+                            </option>
+                            {st && !stoppages.some((g) => g.name === st.name) ? (
+                              <option value={st.name}>{st.name}</option>
+                            ) : null}
+                            {stoppages.map((g) => (
+                              <option key={g.id} value={g.name ?? ''}>
+                                {g.name}
+                                {g.area ? ` · ${g.area}` : ''}
+                                {g.slab_id ? ` · ${g.slab_id}` : ''}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td>
                           <input
@@ -173,21 +174,7 @@ export default async function RoutePage({
                             aria-label={`${tr('drop')} ${idx + 1}`}
                           />
                         </td>
-                        <td>
-                          <select
-                            className="ep-select"
-                            name="slabId"
-                            defaultValue={st?.slabId ?? ''}
-                            aria-label={`${tr('slab')} ${idx + 1}`}
-                          >
-                            <option value="">—</option>
-                            {slabs.map((sl) => (
-                              <option key={sl.id} value={sl.id}>
-                                {sl.code}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
+                        <td>{st?.slabCode ?? '—'}</td>
                         <td>{st?.students ?? ''}</td>
                       </tr>
                     ))}
@@ -228,63 +215,71 @@ export default async function RoutePage({
             )}
           </Card>
         ) : null}
-        {canFleetManage && route ? (
-          <Card title={tr('fleet')}>
-            <form action={setRouteFleet}>
-              <input type="hidden" name="id" value={route.id} />
-              <FormRow columns={2}>
-                <SelectField
-                  id="vehicleId"
-                  name="vehicleId"
-                  label={tr('vehicle')}
-                  defaultValue={route.vehicleId ?? ''}
-                  options={[
-                    { value: '', label: tr('chooseVehicle') },
-                    ...vehicles
-                      .filter((v) => v.status === 'active' || v.id === route.vehicleId)
-                      .map((v) => ({
-                        value: v.id,
-                        label: `${v.regNo}${v.make ? ` · ${v.make}` : ''}`,
-                      })),
-                  ]}
-                />
-                <SelectField
-                  id="driverId"
-                  name="driverId"
-                  label={tr('driver')}
-                  defaultValue={route.driverId ?? ''}
-                  options={[
-                    { value: '', label: tr('chooseDriver') },
-                    ...drivers
-                      .filter((d) => d.status === 'active' || d.id === route.driverId)
-                      .map((d) => ({
-                        value: d.id,
-                        label: `${d.name}${d.mobile ? ` · ${d.mobile}` : ''}`,
-                      })),
-                  ]}
-                />
-                <InputField
-                  id="conductorName"
-                  name="conductorName"
-                  label={tr('conductor')}
-                  defaultValue={route.conductorName ?? ''}
-                  maxLength={80}
-                />
-                <InputField
-                  id="conductorMobile"
-                  name="conductorMobile"
-                  label={tr('conductorMobile')}
-                  defaultValue={route.conductorMobile ?? ''}
-                  pattern="[6-9][0-9]{9}"
-                  maxLength={10}
-                />
-              </FormRow>
-              <FormActions>
-                <Button type="submit" variant="secondary">
-                  {tr('saveFleet')}
-                </Button>
-              </FormActions>
-            </form>
+        {canFleet && route ? (
+          <Card
+            title="Vehicle and crew"
+            actions={
+              canFleetManage ? (
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/masters/transport?tab=transport_route_vehicles&q=${encodeURIComponent(route.code)}`}
+                >
+                  Change the mapping
+                </a>
+              ) : null
+            }
+          >
+            {mapping.length === 0 ? (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                No vehicle is mapped to this route yet. Add it under Transport setup → Route and
+                vehicle mapping, with the driver, conductor and attendant.
+              </p>
+            ) : (
+              <div
+                className="ep-table-wrap"
+                tabIndex={0}
+                role="region"
+                aria-label="Vehicle and crew"
+              >
+                <table className="ep-table ep-table--dense">
+                  <caption className="ep-sr-only">Vehicle and crew of {route.code}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Trip</th>
+                      <th scope="col">Vehicle</th>
+                      <th scope="col">Driver</th>
+                      <th scope="col">Conductor</th>
+                      <th scope="col">Attendant</th>
+                      <th scope="col">From – to</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mapping.map((m) => (
+                      <tr key={m.id}>
+                        <td>
+                          {m.shift === 'both'
+                            ? 'Pick and drop'
+                            : m.shift === 'pick'
+                              ? 'Pick'
+                              : 'Drop'}
+                        </td>
+                        <td>{m.vehicle_id}</td>
+                        <td>{m.driver_id ?? '—'}</td>
+                        <td>{m.conductor_id ?? '—'}</td>
+                        <td>{m.attendant_id ?? '—'}</td>
+                        <td>
+                          {m.from_date || m.to_date
+                            ? `${m.from_date ?? '…'} – ${m.to_date ?? '…'}`
+                            : 'Always'}
+                        </td>
+                        <td>{m.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         ) : null}
         <Card title={`${tr('riders')} · ${riders.length}`}>

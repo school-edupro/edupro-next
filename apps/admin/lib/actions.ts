@@ -2925,12 +2925,31 @@ export async function masterSave(fd: FormData) {
     const v = fd.get(`f:${key}`);
     values[key] = v === null || String(v).trim() === '' ? null : String(v);
   }
-  return run(masterBack(fd), () =>
-    apiFetch(`/masters/${master}/rows`, {
+  const path = masterBack(fd);
+  try {
+    await apiFetch(`/masters/${master}/rows`, {
       method: 'POST',
       body: JSON.stringify({ id: id ?? undefined, values }),
-    }),
-  );
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(path)}`);
+    if (error instanceof ApiError) {
+      // refused: the form stays open with what was typed, and says what to correct
+      const url = new URL(path, 'http://edupro.local');
+      for (const k of ['ok', 'error', 'detail', 'add', 'edit', 'vals']) url.searchParams.delete(k);
+      if (id) url.searchParams.set('edit', id);
+      else url.searchParams.set('add', '1');
+      url.searchParams.set('error', error.problem.type);
+      if (error.problem.detail) url.searchParams.set('detail', error.problem.detail.slice(0, 600));
+      const typed = JSON.stringify(values);
+      if (typed.length <= 3000) url.searchParams.set('vals', typed);
+      url.searchParams.set('r', Date.now().toString(36));
+      redirect(`${url.pathname}${url.search}`);
+    }
+    throw error;
+  }
+  back(path, 'ok');
 }
 
 export async function masterStatus(fd: FormData) {

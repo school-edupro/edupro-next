@@ -7,6 +7,7 @@ import {
   BulkUpdateDto,
   CloneDto,
   RowsQueryDto,
+  ExportQueryDto,
   SaveRowDto,
   SetStatusDto,
   UploadDto,
@@ -63,6 +64,22 @@ export class MastersController {
       .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       .header('content-disposition', `attachment; filename="${fileName}"`)
       .send(bytes);
+  }
+
+  @Get(':master/export')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'The list (search and status kept) as Excel or PDF, at once' })
+  async export(
+    @ReqCtx() ctx: RequestContext,
+    @Param('master') master: string,
+    @Query() q: ExportQueryDto,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.masters.export(ctx, master, q);
+    void reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.fileName}"`)
+      .send(f.bytes);
   }
 
   @Get(':master/imports')

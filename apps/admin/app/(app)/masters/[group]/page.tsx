@@ -3,12 +3,12 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
+import { MapPicker } from '@/components/MapPicker';
 import { RefDatalist } from '@/components/RefDatalist';
 import { Icon } from '@/components/nav-icons';
 import {
   masterBulk,
   masterClone,
-  masterExport,
   masterSave,
   masterStatus,
   masterUploadCommit,
@@ -42,6 +42,7 @@ type Search = {
   upload?: string;
   import?: string;
   export?: string;
+  vals?: string;
   ok?: string;
   error?: string;
   detail?: string;
@@ -68,7 +69,12 @@ export default async function MasterGroupPage({
     getMe(),
     masterRegistry(),
   ]);
-  const masters = registry.filter((m) => m.group === group);
+  // a master may show on a second setup page too (transport slabs: fees and transport); tabs in working order
+  const masters = registry
+    .filter((m) => m.group === group || (m.alsoIn ?? []).includes(group))
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => (a.m.order ?? 500) - (b.m.order ?? 500) || a.i - b.i)
+    .map((x) => x.m);
   // a hidden master (owned by another screen) opens only by its link, never as a tab
   const listed = masters.filter((m) => !m.hidden);
   if (listed.length === 0) notFound();
@@ -81,6 +87,17 @@ export default async function MasterGroupPage({
   if (q) query.set('q', q);
   if (status) query.set('status', status);
   const base = `/masters/${group}?tab=${master.id}&size=${size}${q ? `&q=${encodeURIComponent(q)}` : ''}${status ? `&status=${status}` : ''}`;
+  const exportQuery = new URLSearchParams({
+    ...(q ? { q } : {}),
+    ...(status ? { status } : {}),
+  }).toString();
+  // what was typed in a form the server refused: shown again so nothing is retyped
+  let typed: Record<string, string | null> | null = null;
+  try {
+    typed = sp.vals ? (JSON.parse(sp.vals) as Record<string, string | null>) : null;
+  } catch {
+    typed = null;
+  }
   const pageUrl = (n: number) => `${base}&page=${n}`;
   const back = `${base}&page=${page}`;
   const wantsForm = Boolean(sp.add) || Boolean(sp.edit && /^\d+$/.test(sp.edit));
@@ -198,22 +215,20 @@ export default async function MasterGroupPage({
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`${back}&filter=1`}>
               {t('filter')}
             </a>
-            <form action={masterExport}>
-              <input type="hidden" name="master" value={master.id} />
-              <input type="hidden" name="back" value={back} />
-              <input type="hidden" name="format" value="xlsx" />
-              <Button type="submit" variant="secondary" size="sm">
-                {t('excel')}
-              </Button>
-            </form>
-            <form action={masterExport}>
-              <input type="hidden" name="master" value={master.id} />
-              <input type="hidden" name="back" value={back} />
-              <input type="hidden" name="format" value="pdf" />
-              <Button type="submit" variant="secondary" size="sm">
-                {t('pdf')}
-              </Button>
-            </form>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/masters/${master.id}/export?${exportQuery ? `${exportQuery}&` : ''}format=xlsx`}
+              download
+            >
+              {t('excel')}
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/masters/${master.id}/export?${exportQuery ? `${exportQuery}&` : ''}format=pdf`}
+              download
+            >
+              {t('pdf')}
+            </a>
             {canManage ? (
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`${back}&upload=1`}>
                 {t('upload')}
@@ -264,7 +279,14 @@ export default async function MasterGroupPage({
 
         {/* ---- add / edit ---- */}
         {canManage && (sp.add || editRow) ? (
-          <RowForm master={master} row={editRow} back={back} t={t} lookups={lookups} />
+          <RowForm
+            master={master}
+            row={editRow}
+            back={back}
+            t={t}
+            lookups={lookups}
+            typed={typed}
+          />
         ) : null}
 
         {/* ---- clone ---- */}
@@ -509,6 +531,15 @@ export default async function MasterGroupPage({
                         >
                           <Icon name="file" size={16} />
                         </a>
+                        {master.detail ? (
+                          <a
+                            className="ep-btn ep-btn--secondary ep-btn--sm"
+                            href={master.detail.path.replace('{id}', r.id)}
+                            aria-label={`${master.detail.label}: ${r[master.naturalKey[0]!] ?? r.id}`}
+                          >
+                            {master.detail.label}
+                          </a>
+                        ) : null}
                         {master.status ? (
                           <form action={masterStatus} style={{ display: 'inline' }}>
                             <input type="hidden" name="master" value={master.id} />
@@ -591,8 +622,10 @@ function RowForm({
   back,
   t,
   lookups,
+  typed,
 }: {
   lookups: Record<string, MasterLookupOption[]>;
+  typed: Record<string, string | null> | null;
   master: MasterMeta;
   row: MasterRow | null;
   back: string;
@@ -617,18 +650,24 @@ function RowForm({
           <input key={f.key} type="hidden" name="fields" value={f.key} />
         ))}
         <FormRow columns={3}>
-          {fields.map((f) => (
-            <FieldInput
-              key={f.key}
-              f={f}
-              lookups={lookups}
-              value={row ? (row[f.key] ?? '') : ''}
-              locked={Boolean(row && f.identity)}
-              lockedHelp={t('identityLocked')}
-              yes={t('yes')}
-              no={t('no')}
-            />
-          ))}
+          {fields
+            // the map picker of the latitude field carries the longitude too
+            .filter((f) => !(f.key === 'lng' && fields.some((x) => x.widget === 'map')))
+            .map((f) => (
+              <FieldInput
+                key={f.key}
+                f={f}
+                lookups={lookups}
+                value={
+                  typed && f.key in typed ? (typed[f.key] ?? '') : row ? (row[f.key] ?? '') : ''
+                }
+                lng={typed && 'lng' in typed ? (typed.lng ?? '') : row ? (row.lng ?? '') : ''}
+                locked={Boolean(row && f.identity)}
+                lockedHelp={t('identityLocked')}
+                yes={t('yes')}
+                no={t('no')}
+              />
+            ))}
         </FormRow>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', justifyContent: 'flex-end' }}>
           <a className="ep-btn ep-btn--ghost" href={back}>
@@ -649,10 +688,13 @@ function FieldInput({
   yes,
   no,
   lookups,
+  lng,
 }: {
   lookups: Record<string, MasterLookupOption[]>;
   f: MasterField;
   value: string;
+  /** the longitude that goes with a latitude shown on the map */
+  lng: string;
   locked: boolean;
   lockedHelp: string;
   yes: string;
@@ -688,6 +730,29 @@ function FieldInput({
         options={f.options.map((o) => ({ value: o }))}
       />
     );
+  if (f.widget === 'map')
+    return (
+      <div style={{ gridColumn: '1 / -1' }}>
+        <MapPicker lat={value} lng={lng} />
+      </div>
+    );
+  if (f.type === 'ref' && f.lookup && !f.lookup.parent) {
+    // the box shows "code · name": people pick by the name, the server reads the code
+    const shown = (o: MasterLookupOption) => (o.label ? `${o.value} · ${o.label}` : o.value);
+    const options = lookups[f.key] ?? [];
+    const current = options.find((o) => o.value === value || shown(o) === value);
+    return (
+      <RefDatalist
+        id={id}
+        name={name}
+        label={f.header}
+        required={f.required}
+        defaultValue={current ? shown(current) : value}
+        help={help ?? 'Type to search, then pick from the list.'}
+        options={options.map((o) => ({ value: shown(o) }))}
+      />
+    );
+  }
   if (f.type === 'ref' && f.lookup) {
     const parentOptions = lookups[`${f.key}__parent`];
     return (
@@ -763,8 +828,11 @@ function FieldInput({
       label={f.header}
       required={f.required}
       defaultValue={value}
+      type={f.input ?? 'text'}
+      inputMode={f.input === 'tel' ? 'numeric' : undefined}
       maxLength={f.maxLength}
       pattern={f.pattern}
+      title={f.patternHelp ? `Must be ${f.patternHelp}` : undefined}
       help={
         help ??
         f.patternHelp ??

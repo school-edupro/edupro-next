@@ -13,6 +13,8 @@ export interface MasterField {
     table: string;
     column: string;
     yearScoped?: boolean;
+    labelColumn?: string;
+    showLabel?: boolean;
     parent?: { table: string; column: string; valueColumn: string; label: string };
   };
   scale?: number;
@@ -21,6 +23,9 @@ export interface MasterField {
   maxLength?: number;
   pattern?: string;
   patternHelp?: string;
+  input?: 'email' | 'tel' | 'url';
+  notBefore?: string;
+  widget?: 'map';
   width?: number;
   bulk?: boolean;
   array?: boolean;
@@ -42,6 +47,11 @@ export interface MasterMeta {
   columns: Array<{ key: string; header: string; type?: string; width?: number }>;
   uploadHelp: string | null;
   dataset: string;
+  /** also a tab of these setup pages */
+  alsoIn?: string[];
+  order?: number;
+  /** a row opens its own screen */
+  detail?: { path: string; label: string } | null;
 }
 
 export interface MasterRow extends Record<string, string | null> {

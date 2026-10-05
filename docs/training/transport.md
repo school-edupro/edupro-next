@@ -11,10 +11,24 @@
 
 ## Set-up, once
 
-1. **Transport → Transport setup** (masters, each with search, pages, Excel upload and export):
-   vehicle types, vendors, vehicles, drivers, transport slabs, **stoppages** (each stoppage carries its
-   fee slab), routes, route stops (a stop points at its stoppage and gives the pick and drop time),
-   and the route-vehicle mapping (which vehicle and driver run a route, pick shift, drop shift or both).
+1. **Transport → Transport setup** is the one place for the masters, in the order you fill them. Each
+   tab has search, pages, add / edit, bulk update, **Excel and PDF download at once**, and an Excel
+   upload whose template has **drop-downs** for every choice (slab, route, vehicle, crew, yes / no).
+   Every field is checked: 10-digit mobile, email, GSTIN, vehicle number like MH12AB1234, licence
+   number, links, dates, distances.
+   1. _Vehicle types_ and _Vendors_.
+   2. _Vehicles_: number, name, make and model, type, category, vendor, seats, the in-charge
+      employee, registration date, insurance / fitness / permit / PUC valid till, RC book, AIS device,
+      GPS device, camera and tracking links. **Daily log** opens the vehicle's own page.
+   3. _Crew_: drivers, conductors and attendants (support staff) in one list, with the role, mobile,
+      vendor or employee, licence (drivers), badge and police verification.
+   4. _Transport slabs_ (the same list the fee office sees).
+   5. _Stoppages_: each stoppage once, with its area, slab, radial and route distance, and its place
+      on the map (search a location, click the map or drag the pin).
+   6. _Routes_, then _Route stops_: the stoppages a route calls at, in order, with pick and drop
+      time. **Stops and students** opens the route's own page.
+   7. _Route and vehicle mapping_: which vehicle runs the route (pick, drop or both) with its
+      driver, conductor and attendant, from and to date. The bus list, GPS and the dashboard follow it.
 2. **Transport → Transport settings**:
    - _Charge rule._ Pick and drop from one stoppage = the full slab of that stoppage. Pick only or
      drop only = the percentage you set of the slab. Pick and drop from two different stoppages = the

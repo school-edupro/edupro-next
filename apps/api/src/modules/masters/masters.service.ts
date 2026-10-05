@@ -16,6 +16,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { tablePdf } from '../engagement/table-pdf';
 import { parseCsv } from '../people/csv';
 import type { BulkUpdateDto, CloneDto, RowsQueryDto, SaveRowDto, UploadDto } from './masters.dto';
 
@@ -102,6 +103,9 @@ export class MastersService {
       fields: m.fields,
       columns: masterColumns(m),
       uploadHelp: m.uploadHelp ?? null,
+      alsoIn: m.alsoIn ?? [],
+      order: m.order ?? 500,
+      detail: m.detail ?? null,
       dataset: `master_${m.id}`,
     }));
   }
@@ -138,23 +142,143 @@ export class MastersService {
   }
 
   // ---- template ------------------------------------------------------------------------------------
-  /** Excel template: the accepted columns in row 1, one sample row, and a Notes sheet with the rules. */
+  /**
+   * Excel template: the accepted columns in row 1, ready to fill. Every column with fixed choices (a
+   * status, yes / no, a trip) or that points at another master (a slab, a route, a vehicle, a crew
+   * member) is a drop-down fed from the Lists sheet; numbers and dates are checked as they are typed.
+   * The Notes sheet has the rule of every column.
+   */
   async template(ctx: RequestContext, id: string): Promise<{ fileName: string; bytes: Buffer }> {
     const def = this.def(id);
     this.assertPermission(ctx, def, true);
+    const refs = def.fields.some((f) => f.type === 'ref') ? await this.lookups(ctx, id) : {};
     const wb = new ExcelJS.Workbook();
     wb.creator = 'EduPro Next';
     const ws = wb.addWorksheet(def.title.slice(0, 31));
     const fields = writableFields(def);
-    ws.columns = fields.map((f) => ({ header: f.header, key: f.key, width: f.width ?? 18 }));
+    const columns = [...fields.map((f) => ({ f, header: f.header, key: f.key }))];
+    ws.columns = [
+      ...columns.map((x) => ({
+        header: x.header,
+        key: x.key,
+        width: Math.max(14, x.f.width ?? 18),
+      })),
+      ...(def.status ? [{ header: 'Status', key: def.status.column, width: 12 }] : []),
+    ];
     ws.getRow(1).font = { bold: true };
-    ws.addRow(fields.map((f) => sampleFor(f)));
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    const lists = wb.addWorksheet('Lists');
+    const ROWS = 1000;
+    const letter = (n: number) => {
+      let out = '';
+      for (let x = n; x > 0; x = Math.floor((x - 1) / 26))
+        out = String.fromCharCode(65 + ((x - 1) % 26)) + out;
+      return out;
+    };
+    let listCol = 0;
+    const listOf = (title: string, values: string[]): string => {
+      listCol += 1;
+      const col = letter(listCol);
+      lists.getCell(`${col}1`).value = title;
+      lists.getCell(`${col}1`).font = { bold: true };
+      values.forEach((v, i) => {
+        lists.getCell(`${col}${String(i + 2)}`).value = v;
+      });
+      lists.getColumn(listCol).width = 30;
+      return `Lists!$${col}$2:$${col}$${String(Math.max(2, values.length + 1))}`;
+    };
+    const all = [
+      ...fields,
+      ...(def.status
+        ? [
+            {
+              key: def.status.column,
+              header: 'Status',
+              type: 'select',
+              options: def.status.values,
+            } as MasterField,
+          ]
+        : []),
+    ];
+    all.forEach((f, i) => {
+      const col = letter(i + 1);
+      const each = (make: () => ExcelJS.DataValidation) => {
+        for (let r = 2; r <= ROWS + 1; r += 1)
+          ws.getCell(`${col}${String(r)}`).dataValidation = make();
+      };
+      const refuse = (title: string, error: string) => ({
+        allowBlank: !f.required,
+        showErrorMessage: true,
+        errorStyle: 'error' as const,
+        errorTitle: title,
+        error,
+      });
+      if (f.type === 'ref' && f.lookup) {
+        const options = (refs[f.key] ?? []).map((o) =>
+          f.lookup!.showLabel && o.label ? `${o.value} · ${o.label}` : o.value,
+        );
+        if (!options.length || options.length > 1500) return;
+        const range = listOf(f.header, options);
+        each(() => ({
+          type: 'list',
+          formulae: [range],
+          ...refuse(
+            f.header,
+            'Choose from the drop-down. A new one is added in its own master first.',
+          ),
+        }));
+      } else if (f.type === 'select' && f.options?.length) {
+        const range = listOf(f.header, [...f.options]);
+        each(() => ({
+          type: 'list',
+          formulae: [range],
+          ...refuse(f.header, 'Choose from the drop-down.'),
+        }));
+      } else if (f.type === 'boolean') {
+        const range = listOf(f.header, ['yes', 'no']);
+        each(() => ({ type: 'list', formulae: [range], ...refuse(f.header, 'Choose yes or no.') }));
+      } else if (f.type === 'date') {
+        ws.getColumn(i + 1).numFmt = 'yyyy-mm-dd';
+        each(() => ({
+          type: 'date',
+          operator: 'greaterThan',
+          formulae: [new Date('1990-01-01')],
+          ...refuse(f.header, 'A date like 2027-03-31.'),
+        }));
+      } else if (f.type === 'number') {
+        const whole = (f.scale ?? 0) === 0;
+        const min = f.min ?? -999999999;
+        const max = f.max ?? 999999999;
+        each(() => ({
+          type: whole ? 'whole' : 'decimal',
+          operator: 'between',
+          formulae: [min, max],
+          ...refuse(
+            f.header,
+            `${whole ? 'A whole number' : 'A number'} from ${String(min)} to ${String(max)}.`,
+          ),
+        }));
+      } else if (f.type === 'text' && f.maxLength && !f.array) {
+        // text stays text (a mobile number or a code keeps its leading zero and is not turned into a number)
+        ws.getColumn(i + 1).numFmt = '@';
+        each(() => ({
+          type: 'textLength',
+          operator: 'lessThanOrEqual',
+          formulae: [f.maxLength!],
+          ...refuse(
+            f.header,
+            `At most ${String(f.maxLength)} characters. ${f.patternHelp ? `Must be ${f.patternHelp}.` : ''}`,
+          ),
+        }));
+      }
+    });
+    if (listCol === 0) wb.removeWorksheet(lists.id);
     const notes = wb.addWorksheet('Notes');
     notes.columns = [
       { header: 'Column', key: 'c', width: 26 },
       { header: 'Required', key: 'r', width: 10 },
       { header: 'Type', key: 't', width: 12 },
-      { header: 'Rule', key: 'u', width: 70 },
+      { header: 'Rule', key: 'u', width: 90 },
     ];
     notes.getRow(1).font = { bold: true };
     for (const f of fields) notes.addRow([f.header, f.required ? 'yes' : '', f.type, ruleFor(f)]);
@@ -165,10 +289,90 @@ export class MastersService {
       '',
       `Rows are matched on ${def.naturalKey.join(' + ')}: an existing row is updated, a new one inserted. Rows are never deleted by an upload.`,
     ]);
+    notes.addRow([
+      'Fill',
+      '',
+      '',
+      'Type from row 2 of the first sheet. Leave no example rows behind.',
+    ]);
     if (def.yearScoped)
       notes.addRow(['Year', '', '', 'Rows belong to the academic year selected in the header.']);
     const bytes = Buffer.from(await wb.xlsx.writeBuffer());
     return { fileName: `${def.id}-template.xlsx`, bytes };
+  }
+
+  // ---- export, at once --------------------------------------------------------------------------------
+  /** The list as on screen (search and status filter kept) as Excel or PDF, made on the spot. */
+  async export(
+    ctx: RequestContext,
+    id: string,
+    q: { q?: string; status?: string; format: 'xlsx' | 'pdf' },
+  ): Promise<{ fileName: string; bytes: Buffer; contentType: string }> {
+    const def = this.def(id);
+    this.assertPermission(ctx, def);
+    const tenant = requireTenant(ctx);
+    const inner = def.list({
+      q: q.q?.trim() || null,
+      status: q.status ?? null,
+      academicYearId: def.yearScoped ? (tenant.academicYearId ?? null) : null,
+      filters: {},
+    });
+    const max = def.maxRows ?? 20_000;
+    const { rows, school } = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query<MasterRow>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragment from the registry; values are bound
+        `SELECT t.* FROM (${inner.text}) t LIMIT ${String(max)}`,
+        inner.values,
+      );
+      const s = await c.query<{ name: string }>(
+        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+      );
+      return { rows: r.rows, school: s.rows[0]?.name ?? '' };
+    });
+    const cols = masterColumns(def);
+    const cellOf = (row: MasterRow, key: string): string => {
+      const v = row[key];
+      return v === null || v === undefined
+        ? ''
+        : v === 'true'
+          ? 'yes'
+          : v === 'false'
+            ? 'no'
+            : String(v);
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (q.format === 'pdf') {
+      const bytes = await tablePdf({
+        school,
+        title: def.title,
+        subtitle: `${String(rows.length)} row(s)${q.q ? ` · search "${q.q}"` : ''}${q.status ? ` · ${q.status}` : ''} · ${stamp}`,
+        columns: cols.map((c) => ({
+          label: c.header,
+          width: c.width ?? 16,
+          right: c.type === 'number',
+        })),
+        rows: rows.map((r) => cols.map((c) => cellOf(r, c.key))),
+      });
+      return { fileName: `${def.id}-${stamp}.pdf`, bytes, contentType: 'application/pdf' };
+    }
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'EduPro Next';
+    const ws = wb.addWorksheet(def.title.slice(0, 31));
+    ws.columns = cols.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 18 }));
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    for (const r of rows)
+      ws.addRow(
+        cols.map((c) => {
+          const v = cellOf(r, c.key);
+          return c.type === 'number' && v !== '' && Number.isFinite(Number(v)) ? Number(v) : v;
+        }),
+      );
+    return {
+      fileName: `${def.id}-${stamp}.xlsx`,
+      bytes: Buffer.from(await wb.xlsx.writeBuffer()),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
   }
 
   // ---- upload: validate then commit ----------------------------------------------------------------
@@ -211,6 +415,10 @@ export class MastersService {
             rejects.push({ row: rowNo, column: f.header, message: error });
             ok = false;
           } else if (value !== undefined) out[f.key] = value;
+        }
+        for (const e of crossChecks(fields, out)) {
+          rejects.push({ row: rowNo, ...e });
+          ok = false;
         }
         const key = def.naturalKey.map((k) => String(out[k] ?? '')).join('\u0000');
         if (ok && seen.has(key)) {
@@ -327,6 +535,7 @@ export class MastersService {
         if (error) errors.push(`${f.header}: ${error}`);
         else if (value !== undefined) out[f.key] = value;
       }
+      errors.push(...crossChecks(fields, out).map((e) => `${e.column}: ${e.message}`));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       if (dto.id) {
@@ -490,9 +699,9 @@ export class MastersService {
           label: string | null;
         }>(
           // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry; the year is bound
-          `SELECT t.id::text, t.${l.column}::text AS value, ${parentCol} AS parent, to_jsonb(t) ->> 'name' AS label
+          `SELECT t.id::text, t.${l.column}::text AS value, ${parentCol} AS parent, to_jsonb(t) ->> '${l.labelColumn ?? 'name'}' AS label
             FROM ${l.table} t ${parentJoin}
-            WHERE 1 = 1${hasSoftDelete(l.table) ? ' AND t.deleted_at IS NULL' : ''}${l.yearScoped ? ' AND t.academic_year_id = $1' : ''}
+            WHERE 1 = 1${hasSoftDelete(l.table) ? ' AND t.deleted_at IS NULL' : ''}${l.yearScoped ? ' AND t.academic_year_id = $1' : ''}${l.filter ? ` AND (${l.filter})` : ''}
             ORDER BY 2 LIMIT 2000`,
           l.yearScoped ? [tenant.academicYearId] : [],
         );
@@ -536,14 +745,32 @@ export class MastersService {
         }
       const map = new Map<string, string>();
       if (wanted.size) {
-        const r = await c.query<{ id: string; v: string }>(
-          // eslint-disable-next-line no-restricted-syntax -- table and column come from the registry; values bound
-          `SELECT id::text, ${f.lookup.column}::text AS v FROM ${f.lookup.table}
-            WHERE ${f.lookup.column}::text = ANY($1::text[])${hasSoftDelete(f.lookup.table) ? ' AND deleted_at IS NULL' : ''}
-              ${f.lookup.yearScoped ? 'AND academic_year_id = $2' : ''}`,
-          f.lookup.yearScoped ? [[...wanted], tenant.academicYearId] : [[...wanted]],
+        // a cell may carry the value (a code), what the grid shows ("code · name"), or just the name
+        const asked = new Set<string>();
+        for (const w of wanted) {
+          asked.add(w);
+          const head = w.split(' · ')[0]!.trim();
+          if (head) asked.add(head);
+        }
+        const label = f.lookup.labelColumn ?? 'name';
+        const r = await c.query<{ id: string; v: string; label: string | null }>(
+          // eslint-disable-next-line no-restricted-syntax -- table, columns and the fixed filter come from the registry; values bound
+          `SELECT t.id::text, t.${f.lookup.column}::text AS v, to_jsonb(t) ->> '${label}' AS label FROM ${f.lookup.table} t
+            WHERE (t.${f.lookup.column}::text = ANY($1::text[]) OR lower(to_jsonb(t) ->> '${label}') = ANY($2::text[]))
+              ${hasSoftDelete(f.lookup.table) ? 'AND t.deleted_at IS NULL' : ''}
+              ${f.lookup.yearScoped ? 'AND t.academic_year_id = $3' : ''}
+              ${f.lookup.filter ? `AND (${f.lookup.filter})` : ''}`,
+          f.lookup.yearScoped
+            ? [[...asked], [...asked].map((x) => x.toLowerCase()), tenant.academicYearId]
+            : [[...asked], [...asked].map((x) => x.toLowerCase())],
         );
-        for (const x of r.rows) map.set(norm(x.v), x.id);
+        const byLabel = new Map<string, string[]>();
+        for (const x of r.rows) {
+          map.set(norm(x.v), x.id);
+          if (x.label) byLabel.set(norm(x.label), [...(byLabel.get(norm(x.label)) ?? []), x.id]);
+        }
+        // a name stands for the row only when one row carries it
+        for (const [k, ids] of byLabel) if (ids.length === 1 && !map.has(k)) map.set(k, ids[0]!);
       }
       out[f.key] = map;
     }
@@ -570,20 +797,23 @@ function toImport(r: Record<string, unknown>): MasterImportRow {
   };
 }
 
-function sampleFor(f: MasterField): Cell {
-  if (f.options?.length) return f.options[0]!;
-  switch (f.type) {
-    case 'number':
-      return f.min ?? 0;
-    case 'date':
-      return '2026-04-01';
-    case 'boolean':
-      return 'yes';
-    case 'ref':
-      return f.lookup ? `<${f.lookup.column} of ${f.lookup.table}>` : '';
-    default:
-      return f.identity ? 'CODE1' : '';
+/** Rules across two fields of a row: a date that may not be before another. */
+function crossChecks(
+  fields: MasterField[],
+  out: Record<string, unknown>,
+): Array<{ column: string; message: string }> {
+  const errors: Array<{ column: string; message: string }> = [];
+  for (const f of fields) {
+    if (!f.notBefore) continue;
+    const a = out[f.notBefore];
+    const b = out[f.key];
+    if (typeof a === 'string' && typeof b === 'string' && b < a)
+      errors.push({
+        column: f.header,
+        message: `Cannot be before ${fields.find((x) => x.key === f.notBefore)?.header ?? f.notBefore}`,
+      });
   }
+  return errors;
 }
 
 function ruleFor(f: MasterField): string {
@@ -630,6 +860,11 @@ function coerce(
     case 'text':
     case 'select': {
       const s = String(raw).trim();
+      // a field with its own form (a mobile, a GSTIN) says what it must be, not just "too long"
+      if (f.pattern && !f.array && !f.options && !new RegExp(f.pattern).test(s))
+        return {
+          error: f.patternHelp ? `Must be ${f.patternHelp}` : 'Is not in the expected form',
+        };
       if (f.maxLength && s.length > f.maxLength)
         return { error: `Longer than ${f.maxLength} characters` };
       if (f.array) {
@@ -647,7 +882,7 @@ function coerce(
       }
       if (f.pattern && !new RegExp(f.pattern).test(s))
         return {
-          error: f.patternHelp ? `Must be ${f.patternHelp}` : `Does not match ${f.pattern}`,
+          error: f.patternHelp ? `Must be ${f.patternHelp}` : 'Is not in the expected form',
         };
       return { value: s };
     }
@@ -673,11 +908,10 @@ function coerce(
       return { error: 'Use yes or no' };
     }
     case 'ref': {
-      const idv = lookups[f.key]?.get(norm(String(raw)));
-      if (!idv)
-        return {
-          error: `No ${f.lookup?.table ?? 'row'} with ${f.lookup?.column ?? 'value'} "${String(raw).trim()}"`,
-        };
+      const text = String(raw).trim();
+      const idv =
+        lookups[f.key]?.get(norm(text)) ?? lookups[f.key]?.get(norm(text.split(' · ')[0] ?? ''));
+      if (!idv) return { error: `"${text}" is not on the list: choose one from the drop-down` };
       return { value: idv };
     }
     default:

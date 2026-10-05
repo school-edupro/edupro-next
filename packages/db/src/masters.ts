@@ -31,6 +31,12 @@ export interface MasterField {
     table: string;
     column: string;
     yearScoped?: boolean;
+    /** The column that names the row for people (default `name`): shown beside the value in drop-downs. */
+    labelColumn?: string;
+    /** The grid and the exports show "value · label" (a crew code alone says little). */
+    showLabel?: boolean;
+    /** A fixed condition on the lookup table (alias `t`) that narrows the options, e.g. drivers only. */
+    filter?: string;
     /** The option list is narrowed by a parent lookup (cities by state → country): `column` on the lookup table, `valueColumn` on the parent table. */
     parent?: { table: string; column: string; valueColumn: string; label: string };
   };
@@ -42,6 +48,12 @@ export interface MasterField {
   /** Regular expression (anchored) a `text` value must match; `patternHelp` explains it. */
   pattern?: string;
   patternHelp?: string;
+  /** The kind of text box: the browser checks an email or a link and shows the right keyboard. */
+  input?: 'email' | 'tel' | 'url';
+  /** This date may not be before that other date field of the row (a "to" after its "from"). */
+  notBefore?: string;
+  /** `lat`: the form shows a map to search a place and drop the pin (fills this field and `lng`). */
+  widget?: 'map';
   width?: number;
   /** Offered in the bulk-update control. */
   bulk?: boolean;
@@ -84,6 +96,12 @@ export interface MasterDefinition {
   maxRows?: number;
   /** Short guidance shown on the upload card. */
   uploadHelp?: string;
+  /** Also a tab of these setup pages (transport slabs: a fee master the transport office fills too). */
+  alsoIn?: MasterGroup[];
+  /** Position among the tabs of its setup page (lower first; the default keeps the registry order). */
+  order?: number;
+  /** A row opens its own screen: the path with `{id}` (a route's stops and pupils, a vehicle's log). */
+  detail?: { path: string; label: string };
   /**
    * Not listed on its setup page because a dedicated screen owns the data (communication templates:
    * the Template master); the grid stays reachable from that screen for Excel import and export.
@@ -217,7 +235,11 @@ function buildList(spec: ListSpec): (p: MasterListParams) => DatasetQuery {
         const a = `r${i + 1}`;
         // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry definitions; values are bound
         joins.push(`LEFT JOIN ${f.lookup.table} ${a} ON ${a}.id = t.${f.key}`);
-        cols.push(`${a}.${f.lookup.column}::text AS ${f.key}`);
+        cols.push(
+          f.lookup.showLabel
+            ? `concat_ws(' · ', ${a}.${f.lookup.column}::text, ${a}.${f.lookup.labelColumn ?? 'name'}::text) AS ${f.key}`
+            : `${a}.${f.lookup.column}::text AS ${f.key}`,
+        );
       } else if (f.array) cols.push(`array_to_string(t.${f.key}, ',') AS ${f.key}`);
       else if (f.type === 'date') cols.push(`t.${f.key}::text AS ${f.key}`);
       else cols.push(`t.${f.key}::text AS ${f.key}`);
@@ -299,7 +321,54 @@ const time = (key: string, header: string, required = false): MasterField => ({
   required,
   maxLength: 8,
   width: 8,
+  pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
+  patternHelp: 'a time like 07:30 (24-hour)',
   help: 'HH:MM (24-hour)',
+});
+
+/** A person's name: letters of any script, spaces, dots, apostrophes and hyphens. */
+const PERSON = "^[A-Za-z\\u0900-\\u097F][A-Za-z\\u0900-\\u097F .'\\-]+$";
+/** A code people type and read: capital letters, digits, hyphen, slash or underscore. */
+const tcode = (header = 'Code'): MasterField => ({
+  ...code(header),
+  maxLength: 20,
+  pattern: '^[A-Z0-9][A-Z0-9\\/_\\-]*$',
+  patternHelp: 'capital letters and digits (hyphen, slash or underscore allowed), without spaces',
+});
+const mobile = (key = 'mobile', header = 'Mobile'): MasterField => ({
+  key,
+  header,
+  type: 'text',
+  input: 'tel',
+  maxLength: 10,
+  width: 12,
+  pattern: '^[6-9][0-9]{9}$',
+  patternHelp: 'a 10-digit mobile number',
+});
+const url = (key: string, header: string): MasterField => ({
+  key,
+  header,
+  type: 'text',
+  input: 'url',
+  maxLength: 300,
+  width: 28,
+  pattern: '^https?://[^\\s]+$',
+  patternHelp: 'a link that starts with http:// or https://',
+});
+/** One of the crew with that role, on the route-vehicle mapping. */
+const crew = (key: string, header: string, role: string, required = false): MasterField => ({
+  key,
+  header,
+  type: 'ref',
+  lookup: {
+    table: 'transport_drivers',
+    column: 'code',
+    showLabel: true,
+    // eslint-disable-next-line no-restricted-syntax -- the role is one of three constants above
+    filter: `t.role = '${role}' AND t.status = 'active'`,
+  },
+  required,
+  width: 22,
 });
 
 const master = (
@@ -460,6 +529,8 @@ export const MASTERS: MasterDefinition[] = [
     id: 'transport_slabs',
     title: 'Transport slabs',
     group: 'fees',
+    alsoIn: ['transport'],
+    order: 50,
     table: 'transport_slabs',
     permission: { view: 'fees.master.view', manage: 'fees.master.manage' },
     yearScoped: true,
@@ -965,40 +1036,344 @@ export const MASTERS: MasterDefinition[] = [
     uploadHelp: 'Dates shift by one year on clone; adjust the festival dates afterwards.',
   }),
   // ---- transport ----
+  // In working order: what a vehicle is, who owns it, the vehicles, the crew, the slabs (a fee master,
+  // shown here too), the stoppages, the routes, each route's stops, and which vehicle and crew run it.
+  master({
+    id: 'transport_vehicle_types',
+    title: 'Vehicle types',
+    group: 'transport',
+    order: 10,
+    table: 'transport_vehicle_types',
+    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    fields: [
+      tcode(),
+      name('Vehicle type'),
+      { key: 'seats', header: 'Seats', type: 'number', scale: 0, min: 1, max: 200, width: 8 },
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name'],
+    orderBy: 't.name',
+  }),
+  master({
+    id: 'transport_vendors',
+    title: 'Vendors',
+    group: 'transport',
+    order: 20,
+    table: 'transport_vendors',
+    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    fields: [
+      tcode(),
+      name('Vendor'),
+      {
+        key: 'contact_person',
+        header: 'Contact person',
+        type: 'text',
+        maxLength: 80,
+        width: 16,
+        pattern: PERSON,
+        patternHelp: 'a name in letters (dots, spaces and hyphens allowed)',
+      },
+      mobile(),
+      {
+        key: 'email',
+        header: 'Email',
+        type: 'text',
+        input: 'email',
+        maxLength: 120,
+        width: 22,
+        pattern: '^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$',
+        patternHelp: 'an email address like name@example.com',
+      },
+      { key: 'address', header: 'Address', type: 'text', maxLength: 300, width: 30 },
+      {
+        key: 'gst_no',
+        header: 'GST no',
+        type: 'text',
+        maxLength: 15,
+        width: 16,
+        pattern: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$',
+        patternHelp: 'a 15-character GSTIN like 27ABCDE1234F1Z5 (capital letters)',
+      },
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name', 't.contact_person', 't.mobile'],
+    orderBy: 't.name',
+  }),
+  master({
+    id: 'transport_vehicles',
+    title: 'Vehicles',
+    group: 'transport',
+    order: 30,
+    table: 'transport_vehicles',
+    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
+    naturalKey: ['reg_no'],
+    conflict: '(school_id, reg_no) WHERE deleted_at IS NULL',
+    detail: { path: '/transport/vehicles/{id}', label: 'Daily log' },
+    fields: [
+      {
+        key: 'reg_no',
+        header: 'Vehicle no',
+        type: 'text',
+        required: true,
+        identity: true,
+        maxLength: 13,
+        width: 14,
+        pattern: '^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$|^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$',
+        patternHelp: 'a registration number without spaces, like MH12AB1234 (capital letters)',
+      },
+      { key: 'name', header: 'Vehicle name', type: 'text', maxLength: 60, width: 16 },
+      { key: 'make', header: 'Make', type: 'text', maxLength: 60, width: 14 },
+      { key: 'model', header: 'Model', type: 'text', maxLength: 60, width: 14 },
+      {
+        key: 'vehicle_type_id',
+        header: 'Vehicle type',
+        type: 'ref',
+        lookup: { table: 'transport_vehicle_types', column: 'code' },
+        width: 12,
+        bulk: true,
+      },
+      {
+        key: 'category',
+        header: 'Category',
+        type: 'select',
+        options: ['School owned', 'Vendor', 'Leased'],
+        width: 12,
+        bulk: true,
+      },
+      {
+        key: 'vendor_id',
+        header: 'Vendor',
+        type: 'ref',
+        lookup: { table: 'transport_vendors', column: 'code' },
+        width: 12,
+        bulk: true,
+      },
+      {
+        key: 'capacity',
+        header: 'Seats',
+        type: 'number',
+        scale: 0,
+        min: 1,
+        max: 200,
+        width: 8,
+        bulk: true,
+      },
+      {
+        key: 'incharge_id',
+        header: 'In-charge (employee)',
+        type: 'ref',
+        lookup: {
+          table: 'employees',
+          column: 'employee_code',
+          labelColumn: 'display_name',
+          showLabel: true,
+          filter: "t.status = 'active'",
+        },
+        width: 22,
+        help: 'The employee answerable for this vehicle; the phone number is the one on the employee record.',
+      },
+      { key: 'registration_date', header: 'Registration date', type: 'date', width: 12 },
+      { key: 'insurance_expiry', header: 'Insurance valid till', type: 'date', width: 12 },
+      { key: 'fitness_expiry', header: 'Fitness valid till', type: 'date', width: 12 },
+      { key: 'permit_expiry', header: 'Permit valid till', type: 'date', width: 12 },
+      { key: 'puc_expiry', header: 'PUC valid till', type: 'date', width: 12 },
+      { key: 'rc_book', header: 'RC book', type: 'boolean', width: 8 },
+      { key: 'ais_device', header: 'AIS device', type: 'boolean', width: 8 },
+      {
+        key: 'gps_device_id',
+        header: 'GPS device id',
+        type: 'text',
+        maxLength: 60,
+        width: 14,
+        pattern: '^[A-Za-z0-9_.:\\-]+$',
+        patternHelp: 'letters, digits, dot, colon, hyphen or underscore, without spaces',
+      },
+      url('camera_url', 'Live camera link'),
+      url('track_url', 'Track bus link'),
+    ],
+    status: STATUS,
+    search: ['t.reg_no', 't.name', 't.make', 't.model'],
+    orderBy: 't.reg_no',
+  }),
+  master({
+    id: 'transport_drivers',
+    title: 'Crew',
+    group: 'transport',
+    order: 40,
+    table: 'transport_drivers',
+    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    uploadHelp:
+      'Drivers, conductors and attendants (support staff). A driver needs the licence number and its expiry.',
+    fields: [
+      tcode('Crew code'),
+      {
+        ...name('Name'),
+        pattern: PERSON,
+        patternHelp: 'a name in letters (dots, spaces and hyphens allowed)',
+      },
+      {
+        key: 'role',
+        header: 'Role',
+        type: 'select',
+        options: ['driver', 'conductor', 'attendant'],
+        required: true,
+        width: 10,
+        bulk: true,
+        help: 'attendant = support staff on the bus (helper, lady attendant).',
+      },
+      { ...mobile(), required: true },
+      { ...mobile('emergency_mobile', 'Emergency mobile') },
+      {
+        key: 'vendor_id',
+        header: 'Vendor',
+        type: 'ref',
+        lookup: { table: 'transport_vendors', column: 'code' },
+        width: 12,
+        bulk: true,
+        help: 'Blank for the school’s own staff.',
+      },
+      {
+        key: 'employee_id',
+        header: 'Employee (if on the rolls)',
+        type: 'ref',
+        lookup: {
+          table: 'employees',
+          column: 'employee_code',
+          labelColumn: 'display_name',
+          showLabel: true,
+          filter: "t.status = 'active'",
+        },
+        width: 22,
+      },
+      {
+        key: 'licence_no',
+        header: 'Licence no',
+        type: 'text',
+        maxLength: 20,
+        width: 18,
+        pattern: '^[A-Z]{2}[0-9]{2}[ \\-]?[0-9]{11}$',
+        patternHelp: 'a driving licence number like MH1220110012345 (capital letters)',
+      },
+      { key: 'licence_expiry', header: 'Licence valid till', type: 'date', width: 12 },
+      {
+        key: 'badge_no',
+        header: 'Badge no',
+        type: 'text',
+        maxLength: 20,
+        width: 12,
+        pattern: '^[A-Za-z0-9\\/\\-]+$',
+        patternHelp: 'letters, digits, slash or hyphen',
+      },
+      { key: 'police_verified', header: 'Police verified', type: 'boolean', width: 8, bulk: true },
+      { key: 'police_verified_on', header: 'Verified on', type: 'date', width: 12 },
+      { key: 'address', header: 'Address', type: 'text', maxLength: 300, width: 30 },
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name', 't.mobile', 't.licence_no'],
+    orderBy: 't.role, t.name',
+  }),
+  master({
+    id: 'transport_stoppages',
+    title: 'Stoppages',
+    group: 'transport',
+    order: 60,
+    table: 'transport_stoppages',
+    permission: { view: 'transport.route.view', manage: 'transport.route.manage' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    uploadHelp:
+      'Each stoppage once, with its fee slab. Routes pick their stops from this list (Route stops).',
+    fields: [
+      tcode(),
+      name('Stoppage'),
+      { key: 'area', header: 'Area', type: 'text', maxLength: 80, width: 16 },
+      {
+        key: 'slab_id',
+        header: 'Slab',
+        type: 'ref',
+        lookup: { table: 'transport_slabs', column: 'code', yearScoped: true },
+        width: 10,
+        bulk: true,
+        help: 'The fee slab every pupil of this stoppage is charged at.',
+      },
+      {
+        key: 'radial_km',
+        header: 'Radial distance (km)',
+        type: 'number',
+        scale: 1,
+        min: 0,
+        max: 200,
+        width: 10,
+      },
+      {
+        key: 'route_km',
+        header: 'Route distance (km)',
+        type: 'number',
+        scale: 1,
+        min: 0,
+        max: 300,
+        width: 10,
+      },
+      {
+        key: 'lat',
+        header: 'Latitude',
+        type: 'number',
+        scale: 6,
+        min: -90,
+        max: 90,
+        width: 10,
+        widget: 'map',
+      },
+      { key: 'lng', header: 'Longitude', type: 'number', scale: 6, min: -180, max: 180, width: 10 },
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name', 't.area'],
+    orderBy: 't.name',
+  }),
   master({
     id: 'transport_routes',
     title: 'Routes',
     group: 'transport',
+    order: 70,
     table: 'transport_routes',
     permission: { view: 'transport.route.view', manage: 'transport.route.manage' },
     naturalKey: ['code'],
     conflict: '(school_id, code) WHERE deleted_at IS NULL',
+    detail: { path: '/transport/routes/{id}', label: 'Stops and students' },
+    uploadHelp:
+      'The vehicle and the crew of a route are set under Route and vehicle mapping; its stops under Route stops.',
     fields: [
-      code(),
-      name(),
-      { key: 'vehicle_no', header: 'Vehicle no', type: 'text', maxLength: 20, width: 12 },
-      { key: 'driver_name', header: 'Driver', type: 'text', maxLength: 80, width: 16 },
-      { key: 'driver_mobile', header: 'Driver mobile', type: 'text', maxLength: 15, width: 12 },
+      tcode(),
+      name('Route'),
       time('late_after', 'Late after'),
       { key: 'alert_boarding', header: 'Boarding alert', type: 'boolean', width: 8, bulk: true },
       { key: 'alert_alighting', header: 'Alighting alert', type: 'boolean', width: 8, bulk: true },
     ],
     status: STATUS,
-    search: ['t.code', 't.name', 't.vehicle_no', 't.driver_name'],
+    search: ['t.code', 't.name'],
     orderBy: 't.code',
   }),
   master({
     id: 'transport_stops',
-    title: 'Stops',
+    title: 'Route stops',
     group: 'transport',
+    order: 80,
     table: 'transport_stops',
     permission: { view: 'transport.route.view', manage: 'transport.route.manage' },
     naturalKey: ['route_id', 'sequence'],
     conflict: '(route_id, sequence)',
+    uploadHelp:
+      'Which stoppages a route calls at, in order, with the pick and drop time. The name, slab and place come from the stoppage.',
     fields: [
       {
         key: 'route_id',
-        header: 'Route code',
+        header: 'Route',
         type: 'ref',
         lookup: { table: 'transport_routes', column: 'code' },
         required: true,
@@ -1016,150 +1391,35 @@ export const MASTERS: MasterDefinition[] = [
         identity: true,
         width: 8,
       },
-      name('Stop'),
-      time('pickup_time', 'Pickup'),
-      time('drop_time', 'Drop'),
-      { key: 'lat', header: 'Latitude', type: 'number', scale: 6, min: -90, max: 90, width: 10 },
-      { key: 'lng', header: 'Longitude', type: 'number', scale: 6, min: -180, max: 180, width: 10 },
       {
         key: 'stoppage_id',
-        header: 'Stoppage code',
+        header: 'Stoppage',
         type: 'ref',
-        lookup: { table: 'transport_stoppages', column: 'code' },
-        width: 12,
-        help: 'From the stoppage master; the slab below is the one this stop is charged at.',
+        lookup: { table: 'transport_stoppages', column: 'code', showLabel: true },
+        required: true,
+        width: 24,
       },
-      {
-        key: 'slab_id',
-        header: 'Slab code',
-        type: 'ref',
-        lookup: { table: 'transport_slabs', column: 'code', yearScoped: true },
-        width: 10,
-        bulk: true,
-      },
+      time('pickup_time', 'Pick time'),
+      time('drop_time', 'Drop time'),
     ],
     search: ['r1.code', 't.name'],
     orderBy: 'r1.code, t.sequence',
   }),
   master({
-    id: 'transport_vehicles',
-    title: 'Vehicles',
-    group: 'transport',
-    table: 'transport_vehicles',
-    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
-    naturalKey: ['reg_no'],
-    conflict: '(school_id, reg_no) WHERE deleted_at IS NULL',
-    fields: [
-      {
-        key: 'reg_no',
-        header: 'Registration no',
-        type: 'text',
-        required: true,
-        identity: true,
-        maxLength: 20,
-        width: 14,
-      },
-      { key: 'make', header: 'Make', type: 'text', maxLength: 60, width: 14 },
-      {
-        key: 'capacity',
-        header: 'Seats',
-        type: 'number',
-        scale: 0,
-        min: 1,
-        max: 200,
-        width: 8,
-        bulk: true,
-      },
-      { key: 'insurance_expiry', header: 'Insurance expiry', type: 'date', width: 12 },
-      { key: 'fitness_expiry', header: 'Fitness expiry', type: 'date', width: 12 },
-      { key: 'permit_expiry', header: 'Permit expiry', type: 'date', width: 12 },
-      {
-        key: 'vehicle_type_id',
-        header: 'Vehicle type code',
-        type: 'ref',
-        lookup: { table: 'transport_vehicle_types', column: 'code' },
-        width: 12,
-        bulk: true,
-      },
-      {
-        key: 'vendor_id',
-        header: 'Vendor code',
-        type: 'ref',
-        lookup: { table: 'transport_vendors', column: 'code' },
-        width: 12,
-        bulk: true,
-      },
-      {
-        key: 'gps_device_id',
-        header: 'GPS device',
-        type: 'text',
-        maxLength: 60,
-        width: 12,
-        bulk: true,
-      },
-    ],
-    status: STATUS,
-    search: ['t.reg_no', 't.make'],
-    orderBy: 't.reg_no',
-  }),
-  master({
-    id: 'transport_drivers',
-    title: 'Drivers',
-    group: 'transport',
-    table: 'transport_drivers',
-    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
-    naturalKey: ['name', 'mobile'],
-    conflict: "(school_id, name, COALESCE(mobile, '')) WHERE deleted_at IS NULL",
-    fields: [
-      { ...name('Driver'), identity: true },
-      { key: 'mobile', header: 'Mobile', type: 'text', identity: true, maxLength: 15, width: 12 },
-      { key: 'licence_no', header: 'Licence no', type: 'text', maxLength: 30, width: 14 },
-      { key: 'licence_expiry', header: 'Licence expiry', type: 'date', width: 12 },
-    ],
-    status: STATUS,
-    search: ['t.name', 't.mobile', 't.licence_no'],
-    orderBy: 't.name',
-  }),
-  master({
-    id: 'transport_stoppages',
-    title: 'Stoppages',
-    group: 'transport',
-    table: 'transport_stoppages',
-    permission: { view: 'transport.route.view', manage: 'transport.route.manage' },
-    naturalKey: ['code'],
-    conflict: '(school_id, code)',
-    fields: [
-      code(),
-      name('Stoppage'),
-      { key: 'area', header: 'Area', type: 'text', maxLength: 80, width: 16 },
-      {
-        key: 'slab_id',
-        header: 'Slab code',
-        type: 'ref',
-        lookup: { table: 'transport_slabs', column: 'code', yearScoped: true },
-        width: 10,
-        bulk: true,
-        help: 'The fee slab this stoppage falls in.',
-      },
-      { key: 'lat', header: 'Latitude', type: 'number', scale: 6, min: -90, max: 90, width: 10 },
-      { key: 'lng', header: 'Longitude', type: 'number', scale: 6, min: -180, max: 180, width: 10 },
-    ],
-    status: STATUS,
-    search: ['t.code', 't.name', 't.area'],
-    orderBy: 't.name',
-  }),
-  master({
     id: 'transport_route_vehicles',
     title: 'Route and vehicle mapping',
     group: 'transport',
+    order: 90,
     table: 'transport_route_vehicles',
     permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
     naturalKey: ['route_id', 'vehicle_id', 'shift'],
     conflict: '(route_id, vehicle_id, shift)',
+    uploadHelp:
+      'Which vehicle runs a route (pick trip, drop trip or both) and its crew: driver, conductor and attendant.',
     fields: [
       {
         key: 'route_id',
-        header: 'Route code',
+        header: 'Route',
         type: 'ref',
         lookup: { table: 'transport_routes', column: 'code' },
         required: true,
@@ -1168,9 +1428,9 @@ export const MASTERS: MasterDefinition[] = [
       },
       {
         key: 'vehicle_id',
-        header: 'Vehicle reg. no',
+        header: 'Vehicle no',
         type: 'ref',
-        lookup: { table: 'transport_vehicles', column: 'reg_no' },
+        lookup: { table: 'transport_vehicles', column: 'reg_no', labelColumn: 'name' },
         required: true,
         identity: true,
         width: 14,
@@ -1184,57 +1444,15 @@ export const MASTERS: MasterDefinition[] = [
         identity: true,
         width: 8,
       },
-      {
-        key: 'driver_id',
-        header: 'Driver',
-        type: 'ref',
-        lookup: { table: 'transport_drivers', column: 'name' },
-        width: 16,
-      },
+      crew('driver_id', 'Driver', 'driver', true),
+      crew('conductor_id', 'Conductor', 'conductor'),
+      crew('attendant_id', 'Attendant (support staff)', 'attendant'),
       { key: 'from_date', header: 'From', type: 'date', width: 12 },
-      { key: 'to_date', header: 'To', type: 'date', width: 12 },
+      { key: 'to_date', header: 'To', type: 'date', width: 12, notBefore: 'from_date' },
     ],
     status: STATUS,
     search: ['r1.code', 'r2.reg_no'],
     orderBy: 'r1.code, t.shift',
-  }),
-  master({
-    id: 'transport_vehicle_types',
-    title: 'Vehicle types',
-    group: 'transport',
-    table: 'transport_vehicle_types',
-    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
-    naturalKey: ['code'],
-    conflict: '(school_id, code)',
-    fields: [
-      code(),
-      name('Vehicle type'),
-      { key: 'seats', header: 'Seats', type: 'number', scale: 0, min: 1, max: 200, width: 8 },
-    ],
-    status: STATUS,
-    search: ['t.code', 't.name'],
-    orderBy: 't.name',
-  }),
-  master({
-    id: 'transport_vendors',
-    title: 'Vendors',
-    group: 'transport',
-    table: 'transport_vendors',
-    permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
-    naturalKey: ['code'],
-    conflict: '(school_id, code)',
-    fields: [
-      code(),
-      name('Vendor'),
-      { key: 'contact_person', header: 'Contact person', type: 'text', maxLength: 80, width: 16 },
-      { key: 'mobile', header: 'Mobile', type: 'text', maxLength: 15, width: 12 },
-      { key: 'email', header: 'Email', type: 'text', maxLength: 120, width: 20 },
-      { key: 'address', header: 'Address', type: 'text', maxLength: 300, width: 30 },
-      { key: 'gst_no', header: 'GST no', type: 'text', maxLength: 20, width: 14 },
-    ],
-    status: STATUS,
-    search: ['t.code', 't.name', 't.contact_person', 't.mobile'],
-    orderBy: 't.name',
   }),
   // ---- exams ----
   master({

@@ -333,11 +333,8 @@ const NAV: Array<{
     section: 'transport',
     items: [
       { href: '/transport', label: 'transportDashboard', permission: 'transport.request.view' },
-      { href: '/transport/routes', label: 'routes', permission: 'transport.route.view' },
-      { href: '/transport/vehicles', label: 'vehicles', permission: 'transport.fleet.view' },
       { href: '/masters/transport', label: 'transportSetup', permission: 'transport.route.view' },
       { href: '/transport/gps', label: 'gps', permission: 'transport.gps.view' },
-      { href: '/transport/drivers', label: 'drivers', permission: 'transport.fleet.view' },
       {
         href: '/transport/requests',
         label: 'transportRequests',

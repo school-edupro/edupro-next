@@ -165,10 +165,12 @@ describe('master-data framework (e2e)', () => {
     await wb.xlsx.load(tpl.rawPayload as unknown as ArrayBuffer);
     const ws = wb.worksheets[0]!;
     expect(String(ws.getRow(1).getCell(1).value)).toBe('Class code');
-    ws.spliceRows(2, 1);
-    ws.addRow(['VI', 'A', null, 40]);
-    ws.addRow(['VI', 'B', null, 40]);
-    ws.addRow(['IX', 'A', null, 40]); // no such class
+    // the template is ready to fill: the class column is a drop-down of the school's classes
+    expect(ws.getCell('A2').dataValidation).toMatchObject({ type: 'list', errorStyle: 'error' });
+    expect(String(wb.getWorksheet('Lists')!.getCell('A2').value)).toBe('VI');
+    ws.getRow(2).values = ['VI', 'A', null, 40];
+    ws.getRow(3).values = ['VI', 'B', null, 40];
+    ws.getRow(4).values = ['IX', 'A', null, 40]; // no such class
     const bytes = Buffer.from(await wb.xlsx.writeBuffer());
     const bad = await inject({
       method: 'POST',
@@ -178,7 +180,7 @@ describe('master-data framework (e2e)', () => {
     });
     expect(bad.json().status).toBe('failed');
     expect(bad.json().report[0]).toMatchObject({ row: 4, column: 'Class code' });
-    ws.spliceRows(4, 1);
+    ws.getRow(4).values = [];
     const ok = await inject({
       method: 'POST',
       url: '/masters/class_sections/imports/validate',

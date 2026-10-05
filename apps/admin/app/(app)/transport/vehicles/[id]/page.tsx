@@ -55,7 +55,7 @@ export default async function VehicleLogPage({
     <>
       <Breadcrumbs
         items={[
-          { label: tr('vehicle'), href: '/transport/vehicles' },
+          { label: tr('vehicle'), href: '/masters/transport?tab=transport_vehicles' },
           { label: vehicle?.regNo ?? id },
         ]}
       />

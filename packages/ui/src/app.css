@@ -5275,3 +5275,48 @@ a.ep-tabs__tab {
   font-size: var(--fs-small);
   color: var(--text-heading);
 }
+
+/* The map picker: search a place, click the map or drag the pin to fill latitude and longitude. */
+.ep-map {
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-map__search,
+.ep-map__coords {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  align-items: end;
+}
+.ep-map__search {
+  grid-template-columns: 1fr auto;
+}
+.ep-map__coords {
+  grid-template-columns: 1fr 1fr auto;
+}
+.ep-map__places {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+  justify-items: start;
+}
+.ep-map__places .ep-btn {
+  text-align: left;
+  white-space: normal;
+  height: auto;
+}
+.ep-map__box {
+  height: 22rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  z-index: 0;
+}
+.ep-map__pin {
+  background: var(--action-primary);
+  border: 3px solid var(--surface-card);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: var(--shadow-card);
+}

@@ -45,3 +45,10 @@ export const CloneSchema = z.object({
   toYearId: z.string().regex(/^\d+$/),
 });
 export class CloneDto extends createZodDto(CloneSchema) {}
+
+export const ExportQuerySchema = z.object({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+  q: z.string().trim().max(80).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+});
+export class ExportQueryDto extends createZodDto(ExportQuerySchema) {}
