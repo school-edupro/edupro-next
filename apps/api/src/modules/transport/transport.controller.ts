@@ -31,10 +31,13 @@ import {
   ReplacementDto,
   ReplacementListDto,
   QuoteDto,
+  TransportReportDto,
+  TransportReportExportDto,
   TransportSetupDto,
 } from './transport-desk.dto';
 import { TransportDeskService } from './transport-desk.service';
 import { TransportOpsService } from './transport-ops.service';
+import { TransportReportsService } from './transport-reports.service';
 import { TransportRequestsService } from './transport-requests.service';
 import {
   AssignStudentsDto,
@@ -442,5 +445,56 @@ export class TransportReplacementsController {
   @RequirePermission(TRANSPORT.replacementManage)
   end(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: EndReplacementDto) {
     return this.ops.endReplacement(ctx, id, dto);
+  }
+}
+
+/**
+ * The transport reports: who rides which route and the transport fee by route. Each report checks what
+ * the person holds (the student reports: the routes; the fee reports: the transport fee or the ledger).
+ */
+@ApiTags('transport')
+@ApiBearerAuth()
+@Controller('transport/reports')
+export class TransportReportsController {
+  constructor(private readonly reports: TransportReportsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'The reports this person may open, with the routes and months to filter by',
+  })
+  @AuthenticatedOnly()
+  catalogue(@ReqCtx() ctx: RequestContext) {
+    return this.reports.catalogue(ctx);
+  }
+
+  @Get('fee/student/:studentId')
+  @ApiOperation({ summary: 'One pupil’s transport fee month by month, with the receipts' })
+  @AuthenticatedOnly()
+  studentFee(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.reports.studentFee(ctx, studentId);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Run a transport report' })
+  @AuthenticatedOnly()
+  run(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: TransportReportDto) {
+    return this.reports.run(ctx, id, q);
+  }
+
+  @Get(':id/export')
+  @ApiOperation({ summary: 'A transport report as Excel or PDF' })
+  @AuthenticatedOnly()
+  async export(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: TransportReportExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    const { format, ...filters } = q;
+    const f = await this.reports.export(ctx, id, filters, format);
+    reply
+      .header('content-type', f.type)
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
   }
 }

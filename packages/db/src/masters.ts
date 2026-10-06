@@ -72,6 +72,22 @@ export type MasterGroup =
   | 'library'
   | 'system';
 
+/**
+ * The key fields the edit form may change: every one where the definition says so (`rekey`), and on the
+ * transport set-up the ones picked from a list (the route of a stop). A typed code never changes: uploads
+ * and the history match on it.
+ */
+export function editableKeys(def: Pick<MasterDefinition, 'rekey' | 'group' | 'fields'>): string[] {
+  return def.fields
+    .filter(
+      (f) =>
+        f.identity &&
+        (def.rekey === true ||
+          (def.group === 'transport' && (f.type === 'ref' || f.type === 'select'))),
+    )
+    .map((f) => f.key);
+}
+
 export interface MasterDefinition {
   id: string;
   title: string;

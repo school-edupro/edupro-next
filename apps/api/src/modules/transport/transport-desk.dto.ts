@@ -187,3 +187,20 @@ export const ReplacementListSchema = z.object({
   tab: z.enum(['now', 'upcoming', 'past', 'all']).default('now'),
 });
 export class ReplacementListDto extends createZodDto(ReplacementListSchema) {}
+
+export const TransportReportSchema = z.object({
+  routeId: blank(IdSchema),
+  service: blank(z.enum(['both', 'pick', 'drop'])),
+  fromMonth: blank(Month),
+  toMonth: blank(Month),
+  from: blank(DateSchema),
+  to: blank(DateSchema),
+  measure: z.enum(['projected', 'collected', 'balance']).default('projected'),
+  q: blank(z.string().trim().max(80)),
+});
+export class TransportReportDto extends createZodDto(TransportReportSchema) {}
+
+export const TransportReportExportSchema = TransportReportSchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class TransportReportExportDto extends createZodDto(TransportReportExportSchema) {}

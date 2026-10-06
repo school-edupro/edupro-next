@@ -797,7 +797,6 @@ export class TransportDeskService {
         `i.route_id IS NULL AND $1::bigint[] IS NOT NULL`,
       ]) {
         const r = await c.query<{ id: string }>(
-           
           `SELECT DISTINCT e.user_id::text AS id FROM transport_incharges i JOIN employees e ON e.id = i.employee_id
             WHERE ${where} AND e.user_id IS NOT NULL AND e.status = 'active' AND e.deleted_at IS NULL`,
           [routeIds],

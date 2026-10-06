@@ -65,6 +65,21 @@
   slab, monthly charge, the request that approved it and the one that ended it. By month, route,
   service or one pupil; Excel.
 
+### Reports page (Transport → Reports)
+
+Pick a report, set the filters, then **Excel** or **PDF** (the school's name, the session and the time are on top).
+
+- **Student transport mapping**: every pupil on the bus with category, class, blood group, father and mother with mobiles, address, route, stop, slab, amount, vehicle, travel mode, valid from/to, created on/by.
+- **Route-wise student count**: bus, driver, seats, pupils (pick-up and drop / pick-up only / drop only), boys, girls, seats free.
+- **Route and stoppage count**: pupils picked and dropped at each stoppage, with timings.
+- **Route student list**: the sheet the crew carries, in stoppage order, with the parent's mobile.
+- **Class-wise transport users**: per class-section, on the bus and not.
+- **Route-wise transport fee, month by month**: projected, collected, balance; the months can show any of the three. "Billed, not on a route" are pupils with a transport fee but no bus mapping: check them.
+- **Transport fee by student**: projected, collected, balance and the months due; the name opens the pupil's transport fee month by month with receipts.
+- **Transport fee collection by date**: receipts between two dates.
+
+The fee reports need *See the transport fee* (the transport in-charge, accountant, auditor and admin have it). The transport in-charge sees the transport fee only, never tuition or other heads, and cannot change it. A person named in-charge of particular routes (Settings → In-charges) sees the fee of those routes only.
+
 ## Common questions
 
 1. _A month was already paid and the stoppage changed._ The paid month keeps what was paid; the request

@@ -724,4 +724,95 @@ describe('transport desk (e2e)', () => {
     });
     expect((await get('/transport/replacements?tab=now')).json().data).toHaveLength(0);
   });
+  it('the reports: who rides each route, the transport fee by route, and what an in-charge may see', async () => {
+    const cat = (await get('/transport/reports', incharge)).json();
+    expect(cat.reports.map((r: { id: string }) => r.id)).toEqual([
+      'mapping',
+      'route-summary',
+      'stoppage-count',
+      'student-list',
+      'class-wise',
+      'fee-months',
+      'fee-students',
+      'fee-collection',
+    ]);
+    // a teacher has neither the routes nor the transport fee
+    expect((await get('/transport/reports/route-summary', teacher)).statusCode).toBe(403);
+    expect((await get('/transport/reports/fee-students', teacher)).statusCode).toBe(403);
+
+    const mapping = (await get('/transport/reports/mapping', incharge)).json();
+    expect(mapping.columns.map((c: { label: string }) => c.label)).toEqual(
+      expect.arrayContaining([
+        'Adm. no.',
+        'Father mobile no.',
+        'Slab name',
+        'Route amount',
+        'Travel mode',
+        'Valid from',
+      ]),
+    );
+    expect(mapping.rows.map((r: { student: string }) => r.student)).toContain('Aanya Rider');
+    const summary = (await get('/transport/reports/route-summary', incharge)).json();
+    expect(summary.totals.total).toBe(mapping.rows.length);
+    expect((await get('/transport/reports/class-wise', incharge)).json().totals.riders).toBe(
+      mapping.rows.length,
+    );
+
+    // the fee: what the fee lines say, by route and by pupil
+    const fees = await transportFees();
+    const billed = Object.values(fees).reduce((n, v) => n + v, 0);
+    const byMonth = (await get('/transport/reports/fee-months', incharge)).json();
+    expect(byMonth.totals.balance).toBe(byMonth.totals.projected - byMonth.totals.collected);
+    const pupils = (await get('/transport/reports/fee-students', incharge)).json();
+    expect(byMonth.totals.projected).toBe(pupils.totals.projected);
+    const mine = pupils.rows.find((r: { student: string }) => r.student === 'Aanya Rider');
+    expect(mine).toMatchObject({ projected: billed, student_id: studentId });
+    const one = (await get(`/transport/reports/fee/student/${studentId}`, incharge)).json();
+    expect(one.totals.amount).toBe(billed);
+    expect(one.months).toHaveLength(Object.keys(fees).length);
+    expect(JSON.stringify(one)).not.toContain('Tuition');
+
+    // a person named for one route sees the fee of that route only
+    // a route nobody rides, named to one person
+    const empty = await post('/transport/routes', admin, { code: 'R9', name: 'Empty run' });
+    const other = empty.json().id as string;
+    const second = await withMigrator(async (c) => {
+      const user = await seedUser(c, school, `${s}-incharge2`, 'transport_incharge');
+      const e = await c.query<{ id: string }>(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id, mobile)
+         VALUES ($1, 'TI2', 'Ravi', 'Routeman', $2, '9876522222') RETURNING id::text`,
+        [school.id, user.id],
+      );
+      return { user, employeeId: e.rows[0]!.id };
+    });
+    const setup = (await get('/transport/desk/setup')).json();
+    const saved = await put('/transport/desk/setup', admin, {
+      ...setup.settings,
+      levels: setup.levels,
+      incharges: [
+        ...setup.incharges.map((i: { routeId: string | null; employeeId: string }) => ({
+          routeId: i.routeId,
+          employeeId: i.employeeId,
+        })),
+        { routeId: other, employeeId: second.employeeId },
+      ],
+    });
+    expect(saved.statusCode).toBe(200);
+    const scoped = (await get('/transport/reports', second.user)).json();
+    expect(scoped.feeRoutes).toEqual([other]);
+    expect((await get('/transport/reports/fee-students', second.user)).json().rows).toHaveLength(0);
+    expect((await get(`/transport/reports/fee/student/${studentId}`, second.user)).statusCode).toBe(
+      403,
+    );
+    expect(
+      (await get(`/transport/reports/fee-months?routeId=${route.R1}`, second.user)).statusCode,
+    ).toBe(403);
+
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await get(`/transport/reports/mapping/export?format=${format}`, incharge);
+      expect(f.statusCode).toBe(200);
+      expect(f.headers['content-disposition']).toContain(`.${format}`);
+      expect(f.rawPayload.length).toBeGreaterThan(1000);
+    }
+  });
 });

@@ -666,7 +666,7 @@ function RowForm({
                   typed && f.key in typed ? (typed[f.key] ?? '') : row ? (row[f.key] ?? '') : ''
                 }
                 lng={typed && 'lng' in typed ? (typed.lng ?? '') : row ? (row.lng ?? '') : ''}
-                locked={Boolean(row && f.identity && !master.rekey)}
+                locked={Boolean(row && f.identity && !master.editableKeys?.includes(f.key))}
                 lockedHelp={t('identityLocked')}
                 yes={t('yes')}
                 no={t('no')}

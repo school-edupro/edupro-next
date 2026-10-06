@@ -1,7 +1,7 @@
 import { Alert } from '@edupro/ui';
 
 /** A page of the module and the permission it needs (null = every member of staff). */
-const TABS: Array<{ href: string; label: string; permission: string | null }> = [
+const TABS: Array<{ href: string; label: string; permission: string | string[] | null }> = [
   { href: '/transport', label: 'Dashboard', permission: 'transport.request.view' },
   { href: '/transport/requests', label: 'Requests', permission: 'transport.request.view' },
   {
@@ -17,6 +17,11 @@ const TABS: Array<{ href: string; label: string; permission: string | null }> = 
     permission: 'transport.fleet.view',
   },
   { href: '/transport/papers', label: 'Fleet papers', permission: 'transport.fleet.view' },
+  {
+    href: '/transport/reports',
+    label: 'Reports',
+    permission: ['transport.route.view', 'transport.fee.view', 'fees.ledger.view'],
+  },
   { href: '/transport/setup', label: 'Settings', permission: 'transport.setup.manage' },
 ];
 
@@ -46,13 +51,14 @@ export function TransportNav({
   return (
     <>
       <nav className="ep-tabs-links" aria-label="Transport" style={{ marginBottom: 'var(--sp-4)' }}>
-        {TABS.filter((t) => t.permission === null || permissions.includes(t.permission)).map(
-          (t) => (
-            <a key={t.href} href={t.href} aria-current={t.href === current ? 'page' : undefined}>
-              {t.label}
-            </a>
-          ),
-        )}
+        {TABS.filter(
+          (t) =>
+            t.permission === null || [t.permission].flat().some((p) => permissions.includes(p)),
+        ).map((t) => (
+          <a key={t.href} href={t.href} aria-current={t.href === current ? 'page' : undefined}>
+            {t.label}
+          </a>
+        ))}
       </nav>
       {ok && OK[ok] ? (
         <div style={{ marginBottom: 'var(--sp-4)' }}>

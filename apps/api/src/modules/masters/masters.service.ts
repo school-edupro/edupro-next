@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import {
+  editableKeys,
   hasSoftDelete,
   MASTERS,
   masterOrNull,
@@ -99,7 +100,7 @@ export class MastersService {
       canManage: held.has(m.permission.manage),
       canClone: m.clone !== undefined && held.has(m.permission.manage),
       naturalKey: m.naturalKey,
-      rekey: m.rekey === true,
+      editableKeys: editableKeys(m),
       status: m.status ?? null,
       fields: m.fields,
       columns: masterColumns(m),
@@ -558,8 +559,20 @@ export class MastersService {
       errors.push(...crossChecks(fields, out).map((e) => `${e.column}: ${e.message}`));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
-      if (dto.id && def.rekey) {
-        // editing a row whose key may change: it is updated in place, by its id
+      const openKeys = editableKeys(def);
+      if (dto.id && openKeys.length) {
+        // editing a row whose key may change: it is updated in place, by its id; a key that may not
+        // change stays what the row has
+        const locked = def.naturalKey.filter((k) => !openKeys.includes(k));
+        if (locked.length) {
+          const cur = await c.query<Record<string, unknown>>(
+            // eslint-disable-next-line no-restricted-syntax -- table and key columns come from the registry
+            `SELECT ${locked.join(', ')} FROM ${def.table} WHERE id = $1`,
+            [dto.id],
+          );
+          if (!cur.rows[0]) throw new DomainError('not-found', 'Row not found', { status: 404 });
+          for (const k of locked) out[k] = cur.rows[0][k];
+        }
         const keys = Object.keys(out);
         try {
           const r = await c.query(

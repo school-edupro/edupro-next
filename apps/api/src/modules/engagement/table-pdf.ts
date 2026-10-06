@@ -7,6 +7,10 @@ export interface TablePdf {
   subtitle?: string;
   columns: Array<{ label: string; /** Share of the width. */ width: number; right?: boolean }>;
   rows: Array<Array<string | number | null | undefined>>;
+  /** Smaller for a sheet with many columns (default 8.5). */
+  fontSize?: number;
+  /** Long text runs onto more lines of its cell (up to three) instead of being cut. */
+  wrap?: boolean;
 }
 
 const W = 841.89; // A4 landscape
@@ -28,6 +32,39 @@ function fit(font: PDFFont, text: string, size: number, width: number): string {
   return `${out}...`;
 }
 
+/** Breaks text into the lines that fit a cell: at spaces, and inside a word too long for the cell. */
+function wrapLines(
+  font: PDFFont,
+  text: string,
+  size: number,
+  width: number,
+  max: number,
+): string[] {
+  const out: string[] = [];
+  let line = '';
+  const push = (word: string) => {
+    let w = word;
+    while (font.widthOfTextAtSize(w, size) > width && w.length > 1) {
+      let cut = w.length - 1;
+      while (cut > 1 && font.widthOfTextAtSize(w.slice(0, cut), size) > width) cut -= 1;
+      out.push(w.slice(0, cut));
+      w = w.slice(cut);
+    }
+    line = w;
+  };
+  for (const word of latin(text).split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(next, size) <= width) line = next;
+    else {
+      if (line) out.push(line);
+      push(word);
+    }
+  }
+  if (line) out.push(line);
+  if (out.length <= max) return out.length ? out : [''];
+  return [...out.slice(0, max - 1), fit(font, out.slice(max - 1).join(' '), size, width)];
+}
+
 /**
  * A plain list as a PDF (A4 landscape): the school band, the title, a header row repeated on every page,
  * zebra rows and page numbers. Used for the clinic's set-up lists and stock reports, straight from the API
@@ -40,10 +77,33 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const total = t.columns.reduce((n, c) => n + c.width, 0) || 1;
   const widths = t.columns.map((c) => ((W - 2 * M) * c.width) / total);
-  const ROW = 18;
+  const FS = t.fontSize ?? 8.5;
+  const ROW = FS < 8 ? 14 : 18;
   const pages: Array<ReturnType<typeof pdf.addPage>> = [];
   let page = pdf.addPage([W, H]);
   let y = 0;
+  const PAD = FS < 8 ? 2 : 4;
+  const LEAD = FS + 2;
+  /** The lines of one cell: one cut line, or up to three when the sheet wraps. */
+  const cell = (font: PDFFont, text: string, i: number): string[] =>
+    t.wrap
+      ? wrapLines(font, text, FS, widths[i]! - 2 * PAD, 3)
+      : [fit(font, text, FS, widths[i]! - 2 * PAD)];
+  const draw = (cells: string[][], font: PDFFont) => {
+    let x = M;
+    t.columns.forEach((c, i) => {
+      cells[i]!.forEach((s, k) =>
+        page.drawText(s, {
+          x: c.right ? x + widths[i]! - PAD - font.widthOfTextAtSize(s, FS) : x + PAD,
+          y: y - k * LEAD,
+          size: FS,
+          font,
+          color: INK,
+        }),
+      );
+      x += widths[i]!;
+    });
+  };
   const head = () => {
     pages.push(page);
     page.drawRectangle({ x: 0, y: H - 46, width: W, height: 46, color: NAVY });
@@ -72,20 +132,17 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       });
       y -= 16;
     }
-    let x = M;
-    page.drawRectangle({ x: M, y: y - 5, width: W - 2 * M, height: ROW, color: LINE });
-    t.columns.forEach((c, i) => {
-      const label = fit(bold, c.label, 8.5, widths[i]! - 8);
-      page.drawText(label, {
-        x: c.right ? x + widths[i]! - 4 - bold.widthOfTextAtSize(label, 8.5) : x + 4,
-        y,
-        size: 8.5,
-        font: bold,
-        color: INK,
-      });
-      x += widths[i]!;
+    const labels = t.columns.map((c, i) => cell(bold, c.label, i));
+    const extra = (Math.max(...labels.map((l) => l.length), 1) - 1) * LEAD;
+    page.drawRectangle({
+      x: M,
+      y: y - 5 - extra,
+      width: W - 2 * M,
+      height: ROW + extra,
+      color: LINE,
     });
-    y -= ROW;
+    draw(labels, bold);
+    y -= ROW + extra;
   };
   head();
   t.rows.forEach((row, n) => {
@@ -93,22 +150,25 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       page = pdf.addPage([W, H]);
       head();
     }
-    if (n % 2 === 1)
-      page.drawRectangle({ x: M, y: y - 5, width: W - 2 * M, height: ROW, color: ZEBRA });
-    let x = M;
-    t.columns.forEach((c, i) => {
+    const cells = t.columns.map((_, i) => {
       const v = row[i];
-      const s = fit(regular, v === null || v === undefined ? '' : String(v), 8.5, widths[i]! - 8);
-      page.drawText(s, {
-        x: c.right ? x + widths[i]! - 4 - regular.widthOfTextAtSize(s, 8.5) : x + 4,
-        y,
-        size: 8.5,
-        font: regular,
-        color: INK,
-      });
-      x += widths[i]!;
+      return cell(regular, v === null || v === undefined ? '' : String(v), i);
     });
-    y -= ROW;
+    const extra = (Math.max(...cells.map((l) => l.length), 1) - 1) * LEAD;
+    if (y - extra < M + 20) {
+      page = pdf.addPage([W, H]);
+      head();
+    }
+    if (n % 2 === 1)
+      page.drawRectangle({
+        x: M,
+        y: y - 5 - extra,
+        width: W - 2 * M,
+        height: ROW + extra,
+        color: ZEBRA,
+      });
+    draw(cells, regular);
+    y -= ROW + extra;
   });
   if (!t.rows.length)
     page.drawText('Nothing to show.', { x: M, y, size: 9, font: regular, color: MUTED });
