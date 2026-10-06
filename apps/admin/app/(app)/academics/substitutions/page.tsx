@@ -12,6 +12,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createSubstitution, removeSubstitution } from '@/lib/actions';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { FreeTeacher, Substitution } from '@/lib/types';
@@ -58,6 +59,7 @@ export default async function SubstitutionsPage({
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <AcademicsNav current="/academics/substitutions" permissions={me.permissions} />
       <Notice params={sp} />
       <div
         style={{

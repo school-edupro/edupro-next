@@ -11,6 +11,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { clearSlot, createPeriod, deletePeriod, setSlot } from '@/lib/actions';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Employee, Page, Period, PeriodKind, Slot, Subject } from '@/lib/types';
@@ -62,6 +63,7 @@ export default async function TimetablePage({
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <AcademicsNav current="/academics/timetable" permissions={me.permissions} />
       <Notice params={sp} />
 
       <Card>

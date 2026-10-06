@@ -1,4 +1,5 @@
 import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { ChipPickerField } from '@/components/ChipPickerField';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
@@ -40,9 +41,16 @@ const when = (iso: string) =>
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; kind?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    kind?: string;
+    new?: string;
+  }>;
 }) {
   const sp = await searchParams;
+  const adding = sp.new === '1';
   const [me, list, sections, subjects] = await Promise.all([
     getMe(),
     apiFetch<{ data: Doc[]; kinds: Array<{ value: string; label: string }> }>(
@@ -58,9 +66,21 @@ export default async function DocumentsPage({
         kicker="Academics"
         title="Session plans, curriculum, date sheets and the magazine"
         description="Documents shared with parents and students: by class, or for the whole school."
+        actions={
+          adding ? (
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/academics/documents">
+              Back to the list
+            </a>
+          ) : canPost ? (
+            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/academics/documents?new=1">
+              + Upload
+            </a>
+          ) : null
+        }
       />
+      <AcademicsNav current="/academics/documents" permissions={me.permissions} />
       <Notice params={sp} />
-      {canPost ? (
+      {canPost && adding ? (
         <Card title="Upload" style={{ marginBottom: 'var(--sp-4)' }}>
           <form action={createDocument} className="ep-hd__form">
             <div className="ep-hd__row">
@@ -123,107 +143,109 @@ export default async function DocumentsPage({
           </form>
         </Card>
       ) : null}
-      <nav
-        className="ep-tabs-links"
-        aria-label="Kind"
-        style={{ marginBottom: 'var(--sp-3)', flexWrap: 'wrap' }}
-      >
-        <a href="/academics/documents" aria-current={!sp.kind ? 'page' : undefined}>
-          All
-        </a>
-        {list.kinds.map((k) => (
-          <a
-            key={k.value}
-            href={`/academics/documents?kind=${k.value}`}
-            aria-current={sp.kind === k.value ? 'page' : undefined}
-          >
-            {k.label}
+      <div hidden={adding}>
+        <nav
+          className="ep-tabs-links"
+          aria-label="Kind"
+          style={{ marginBottom: 'var(--sp-3)', flexWrap: 'wrap' }}
+        >
+          <a href="/academics/documents" aria-current={!sp.kind ? 'page' : undefined}>
+            All
           </a>
-        ))}
-      </nav>
-      <Card>
-        {list.data.length === 0 ? (
-          <p className="ep-field__help" style={{ margin: 0 }}>
-            Nothing uploaded yet.
-          </p>
-        ) : (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Documents">
-            <table className="ep-table ep-table--dense">
-              <caption className="ep-sr-only">Class and school documents</caption>
-              <thead>
-                <tr>
-                  <th scope="col">What</th>
-                  <th scope="col">Title</th>
-                  <th scope="col">For</th>
-                  <th scope="col">Files</th>
-                  <th scope="col">Uploaded by</th>
-                  <th scope="col">Published</th>
-                  <th scope="col">Acknowledged</th>
-                  <th scope="col">
-                    <span className="ep-sr-only">Remove</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.kindLabel}</td>
-                    <th scope="row">
-                      {d.title}
-                      <div className="ep-field__help">
-                        {[d.subject, d.remark].filter(Boolean).join(' · ')}
-                      </div>
+          {list.kinds.map((k) => (
+            <a
+              key={k.value}
+              href={`/academics/documents?kind=${k.value}`}
+              aria-current={sp.kind === k.value ? 'page' : undefined}
+            >
+              {k.label}
+            </a>
+          ))}
+        </nav>
+        <Card>
+          {list.data.length === 0 ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              Nothing uploaded yet.
+            </p>
+          ) : (
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Documents">
+              <table className="ep-table ep-table--dense">
+                <caption className="ep-sr-only">Class and school documents</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">What</th>
+                    <th scope="col">Title</th>
+                    <th scope="col">For</th>
+                    <th scope="col">Files</th>
+                    <th scope="col">Uploaded by</th>
+                    <th scope="col">Published</th>
+                    <th scope="col">Acknowledged</th>
+                    <th scope="col">
+                      <span className="ep-sr-only">Remove</span>
                     </th>
-                    <td>{d.section ?? 'Whole school'}</td>
-                    <td>
-                      {d.fileIds.map((f, i) => (
-                        <FileLinks
-                          key={f}
-                          href={`/api/academics/doc-file/document/${d.id}/${f}`}
-                          label={`attachment ${String(i + 1)} of ${d.title}`}
-                        />
-                      ))}
-                    </td>
-                    <td>{d.postedBy ?? ''}</td>
-                    <td>
-                      {when(d.publishAt)}{' '}
-                      {d.scheduled ? <Badge tone="warning">Scheduled</Badge> : null}
-                    </td>
-                    <td>
-                      {d.ackRequired ? (
-                        <a
-                          href={`/academics/acknowledgements?type=document&id=${d.id}`}
-                          style={{ textDecoration: 'underline' }}
-                          aria-label={`Who acknowledged ${d.title}`}
-                        >
-                          {d.ackCount} · view
-                        </a>
-                      ) : (
-                        '–'
-                      )}
-                    </td>
-                    <td>
-                      {canPost ? (
-                        <form action={deleteDocument}>
-                          <input type="hidden" name="id" value={d.id} />
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Remove ${d.title}`}
-                          >
-                            Remove
-                          </Button>
-                        </form>
-                      ) : null}
-                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                </thead>
+                <tbody>
+                  {list.data.map((d) => (
+                    <tr key={d.id}>
+                      <td>{d.kindLabel}</td>
+                      <th scope="row">
+                        {d.title}
+                        <div className="ep-field__help">
+                          {[d.subject, d.remark].filter(Boolean).join(' · ')}
+                        </div>
+                      </th>
+                      <td>{d.section ?? 'Whole school'}</td>
+                      <td>
+                        {d.fileIds.map((f, i) => (
+                          <FileLinks
+                            key={f}
+                            href={`/api/academics/doc-file/document/${d.id}/${f}`}
+                            label={`attachment ${String(i + 1)} of ${d.title}`}
+                          />
+                        ))}
+                      </td>
+                      <td>{d.postedBy ?? ''}</td>
+                      <td>
+                        {when(d.publishAt)}{' '}
+                        {d.scheduled ? <Badge tone="warning">Scheduled</Badge> : null}
+                      </td>
+                      <td>
+                        {d.ackRequired ? (
+                          <a
+                            href={`/academics/acknowledgements?type=document&id=${d.id}`}
+                            style={{ textDecoration: 'underline' }}
+                            aria-label={`Who acknowledged ${d.title}`}
+                          >
+                            {d.ackCount} · view
+                          </a>
+                        ) : (
+                          '–'
+                        )}
+                      </td>
+                      <td>
+                        {canPost ? (
+                          <form action={deleteDocument}>
+                            <input type="hidden" name="id" value={d.id} />
+                            <Button
+                              type="submit"
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Remove ${d.title}`}
+                            >
+                              Remove
+                            </Button>
+                          </form>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
     </>
   );
 }

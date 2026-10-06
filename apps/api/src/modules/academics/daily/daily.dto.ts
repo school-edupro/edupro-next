@@ -225,3 +225,10 @@ export const NoticeReportQuerySchema = z.object({
   format: z.enum(['json', 'xlsx', 'pdf']).default('json'),
 });
 export class NoticeReportQueryDto extends createZodDto(NoticeReportQuerySchema) {}
+
+export const NoticeReachSchema = z.object({
+  kind: NoticeKindSchema.default('notice'),
+  audience: AudienceSchema.default('everyone'),
+  targets: z.array(TargetSchema).max(400).default([]),
+});
+export class NoticeReachDto extends createZodDto(NoticeReachSchema) {}

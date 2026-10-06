@@ -1,6 +1,7 @@
 import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
-import { apiFetch } from '@/lib/api';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
+import { apiFetch, getMe } from '@/lib/api';
 import type { LessonPlan, Page } from '@/lib/types';
 
 export default async function LessonPlansPage({
@@ -9,12 +10,13 @@ export default async function LessonPlansPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const sp = await searchParams;
-  const [t, pl, page] = await Promise.all([
+  const [t, pl, page, me] = await Promise.all([
     getTranslations('pages.academics_lesson_plans'),
     getTranslations('planner'),
     apiFetch<Page<LessonPlan>>(
       `/academics/lesson-plans?size=100${sp.status ? `&status=${sp.status}` : ''}`,
     ),
+    getMe(),
   ]);
   const tone = (s: LessonPlan['status']) =>
     s === 'approved'
@@ -27,6 +29,7 @@ export default async function LessonPlansPage({
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <AcademicsNav current="/academics/lesson-plans" permissions={me.permissions} />
       <Card>
         <form
           method="get"

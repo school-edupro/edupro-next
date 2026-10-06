@@ -350,6 +350,122 @@ export class DocumentsService {
     });
   }
 
+  /**
+   * The academics dashboard for the session: what is set up and what is missing, the posts of the last
+   * 14 days, the acknowledgements asked and received, what is scheduled, and what is coming up.
+   */
+  async dashboard(ctx: RequestContext) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.viewer.requireYear(tenant);
+    const v = await this.viewer.resolve(ctx, DAILY.workView);
+    return this.db.tenant(tenant, async (c) => {
+      const scope = v.sectionIds;
+      const k = await c.query<Row>(
+        `SELECT (SELECT count(*) FROM classes WHERE deleted_at IS NULL AND status = 'active')::int AS classes,
+                (SELECT count(*) FROM class_sections cs WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2)))::int AS sections,
+                (SELECT count(*) FROM subjects WHERE deleted_at IS NULL AND status = 'active')::int AS subjects,
+                (SELECT count(*) FROM class_sections cs WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2))
+                    AND NOT EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL))::int AS no_class_teacher,
+                (SELECT count(*) FROM class_sections cs JOIN class_subjects x ON x.class_id = cs.class_id AND x.academic_year_id = cs.academic_year_id
+                  WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2))
+                    AND NOT EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.class_section_id = cs.id AND ta.subject_id = x.subject_id AND ta.valid_to IS NULL))::int AS no_subject_teacher,
+                (SELECT count(*) FROM daily_work w WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.created_at >= now() - interval '7 days' AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2)))::int AS posts_week,
+                (SELECT count(*) FROM daily_work w WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.publish_at > now() AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2)))::int
+                  + (SELECT count(*) FROM academic_documents d WHERE d.academic_year_id = $1 AND d.deleted_at IS NULL AND d.publish_at > now() AND ($2::bigint[] IS NULL OR d.class_section_id IS NULL OR d.class_section_id = ANY($2)))::int AS scheduled,
+                (SELECT count(*) FROM academic_documents d WHERE d.academic_year_id = $1 AND d.deleted_at IS NULL AND ($2::bigint[] IS NULL OR d.class_section_id IS NULL OR d.class_section_id = ANY($2)))::int AS documents,
+                (SELECT count(*) FROM notices n WHERE n.academic_year_id = $1 AND n.deleted_at IS NULL AND n.published_at >= date_trunc('month', now()))::int AS notices_month`,
+        [yearId, scope],
+      );
+      const days = await c.query<Row>(
+        `SELECT to_char(g, 'YYYY-MM-DD') AS d,
+                (SELECT count(*) FROM daily_work w WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.assigned_on = g::date AND w.kind = 'homework' AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2)))::int AS homework,
+                (SELECT count(*) FROM daily_work w WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.assigned_on = g::date AND w.kind = 'classwork' AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2)))::int AS classwork,
+                (SELECT count(*) FROM daily_work w WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.assigned_on = g::date AND w.kind = 'assignment' AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2)))::int AS assignment
+           FROM generate_series((now() AT TIME ZONE 'Asia/Kolkata')::date - 13, (now() AT TIME ZONE 'Asia/Kolkata')::date, interval '1 day') g ORDER BY 1`,
+        [yearId, scope],
+      );
+      const quiet = await c.query<Row>(
+        `SELECT cs.id::text, k.code || '-' || cs.name AS section,
+                (SELECT max(w.assigned_on)::text FROM daily_work w WHERE w.class_section_id = cs.id AND w.deleted_at IS NULL) AS last_on,
+                (SELECT e.display_name FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+                  WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL LIMIT 1) AS teacher
+           FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+          WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2))
+            AND NOT EXISTS (SELECT 1 FROM daily_work w WHERE w.class_section_id = cs.id AND w.deleted_at IS NULL AND w.assigned_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 6)
+          ORDER BY k.display_order, cs.name LIMIT 60`,
+        [yearId, scope],
+      );
+      const acks = await c.query<Row>(
+        `SELECT * FROM (
+           SELECT 'daily_work' AS type, w.id::text, w.title, k.code || '-' || cs.name AS section, w.publish_at,
+                  (SELECT count(*) FROM enrolments en WHERE en.class_section_id = w.class_section_id AND en.academic_year_id = $1 AND en.status = 'active')::int AS asked,
+                  (SELECT count(*) FROM academic_acks a WHERE a.item_type = 'daily_work' AND a.item_id = w.id)::int AS got
+             FROM daily_work w JOIN class_sections cs ON cs.id = w.class_section_id JOIN classes k ON k.id = cs.class_id
+            WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.ack_required AND w.publish_at <= now() AND w.publish_at >= now() - interval '30 days'
+              AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2))
+           UNION ALL
+           SELECT 'document', d.id::text, d.title, k.code || '-' || cs.name, d.publish_at,
+                  (SELECT count(*) FROM enrolments en WHERE en.class_section_id = d.class_section_id AND en.academic_year_id = $1 AND en.status = 'active')::int,
+                  (SELECT count(*) FROM academic_acks a WHERE a.item_type = 'document' AND a.item_id = d.id)::int
+             FROM academic_documents d JOIN class_sections cs ON cs.id = d.class_section_id JOIN classes k ON k.id = cs.class_id
+            WHERE d.academic_year_id = $1 AND d.deleted_at IS NULL AND d.ack_required AND d.publish_at <= now() AND d.publish_at >= now() - interval '30 days'
+              AND ($2::bigint[] IS NULL OR d.class_section_id = ANY($2))) x
+          ORDER BY publish_at DESC LIMIT 12`,
+        [yearId, scope],
+      );
+      const coming = await c
+        .query<Row>(
+          `SELECT * FROM (
+           SELECT 'Holiday' AS what, h.name AS title, h.starts_on::text AS on_date FROM holidays h WHERE h.academic_year_id = $1 AND h.ends_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date
+           UNION ALL
+           SELECT initcap(e.kind::text), e.title, e.starts_on::text FROM almanac_events e WHERE e.academic_year_id = $1 AND e.starts_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date AND e.deleted_at IS NULL) x
+          ORDER BY on_date LIMIT 8`,
+          [yearId],
+        )
+        .catch(() => ({ rows: [] as Row[] }));
+      const x = k.rows[0]!;
+      return {
+        scoped: scope !== null,
+        counts: {
+          classes: Number(x.classes),
+          sections: Number(x.sections),
+          subjects: Number(x.subjects),
+          noClassTeacher: Number(x.no_class_teacher),
+          noSubjectTeacher: Number(x.no_subject_teacher),
+          postsWeek: Number(x.posts_week),
+          scheduled: Number(x.scheduled),
+          documents: Number(x.documents),
+          noticesMonth: Number(x.notices_month),
+        },
+        days: days.rows.map((d) => ({
+          date: String(d.d),
+          homework: Number(d.homework),
+          classwork: Number(d.classwork),
+          assignment: Number(d.assignment),
+        })),
+        quiet: quiet.rows.map((q) => ({
+          id: String(q.id),
+          section: String(q.section),
+          lastOn: text(q.last_on),
+          teacher: text(q.teacher),
+        })),
+        acks: acks.rows.map((a) => ({
+          type: String(a.type),
+          id: String(a.id),
+          title: String(a.title),
+          section: String(a.section),
+          asked: Number(a.asked),
+          got: Number(a.got),
+        })),
+        coming: coming.rows.map((e) => ({
+          what: String(e.what),
+          title: String(e.title),
+          date: String(e.on_date),
+        })),
+      };
+    });
+  }
+
   /** The school directory as the families see it: the active entries under their headings. */
   async directory(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {

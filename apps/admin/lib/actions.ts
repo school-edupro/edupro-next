@@ -1089,7 +1089,8 @@ export async function deleteDailyWork(fd: FormData) {
 }
 
 // ---- Sprint 7: notices --------------------------------------------------------------------------
-export async function createNotice(fd: FormData) {
+/** The notice form: `publish` from the form's tick, or forced by the button pressed (draft / publish). */
+async function saveNotice(fd: FormData, publish: boolean) {
   return run('/academics/notices', async () => {
     const fileIds = await uploadAll(fd, 'files');
     const targets = [
@@ -1109,7 +1110,7 @@ export async function createNotice(fd: FormData) {
         isPinned: fd.get('isPinned') !== null,
         targets,
         fileIds,
-        publish: fd.get('publish') !== null,
+        publish,
         bodyFormat: str(fd, 'bodyFormat') === 'html' ? 'html' : 'text',
         ackRequired: fd.get('ackRequired') !== null,
         publishAt: opt(fd, 'publishAt'),
@@ -1117,6 +1118,17 @@ export async function createNotice(fd: FormData) {
       }),
     });
   });
+}
+
+export async function createNotice(fd: FormData) {
+  return saveNotice(fd, fd.get('publish') !== null);
+}
+// each button of the compose screen has its own action
+export async function saveNoticeDraft(fd: FormData) {
+  return saveNotice(fd, false);
+}
+export async function publishNoticeNow(fd: FormData) {
+  return saveNotice(fd, true);
 }
 
 /** A class document, or (no class chosen) a document for the whole school such as the magazine. */

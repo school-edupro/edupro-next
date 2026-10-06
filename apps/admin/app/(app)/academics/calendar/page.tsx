@@ -12,6 +12,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createEvent, createHoliday, deleteEvent, deleteHoliday } from '@/lib/actions';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import type { AlmanacEvent, Audience, Calendar, Holiday } from '@/lib/types';
 
@@ -23,7 +24,7 @@ const EVENT_KINDS = ['event', 'exam', 'meeting', 'activity', 'deadline'] as cons
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string; new?: string }>;
 }) {
   const sp = await searchParams;
   const [t, d, me] = await Promise.all([
@@ -42,6 +43,7 @@ export default async function CalendarPage({
         title={t('title')}
         description={`${t('description')} (${cal.from} → ${cal.to})`}
       />
+      <AcademicsNav current="/academics/calendar" permissions={me.permissions} />
       <Notice params={sp} />
       <div
         style={{
@@ -50,7 +52,27 @@ export default async function CalendarPage({
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
-        <Card title={d('holidays')}>
+        <Card
+          title={d('holidays')}
+          actions={
+            canManage ? (
+              <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href="/academics/calendar?new=holiday"
+                >
+                  + Holiday
+                </a>
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href="/masters/academics?tab=holidays"
+                >
+                  Excel upload
+                </a>
+              </span>
+            ) : null
+          }
+        >
           <DataTable<Holiday>
             caption={d('holidays')}
             density="dense"
@@ -85,7 +107,7 @@ export default async function CalendarPage({
             rowKey={(h) => h.id}
             emptyTitle={d('noHolidays')}
           />
-          {canManage ? (
+          {canManage && sp.new === 'holiday' ? (
             <form action={createHoliday} style={{ marginTop: 'var(--sp-4)' }}>
               <FormRow columns={2}>
                 <InputField id="hname" name="name" label={d('name')} required maxLength={120} />
@@ -115,7 +137,19 @@ export default async function CalendarPage({
           ) : null}
         </Card>
 
-        <Card title={d('events')}>
+        <Card
+          title={d('events')}
+          actions={
+            canManage ? (
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href="/academics/calendar?new=event"
+              >
+                + Event
+              </a>
+            ) : null
+          }
+        >
           <DataTable<AlmanacEvent>
             caption={d('events')}
             density="dense"
@@ -158,7 +192,7 @@ export default async function CalendarPage({
             rowKey={(e) => e.id}
             emptyTitle={d('noEvents')}
           />
-          {canManage ? (
+          {canManage && sp.new === 'event' ? (
             <form action={createEvent} style={{ marginTop: 'var(--sp-4)' }}>
               <FormRow columns={2}>
                 <InputField id="etitle" name="title" label={d('title')} required maxLength={160} />

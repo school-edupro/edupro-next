@@ -1,6 +1,7 @@
 import { Badge, Button, Card, FormRow, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { MapPicker } from '@/components/MapPicker';
@@ -147,6 +148,9 @@ export default async function MasterGroupPage({
         title={t(`title.${groupKey}`)}
         description={t('description')}
       />
+      {groupKey === 'academics' ? (
+        <AcademicsNav current="/masters/academics" permissions={me.permissions} />
+      ) : null}
       <Notice params={sp} />
       {exportRow ? (
         <ExportWatcher

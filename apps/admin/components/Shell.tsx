@@ -137,8 +137,7 @@ const NAV: Array<{
   {
     section: 'academics',
     items: [
-      { href: '/academics/classes', label: 'classes', permission: 'academics.class.view' },
-      { href: '/academics/subjects', label: 'subjects', permission: 'academics.subject.view' },
+      { href: '/academics', label: 'academicsDashboard', permission: 'academics.daily_work.view' },
       { href: '/masters/academics', label: 'academicsSetup', permission: 'academics.class.view' },
       {
         href: '/academics/documents',

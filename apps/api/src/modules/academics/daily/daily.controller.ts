@@ -32,6 +32,7 @@ import {
   AckStatusQueryDto,
   CreateDocumentDto,
   ListDocumentsQueryDto,
+  NoticeReachDto,
   NoticeReportQueryDto,
 } from './daily.dto';
 import { DAILY } from './daily.permissions';
@@ -109,6 +110,14 @@ export class DailyWorkController {
 @Controller('academics/notices')
 export class NoticesController {
   constructor(private readonly notices: NoticesService) {}
+
+  @Post('reach')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'How many students and employees an audience reaches' })
+  @RequirePermission(DAILY.noticeManage)
+  reach(@ReqCtx() ctx: RequestContext, @Body() dto: NoticeReachDto) {
+    return this.notices.reach(ctx, dto);
+  }
 
   @Get('report')
   @ApiOperation({ summary: 'Notices and office orders with their reach; also as Excel or PDF' })
@@ -309,6 +318,15 @@ export class DocumentsController {
   @AuthenticatedOnly()
   ackStatus(@ReqCtx() ctx: RequestContext, @Query() q: AckStatusQueryDto) {
     return this.docs.ackStatus(ctx, q);
+  }
+
+  @Get('dashboard')
+  @ApiOperation({
+    summary: 'The academics dashboard: set-up gaps, posts, acknowledgements, what is coming',
+  })
+  @RequirePermission(DAILY.workView)
+  dashboard(@ReqCtx() ctx: RequestContext) {
+    return this.docs.dashboard(ctx);
   }
 
   @Get('directory')

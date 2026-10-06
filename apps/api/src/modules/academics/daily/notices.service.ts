@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import { sanitizeEmailHtml } from '../../comms/email-html';
 import { PushService } from '../../comms/push.service';
 import { FilesService } from '../../files/files.service';
 import { AuditService } from '../../../common/audit/audit.service';
 import { DbService } from '../../../common/db/db.service';
 import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
-import sanitizeHtml from 'sanitize-html';
 import type {
   CreateNoticeDto,
   ListNoticesQueryDto,
+  NoticeReachDto,
   NoticeReportQueryDto,
   UpdateNoticeDto,
 } from './daily.dto';
@@ -96,39 +97,8 @@ const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publis
                     FROM notice_files nf JOIN files f ON f.id = nf.file_id WHERE nf.notice_id = n.id), '[]'::jsonb) AS files
    FROM notices n LEFT JOIN users u ON u.id = n.published_by`;
 
-/** A notice written in the editor: headings, emphasis, lists, quotes, links and simple tables. */
-export const cleanNoticeHtml = (html: string): string =>
-  sanitizeHtml(html, {
-    allowedTags: [
-      'p',
-      'br',
-      'strong',
-      'b',
-      'em',
-      'i',
-      'u',
-      's',
-      'h2',
-      'h3',
-      'h4',
-      'ul',
-      'ol',
-      'li',
-      'blockquote',
-      'a',
-      'table',
-      'thead',
-      'tbody',
-      'tr',
-      'th',
-      'td',
-      'div',
-      'span',
-    ],
-    allowedAttributes: { a: ['href'], td: ['colspan', 'rowspan'], th: ['colspan', 'rowspan'] },
-    allowedSchemes: ['http', 'https', 'mailto'],
-    transformTags: { h1: 'h2' },
-  }).trim();
+/** A notice written in the editor (the same one as Communication → Compose): cleaned like an e-mail body. */
+export const cleanNoticeHtml = (html: string): string => sanitizeEmailHtml(html).trim();
 
 const toRow = (r: Db): NoticeRow => ({
   id: r.id,
@@ -487,6 +457,35 @@ export class NoticesService {
       id,
       to.rows.length,
     ]);
+  }
+
+  /** How many students and employees a notice would reach, before it is saved (the compose screen's count). */
+  async reach(ctx: RequestContext, dto: NoticeReachDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.viewer.requireYear(tenant);
+    const audience = dto.kind === 'office_order' ? 'employees' : dto.audience;
+    const of = (type: string) => dto.targets.filter((t) => t.type === type).map((t) => t.id);
+    return this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{ pupils: number; staff: number }>(
+        `SELECT (SELECT count(*) FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
+                  WHERE en.academic_year_id = $1 AND en.status = 'active' AND $2 IN ('everyone', 'students')
+                    AND (NOT $3 OR en.class_section_id = ANY($4::bigint[]) OR cs.class_id = ANY($5::bigint[]) OR en.student_id = ANY($6::bigint[])))::int AS pupils,
+                (SELECT count(*) FROM employees e
+                  WHERE e.status = 'active' AND e.deleted_at IS NULL AND $2 IN ('everyone', 'employees')
+                    AND (NOT $3 OR e.id = ANY($7::bigint[])
+                         OR EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = ANY($4::bigint[]) AND ta.valid_to IS NULL)))::int AS staff`,
+        [
+          yearId,
+          audience,
+          dto.targets.length > 0,
+          of('class_section'),
+          of('class'),
+          of('student'),
+          of('employee'),
+        ],
+      );
+      return { students: r.rows[0]!.pupils, employees: r.rows[0]!.staff };
+    });
   }
 
   /** Notices and office orders with how far each reached: whom it is for, acknowledged, e-mailed. */
