@@ -34,6 +34,8 @@ export interface RosterRow {
   hint: Hint | null;
   /** What the roster pre-fills while nobody has marked the pupil (from the leave or the gate pass). */
   suggested: string | null;
+  /** On approved leave: marked as leave, and only a coordinator or admin may change it. */
+  locked: boolean;
 }
 
 export interface SessionRow {
@@ -178,6 +180,7 @@ export class AttendanceService {
       source: x.source,
       hint: null,
       suggested: null,
+      locked: false,
     }));
   }
 
@@ -236,6 +239,8 @@ export class AttendanceService {
       for (const x of roster) {
         x.hint = hints.get(x.studentId) ?? null;
         x.suggested = x.code ? null : suggest(x.hint ?? undefined, 'class');
+        x.locked = Boolean(x.hint?.leave) && !manager;
+        if (x.locked && x.code !== 'LV') x.suggested = 'LV';
       }
     }
     const window = await this.gate.state(
@@ -334,6 +339,15 @@ export class AttendanceService {
         [dto.classSectionId, yearId],
       );
       const allowed = new Set(enrolled.rows.map((x) => x.id));
+      // an approved leave stands: the teacher's entry for that pupil is kept as leave (a coordinator or admin may change it)
+      const onLeave =
+        dto.kind === 'day' && !manager
+          ? await this.gate.hints(
+              c,
+              dto.marks.map((m) => m.studentId),
+              dto.date,
+            )
+          : null;
       for (const m of dto.marks) {
         if (!allowed.has(m.studentId))
           throw new DomainError(
@@ -345,7 +359,12 @@ export class AttendanceService {
           `INSERT INTO attendance_marks (school_id, session_id, student_id, code, remarks, source, marked_by)
            VALUES (app.current_school_id(), $1, $2, $3::attendance_code, $4, 'manual', app.current_user_id())
            ON CONFLICT (session_id, student_id) DO UPDATE SET code = EXCLUDED.code, remarks = EXCLUDED.remarks, source = 'manual', marked_by = EXCLUDED.marked_by, updated_at = now()`,
-          [sessionId, m.studentId, m.code, m.remarks ?? null],
+          [
+            sessionId,
+            m.studentId,
+            onLeave?.get(m.studentId)?.leave ? 'LV' : m.code,
+            m.remarks ?? null,
+          ],
         );
       }
       const session = await this.sessionWith(c, yearId, dto, manager);

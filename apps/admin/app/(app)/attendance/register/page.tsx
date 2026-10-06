@@ -120,12 +120,23 @@ export default async function RegisterPage({
               </thead>
               <tbody>
                 {session.roster.map((r) => (
-                  <tr key={r.studentId}>
+                  <tr
+                    key={r.studentId}
+                    className={
+                      r.hint?.pass ? 'ep-row--pass' : r.hint?.leave ? 'ep-row--leave' : undefined
+                    }
+                  >
                     <td>{r.rollNo ?? ''}</td>
                     <td>
                       <a href={`/people/students/${r.studentId}`}>{r.name}</a>
                       <div className="ep-kicker">{r.admissionNo}</div>
-                      {r.hint?.leave ? <Badge tone="info">Leave approved</Badge> : null}{' '}
+                      {r.hint?.leave ? (
+                        <Badge tone="info">
+                          {r.locked
+                            ? 'On leave (approved): cannot be changed'
+                            : 'On leave (approved)'}
+                        </Badge>
+                      ) : null}{' '}
                       {r.hint?.pass ? (
                         <Badge tone="warning">
                           {r.hint.pass.kind === 'early_leave'
@@ -147,8 +158,12 @@ export default async function RegisterPage({
                               type="radio"
                               name={`code-${r.studentId}`}
                               value={code}
-                              defaultChecked={(r.code ?? r.suggested ?? 'P') === code}
-                              disabled={!canMark || session.locked}
+                              defaultChecked={
+                                (r.locked ? 'LV' : (r.code ?? r.suggested ?? 'P')) === code
+                              }
+                              disabled={
+                                !canMark || session.locked || (r.locked === true && code !== 'LV')
+                              }
                             />
                             {code}
                           </label>

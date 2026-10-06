@@ -13,7 +13,8 @@ export async function GET(req: NextRequest) {
   const format = sp.get('format') === 'pdf' ? 'pdf' : 'xlsx';
   const section = sp.get('section') ?? '';
   const route = sp.get('route') ?? '';
-  const trip = sp.get('trip') === 'drop' ? 'drop' : 'pick';
+  const asked = sp.get('trip');
+  const trip = asked === 'drop' || asked === 'pick' ? asked : 'both';
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return new NextResponse(null, { status: 400 });
   const path = /^\d{1,18}$/.test(section)
     ? `/attendance/desk/class-register/file?classSectionId=${section}&month=${month}&format=${format}`

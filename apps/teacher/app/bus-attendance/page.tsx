@@ -28,6 +28,7 @@ interface Rider {
   classCode: string | null;
   tapped: string | null;
   suggested: string | null;
+  locked?: boolean;
 }
 interface Roll {
   id: string | null;
@@ -128,9 +129,17 @@ export default async function BusAttendancePage({
               : ''
         }
         actions={
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
-          </a>
+          <>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/bus-attendance/register${chosen ? `?route=${chosen.routeId}` : ''}`}
+            >
+              Monthly register
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
+              Home
+            </a>
+          </>
         }
       />
       {sp.ok ? (
@@ -203,14 +212,14 @@ export default async function BusAttendancePage({
             <p className="ep-field__help" style={{ marginBottom: 0 }}>
               Register of {month}:{' '}
               <a
-                href={`/api/register?route=${chosen.routeId}&trip=${chosen.trip}&month=${month}&format=xlsx`}
+                href={`/api/register?route=${chosen.routeId}&trip=both&month=${month}&format=xlsx`}
                 style={{ textDecoration: 'underline' }}
               >
                 Excel
               </a>{' '}
               ·{' '}
               <a
-                href={`/api/register?route=${chosen.routeId}&trip=${chosen.trip}&month=${month}&format=pdf`}
+                href={`/api/register?route=${chosen.routeId}&trip=both&month=${month}&format=pdf`}
                 style={{ textDecoration: 'underline' }}
               >
                 PDF
@@ -261,13 +270,28 @@ export default async function BusAttendancePage({
                   </thead>
                   <tbody>
                     {roll.roster.map((r) => (
-                      <tr key={r.studentId}>
+                      <tr
+                        key={r.studentId}
+                        className={
+                          r.hint?.pass
+                            ? 'ep-row--pass'
+                            : r.hint?.leave
+                              ? 'ep-row--leave'
+                              : undefined
+                        }
+                      >
                         <th scope="row">
                           {r.name}
                           <div className="ep-kicker">
                             {[r.section, r.admissionNo].filter(Boolean).join(' · ')}
                           </div>
-                          {r.hint?.leave ? <Badge tone="info">Leave approved</Badge> : null}{' '}
+                          {r.hint?.leave ? (
+                            <Badge tone="info">
+                              {r.locked
+                                ? 'On leave (approved): cannot be changed'
+                                : 'On leave (approved)'}
+                            </Badge>
+                          ) : null}{' '}
                           {r.hint?.pass ? (
                             <Badge tone="warning">
                               {r.hint.pass.kind === 'early_leave'
@@ -313,8 +337,10 @@ export default async function BusAttendancePage({
                                   type="radio"
                                   name={`code-${r.studentId}`}
                                   value={code}
-                                  defaultChecked={(r.code ?? r.suggested ?? 'P') === code}
-                                  disabled={closed}
+                                  defaultChecked={
+                                    (r.locked ? 'LV' : (r.code ?? r.suggested ?? 'P')) === code
+                                  }
+                                  disabled={closed || (r.locked === true && code !== 'LV')}
                                 />
                                 {code}
                               </label>

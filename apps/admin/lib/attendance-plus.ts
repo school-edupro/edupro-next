@@ -108,6 +108,7 @@ export interface BusRoll {
     classCode: string | null;
     tapped: string | null;
     suggested: string | null;
+    locked?: boolean;
   }>;
   counts: Record<string, number>;
 }

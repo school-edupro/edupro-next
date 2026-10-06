@@ -1014,6 +1014,7 @@ export interface AttendanceRosterRow {
   outAt: string | null;
   source: string | null;
   suggested?: string | null;
+  locked?: boolean;
   hint?: {
     leave: { number: string } | null;
     pass: { kind: 'early_leave' | 'late_arrival'; number: string; atTime: string | null } | null;

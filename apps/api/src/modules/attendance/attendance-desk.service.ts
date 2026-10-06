@@ -1,13 +1,12 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are constant fragments (time zone, column lists); every value is bound */
 import { Injectable } from '@nestjs/common';
-import ExcelJS from 'exceljs';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
-import { tablePdf } from '../engagement/table-pdf';
+import { generatedOn, monthName, registerFile, schoolHead } from './register-file';
 import { AttendanceGate } from './attendance-gate';
 import { codeOf, readSheet, templateSheet } from '../../common/excel/sheet';
 import type {
@@ -412,49 +411,26 @@ export class AttendanceDeskService {
       r.late,
       r.percent ?? '',
     ]);
-    const title = `Attendance register · Class ${reg.section} · ${reg.month}`;
-    const name = `attendance-register-${reg.section}-${reg.month}`.replace(/[^\w-]+/g, '-');
-    if (format === 'pdf') {
-      const school = await this.db.tenant(
-        requireTenant(ctx),
-        async (c) =>
-          (
-            await c.query<{ name: string }>(
-              `SELECT name FROM schools WHERE id = app.current_school_id()`,
-            )
-          ).rows[0]?.name ?? '',
-      );
-      return {
-        bytes: await tablePdf({
-          school,
-          title,
-          subtitle:
-            'P present · A absent · LV leave · L late · H half day · SR short leave · OD on duty · SB stay back · - not marked',
-          columns: head.map((h, i) => ({
-            label: h,
-            width: i === 1 ? 20 : i === 0 ? 4 : i === 2 ? 9 : i > 2 + reg.days.length ? 5 : 3.2,
-            right: i > 2 + reg.days.length,
-          })),
-          rows,
-        }),
-        filename: `${name}.pdf`,
-        contentType: 'application/pdf',
-      };
-    }
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Register');
-    ws.addRow([title]).font = { bold: true };
-    ws.addRow(head).font = { bold: true };
-    for (const r of rows) ws.addRow(r);
-    ws.columns.forEach((col, i) => {
-      col.width = i === 1 ? 26 : i === 2 ? 14 : 6;
-    });
-    ws.views = [{ state: 'frozen', ySplit: 2, xSplit: 2 }];
-    return {
-      bytes: Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer),
-      filename: `${name}.xlsx`,
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    };
+    const sheet = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    return registerFile(
+      {
+        school: sheet.name,
+        address: sheet.address,
+        report: 'Class attendance register',
+        details: [`Class ${reg.section}`, monthName(reg.month), generatedOn()],
+        legend:
+          'P present · A absent · LV leave · L late · H half day · SR short leave · OD on duty · SB stay back · - not marked',
+        columns: head.map((h, i) => ({
+          label: h,
+          width: i === 1 ? 18 : i === 0 ? 4 : i === 2 ? 8 : i > 2 + reg.days.length ? 5 : 2.8,
+          right: i > 2 + reg.days.length,
+          center: i > 2 && i <= 2 + reg.days.length,
+        })),
+        rows,
+        filename: `attendance-register-${reg.section}-${reg.month}`.replace(/[^\w-]+/g, '-'),
+      },
+      format,
+    );
   }
 
   // ---- dashboards -----------------------------------------------------------------------------------

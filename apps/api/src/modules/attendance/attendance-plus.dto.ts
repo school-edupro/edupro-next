@@ -35,7 +35,12 @@ export class BusRollMarkDto extends createZodDto(BusRollMarkSchema) {}
 
 export const RegisterQuerySchema = z.object({ month: Month });
 export class RegisterQueryDto extends createZodDto(RegisterQuerySchema) {}
-export const BusRegisterQuerySchema = z.object({ routeId: IdSchema, trip: Trip, month: Month });
+/** `both` (the default): the morning and the afternoon trip side by side. */
+export const BusRegisterQuerySchema = z.object({
+  routeId: IdSchema,
+  trip: z.enum(['both', 'pick', 'drop']).default('both'),
+  month: Month,
+});
 export class BusRegisterQueryDto extends createZodDto(BusRegisterQuerySchema) {}
 export const ClassRegisterQuerySchema = z.object({ classSectionId: IdSchema, month: Month });
 export class ClassRegisterQueryDto extends createZodDto(ClassRegisterQuerySchema) {}

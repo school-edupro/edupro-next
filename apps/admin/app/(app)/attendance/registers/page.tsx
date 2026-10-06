@@ -1,5 +1,6 @@
 import { Button, Card, PageHeader, SelectField } from '@edupro/ui';
 import { AttendanceNav } from '@/components/attendance/AttendanceNav';
+import { BusRegisterTable, type BusRegister } from '@/components/attendance/BusRegisterTable';
 import { apiFetch, getMe } from '@/lib/api';
 import { istToday } from '@/lib/attendance-plus';
 import { sectionOptions } from '@/lib/sections';
@@ -21,26 +22,6 @@ interface ClassRegister {
     percent: number | null;
   }>;
 }
-interface BusRegister {
-  route: string;
-  tripLabel: string;
-  month: string;
-  days: string[];
-  rows: Array<{
-    studentId: string;
-    name: string;
-    admissionNo: string | null;
-    section: string | null;
-    stop: string | null;
-    marks: Record<string, string>;
-    present: number;
-    absent: number;
-    leave: number;
-    gatePass: number;
-    other: number;
-  }>;
-}
-
 /**
  * The monthly registers: a class (a row per pupil, a column per day, present / absent / leave / late and
  * the percentage) or a bus route and trip (on the bus / not on the bus / leave / gate pass), on screen
@@ -60,7 +41,7 @@ export default async function AttendanceRegistersPage({
   const sp = await searchParams;
   const kind = sp.kind === 'bus' ? 'bus' : 'class';
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : istToday().slice(0, 7);
-  const trip = sp.trip === 'drop' ? 'drop' : 'pick';
+  const trip = sp.trip === 'drop' || sp.trip === 'pick' ? sp.trip : 'both';
   const [me, sections, routes] = await Promise.all([
     getMe(),
     sectionOptions(),
@@ -150,8 +131,9 @@ export default async function AttendanceRegistersPage({
                 label="Trip"
                 defaultValue={trip}
                 options={[
-                  { value: 'pick', label: 'Morning (pick)' },
-                  { value: 'drop', label: 'Afternoon (drop)' },
+                  { value: 'both', label: 'Morning and afternoon' },
+                  { value: 'pick', label: 'Morning (pick) only' },
+                  { value: 'drop', label: 'Afternoon (drop) only' },
                 ]}
               />
             </>
@@ -191,104 +173,55 @@ export default async function AttendanceRegistersPage({
             </p>
           ) : (
             <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Register">
-              <table className="ep-table ep-table--dense">
-                <caption className="ep-sr-only">Attendance register of {month}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Student</th>
-                    {reg.days.map((d) => (
-                      <th key={d} scope="col" className="ep-num" title={d}>
-                        {d.slice(8)}
-                      </th>
-                    ))}
-                    {cls ? (
-                      <>
-                        <th scope="col" className="ep-num">
-                          Present
+              {cls ? (
+                <table className="ep-table ep-table--dense">
+                  <caption className="ep-sr-only">Attendance register of {month}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Student</th>
+                      {cls.days.map((d) => (
+                        <th key={d} scope="col" className="ep-num" title={d}>
+                          {d.slice(8)}
                         </th>
-                        <th scope="col" className="ep-num">
-                          Absent
-                        </th>
-                        <th scope="col" className="ep-num">
-                          Leave
-                        </th>
-                        <th scope="col" className="ep-num">
-                          Late
-                        </th>
-                        <th scope="col" className="ep-num">
-                          %
-                        </th>
-                      </>
-                    ) : (
-                      <>
-                        <th scope="col" className="ep-num">
-                          On bus
-                        </th>
-                        <th scope="col" className="ep-num">
-                          Not on bus
-                        </th>
-                        <th scope="col" className="ep-num">
-                          Leave
-                        </th>
-                        <th scope="col" className="ep-num">
-                          Gate pass
-                        </th>
-                        <th scope="col" className="ep-num">
-                          Other
-                        </th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {cls
-                    ? cls.rows.map((r) => (
-                        <tr key={r.studentId}>
-                          <th scope="row">
-                            {r.rollNo ? `${String(r.rollNo)}. ` : ''}
-                            {r.name}
-                            <div className="ep-field__help">{r.admissionNo}</div>
-                          </th>
-                          {cls.days.map((d) => (
-                            <td key={d} className="ep-num">
-                              {r.marks[d] ?? '–'}
-                            </td>
-                          ))}
-                          <td className="ep-num">{r.present}</td>
-                          <td className="ep-num">{r.absent}</td>
-                          <td className="ep-num">{r.leave}</td>
-                          <td className="ep-num">{r.late}</td>
-                          <td className="ep-num">{r.percent ?? '–'}</td>
-                        </tr>
-                      ))
-                    : bus!.rows.map((r) => (
-                        <tr key={r.studentId}>
-                          <th scope="row">
-                            {r.name}
-                            <div className="ep-field__help">
-                              {[r.section, r.admissionNo, r.stop].filter(Boolean).join(' · ')}
-                            </div>
-                          </th>
-                          {bus!.days.map((d) => (
-                            <td key={d} className="ep-num">
-                              {r.marks[d] ?? '–'}
-                            </td>
-                          ))}
-                          <td className="ep-num">{r.present}</td>
-                          <td className="ep-num">{r.absent}</td>
-                          <td className="ep-num">{r.leave}</td>
-                          <td className="ep-num">{r.gatePass}</td>
-                          <td className="ep-num">{r.other}</td>
-                        </tr>
                       ))}
-                </tbody>
-              </table>
+                      {['Present', 'Absent', 'Leave', 'Late', '%'].map((h) => (
+                        <th key={h} scope="col" className="ep-num">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cls.rows.map((r) => (
+                      <tr key={r.studentId}>
+                        <th scope="row">
+                          {r.rollNo ? `${String(r.rollNo)}. ` : ''}
+                          {r.name}
+                          <div className="ep-field__help">{r.admissionNo}</div>
+                        </th>
+                        {cls.days.map((d) => (
+                          <td key={d} className="ep-num">
+                            {r.marks[d] ?? '–'}
+                          </td>
+                        ))}
+                        <td className="ep-num">{r.present}</td>
+                        <td className="ep-num">{r.absent}</td>
+                        <td className="ep-num">{r.leave}</td>
+                        <td className="ep-num">{r.late}</td>
+                        <td className="ep-num">{r.percent ?? '–'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <BusRegisterTable reg={bus!} />
+              )}
             </div>
           )}
           <p className="ep-field__help">
             {cls
               ? 'P present · A absent · LV leave · L late · H half day · SR short leave · OD on duty · SB stay back · – not marked'
-              : 'P on the bus · A not on the bus · LV leave · GP gate pass · OT other arrangement · – not marked'}
+              : 'M morning (pick) · A afternoon (drop) · P on the bus · A not on the bus · LV leave · GP gate pass · OT other arrangement · – not marked · blank: does not ride that trip'}
           </p>
         </Card>
       )}

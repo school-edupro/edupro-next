@@ -1,13 +1,12 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are constant fragments (time zone, column lists, WHERE pieces with numbered placeholders); every value is bound */
 import { Injectable } from '@nestjs/common';
-import ExcelJS from 'exceljs';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
-import { tablePdf } from '../engagement/table-pdf';
+import { generatedOn, monthName, registerFile, schoolHead } from './register-file';
 import { AttendanceGate, suggest, type Hint, type WindowState } from './attendance-gate';
 import type { BusRollMarkDto, BusRollQueryDto, RegisterQueryDto } from './attendance-plus.dto';
 
@@ -55,6 +54,11 @@ export class BusRollService {
         status: 409,
       });
     return y;
+  }
+
+  /** A coordinator or admin: may change the status of a pupil on approved leave. */
+  private overridesLeave(ctx: RequestContext): boolean {
+    return ctx.permissions?.has('attendance.setup.manage') === true;
   }
 
   /** Runs bus attendance for the school (any route, not bound to the teacher's window). */
@@ -161,6 +165,7 @@ export class BusRollService {
       r.rows.map((x) => String(x.id)),
       q.date,
     );
+    const mayOverride = this.overridesLeave(ctx);
     const roster = r.rows.map((x) => {
       const hint: Hint | null = hints.get(String(x.id)) ?? null;
       const code = x.code === null || x.code === undefined ? null : String(x.code);
@@ -180,14 +185,19 @@ export class BusRollService {
         classCode,
         /** The time the pupil's card was read on the bus, when the bus has a reader. */
         tapped: x.tapped === null || x.tapped === undefined ? null : String(x.tapped),
-        suggested: code
-          ? null
-          : (suggest(hint ?? undefined, q.trip) ??
-            (x.tapped
-              ? 'P'
-              : q.trip === 'drop' && (classCode === 'A' || classCode === 'LV')
-                ? 'A'
-                : null)),
+        /** On approved leave: marked as leave, and only a coordinator or admin may change it. */
+        locked: Boolean(hint?.leave) && !mayOverride,
+        suggested:
+          hint?.leave && !mayOverride && code !== 'LV'
+            ? 'LV'
+            : code
+              ? null
+              : (suggest(hint ?? undefined, q.trip) ??
+                (x.tapped
+                  ? 'P'
+                  : q.trip === 'drop' && (classCode === 'A' || classCode === 'LV')
+                    ? 'A'
+                    : null)),
       };
     });
     const counts: Record<string, number> = { riders: roster.length, unmarked: 0 };
@@ -264,6 +274,14 @@ export class BusRollService {
         [yearId, dto.routeId, dto.date, dto.trip, window.late, dto.notes ?? null],
       );
       const sid = s.rows[0]!.id;
+      // an approved leave stands: the teacher's entry for that pupil is kept as leave
+      const onLeave = this.overridesLeave(ctx)
+        ? null
+        : await this.gate.hints(
+            c,
+            dto.marks.map((m) => m.studentId),
+            dto.date,
+          );
       for (const m of dto.marks) {
         if (!allowed.has(m.studentId))
           throw new DomainError(
@@ -275,7 +293,7 @@ export class BusRollService {
           `INSERT INTO bus_roll_marks (school_id, session_id, student_id, code, remarks, marked_by)
            VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())
            ON CONFLICT (session_id, student_id) DO UPDATE SET code = EXCLUDED.code, remarks = EXCLUDED.remarks, marked_by = EXCLUDED.marked_by, updated_at = now()`,
-          [sid, m.studentId, m.code, m.remarks ?? null],
+          [sid, m.studentId, onLeave?.get(m.studentId)?.leave ? 'LV' : m.code, m.remarks ?? null],
         );
       }
       const roll = await this.rollWith(c, ctx, yearId, dto);
@@ -358,134 +376,163 @@ export class BusRollService {
     });
   }
 
-  /** The month's register of a route and trip: a row per pupil, a column per day, and the totals. */
-  async register(ctx: RequestContext, q: RegisterQueryDto & { routeId: string; trip: Trip }) {
+  /**
+   * The month's register of a route: a row per pupil and, under each day, the morning (M) and the
+   * afternoon (A) trip, with the totals of both. One trip alone shows that trip's column only.
+   */
+  async register(
+    ctx: RequestContext,
+    q: RegisterQueryDto & { routeId: string; trip: Trip | 'both' },
+  ) {
     const yearId = this.year(ctx);
+    const trips: Trip[] = q.trip === 'both' ? ['pick', 'drop'] : [q.trip];
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.assertMayRead(c, ctx, q.routeId);
-      const route = await c.query<{ code: string; name: string }>(
-        `SELECT code, name FROM transport_routes WHERE id = $1 AND deleted_at IS NULL`,
+      const route = await c.query<{ code: string; name: string; vehicle_no: string | null }>(
+        `SELECT code, name, vehicle_no FROM transport_routes WHERE id = $1 AND deleted_at IS NULL`,
         [q.routeId],
       );
       if (!route.rows[0]) throw new DomainError('not-found', 'Route not found', { status: 404 });
       const from = `${q.month}-01`;
-      const marks = await c.query<{ student_id: string; d: string; code: string }>(
-        `SELECT m.student_id::text, b.on_date::text AS d, m.code FROM bus_roll_marks m JOIN bus_roll_sessions b ON b.id = m.session_id
-          WHERE b.route_id = $1 AND b.trip = $2 AND b.on_date >= $3::date AND b.on_date < ($3::date + interval '1 month')`,
-        [q.routeId, q.trip, from],
+      const marks = await c.query<{ student_id: string; d: string; trip: Trip; code: string }>(
+        `SELECT m.student_id::text, b.on_date::text AS d, b.trip, m.code FROM bus_roll_marks m JOIN bus_roll_sessions b ON b.id = m.session_id
+          WHERE b.route_id = $1 AND b.trip = ANY($2::text[]) AND b.on_date >= $3::date AND b.on_date < ($3::date + interval '1 month')`,
+        [q.routeId, trips, from],
       );
-      const pupils = await c.query<Row>(
-        `SELECT s.id::text, s.display_name AS name, s.admission_no, ${SECTION} AS section,
-                CASE WHEN $2 = 'pick' THEN COALESCE(ps.name, a.stop_name) ELSE COALESCE(ds.name, a.stop_name) END AS stop
-           ${RIDERS} ORDER BY s.display_name`,
-        [q.routeId, q.trip, yearId],
-      );
+      const pupils = new Map<string, Row & { trips: Trip[] }>();
+      for (const trip of trips) {
+        const r = await c.query<Row>(
+          `SELECT s.id::text, s.display_name AS name, s.admission_no, ${SECTION} AS section,
+                  CASE WHEN $2 = 'pick' THEN COALESCE(ps.name, a.stop_name) ELSE COALESCE(ds.name, a.stop_name) END AS stop
+             ${RIDERS} ORDER BY s.display_name`,
+          [q.routeId, trip, yearId],
+        );
+        for (const p of r.rows) {
+          const had = pupils.get(String(p.id));
+          if (had) had.trips.push(trip);
+          else pupils.set(String(p.id), { ...p, trips: [trip] });
+        }
+      }
       const days = [...new Set(marks.rows.map((m) => m.d))].sort();
       const by = new Map<string, Record<string, string>>();
-      for (const m of marks.rows)
-        by.set(m.student_id, { ...(by.get(m.student_id) ?? {}), [m.d]: m.code });
+      for (const m of marks.rows) {
+        const key = `${m.student_id}|${m.trip}`;
+        by.set(key, { ...(by.get(key) ?? {}), [m.d]: m.code });
+      }
+      const head = await schoolHead(c);
       return {
+        school: head.name,
+        address: head.address,
         route: `${route.rows[0].code} · ${route.rows[0].name}`,
         routeCode: route.rows[0].code,
+        vehicle: route.rows[0].vehicle_no,
         trip: q.trip,
-        tripLabel: TRIP_LABEL[q.trip],
+        trips,
+        tripLabel: q.trip === 'both' ? 'Morning and afternoon' : TRIP_LABEL[q.trip],
         month: q.month,
         days,
-        rows: pupils.rows.map((p) => {
-          const m = by.get(String(p.id)) ?? {};
-          const n = (code: string) => Object.values(m).filter((x) => x === code).length;
-          return {
-            studentId: String(p.id),
-            name: String(p.name),
-            admissionNo: p.admission_no === null ? null : String(p.admission_no),
-            section: p.section === null ? null : String(p.section),
-            stop: p.stop === null ? null : String(p.stop),
-            marks: m,
-            present: n('P'),
-            absent: n('A'),
-            leave: n('LV'),
-            gatePass: n('GP'),
-            other: n('OT'),
-            unmarked: days.length - Object.keys(m).length,
-          };
-        }),
+        rows: [...pupils.values()]
+          .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+          .map((p) => {
+            const pick = by.get(`${String(p.id)}|pick`) ?? {};
+            const drop = by.get(`${String(p.id)}|drop`) ?? {};
+            const all = [...Object.values(pick), ...Object.values(drop)];
+            const n = (code: string) => all.filter((x) => x === code).length;
+            const count = (m: Record<string, string>) =>
+              Object.values(m).filter((x) => x === 'P').length;
+            return {
+              studentId: String(p.id),
+              name: String(p.name),
+              admissionNo: p.admission_no === null ? null : String(p.admission_no),
+              section: p.section === null ? null : String(p.section),
+              stop: p.stop === null ? null : String(p.stop),
+              /** The trips this pupil rides on this route. */
+              rides: p.trips,
+              /** One trip asked for: that trip's marks (kept for the single-trip view). */
+              marks: q.trip === 'drop' ? drop : pick,
+              pick,
+              drop,
+              presentPick: count(pick),
+              presentDrop: count(drop),
+              present: n('P'),
+              absent: n('A'),
+              leave: n('LV'),
+              gatePass: n('GP'),
+              other: n('OT'),
+              unmarked: days.length * p.trips.length - all.length,
+            };
+          }),
       };
     });
   }
 
   async registerFile(
     ctx: RequestContext,
-    q: RegisterQueryDto & { routeId: string; trip: Trip },
+    q: RegisterQueryDto & { routeId: string; trip: Trip | 'both' },
     format: 'xlsx' | 'pdf',
   ) {
     const reg = await this.register(ctx, q);
-    const head = [
-      'Student',
-      'Adm. no.',
-      'Class',
-      'Stoppage',
-      ...reg.days.map((d) => d.slice(8)),
-      'On bus',
-      'Not on bus',
-      'Leave',
-      'Gate pass',
-      'Other',
-    ];
-    const rows = reg.rows.map((r) => [
-      r.name,
-      r.admissionNo ?? '',
-      r.section ?? '',
-      r.stop ?? '',
-      ...reg.days.map((d) => r.marks[d] ?? '-'),
-      r.present,
-      r.absent,
-      r.leave,
-      r.gatePass,
-      r.other,
-    ]);
-    const title = `Bus attendance register · ${reg.route} · ${reg.tripLabel} · ${reg.month}`;
-    const name = `bus-register-${reg.routeCode}-${reg.trip}-${reg.month}`;
-    if (format === 'pdf') {
-      const school = await this.db.tenant(
-        requireTenant(ctx),
-        async (c) =>
-          (
-            await c.query<{ name: string }>(
-              `SELECT name FROM schools WHERE id = app.current_school_id()`,
-            )
-          ).rows[0]?.name ?? '',
-      );
-      return {
-        bytes: await tablePdf({
-          school,
-          title,
-          subtitle:
-            'P on the bus · A not on the bus · LV leave · GP gate pass · OT other arrangement · - not marked',
-          columns: head.map((h, i) => ({
-            label: h,
-            width: i === 0 ? 20 : i < 4 ? 10 : 3.2,
-            right: i > 3 + reg.days.length,
-          })),
-          rows,
-        }),
-        filename: `${name}.pdf`,
-        contentType: 'application/pdf',
-      };
-    }
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Register');
-    ws.addRow([title]).font = { bold: true };
-    ws.addRow(head).font = { bold: true };
-    for (const r of rows) ws.addRow(r);
-    ws.columns.forEach((col, i) => {
-      col.width = i === 0 ? 26 : i < 4 ? 14 : 6;
-    });
-    ws.views = [{ state: 'frozen', ySplit: 2, xSplit: 1 }];
-    return {
-      bytes: Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer),
-      filename: `${name}.xlsx`,
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    };
+    const both = reg.trips.length === 2;
+    const dayCols = reg.days.flatMap((d) =>
+      reg.trips.map((t) => ({
+        label: both ? (t === 'pick' ? 'M' : 'A') : d.slice(8),
+        width: 2.6,
+        center: true,
+        group: both ? d.slice(8) : undefined,
+      })),
+    );
+    return registerFile(
+      {
+        school: reg.school,
+        address: reg.address,
+        report: 'Bus attendance register',
+        details: [
+          `Route ${reg.route}`,
+          reg.vehicle ? `Bus ${reg.vehicle}` : '',
+          reg.tripLabel,
+          monthName(reg.month),
+          generatedOn(),
+        ].filter(Boolean),
+        legend: `${both ? 'M morning (pick) · A afternoon (drop) · ' : ''}P on the bus · A not on the bus · LV leave · GP gate pass · OT other arrangement · - not marked${both ? ' · blank: does not ride that trip' : ''}`,
+        columns: [
+          { label: 'Sl.', width: 3, right: true },
+          { label: 'Student', width: 16 },
+          { label: 'Adm. no.', width: 7 },
+          { label: 'Class', width: 5 },
+          { label: 'Stoppage', width: 10 },
+          ...dayCols,
+          ...(both
+            ? [
+                { label: 'On bus M', width: 4, right: true },
+                { label: 'On bus A', width: 4, right: true },
+              ]
+            : [{ label: 'On bus', width: 4, right: true }]),
+          { label: 'Not on bus', width: 4, right: true },
+          { label: 'Leave', width: 4, right: true },
+          { label: 'Gate pass', width: 4, right: true },
+          { label: 'Other', width: 4, right: true },
+        ],
+        rows: reg.rows.map((r, i) => [
+          i + 1,
+          r.name,
+          r.admissionNo ?? '',
+          r.section ?? '',
+          r.stop ?? '',
+          ...reg.days.flatMap((d) =>
+            reg.trips.map((t) =>
+              r.rides.includes(t) ? ((t === 'pick' ? r.pick : r.drop)[d] ?? '-') : '',
+            ),
+          ),
+          ...(both ? [r.presentPick, r.presentDrop] : [r.present]),
+          r.absent,
+          r.leave,
+          r.gatePass,
+          r.other,
+        ]),
+        filename: `bus-register-${reg.routeCode}-${reg.trip}-${reg.month}`.replace(/[^\w-]+/g, '-'),
+      },
+      format,
+    );
   }
 
   /** The family: each child's bus attendance of a month, morning and afternoon. */

@@ -3,9 +3,20 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 export interface TablePdf {
   school: string;
   title: string;
-  /** Under the title: the filters used, the date. */
-  subtitle?: string;
-  columns: Array<{ label: string; /** Share of the width. */ width: number; right?: boolean }>;
+  /** Under the title: the filters used, the date. Several lines when an array. */
+  subtitle?: string | string[];
+  /** The school's address, under its name in the band. */
+  address?: string;
+  columns: Array<{
+    label: string;
+    /** Share of the width. */
+    width: number;
+    right?: boolean;
+    /** Centred in its cell (a one-letter code under a date). */
+    center?: boolean;
+    /** A heading over this and the next columns that carry the same group (a date over M and A). */
+    group?: string;
+  }>;
   rows: Array<Array<string | number | null | undefined>>;
   /** Smaller for a sheet with many columns (default 8.5). */
   fontSize?: number;
@@ -94,7 +105,11 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
     t.columns.forEach((c, i) => {
       cells[i]!.forEach((s, k) =>
         page.drawText(s, {
-          x: c.right ? x + widths[i]! - PAD - font.widthOfTextAtSize(s, FS) : x + PAD,
+          x: c.right
+            ? x + widths[i]! - PAD - font.widthOfTextAtSize(s, FS)
+            : c.center
+              ? x + (widths[i]! - font.widthOfTextAtSize(s, FS)) / 2
+              : x + PAD,
           y: y - k * LEAD,
           size: FS,
           font,
@@ -106,7 +121,8 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   };
   const head = () => {
     pages.push(page);
-    page.drawRectangle({ x: 0, y: H - 46, width: W, height: 46, color: NAVY });
+    const BAND = t.address ? 58 : 46;
+    page.drawRectangle({ x: 0, y: H - BAND, width: W, height: BAND, color: NAVY });
     page.drawText(fit(bold, t.school, 13, W / 2), {
       x: M,
       y: H - 28,
@@ -114,6 +130,14 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       font: bold,
       color: rgb(1, 1, 1),
     });
+    if (t.address)
+      page.drawText(fit(regular, t.address, 8.5, W / 2), {
+        x: M,
+        y: H - 44,
+        size: 8.5,
+        font: regular,
+        color: rgb(1, 1, 1),
+      });
     page.drawText(fit(bold, t.title, 11, W / 2 - M), {
       x: W / 2,
       y: H - 28,
@@ -121,16 +145,50 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       font: bold,
       color: rgb(1, 1, 1),
     });
-    y = H - 62;
-    if (t.subtitle) {
-      page.drawText(fit(regular, t.subtitle, 9, W - 2 * M), {
+    y = H - BAND - 16;
+    for (const line of [t.subtitle ?? []].flat()) {
+      page.drawText(fit(regular, line, 9, W - 2 * M), {
         x: M,
         y,
         size: 9,
         font: regular,
         color: MUTED,
       });
-      y -= 16;
+      y -= 13;
+    }
+    y -= 3;
+    if (t.columns.some((c) => c.group)) {
+      // the headings over grouped columns: one label centred over each run of the same group
+      page.drawRectangle({ x: M, y: y - 5, width: W - 2 * M, height: ROW, color: LINE });
+      let gx = M;
+      for (let i = 0; i < t.columns.length;) {
+        const g = t.columns[i]!.group;
+        let span = widths[i]!;
+        let k = i + 1;
+        while (g && k < t.columns.length && t.columns[k]!.group === g) {
+          span += widths[k]!;
+          k += 1;
+        }
+        if (g) {
+          const label = fit(bold, g, FS, span - 1);
+          page.drawText(label, {
+            x: gx + (span - bold.widthOfTextAtSize(label, FS)) / 2,
+            y,
+            size: FS,
+            font: bold,
+            color: INK,
+          });
+          page.drawLine({
+            start: { x: gx, y: y - 5 },
+            end: { x: gx, y: y - 5 + ROW },
+            thickness: 0.4,
+            color: rgb(1, 1, 1),
+          });
+        }
+        gx += span;
+        i = k;
+      }
+      y -= ROW;
     }
     const labels = t.columns.map((c, i) => cell(bold, c.label, i));
     const extra = (Math.max(...labels.map((l) => l.length), 1) - 1) * LEAD;

@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ type: 'validation-failed' }, { status: 400 });
   const section = sp.get('section') ?? '';
   const route = sp.get('route') ?? '';
-  const trip = sp.get('trip') === 'drop' ? 'drop' : 'pick';
+  const asked = sp.get('trip');
+  const trip = asked === 'drop' || asked === 'pick' ? asked : 'both';
   const path = /^\d{1,18}$/.test(section)
     ? `/attendance/desk/class-register.${format}?classSectionId=${section}&month=${month}`
     : /^\d{1,18}$/.test(route)

@@ -115,7 +115,7 @@ export default async function BusRollPage({
           Show
         </Button>
       </form>
-      {summary === null ? (
+      {routeId && summary ? null : summary === null ? (
         <Alert tone="warning">
           Bus attendance is not part of your role. A teacher sees the routes mapped to them under
           Attendance set-up.
@@ -268,7 +268,16 @@ export default async function BusRollPage({
                   </thead>
                   <tbody>
                     {roll.roster.map((r) => (
-                      <tr key={r.studentId}>
+                      <tr
+                        key={r.studentId}
+                        className={
+                          r.hint?.pass
+                            ? 'ep-row--pass'
+                            : r.hint?.leave
+                              ? 'ep-row--leave'
+                              : undefined
+                        }
+                      >
                         <th scope="row">
                           {r.name}
                           <div className="ep-field__help">
@@ -276,7 +285,13 @@ export default async function BusRollPage({
                               .filter(Boolean)
                               .join(' · ')}
                           </div>
-                          {r.hint?.leave ? <Badge tone="info">Leave approved</Badge> : null}{' '}
+                          {r.hint?.leave ? (
+                            <Badge tone="info">
+                              {r.locked
+                                ? 'On leave (approved): cannot be changed'
+                                : 'On leave (approved)'}
+                            </Badge>
+                          ) : null}{' '}
                           {r.hint?.pass ? (
                             <Badge tone="warning">
                               {r.hint.pass.kind === 'early_leave'
@@ -319,8 +334,10 @@ export default async function BusRollPage({
                                     type="radio"
                                     name={`code-${r.studentId}`}
                                     value={code}
-                                    defaultChecked={(r.code ?? r.suggested ?? 'P') === code}
-                                    disabled={!canMark}
+                                    defaultChecked={
+                                      (r.locked ? 'LV' : (r.code ?? r.suggested ?? 'P')) === code
+                                    }
+                                    disabled={!canMark || (r.locked === true && code !== 'LV')}
                                   />{' '}
                                   {code}
                                 </label>

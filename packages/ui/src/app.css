@@ -5373,3 +5373,17 @@ a.ep-tabs__tab {
   gap: var(--sp-2);
   align-items: center;
 }
+
+/* a roll: the row of a pupil with a gate pass of the day stands out; a pupil on approved leave is tinted */
+.ep-row--pass > td,
+.ep-row--pass > th {
+  background: var(--status-warning-bg);
+}
+.ep-row--pass > td:first-child,
+.ep-row--pass > th:first-child {
+  box-shadow: inset 4px 0 0 var(--status-warning);
+}
+.ep-row--leave > td,
+.ep-row--leave > th {
+  background: var(--status-info-bg);
+}

@@ -27,6 +27,7 @@ interface Roster {
     pass: { kind: 'early_leave' | 'late_arrival'; number: string; atTime: string | null } | null;
   } | null;
   suggested: string | null;
+  locked?: boolean;
 }
 interface Session {
   id: string | null;
@@ -198,8 +199,8 @@ export default async function AttendancePage({
         </form>
         <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
           Codes: P present · A absent · LV leave · L late · SR short leave · H half day · OD on duty
-          · SB stay back. An approved leave or a gate pass of the day is filled in already; change
-          it if the child did come.
+          · SB stay back. A student on approved leave is marked LV and cannot be changed here (the
+          coordinator can); a student with a gate pass is highlighted.
         </p>
         {chosen && !chosen.subjectId ? (
           <p className="ep-field__help" style={{ marginBottom: 0 }}>
@@ -261,7 +262,12 @@ export default async function AttendancePage({
               </thead>
               <tbody>
                 {session.roster.map((r) => (
-                  <tr key={r.studentId}>
+                  <tr
+                    key={r.studentId}
+                    className={
+                      r.hint?.pass ? 'ep-row--pass' : r.hint?.leave ? 'ep-row--leave' : undefined
+                    }
+                  >
                     <td>{r.rollNo ?? ''}</td>
                     <td>
                       {r.name}
@@ -271,7 +277,13 @@ export default async function AttendancePage({
                           ? ` · in ${new Date(r.inAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
                           : ''}
                       </div>
-                      {r.hint?.leave ? <Badge tone="info">Leave approved</Badge> : null}{' '}
+                      {r.hint?.leave ? (
+                        <Badge tone="info">
+                          {r.locked
+                            ? 'On leave (approved): cannot be changed'
+                            : 'On leave (approved)'}
+                        </Badge>
+                      ) : null}{' '}
                       {r.hint?.pass ? (
                         <Badge tone="warning">
                           {r.hint.pass.kind === 'early_leave'
@@ -293,8 +305,10 @@ export default async function AttendancePage({
                               type="radio"
                               name={`code-${r.studentId}`}
                               value={code}
-                              defaultChecked={(r.code ?? r.suggested ?? 'P') === code}
-                              disabled={closed}
+                              defaultChecked={
+                                (r.locked ? 'LV' : (r.code ?? r.suggested ?? 'P')) === code
+                              }
+                              disabled={closed || (r.locked === true && code !== 'LV')}
                             />
                             {code}
                           </label>
