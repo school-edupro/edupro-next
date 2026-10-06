@@ -486,6 +486,47 @@ describe('transport desk (e2e)', () => {
     await post(`/transport/requests/${ask.json().id}/decide`, accountant, { outcome: 'approved' });
   });
 
+  it('an office request whose level is the transport in-charge is approved automatically', async () => {
+    const setup = (await get('/transport/desk/setup')).json();
+    const body = (levels: unknown[]) => ({
+      ...setup.settings,
+      levels,
+      incharges: setup.incharges.map((i: { routeId: string | null; employeeId: string }) => ({
+        routeId: i.routeId,
+        employeeId: i.employeeId,
+      })),
+    });
+    const changed = await put(
+      '/transport/desk/setup',
+      admin,
+      body(
+        setup.levels.map((l: { source: string }) =>
+          l.source === 'office'
+            ? { ...l, kind: 'route_incharge', roleCode: null, designation: null, employeeId: null }
+            : l,
+        ),
+      ),
+    );
+    expect(changed.statusCode).toBe(200);
+    const made = await post('/transport/requests', incharge, {
+      studentId,
+      kind: 'change',
+      service: 'both',
+      pickRouteId: route.R1,
+      pickStopId: stop.Warje,
+      fromMonth: months[10],
+    });
+    expect(made.statusCode).toBe(201);
+    // nobody is asked: the transport office made it, and the only level is the transport in-charge
+    expect(made.json()).toMatchObject({ source: 'office', status: 'approved', waitingOn: null });
+    expect(made.json().approvals[0]).toMatchObject({
+      status: 'approved',
+      note: 'Made by the transport office: approved automatically',
+    });
+    expect((await transportFees())[months[10]!]).toBe(made.json().monthlyAmount);
+    expect((await put('/transport/desk/setup', admin, body(setup.levels))).statusCode).toBe(200);
+  });
+
   it('many pupils from one Excel sheet become requests; the fee department approves them in one go', async () => {
     const extra: string[] = [];
     for (const n of [2, 3]) {

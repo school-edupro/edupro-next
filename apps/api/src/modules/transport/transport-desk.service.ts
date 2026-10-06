@@ -835,7 +835,14 @@ export class TransportDeskService {
     quiet = false,
   ) {
     await this.settings(c);
-    const rows: Array<{ label: string; users: string[] }> = [];
+    const rows: Array<{ label: string; users: string[]; auto?: boolean }> = [];
+    const maker =
+      (
+        await c.query<{ id: string | null }>(
+          `SELECT requested_by::text AS id FROM transport_requests WHERE id = $1`,
+          [id],
+        )
+      ).rows[0]?.id ?? null;
     // the routes the request is about (a withdrawal: the routes the pupil rides now)
     const routes = await c.query<{ id: string }>(
       `SELECT DISTINCT x.id::text FROM transport_requests q
@@ -845,8 +852,18 @@ export class TransportDeskService {
       [id],
     );
     const routeIds = routes.rows.map((x) => x.id);
-    for (const l of (await this.levels(c, source)).filter((x) => x.active))
-      rows.push({ label: l.label, users: await this.approversOf(c, l, routeIds) });
+    for (const l of (await this.levels(c, source)).filter((x) => x.active)) {
+      const users = await this.approversOf(c, l, routeIds);
+      // the transport office made the request: a level that is the transport side, or that the maker
+      // holds, has nothing left to check, so it is passed as approved and the next level is asked
+      const auto =
+        source === 'office' &&
+        users.length > 0 &&
+        (l.kind === 'route_incharge' ||
+          (l.kind === 'role' && l.roleCode === 'transport_incharge') ||
+          (maker !== null && users.includes(maker)));
+      rows.push({ label: l.label, users, auto });
+    }
     if (!rows.some((r) => r.users.length)) {
       const admins = await this.approversOf(c, {
         kind: 'role',
@@ -857,25 +874,44 @@ export class TransportDeskService {
       rows.push({ label: 'School admin', users: admins });
     }
     let opened = false;
+    let passed = false;
     let seq = 0;
     for (const r of rows) {
       seq += 1;
-      const status = !r.users.length ? 'skipped' : opened ? 'waiting' : 'pending';
+      const status = !r.users.length
+        ? 'skipped'
+        : r.auto
+          ? 'approved'
+          : opened
+            ? 'waiting'
+            : 'pending';
       if (status === 'pending') opened = true;
+      if (status === 'approved') passed = true;
       await c.query(
-        `INSERT INTO transport_request_approvals (school_id, request_id, seq, label, approver_user_ids, status, note)
-         VALUES (app.current_school_id(), $1, $2, $3, $4::bigint[], $5, $6)`,
+        `INSERT INTO transport_request_approvals (school_id, request_id, seq, label, approver_user_ids, status, note, acted_by, acted_at)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::bigint[], $5, $6, $7, CASE WHEN $5 = 'approved' THEN now() END)`,
         [
           id,
           seq,
           r.label,
           r.users,
           status,
-          status === 'skipped' ? 'Nobody holds this level' : null,
+          status === 'skipped'
+            ? 'Nobody holds this level'
+            : status === 'approved'
+              ? 'Made by the transport office: approved automatically'
+              : null,
+          status === 'approved' ? maker : null,
         ],
       );
     }
-    if (!opened) return this.finish(c, id, 'approved', 'No approver is set up');
+    if (!opened)
+      return this.finish(
+        c,
+        id,
+        'approved',
+        passed ? 'Made by the transport office: approved automatically' : 'No approver is set up',
+      );
     if (!quiet) await this.tellApprovers(c, id);
   }
 

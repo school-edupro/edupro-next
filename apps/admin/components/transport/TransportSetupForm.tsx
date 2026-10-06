@@ -381,7 +381,7 @@ export function TransportSetupForm({ setup }: { setup: TransportSetup }) {
       {block(
         'office',
         'Approval: a request made by the transport office',
-        'The transport in-charge has already made the request, so it usually goes to the fee department only.',
+        'The transport in-charge has already made the request, so it usually goes to the fee department only. A level set to the transport in-charge, or one the person who made the request holds, is approved automatically.',
       )}
       <section className="ep-hd__form" aria-label="Rules">
         <h3 className="ep-cdash__h3">Rules</h3>

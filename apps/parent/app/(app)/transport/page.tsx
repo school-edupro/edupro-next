@@ -252,7 +252,9 @@ export default async function TransportPage({
               </p>
             ) : (
               <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
-                {t(lang, 'No position from the bus yet.')}
+                {c.vehicle
+                  ? `${c.vehicle.regNo} · ${t(lang, 'No position from the bus yet.')}`
+                  : t(lang, 'No bus is mapped to this route today; live tracking shows once the school maps one.')}
               </p>
             )}
           </Card>

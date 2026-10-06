@@ -175,6 +175,8 @@ export class GpsService {
     const v = await this.viewer.resolve(ctx, 'transport.family.track');
     if (v.kind !== 'family') return { children: [] };
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      // a bus mapped to the route from a date takes the route on that date, and leaves it after the last
+      await c.query(`SELECT app.transport_routes_sync()`);
       const children = [];
       for (const s of v.students) {
         const r = await c.query<Record<string, unknown>>(
