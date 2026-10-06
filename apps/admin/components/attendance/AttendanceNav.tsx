@@ -10,6 +10,7 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
     permission: 'attendance.session.view',
   },
   { href: '/attendance/leaves', label: 'Student leave', permission: 'attendance.leave.decide' },
+  { href: '/masters/attendance', label: 'Leave types', permission: 'attendance.setup.manage' },
   { href: '/attendance/setup', label: 'Set-up', permission: 'attendance.setup.manage' },
 ];
 const OK: Record<string, string> = {

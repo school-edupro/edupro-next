@@ -396,11 +396,13 @@ export class FileMovementService {
              SELECT id FROM file_note_levels WHERE note_id = $1 AND round = $2 AND status = 'waiting' ORDER BY level LIMIT 1)`,
           [id, n.round],
         );
-        if (!next.rowCount)
+        if (!next.rowCount) {
           await c.query(
             `UPDATE file_notes SET status = 'approved', closed_at = now(), updated_at = now() WHERE id = $1`,
             [id],
           );
+          await this.tellCreator(c, id, 'approved', mine.rows[0].level, dto.remark ?? null);
+        }
       } else {
         // sent back or rejected: the later levels of this round are not asked
         await c.query(
@@ -411,6 +413,7 @@ export class FileMovementService {
           `UPDATE file_notes SET status = $2, closed_at = CASE WHEN $2 = 'rejected' THEN now() END, updated_at = now() WHERE id = $1`,
           [id, dto.outcome],
         );
+        await this.tellCreator(c, id, dto.outcome, mine.rows[0].level, dto.remark ?? null);
       }
       await this.audit.stage(ctx, c, {
         action: `files.movement.${dto.outcome}`,
@@ -420,6 +423,79 @@ export class FileMovementService {
       });
       return this.detail(c, ctx, id);
     });
+  }
+
+  /**
+   * The creator is told by e-mail when the file is closed or comes back: approved by every level, sent
+   * back with a remark, or rejected. The mail is the school's card (its name on top, the file in a table).
+   */
+  private async tellCreator(
+    c: PoolClient,
+    id: string,
+    outcome: 'approved' | 'returned' | 'rejected',
+    level: number,
+    remark: string | null,
+  ) {
+    const r = await c.query<Row>(
+      `SELECT COALESCE(n.number, 'FM-' || n.id::text) AS number, n.subject, n.created_by::text AS user_id,
+              COALESCE((SELECT e.email::text FROM employees e WHERE e.user_id = n.created_by AND e.deleted_at IS NULL AND e.email IS NOT NULL LIMIT 1), u.email::text) AS email,
+              ${NAME('n.created_by')} AS creator, ${NAME('app.current_user_id()')} AS by_name,
+              (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+              (SELECT count(*) FROM file_note_levels l WHERE l.note_id = n.id AND l.round = n.round)::int AS levels
+         FROM file_notes n JOIN users u ON u.id = n.created_by WHERE n.id = $1`,
+      [id],
+    );
+    const x = r.rows[0];
+    if (!x?.email) return;
+    const what = {
+      approved: {
+        title: 'Your file is approved',
+        colour: '#1B7F4B',
+        intro: `Dear ${String(x.creator)}, every level has approved your file. The PDF note sheet is ready to download.`,
+        note: 'Open EduPro → Approvals → File movement → the file → Download PDF.',
+      },
+      returned: {
+        title: 'Your file is sent back',
+        colour: '#B26A00',
+        intro: `Dear ${String(x.creator)}, your file was sent back for a change. Correct it and submit again; it will start from the L1 approver.`,
+        note: 'Open EduPro → Approvals → File movement → the file → Correct and submit again.',
+      },
+      rejected: {
+        title: 'Your file is rejected',
+        colour: '#B3261E',
+        intro: `Dear ${String(x.creator)}, your file was not approved. The remark is below.`,
+        note: 'The file is closed. Raise a new file if it is needed again.',
+      },
+    }[outcome];
+    const rows = [
+      ['File no.', String(x.number)],
+      ['Subject', String(x.subject)],
+      [
+        outcome === 'approved'
+          ? 'Final approval by'
+          : outcome === 'returned'
+            ? 'Sent back by'
+            : 'Rejected by',
+        `${String(x.by_name)} (L${String(level)} of ${String(x.levels)})`,
+      ],
+      ['Remark', remark ?? ''],
+      ['On', ist(new Date())],
+    ];
+    await c.query(
+      `SELECT app.queue_mail($1, $2, app.mail_card_html($3, $4, $5, $6, $7::jsonb, NULL, NULL, $8), '[]'::jsonb, jsonb_build_object('fileNote', $9::text), $10::bigint)`,
+      [
+        x.email,
+        `${what.title}: ${String(x.number)} · ${String(x.subject)}`,
+        x.school,
+        what.title,
+        what.colour,
+        what.intro,
+        JSON.stringify(rows),
+        what.note,
+        id,
+        x.user_id,
+      ],
+    );
   }
 
   async withdraw(ctx: RequestContext, id: string) {

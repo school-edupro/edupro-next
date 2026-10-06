@@ -118,6 +118,7 @@ const NAV: Array<{
       { href: '/attendance/bus', label: 'busAttendance', permission: 'attendance.bus.view' },
       { href: '/attendance/punches', label: 'punches', permission: 'attendance.punch.view' },
       { href: '/attendance/rules', label: 'attendanceRules', permission: 'attendance.rule.manage' },
+      { href: '/masters/attendance', label: 'leaveTypes', permission: 'attendance.setup.manage' },
     ],
   },
   {

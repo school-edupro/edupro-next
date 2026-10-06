@@ -42,8 +42,15 @@ describe('file movement (e2e)', () => {
         ['A2', 'Bina', two],
       ] as const) {
         const e = await c.query<{ id: string }>(
-          `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id, designation) VALUES ($1, $2, $3, 'Staff', $4, 'Teacher') RETURNING id::text`,
-          [school.id, code, first, u.id],
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id, designation, email)
+           VALUES ($1, $2, $3, 'Staff', $4, 'Teacher', $5) RETURNING id::text`,
+          [
+            school.id,
+            code,
+            first,
+            u.id,
+            `${first.toLowerCase()}.${code.toLowerCase()}@example.test`,
+          ],
         );
         emp[code] = e.rows[0]!.id;
       }
@@ -154,6 +161,22 @@ describe('file movement (e2e)', () => {
     expect((await post(`/file-movement/${third.json().id}/withdraw`, maker)).json().status).toBe(
       'withdrawn',
     );
+
+    // the creator was mailed each time a file came back or closed: sent back, approved, rejected
+    const mails = await withMigrator(async (c) =>
+      (
+        await c.query<{ subject: string }>(
+          // read them and take them off the queue: these are test addresses
+          `UPDATE comms_messages SET status = 'cancelled' WHERE school_id = $1 AND variables ? 'fileNote' RETURNING id, subject`,
+          [school.id],
+        )
+      ).rows.map((x) => x.subject.split(':')[0]),
+    );
+    expect(mails.sort()).toEqual([
+      'Your file is approved',
+      'Your file is rejected',
+      'Your file is sent back',
+    ]);
 
     // the office sees every file; an approver sees what came to them; the report comes as files
     const dash = (await get('/file-movement/dashboard', admin)).json();
