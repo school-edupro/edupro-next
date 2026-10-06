@@ -192,19 +192,27 @@ export async function importRouteTeachers(fileBase64: string): Promise<RouteTeac
 }
 
 /** An approver's decision on a student leave at their level. */
-export async function decideLeave(fd: FormData) {
+async function decideLeave(fd: FormData, outcome: 'approved' | 'rejected') {
   const id = str(fd, 'id');
   const here = `/attendance/leaves?tab=${str(fd, 'tab') || 'inbox'}`;
   try {
     await apiFetch(`/attendance/leaves/${id}/decide`, {
       method: 'POST',
-      body: JSON.stringify({ outcome: str(fd, 'outcome'), note: str(fd, 'note') || undefined }),
+      body: JSON.stringify({ outcome, note: str(fd, 'note') || undefined }),
     });
   } catch (error) {
     fail(`${here}&open=${id}`, error);
   }
   revalidatePath('/attendance/leaves');
-  redirect(`${here}&ok=${str(fd, 'outcome') === 'approved' ? 'leave_approved' : 'leave_rejected'}`);
+  redirect(`${here}&ok=${outcome === 'approved' ? 'leave_approved' : 'leave_rejected'}`);
+}
+
+// each button has its own action: the decision does not depend on the browser sending the button's value
+export async function approveLeave(fd: FormData) {
+  return decideLeave(fd, 'approved');
+}
+export async function rejectLeave(fd: FormData) {
+  return decideLeave(fd, 'rejected');
 }
 
 export async function saveLeaveSetup(input: {

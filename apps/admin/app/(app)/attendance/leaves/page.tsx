@@ -3,7 +3,7 @@ import { AttendanceNav } from '@/components/attendance/AttendanceNav';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { decideLeave } from '@/lib/attendance-actions';
+import { approveLeave, rejectLeave } from '@/lib/attendance-actions';
 import {
   LEAVE_TONE,
   leaveDays,
@@ -156,7 +156,11 @@ export default async function StudentLeavesPage({
             ))}
           </ol>
           {open.canDecide ? (
-            <form action={decideLeave} className="ep-hd__form" style={{ marginTop: 'var(--sp-3)' }}>
+            <form
+              action={approveLeave}
+              className="ep-hd__form"
+              style={{ marginTop: 'var(--sp-3)' }}
+            >
               <input type="hidden" name="id" value={open.id} />
               <input type="hidden" name="tab" value={tab} />
               <label className="ep-field" htmlFor="lv-note">
@@ -164,10 +168,10 @@ export default async function StudentLeavesPage({
                 <textarea id="lv-note" name="note" className="ep-input" rows={2} maxLength={500} />
               </label>
               <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                <Button type="submit" name="outcome" value="approved">
+                <Button type="submit" formAction={approveLeave}>
                   Approve
                 </Button>
-                <Button type="submit" name="outcome" value="rejected" variant="secondary">
+                <Button type="submit" formAction={rejectLeave} variant="secondary">
                   Do not approve
                 </Button>
               </div>

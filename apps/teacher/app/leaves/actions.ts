@@ -6,9 +6,8 @@ import { bff } from '@/lib/bff';
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').trim();
 
 /** The class teacher (or the next level) approves or rejects a student leave. */
-export async function decideLeave(fd: FormData) {
+async function decideLeave(fd: FormData, outcome: 'approved' | 'rejected') {
   const id = str(fd, 'id');
-  const outcome = str(fd, 'outcome') === 'approved' ? 'approved' : 'rejected';
   try {
     await bff.api.fetch(`/attendance/leaves/${id}/decide`, {
       method: 'POST',
@@ -33,4 +32,12 @@ export async function decideLeave(fd: FormData) {
     throw error;
   }
   redirect(`/leaves?ok=${outcome}`);
+}
+
+// each button has its own action: the decision does not depend on the browser sending the button's value
+export async function approveLeave(fd: FormData) {
+  return decideLeave(fd, 'approved');
+}
+export async function rejectLeave(fd: FormData) {
+  return decideLeave(fd, 'rejected');
 }

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { FileLinks } from '@/components/FileLinks';
 import { bff } from '@/lib/bff';
-import { decideLeave } from './actions';
+import { approveLeave, rejectLeave } from './actions';
 
 interface Leave {
   id: string;
@@ -168,17 +168,17 @@ export default async function TeacherLeavesPage({
             ))}
           </ul>
           {open.canDecide ? (
-            <form action={decideLeave}>
+            <form action={approveLeave}>
               <input type="hidden" name="id" value={open.id} />
               <label className="ep-field">
                 <span className="ep-field__label">Note (needed when not approving)</span>
                 <textarea name="note" className="ep-input" rows={2} maxLength={500} />
               </label>
               <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}>
-                <Button type="submit" name="outcome" value="approved">
+                <Button type="submit" formAction={approveLeave}>
                   Approve
                 </Button>
-                <Button type="submit" name="outcome" value="rejected" variant="secondary">
+                <Button type="submit" formAction={rejectLeave} variant="secondary">
                   Do not approve
                 </Button>
               </div>
