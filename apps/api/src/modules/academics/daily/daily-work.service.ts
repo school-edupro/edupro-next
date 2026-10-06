@@ -11,6 +11,10 @@ import type { CreateDailyWorkDto, ListDailyWorkQueryDto, UpdateDailyWorkDto } fr
 import { DAILY } from './daily.permissions';
 import { ViewerService } from './viewer.service';
 
+/** A form's date and time ("2026-10-07T09:30", school time) as a time with its zone; an ISO time as it is. */
+export const schoolTime = (v: string | undefined): string | null =>
+  !v ? null : /(Z|[+-]\d{2}:\d{2})$/.test(v) ? v : `${v.length === 16 ? `${v}:00` : v}+05:30`;
+
 export interface AttachedFile {
   id: string;
   name: string | null;
@@ -33,6 +37,15 @@ export interface DailyWorkRow {
   postedBy: string | null;
   files: AttachedFile[];
   createdAt: string;
+  /** When the family sees it. */
+  publishAt: string;
+  /** Not yet shown to the family (a later publish time). */
+  scheduled: boolean;
+  ackRequired: boolean;
+  /** Pupils of the class whose family acknowledged it. */
+  ackCount: number;
+  /** The children (of the family asking) it is acknowledged for. */
+  ackedFor: string[];
 }
 
 interface Db {
@@ -50,11 +63,20 @@ interface Db {
   posted_by: string | null;
   files: AttachedFile[];
   created_at: Date;
+  publish_at: Date;
+  ack_required: boolean;
+  ack_count: number;
+  acked_for: string[] | null;
 }
 
 const SELECT = `SELECT w.id::text, w.kind, w.class_section_id::text, c.code || '-' || cs.name AS section,
         w.subject_id::text, s.code AS subject_code, s.name AS subject_name, w.title, w.body,
-        w.assigned_on::text, w.due_on::text, e.display_name AS posted_by, w.created_at,
+        w.assigned_on::text, w.due_on::text, e.display_name AS posted_by, w.created_at, w.publish_at, w.ack_required,
+        (SELECT count(*) FROM academic_acks k WHERE k.item_type = 'daily_work' AND k.item_id = w.id)::int AS ack_count,
+        (SELECT array_agg(k.student_id::text) FROM academic_acks k
+          WHERE k.item_type = 'daily_work' AND k.item_id = w.id AND k.student_id IN (
+            SELECT sg.student_id FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE g.user_id = app.current_user_id()
+            UNION SELECT st.id FROM students st WHERE st.user_id = app.current_user_id())) AS acked_for,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id::text, 'name', f.original_name, 'contentType', f.content_type, 'sizeBytes', f.size_bytes) ORDER BY f.id)
                     FROM daily_work_files wf JOIN files f ON f.id = wf.file_id WHERE wf.daily_work_id = w.id), '[]'::jsonb) AS files
    FROM daily_work w
@@ -78,6 +100,11 @@ const toRow = (r: Db): DailyWorkRow => ({
   postedBy: r.posted_by,
   files: r.files,
   createdAt: r.created_at.toISOString(),
+  publishAt: r.publish_at.toISOString(),
+  scheduled: r.publish_at.getTime() > Date.now(),
+  ackRequired: r.ack_required,
+  ackCount: r.ack_count,
+  ackedFor: r.acked_for ?? [],
 });
 
 /** Homework, classwork and assignments (S7-03): teachers post for their sections, families read their children's. */
@@ -131,6 +158,8 @@ export class DailyWorkService {
         params.push(q.to);
         where.push(`w.assigned_on <= $${params.length}::date`);
       }
+      // a family sees an item from its publish time; the staff see it at once (marked as scheduled)
+      if (v.kind === 'family') where.push('w.publish_at <= now()');
       const whereSql = where.join(' AND ');
       const total = await c.query<{ n: string }>(
         // eslint-disable-next-line no-restricted-syntax -- whereSql is a conjunction of fixed fragments; values are bound parameters
@@ -157,7 +186,11 @@ export class DailyWorkService {
     const tenant = requireTenant(ctx);
     const v = await this.viewer.resolve(ctx, DAILY.workView);
     const row = await this.db.tenant(tenant, (c) => this.find(c, id));
-    if (!row || (v.sectionIds !== null && !v.sectionIds.includes(row.classSectionId)))
+    if (
+      !row ||
+      (v.sectionIds !== null && !v.sectionIds.includes(row.classSectionId)) ||
+      (v.kind === 'family' && row.scheduled)
+    )
       throw new DomainError('not-found', 'Not found');
     return row;
   }
@@ -206,8 +239,8 @@ export class DailyWorkService {
           );
       }
       const r = await c.query<{ id: string }>(
-        `INSERT INTO daily_work (school_id, academic_year_id, class_section_id, subject_id, kind, title, body, assigned_on, due_on, posted_by_employee_id, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4::daily_work_kind, $5, $6, COALESCE($7::date, CURRENT_DATE), $8::date, $9, app.current_user_id(), app.current_user_id())
+        `INSERT INTO daily_work (school_id, academic_year_id, class_section_id, subject_id, kind, title, body, assigned_on, due_on, posted_by_employee_id, publish_at, ack_required, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::daily_work_kind, $5, $6, COALESCE($7::date, CURRENT_DATE), $8::date, $9, COALESCE($10::timestamptz, now()), $11, app.current_user_id(), app.current_user_id())
          RETURNING id::text`,
         [
           yearId,
@@ -219,6 +252,8 @@ export class DailyWorkService {
           dto.assignedOn ?? null,
           dto.dueOn ?? null,
           v.employeeId,
+          schoolTime(dto.publishAt),
+          dto.ackRequired,
         ],
       );
       const id = r.rows[0]!.id;
@@ -228,13 +263,14 @@ export class DailyWorkService {
           [id, fileId],
         );
       const created = (await this.find(c, id))!;
-      await this.push.send(c, ctx, {
-        userIds: await this.push.familyUsersOfSections(c, [dto.classSectionId]),
-        title: dto.kind === 'homework' ? 'New homework' : `New ${dto.kind}`,
-        body: dto.title,
-        link: '/homework',
-        event: 'homework',
-      });
+      if (!created.scheduled)
+        await this.push.send(c, ctx, {
+          userIds: await this.push.familyUsersOfSections(c, [dto.classSectionId]),
+          title: dto.kind === 'homework' ? 'New homework' : `New ${dto.kind}`,
+          body: dto.title,
+          link: '/homework',
+          event: 'homework',
+        });
       await this.audit.stage(ctx, c, {
         action: `academics.${dto.kind}.post`,
         entityType: 'daily_work',
@@ -263,6 +299,9 @@ export class DailyWorkService {
       if (dto.body !== undefined) set('body', dto.body);
       if (dto.assignedOn !== undefined) set('assigned_on', dto.assignedOn, '::date');
       if (dto.dueOn !== undefined) set('due_on', dto.dueOn, '::date');
+      if (dto.publishAt !== undefined)
+        set('publish_at', schoolTime(dto.publishAt), '::timestamptz');
+      if (dto.ackRequired !== undefined) set('ack_required', dto.ackRequired);
       params.push(id);
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters

@@ -1,6 +1,19 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
 import { CalendarService } from './calendar.service';
 import {
@@ -15,9 +28,15 @@ import {
   ListNoticesQueryDto,
   UpdateDailyWorkDto,
   UpdateNoticeDto,
+  AckDto,
+  AckStatusQueryDto,
+  CreateDocumentDto,
+  ListDocumentsQueryDto,
+  NoticeReportQueryDto,
 } from './daily.dto';
 import { DAILY } from './daily.permissions';
 import { DailyWorkService } from './daily-work.service';
+import { DocumentsService } from './documents.service';
 import { GalleryService } from './gallery.service';
 import { NoticesService } from './notices.service';
 import { ViewerService } from './viewer.service';
@@ -90,6 +109,23 @@ export class DailyWorkController {
 @Controller('academics/notices')
 export class NoticesController {
   constructor(private readonly notices: NoticesService) {}
+
+  @Get('report')
+  @ApiOperation({ summary: 'Notices and office orders with their reach; also as Excel or PDF' })
+  @RequirePermission(DAILY.noticeManage)
+  async report(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: NoticeReportQueryDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const r = await this.notices.report(ctx, q);
+    if (q.format === 'json') return r;
+    const f = await this.notices.reportFile(ctx, q, r.data, q.format);
+    reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`);
+    return reply.send(f.bytes);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Notices and circulars visible to the caller' })
@@ -221,5 +257,64 @@ export class GalleryController {
   @RequirePermission(DAILY.galleryManage)
   async remove(@ReqCtx() ctx: RequestContext, @Param('id') id: string): Promise<void> {
     await this.gallery.remove(ctx, id);
+  }
+}
+
+/** Class documents (session plan, curriculum, date sheet, magazine), acknowledgements and the directory (0091). */
+@ApiTags('academics')
+@ApiBearerAuth()
+@Controller('academics')
+export class DocumentsController {
+  constructor(private readonly docs: DocumentsService) {}
+
+  @Get('documents')
+  @ApiOperation({ summary: 'Class documents the viewer may see (families from the publish time)' })
+  @RequirePermission(DAILY.workView)
+  list(@ReqCtx() ctx: RequestContext, @Query() q: ListDocumentsQueryDto) {
+    return this.docs.list(ctx, q);
+  }
+
+  @Post('documents')
+  @ApiOperation({
+    summary: 'Upload a session plan, curriculum, date sheet or a school-wide document',
+  })
+  @RequirePermission(DAILY.workPost)
+  create(@ReqCtx() ctx: RequestContext, @Body() dto: CreateDocumentDto) {
+    return this.docs.create(ctx, dto);
+  }
+
+  @Get('documents/:id/files/:fileId')
+  @RequirePermission(DAILY.workView)
+  file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.docs.fileUrl(ctx, id, fileId);
+  }
+
+  @Delete('documents/:id')
+  @HttpCode(204)
+  @RequirePermission(DAILY.workPost)
+  async remove(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    await this.docs.remove(ctx, id);
+  }
+
+  @Post('acks')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Acknowledge homework, a class document or a notice' })
+  @AuthenticatedOnly()
+  ack(@ReqCtx() ctx: RequestContext, @Body() dto: AckDto) {
+    return this.docs.ack(ctx, dto);
+  }
+
+  @Get('acks')
+  @ApiOperation({ summary: 'Who acknowledged an item and who has not' })
+  @AuthenticatedOnly()
+  ackStatus(@ReqCtx() ctx: RequestContext, @Query() q: AckStatusQueryDto) {
+    return this.docs.ackStatus(ctx, q);
+  }
+
+  @Get('directory')
+  @ApiOperation({ summary: 'The school directory' })
+  @AuthenticatedOnly()
+  directory(@ReqCtx() ctx: RequestContext) {
+    return this.docs.directory(ctx);
   }
 }

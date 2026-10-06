@@ -6,8 +6,15 @@ import { AuditService } from '../../../common/audit/audit.service';
 import { DbService } from '../../../common/db/db.service';
 import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
-import type { CreateNoticeDto, ListNoticesQueryDto, UpdateNoticeDto } from './daily.dto';
-import type { AttachedFile } from './daily-work.service';
+import sanitizeHtml from 'sanitize-html';
+import type {
+  CreateNoticeDto,
+  ListNoticesQueryDto,
+  NoticeReportQueryDto,
+  UpdateNoticeDto,
+} from './daily.dto';
+import { schoolTime, type AttachedFile } from './daily-work.service';
+import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
 import { DAILY } from './daily.permissions';
 import { ViewerService, type Viewer } from './viewer.service';
 
@@ -19,9 +26,22 @@ export interface NoticeTarget {
 
 export interface NoticeRow {
   id: string;
-  kind: 'notice' | 'circular';
+  kind: 'notice' | 'circular' | 'office_order';
   title: string;
   body: string;
+  /** `html`: the body is cleaned formatted text. */
+  bodyFormat: 'text' | 'html';
+  ackRequired: boolean;
+  /** When the portal starts to show it. */
+  publishAt: string | null;
+  alsoEmail: boolean;
+  emailedAt: string | null;
+  emailedCount: number | null;
+  ackCount: number;
+  /** The children (of the family asking) it is acknowledged for. */
+  ackedFor: string[];
+  /** The member of staff asking has acknowledged it. */
+  ackedByMe: boolean;
   audience: 'everyone' | 'students' | 'employees';
   publishFrom: string;
   publishUntil: string | null;
@@ -47,10 +67,24 @@ interface Db {
   targets: NoticeTarget[];
   files: AttachedFile[];
   created_at: Date;
+  body_format: 'text' | 'html';
+  ack_required: boolean;
+  publish_at: Date | null;
+  also_email: boolean;
+  emailed_at: Date | null;
+  emailed_count: number | null;
+  ack_count: number;
+  acked_for: string[] | null;
+  acked_by_me: boolean;
 }
 
 const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publish_from::text, n.publish_until::text, n.is_pinned,
-        n.published_at, u.display_name AS published_by, n.created_at,
+        n.published_at, u.display_name AS published_by, n.created_at, n.body_format, n.ack_required, n.publish_at, n.also_email, n.emailed_at, n.emailed_count,
+        (SELECT count(*) FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id)::int AS ack_count,
+        (SELECT array_agg(k.student_id::text) FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id AND k.student_id IN (
+            SELECT sg.student_id FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE g.user_id = app.current_user_id()
+            UNION SELECT st.id FROM students st WHERE st.user_id = app.current_user_id())) AS acked_for,
+        EXISTS (SELECT 1 FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id AND k.staff_user_id = app.current_user_id()) AS acked_by_me,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('type', t.target_type, 'id', t.target_id::text, 'label',
                    CASE t.target_type
                      WHEN 'class' THEN (SELECT c.code FROM classes c WHERE c.id = t.target_id)
@@ -61,6 +95,40 @@ const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publis
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id::text, 'name', f.original_name, 'contentType', f.content_type, 'sizeBytes', f.size_bytes) ORDER BY f.id)
                     FROM notice_files nf JOIN files f ON f.id = nf.file_id WHERE nf.notice_id = n.id), '[]'::jsonb) AS files
    FROM notices n LEFT JOIN users u ON u.id = n.published_by`;
+
+/** A notice written in the editor: headings, emphasis, lists, quotes, links and simple tables. */
+export const cleanNoticeHtml = (html: string): string =>
+  sanitizeHtml(html, {
+    allowedTags: [
+      'p',
+      'br',
+      'strong',
+      'b',
+      'em',
+      'i',
+      'u',
+      's',
+      'h2',
+      'h3',
+      'h4',
+      'ul',
+      'ol',
+      'li',
+      'blockquote',
+      'a',
+      'table',
+      'thead',
+      'tbody',
+      'tr',
+      'th',
+      'td',
+      'div',
+      'span',
+    ],
+    allowedAttributes: { a: ['href'], td: ['colspan', 'rowspan'], th: ['colspan', 'rowspan'] },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    transformTags: { h1: 'h2' },
+  }).trim();
 
 const toRow = (r: Db): NoticeRow => ({
   id: r.id,
@@ -76,6 +144,15 @@ const toRow = (r: Db): NoticeRow => ({
   targets: r.targets,
   files: r.files,
   createdAt: r.created_at.toISOString(),
+  bodyFormat: r.body_format,
+  ackRequired: r.ack_required,
+  publishAt: r.publish_at ? r.publish_at.toISOString() : null,
+  alsoEmail: r.also_email,
+  emailedAt: r.emailed_at ? r.emailed_at.toISOString() : null,
+  emailedCount: r.emailed_count,
+  ackCount: r.ack_count,
+  ackedFor: r.acked_for ?? [],
+  ackedByMe: r.acked_by_me,
 });
 
 /**
@@ -104,7 +181,7 @@ export class NoticesService {
   /** SQL fragment restricting rows to what the viewer may read; params are appended. */
   private visibility(ctx: RequestContext, v: Viewer, params: unknown[]): string {
     if (ctx.permissions?.has(DAILY.noticeManage)) return 'TRUE';
-    const live = `n.published_at IS NOT NULL AND n.publish_from <= CURRENT_DATE AND (n.publish_until IS NULL OR n.publish_until >= CURRENT_DATE)`;
+    const live = `n.published_at IS NOT NULL AND n.publish_from <= CURRENT_DATE AND (n.publish_until IS NULL OR n.publish_until >= CURRENT_DATE) AND (n.publish_at IS NULL OR n.publish_at <= now())`;
     if (v.kind === 'family') {
       params.push(
         v.sectionIds ?? [],
@@ -224,25 +301,33 @@ export class NoticesService {
     await this.viewer.assertFilesReady(ctx, dto.fileIds);
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<{ id: string }>(
-        `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by, created_by, updated_by)
+        `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by,
+                              body_format, ack_required, publish_at, also_email, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2::notice_kind, $3, $4, $5::audience_kind, COALESCE($6::date, CURRENT_DATE), $7::date, $8,
-                 CASE WHEN $9 THEN now() END, CASE WHEN $9 THEN app.current_user_id() END, app.current_user_id(), app.current_user_id())
+                 CASE WHEN $9 THEN now() END, CASE WHEN $9 THEN app.current_user_id() END, $10, $11, $12::timestamptz, $13,
+                 app.current_user_id(), app.current_user_id())
          RETURNING id::text`,
         [
           yearId,
           dto.kind,
           dto.title,
-          dto.body,
-          dto.audience,
+          dto.bodyFormat === 'html' ? cleanNoticeHtml(dto.body) : dto.body,
+          // an office order is for the employees
+          dto.kind === 'office_order' ? 'employees' : dto.audience,
           dto.publishFrom ?? null,
           dto.publishUntil ?? null,
           dto.isPinned,
           dto.publish,
+          dto.bodyFormat,
+          dto.ackRequired,
+          schoolTime(dto.publishAt),
+          dto.alsoEmail,
         ],
       );
       const id = r.rows[0]!.id;
       await this.writeTargets(c, id, dto.targets);
       await this.writeFiles(c, id, dto.fileIds);
+      if (dto.publish) await this.mail(c, id, yearId);
       const created = (await this.find(c, id))!;
       // published today: a push to the families and staff it reaches (when the admin switched it on)
       if (
@@ -280,11 +365,24 @@ export class NoticesService {
       };
       if (dto.kind !== undefined) set('kind', dto.kind, '::notice_kind');
       if (dto.title !== undefined) set('title', dto.title);
-      if (dto.body !== undefined) set('body', dto.body);
+      if (dto.body !== undefined)
+        set(
+          'body',
+          (dto.bodyFormat ?? before.bodyFormat) === 'html' ? cleanNoticeHtml(dto.body) : dto.body,
+        );
       if (dto.audience !== undefined) set('audience', dto.audience, '::audience_kind');
       if (dto.publishFrom !== undefined) set('publish_from', dto.publishFrom, '::date');
       if (dto.publishUntil !== undefined) set('publish_until', dto.publishUntil, '::date');
       if (dto.isPinned !== undefined) set('is_pinned', dto.isPinned);
+      if (dto.bodyFormat !== undefined) set('body_format', dto.bodyFormat);
+      if (dto.ackRequired !== undefined) set('ack_required', dto.ackRequired);
+      if (dto.publishAt !== undefined)
+        set(
+          'publish_at',
+          dto.publishAt === null ? null : schoolTime(dto.publishAt),
+          '::timestamptz',
+        );
+      if (dto.alsoEmail !== undefined) set('also_email', dto.alsoEmail);
       params.push(id);
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters
@@ -315,6 +413,7 @@ export class NoticesService {
                 updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
         [id, publish],
       );
+      if (publish) await this.mail(c, id, this.viewer.requireYear(tenant));
       const after = (await this.find(c, id))!;
       await this.audit.stage(ctx, c, {
         action: publish ? 'academics.notice.publish' : 'academics.notice.unpublish',
@@ -325,6 +424,174 @@ export class NoticesService {
       });
       return after;
     });
+  }
+
+  /** The people a notice is for: the pupils of its classes (their guardians' e-mail) and the employees. */
+  private static readonly PUPILS = `FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
+     WHERE en.academic_year_id = $2 AND en.status = 'active'
+       AND EXISTS (SELECT 1 FROM notices n WHERE n.id = $1 AND n.audience IN ('everyone', 'students'))
+       AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1)
+         OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1 AND ((t.target_type = 'class_section' AND t.target_id = en.class_section_id)
+              OR (t.target_type = 'class' AND t.target_id = cs.class_id) OR (t.target_type = 'student' AND t.target_id = en.student_id))))`;
+  private static readonly STAFF = `FROM employees e
+     WHERE e.status = 'active' AND e.deleted_at IS NULL
+       AND EXISTS (SELECT 1 FROM notices n WHERE n.id = $1 AND n.audience IN ('everyone', 'employees'))
+       AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1)
+         OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1 AND ((t.target_type = 'employee' AND t.target_id = e.id)
+              OR (t.target_type = 'class_section' AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = t.target_id AND ta.valid_to IS NULL)))))`;
+
+  /**
+   * A published notice with "also by e-mail": one mail to each guardian and employee it is for, once.
+   * The mail carries the school's name, the title and the text; attachments stay in the portal.
+   */
+  private async mail(c: PoolClient, id: string, yearId: string): Promise<void> {
+    const n = await c.query<{
+      title: string;
+      body: string;
+      body_format: string;
+      kind: string;
+      school: string;
+      files: number;
+    }>(
+      `SELECT n.title, n.body, n.body_format, n.kind::text, (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+              (SELECT count(*) FROM notice_files f WHERE f.notice_id = n.id)::int AS files
+         FROM notices n WHERE n.id = $1 AND n.also_email AND n.emailed_at IS NULL AND n.published_at IS NOT NULL
+          AND (n.publish_at IS NULL OR n.publish_at <= now())`,
+      [id],
+    );
+    const x = n.rows[0];
+    if (!x) return;
+    const to = await c.query<{ email: string; user_id: string | null }>(
+      // eslint-disable-next-line no-restricted-syntax -- constant fragments; the notice and the year are bound
+      `SELECT DISTINCT ON (email) email, user_id FROM (
+         SELECT lower(g.email::text) AS email, g.user_id::text AS user_id
+           FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL AND g.email IS NOT NULL
+          WHERE sg.receives_notifications AND sg.student_id IN (SELECT en.student_id ${NoticesService.PUPILS})
+         UNION ALL
+         SELECT lower(e.email::text), e.user_id::text ${NoticesService.STAFF} AND e.email IS NOT NULL) r
+        ORDER BY email LIMIT 5000`,
+      [id, yearId],
+    );
+    const esc = (v: string) =>
+      v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const label =
+      x.kind === 'office_order' ? 'Office order' : x.kind === 'circular' ? 'Circular' : 'Notice';
+    const body = x.body_format === 'html' ? x.body : esc(x.body).replace(/\n/g, '<br>');
+    const html = `<!doctype html><html><body style="margin:0;padding:0;background:#F3F5F9"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F9;padding:24px 0"><tr><td align="center"><table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;font-family:Arial,Helvetica,sans-serif"><tr><td style="background:#00265D;color:#FFFFFF;padding:16px 24px;font-size:16px;font-weight:600">${esc(x.school)}</td></tr><tr><td style="padding:22px 24px 6px"><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#5B6676">${label}</div><div style="font-size:20px;font-weight:700;color:#00265D;margin-top:4px">${esc(x.title)}</div></td></tr><tr><td style="padding:8px 24px 18px;color:#2B3545;font-size:15px;line-height:1.55">${body}</td></tr>${x.files ? `<tr><td style="padding:0 24px 16px;color:#5B6676;font-size:13px">${String(x.files)} attachment(s): open the portal to see them.</td></tr>` : ''}<tr><td style="padding:14px 24px;background:#F7F9FC;color:#5B6676;font-size:12px">Sent from the school's EduPro portal. Please do not reply to this mail.</td></tr></table></td></tr></table></body></html>`;
+    for (const r of to.rows)
+      await c.query(
+        `SELECT app.queue_mail($1, $2, $3, '[]'::jsonb, jsonb_build_object('notice', $4::text), $5::bigint)`,
+        [r.email, `${label}: ${x.title}`, html, id, r.user_id],
+      );
+    await c.query(`UPDATE notices SET emailed_at = now(), emailed_count = $2 WHERE id = $1`, [
+      id,
+      to.rows.length,
+    ]);
+  }
+
+  /** Notices and office orders with how far each reached: whom it is for, acknowledged, e-mailed. */
+  async report(ctx: RequestContext, q: NoticeReportQueryDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.viewer.requireYear(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      const params: unknown[] = [yearId];
+      const w = ['n.deleted_at IS NULL', 'n.academic_year_id = $1', 'n.published_at IS NOT NULL'];
+      if (q.kind) {
+        params.push(q.kind);
+        w.push(`n.kind = $${String(params.length)}::notice_kind`);
+      }
+      if (q.from) {
+        params.push(q.from);
+        w.push(`n.publish_from >= $${String(params.length)}::date`);
+      }
+      if (q.to) {
+        params.push(q.to);
+        w.push(`n.publish_from <= $${String(params.length)}::date`);
+      }
+      const r = await c.query<Db>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; w holds fixed fragments; values are bound
+        `${SELECT} WHERE ${w.join(' AND ')} ORDER BY n.publish_from DESC, n.id DESC LIMIT 1000`,
+        params,
+      );
+      const rows = [];
+      for (const n of r.rows.map(toRow)) {
+        const reach = await c.query<{ pupils: number; staff: number }>(
+          // eslint-disable-next-line no-restricted-syntax -- constant fragments; the notice and the year are bound
+          `SELECT (SELECT count(*) ${NoticesService.PUPILS})::int AS pupils, (SELECT count(*) ${NoticesService.STAFF} AND $2::bigint IS NOT NULL)::int AS staff`,
+          [n.id, yearId],
+        );
+        rows.push({
+          id: n.id,
+          kind: n.kind,
+          title: n.title,
+          audience: n.audience,
+          targets: n.targets.map((t) => t.label).join(', ') || 'All',
+          publishFrom: n.publishFrom,
+          publishedBy: n.publishedBy,
+          students: reach.rows[0]!.pupils,
+          employees: reach.rows[0]!.staff,
+          ackRequired: n.ackRequired,
+          acknowledged: n.ackCount,
+          emailed: n.emailedCount,
+          attachments: n.files.length,
+        });
+      }
+      return { data: rows };
+    });
+  }
+
+  /** The report as a file, with the school's name and address on top. */
+  async reportFile(
+    ctx: RequestContext,
+    q: NoticeReportQueryDto,
+    rows: Awaited<ReturnType<NoticesService['report']>>['data'],
+    format: 'xlsx' | 'pdf',
+  ) {
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const KIND: Record<string, string> = {
+      notice: 'Notice',
+      circular: 'Circular',
+      office_order: 'Office order',
+    };
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Notices and office orders',
+        details: [
+          q.kind ? (KIND[q.kind] ?? q.kind) : 'All kinds',
+          q.from || q.to ? `From ${q.from ?? '…'} to ${q.to ?? '…'}` : '',
+          generatedOn(),
+        ].filter(Boolean),
+        legend: `${String(rows.length)} published`,
+        columns: [
+          { label: 'Sl.', width: 3, right: true },
+          { label: 'Date', width: 7 },
+          { label: 'Kind', width: 7 },
+          { label: 'Title', width: 22 },
+          { label: 'For', width: 14 },
+          { label: 'Published by', width: 10 },
+          { label: 'Students', width: 5, right: true },
+          { label: 'Employees', width: 5, right: true },
+          { label: 'Acknowledged', width: 6, right: true },
+          { label: 'E-mailed', width: 5, right: true },
+        ],
+        rows: rows.map((n, i) => [
+          i + 1,
+          n.publishFrom,
+          KIND[n.kind] ?? n.kind,
+          n.title,
+          n.targets,
+          n.publishedBy ?? '',
+          n.students,
+          n.employees,
+          n.ackRequired ? n.acknowledged : '-',
+          n.emailed ?? '-',
+        ]),
+        filename: `notices-${new Date().toISOString().slice(0, 10)}`,
+      },
+      format,
+    );
   }
 
   async remove(ctx: RequestContext, id: string): Promise<void> {

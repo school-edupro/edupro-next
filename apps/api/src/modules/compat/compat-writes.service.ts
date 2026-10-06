@@ -94,6 +94,7 @@ export class CompatWritesService {
       assignedOn: date,
       dueOn: dto.txtDueDate ? legacyDate(dto.txtDueDate) : undefined,
       fileIds: [],
+      ackRequired: false,
     } as CreateDailyWorkDto);
     return {
       status: true,
@@ -175,6 +176,9 @@ export class CompatWritesService {
       isPinned: false,
       targets,
       fileIds: [],
+      ackRequired: false,
+      bodyFormat: 'text',
+      alsoEmail: false,
       publish: true,
     } as CreateNoticeDto);
     return { status: true, info: 'Notice published', data: { srno: row.id } };

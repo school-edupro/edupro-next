@@ -4,9 +4,16 @@ import { IdSchema } from '../classes/classes.dto';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
 const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be HH:MM');
+/** A date and time as the form gives it (school time), or a full ISO time. */
+export const PublishAtSchema = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/,
+    'must be a date and time',
+  );
 export const DailyWorkKindSchema = z.enum(['homework', 'classwork', 'assignment']);
 export const AudienceSchema = z.enum(['everyone', 'students', 'employees']);
-export const NoticeKindSchema = z.enum(['notice', 'circular']);
+export const NoticeKindSchema = z.enum(['notice', 'circular', 'office_order']);
 export const TargetTypeSchema = z.enum(['class', 'class_section', 'student', 'employee']);
 export const HolidayKindSchema = z.enum(['holiday', 'vacation', 'working_day']);
 export const AlmanacKindSchema = z.enum(['event', 'exam', 'meeting', 'activity', 'deadline']);
@@ -22,6 +29,10 @@ export const CreateDailyWorkSchema = z
     assignedOn: DateSchema.optional(),
     dueOn: DateSchema.optional(),
     fileIds: z.array(IdSchema).max(10).default([]),
+    /** When the family sees it: now when left out. */
+    publishAt: PublishAtSchema.optional(),
+    /** The family is asked to acknowledge it. */
+    ackRequired: z.boolean().default(false),
   })
   .refine((v) => !v.dueOn || !v.assignedOn || v.dueOn >= v.assignedOn, {
     message: 'dueOn must not be before assignedOn',
@@ -37,6 +48,8 @@ export const UpdateDailyWorkSchema = z
     assignedOn: DateSchema,
     dueOn: DateSchema.nullable(),
     fileIds: z.array(IdSchema).max(10),
+    publishAt: PublishAtSchema,
+    ackRequired: z.boolean(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
@@ -67,6 +80,13 @@ export const CreateNoticeSchema = z
     targets: z.array(TargetSchema).max(200).default([]),
     fileIds: z.array(IdSchema).max(10).default([]),
     publish: z.boolean().default(false),
+    /** `html`: the body is formatted text from the editor (cleaned on the server). */
+    bodyFormat: z.enum(['text', 'html']).default('text'),
+    ackRequired: z.boolean().default(false),
+    /** The time the portal starts to show it (after it is published): now when left out. */
+    publishAt: PublishAtSchema.optional(),
+    /** Also send it by e-mail to the people it is for, when it is published. */
+    alsoEmail: z.boolean().default(false),
   })
   .refine((v) => !v.publishUntil || !v.publishFrom || v.publishUntil >= v.publishFrom, {
     message: 'publishUntil must not be before publishFrom',
@@ -85,6 +105,10 @@ export const UpdateNoticeSchema = z
     isPinned: z.boolean(),
     targets: z.array(TargetSchema).max(200),
     fileIds: z.array(IdSchema).max(10),
+    bodyFormat: z.enum(['text', 'html']),
+    ackRequired: z.boolean(),
+    publishAt: PublishAtSchema.nullable(),
+    alsoEmail: z.boolean(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
@@ -154,3 +178,50 @@ export const AddAlbumItemsSchema = z.object({
     .max(100),
 });
 export class AddAlbumItemsDto extends createZodDto(AddAlbumItemsSchema) {}
+
+// ---- class documents, acknowledgements --------------------------------------------------------------
+export const DocumentKindSchema = z.enum([
+  'session_plan',
+  'curriculum',
+  'date_sheet',
+  'magazine',
+  'almanac',
+  'other',
+]);
+export const CreateDocumentSchema = z.object({
+  kind: DocumentKindSchema,
+  title: z.string().trim().min(2).max(200),
+  remark: z.string().trim().max(2000).optional(),
+  /** The classes it is for; none = the whole school (the office only). */
+  classSectionIds: z.array(IdSchema).max(80).default([]),
+  subjectId: IdSchema.optional(),
+  fileIds: z.array(IdSchema).min(1, 'Attach the file').max(5),
+  publishAt: PublishAtSchema.optional(),
+  ackRequired: z.boolean().default(false),
+});
+export class CreateDocumentDto extends createZodDto(CreateDocumentSchema) {}
+
+export const ListDocumentsQuerySchema = z.object({
+  kind: DocumentKindSchema.optional(),
+  classSectionId: IdSchema.optional(),
+});
+export class ListDocumentsQueryDto extends createZodDto(ListDocumentsQuerySchema) {}
+
+export const AckItemSchema = z.enum(['daily_work', 'document', 'notice']);
+export const AckSchema = z.object({
+  type: AckItemSchema,
+  id: IdSchema,
+  /** The child it is acknowledged for (a family); left out by an employee. */
+  studentId: IdSchema.optional(),
+});
+export class AckDto extends createZodDto(AckSchema) {}
+export const AckStatusQuerySchema = z.object({ type: AckItemSchema, id: IdSchema });
+export class AckStatusQueryDto extends createZodDto(AckStatusQuerySchema) {}
+
+export const NoticeReportQuerySchema = z.object({
+  kind: NoticeKindSchema.optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  format: z.enum(['json', 'xlsx', 'pdf']).default('json'),
+});
+export class NoticeReportQueryDto extends createZodDto(NoticeReportQuerySchema) {}
