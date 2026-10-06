@@ -1,6 +1,7 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { AttendanceNav } from '@/components/attendance/AttendanceNav';
 import { AttendanceSetupForm } from '@/components/attendance/AttendanceSetupForm';
+import { RouteTeachersPanel } from '@/components/attendance/RouteTeachersPanel';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { reopenAttendance } from '@/lib/attendance-actions';
@@ -33,6 +34,9 @@ export default async function AttendanceSetupPage({
       <Notice params={{ error: sp.error, detail: sp.detail }} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <AttendanceSetupForm setup={setup} />
+      </Card>
+      <Card title="Bus attendance: teacher of each route" style={{ marginBottom: 'var(--sp-4)' }}>
+        <RouteTeachersPanel setup={setup} />
       </Card>
       <Card
         title="Class teachers (class attendance)"

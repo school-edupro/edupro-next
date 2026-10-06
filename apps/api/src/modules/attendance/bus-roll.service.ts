@@ -298,8 +298,10 @@ export class BusRollService {
   /** Every route and trip of a date: riders, on the bus, not on it, leave, gate pass, not marked. */
   async summary(ctx: RequestContext, date: string | undefined) {
     const yearId = this.year(ctx);
-    if (!this.overseer(ctx))
-      throw new DomainError('forbidden', 'Only staff who oversee attendance see every route', {
+    // staff who oversee attendance see every route; a teacher sees the routes and trips mapped to them
+    const all = this.overseer(ctx);
+    if (!all && !ctx.permissions?.has('attendance.bus.mark'))
+      throw new DomainError('forbidden', 'Bus attendance is not part of your role', {
         status: 403,
       });
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -316,14 +318,19 @@ export class BusRollService {
            FROM transport_routes r CROSS JOIN (VALUES ('pick'), ('drop')) AS t(trip)
            LEFT JOIN bus_roll_sessions b ON b.route_id = r.id AND b.trip = t.trip AND b.on_date = COALESCE($2::date, ${TODAY})
            LEFT JOIN users u ON u.id = b.marked_by
-          WHERE r.deleted_at IS NULL AND r.status = 'active' ORDER BY r.code, t.trip DESC`,
-        [yearId, date ?? null],
+          WHERE r.deleted_at IS NULL AND r.status = 'active'
+            AND ($3 OR EXISTS (SELECT 1 FROM transport_route_teachers m JOIN employees e ON e.id = m.employee_id
+                                WHERE m.route_id = r.id AND m.trip = t.trip AND e.user_id = app.current_user_id()))
+          ORDER BY r.code, t.trip DESC`,
+        [yearId, date ?? null, all],
       );
       return {
         date: r.rows[0]
           ? String(r.rows[0].on_date)
           : (date ?? new Date().toISOString().slice(0, 10)),
         windows: await this.gate.windows(c),
+        /** Only the routes and trips mapped to this teacher are listed. */
+        mine: !all,
         rows: r.rows.map((x) => {
           const codes = (x.codes as Record<string, number> | null) ?? {};
           const marked = Object.values(codes).reduce((a, b) => a + b, 0);

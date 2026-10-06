@@ -381,6 +381,8 @@ export interface ClassSubject {
 }
 
 export interface TeacherAssignment {
+  /** A class teacher: false for a co-class teacher. */
+  isActual?: boolean;
   id: string;
   academicYearId: string;
   employeeId: string;

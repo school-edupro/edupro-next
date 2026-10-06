@@ -9,7 +9,13 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ViewerService } from '../academics/daily/viewer.service';
 import { tablePdf } from '../engagement/table-pdf';
 import { AttendanceGate } from './attendance-gate';
-import type { AttendanceSetupDto, ReopenDto } from './attendance-plus.dto';
+import { codeOf, readSheet, templateSheet } from '../../common/excel/sheet';
+import type {
+  AttendanceSetupDto,
+  ReopenDto,
+  RouteTeacherRemoveDto,
+  RouteTeachersDto,
+} from './attendance-plus.dto';
 
 type Row = Record<string, unknown>;
 const TZ = `'Asia/Kolkata'`;
@@ -47,8 +53,10 @@ export class AttendanceDeskService {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const teachers = await c.query<Row>(
-        `SELECT m.route_id::text, m.trip, m.employee_id::text, e.display_name AS name, (e.user_id IS NOT NULL) AS login
-           FROM transport_route_teachers m JOIN employees e ON e.id = m.employee_id ORDER BY m.route_id, m.trip DESC, e.display_name`,
+        `SELECT m.route_id::text, m.trip, m.employee_id::text, e.display_name AS name, e.employee_code AS code, (e.user_id IS NOT NULL) AS login,
+                r.code AS route_code, r.name AS route_name
+           FROM transport_route_teachers m JOIN employees e ON e.id = m.employee_id JOIN transport_routes r ON r.id = m.route_id
+          ORDER BY e.display_name, r.code, m.trip DESC`,
       );
       const routes = await c.query<{ id: string; name: string }>(
         `SELECT id::text, code || ' · ' || name AS name FROM transport_routes WHERE deleted_at IS NULL AND status = 'active' ORDER BY code`,
@@ -60,7 +68,7 @@ export class AttendanceDeskService {
       const sections = await c.query<{ id: string; name: string; teacher: string | null }>(
         `SELECT cs.id::text, k.code || '-' || cs.name AS name,
                 (SELECT e.display_name FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
-                  WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.valid_to IS NULL LIMIT 1) AS teacher
+                  WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL LIMIT 1) AS teacher
            FROM class_sections cs JOIN classes k ON k.id = cs.class_id
           WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL ORDER BY k.display_order, cs.name`,
         [yearId],
@@ -79,6 +87,8 @@ export class AttendanceDeskService {
           trip: String(x.trip) as 'pick' | 'drop',
           employeeId: String(x.employee_id),
           name: String(x.name),
+          code: x.code ? String(x.code) : null,
+          route: `${String(x.route_code)} · ${String(x.route_name)}`,
           login: Boolean(x.login),
         })),
         routes: routes.rows,
@@ -119,8 +129,8 @@ export class AttendanceDeskService {
           dto.backDays,
         ],
       );
-      await c.query(`DELETE FROM transport_route_teachers`);
-      for (const t of dto.routeTeachers)
+      if (dto.routeTeachers) await c.query(`DELETE FROM transport_route_teachers`);
+      for (const t of dto.routeTeachers ?? [])
         await c.query(
           `INSERT INTO transport_route_teachers (school_id, route_id, trip, employee_id, created_by)
            VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id()) ON CONFLICT DO NOTHING`,
@@ -130,13 +140,165 @@ export class AttendanceDeskService {
         action: 'attendance.setup.update',
         entityType: 'attendance_settings',
         entityId: requireTenant(ctx).schoolId,
-        after: { ...dto, routeTeachers: dto.routeTeachers.length },
+        after: { ...dto, routeTeachers: dto.routeTeachers?.length ?? null },
       });
     });
     return this.setup(ctx);
   }
 
   /** The coordinator opens a closed day again for the teacher of a class or of a route and trip. */
+  // ---- the teacher of each route (bus attendance) ---------------------------------------------------
+  private static readonly TRIPS = {
+    both: ['pick', 'drop'],
+    pick: ['pick'],
+    drop: ['drop'],
+  } as const;
+
+  /** A teacher on some routes for the morning trip, the afternoon trip or both; a route and trip may have several. */
+  async addRouteTeachers(ctx: RequestContext, dto: RouteTeachersDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const emp = await c.query<{ login: boolean }>(
+        `SELECT (user_id IS NOT NULL) AS login FROM employees WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+        [dto.employeeId],
+      );
+      if (!emp.rows[0]) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      const routes = await c.query(
+        `SELECT 1 FROM transport_routes WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+        [dto.routeIds],
+      );
+      if (routes.rowCount !== new Set(dto.routeIds).size)
+        throw new DomainError('not-found', 'Route not found', { status: 404 });
+      const r = await c.query(
+        `INSERT INTO transport_route_teachers (school_id, route_id, trip, employee_id, created_by)
+         SELECT app.current_school_id(), x.id, t.trip, $1, app.current_user_id()
+           FROM unnest($2::bigint[]) AS x(id) CROSS JOIN unnest($3::text[]) AS t(trip)
+         ON CONFLICT DO NOTHING`,
+        [dto.employeeId, dto.routeIds, AttendanceDeskService.TRIPS[dto.trip]],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'attendance.route_teacher.add',
+        entityType: 'transport_route_teachers',
+        entityId: dto.employeeId,
+        after: dto,
+      });
+      return { added: r.rowCount ?? 0, login: emp.rows[0].login };
+    });
+  }
+
+  async removeRouteTeacher(ctx: RequestContext, dto: RouteTeacherRemoveDto) {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(
+        `DELETE FROM transport_route_teachers WHERE employee_id = $1 AND route_id = $2 AND trip = ANY($3::text[])`,
+        [dto.employeeId, dto.routeId, AttendanceDeskService.TRIPS[dto.trip]],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'attendance.route_teacher.remove',
+        entityType: 'transport_route_teachers',
+        entityId: dto.employeeId,
+        after: dto,
+      });
+    });
+  }
+
+  private static readonly RT_HEADERS = ['Employee', 'Route', 'Trip'];
+  private static readonly RT_TRIP: Record<string, 'both' | 'pick' | 'drop'> = {
+    both: 'both',
+    'morning (pick)': 'pick',
+    morning: 'pick',
+    pick: 'pick',
+    'afternoon (drop)': 'drop',
+    afternoon: 'drop',
+    drop: 'drop',
+  };
+
+  /** The Excel format for the route teachers: employee, route and trip, each from a drop-down. */
+  async routeTeacherTemplate(ctx: RequestContext) {
+    const l = await this.db.tenant(requireTenant(ctx), async (c) => ({
+      staff: (
+        await c.query<{ v: string }>(
+          `SELECT employee_code || ' · ' || display_name AS v FROM employees WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name`,
+        )
+      ).rows.map((x) => x.v),
+      routes: (
+        await c.query<{ v: string }>(
+          `SELECT code || ' · ' || name AS v FROM transport_routes WHERE deleted_at IS NULL AND status = 'active' ORDER BY code`,
+        )
+      ).rows.map((x) => x.v),
+    }));
+    return {
+      bytes: await templateSheet({
+        sheet: 'Route teachers',
+        columns: [
+          { header: 'Employee', width: 34, required: true, options: l.staff },
+          { header: 'Route', width: 34, required: true, options: l.routes },
+          {
+            header: 'Trip',
+            width: 18,
+            required: true,
+            options: ['Both', 'Morning (pick)', 'Afternoon (drop)'],
+          },
+        ],
+        guide: [
+          'One row for each teacher and route. Pick every value from its drop-down.',
+          'Trip: Both = the teacher marks the morning and the afternoon trip; else only the one chosen.',
+          'A route and trip may have more than one teacher: any of them can mark, and the roll shows who did.',
+          'A row that is already there is left as it is. Nothing is removed by an upload.',
+        ],
+      }),
+      filename: 'bus-attendance-route-teachers-format.xlsx',
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+  }
+
+  async importRouteTeachers(ctx: RequestContext, fileBase64: string) {
+    const rows = await readSheet(fileBase64, AttendanceDeskService.RT_HEADERS);
+    if (!rows.length)
+      throw new DomainError('validation-failed', 'The sheet has no filled row', { status: 400 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const staff = await c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, lower(employee_code) AS code, lower(display_name) AS name FROM employees WHERE deleted_at IS NULL AND status = 'active'`,
+      );
+      const routes = await c.query<{ id: string; code: string }>(
+        `SELECT id::text, lower(code) AS code FROM transport_routes WHERE deleted_at IS NULL`,
+      );
+      const errors: Array<{ row: number; message: string }> = [];
+      const ready: Array<{ employeeId: string; routeId: string; trip: 'both' | 'pick' | 'drop' }> =
+        [];
+      for (const { row, cells } of rows) {
+        const e = codeOf(cells.Employee!).toLowerCase();
+        const emp = staff.rows.find((x) => x.code === e || x.name === e);
+        const route = routes.rows.find((x) => x.code === codeOf(cells.Route!).toLowerCase());
+        const trip = AttendanceDeskService.RT_TRIP[cells.Trip!.toLowerCase()];
+        const problems = [
+          emp ? null : `Employee "${cells.Employee!}" is not on the list`,
+          route ? null : `Route "${cells.Route!}" is not on the list`,
+          trip ? null : `Trip "${cells.Trip!}" must be Both, Morning (pick) or Afternoon (drop)`,
+        ].filter(Boolean);
+        if (problems.length) errors.push({ row, message: problems.join('; ') });
+        else ready.push({ employeeId: emp!.id, routeId: route!.id, trip: trip! });
+      }
+      if (errors.length) return { added: 0, already: 0, errors };
+      let added = 0;
+      for (const x of ready) {
+        const r = await c.query(
+          `INSERT INTO transport_route_teachers (school_id, route_id, trip, employee_id, created_by)
+           SELECT app.current_school_id(), $2, t.trip, $1, app.current_user_id() FROM unnest($3::text[]) AS t(trip)
+           ON CONFLICT DO NOTHING`,
+          [x.employeeId, x.routeId, AttendanceDeskService.TRIPS[x.trip]],
+        );
+        added += r.rowCount ?? 0;
+      }
+      const asked = ready.reduce((n2, x) => n2 + AttendanceDeskService.TRIPS[x.trip].length, 0);
+      await this.audit.stage(ctx, c, {
+        action: 'attendance.route_teacher.import',
+        entityType: 'transport_route_teachers',
+        entityId: requireTenant(ctx).schoolId,
+        after: { rows: rows.length, added },
+      });
+      return { added, already: asked - added, errors };
+    });
+  }
+
   async reopen(ctx: RequestContext, dto: ReopenDto) {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const future = await c.query<{ f: boolean }>(`SELECT $1::date > ${TODAY} AS f`, [dto.date]);
@@ -322,7 +484,7 @@ export class AttendanceDeskService {
       const pending = await c.query<Row>(
         `SELECT cs.id::text, k.code || '-' || cs.name AS name,
                 (SELECT e.display_name FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
-                  WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.valid_to IS NULL LIMIT 1) AS teacher
+                  WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL LIMIT 1) AS teacher
            FROM class_sections cs JOIN classes k ON k.id = cs.class_id
           WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL
             AND EXISTS (SELECT 1 FROM enrolments e WHERE e.class_section_id = cs.id AND e.status = 'active')

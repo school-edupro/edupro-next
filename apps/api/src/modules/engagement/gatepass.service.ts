@@ -399,7 +399,7 @@ export class GatePassService {
       if (!studentId) return [];
       const r = await c.query<{ id: string }>(
         `SELECT DISTINCT e.user_id::text AS id FROM enrolments en
-           JOIN teacher_assignments ta ON ta.class_section_id = en.class_section_id AND ta.kind = 'class_teacher' AND ta.valid_to IS NULL
+           JOIN teacher_assignments ta ON ta.class_section_id = en.class_section_id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL
            JOIN employees e ON e.id = ta.employee_id AND e.deleted_at IS NULL AND e.user_id IS NOT NULL
           WHERE en.student_id = $1 AND en.status = 'active' AND en.academic_year_id = (
             SELECT max(x.academic_year_id) FROM enrolments x WHERE x.student_id = $1 AND x.status = 'active')`,

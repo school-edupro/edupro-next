@@ -24,6 +24,7 @@ const PAGES = [
   '/attendance/registers',
   '/attendance/registers?kind=bus&route=16&trip=pick',
   '/attendance/setup',
+  '/academics/teacher-assignments',
   '/attendance/rfid/dashboard',
   '/comms/compose',
   '/comms/requests',

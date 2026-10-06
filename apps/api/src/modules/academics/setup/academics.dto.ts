@@ -63,12 +63,34 @@ export const CreateTeacherAssignmentSchema = z
     canPostHomework: z.boolean().default(true),
     canAnswerQueries: z.boolean().default(true),
     validFrom: DateSchema.optional(),
+    isActual: z.boolean().default(true),
   })
   .refine((v) => v.kind !== 'subject_teacher' || v.subjectId, {
     message: 'subjectId is required for a subject teacher',
     path: ['subjectId'],
   });
 export class CreateTeacherAssignmentDto extends createZodDto(CreateTeacherAssignmentSchema) {}
+
+/** One teacher, one type, many classes and many subjects: every class with every subject. */
+export const BulkTeacherAssignmentSchema = z
+  .object({
+    employeeId: IdSchema,
+    kind: AssignmentKindSchema,
+    classSectionIds: z.array(IdSchema).min(1, 'Pick at least one class').max(80),
+    subjectIds: z.array(IdSchema).max(40).default([]),
+    /** Class teacher only: the actual class teacher of the section (else a co-class teacher). */
+    isActual: z.boolean().default(true),
+  })
+  .refine((v) => v.kind !== 'subject_teacher' || v.subjectIds.length > 0, {
+    message: 'Pick at least one subject for a subject teacher',
+    path: ['subjectIds'],
+  });
+export class BulkTeacherAssignmentDto extends createZodDto(BulkTeacherAssignmentSchema) {}
+
+export const ImportTeacherAssignmentsSchema = z.object({
+  fileBase64: z.string().min(100).max(1_400_000),
+});
+export class ImportTeacherAssignmentsDto extends createZodDto(ImportTeacherAssignmentsSchema) {}
 
 export const ListTeacherAssignmentsQuerySchema = z.object({
   employeeId: IdSchema.optional(),

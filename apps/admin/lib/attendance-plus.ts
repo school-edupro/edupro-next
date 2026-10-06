@@ -118,6 +118,8 @@ export interface AttendanceSetup {
     trip: 'pick' | 'drop';
     employeeId: string;
     name?: string;
+    code?: string | null;
+    route?: string;
     login?: boolean;
   }>;
   routes: Array<{ id: string; name: string }>;

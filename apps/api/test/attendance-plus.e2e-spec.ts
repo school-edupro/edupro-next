@@ -402,4 +402,113 @@ describe('attendance: leave, gate pass, windows and bus roll (e2e)', () => {
     const mine = (await get(`/attendance/bus-roll/mine?month=${month}`, parent)).json().children[0];
     expect(mine.days).toEqual([{ date: today, pick: 'P', drop: 'P', route: 'R1' }]);
   });
+  it('set-up: a teacher on many routes for both trips, a co-class teacher, and the Excel formats', async () => {
+    const r2 = (await post('/transport/routes', admin, { code: 'R2', name: 'Baner' })).json().id;
+    // Omar takes both trips of two routes in one save; a second save adds nothing
+    const both = await post('/attendance/desk/route-teachers', admin, {
+      employeeId: employee.T2,
+      routeIds: [routeId, r2],
+      trip: 'both',
+    });
+    expect(both.json()).toMatchObject({ added: 4, login: true });
+    expect(
+      (
+        await post('/attendance/desk/route-teachers', admin, {
+          employeeId: employee.T2,
+          routeIds: [routeId],
+          trip: 'pick',
+        })
+      ).json().added,
+    ).toBe(0);
+    expect((await get('/attendance/bus-roll/routes', other)).json().data).toHaveLength(4);
+    // the route teacher opens the day's summary: only the routes and trips mapped to them
+    const sum = (await get('/attendance/bus-roll/summary', other)).json();
+    expect(sum.mine).toBe(true);
+    expect(sum.rows.map((r: { code: string; trip: string }) => `${r.code}:${r.trip}`)).toEqual([
+      'R1:pick',
+      'R1:drop',
+      'R2:pick',
+      'R2:drop',
+    ]);
+    expect((await get('/attendance/bus-roll/summary', parent)).statusCode).toBe(403);
+    await post('/attendance/desk/route-teachers/remove', admin, {
+      employeeId: employee.T2,
+      routeId: r2,
+      trip: 'drop',
+    });
+    expect((await get('/attendance/bus-roll/routes', other)).json().data).toHaveLength(3);
+
+    // the Excel format carries the drop-downs; a wrong row saves nothing, a right sheet adds
+    const ExcelJS = (await import('exceljs')).default;
+    const fill = async (url: string, rows: string[][]) => {
+      const tpl = await get(url);
+      expect(tpl.statusCode).toBe(200);
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(tpl.rawPayload as unknown as ArrayBuffer);
+      const ws = wb.worksheets[0]!;
+      expect(ws.getCell('A2').dataValidation).toMatchObject({ type: 'list' });
+      rows.forEach((r, i) => r.forEach((v, k) => (ws.getCell(i + 2, k + 1).value = v)));
+      return Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    };
+    const bad = await post('/attendance/desk/route-teachers/import', admin, {
+      fileBase64: await fill('/attendance/desk/route-teachers/template.xlsx', [
+        ['T1 · Tara Teacher', 'R2 · Baner', 'Both'],
+        ['T9', 'R2', 'Evening'],
+      ]),
+    });
+    expect(bad.json()).toMatchObject({ added: 0, errors: [{ row: 3 }] });
+    const good = await post('/attendance/desk/route-teachers/import', admin, {
+      fileBase64: await fill('/attendance/desk/route-teachers/template.xlsx', [
+        ['T1 · Tara Teacher', 'R2 · Baner', 'Both'],
+        ['T2', 'R2', 'Afternoon (drop)'],
+      ]),
+    });
+    expect(good.json()).toMatchObject({ added: 3, errors: [] });
+
+    // teacher assignments: the section has its class teacher (Tara); Omar joins as a co-class teacher
+    const subject = (
+      await post('/academics/subjects', admin, { code: `${s}M`, name: 'Maths', kind: 'scholastic' })
+    ).json().id;
+    const second = await post('/academics/teacher-assignments/bulk', admin, {
+      employeeId: employee.T2,
+      kind: 'class_teacher',
+      classSectionIds: [section],
+      subjectIds: [subject],
+      isActual: true,
+    });
+    // refused as the actual class teacher, but the subject is saved
+    expect(second.json()).toMatchObject({ created: 1 });
+    expect(second.json().skipped[0].why).toContain('is the class teacher');
+    const co = await post('/academics/teacher-assignments/bulk', admin, {
+      employeeId: employee.T2,
+      kind: 'class_teacher',
+      classSectionIds: [section],
+      subjectIds: [subject],
+      isActual: false,
+    });
+    expect(co.json()).toMatchObject({ created: 1, skipped: [{ why: 'already assigned' }] });
+    const list = (await get(`/academics/teacher-assignments?classSectionId=${section}`)).json()
+      .data as Array<{ employeeCode: string; kind: string; isActual: boolean }>;
+    expect(
+      list.filter((a) => a.kind === 'class_teacher').map((a) => [a.employeeCode, a.isActual]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['T1', true],
+        ['T2', false],
+      ]),
+    );
+    // the name of the class is still the actual class teacher's
+    const setup = (await get('/attendance/desk/setup')).json();
+    expect(setup.sections.find((x: { id: string }) => x.id === section).teacher).toBe(
+      'Tara Teacher',
+    );
+    const sheet = await post('/academics/teacher-assignments/import', admin, {
+      fileBase64: await fill('/academics/teacher-assignments/template.xlsx', [
+        ['T1 · Tara Teacher', 'Subject teacher', 'VI-A', `${s}M · Maths`, ''],
+        ['T2', 'Subject teacher', 'VI-A', 'Maths', ''],
+      ]),
+    });
+    expect(sheet.json()).toMatchObject({ created: 1, errors: [] });
+    expect(sheet.json().skipped).toHaveLength(1);
+  });
 });

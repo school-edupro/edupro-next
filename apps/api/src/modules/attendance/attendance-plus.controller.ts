@@ -16,6 +16,9 @@ import {
   DayQueryDto,
   MonthQueryDto,
   ReopenDto,
+  RouteTeacherRemoveDto,
+  RouteTeachersDto,
+  RouteTeachersImportDto,
 } from './attendance-plus.dto';
 import { ATTENDANCE } from './attendance.dto';
 import { BusRollService } from './bus-roll.service';
@@ -61,6 +64,37 @@ export class AttendanceDeskController {
   @RequirePermission(ATTENDANCE.setup)
   saveSetup(@ReqCtx() ctx: RequestContext, @Body() dto: AttendanceSetupDto) {
     return this.desk.saveSetup(ctx, dto);
+  }
+
+  @Post('route-teachers')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'A teacher for bus attendance on some routes: morning, afternoon or both',
+  })
+  @RequirePermission(ATTENDANCE.setup)
+  addRouteTeachers(@ReqCtx() ctx: RequestContext, @Body() dto: RouteTeachersDto) {
+    return this.desk.addRouteTeachers(ctx, dto);
+  }
+
+  @Post('route-teachers/remove')
+  @HttpCode(200)
+  @RequirePermission(ATTENDANCE.setup)
+  async removeRouteTeacher(@ReqCtx() ctx: RequestContext, @Body() dto: RouteTeacherRemoveDto) {
+    await this.desk.removeRouteTeacher(ctx, dto);
+    return { ok: true };
+  }
+
+  @Get('route-teachers/template.xlsx')
+  @RequirePermission(ATTENDANCE.setup)
+  async routeTeacherTemplate(@ReqCtx() ctx: RequestContext, @Res() reply: FastifyReply) {
+    send(reply, await this.desk.routeTeacherTemplate(ctx));
+  }
+
+  @Post('route-teachers/import')
+  @HttpCode(200)
+  @RequirePermission(ATTENDANCE.setup)
+  importRouteTeachers(@ReqCtx() ctx: RequestContext, @Body() dto: RouteTeachersImportDto) {
+    return this.desk.importRouteTeachers(ctx, dto.fileBase64);
   }
 
   @Post('reopen')

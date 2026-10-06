@@ -352,7 +352,7 @@ export class PortalProfileService {
       const classTeacher = snap.enrolment
         ? await c.query<{ name: string }>(
             `SELECT emp.display_name AS name FROM teacher_assignments ta JOIN employees emp ON emp.id = ta.employee_id
-              WHERE ta.class_section_id = $1 AND ta.kind = 'class_teacher' AND ta.valid_to IS NULL LIMIT 1`,
+              WHERE ta.class_section_id = $1 AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL LIMIT 1`,
             [snap.enrolment.classSectionId],
           )
         : { rows: [] as Array<{ name: string }> };

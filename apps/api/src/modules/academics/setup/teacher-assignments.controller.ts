@@ -1,8 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
-import { CreateTeacherAssignmentDto, ListTeacherAssignmentsQueryDto } from './academics.dto';
+import {
+  BulkTeacherAssignmentDto,
+  CreateTeacherAssignmentDto,
+  ImportTeacherAssignmentsDto,
+  ListTeacherAssignmentsQueryDto,
+} from './academics.dto';
 import { ACADEMICS } from './academics.permissions';
 import { TeacherAssignmentsService } from './teacher-assignments.service';
 
@@ -35,6 +41,33 @@ export class TeacherAssignmentsController {
   })
   create(@ReqCtx() ctx: RequestContext, @Body() body: CreateTeacherAssignmentDto) {
     return this.assignments.create(ctx, body);
+  }
+
+  @Post('bulk')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'One teacher, one type, many classes and subjects in one save' })
+  @RequirePermission(ACADEMICS.assignmentManage)
+  bulk(@ReqCtx() ctx: RequestContext, @Body() body: BulkTeacherAssignmentDto) {
+    return this.assignments.bulk(ctx, body);
+  }
+
+  @Get('template.xlsx')
+  @ApiOperation({ summary: 'The Excel format for teacher assignments, with drop-downs' })
+  @RequirePermission(ACADEMICS.assignmentManage)
+  async template(@ReqCtx() ctx: RequestContext, @Res() reply: FastifyReply) {
+    const f = await this.assignments.template(ctx);
+    reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
+  }
+
+  @Post('import')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Teacher assignments from the filled Excel format' })
+  @RequirePermission(ACADEMICS.assignmentManage)
+  import(@ReqCtx() ctx: RequestContext, @Body() body: ImportTeacherAssignmentsDto) {
+    return this.assignments.import(ctx, body.fileBase64);
   }
 
   @Post(':id/end')

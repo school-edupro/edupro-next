@@ -35,6 +35,7 @@ export default async function BusRollPage({
   searchParams: Promise<{
     date?: string;
     route?: string;
+    pick?: string;
     trip?: string;
     ok?: string;
     error?: string;
@@ -43,20 +44,35 @@ export default async function BusRollPage({
 }) {
   const sp = await searchParams;
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : istToday();
-  const trip = sp.trip === 'drop' ? 'drop' : 'pick';
-  const routeId = /^\d+$/.test(sp.route ?? '') ? sp.route! : null;
+  // the route and trip come from the picker ("<route>|<trip>") or from a row's Open link
+  const picked = /^(\d+)\|(pick|drop)$/.exec(sp.pick ?? '');
   const me = await getMe();
   const canMark = me.permissions.includes('attendance.bus.mark');
-  const [summary, roll] = await Promise.all([
-    apiFetch<{ date: string; windows: Windows; rows: BusSummaryRow[] }>(
-      `/attendance/bus-roll/summary?date=${date}`,
-    ).catch(() => null),
-    routeId
-      ? apiFetch<BusRoll>(
-          `/attendance/bus-roll?routeId=${routeId}&date=${date}&trip=${trip}`,
-        ).catch(() => null)
-      : Promise.resolve(null),
-  ]);
+  const summary = await apiFetch<{
+    date: string;
+    windows: Windows;
+    mine?: boolean;
+    rows: BusSummaryRow[];
+  }>(`/attendance/bus-roll/summary?date=${date}`).catch(() => null);
+  // a route teacher lands on their first route; staff who see every route pick one
+  const first = summary?.mine ? summary.rows[0] : undefined;
+  const routeId = picked
+    ? picked[1]!
+    : /^\d+$/.test(sp.route ?? '')
+      ? sp.route!
+      : (first?.routeId ?? null);
+  const trip: 'pick' | 'drop' = picked
+    ? (picked[2] as 'pick' | 'drop')
+    : sp.trip === 'drop'
+      ? 'drop'
+      : sp.trip === 'pick' || !first
+        ? 'pick'
+        : first.trip;
+  const roll = routeId
+    ? await apiFetch<BusRoll>(
+        `/attendance/bus-roll?routeId=${routeId}&date=${date}&trip=${trip}`,
+      ).catch(() => null)
+    : null;
   const month = date.slice(0, 7);
   return (
     <>
@@ -68,6 +84,22 @@ export default async function BusRollPage({
       <AttendanceNav current="/attendance/bus-roll" permissions={me.permissions} ok={sp.ok} />
       <Notice params={{ error: sp.error, detail: sp.detail }} />
       <form method="get" className="ep-dlog__filters" style={{ marginBottom: 'var(--sp-4)' }}>
+        <label className="ep-field" htmlFor="br-pick" style={{ minWidth: '18rem' }}>
+          <span className="ep-field__label">Route and trip</span>
+          <select
+            id="br-pick"
+            name="pick"
+            className="ep-select"
+            defaultValue={routeId ? `${routeId}|${trip}` : ''}
+          >
+            {summary?.mine ? null : <option value="">All routes (summary)</option>}
+            {(summary?.rows ?? []).map((r) => (
+              <option key={`${r.routeId}|${r.trip}`} value={`${r.routeId}|${r.trip}`}>
+                {r.code} · {r.name} · {r.tripLabel}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="ep-field" htmlFor="br-date">
           <span className="ep-field__label">Date</span>
           <input
@@ -85,8 +117,8 @@ export default async function BusRollPage({
       </form>
       {summary === null ? (
         <Alert tone="warning">
-          The route-wise summary is for staff who oversee attendance. Mark your own route in the
-          teacher app under Bus attendance.
+          Bus attendance is not part of your role. A teacher sees the routes mapped to them under
+          Attendance set-up.
         </Alert>
       ) : (
         <Card title={`Route-wise · ${date}`} style={{ marginBottom: 'var(--sp-4)' }}>
@@ -97,7 +129,9 @@ export default async function BusRollPage({
           </p>
           {summary.rows.length === 0 ? (
             <p className="ep-field__help" style={{ margin: 0 }}>
-              No route is set up yet.
+              {summary.mine
+                ? 'No route is mapped to you for bus attendance. The coordinator maps a teacher to each route under Attendance set-up.'
+                : 'No route is set up yet.'}
             </p>
           ) : (
             <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Routes">

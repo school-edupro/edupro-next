@@ -45,7 +45,6 @@ export async function saveAttendanceSetup(input: {
   busDropFrom: string;
   busDropTo: string;
   backDays: number;
-  routeTeachers: Array<{ routeId: string; trip: 'pick' | 'drop'; employeeId: string }>;
 }): Promise<SetupResult> {
   try {
     await apiFetch('/attendance/desk/setup', { method: 'PUT', body: JSON.stringify(input) });
@@ -93,4 +92,89 @@ export async function reopenAttendance(fd: FormData) {
   }
   revalidatePath(here);
   redirect(`${here}?ok=reopened`);
+}
+
+const said = (error: unknown): string => {
+  if (!(error instanceof ApiError)) throw error;
+  const errs = error.problem.errors as Array<{ message?: string }> | undefined;
+  return (
+    (Array.isArray(errs)
+      ? errs
+          .map((e) => e.message)
+          .filter(Boolean)
+          .join('; ')
+      : '') ||
+    error.problem.detail ||
+    error.problem.type
+  );
+};
+
+export type RouteTeacherResult =
+  | { ok: true; text: string; errors?: Array<{ row: number; message: string }> }
+  | { ok: false; error: string };
+
+/** A teacher on the routes picked, for the morning trip, the afternoon trip or both. */
+export async function addRouteTeachers(input: {
+  employeeId: string;
+  routeIds: string[];
+  trip: 'both' | 'pick' | 'drop';
+}): Promise<RouteTeacherResult> {
+  try {
+    const r = await apiFetch<{ added: number; login: boolean }>('/attendance/desk/route-teachers', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/attendance/setup');
+    return {
+      ok: true,
+      text:
+        (r.added ? 'Saved.' : 'Already mapped; nothing new to save.') +
+        (r.login ? '' : ' This employee has no login yet, so cannot mark until one is given.'),
+    };
+  } catch (error) {
+    return { ok: false, error: said(error) };
+  }
+}
+
+export async function removeRouteTeacher(input: {
+  employeeId: string;
+  routeId: string;
+  trip: 'both' | 'pick' | 'drop';
+}): Promise<RouteTeacherResult> {
+  try {
+    await apiFetch('/attendance/desk/route-teachers/remove', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/attendance/setup');
+    return { ok: true, text: 'Removed.' };
+  } catch (error) {
+    return { ok: false, error: said(error) };
+  }
+}
+
+export async function importRouteTeachers(fileBase64: string): Promise<RouteTeacherResult> {
+  try {
+    const r = await apiFetch<{
+      added: number;
+      already: number;
+      errors: Array<{ row: number; message: string }>;
+    }>('/attendance/desk/route-teachers/import', {
+      method: 'POST',
+      body: JSON.stringify({ fileBase64 }),
+    });
+    if (r.errors.length)
+      return {
+        ok: true,
+        text: 'Nothing was saved: correct these rows in the sheet and upload it again.',
+        errors: r.errors,
+      };
+    revalidatePath('/attendance/setup');
+    return {
+      ok: true,
+      text: `${String(r.added)} added${r.already ? `, ${String(r.already)} were already there` : ''}.`,
+    };
+  } catch (error) {
+    return { ok: false, error: said(error) };
+  }
 }

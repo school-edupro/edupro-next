@@ -58,3 +58,10 @@
   bus trips not yet marked (with the teacher's name), both bus trips, and the last 14 days.
 - **Families** see class attendance and the bus (morning and afternoon) under Attendance, and today's
   status on the home page.
+
+
+## Set-up screens (October 2026 update)
+
+- **Bus attendance: teacher of each route** (Attendance → Set-up). Select the employee, select one or many routes, choose the trip (**Both**, Morning only, Afternoon only) and Submit. A route may have more than one teacher. The same from Excel: *Download the format* (Employee, Route and Trip are drop-downs), fill, *Upload*. An upload only adds; remove from the list.
+- **Bus attendance page** (admin and teacher app): choose *Route and trip* and the *Date* (today by default), then Show; the list is the route's students for that trip. A route teacher sees only the routes mapped to them, in the admin portal too.
+- **Teacher assignments** (Academics). Select employee, teacher type, one or many classes and one or many subjects, then Submit: every class is saved with every subject. For a class teacher, tick **Actual class teacher**; untick it for a co-class teacher (a section has one actual class teacher, whose name prints on the register and shows to parents; a co-class teacher can also mark the class). Excel format with drop-downs is on the same card.

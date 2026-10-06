@@ -59,10 +59,11 @@ export const AttendanceSetupSchema = z
     busDropFrom: blank(Time),
     busDropTo: blank(Time),
     backDays: z.coerce.number().int().min(0).max(7).default(0),
+    /** Left out: the route teachers stay as they are (they have their own add / remove / upload). */
     routeTeachers: z
       .array(z.object({ routeId: IdSchema, trip: Trip, employeeId: IdSchema }))
       .max(600)
-      .default([]),
+      .optional(),
   })
   .refine(
     (v) =>
@@ -89,3 +90,23 @@ export const ReopenSchema = z
     path: ['classSectionId'],
   });
 export class ReopenDto extends createZodDto(ReopenSchema) {}
+
+/** A teacher for bus attendance on some routes: the morning trip, the afternoon trip or both. */
+export const RouteTeachersSchema = z.object({
+  employeeId: IdSchema,
+  routeIds: z.array(IdSchema).min(1, 'Pick at least one route').max(200),
+  trip: z.enum(['both', 'pick', 'drop']).default('both'),
+});
+export class RouteTeachersDto extends createZodDto(RouteTeachersSchema) {}
+
+export const RouteTeacherRemoveSchema = z.object({
+  employeeId: IdSchema,
+  routeId: IdSchema,
+  trip: z.enum(['both', 'pick', 'drop']).default('both'),
+});
+export class RouteTeacherRemoveDto extends createZodDto(RouteTeacherRemoveSchema) {}
+
+export const RouteTeachersImportSchema = z.object({
+  fileBase64: z.string().min(100).max(1_400_000),
+});
+export class RouteTeachersImportDto extends createZodDto(RouteTeachersImportSchema) {}

@@ -3,7 +3,6 @@ import { useState, useTransition } from 'react';
 import { saveAttendanceSetup } from '@/lib/attendance-actions';
 import type { AttendanceSetup } from '@/lib/attendance-plus';
 
-type Trip = 'pick' | 'drop';
 const WINDOWS: Array<
   [string, 'classFrom' | 'busPickFrom' | 'busDropFrom', 'classTo' | 'busPickTo' | 'busDropTo']
 > = [
@@ -14,7 +13,7 @@ const WINDOWS: Array<
 
 /**
  * Attendance set-up: the time of day in which a teacher may mark (class, bus morning, bus afternoon), how
- * many days back a teacher may still mark, and the teacher of each route for each trip.
+ * many days back a teacher may still mark.
  */
 export function AttendanceSetupForm({ setup }: { setup: AttendanceSetup }) {
   const [w, setW] = useState({
@@ -26,26 +25,12 @@ export function AttendanceSetupForm({ setup }: { setup: AttendanceSetup }) {
     busDropTo: setup.windows.busDropTo ?? '',
     backDays: setup.windows.backDays,
   });
-  const [teachers, setTeachers] = useState(
-    setup.routeTeachers.map((t) => ({
-      routeId: t.routeId,
-      trip: t.trip,
-      employeeId: t.employeeId,
-    })),
-  );
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, start] = useTransition();
-  const patch = (n: number, p: Partial<(typeof teachers)[number]>) =>
-    setTeachers(teachers.map((t, i) => (i === n ? { ...t, ...p } : t)));
   const save = () =>
     start(async () => {
       setMsg(null);
-      if (teachers.some((t) => !t.routeId || !t.employeeId))
-        return setMsg({
-          ok: false,
-          text: 'Choose the route and the teacher on every row, or remove the row.',
-        });
-      const r = await saveAttendanceSetup({ ...w, routeTeachers: teachers });
+      const r = await saveAttendanceSetup(w);
       setMsg(r.ok ? { ok: true, text: 'Saved.' } : { ok: false, text: r.error });
     });
   return (
@@ -97,97 +82,6 @@ export function AttendanceSetupForm({ setup }: { setup: AttendanceSetup }) {
             }
           />
         </label>
-      </section>
-      <section className="ep-hd__form" aria-label="Route teachers">
-        <h3 className="ep-cdash__h3">Teacher of each route (bus attendance)</h3>
-        <p className="ep-field__help" style={{ margin: 0 }}>
-          Map a teacher to a route for the morning trip, the afternoon trip, or both (two rows). Add
-          a second teacher on the same route and trip as a backup. Only they, the transport office
-          and admins can mark that route.
-        </p>
-        {teachers.map((t, n) => (
-          <div key={String(n)} className="ep-hd__row">
-            <label className="ep-field" htmlFor={`rt-route-${String(n)}`}>
-              <span className="ep-field__label">Route</span>
-              <select
-                id={`rt-route-${String(n)}`}
-                className="ep-select"
-                value={t.routeId}
-                onChange={(e) => patch(n, { routeId: e.target.value })}
-              >
-                <option value="">Choose</option>
-                {setup.routes.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="ep-field" htmlFor={`rt-trip-${String(n)}`}>
-              <span className="ep-field__label">Trip</span>
-              <select
-                id={`rt-trip-${String(n)}`}
-                className="ep-select"
-                value={t.trip}
-                onChange={(e) => patch(n, { trip: e.target.value as Trip })}
-              >
-                <option value="pick">Morning (pick)</option>
-                <option value="drop">Afternoon (drop)</option>
-              </select>
-            </label>
-            <label className="ep-field" htmlFor={`rt-emp-${String(n)}`}>
-              <span className="ep-field__label">Teacher</span>
-              <select
-                id={`rt-emp-${String(n)}`}
-                className="ep-select"
-                value={t.employeeId}
-                onChange={(e) => patch(n, { employeeId: e.target.value })}
-              >
-                <option value="">Choose</option>
-                {setup.staff.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
-              {t.trip === 'pick' &&
-              !teachers.some(
-                (x) =>
-                  x.routeId === t.routeId && x.employeeId === t.employeeId && x.trip === 'drop',
-              ) ? (
-                <button
-                  type="button"
-                  className="ep-btn ep-btn--secondary ep-btn--sm"
-                  onClick={() => setTeachers([...teachers, { ...t, trip: 'drop' }])}
-                  aria-label={`Add the afternoon trip for row ${String(n + 1)}`}
-                >
-                  + afternoon
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="ep-btn ep-btn--secondary ep-btn--sm"
-                onClick={() => setTeachers(teachers.filter((_, i) => i !== n))}
-                aria-label={`Remove row ${String(n + 1)}`}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
-        <div>
-          <button
-            type="button"
-            className="ep-btn ep-btn--secondary ep-btn--sm"
-            onClick={() =>
-              setTeachers([...teachers, { routeId: '', trip: 'pick', employeeId: '' }])
-            }
-          >
-            Add a route teacher
-          </button>
-        </div>
       </section>
       <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="ep-btn ep-btn--primary" onClick={save} disabled={busy}>

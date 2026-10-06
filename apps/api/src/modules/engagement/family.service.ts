@@ -51,7 +51,7 @@ export class FamilyService {
           `SELECT s.id::text, s.admission_no, s.first_name, s.last_name, s.display_name, s.dob::text, s.gender::text, s.blood_group, s.house, s.address, s.details, s.photo_file_id::text,
                   (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' LIMIT 1) AS section,
                   (SELECT e.roll_no FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' LIMIT 1) AS roll_no,
-                  (SELECT emp.display_name FROM enrolments e JOIN teacher_assignments ta ON ta.class_section_id = e.class_section_id AND ta.kind = 'class_teacher' AND ta.valid_to IS NULL JOIN employees emp ON emp.id = ta.employee_id WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' LIMIT 1) AS class_teacher,
+                  (SELECT emp.display_name FROM enrolments e JOIN teacher_assignments ta ON ta.class_section_id = e.class_section_id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL JOIN employees emp ON emp.id = ta.employee_id WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' LIMIT 1) AS class_teacher,
                   (SELECT jsonb_build_object('routeId', r.id::text, 'code', r.code, 'name', r.name, 'vehicleNo', r.vehicle_no, 'stopName', a.stop_name, 'pickupTime', a.pickup_time::text, 'dropTime', a.drop_time::text)
                      FROM student_route_assignments a JOIN transport_routes r ON r.id = a.route_id WHERE a.student_id = s.id AND a.academic_year_id = $2) AS route
              FROM students s WHERE s.id = $1`,
