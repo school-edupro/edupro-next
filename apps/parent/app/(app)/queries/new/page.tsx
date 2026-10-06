@@ -30,13 +30,18 @@ export default async function NewQueryPage({
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     throw error;
   }
-  const kind = sp.kind === 'leave' || sp.kind === 'complaint' ? sp.kind : 'query';
+  // leave has its own form and approval levels under Attendance
+  if (sp.kind === 'leave') redirect('/attendance?view=leave');
+  const kind = (sp.kind === 'complaint' ? 'complaint' : 'query') as 'query' | 'complaint' | 'leave';
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
         kicker={t(lang, 'Queries')}
         title={t(lang, 'New request')}
-        description={t(lang, 'A query, a complaint or a leave application for your child.')}
+        description={t(
+          lang,
+          'A query or a complaint for your child. Leave is applied for under Attendance.',
+        )}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/queries">
             {t(lang, 'Back')}
@@ -54,7 +59,7 @@ export default async function NewQueryPage({
       ) : null}
       <Card>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)' }}>
-          {(['query', 'complaint', 'leave'] as const).map((k) => (
+          {(['query', 'complaint'] as const).map((k) => (
             <a
               key={k}
               className={`ep-btn ep-btn--sm ${kind === k ? 'ep-btn--primary' : 'ep-btn--ghost'}`}

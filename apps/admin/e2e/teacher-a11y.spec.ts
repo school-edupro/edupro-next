@@ -15,6 +15,8 @@ const PAGES = [
   '/attendance',
   '/marks',
   '/bus-attendance',
+  '/bus-attendance/register',
+  '/leaves',
   '/gate-passes',
   '/gate-passes/new',
 ];

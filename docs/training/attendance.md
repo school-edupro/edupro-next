@@ -65,3 +65,14 @@
 - **Bus attendance: teacher of each route** (Attendance → Set-up). Select the employee, select one or many routes, choose the trip (**Both**, Morning only, Afternoon only) and Submit. A route may have more than one teacher. The same from Excel: *Download the format* (Employee, Route and Trip are drop-downs), fill, *Upload*. An upload only adds; remove from the list.
 - **Bus attendance page** (admin and teacher app): choose *Route and trip* and the *Date* (today by default), then Show; the list is the route's students for that trip. A route teacher sees only the routes mapped to them, in the admin portal too.
 - **Teacher assignments** (Academics). Select employee, teacher type, one or many classes and one or many subjects, then Submit: every class is saved with every subject. For a class teacher, tick **Actual class teacher**; untick it for a co-class teacher (a section has one actual class teacher, whose name prints on the register and shows to parents; a co-class teacher can also mark the class). Excel format with drop-downs is on the same card.
+
+
+## Leave, registers and the parent portal (October 2026, second update)
+
+- **Student leave.** The family applies in the parent portal: Attendance → Leave (type, first and last day, reason, certificate). Up to the long-leave limit (2 days unless changed) the **class teacher** approves; a longer leave goes on to the **coordinator** and then the **principal**. A medical leave longer than the limit cannot be applied for without the doctor's certificate. The family sees who it is waiting with, can cancel it, and can end an approved leave early ("child is back").
+- **Set-up** (Attendance → Set-up → Student leave: approval levels): the long-leave limit, how many days back a family may apply, and the levels of a short and a long leave (the student's class teacher, everyone with a role, or one employee). A level nobody holds is skipped.
+- **Approving.** Teacher app → Student leave; admin portal → Attendance → Student leave (the coordinator's office sees every leave). A rejection needs a note.
+- **In the rolls.** A student on approved leave is marked **LV** in the class and the bus roll and the teacher cannot change it; a coordinator or admin can. A student with a gate pass of the day is highlighted.
+- **Registers.** Class and bus registers (Excel and PDF) carry the school's name and address, the report name, the class or route, the month and when it was generated. The bus register of a route shows **M** (morning) and **A** (afternoon) under each date. Teachers open it in the teacher app: Bus attendance → Monthly register.
+- **Parent portal → Attendance.** Month (tiles, a ring, a calendar, the bus), Year (a bar per month and a table) and Leave.
+- Not yet: SMS / WhatsApp / e-mail about a leave; the status shows in the portals.

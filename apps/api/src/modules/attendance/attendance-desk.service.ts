@@ -623,4 +623,60 @@ export class AttendanceDeskService {
       return { date: today, children };
     });
   }
+  /** The session month by month for each child of the family: days marked, present, absent, leave, late. */
+  async familyYear(ctx: RequestContext) {
+    const yearId = this.year(ctx);
+    const v = await this.viewer.resolve(ctx, 'attendance.session.view');
+    if (v.kind !== 'family') return { months: [], children: [] };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const months = await c.query<{ m: string }>(
+        `SELECT to_char(g, 'YYYY-MM') AS m FROM academic_years ay,
+                generate_series(date_trunc('month', ay.start_date), LEAST(ay.end_date, ${TODAY}), interval '1 month') g
+          WHERE ay.id = $1 ORDER BY 1`,
+        [yearId],
+      );
+      const r = await c.query<Row>(
+        `SELECT m.student_id::text, to_char(a.on_date, 'YYYY-MM') AS mth, count(*)::int AS days,
+                count(*) FILTER (WHERE m.code::text NOT IN ('A', 'LV'))::int AS present,
+                count(*) FILTER (WHERE m.code::text = 'A')::int AS absent,
+                count(*) FILTER (WHERE m.code::text = 'LV')::int AS leave,
+                count(*) FILTER (WHERE m.code::text = 'L')::int AS late
+           FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id
+          WHERE a.kind = 'day' AND a.academic_year_id = $1 AND m.student_id = ANY($2::bigint[])
+          GROUP BY 1, 2`,
+        [yearId, v.students.map((s) => s.id)],
+      );
+      return {
+        months: months.rows.map((x) => x.m),
+        children: v.students.map((s) => {
+          const rows = months.rows.map((mo) => {
+            const x = r.rows.find((y) => y.student_id === s.id && y.mth === mo.m);
+            return {
+              month: mo.m,
+              days: n(x?.days),
+              present: n(x?.present),
+              absent: n(x?.absent),
+              leave: n(x?.leave),
+              late: n(x?.late),
+            };
+          });
+          const sum = (k: 'days' | 'present' | 'absent' | 'leave' | 'late') =>
+            rows.reduce((t, x) => t + x[k], 0);
+          return {
+            id: s.id,
+            name: s.name,
+            section: s.section,
+            months: rows,
+            total: {
+              days: sum('days'),
+              present: sum('present'),
+              absent: sum('absent'),
+              leave: sum('leave'),
+              late: sum('late'),
+            },
+          };
+        }),
+      };
+    });
+  }
 }

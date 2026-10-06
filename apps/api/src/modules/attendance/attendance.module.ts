@@ -11,9 +11,15 @@ import {
 } from './attendance.controller';
 import { AttendanceDeskService } from './attendance-desk.service';
 import { AttendanceGate } from './attendance-gate';
-import { AttendanceDeskController, BusRollController } from './attendance-plus.controller';
+import {
+  AttendanceDeskController,
+  BusRollController,
+  LeaveController,
+} from './attendance-plus.controller';
 import { AttendanceService } from './attendance.service';
 import { BusRollService } from './bus-roll.service';
+import { LeaveService } from './leave.service';
+import { FilesModule } from '../files/files.module';
 import { BusService } from './bus.service';
 import { PunchService } from './punch.service';
 import { RfidService } from './rfid.service';
@@ -21,7 +27,7 @@ import { RulesService } from './rules.service';
 
 /** Sprint 9: sessions, marks, absent alerts, RFID gates. Sprint 10: bus readers, biometric punches, dashboards. */
 @Module({
-  imports: [DailyAcademicsModule, CommsModule],
+  imports: [DailyAcademicsModule, CommsModule, FilesModule],
   controllers: [
     AttendanceController,
     RfidController,
@@ -30,11 +36,13 @@ import { RulesService } from './rules.service';
     RulesController,
     AttendanceDeskController,
     BusRollController,
+    LeaveController,
   ],
   providers: [
     AttendanceGate,
     AttendanceDeskService,
     BusRollService,
+    LeaveService,
     AttendanceService,
     RfidService,
     BusService,

@@ -178,3 +178,40 @@ export async function importRouteTeachers(fileBase64: string): Promise<RouteTeac
     return { ok: false, error: said(error) };
   }
 }
+
+/** An approver's decision on a student leave at their level. */
+export async function decideLeave(fd: FormData) {
+  const id = str(fd, 'id');
+  const here = `/attendance/leaves?tab=${str(fd, 'tab') || 'inbox'}`;
+  try {
+    await apiFetch(`/attendance/leaves/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome: str(fd, 'outcome'), note: str(fd, 'note') || undefined }),
+    });
+  } catch (error) {
+    fail(`${here}&open=${id}`, error);
+  }
+  revalidatePath('/attendance/leaves');
+  redirect(`${here}&ok=${str(fd, 'outcome') === 'approved' ? 'leave_approved' : 'leave_rejected'}`);
+}
+
+export async function saveLeaveSetup(input: {
+  longDays: number;
+  backDays: number;
+  levels: Array<{
+    chain: 'short' | 'long';
+    label: string;
+    kind: string;
+    roleCode: string | null;
+    employeeId: string | null;
+    active: boolean;
+  }>;
+}): Promise<SetupResult> {
+  try {
+    await apiFetch('/attendance/leaves/setup', { method: 'PUT', body: JSON.stringify(input) });
+    revalidatePath('/attendance/setup');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: said(error) };
+  }
+}

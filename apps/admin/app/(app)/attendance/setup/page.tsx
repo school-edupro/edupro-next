@@ -1,11 +1,12 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { AttendanceNav } from '@/components/attendance/AttendanceNav';
 import { AttendanceSetupForm } from '@/components/attendance/AttendanceSetupForm';
+import { LeaveSetupForm } from '@/components/attendance/LeaveSetupForm';
 import { RouteTeachersPanel } from '@/components/attendance/RouteTeachersPanel';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { reopenAttendance } from '@/lib/attendance-actions';
-import { istToday, type AttendanceSetup } from '@/lib/attendance-plus';
+import { istToday, type AttendanceSetup, type LeaveSetup } from '@/lib/attendance-plus';
 import { when } from '@/lib/appointments';
 
 /**
@@ -18,9 +19,10 @@ export default async function AttendanceSetupPage({
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
-  const [me, setup] = await Promise.all([
+  const [me, setup, leave] = await Promise.all([
     getMe(),
     apiFetch<AttendanceSetup>('/attendance/desk/setup'),
+    apiFetch<LeaveSetup>('/attendance/leaves/setup'),
   ]);
   const unmapped = setup.sections.filter((s) => !s.teacher);
   return (
@@ -73,6 +75,9 @@ export default async function AttendanceSetupPage({
             </tbody>
           </table>
         </div>
+      </Card>
+      <Card title="Student leave: approval levels" style={{ marginBottom: 'var(--sp-4)' }}>
+        <LeaveSetupForm setup={leave} />
       </Card>
       <Card title="Reopen a day for a teacher">
         <p className="ep-field__help" style={{ marginTop: 0 }}>

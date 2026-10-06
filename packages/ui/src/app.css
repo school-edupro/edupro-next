@@ -5387,3 +5387,170 @@ a.ep-tabs__tab {
 .ep-row--leave > th {
   background: var(--status-info-bg);
 }
+
+/* the family's attendance page: tiles, a donut, a month calendar and yearly bars */
+.ep-att__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.ep-att__tile {
+  border: 1px solid var(--border-subtle, var(--border-strong));
+  border-radius: var(--radius-md, 8px);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-subtle);
+}
+.ep-att__tile strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3, 1.25rem);
+  color: var(--text-heading);
+}
+.ep-att__tile[data-tone='success'] strong {
+  color: var(--status-success);
+}
+.ep-att__tile[data-tone='danger'] strong {
+  color: var(--status-danger);
+}
+.ep-att__tile[data-tone='info'] strong {
+  color: var(--status-info);
+}
+.ep-att__tile[data-tone='warning'] strong {
+  color: var(--status-warning);
+}
+.ep-att__split {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) 1fr;
+  gap: var(--sp-4);
+  align-items: start;
+}
+@media (max-width: 36rem) {
+  .ep-att__split {
+    grid-template-columns: 1fr;
+  }
+}
+.ep-att__donut {
+  width: 100%;
+  max-width: 12rem;
+  display: block;
+  margin: 0 auto;
+}
+.ep-att__donut text {
+  font-family: var(--font-heading);
+  fill: var(--text-heading);
+}
+.ep-att-ring {
+  fill: none;
+  stroke: var(--border-strong);
+}
+.ep-att-seg {
+  fill: none;
+}
+.ep-att-seg--p {
+  stroke: var(--status-success);
+}
+.ep-att-seg--a {
+  stroke: var(--status-danger);
+}
+.ep-att-seg--lv {
+  stroke: var(--status-info);
+}
+.ep-att-fill--p {
+  fill: var(--status-success);
+}
+.ep-att-fill--a {
+  fill: var(--status-danger);
+}
+.ep-att-fill--lv {
+  fill: var(--status-info);
+}
+.ep-att__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  font-size: var(--fs-small);
+  margin-top: var(--sp-2);
+}
+.ep-att__legend span::before {
+  content: '';
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  margin-right: var(--sp-1);
+  background: var(--border-strong);
+  vertical-align: -1px;
+}
+.ep-att__legend [data-code='P']::before {
+  background: var(--status-success);
+}
+.ep-att__legend [data-code='A']::before {
+  background: var(--status-danger);
+}
+.ep-att__legend [data-code='LV']::before {
+  background: var(--status-info);
+}
+.ep-att__legend [data-code='L']::before {
+  background: var(--status-warning);
+}
+.ep-att__cal {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  table-layout: fixed;
+}
+.ep-att__cal th {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--text-body);
+  text-align: center;
+}
+.ep-att__cal td {
+  text-align: center;
+  padding: var(--sp-1) 0;
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--fs-small);
+  background: var(--surface-subtle);
+  color: var(--text-body);
+}
+.ep-att__cal td small {
+  display: block;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.ep-att__cal td[data-code='P'],
+.ep-att__cal td[data-code='OD'],
+.ep-att__cal td[data-code='SB'] {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+.ep-att__cal td[data-code='A'] {
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+}
+.ep-att__cal td[data-code='LV'] {
+  background: var(--status-info-bg);
+  color: var(--status-info);
+}
+.ep-att__cal td[data-code='L'],
+.ep-att__cal td[data-code='H'],
+.ep-att__cal td[data-code='SR'] {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+.ep-att__cal td[data-empty] {
+  background: transparent;
+}
+.ep-att__bars {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.ep-att__bars text {
+  font-family: var(--font-body);
+  fill: var(--text-body);
+}
+.ep-att__axis {
+  stroke: var(--border-strong);
+}

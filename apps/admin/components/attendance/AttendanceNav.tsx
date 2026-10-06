@@ -9,11 +9,14 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
     label: 'Monthly registers',
     permission: 'attendance.session.view',
   },
+  { href: '/attendance/leaves', label: 'Student leave', permission: 'attendance.leave.decide' },
   { href: '/attendance/setup', label: 'Set-up', permission: 'attendance.setup.manage' },
 ];
 const OK: Record<string, string> = {
   saved: 'Saved.',
   reopened: 'The day is open again for the teacher until the time shown.',
+  leave_approved: 'Approved at your level.',
+  leave_rejected: 'Not approved. The family sees it in the portal.',
 };
 
 /** The attendance screens' own tabs (only the pages this role may open) and the message of a finished action. */

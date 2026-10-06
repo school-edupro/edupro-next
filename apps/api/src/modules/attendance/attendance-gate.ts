@@ -159,7 +159,13 @@ export class AttendanceGate {
     const leave = await c.query<{ student_id: string; number: string; f: string; t: string }>(
       `SELECT q.student_id::text, COALESCE(q.number, 'Q-' || q.id::text) AS number, q.leave_from::text AS f, q.leave_to::text AS t
          FROM parent_queries q
-        WHERE q.kind = 'leave' AND q.decision = 'approved' AND q.student_id = ANY($1::bigint[]) AND $2::date BETWEEN q.leave_from AND q.leave_to`,
+        WHERE q.kind = 'leave' AND q.decision = 'approved' AND q.student_id = ANY($1::bigint[]) AND $2::date BETWEEN q.leave_from AND q.leave_to
+        UNION ALL
+       -- leave applied from the portal (0088); the days the family gave up are not leave
+       SELECT l.student_id::text, COALESCE(l.number, 'LV-' || l.id::text), l.from_date::text, LEAST(l.to_date, COALESCE(l.ended_on - 1, l.to_date))::text
+         FROM student_leaves l
+        WHERE l.status = 'approved' AND l.student_id = ANY($1::bigint[])
+          AND $2::date BETWEEN l.from_date AND LEAST(l.to_date, COALESCE(l.ended_on - 1, l.to_date))`,
       [studentIds, date],
     );
     for (const x of leave.rows) of(x.student_id).leave = { number: x.number, from: x.f, to: x.t };

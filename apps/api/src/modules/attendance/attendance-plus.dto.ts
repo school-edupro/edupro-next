@@ -115,3 +115,71 @@ export const RouteTeachersImportSchema = z.object({
   fileBase64: z.string().min(100).max(1_400_000),
 });
 export class RouteTeachersImportDto extends createZodDto(RouteTeachersImportSchema) {}
+
+// ---- student leave (0088) ---------------------------------------------------------------------------
+export const LEAVE_TYPES = ['medical', 'family', 'travel', 'other'] as const;
+export const LeaveApplySchema = z
+  .object({
+    studentId: IdSchema,
+    leaveType: z.enum(LEAVE_TYPES),
+    fromDate: DateSchema,
+    toDate: DateSchema,
+    reason: z.string().trim().min(5, 'Write the reason (at least 5 letters)').max(1000),
+    fileIds: z.array(IdSchema).max(5).default([]),
+  })
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: 'The last day cannot be before the first day',
+    path: ['toDate'],
+  });
+export class LeaveApplyDto extends createZodDto(LeaveApplySchema) {}
+
+export const LeaveDecideSchema = z
+  .object({
+    outcome: z.enum(['approved', 'rejected']),
+    note: blank(z.string().trim().max(500)),
+  })
+  .refine((v) => v.outcome === 'approved' || (v.note && v.note.length >= 3), {
+    message: 'Write the reason for not approving',
+    path: ['note'],
+  });
+export class LeaveDecideDto extends createZodDto(LeaveDecideSchema) {}
+
+export const LeaveListSchema = z.object({
+  tab: z.enum(['inbox', 'pending', 'approved', 'rejected', 'all']).default('inbox'),
+  q: blank(z.string().trim().max(80)),
+});
+export class LeaveListDto extends createZodDto(LeaveListSchema) {}
+
+const LeaveLevel = z.object({
+  chain: z.enum(['short', 'long']),
+  label: z.string().trim().min(2).max(60),
+  kind: z.enum(['class_teacher', 'role', 'employee']),
+  roleCode: blank(z.string().trim().max(60)),
+  employeeId: blank(IdSchema),
+  active: z.boolean().default(true),
+});
+export const LeaveSetupSchema = z
+  .object({
+    longDays: z.coerce.number().int().min(1).max(30),
+    backDays: z.coerce.number().int().min(0).max(30),
+    levels: z.array(LeaveLevel).min(1).max(12),
+  })
+  .refine(
+    (v) =>
+      v.levels.every(
+        (l) =>
+          l.kind === 'class_teacher' ||
+          (l.kind === 'role' && l.roleCode) ||
+          (l.kind === 'employee' && l.employeeId),
+      ),
+    { message: 'Choose who approves at every level', path: ['levels'] },
+  )
+  .refine(
+    (v) =>
+      (['short', 'long'] as const).every((ch) => v.levels.some((l) => l.chain === ch && l.active)),
+    {
+      message: 'Keep at least one level for a short leave and one for a long leave',
+      path: ['levels'],
+    },
+  );
+export class LeaveSetupDto extends createZodDto(LeaveSetupSchema) {}

@@ -43,6 +43,12 @@ export default async function HomePage() {
       '/bus-attendance',
     ],
     [
+      t(lang, 'Student leave'),
+      t(lang, 'Approve the leave families applied for'),
+      can('attendance.leave.decide'),
+      '/leaves',
+    ],
+    [
       t(lang, 'Daily work'),
       t(lang, 'Post homework and classwork'),
       can('academics.daily_work.post'),

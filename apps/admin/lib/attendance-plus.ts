@@ -152,3 +152,73 @@ export const shortDay = (d: string) =>
   });
 export const windowText = (from: string | null, to: string | null) =>
   from || to ? `${from ?? 'start of day'} – ${to ?? 'end of day'}` : 'any time';
+
+// ---- student leave ----------------------------------------------------------------------------------
+export interface StudentLeave {
+  id: string;
+  number: string;
+  studentId: string;
+  student: string;
+  admissionNo: string | null;
+  section: string | null;
+  leaveType: string;
+  leaveTypeLabel: string;
+  fromDate: string;
+  toDate: string;
+  days: number;
+  reason: string;
+  long: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  appliedAt: string;
+  appliedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  endedOn: string | null;
+  waitingOn: string | null;
+}
+export interface StudentLeaveDetail extends StudentLeave {
+  files: Array<{ id: string; name: string }>;
+  approvals: Array<{
+    seq: number;
+    label: string;
+    status: string;
+    note: string | null;
+    actedAt: string | null;
+    actedBy: string | null;
+    approvers: string | null;
+    mine: boolean;
+  }>;
+  canDecide: boolean;
+}
+export interface LeaveSetup {
+  longDays: number;
+  backDays: number;
+  levels: Array<{
+    chain: 'short' | 'long';
+    label: string;
+    kind: 'class_teacher' | 'role' | 'employee';
+    roleCode: string | null;
+    employeeId: string | null;
+    active: boolean;
+  }>;
+  roles: Array<{ code: string; name: string }>;
+  staff: Array<{ id: string; name: string }>;
+}
+export const LEAVE_TONE: Record<string, 'warning' | 'success' | 'danger' | 'neutral'> = {
+  pending: 'warning',
+  approved: 'success',
+  rejected: 'danger',
+  cancelled: 'neutral',
+};
+export const leaveDays = (l: { fromDate: string; toDate: string; days: number }) => {
+  const d = (x: string) =>
+    new Date(`${x}T00:00:00Z`).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  return l.fromDate === l.toDate
+    ? `${d(l.fromDate)} · 1 day`
+    : `${d(l.fromDate)} to ${d(l.toDate)} · ${String(l.days)} days`;
+};

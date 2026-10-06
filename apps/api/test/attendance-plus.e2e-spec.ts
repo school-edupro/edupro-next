@@ -511,4 +511,144 @@ describe('attendance: leave, gate pass, windows and bus roll (e2e)', () => {
     expect(sheet.json()).toMatchObject({ created: 1, errors: [] });
     expect(sheet.json().skipped).toHaveLength(1);
   });
+  it('student leave: short to the class teacher, long on to the principal; a long medical leave needs the certificate', async () => {
+    const day = (n: number) =>
+      new Date(new Date(`${today}T00:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
+    const mine = (await get('/attendance/leaves/mine', parent)).json();
+    expect(mine).toMatchObject({ longDays: 2, students: [{ id: student.Ana }] });
+    expect((await get('/attendance/leaves/mine', teacher)).statusCode).toBe(403);
+    // one day, tomorrow: the class teacher alone
+    const short = await post('/attendance/leaves/mine', parent, {
+      studentId: student.Ana,
+      leaveType: 'family',
+      fromDate: day(1),
+      toDate: day(1),
+      reason: 'A wedding in the family',
+    });
+    expect(short.statusCode).toBe(201);
+    expect(short.json()).toMatchObject({
+      days: 1,
+      long: false,
+      status: 'pending',
+      waitingOn: 'Class teacher',
+    });
+    expect(short.json().approvals).toHaveLength(1);
+    // another family's child, and overlapping dates, are refused
+    expect(
+      (
+        await post('/attendance/leaves/mine', parent, {
+          studentId: student.Bala,
+          leaveType: 'other',
+          fromDate: day(1),
+          toDate: day(1),
+          reason: 'Not my child',
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await post('/attendance/leaves/mine', parent, {
+          studentId: student.Ana,
+          leaveType: 'other',
+          fromDate: day(1),
+          toDate: day(2),
+          reason: 'Overlaps the first',
+        })
+      ).json().errors.fromDate,
+    ).toContain('overlap');
+    // the co-class teacher is not asked while the section has its class teacher
+    expect((await get('/attendance/leaves', other)).json().data).toHaveLength(0);
+    expect((await get('/attendance/leaves', teacher)).json()).toMatchObject({ inbox: 1 });
+    expect(
+      (await post(`/attendance/leaves/${short.json().id}/decide`, other, { outcome: 'approved' }))
+        .statusCode,
+    ).toBe(403);
+    const ok = await post(`/attendance/leaves/${short.json().id}/decide`, teacher, {
+      outcome: 'approved',
+    });
+    expect(ok.json()).toMatchObject({ status: 'approved', canDecide: false });
+    // tomorrow's bus roll: on leave and locked for the route teacher; the coordinator's office may change it
+    const of = (r: {
+      roster: Array<{ studentId: string; locked: boolean; suggested: string | null }>;
+    }) => r.roster.find((x) => x.studentId === student.Ana)!;
+    expect(
+      of(
+        (
+          await get(`/attendance/bus-roll?routeId=${routeId}&date=${day(1)}&trip=pick`, other)
+        ).json(),
+      ),
+    ).toMatchObject({ locked: true, suggested: 'LV' });
+    expect(
+      of(
+        (
+          await get(`/attendance/bus-roll?routeId=${routeId}&date=${day(1)}&trip=pick`, admin)
+        ).json(),
+      ).locked,
+    ).toBe(false);
+
+    // five days of medical leave: the certificate is needed
+    const medical = {
+      studentId: student.Ana,
+      leaveType: 'medical',
+      fromDate: day(10),
+      toDate: day(14),
+      reason: 'Advised rest after a fracture',
+    };
+    const noFile = await post('/attendance/leaves/mine', parent, medical);
+    expect(noFile.statusCode).toBe(400);
+    expect(noFile.json().errors.files).toContain('certificate');
+    // the same days as a family leave: a long leave, class teacher then the principal (nobody is coordinator here)
+    const long = await post('/attendance/leaves/mine', parent, { ...medical, leaveType: 'travel' });
+    expect(long.json()).toMatchObject({ days: 5, long: true, waitingOn: 'Class teacher' });
+    expect(
+      long.json().approvals.map((a: { label: string; status: string }) => [a.label, a.status]),
+    ).toEqual([
+      ['Class teacher', 'pending'],
+      ['Coordinator', 'skipped'],
+      ['Principal', 'waiting'],
+    ]);
+    const first = await post(`/attendance/leaves/${long.json().id}/decide`, teacher, {
+      outcome: 'approved',
+    });
+    expect(first.json()).toMatchObject({ status: 'pending', waitingOn: 'Principal' });
+    // a rejection needs its reason
+    expect(
+      (await post(`/attendance/leaves/${long.json().id}/decide`, admin, { outcome: 'rejected' }))
+        .statusCode,
+    ).toBe(400);
+    const no = await post(`/attendance/leaves/${long.json().id}/decide`, admin, {
+      outcome: 'rejected',
+      note: 'Exams fall in these days',
+    });
+    expect(no.json()).toMatchObject({
+      status: 'rejected',
+      decisionNote: 'Exams fall in these days',
+    });
+
+    // the family gives up the approved leave before it begins; the roll is free again
+    const gone = await post(`/attendance/leaves/mine/${short.json().id}/cancel`, parent);
+    expect(gone.json().status).toBe('cancelled');
+    expect(
+      of(
+        (
+          await get(`/attendance/bus-roll?routeId=${routeId}&date=${day(1)}&trip=pick`, other)
+        ).json(),
+      ).locked,
+    ).toBe(false);
+
+    // the school changes the limit and the levels
+    const setup = (await get('/attendance/leaves/setup')).json();
+    expect(
+      setup.levels.map((l: { chain: string; label: string }) => `${l.chain}:${l.label}`),
+    ).toEqual(['short:Class teacher', 'long:Class teacher', 'long:Coordinator', 'long:Principal']);
+    const saved = await put('/attendance/leaves/setup', admin, {
+      longDays: 5,
+      backDays: 0,
+      levels: setup.levels,
+    });
+    expect(saved.json()).toMatchObject({ longDays: 5, backDays: 0 });
+    const five = await post('/attendance/leaves/mine', parent, { ...medical });
+    expect(five.json()).toMatchObject({ days: 5, long: false });
+    expect((await get('/attendance/leaves/setup', teacher)).statusCode).toBe(403);
+  });
 });

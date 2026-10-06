@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Put, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
@@ -14,6 +14,10 @@ import {
   ClassRegisterFileDto,
   ClassRegisterQueryDto,
   DayQueryDto,
+  LeaveApplyDto,
+  LeaveDecideDto,
+  LeaveListDto,
+  LeaveSetupDto,
   MonthQueryDto,
   ReopenDto,
   RouteTeacherRemoveDto,
@@ -22,6 +26,7 @@ import {
 } from './attendance-plus.dto';
 import { ATTENDANCE } from './attendance.dto';
 import { BusRollService } from './bus-roll.service';
+import { LeaveService } from './leave.service';
 
 const send = (reply: FastifyReply, f: { bytes: Buffer; filename: string; contentType: string }) =>
   reply
@@ -50,6 +55,13 @@ export class AttendanceDeskController {
   @RequirePermission(ATTENDANCE.view)
   familyToday(@ReqCtx() ctx: RequestContext) {
     return this.desk.familyToday(ctx);
+  }
+
+  @Get('mine/year')
+  @ApiOperation({ summary: 'A family’s children month by month over the session' })
+  @RequirePermission(ATTENDANCE.view)
+  familyYear(@ReqCtx() ctx: RequestContext) {
+    return this.desk.familyYear(ctx);
   }
 
   @Get('setup')
@@ -218,5 +230,91 @@ export class BusRollController {
     @Res() reply: FastifyReply,
   ) {
     send(reply, await this.roll.registerFile(ctx, q, 'pdf'));
+  }
+}
+
+/**
+ * Student leave (0088): the family applies and follows it; the approvers decide level by level; the
+ * school sets the long-leave limit and the levels. The service checks what the person holds.
+ */
+@ApiTags('attendance')
+@ApiBearerAuth()
+@Controller('attendance/leaves')
+export class LeaveController {
+  constructor(private readonly leaves: LeaveService) {}
+
+  @Get('mine')
+  @ApiOperation({ summary: 'My children’s leave of the session, with what the form needs' })
+  @AuthenticatedOnly()
+  mine(@ReqCtx() ctx: RequestContext) {
+    return this.leaves.mine(ctx);
+  }
+
+  @Post('mine')
+  @ApiOperation({ summary: 'Apply for leave for my child' })
+  @AuthenticatedOnly()
+  apply(@ReqCtx() ctx: RequestContext, @Body() dto: LeaveApplyDto) {
+    return this.leaves.apply(ctx, dto);
+  }
+
+  @Get('mine/:id')
+  @AuthenticatedOnly()
+  myLeave(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.leaves.myLeave(ctx, id);
+  }
+
+  @Post('mine/:id/cancel')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Withdraw a leave that waits, or end an approved one from today' })
+  @AuthenticatedOnly()
+  cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.leaves.cancel(ctx, id);
+  }
+
+  @Get('mine/:id/files/:fileId')
+  @AuthenticatedOnly()
+  myFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.leaves.fileUrl(ctx, id, fileId, true);
+  }
+
+  @Get('setup')
+  @AuthenticatedOnly()
+  setup(@ReqCtx() ctx: RequestContext) {
+    return this.leaves.setup(ctx);
+  }
+
+  @Put('setup')
+  @AuthenticatedOnly()
+  saveSetup(@ReqCtx() ctx: RequestContext, @Body() dto: LeaveSetupDto) {
+    return this.leaves.saveSetup(ctx, dto);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Student leave that came to me (or all of it, for the coordinator’s office)',
+  })
+  @AuthenticatedOnly()
+  list(@ReqCtx() ctx: RequestContext, @Query() q: LeaveListDto) {
+    return this.leaves.list(ctx, q);
+  }
+
+  @Get(':id')
+  @AuthenticatedOnly()
+  get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.leaves.get(ctx, id);
+  }
+
+  @Post(':id/decide')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Approve or reject a leave at my level' })
+  @AuthenticatedOnly()
+  decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: LeaveDecideDto) {
+    return this.leaves.decide(ctx, id, dto);
+  }
+
+  @Get(':id/files/:fileId')
+  @AuthenticatedOnly()
+  file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.leaves.fileUrl(ctx, id, fileId, false);
   }
 }
