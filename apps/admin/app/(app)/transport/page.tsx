@@ -1,4 +1,5 @@
 import { Alert, Badge, Card, PageHeader } from '@edupro/ui';
+import { TransportFeePanel } from '@/components/transport/TransportFeePanel';
 import { TransportNav } from '@/components/transport/TransportNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { dayLabel as dateLabel, monthLabel, rupees, type Replacement } from '@/lib/transport-desk';
@@ -485,6 +486,9 @@ export default async function TransportDashboardPage() {
           )}
         </Card>
       </div>
+      {me.permissions.some((p) => p === 'transport.fee.view' || p === 'fees.ledger.view') ? (
+        <TransportFeePanel />
+      ) : null}
     </>
   );
 }

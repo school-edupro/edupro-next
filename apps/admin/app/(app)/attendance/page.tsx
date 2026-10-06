@@ -1,6 +1,7 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { AttendanceNav } from '@/components/attendance/AttendanceNav';
+import { BarChart, DonutChart, LineChart, ProgressRows } from '@/components/charts/Charts';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   shortDay,
@@ -100,6 +101,94 @@ export default async function AttendanceDashboardPage({
           </Card>
         ))}
       </div>
+      <div className="ep-chart__grid2" style={{ marginTop: 'var(--sp-4)' }}>
+        <Card title={`In class · ${shortDay(date)}`}>
+          <DonutChart
+            title="Class attendance of the day"
+            centre={d.class.percent === null ? '–' : `${String(d.class.percent)}%`}
+            caption="in school"
+            parts={[
+              {
+                label: 'Present',
+                tone: 'success',
+                value: Math.max(0, d.class.present - d.class.late),
+              },
+              { label: 'Late', tone: 'warning', value: d.class.late },
+              { label: 'On leave', tone: 'info', value: d.class.leave },
+              { label: 'Absent', tone: 'danger', value: d.class.absent },
+              { label: 'Not marked', tone: 'muted', value: d.class.unmarked },
+            ]}
+          />
+        </Card>
+        {trips.map(([trip, title, x]) => (
+          <Card key={`ring-${trip}`} title={title}>
+            <DonutChart
+              title={title}
+              centre={
+                x.riders - x.unmarked > 0
+                  ? `${String(Math.round((x.present / (x.riders - x.unmarked)) * 100))}%`
+                  : '–'
+              }
+              caption="on the bus"
+              parts={[
+                { label: 'On the bus', tone: 'success', value: x.present },
+                { label: 'Leave', tone: 'info', value: x.leave },
+                { label: 'Gate pass / other', tone: 'warning', value: x.gatePass + x.other },
+                { label: 'Not on the bus', tone: 'danger', value: x.absent },
+                { label: 'Not marked', tone: 'muted', value: x.unmarked },
+              ]}
+            />
+          </Card>
+        ))}
+      </div>
+      <div className="ep-chart__grid2">
+        <Card title="In school, last 14 days (%)">
+          <LineChart
+            title="Share of marked pupils in school on each of the last 14 days"
+            labels={d.trend.map((x) => x.date.slice(8))}
+            max={100}
+            suffix="%"
+            series={[{ label: 'In school %', tone: 'navy', values: d.trend.map((x) => x.percent) }]}
+          />
+        </Card>
+        <Card title="On the bus, last 14 days">
+          <BarChart
+            title="Pupils on the bus in the morning and the afternoon, last 14 days"
+            series={[
+              { label: 'Morning', tone: 'cyan' },
+              { label: 'Afternoon', tone: 'navy' },
+            ]}
+            data={d.trend.map((x) => ({ label: x.date.slice(8), values: [x.pick, x.drop] }))}
+          />
+        </Card>
+      </div>
+      <Card title="Class by class, lowest first" style={{ marginBottom: 'var(--sp-4)' }}>
+        {rows.filter((r) => r.sessionId).length === 0 ? (
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            No class is marked for this day yet.
+          </p>
+        ) : (
+          <ProgressRows
+            label="Present of the class strength, by class"
+            rows={rows
+              .filter((r) => r.sessionId && r.strength > 0)
+              .map((r) => ({ r, pct: r.present / r.strength }))
+              .sort((x, y) => x.pct - y.pct)
+              .map(({ r, pct }) => ({
+                name: r.section,
+                value: r.present,
+                of: r.strength,
+                tone:
+                  pct >= 0.9
+                    ? ('success' as const)
+                    : pct >= 0.75
+                      ? ('warning' as const)
+                      : ('danger' as const),
+                text: `${String(Math.round(pct * 100))}% · ${String(r.present)}/${String(r.strength)} · ${String(r.absent)} absent`,
+              }))}
+          />
+        )}
+      </Card>
       <div className="ep-cdash__two">
         {trips.map(([trip, title, x, win]) => (
           <Card
@@ -182,7 +271,7 @@ export default async function AttendanceDashboardPage({
           )}
         </Card>
       </div>
-      <Card title="Last 14 days" style={{ margin: 'var(--sp-4) 0' }}>
+      <Card title="Last 14 days: the figures" style={{ margin: 'var(--sp-4) 0' }}>
         <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Last 14 days">
           <table className="ep-table ep-table--dense">
             <caption className="ep-sr-only">Class and bus attendance, day by day</caption>
