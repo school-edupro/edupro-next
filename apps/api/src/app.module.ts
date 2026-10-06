@@ -19,6 +19,7 @@ import { LifecycleModule } from './modules/people/lifecycle/lifecycle.module';
 import { AdmissionsModule } from './modules/admissions/admissions.module';
 import { FeesModule } from './modules/fees/fees.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
+import { FileMovementModule } from './modules/file-movement/file-movement.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { EngagementModule } from './modules/engagement/engagement.module';
@@ -67,6 +68,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     TemplatesModule,
     LifecycleModule,
     WorkflowModule,
+    FileMovementModule,
     PaymentsModule,
     AdmissionsModule,
     FeesModule,
