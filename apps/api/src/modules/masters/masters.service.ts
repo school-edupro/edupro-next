@@ -99,6 +99,7 @@ export class MastersService {
       canManage: held.has(m.permission.manage),
       canClone: m.clone !== undefined && held.has(m.permission.manage),
       naturalKey: m.naturalKey,
+      rekey: m.rekey === true,
       status: m.status ?? null,
       fields: m.fields,
       columns: masterColumns(m),
@@ -535,9 +536,66 @@ export class MastersService {
         if (error) errors.push(`${f.header}: ${error}`);
         else if (value !== undefined) out[f.key] = value;
       }
+      if (dto.id) {
+        // the edit form shows every field: one the user emptied is cleared, where the column may be empty
+        const blank = fields.filter(
+          (f) =>
+            !f.required &&
+            !f.identity &&
+            f.type !== 'boolean' &&
+            f.key in dto.values &&
+            out[f.key] === undefined,
+        );
+        if (blank.length) {
+          const nullable = await c.query<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = $1 AND is_nullable = 'YES' AND column_name = ANY($2::text[])`,
+            [def.table, blank.map((f) => f.key)],
+          );
+          for (const x of nullable.rows) out[x.column_name] = null;
+        }
+      }
       errors.push(...crossChecks(fields, out).map((e) => `${e.column}: ${e.message}`));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
+      if (dto.id && def.rekey) {
+        // editing a row whose key may change: it is updated in place, by its id
+        const keys = Object.keys(out);
+        try {
+          const r = await c.query(
+            // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry; values are bound
+            `UPDATE ${def.table} SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE id = $1`,
+            [dto.id, ...keys.map((k) => out[k])],
+          );
+          if (r.rowCount === 0)
+            throw new DomainError('not-found', 'Row not found', { status: 404 });
+        } catch (error) {
+          const e = error as { code?: string; message?: string };
+          if (e.code === '23505')
+            throw new DomainError(
+              'validation-failed',
+              `${def.title}: another row already has this ${def.fields
+                .filter((f) => f.identity)
+                .map((f) => f.header)
+                .join(' + ')}`,
+              { status: 400 },
+            );
+          if (e.code && e.code.startsWith('23'))
+            throw new DomainError(
+              'validation-failed',
+              `${def.title}: ${e.message ?? 'constraint failed'}`,
+              { status: 400 },
+            );
+          throw error;
+        }
+        await this.audit.stage(ctx, c, {
+          action: 'masters.row.update',
+          entityType: def.table,
+          entityId: dto.id,
+          after: out,
+        });
+        return { id: dto.id, ...out };
+      }
       if (dto.id) {
         // editing: the natural key must stay what the row has
         const cur = await c.query<Record<string, unknown>>(

@@ -190,6 +190,44 @@ describe('transport masters (e2e)', () => {
       conductor_name: 'Sunil Jadhav',
       vehicle_no: 'MH12AB1234',
     });
+    // editing the mapping may change its route, bus or trip: the same row, not a second one
+    const id = (await rows('transport_route_vehicles'))[0]!.id;
+    const crewOf = {
+      route_id: 'R1',
+      vehicle_id: 'MH12AB1234',
+      driver_id: 'D1',
+      conductor_id: 'C1',
+      attendant_id: 'A1',
+    };
+    const pick = await save('transport_route_vehicles', { ...crewOf, shift: 'pick' }, id);
+    expect(pick.statusCode).toBe(201);
+    const after = await rows('transport_route_vehicles');
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ id, shift: 'pick' });
+    // a mapping that starts on a later date does not hold the route today
+    const vehicleNo = async () =>
+      withMigrator(
+        async (c) =>
+          (
+            await c.query<{ vehicle_no: string | null }>(
+              `SELECT vehicle_no FROM transport_routes WHERE school_id = $1 AND code = 'R1'`,
+              [school.id],
+            )
+          ).rows[0]!.vehicle_no,
+      );
+    await save(
+      'transport_route_vehicles',
+      { ...crewOf, shift: 'both', from_date: '2099-01-01', to_date: '2099-01-31' },
+      id,
+    );
+    expect(await vehicleNo()).toBeNull();
+    // emptying the dates on the form clears them: the bus runs the route from now
+    await save(
+      'transport_route_vehicles',
+      { ...crewOf, shift: 'both', from_date: '', to_date: '' },
+      id,
+    );
+    expect(await vehicleNo()).toBe('MH12AB1234');
   });
 
   it('a route’s stops come from the stoppage master, which owns the name, the slab and the place', async () => {

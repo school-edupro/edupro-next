@@ -42,6 +42,7 @@ export interface MasterMeta {
   /** owned by another screen; opened from there, not listed */
   hidden?: boolean;
   naturalKey: string[];
+  rekey?: boolean;
   status: { column: string; values: string[] } | null;
   fields: MasterField[];
   columns: Array<{ key: string; header: string; type?: string; width?: number }>;

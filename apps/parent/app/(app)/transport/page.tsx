@@ -104,6 +104,7 @@ interface Track {
     student: { id: string; name: string };
     route: { code: string; name: string; stop: string | null; pickup: string | null } | null;
     vehicle: { id: string; regNo: string } | null;
+    upcoming?: { regNo: string; from: string } | null;
     /** set while a replacement bus runs the route */
     replacement: {
       regular: string;
@@ -254,7 +255,12 @@ export default async function TransportPage({
               <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
                 {c.vehicle
                   ? `${c.vehicle.regNo} · ${t(lang, 'No position from the bus yet.')}`
-                  : t(lang, 'No bus is mapped to this route today; live tracking shows once the school maps one.')}
+                  : c.upcoming
+                    ? `${t(lang, 'Bus')} ${c.upcoming.regNo} ${t(lang, 'runs this route from')} ${new Date(`${c.upcoming.from}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })}. ${t(lang, 'Live tracking starts that day.')}`
+                    : t(
+                        lang,
+                        'No bus is mapped to this route today; live tracking shows once the school maps one.',
+                      )}
               </p>
             )}
           </Card>

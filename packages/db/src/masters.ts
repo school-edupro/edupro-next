@@ -84,6 +84,8 @@ export interface MasterDefinition {
   naturalKey: string[];
   /** The ON CONFLICT target that matches the table's unique index for the natural key. */
   conflict: string;
+  /** The edit form may change the key columns too (a mapping moved to another route, bus or trip): the row is updated by its id. */
+  rekey?: boolean;
   fields: MasterField[];
   /** Soft status column, when the master has one (rows are never deleted through the grid). */
   status?: { column: string; values: readonly string[] };
@@ -1424,6 +1426,7 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'transport.fleet.view', manage: 'transport.fleet.manage' },
     naturalKey: ['route_id', 'vehicle_id', 'shift'],
     conflict: '(route_id, vehicle_id, shift)',
+    rekey: true,
     uploadHelp:
       'Which vehicle runs a route (pick trip, drop trip or both) and its crew: driver, conductor and attendant.',
     fields: [
@@ -1457,8 +1460,21 @@ export const MASTERS: MasterDefinition[] = [
       crew('driver_id', 'Driver', 'driver', true),
       crew('conductor_id', 'Conductor', 'conductor'),
       crew('attendant_id', 'Attendant (support staff)', 'attendant'),
-      { key: 'from_date', header: 'From', type: 'date', width: 12 },
-      { key: 'to_date', header: 'To', type: 'date', width: 12, notBefore: 'from_date' },
+      {
+        key: 'from_date',
+        header: 'From',
+        type: 'date',
+        width: 12,
+        help: 'The bus runs the route, and parents can track it, from this date. Leave blank to start now.',
+      },
+      {
+        key: 'to_date',
+        header: 'To',
+        type: 'date',
+        width: 12,
+        notBefore: 'from_date',
+        help: 'The last date the bus runs the route. Leave blank for no end.',
+      },
     ],
     status: STATUS,
     search: ['r1.code', 'r2.reg_no'],
