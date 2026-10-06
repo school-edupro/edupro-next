@@ -79,7 +79,7 @@ export function htmlToLines(html: string): NoteLine[] {
       ordered = list?.ol ?? false;
       n += 1;
       for (const [i, part] of t.split('\n').entries())
-        out.push({ text: `${i ? '   ' : ordered ? `${String(n)}. ` : '•  '}${part}`, kind: 'li' });
+        out.push({ text: `${i ? '   ' : ordered ? `${String(n)}. ` : '-  '}${part}`, kind: 'li' });
     } else {
       for (const part of t.split('\n'))
         out.push({

@@ -124,6 +124,7 @@ const NAV: Array<{
     section: 'workflow',
     items: [
       { href: '/workflow/inbox', label: 'inbox', permission: 'workflow.inbox.act' },
+      { href: '/workflow/files', label: 'fileMovement', permission: 'files.movement.raise' },
       { href: '/workflow/instances', label: 'instances', permission: 'workflow.instance.view' },
       {
         href: '/workflow/definitions',

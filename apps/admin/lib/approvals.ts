@@ -6,7 +6,15 @@ import type { SchoolTransfer } from './types';
  * and tickets are not approvals: they live only under the header Queries icon.
  */
 export interface ApprovalGroup {
-  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'gate_pass' | 'transport' | 'leave';
+  key:
+    | 'profile'
+    | 'workflow'
+    | 'withdrawal'
+    | 'transfer'
+    | 'gate_pass'
+    | 'transport'
+    | 'leave'
+    | 'file';
   title: string;
   help: string;
   href: string;
@@ -208,6 +216,37 @@ export async function myApprovals(
           : null,
       )
       .catch(() => null),
+    // files for approval wait on the people their creator named
+    has.has('files.movement.raise')
+      ? apiFetch<{
+          data: Array<{
+            id: string;
+            number: string;
+            subject: string;
+            createdBy: string;
+            submittedAt: string;
+          }>;
+        }>('/file-movement?box=inbox')
+          .then((r): ApprovalGroup | null =>
+            r.data.length
+              ? {
+                  key: 'file',
+                  title: 'File movement',
+                  help: 'Files raised for approval that are with you now',
+                  href: '/workflow/files',
+                  count: r.data.length,
+                  items: r.data.slice(0, size).map((n) => ({
+                    id: n.id,
+                    title: `${n.number} · ${n.subject}`,
+                    detail: `raised by ${n.createdBy}`,
+                    href: `/workflow/files/${n.id}`,
+                    since: n.submittedAt,
+                  })),
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null,
     // student leave waits on the people of a level (class teacher, coordinator, principal)
     has.has('attendance.leave.decide') || has.has('attendance.setup.manage')
       ? apiFetch<{

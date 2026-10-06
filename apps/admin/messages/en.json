@@ -53,6 +53,7 @@
     "rfid": "RFID readers",
     "workflow": "Approvals",
     "inbox": "My inbox",
+    "fileMovement": "File movement",
     "instances": "Requests",
     "definitions": "Workflows",
     "payments": "Payments",
