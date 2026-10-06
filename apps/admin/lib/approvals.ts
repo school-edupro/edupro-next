@@ -6,7 +6,7 @@ import type { SchoolTransfer } from './types';
  * and tickets are not approvals: they live only under the header Queries icon.
  */
 export interface ApprovalGroup {
-  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'gate_pass' | 'transport';
+  key: 'profile' | 'workflow' | 'withdrawal' | 'transfer' | 'gate_pass' | 'transport' | 'leave';
   title: string;
   help: string;
   href: string;
@@ -208,6 +208,41 @@ export async function myApprovals(
           : null,
       )
       .catch(() => null),
+    // student leave waits on the people of a level (class teacher, coordinator, principal)
+    has.has('attendance.leave.decide') || has.has('attendance.setup.manage')
+      ? apiFetch<{
+          data: Array<{
+            id: string;
+            number: string;
+            student: string;
+            section: string | null;
+            leaveTypeLabel: string;
+            fromDate: string;
+            toDate: string;
+            days: number;
+            appliedAt: string;
+          }>;
+        }>('/attendance/leaves?tab=inbox')
+          .then((r): ApprovalGroup | null =>
+            r.data.length
+              ? {
+                  key: 'leave',
+                  title: 'Student leave',
+                  help: 'Leave the families applied for, waiting for your approval',
+                  href: '/attendance/leaves',
+                  count: r.data.length,
+                  items: r.data.slice(0, size).map((l) => ({
+                    id: l.id,
+                    title: `${l.student}${l.section ? ` · ${l.section}` : ''}`,
+                    detail: `${l.leaveTypeLabel} · ${l.fromDate}${l.toDate !== l.fromDate ? ` to ${l.toDate}` : ''} · ${String(l.days)} day${l.days === 1 ? '' : 's'}`,
+                    href: `/attendance/leaves?tab=inbox&open=${l.id}`,
+                    since: l.appliedAt,
+                  })),
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null,
   ]);
   return groups.filter((g): g is ApprovalGroup => g !== null);
 }

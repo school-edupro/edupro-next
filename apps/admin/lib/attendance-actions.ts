@@ -6,10 +6,22 @@ import { ApiError, apiFetch } from './api';
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const fail = (path: string, error: unknown): never => {
-  if (error instanceof ApiError)
+  if (error instanceof ApiError) {
+    // a refused field says what is wrong with it ("Write the reason for not approving")
+    const errs = error.problem.errors as Array<{ message?: string }> | undefined;
+    const detail =
+      (Array.isArray(errs)
+        ? errs
+            .map((e) => e.message)
+            .filter(Boolean)
+            .join('; ')
+        : '') ||
+      error.problem.detail ||
+      '';
     redirect(
-      `${path}${path.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent((error.problem.detail ?? '').slice(0, 300))}`,
+      `${path}${path.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 300))}`,
     );
+  }
   throw error;
 };
 

@@ -1,11 +1,4 @@
-import {
-  Badge,
-  Button,
-  Card,
-  DataTable,
-  PageHeader,
-  SelectField,
-} from '@edupro/ui';
+import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { AssignmentForm } from '@/components/academics/AssignmentForm';

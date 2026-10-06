@@ -16,9 +16,15 @@ export async function decideLeave(fd: FormData) {
     });
   } catch (error) {
     if (error instanceof ApiError) {
-      const errs = error.problem.errors as Record<string, string> | undefined;
+      const errs = error.problem.errors as
+        Array<{ message?: string }> | Record<string, string> | undefined;
       const detail =
-        (errs && Object.values(errs).join('; ')) ||
+        (Array.isArray(errs)
+          ? errs
+              .map((e) => e.message)
+              .filter(Boolean)
+              .join('; ')
+          : errs && Object.values(errs).join('; ')) ||
         (typeof error.problem.detail === 'string' ? error.problem.detail : '');
       redirect(
         `/leaves?open=${id}&error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 200))}`,

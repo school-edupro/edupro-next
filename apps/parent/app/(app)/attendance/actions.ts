@@ -9,9 +9,14 @@ const BACK = '/attendance?view=leave';
 
 function fail(error: unknown, keep = ''): never {
   if (error instanceof ApiError) {
-    const errs = error.problem.errors as Record<string, string> | undefined;
-    const detail =
-      errs && !Array.isArray(errs) && Object.keys(errs).length
+    const errs = error.problem.errors as
+      Array<{ message?: string }> | Record<string, string> | undefined;
+    const detail = Array.isArray(errs)
+      ? errs
+          .map((e) => e.message)
+          .filter(Boolean)
+          .join('; ')
+      : errs && Object.keys(errs).length
         ? Object.values(errs).join('; ')
         : typeof error.problem.detail === 'string'
           ? error.problem.detail
