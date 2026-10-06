@@ -62,8 +62,8 @@ export function LeaveSetupForm({ setup }: { setup: LeaveSetup }) {
         </label>
       </div>
       <p className="ep-field__help" style={{ margin: 0 }}>
-        A medical leave of more than {longDays} day(s) cannot be applied for without the doctor’s
-        certificate.
+        Which leave needs a certificate is set per type under Leave types (never, for a long leave,
+        or always); “long” there means more than {longDays} day(s).
       </p>
       {CHAINS.map(([chain, title, help]) => (
         <section key={chain} className="ep-hd__form" aria-label={title}>

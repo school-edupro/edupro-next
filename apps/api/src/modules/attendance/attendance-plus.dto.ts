@@ -117,11 +117,11 @@ export const RouteTeachersImportSchema = z.object({
 export class RouteTeachersImportDto extends createZodDto(RouteTeachersImportSchema) {}
 
 // ---- student leave (0088) ---------------------------------------------------------------------------
-export const LEAVE_TYPES = ['medical', 'family', 'travel', 'other'] as const;
 export const LeaveApplySchema = z
   .object({
     studentId: IdSchema,
-    leaveType: z.enum(LEAVE_TYPES),
+    /** A code of the school's leave types master. */
+    leaveType: z.string().trim().min(1).max(30),
     fromDate: DateSchema,
     toDate: DateSchema,
     reason: z.string().trim().min(5, 'Write the reason (at least 5 letters)').max(1000),

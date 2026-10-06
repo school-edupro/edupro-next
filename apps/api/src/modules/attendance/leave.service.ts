@@ -31,7 +31,7 @@ const text = (v: unknown): string | null => (v === null || v === undefined ? nul
 const LEAVE = `SELECT l.id::text, COALESCE(l.number, 'LV-' || l.id::text) AS number, l.student_id::text, s.display_name AS student, s.admission_no,
        (SELECT k.code || '-' || cs.name FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN classes k ON k.id = cs.class_id
          WHERE en.student_id = s.id AND en.academic_year_id = l.academic_year_id AND en.status = 'active' LIMIT 1) AS section,
-       l.leave_type, l.from_date::text, l.to_date::text, l.days, l.reason, l.file_ids, l.chain, l.status, l.applied_at, l.decided_at, l.decision_note,
+       l.leave_type, (SELECT t.name FROM leave_types t WHERE t.code = l.leave_type LIMIT 1) AS leave_type_name, l.from_date::text, l.to_date::text, l.days, l.reason, l.file_ids, l.chain, l.status, l.applied_at, l.decided_at, l.decision_note,
        l.ended_on::text, COALESCE((SELECT g.display_name FROM guardians g WHERE g.user_id = l.applied_by LIMIT 1), u.display_name) AS applied_by,
        l.applied_by::text AS applied_by_id,
        (SELECT a.label FROM student_leave_approvals a WHERE a.leave_id = l.id AND a.status = 'pending' ORDER BY a.seq LIMIT 1) AS waiting_on
@@ -45,7 +45,8 @@ const toLeave = (x: Row) => ({
   admissionNo: text(x.admission_no),
   section: text(x.section),
   leaveType: String(x.leave_type),
-  leaveTypeLabel: LEAVE_TYPE_LABEL[String(x.leave_type)] ?? String(x.leave_type),
+  leaveTypeLabel:
+    text(x.leave_type_name) ?? LEAVE_TYPE_LABEL[String(x.leave_type)] ?? String(x.leave_type),
   fromDate: String(x.from_date),
   toDate: String(x.to_date),
   days: Number(x.days),
@@ -109,6 +110,7 @@ export class LeaveService {
                       ('long', 3, 'Principal', 'role', 'school_admin')) AS x(chain, seq, label, kind, role_code)
         WHERE NOT EXISTS (SELECT 1 FROM leave_approval_levels)`,
     );
+    await c.query(`SELECT app.leave_types_seed(app.current_school_id())`);
     const r = await c.query<{ long_days: number; back_days: number }>(
       `SELECT long_days, back_days FROM leave_settings WHERE school_id = app.current_school_id()`,
     );
@@ -316,7 +318,21 @@ export class LeaveService {
       );
       return {
         ...settings,
-        types: Object.entries(LEAVE_TYPE_LABEL).map(([value, label]) => ({ value, label })),
+        types: (
+          await c.query<{
+            value: string;
+            label: string;
+            certificate: string;
+            max_days: number | null;
+          }>(
+            `SELECT code AS value, name AS label, certificate, max_days FROM leave_types WHERE status = 'active' ORDER BY sort_order, name`,
+          )
+        ).rows.map((x) => ({
+          value: x.value,
+          label: x.label,
+          certificate: x.certificate,
+          maxDays: x.max_days,
+        })),
         students: v.kind === 'family' ? v.students.map((s) => ({ id: s.id, name: s.name })) : [],
         leaves: r.rows.map(toLeave),
       };
@@ -341,7 +357,7 @@ export class LeaveService {
         [dto.fromDate, dto.toDate, s.backDays, yearId],
       );
       const { days, too_old, in_year } = d.rows[0]!;
-      const fail = (field: string, message: string) => {
+      const fail = (field: string, message: string): never => {
         throw new DomainError('validation-failed', message, {
           status: 400,
           extra: { errors: { [field]: message } },
@@ -357,10 +373,27 @@ export class LeaveService {
       if (!in_year) fail('toDate', 'The dates are outside this academic session');
       if (days > 90) fail('toDate', 'A leave of more than 90 days needs the school office');
       const long = days > s.longDays;
-      if (dto.leaveType === 'medical' && long && dto.fileIds.length === 0)
+      const type = (
+        await c.query<{ name: string; certificate: string; max_days: number | null }>(
+          `SELECT name, certificate, max_days FROM leave_types WHERE code = $1 AND status = 'active'`,
+          [dto.leaveType],
+        )
+      ).rows[0];
+      if (!type) return fail('leaveType', 'Choose the type of leave from the list');
+      if (type.max_days !== null && days > type.max_days)
+        fail(
+          'toDate',
+          `${type.name} leave is for at most ${String(type.max_days)} day(s) in one application`,
+        );
+      if (
+        dto.fileIds.length === 0 &&
+        (type.certificate === 'always' || (type.certificate === 'long' && long))
+      )
         fail(
           'files',
-          `A medical leave of more than ${String(s.longDays)} day(s) needs the doctor's certificate: attach it`,
+          type.certificate === 'always'
+            ? `${type.name} leave needs a certificate or letter: attach it`
+            : `A ${type.name.toLowerCase()} leave of more than ${String(s.longDays)} day(s) needs the certificate: attach it`,
         );
       if (dto.fileIds.length) {
         const f = await c.query<{ ok: boolean }>(

@@ -55,7 +55,7 @@ interface Leave {
 interface MyLeaves {
   longDays: number;
   backDays: number;
-  types: Array<{ value: string; label: string }>;
+  types: Array<{ value: string; label: string; certificate?: string; maxDays?: number | null }>;
   students: Array<{ id: string; name: string }>;
   leaves: Leave[];
 }
@@ -753,8 +753,17 @@ export default async function AttendancePage({
                     multiple
                   />
                   <span className="ep-field__help">
-                    {t(lang, 'A medical leave of more than')} {leaves.longDays}{' '}
-                    {t(lang, 'day(s) needs the doctor’s certificate.')}
+                    {leaves.types
+                      .filter((x) => x.certificate && x.certificate !== 'never')
+                      .map(
+                        (x) =>
+                          `${t(lang, x.label)}: ${
+                            x.certificate === 'always'
+                              ? t(lang, 'certificate always needed')
+                              : `${t(lang, 'certificate needed for more than')} ${String(leaves.longDays)} ${t(lang, 'day(s)')}`
+                          }`,
+                      )
+                      .join(' · ')}
                   </span>
                 </label>
                 <p className="ep-field__help" style={{ margin: 0 }}>

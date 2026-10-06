@@ -76,7 +76,15 @@ export default async function AttendanceSetupPage({
           </table>
         </div>
       </Card>
-      <Card title="Student leave: approval levels" style={{ marginBottom: 'var(--sp-4)' }}>
+      <Card
+        title="Student leave: approval levels"
+        style={{ marginBottom: 'var(--sp-4)' }}
+        actions={
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/masters/attendance">
+            Leave types
+          </a>
+        }
+      >
         <LeaveSetupForm setup={leave} />
       </Card>
       <Card title="Reopen a day for a teacher">

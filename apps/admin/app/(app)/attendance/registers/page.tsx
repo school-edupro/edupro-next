@@ -45,12 +45,24 @@ export default async function AttendanceRegistersPage({
   const [me, sections, routes] = await Promise.all([
     getMe(),
     sectionOptions(),
-    apiFetch<{ data: Array<{ id: string; code: string; name: string }> }>('/transport/routes')
-      .then((r) => r.data)
-      .catch(() => []),
+    // the routes this person may open: every route for the office, the mapped ones for a route teacher
+    apiFetch<{ data: Array<{ routeId: string; code: string; name: string }> }>(
+      '/attendance/bus-roll/routes',
+    )
+      .then((r) =>
+        r.data
+          .filter((x, i) => r.data.findIndex((y) => y.routeId === x.routeId) === i)
+          .map((x) => ({ id: x.routeId, code: x.code, name: x.name })),
+      )
+      .catch(() =>
+        apiFetch<{ data: Array<{ id: string; code: string; name: string }> }>('/transport/routes')
+          .then((r) => r.data)
+          .catch(() => []),
+      ),
   ]);
   const section = sections.find((s) => s.value === sp.section)?.value ?? null;
-  const route = routes.find((r) => r.id === sp.route)?.id ?? null;
+  const route =
+    routes.find((r) => r.id === sp.route)?.id ?? (routes.length === 1 ? routes[0]!.id : null);
   const [cls, bus] = await Promise.all([
     kind === 'class' && section
       ? apiFetch<ClassRegister>(
