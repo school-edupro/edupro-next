@@ -2,14 +2,19 @@ import { FileLinks } from '@/components/FileLinks';
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { AckButton } from '@/components/AckButton';
 import { bff } from '@/lib/bff';
+import { chosenChild } from '@/lib/child';
 import { currentLang, t } from '@/lib/i18n';
 
 interface Notice {
   id: string;
-  kind: 'notice' | 'circular';
+  kind: 'notice' | 'circular' | 'office_order';
   title: string;
   body: string;
+  bodyFormat?: 'text' | 'html';
+  ackRequired?: boolean;
+  ackedFor?: string[];
   publishFrom: string;
   isPinned: boolean;
   targets: Array<{ label: string }>;
@@ -19,6 +24,7 @@ interface Notice {
 /** S7-08: notices visible to the family (audience and targets are applied by the API). */
 export default async function NoticesPage() {
   const lang = await currentLang();
+  const kid = await chosenChild();
   let notices: Notice[];
   try {
     notices = await bff.api
@@ -70,7 +76,11 @@ export default async function NoticesPage() {
           >
             {n.title}
           </div>
-          <p style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--sp-1)' }}>{n.body}</p>
+          {n.bodyFormat === 'html' ? (
+            <div className="ep-prose ep-note" dangerouslySetInnerHTML={{ __html: n.body }} />
+          ) : (
+            <p style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--sp-1)' }}>{n.body}</p>
+          )}
           {n.files.length ? (
             <div className="pp-attachments ep-filecell">
               <span>{t(lang, 'Attachments')}</span>
@@ -84,6 +94,19 @@ export default async function NoticesPage() {
                   saveLabel={t(lang, 'Download')}
                 />
               ))}
+            </div>
+          ) : null}
+          {n.ackRequired && kid ? (
+            <div style={{ marginTop: 'var(--sp-2)' }}>
+              <AckButton
+                type="notice"
+                id={n.id}
+                studentId={kid.id}
+                done={(n.ackedFor ?? []).includes(kid.id)}
+                back="/notices"
+                label={t(lang, 'Acknowledge')}
+                doneLabel={t(lang, 'Acknowledged')}
+              />
             </div>
           ) : null}
         </Card>

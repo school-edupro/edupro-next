@@ -2,6 +2,7 @@ import { FileLinks } from '@/components/FileLinks';
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
+import { AckButton } from '@/components/AckButton';
 import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
@@ -19,6 +20,9 @@ interface Work {
   dueOn: string | null;
   postedBy: string | null;
   files: Array<{ id: string; name: string | null }>;
+  publishAt: string;
+  ackRequired: boolean;
+  ackedFor: string[];
 }
 interface Viewer {
   kind: 'staff' | 'family';
@@ -29,6 +33,15 @@ interface Viewer {
     section: string | null;
   }>;
 }
+
+const publishedAt = (iso: string) =>
+  new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 /** S7-08: homework, classwork and assignments of the guardian's children, one child at a time. */
 export default async function HomeworkPage({
@@ -144,7 +157,24 @@ export default async function HomeworkPage({
                   ))}
                 </div>
               ) : null}
-              {w.postedBy ? <div className="ep-kicker">{w.postedBy}</div> : null}
+              <div className="ep-kicker">
+                {[w.postedBy, `${t(lang, 'Published')} ${publishedAt(w.publishAt)}`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+              {w.ackRequired && child ? (
+                <div style={{ marginTop: 'var(--sp-2)' }}>
+                  <AckButton
+                    type="daily_work"
+                    id={w.id}
+                    studentId={child.id}
+                    done={w.ackedFor.includes(child.id)}
+                    back="/homework"
+                    label={t(lang, 'Acknowledge')}
+                    doneLabel={t(lang, 'Acknowledged')}
+                  />
+                </div>
+              ) : null}
             </div>
           ))}
         </Card>

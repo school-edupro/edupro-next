@@ -5746,3 +5746,10 @@ a.ep-tabs__tab {
   padding-left: var(--sp-3);
   border-left: 3px solid var(--border-accent);
 }
+/* small grey text on a tinted roll row keeps its contrast */
+.ep-row--pass .ep-kicker,
+.ep-row--leave .ep-kicker,
+.ep-row--pass .ep-field__help,
+.ep-row--leave .ep-field__help {
+  color: var(--text-heading);
+}

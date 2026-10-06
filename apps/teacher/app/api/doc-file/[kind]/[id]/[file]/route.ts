@@ -3,17 +3,12 @@ import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 
 const BASE: Record<string, string> = {
-  homework: '/academics/daily-work',
-  notice: '/academics/notices',
-  query: '/engagement/mine/queries',
-  leave: '/attendance/leaves/mine',
   document: '/academics/documents',
+  notice: '/academics/notices',
+  work: '/academics/daily-work',
 };
 
-/**
- * A homework, notice or query attachment for the family: the API checks the family may see that homework or
- * notice and signs a short-lived link. PDFs and images open in the browser; `?save=1` downloads.
- */
+/** An attachment of a class document, a notice or daily work: opens in the browser; `?save=1` downloads. */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ kind: string; id: string; file: string }> },

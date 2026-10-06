@@ -14,6 +14,10 @@ interface Work {
   assignedOn: string;
   dueOn: string | null;
   files: Array<{ id: string; name: string | null }>;
+  publishAt: string;
+  scheduled: boolean;
+  ackRequired: boolean;
+  ackCount: number;
 }
 interface Assignment {
   classSectionId: string;
@@ -28,6 +32,17 @@ interface Subject {
   code: string;
   name: string;
 }
+
+/** The school's time now, as a date-time field takes it. */
+const nowLocal = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 16);
+const when = (iso: string) =>
+  new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 /** S7-07: the teacher posts homework and classwork for the sections assigned to them. */
 export default async function DailyWorkPage({
@@ -72,9 +87,14 @@ export default async function DailyWorkPage({
         title="Homework and classwork"
         description={`${work.length} recent posts for your sections`}
         actions={
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            Home
-          </a>
+          <>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/documents">
+              Session plan, curriculum, date sheet
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
+              Home
+            </a>
+          </>
         }
       />
       {sp.ok ? (
@@ -153,6 +173,26 @@ export default async function DailyWorkPage({
               <span className="ep-field__label">Details</span>
               <textarea name="body" className="ep-input" rows={3} maxLength={8000} />
             </label>
+            <div
+              style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap', alignItems: 'end' }}
+            >
+              <label className="ep-field">
+                <span className="ep-field__label">Publish on (date and time)</span>
+                <input
+                  name="publishAt"
+                  type="datetime-local"
+                  className="ep-input"
+                  defaultValue={nowLocal()}
+                />
+                <span className="ep-field__help">
+                  Parents and students see it from this time. Now by default.
+                </span>
+              </label>
+              <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                <input type="checkbox" name="ackRequired" value="1" />
+                Ask the parent / student to acknowledge
+              </label>
+            </div>
             <label className="ep-field">
               <span className="ep-field__label">Attachment (PDF or image)</span>
               <input
@@ -203,6 +243,31 @@ export default async function DailyWorkPage({
               ),
             },
             { key: 'due', header: 'Due', render: (w) => w.dueOn ?? '' },
+            {
+              key: 'publish',
+              header: 'Published',
+              render: (w) => (
+                <span>
+                  {when(w.publishAt)} {w.scheduled ? <Badge tone="warning">Scheduled</Badge> : null}
+                </span>
+              ),
+            },
+            {
+              key: 'ack',
+              header: 'Acknowledged',
+              render: (w) =>
+                w.ackRequired ? (
+                  <a
+                    href={`/acknowledgements?type=daily_work&id=${w.id}`}
+                    style={{ textDecoration: 'underline' }}
+                    aria-label={`Who acknowledged ${w.title}`}
+                  >
+                    {w.ackCount} · view
+                  </a>
+                ) : (
+                  '–'
+                ),
+            },
           ]}
           rows={work}
           rowKey={(w) => w.id}

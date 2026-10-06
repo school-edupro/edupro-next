@@ -141,6 +141,11 @@ const NAV: Array<{
       { href: '/academics/subjects', label: 'subjects', permission: 'academics.subject.view' },
       { href: '/masters/academics', label: 'academicsSetup', permission: 'academics.class.view' },
       {
+        href: '/academics/documents',
+        label: 'classDocuments',
+        permission: 'academics.daily_work.view',
+      },
+      {
         href: '/academics/teacher-assignments',
         label: 'teacherAssignments',
         permission: 'academics.teacher_assignment.view',

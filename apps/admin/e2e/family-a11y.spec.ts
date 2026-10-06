@@ -7,6 +7,8 @@ const PAGES = [
   '/?welcome=1',
   '/profile',
   '/attendance',
+  '/documents',
+  '/directory',
   '/attendance?view=year',
   '/attendance?view=leave',
   '/fees',

@@ -506,8 +506,12 @@ export interface NoticeTarget {
 }
 
 export interface Notice {
+  ackRequired?: boolean;
+  ackCount?: number;
+  emailedCount?: number | null;
+  bodyFormat?: 'text' | 'html';
   id: string;
-  kind: 'notice' | 'circular';
+  kind: 'notice' | 'circular' | 'office_order';
   title: string;
   body: string;
   audience: Audience;

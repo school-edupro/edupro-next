@@ -55,6 +55,18 @@ export default async function HomePage() {
       '/daily-work',
     ],
     [
+      t(lang, 'Session plan, curriculum, date sheet'),
+      t(lang, 'Upload class documents for parents and students'),
+      can('academics.daily_work.post'),
+      '/documents',
+    ],
+    [
+      t(lang, 'Office orders'),
+      t(lang, 'Orders and circulars the school issued for staff'),
+      can('academics.notice.view'),
+      '/office-orders',
+    ],
+    [
       t(lang, 'Lesson plans'),
       t(lang, 'Weekly plans with approvals'),
       can('academics.lesson_plan.manage'),

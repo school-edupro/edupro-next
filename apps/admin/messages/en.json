@@ -54,6 +54,7 @@
     "workflow": "Approvals",
     "inbox": "My inbox",
     "fileMovement": "File movement",
+    "classDocuments": "Session plans, date sheets, magazine",
     "leaveTypes": "Leave types",
     "instances": "Requests",
     "definitions": "Workflows",

@@ -10,11 +10,13 @@ import {
   SelectField,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { ChipPickerField } from '@/components/ChipPickerField';
+import { RichEditor } from '@/components/files/RichEditor';
 import { Notice } from '@/components/Notice';
 import { createNotice, deleteNotice, publishNotice } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
-import type { Audience, ClassRow, Notice as NoticeRow, Page } from '@/lib/types';
+import type { Audience, ClassRow, Employee, Notice as NoticeRow, Page } from '@/lib/types';
 
 const AUDIENCES: Audience[] = ['everyone', 'students', 'employees'];
 
@@ -47,10 +49,24 @@ export default async function NoticesPage({
       : Promise.resolve<ClassRow[]>([]),
     canManage ? sectionOptions() : Promise.resolve([]),
   ]);
+  const employees = canManage
+    ? await apiFetch<Page<Employee>>('/people/employees?size=200')
+        .then((r) => r.data)
+        .catch(() => [] as Employee[])
+    : [];
 
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker={t('kicker')}
+        title="Notices and office orders"
+        description="Notices and circulars show in the parent and student portal; office orders show to employees. Write your own text, attach files, ask for an acknowledgement and send it by e-mail too."
+        actions={
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/academics/notices/report">
+            Report
+          </a>
+        }
+      />
       <Notice params={sp} />
       <Card>
         <form
@@ -90,7 +106,7 @@ export default async function NoticesPage({
               header: d('kind'),
               render: (n) => (
                 <Badge tone={n.kind === 'circular' ? 'warning' : 'info'}>
-                  {d(`noticeKinds.${n.kind}`)}
+                  {n.kind === 'office_order' ? 'Office order' : d(`noticeKinds.${n.kind}`)}
                 </Badge>
               ),
             },
@@ -103,7 +119,10 @@ export default async function NoticesPage({
                   <strong>{n.title}</strong>
                   <br />
                   <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-small)' }}>
-                    {n.body.slice(0, 160)}
+                    {n.body
+                      .replace(/<[^>]+>/g, ' ')
+                      .replace(/&nbsp;/g, ' ')
+                      .slice(0, 160)}
                   </span>
                 </span>
               ),
@@ -114,6 +133,28 @@ export default async function NoticesPage({
               header: d('targets'),
               render: (n) =>
                 n.targets.length ? n.targets.map((x) => x.label).join(', ') : d('noTargets'),
+            },
+            {
+              key: 'ack',
+              header: 'Acknowledged',
+              render: (n) =>
+                n.ackRequired ? (
+                  <a
+                    href={`/academics/acknowledgements?type=notice&id=${n.id}`}
+                    style={{ textDecoration: 'underline' }}
+                    aria-label={`Who acknowledged ${n.title}`}
+                  >
+                    {n.ackCount ?? 0} · view
+                  </a>
+                ) : (
+                  '–'
+                ),
+            },
+            {
+              key: 'mail',
+              header: 'E-mailed',
+              render: (n) =>
+                n.emailedCount === null || n.emailedCount === undefined ? '–' : n.emailedCount,
             },
             {
               key: 'status',
@@ -165,10 +206,11 @@ export default async function NoticesPage({
                 id="kind"
                 name="kind"
                 label={d('kind')}
-                options={(['notice', 'circular'] as const).map((k) => ({
-                  value: k,
-                  label: d(`noticeKinds.${k}`),
-                }))}
+                options={[
+                  { value: 'notice', label: 'Notice (students / parents)' },
+                  { value: 'circular', label: 'Circular' },
+                  { value: 'office_order', label: 'Office order (employees)' },
+                ]}
               />
               <SelectField
                 id="audience"
@@ -193,17 +235,12 @@ export default async function NoticesPage({
               <InputField id="title" name="title" label={d('title')} required maxLength={200} />
             </FormRow>
             <FormRow columns={1}>
-              <div className="ep-field">
-                <label className="ep-field__label" htmlFor="body">
-                  {d('body')}
-                </label>
-                <textarea
-                  id="body"
+              <div>
+                <input type="hidden" name="bodyFormat" value="html" />
+                <RichEditor
                   name="body"
-                  className="ep-input"
-                  rows={5}
-                  required
-                  maxLength={20000}
+                  label={`${d('body')} *`}
+                  placeholder="Write the notice or the office order here…"
                 />
               </div>
             </FormRow>
@@ -238,6 +275,32 @@ export default async function NoticesPage({
                   ))}
                 </select>
               </div>
+            </FormRow>
+            <FormRow columns={1}>
+              <ChipPickerField
+                name="employeeIds"
+                label="Only these employees (office order or staff notice; leave empty for all staff)"
+                options={employees.map((e) => ({
+                  value: e.id,
+                  label: `${e.employeeCode} · ${e.displayName}`,
+                }))}
+              />
+            </FormRow>
+            <FormRow columns={3}>
+              <InputField
+                id="publishAt"
+                name="publishAt"
+                label="Show in the portal from (date and time)"
+                type="datetime-local"
+                defaultValue={new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 16)}
+              />
+              <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                <input type="checkbox" name="ackRequired" value="1" /> Ask for an acknowledgement
+              </label>
+              <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                <input type="checkbox" name="alsoEmail" value="1" /> Also send by e-mail when
+                published
+              </label>
             </FormRow>
             <FormRow columns={3}>
               <InputField

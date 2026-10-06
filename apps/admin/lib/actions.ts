@@ -1095,6 +1095,7 @@ export async function createNotice(fd: FormData) {
     const targets = [
       ...fd.getAll('classIds').map((id) => ({ type: 'class', id: String(id) })),
       ...fd.getAll('classSectionIds').map((id) => ({ type: 'class_section', id: String(id) })),
+      ...fd.getAll('employeeIds').map((id) => ({ type: 'employee', id: String(id) })),
     ];
     await apiFetch('/academics/notices', {
       method: 'POST',
@@ -1109,9 +1110,40 @@ export async function createNotice(fd: FormData) {
         targets,
         fileIds,
         publish: fd.get('publish') !== null,
+        bodyFormat: str(fd, 'bodyFormat') === 'html' ? 'html' : 'text',
+        ackRequired: fd.get('ackRequired') !== null,
+        publishAt: opt(fd, 'publishAt'),
+        alsoEmail: fd.get('alsoEmail') !== null,
       }),
     });
   });
+}
+
+/** A class document, or (no class chosen) a document for the whole school such as the magazine. */
+export async function createDocument(fd: FormData) {
+  return run('/academics/documents', async () => {
+    const fileIds = await uploadAll(fd, 'files');
+    await apiFetch('/academics/documents', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: str(fd, 'kind'),
+        title: str(fd, 'title'),
+        remark: opt(fd, 'remark'),
+        classSectionIds: fd.getAll('classSectionIds').map(String).filter(Boolean),
+        subjectId: opt(fd, 'subjectId'),
+        fileIds,
+        publishAt: opt(fd, 'publishAt'),
+        ackRequired: fd.get('ackRequired') !== null,
+      }),
+    });
+  });
+}
+
+export async function deleteDocument(fd: FormData) {
+  const id = str(fd, 'id');
+  return run('/academics/documents', () =>
+    apiFetch(`/academics/documents/${id}`, { method: 'DELETE' }),
+  );
 }
 
 export async function publishNotice(fd: FormData) {
