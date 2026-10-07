@@ -112,10 +112,13 @@ export default async function FamilyDocumentsPage({
                 >
                   <Badge tone="info">{t(lang, d.kindLabel)}</Badge>
                   <strong>{d.title}</strong>
-                  {d.subject ? <span className="ep-kicker">{d.subject}</span> : null}
                 </div>
                 {d.remark ? (
-                  <p style={{ margin: 'var(--sp-1) 0', whiteSpace: 'pre-wrap' }}>{d.remark}</p>
+                  <div
+                    className="ep-richtext"
+                    style={{ margin: 'var(--sp-1) 0' }}
+                    dangerouslySetInnerHTML={{ __html: d.remark }}
+                  />
                 ) : null}
                 <div className="pp-attachments ep-filecell">
                   <span>{t(lang, 'Attachments')}</span>

@@ -855,6 +855,7 @@ const DICT: Record<string, string> = {
   'No assignment is pending.': 'कोई असाइनमेंट बाकी नहीं।',
   given: 'दिया गया',
   'Past the due date': 'अंतिम तिथि निकल चुकी',
+  'Given from': 'दिए जाने की तिथि से',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

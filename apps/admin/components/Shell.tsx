@@ -165,7 +165,6 @@ const NAV: Array<{
         label: 'dailyWork',
         permission: 'academics.daily_work.view',
       },
-      { href: '/academics/notices', label: 'notices', permission: 'academics.notice.view' },
       { href: '/academics/calendar', label: 'calendar', permission: 'academics.calendar.view' },
       { href: '/academics/gallery', label: 'gallery', permission: 'academics.gallery.view' },
     ],
@@ -184,6 +183,8 @@ const NAV: Array<{
     items: [
       { href: '/comms', label: 'commsDashboard', permission: 'comms.report.view' },
       { href: '/comms/compose', label: 'compose', permission: 'comms.request.create' },
+      // notices and office orders are written like a message: they sit with Communication
+      { href: '/academics/notices', label: 'notices', permission: 'academics.notice.view' },
       { href: '/comms/requests', label: 'requests', permission: 'comms.request.view' },
       { href: '/comms/groups', label: 'groups', permission: 'comms.group.view' },
       { href: '/comms/consents', label: 'consents', permission: 'comms.consent.view' },

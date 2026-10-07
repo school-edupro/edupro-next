@@ -17,7 +17,7 @@ const PAGES = [
   '/fees',
   '/homework',
   '/homework?date=2026-10-07',
-  '/homework?view=assignments',
+  '/homework?view=assignments&from=2026-09-01&to=2026-10-31',
   '/teachers',
   '/notices',
   '/messages',

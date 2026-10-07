@@ -103,6 +103,9 @@ describe('daily work sheet (e2e)', () => {
         json: { employeeId, classSectionId: sec, kind, subjectId },
       });
     expect((await assign(ids.empCt!, 'class_teacher', ids.secA!)).statusCode).toBe(201);
+    // the class teacher teaches English and Science there; Mathematics is another teacher's
+    expect((await assign(ids.empCt!, 'subject_teacher', ids.secA!, ids.ENG)).statusCode).toBe(201);
+    expect((await assign(ids.empCt!, 'subject_teacher', ids.secA!, ids.SCI)).statusCode).toBe(201);
     expect((await assign(ids.empMt!, 'subject_teacher', ids.secA!, ids.MAT)).statusCode).toBe(201);
     expect((await assign(ids.empMt!, 'subject_teacher', ids.secB!, ids.MAT)).statusCode).toBe(201);
   });
@@ -110,15 +113,12 @@ describe('daily work sheet (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('gives the class teacher every subject of the class and a subject teacher their own', async () => {
+  it('gives every teacher, the class teacher too, only the subjects assigned to them', async () => {
     const ct = (await get(classTeacher, '/academics/daily-work/sheet/options')).json().data;
     expect(ct).toHaveLength(1);
     expect(ct[0].section).toBe('VI-A');
-    expect(ct[0].subjects.map((x: { code: string }) => x.code).sort()).toEqual([
-      'ENG',
-      'MAT',
-      'SCI',
-    ]);
+    expect(ct[0].subjects.map((x: { code: string }) => x.code).sort()).toEqual(['ENG', 'SCI']);
+    expect(ct[0]).toMatchObject({ classId: ids.cls, className: 'Class VI' });
     const mt = (await get(mathsTeacher, '/academics/daily-work/sheet/options')).json().data;
     expect(mt.map((x: { section: string }) => x.section)).toEqual(['VI-A', 'VI-B']);
     for (const s of mt) expect(s.subjects.map((x: { code: string }) => x.code)).toEqual(['MAT']);
@@ -169,13 +169,15 @@ describe('daily work sheet (e2e)', () => {
           rows: [row(ids.ENG!, 'Read chapter 3'), row(ids.MAT!, 'Exercise 4.2, sums 1 to 12')],
         })
       ).json(),
-    ).toMatchObject({ created: 1, updated: 1 });
+    ).toMatchObject({ created: 1, updated: 0 });
 
     const sheet = (
-      await get(classTeacher, `/academics/daily-work/sheet?date=2026-10-07&sections=${ids.secA}`)
+      await get(mathsTeacher, `/academics/daily-work/sheet?date=2026-10-07&classId=${ids.cls}`)
     ).json();
     const maths2 = sheet.rows.find((r: { subject: { code: string } }) => r.subject.code === 'MAT');
-    expect(maths2.homework.text).toBe('Exercise 4.2, sums 1 to 12');
+    expect(sheet.chosen).toHaveLength(2);
+    expect(sheet.classes).toEqual([{ id: ids.cls, name: 'Class VI' }]);
+    expect(maths2.homework.text).toBe('Exercise 4.2, sums 1 to 10');
     expect(maths2.classwork.text).toBe('Fractions on the number line');
 
     const seen = (
@@ -299,6 +301,17 @@ describe('daily work sheet (e2e)', () => {
     });
     expect(res.statusCode).toBe(413);
     expect(res.json().detail).toContain('larger than 1 MB');
+  });
+
+  it('downloads the report of what was posted as Excel and PDF', async () => {
+    for (const q of ['format=xlsx&kind=daily', 'format=pdf&kind=assignment', 'format=pdf']) {
+      const f = await get(
+        classTeacher,
+        `/academics/daily-work/report?from=2026-10-01&to=2026-10-31&${q}`,
+      );
+      expect(f.statusCode).toBe(200);
+      expect(f.rawPayload.length).toBeGreaterThan(800);
+    }
   });
 
   it('exports teacher assignments by class and by teacher', async () => {

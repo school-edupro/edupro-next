@@ -228,22 +228,29 @@ export class DailyWorkService {
             status: 409,
           },
         );
-      // a subject teacher gives work for the subjects mapped to them in this class (a class teacher, a
-      // coordinator and unscoped staff for any)
+      // a teacher, the class teacher too, gives work for the subjects mapped to them in this class
+      // (a coordinator and unscoped staff for any)
       if ((await this.scopes.filter(tenant, DAILY.workPost, 'class_section')) !== null) {
-        const mine = await c.query<{ any: boolean; ids: string[] | null }>(
-          `SELECT COALESCE(bool_or(ta.kind IN ('class_teacher', 'coordinator')), false) AS any,
+        const mine = await c.query<{
+          any: boolean;
+          n: number;
+          ct: boolean;
+          ids: string[] | null;
+        }>(
+          `SELECT COALESCE(bool_or(ta.kind = 'coordinator'), false) AS any, count(*)::int AS n,
+                  COALESCE(bool_or(ta.kind = 'class_teacher'), false) AS ct,
                   array_agg(ta.subject_id::text) FILTER (WHERE ta.subject_id IS NOT NULL) AS ids
              FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
             WHERE e.user_id = app.current_user_id() AND ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL`,
           [dto.classSectionId, yearId],
         );
         const m = mine.rows[0];
+        // a note for the whole class (no subject) is the class teacher's to give
         if (
           m &&
           !m.any &&
-          (m.ids ?? []).length &&
-          (!dto.subjectId || !(m.ids ?? []).includes(dto.subjectId))
+          m.n > 0 &&
+          (dto.subjectId ? !(m.ids ?? []).includes(dto.subjectId) : !m.ct)
         )
           throw new DomainError(
             'daily.subject_not_assigned',

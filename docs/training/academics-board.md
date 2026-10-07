@@ -47,3 +47,13 @@ Three tabs. **Calendar** is the month grid (holidays green, vacations blue, exam
 - Largest file (1–25 MB) for homework/classwork, assignments, class documents, notices and gallery.
 
 **Teacher assignments** can be filtered by class and by teacher, and downloaded as Excel or PDF.
+
+## Changes of 7 October 2026 (second round)
+
+- **Who posts what.** A teacher, the class teacher too, posts daily work and assignments only for the class and subject given in *Teacher assignments*. Coordinators and the office see every subject. A class teacher may still post a general note without a subject from the API (legacy single post).
+- **Class, then sections.** On the daily work sheet, assignments and class documents you pick the class; every section of it you may post for comes ticked, and one can be unticked.
+- **Attachments** show as View and Download icons on the sheet (once posted) and in the report.
+- **Report** has a filter *Daily work / Assignments / both*, and Excel and PDF downloads with the school header.
+- **Class documents** (session plan, curriculum, date sheet, magazine): no subject; the remark is written in the formatted-text editor; up to 5 files.
+- **Parent portal → Homework**: a date box on the day view; *Given from / To* on Assignments.
+- **Notices and office orders** are under **Communication** in the left menu (the address `/academics/notices` is unchanged).

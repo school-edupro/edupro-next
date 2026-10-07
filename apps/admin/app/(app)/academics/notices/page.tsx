@@ -1,6 +1,5 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
-import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { Notice } from '@/components/Notice';
 import { deleteNotice, publishNotice } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -49,7 +48,6 @@ export default async function NoticesPage({
           </>
         }
       />
-      <AcademicsNav current="/academics/notices" permissions={me.permissions} />
       <Notice params={sp} />
       <Card>
         <form

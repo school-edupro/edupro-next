@@ -10,6 +10,7 @@ import {
   type WorkSheetData,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { deleteDailyWork, saveWorkSheet } from '@/lib/actions';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
@@ -36,6 +37,8 @@ export default async function DailyWorkPage({
     view?: string;
     date?: string;
     s?: string | string[];
+    c?: string;
+    kind?: string;
     from?: string;
     to?: string;
     classSectionId?: string;
@@ -51,6 +54,8 @@ export default async function DailyWorkPage({
   const from = isDate(sp.from) ? sp.from : daysAgo(6);
   const to = isDate(sp.to) ? sp.to : today();
   const chosen = ids(sp.s);
+  const classId = /^\d{1,18}$/.test(sp.c ?? '') ? sp.c! : '';
+  const kind = sp.kind === 'daily' || sp.kind === 'assignment' ? sp.kind : '';
   const [t, me] = await Promise.all([getTranslations('pages.academics_daily_work'), getMe()]);
   const canPost = me.permissions.includes('academics.daily_work.post');
   const reportQuery = new URLSearchParams({ size: '200', from, to });
@@ -59,7 +64,7 @@ export default async function DailyWorkPage({
   const [sheet, report] = await Promise.all([
     canPost
       ? apiFetch<WorkSheetData>(
-          `/academics/daily-work/sheet?mode=${mode}&date=${date}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
+          `/academics/daily-work/sheet?mode=${mode}&date=${date}${classId ? `&classId=${classId}` : ''}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
         )
       : Promise.resolve<WorkSheetData | null>(null),
     view === 'report' || !canPost
@@ -69,7 +74,6 @@ export default async function DailyWorkPage({
       : Promise.resolve<WorkReportItem[]>([]),
   ]);
   const showReport = view === 'report' || !sheet;
-  const self = `/academics/daily-work?view=report&from=${from}&to=${to}${sp.classSectionId ? `&classSectionId=${sp.classSectionId}` : ''}`;
   const tab = (v: View, label: string) => (
     <a
       key={v}
@@ -79,6 +83,14 @@ export default async function DailyWorkPage({
       {label}
     </a>
   );
+  const fileLinks = (workId: string, fileId: string, n: number) => (
+    <FileLinks
+      href={`/api/academics/doc-file/work/${workId}/${fileId}`}
+      label={`attachment ${String(n)}`}
+    />
+  );
+  const exportQuery = `from=${from}&to=${to}${sp.classSectionId ? `&classSectionId=${sp.classSectionId}` : ''}${kind ? `&kind=${kind}` : ''}`;
+  const self = `/academics/daily-work?view=report&${exportQuery}`;
   const remove = (w: WorkReportItem) =>
     canPost ? (
       <form action={deleteDailyWork} style={{ display: 'inline' }}>
@@ -131,16 +143,47 @@ export default async function DailyWorkPage({
                 ]}
               />
             ) : null}
+            <SelectField
+              id="kind"
+              name="kind"
+              label="Show"
+              defaultValue={kind}
+              options={[
+                { value: '', label: 'Daily work and assignments' },
+                { value: 'daily', label: 'Daily work (homework, classwork)' },
+                { value: 'assignment', label: 'Assignments' },
+              ]}
+            />
             <Button type="submit" variant="secondary">
               Show
             </Button>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/academics/work-report?format=xlsx&${exportQuery}`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/academics/work-report?format=pdf&${exportQuery}`}
+            >
+              PDF
+            </a>
           </form>
-          <h3 className="ep-card__title">Homework and classwork</h3>
-          <WorkReport items={report} mode="daily" extra={remove} />
-          <h3 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
-            Assignments
-          </h3>
-          <WorkReport items={report} mode="assignment" extra={remove} />
+          {kind !== 'assignment' ? (
+            <>
+              <h3 className="ep-card__title">Homework and classwork</h3>
+              <WorkReport items={report} mode="daily" extra={remove} fileLinks={fileLinks} />
+            </>
+          ) : null}
+          {kind !== 'daily' ? (
+            <>
+              <h3 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
+                Assignments
+              </h3>
+              <WorkReport items={report} mode="assignment" extra={remove} fileLinks={fileLinks} />
+            </>
+          ) : null}
         </Card>
       ) : (
         <Card>
@@ -149,6 +192,7 @@ export default async function DailyWorkPage({
             path="/academics/daily-work"
             view={view}
             action={saveWorkSheet}
+            fileLinks={fileLinks}
           />
         </Card>
       )}

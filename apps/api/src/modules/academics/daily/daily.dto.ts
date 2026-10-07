@@ -77,9 +77,23 @@ export const SheetQuerySchema = z.object({
     .string()
     .regex(/^\d{1,18}(,\d{1,18}){0,29}$/)
     .optional(),
+  /** A class alone: every section of it the caller posts for. */
+  classId: IdSchema.optional(),
   mode: SheetModeSchema.default('daily'),
 });
 export class SheetQueryDto extends createZodDto(SheetQuerySchema) {}
+
+export const WorkReportQuerySchema = z.object({
+  classSectionId: IdSchema.optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  /** Homework and classwork, or assignments; both when left out. */
+  kind: SheetModeSchema.optional(),
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+  /** `1`: the file inside a JSON answer (the teacher app's own download route reads it). */
+  wrap: z.enum(['1']).optional(),
+});
+export class WorkReportQueryDto extends createZodDto(WorkReportQuerySchema) {}
 
 export const SaveSheetSchema = z.object({
   date: DateSchema,
@@ -249,10 +263,10 @@ export const DocumentKindSchema = z.enum([
 export const CreateDocumentSchema = z.object({
   kind: DocumentKindSchema,
   title: z.string().trim().min(2).max(200),
-  remark: z.string().trim().max(2000).optional(),
+  /** Written in the editor: kept as cleaned HTML. */
+  remark: z.string().trim().max(20000).optional(),
   /** The classes it is for; none = the whole school (the office only). */
   classSectionIds: z.array(IdSchema).max(80).default([]),
-  subjectId: IdSchema.optional(),
   fileIds: z.array(IdSchema).min(1, 'Attach the file').max(5),
   publishAt: PublishAtSchema.optional(),
   ackRequired: z.boolean().default(false),

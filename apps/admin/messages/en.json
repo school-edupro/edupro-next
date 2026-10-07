@@ -30,7 +30,7 @@
     "timetable": "Timetable",
     "import": "Bulk import",
     "dailyWork": "Daily work",
-    "notices": "Notices and circulars",
+    "notices": "Notices and office orders",
     "calendar": "Holidays and almanac",
     "gallery": "Gallery",
     "transferCertificates": "Transfer certificates",
@@ -439,7 +439,7 @@
       "description": "Homework, classwork and assignments by section. Teachers post for their own sections; families see their children's."
     },
     "academics_notices": {
-      "kicker": "Academics",
+      "kicker": "Communication",
       "title": "Notices and circulars",
       "description": "Published notices reach their audience and targets in the parent and teacher apps; drafts stay here."
     },

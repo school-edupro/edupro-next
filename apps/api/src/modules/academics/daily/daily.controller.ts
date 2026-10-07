@@ -37,6 +37,7 @@ import {
   NoticeReportQueryDto,
   SaveSheetDto,
   SheetQueryDto,
+  WorkReportQueryDto,
   UpdateAcademicSettingsDto,
 } from './daily.dto';
 import { DAILY } from './daily.permissions';
@@ -63,6 +64,27 @@ export class DailyWorkController {
   @RequirePermission(DAILY.workPost)
   async sheetOptions(@ReqCtx() ctx: RequestContext) {
     return { data: await this.sheets.options(ctx) };
+  }
+
+  @Get('report')
+  @ApiOperation({ summary: 'What was posted between two dates, as Excel or PDF' })
+  @RequirePermission(DAILY.workView)
+  async reportFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: WorkReportQueryDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const f = await this.sheets.reportFile(ctx, q);
+    if (q.wrap)
+      return {
+        filename: f.filename,
+        contentType: f.contentType,
+        base64: Buffer.from(f.bytes).toString('base64'),
+      };
+    reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`);
+    return reply.send(f.bytes);
   }
 
   @Get('sheet')

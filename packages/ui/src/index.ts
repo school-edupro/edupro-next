@@ -40,4 +40,7 @@ export {
   type WorkSheetProps,
   type WorkReportItem,
   type WorkReportProps,
+  type WorkFileLinks,
 } from './components/WorkSheet';
+export { RichEditor } from './components/RichEditor';
+export { ClassSectionPicker, type ClassSectionOption } from './components/ClassSectionPicker';

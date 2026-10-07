@@ -1,12 +1,19 @@
-import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  ClassSectionPicker,
+  InputField,
+  PageHeader,
+  RichEditor,
+  SelectField,
+  type ClassSectionOption,
+} from '@edupro/ui';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
-import { ChipPickerField } from '@/components/ChipPickerField';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { createDocument, deleteDocument } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import { sectionOptions } from '@/lib/sections';
-import type { Page, Subject } from '@/lib/types';
 
 interface Doc {
   id: string;
@@ -51,13 +58,14 @@ export default async function DocumentsPage({
 }) {
   const sp = await searchParams;
   const adding = sp.new === '1';
-  const [me, list, sections, subjects] = await Promise.all([
+  const [me, list, classOptions] = await Promise.all([
     getMe(),
     apiFetch<{ data: Doc[]; kinds: Array<{ value: string; label: string }> }>(
       `/academics/documents${sp.kind ? `?kind=${encodeURIComponent(sp.kind)}` : ''}`,
     ),
-    sectionOptions(),
-    apiFetch<Page<Subject>>('/academics/subjects?size=200&status=active').then((r) => r.data),
+    apiFetch<{ data: ClassSectionOption[] }>('/academics/daily-work/sheet/options')
+      .then((r) => r.data)
+      .catch(() => [] as ClassSectionOption[]),
   ]);
   const canPost = me.permissions.includes('academics.daily_work.post');
   return (
@@ -90,37 +98,23 @@ export default async function DocumentsPage({
                 label="What *"
                 options={list.kinds.map((k) => ({ value: k.value, label: k.label }))}
               />
-              <SelectField
-                id="doc-subject"
-                name="subjectId"
-                label="Subject"
-                options={[
-                  { value: '', label: 'All / not for one subject' },
-                  ...subjects.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })),
-                ]}
-              />
             </div>
-            <ChipPickerField
+            <ClassSectionPicker
               name="classSectionIds"
-              label="Classes (leave empty for the whole school: the magazine, the almanac)"
-              options={sections}
+              options={classOptions}
+              whole={me.permissions.includes('academics.notice.manage')}
             />
+            <p className="ep-field__help">
+              Pick the class: all its sections come ticked. Whole school is for the magazine and the
+              almanac.
+            </p>
             <InputField id="doc-title" name="title" label="Title *" required maxLength={200} />
-            <label className="ep-field" htmlFor="doc-remark">
-              <span className="ep-field__label">Remark</span>
-              <textarea
-                id="doc-remark"
-                name="remark"
-                className="ep-input"
-                rows={2}
-                maxLength={2000}
-              />
-            </label>
+            <RichEditor name="remark" label="Remark" />
             <div className="ep-hd__row">
               <InputField
                 id="doc-files"
                 name="files"
-                label="Attachments * (PDF or image, up to 5)"
+                label="Attachments * (PDF or image, up to 5 files)"
                 type="file"
                 multiple
                 required
@@ -191,9 +185,12 @@ export default async function DocumentsPage({
                       <td>{d.kindLabel}</td>
                       <th scope="row">
                         {d.title}
-                        <div className="ep-field__help">
-                          {[d.subject, d.remark].filter(Boolean).join(' · ')}
-                        </div>
+                        {d.remark ? (
+                          <div
+                            className="ep-richtext ep-field__help"
+                            dangerouslySetInnerHTML={{ __html: d.remark }}
+                          />
+                        ) : null}
                       </th>
                       <td>{d.section ?? 'Whole school'}</td>
                       <td>

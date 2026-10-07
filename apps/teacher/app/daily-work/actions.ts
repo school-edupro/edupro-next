@@ -72,7 +72,7 @@ export async function postDailyWork(fd: FormData) {
 export async function saveSheet(fd: FormData) {
   const view = str(fd, 'view') || 'sheet';
   const sections = fd.getAll('sections').map(String).filter(Boolean);
-  const here = `/daily-work?view=${view}&date=${str(fd, 'date')}${sections.map((s) => `&s=${s}`).join('')}`;
+  const here = `/daily-work?view=${view}&date=${str(fd, 'date')}&c=${str(fd, 'c')}${sections.map((s) => `&s=${s}`).join('')}`;
   let done: { created: number; updated: number };
   try {
     const rows = [];
@@ -143,7 +143,6 @@ export async function postDocument(fd: FormData) {
         title: str(fd, 'title'),
         remark: str(fd, 'remark') || undefined,
         classSectionIds: fd.getAll('classSectionIds').map(String).filter(Boolean),
-        subjectId: str(fd, 'subjectId') || undefined,
         fileIds,
         publishAt: str(fd, 'publishAt') || undefined,
         ackRequired: fd.get('ackRequired') !== null,

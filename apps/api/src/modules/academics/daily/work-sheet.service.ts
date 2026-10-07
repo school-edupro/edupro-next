@@ -7,7 +7,8 @@ import { requireTenant, type RequestContext } from '../../../common/http/request
 import { PushService } from '../../comms/push.service';
 import { FilesService } from '../../files/files.service';
 import { AcademicSettingsService, maskEmail, maskMobile } from './academic-settings.service';
-import type { SaveSheetDto, SheetQueryDto } from './daily.dto';
+import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
+import type { SaveSheetDto, SheetQueryDto, WorkReportQueryDto } from './daily.dto';
 import { DAILY } from './daily.permissions';
 import { DailyWorkService } from './daily-work.service';
 import { ViewerService } from './viewer.service';
@@ -22,6 +23,8 @@ export interface SheetSubject {
 export interface SheetSection {
   classSectionId: string;
   section: string;
+  classId: string;
+  className: string;
   /** The subjects the caller may give work for in this section. */
   subjects: SheetSubject[];
 }
@@ -29,6 +32,8 @@ export interface SheetSection {
 export interface SheetEntry {
   text: string;
   files: number;
+  /** The files already attached, each with the entry it belongs to (for its View and Download links). */
+  attachments: Array<{ workId: string; fileId: string }>;
   dueOn: string | null;
   /** The sections that have it. */
   sections: string[];
@@ -76,8 +81,13 @@ export class WorkSheetService {
     yearId: string,
     allowed: string[] | null,
   ): Promise<SheetSection[]> {
-    const sections = await c.query<{ id: string; section: string; class_id: string }>(
-      `SELECT cs.id::text, c.code || '-' || cs.name AS section, cs.class_id::text
+    const sections = await c.query<{
+      id: string;
+      section: string;
+      class_id: string;
+      class_name: string;
+    }>(
+      `SELECT cs.id::text, c.code || '-' || cs.name AS section, cs.class_id::text, c.name AS class_name
          FROM class_sections cs JOIN classes c ON c.id = cs.class_id
         WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[]))
         ORDER BY c.display_order, c.code, cs.name`,
@@ -90,7 +100,8 @@ export class WorkSheetService {
       `SELECT class_id::text, subject_id::text FROM class_subjects WHERE academic_year_id = $1`,
       [yearId],
     );
-    // the caller's own assignments say which subjects, unless they hold the whole class
+    // the caller's own assignments say which subjects: a class teacher too posts only for the subjects
+    // given to them; a coordinator and the office have every subject of the class
     const mine =
       allowed === null
         ? []
@@ -111,15 +122,14 @@ export class WorkSheetService {
       const classSubjects = subjects.rows.filter((x) => !ofClass || ofClass.has(x.id));
       const own = mine.filter((m) => m.class_section_id === s.id);
       const whole =
-        allowed === null ||
-        own.length === 0 ||
-        own.some((m) => m.kind === 'class_teacher' || m.kind === 'coordinator');
+        allowed === null || own.length === 0 || own.some((m) => m.kind === 'coordinator');
       const ids = new Set(own.map((m) => m.subject_id).filter((x): x is string => x !== null));
       return {
         classSectionId: s.id,
         section: s.section,
-        subjects:
-          whole || ids.size === 0 ? classSubjects : subjects.rows.filter((x) => ids.has(x.id)),
+        classId: s.class_id,
+        className: s.class_name,
+        subjects: whole ? classSubjects : subjects.rows.filter((x) => ids.has(x.id)),
       };
     });
   }
@@ -130,10 +140,17 @@ export class WorkSheetService {
     const yearId = this.viewer.requireYear(tenant);
     const allowed = await this.scopes.filter(tenant, DAILY.workPost, 'class_section');
     const date = q.date ?? today();
-    const wanted = q.sections ? q.sections.split(',') : [];
     return this.db.tenant(tenant, async (c) => {
       const options = await this.optionsIn(c, yearId, allowed);
       const settings = await this.settings.read(c);
+      // a class alone stands for every section of it the caller posts for; a teacher of one class
+      // has it chosen already
+      const classIds = [...new Set(options.map((o) => o.classId))];
+      const classId = q.classId ?? (!q.sections && classIds.length === 1 ? classIds[0] : undefined);
+      const ofClass = options.filter((o) => o.classId === classId).map((o) => o.classSectionId);
+      const asked = q.sections ? q.sections.split(',') : [];
+      const ticked = classId ? asked.filter((id) => ofClass.includes(id)) : asked;
+      const wanted = ticked.length ? ticked : ofClass;
       const chosen = options.filter((o) => wanted.includes(o.classSectionId));
       if (wanted.length && chosen.length !== new Set(wanted).size)
         throw new DomainError('scope-denied', 'A chosen class is not assigned to you', {
@@ -148,10 +165,11 @@ export class WorkSheetService {
             body: string;
             title: string;
             due_on: string | null;
-            files: number;
+            id: string;
+            files: string[] | null;
           }>(
-            `SELECT c.code || '-' || cs.name AS section, w.subject_id::text, w.kind, w.body, w.title, w.due_on::text,
-                    (SELECT count(*) FROM daily_work_files f WHERE f.daily_work_id = w.id)::int AS files
+            `SELECT c.code || '-' || cs.name AS section, w.subject_id::text, w.kind, w.body, w.title, w.due_on::text, w.id::text,
+                    (SELECT array_agg(f.file_id::text ORDER BY f.file_id) FROM daily_work_files f WHERE f.daily_work_id = w.id) AS files
                FROM daily_work w JOIN class_sections cs ON cs.id = w.class_section_id JOIN classes c ON c.id = cs.class_id
               WHERE w.deleted_at IS NULL AND w.assigned_on = $1::date AND w.class_section_id = ANY($2::bigint[])
                 AND w.kind = ANY($3::daily_work_kind[]) AND w.subject_id IS NOT NULL
@@ -165,7 +183,8 @@ export class WorkSheetService {
         const first = hits[0]!;
         return {
           text: first.body || first.title,
-          files: first.files,
+          files: (first.files ?? []).length,
+          attachments: (first.files ?? []).map((fileId) => ({ workId: first.id, fileId })),
           dueOn: first.due_on,
           sections: [...new Set(hits.map((h) => h.section))],
         };
@@ -189,7 +208,15 @@ export class WorkSheetService {
       return {
         date,
         mode: q.mode,
-        options: options.map((o) => ({ classSectionId: o.classSectionId, section: o.section })),
+        options: options.map((o) => ({
+          classSectionId: o.classSectionId,
+          section: o.section,
+          classId: o.classId,
+        })),
+        classes: [...new Map(options.map((o) => [o.classId, o.className])).entries()].map(
+          ([id, name]) => ({ id, name }),
+        ),
+        classId: chosen[0]?.classId ?? classId ?? null,
         chosen: chosen.map((s) => s.classSectionId),
         rows: [...seen.values()],
         publishAt: at && at > now ? at : now,
@@ -312,6 +339,79 @@ export class WorkSheetService {
         });
       });
     return { created, updated, sections: chosen.length };
+  }
+
+  /** What was posted between two dates, as Excel or PDF with the school's header. */
+  async reportFile(ctx: RequestContext, q: WorkReportQueryDto) {
+    const { rows } = await this.work.list(ctx, {
+      classSectionId: q.classSectionId,
+      from: q.from,
+      to: q.to,
+      kind: q.kind === 'assignment' ? 'assignment' : undefined,
+      page: 1,
+      size: 200,
+    });
+    const items = rows.filter((r) =>
+      q.kind === 'daily'
+        ? r.kind !== 'assignment'
+        : q.kind === 'assignment'
+          ? r.kind === 'assignment'
+          : true,
+    );
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const KIND = { homework: 'Homework', classwork: 'Classwork', assignment: 'Assignment' };
+    const at = (d: Date) =>
+      d.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report:
+          q.kind === 'assignment'
+            ? 'Assignments'
+            : q.kind === 'daily'
+              ? 'Homework and classwork'
+              : 'Homework, classwork and assignments',
+        details: [
+          q.classSectionId ? `Class ${items[0]?.section ?? ''}` : 'All classes',
+          q.from || q.to ? `From ${q.from ?? '…'} to ${q.to ?? '…'}` : '',
+          generatedOn(),
+        ].filter(Boolean),
+        legend: `${String(items.length)} entr${items.length === 1 ? 'y' : 'ies'}`,
+        columns: [
+          { label: 'Sl.', width: 3, right: true },
+          { label: 'Date', width: 7 },
+          { label: 'Class', width: 5 },
+          { label: 'Subject', width: 10 },
+          { label: 'Kind', width: 7 },
+          { label: 'Work', width: 30 },
+          { label: 'Due', width: 7 },
+          { label: 'Files', width: 4, right: true },
+          { label: 'Published', width: 10 },
+          { label: 'Posted by', width: 10 },
+        ],
+        rows: items.map((w, i) => [
+          i + 1,
+          w.assignedOn,
+          w.section,
+          w.subjectName ?? '',
+          KIND[w.kind],
+          w.body || w.title,
+          w.dueOn ?? '',
+          w.files.length,
+          `${at(new Date(w.publishAt))}${w.scheduled ? ' (scheduled)' : ''}`,
+          w.postedBy ?? '',
+        ]),
+        filename: `daily-work-${new Date().toISOString().slice(0, 10)}`,
+      },
+      q.format,
+    );
   }
 
   // ---- who teaches my child ------------------------------------------------------------------------

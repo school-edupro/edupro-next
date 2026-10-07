@@ -1,4 +1,12 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  ClassSectionPicker,
+  PageHeader,
+  RichEditor,
+  type ClassSectionOption,
+} from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { FileLinks } from '@/components/FileLinks';
@@ -19,13 +27,6 @@ interface Doc {
   ackRequired: boolean;
   ackCount: number;
   postedBy: string | null;
-}
-interface Assignment {
-  classSectionId: string;
-  classCode: string;
-  section: string;
-  subjectId: string | null;
-  subjectName: string | null;
 }
 const KINDS: Array<[string, string]> = [
   ['session_plan', 'Session plan'],
@@ -56,24 +57,18 @@ export default async function DocumentsPage({
 }) {
   const sp = await searchParams;
   let docs: Doc[] = [];
-  let assignments: Assignment[] = [];
+  let sections: ClassSectionOption[] = [];
   try {
-    [docs, assignments] = await Promise.all([
+    [docs, sections] = await Promise.all([
       bff.api.fetch<{ data: Doc[] }>('/academics/documents').then((r) => r.data),
       bff.api
-        .fetch<{ data: Assignment[] }>('/academics/teacher-assignments/mine')
+        .fetch<{ data: ClassSectionOption[] }>('/academics/daily-work/sheet/options')
         .then((r) => r.data),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (!(error instanceof ApiError && error.status === 403)) throw error;
   }
-  const sections = [...new Map(assignments.map((a) => [a.classSectionId, a])).values()];
-  const subjects = [
-    ...new Map(
-      assignments.filter((a) => a.subjectId).map((a) => [a.subjectId!, a.subjectName ?? '']),
-    ).entries(),
-  ];
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 960, margin: '0 auto' }}>
       <PageHeader
@@ -118,47 +113,15 @@ export default async function DocumentsPage({
                   ))}
                 </select>
               </label>
-              <label className="ep-field">
-                <span className="ep-field__label">Subject</span>
-                <select name="subjectId" className="ep-select">
-                  <option value="">All / not for one subject</option>
-                  {subjects.map(([id, name]) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
-            <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-              <legend className="ep-field__label">Classes *</legend>
-              <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-                {sections.map((s, i) => (
-                  <label
-                    key={s.classSectionId}
-                    style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}
-                  >
-                    <input
-                      type="checkbox"
-                      name="classSectionIds"
-                      value={s.classSectionId}
-                      defaultChecked={sections.length === 1 && i === 0}
-                    />
-                    {s.classCode}-{s.section}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <ClassSectionPicker name="classSectionIds" options={sections} />
             <label className="ep-field">
               <span className="ep-field__label">Title *</span>
               <input name="title" className="ep-input" required minLength={2} maxLength={200} />
             </label>
+            <RichEditor name="remark" label="Remark" />
             <label className="ep-field">
-              <span className="ep-field__label">Remark</span>
-              <textarea name="remark" className="ep-input" rows={2} maxLength={2000} />
-            </label>
-            <label className="ep-field">
-              <span className="ep-field__label">Attachments * (PDF or image, up to 5)</span>
+              <span className="ep-field__label">Attachments * (PDF or image, up to 5 files)</span>
               <input
                 name="files"
                 type="file"
@@ -223,9 +186,12 @@ export default async function DocumentsPage({
                     <td>{d.kindLabel}</td>
                     <th scope="row">
                       {d.title}
-                      <div className="ep-kicker">
-                        {[d.subject, d.remark].filter(Boolean).join(' · ')}
-                      </div>
+                      {d.remark ? (
+                        <div
+                          className="ep-richtext ep-field__help"
+                          dangerouslySetInnerHTML={{ __html: d.remark }}
+                        />
+                      ) : null}
                     </th>
                     <td>{d.section ?? 'Whole school'}</td>
                     <td>

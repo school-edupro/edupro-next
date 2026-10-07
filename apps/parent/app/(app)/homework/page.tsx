@@ -125,7 +125,13 @@ function Entry({
 export default async function HomeworkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ child?: string; view?: string; date?: string }>;
+  searchParams: Promise<{
+    child?: string;
+    view?: string;
+    date?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
@@ -154,6 +160,9 @@ export default async function HomeworkPage({
   const child = kids.find((k) => k.id === chosen?.id) ?? kids[0];
   const today = iso(new Date(Date.now() + 5.5 * 3_600_000)); // the school's day (IST)
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? '') && sp.date! <= today ? sp.date! : today;
+  const isDate = (v: string | undefined): v is string => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+  const from = isDate(sp.from) ? sp.from : '';
+  const to = isDate(sp.to) ? sp.to : '';
   const base = `/academics/daily-work?size=200&classSectionId=${child?.classSectionId ?? ''}`;
   const [recent, assignments] = child
     ? await Promise.all([
@@ -161,7 +170,11 @@ export default async function HomeworkPage({
         bff.api
           .fetch<{ data: Work[] }>(`${base}&from=${shift(date, -13)}&to=${date}`)
           .then((r) => r.data.filter((w) => w.kind !== 'assignment')),
-        bff.api.fetch<{ data: Work[] }>(`${base}&kind=assignment`).then((r) => r.data),
+        bff.api
+          .fetch<{ data: Work[] }>(
+            `${base}&kind=assignment${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`,
+          )
+          .then((r) => r.data),
       ])
     : [[], []];
   const ofDay = recent.filter((w) => w.assignedOn === date);
@@ -230,6 +243,15 @@ export default async function HomeworkPage({
 
       {child && view === 'day' ? (
         <>
+          <form method="get" action="/homework" className="ep-hw__filter">
+            <label className="ep-field">
+              <span className="ep-field__label">{t(lang, 'Date')}</span>
+              <input className="ep-input" type="date" name="date" defaultValue={date} max={today} />
+            </label>
+            <button type="submit" className="ep-btn ep-btn--secondary">
+              {t(lang, 'Show')}
+            </button>
+          </form>
           {days.length ? (
             <nav className="ep-hw__days ep-tabs-links" aria-label={t(lang, 'Days with work')}>
               {days.map((d) => (
@@ -282,6 +304,25 @@ export default async function HomeworkPage({
 
       {child && view === 'assignments' ? (
         <>
+          <form method="get" action="/homework" className="ep-hw__filter">
+            <input type="hidden" name="view" value="assignments" />
+            <label className="ep-field">
+              <span className="ep-field__label">{t(lang, 'Given from')}</span>
+              <input className="ep-input" type="date" name="from" defaultValue={from} />
+            </label>
+            <label className="ep-field">
+              <span className="ep-field__label">{t(lang, 'To')}</span>
+              <input className="ep-input" type="date" name="to" defaultValue={to} />
+            </label>
+            <button type="submit" className="ep-btn ep-btn--secondary">
+              {t(lang, 'Show')}
+            </button>
+            {from || to ? (
+              <a className="ep-btn ep-btn--ghost" href="/homework?view=assignments">
+                {t(lang, 'Clear')}
+              </a>
+            ) : null}
+          </form>
           <Card title={t(lang, 'To do')} style={{ marginBottom: 'var(--sp-3)' }}>
             {open.length === 0 ? (
               <p style={{ margin: 0 }}>{t(lang, 'No assignment is pending.')}</p>

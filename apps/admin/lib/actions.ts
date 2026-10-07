@@ -1085,7 +1085,7 @@ export async function postDailyWork(fd: FormData) {
 export async function saveWorkSheet(fd: FormData) {
   const view = str(fd, 'view') || 'sheet';
   const sections = fd.getAll('sections').map(String).filter(Boolean);
-  const here = `/academics/daily-work?view=${view}&date=${str(fd, 'date')}${sections.map((x) => `&s=${x}`).join('')}`;
+  const here = `/academics/daily-work?view=${view}&date=${str(fd, 'date')}&c=${str(fd, 'c')}${sections.map((x) => `&s=${x}`).join('')}`;
   return run(here, async () => {
     const rows = [];
     for (const subjectId of fd.getAll('subject').map(String))
@@ -1195,7 +1195,6 @@ export async function createDocument(fd: FormData) {
         title: str(fd, 'title'),
         remark: opt(fd, 'remark'),
         classSectionIds: fd.getAll('classSectionIds').map(String).filter(Boolean),
-        subjectId: opt(fd, 'subjectId'),
         fileIds,
         publishAt: opt(fd, 'publishAt'),
         ackRequired: fd.get('ackRequired') !== null,

@@ -7,11 +7,6 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
     label: 'Class documents',
     permission: 'academics.daily_work.view',
   },
-  {
-    href: '/academics/notices',
-    label: 'Notices and office orders',
-    permission: 'academics.notice.view',
-  },
   { href: '/academics/calendar', label: 'Calendar', permission: 'academics.calendar.view' },
   { href: '/academics/timetable', label: 'Timetable', permission: 'academics.timetable.view' },
   {

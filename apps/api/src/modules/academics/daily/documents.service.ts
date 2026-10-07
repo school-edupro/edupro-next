@@ -7,6 +7,7 @@ import { DbService } from '../../../common/db/db.service';
 import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { FilesService } from '../../files/files.service';
+import { sanitizeEmailHtml } from '../../comms/email-html';
 import { schoolTime } from './daily-work.service';
 import type {
   AckDto,
@@ -46,7 +47,8 @@ const toDoc = (x: Row) => ({
   kind: String(x.kind),
   kindLabel: DOCUMENT_KIND[String(x.kind)] ?? String(x.kind),
   title: String(x.title),
-  remark: text(x.remark),
+  // cleaned again on the way out: remarks written before the editor were plain text
+  remark: x.remark ? sanitizeEmailHtml(String(x.remark)).trim() || null : null,
   classSectionId: text(x.class_section_id),
   /** Null: for the whole school. */
   section: text(x.section),
@@ -152,29 +154,6 @@ export class DocumentsService {
       );
       if (sections.rowCount !== new Set(dto.classSectionIds).size)
         throw new DomainError('not-found', 'A class is not of this academic year');
-      if (scoped)
-        // a subject teacher uploads for the subjects mapped to them in the class
-        for (const sectionId of dto.classSectionIds) {
-          const mine = await c.query<{ any: boolean; ids: string[] | null }>(
-            `SELECT COALESCE(bool_or(ta.kind IN ('class_teacher', 'coordinator')), false) AS any,
-                    array_agg(ta.subject_id::text) FILTER (WHERE ta.subject_id IS NOT NULL) AS ids
-               FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
-              WHERE e.user_id = app.current_user_id() AND ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL`,
-            [sectionId, yearId],
-          );
-          const m = mine.rows[0];
-          if (
-            m &&
-            !m.any &&
-            (m.ids ?? []).length &&
-            (!dto.subjectId || !(m.ids ?? []).includes(dto.subjectId))
-          )
-            throw new DomainError(
-              'daily.subject_not_assigned',
-              'Choose one of the subjects you teach in this class',
-              { status: 403 },
-            );
-        }
       const ids: string[] = [];
       for (const sectionId of dto.classSectionIds.length ? dto.classSectionIds : [null]) {
         const r = await c.query<{ id: string }>(
@@ -186,9 +165,9 @@ export class DocumentsService {
             yearId,
             dto.kind,
             dto.title,
-            dto.remark ?? null,
+            dto.remark ? sanitizeEmailHtml(dto.remark).trim() || null : null,
             sectionId,
-            dto.subjectId ?? null,
+            null,
             JSON.stringify(dto.fileIds),
             schoolTime(dto.publishAt),
             dto.ackRequired,

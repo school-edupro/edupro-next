@@ -9,6 +9,7 @@ import {
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { FileLinks } from '@/components/FileLinks';
 import { saveSheet } from './actions';
 
 type View = 'sheet' | 'assignments' | 'report';
@@ -31,6 +32,8 @@ export default async function DailyWorkPage({
     view?: string;
     date?: string;
     s?: string | string[];
+    c?: string;
+    kind?: string;
     from?: string;
     to?: string;
     classSectionId?: string;
@@ -46,11 +49,13 @@ export default async function DailyWorkPage({
   const from = isDate(sp.from) ? sp.from : daysAgo(6);
   const to = isDate(sp.to) ? sp.to : today();
   const chosen = ids(sp.s);
+  const classId = /^\d{1,18}$/.test(sp.c ?? '') ? sp.c! : '';
+  const kind = sp.kind === 'daily' || sp.kind === 'assignment' ? sp.kind : '';
   let sheet: WorkSheetData;
   let items: WorkReportItem[] = [];
   try {
     sheet = await bff.api.fetch<WorkSheetData>(
-      `/academics/daily-work/sheet?mode=${mode}&date=${date}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
+      `/academics/daily-work/sheet?mode=${mode}&date=${date}${classId ? `&classId=${classId}` : ''}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
     );
     if (view === 'report') {
       const q = new URLSearchParams({ size: '200', from, to });
@@ -79,6 +84,14 @@ export default async function DailyWorkPage({
       {label}
     </a>
   );
+  const fileLinks = (workId: string, fileId: string, n: number) => (
+    <FileLinks
+      url={`/api/doc-file/work/${workId}/${fileId}`}
+      saveUrl={`/api/doc-file/work/${workId}/${fileId}?save=1`}
+      label={`Attachment ${String(n)}`}
+    />
+  );
+  const exportQuery = `from=${from}&to=${to}${sp.classSectionId ? `&classSectionId=${sp.classSectionId}` : ''}${kind ? `&kind=${kind}` : ''}`;
   const [created, updated] = (sp.ok ?? '').split('-').map(Number);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 1180, margin: '0 auto' }}>
@@ -91,7 +104,7 @@ export default async function DailyWorkPage({
               ? 'Assignments'
               : 'What was posted'
         }
-        description="A class teacher sees every subject of the class; a subject teacher sees the subjects given to them."
+        description="You post for the classes and subjects given to you in Teacher assignments."
         actions={
           <>
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/documents">
@@ -166,30 +179,65 @@ export default async function DailyWorkPage({
                 ))}
               </select>
             </label>
+            <label className="ep-field">
+              <span className="ep-field__label">Show</span>
+              <select className="ep-select" name="kind" defaultValue={kind}>
+                <option value="">Daily work and assignments</option>
+                <option value="daily">Daily work (homework, classwork)</option>
+                <option value="assignment">Assignments</option>
+              </select>
+            </label>
             <button type="submit" className="ep-btn ep-btn--secondary">
               Show
             </button>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/work-report?format=xlsx&${exportQuery}`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/work-report?format=pdf&${exportQuery}`}
+            >
+              PDF
+            </a>
           </form>
-          <h2 className="ep-card__title">Homework and classwork</h2>
-          <WorkReport
-            items={items}
-            mode="daily"
-            extra={(w) =>
-              w.ackRequired ? (
-                <a href={`/acknowledgements?type=daily_work&id=${w.id}`}>
-                  · {w.ackCount} acknowledged
-                </a>
-              ) : null
-            }
-          />
-          <h2 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
-            Assignments
-          </h2>
-          <WorkReport items={items} mode="assignment" />
+          {kind !== 'assignment' ? (
+            <>
+              <h2 className="ep-card__title">Homework and classwork</h2>
+              <WorkReport
+                items={items}
+                mode="daily"
+                fileLinks={fileLinks}
+                extra={(w) =>
+                  w.ackRequired ? (
+                    <a href={`/acknowledgements?type=daily_work&id=${w.id}`}>
+                      · {w.ackCount} acknowledged
+                    </a>
+                  ) : null
+                }
+              />
+            </>
+          ) : null}
+          {kind !== 'daily' ? (
+            <>
+              <h2 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
+                Assignments
+              </h2>
+              <WorkReport items={items} mode="assignment" fileLinks={fileLinks} />
+            </>
+          ) : null}
         </Card>
       ) : (
         <Card>
-          <WorkSheet sheet={sheet} path="/daily-work" view={view} action={saveSheet} />
+          <WorkSheet
+            sheet={sheet}
+            path="/daily-work"
+            view={view}
+            action={saveSheet}
+            fileLinks={fileLinks}
+          />
         </Card>
       )}
     </main>

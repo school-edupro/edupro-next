@@ -6097,3 +6097,25 @@ a.ep-tabs__tab {
   font-size: var(--fs-caption);
   color: var(--text-body);
 }
+.ep-sheet__files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+.ep-richtext p {
+  margin: 0 0 var(--sp-1);
+}
+.ep-richtext {
+  overflow-wrap: anywhere;
+}
+.ep-hw__filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+  margin-bottom: var(--sp-3);
+}
