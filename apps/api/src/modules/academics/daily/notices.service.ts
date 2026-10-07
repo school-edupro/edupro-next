@@ -52,6 +52,8 @@ export interface NoticeRow {
   isPinned: boolean;
   publishedAt: string | null;
   publishedBy: string | null;
+  /** Who wrote (uploaded) it. */
+  createdBy: string | null;
   targets: NoticeTarget[];
   files: AttachedFile[];
   createdAt: string;
@@ -68,6 +70,7 @@ interface Db {
   is_pinned: boolean;
   published_at: Date | null;
   published_by: string | null;
+  created_by: string | null;
   targets: NoticeTarget[];
   files: AttachedFile[];
   created_at: Date;
@@ -83,7 +86,8 @@ interface Db {
 }
 
 const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publish_from::text, n.publish_until::text, n.is_pinned,
-        n.published_at, u.display_name AS published_by, n.created_at, n.body_format, n.ack_required, n.publish_at, n.also_email, n.emailed_at, n.emailed_count,
+        n.published_at, u.display_name AS published_by, n.created_at,
+        (SELECT cu.display_name FROM users cu WHERE cu.id = n.created_by) AS created_by, n.body_format, n.ack_required, n.publish_at, n.also_email, n.emailed_at, n.emailed_count,
         (SELECT count(*) FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id)::int AS ack_count,
         (SELECT array_agg(k.student_id::text) FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id AND k.student_id IN (
             SELECT sg.student_id FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE g.user_id = app.current_user_id()
@@ -114,6 +118,7 @@ const toRow = (r: Db): NoticeRow => ({
   isPinned: r.is_pinned,
   publishedAt: r.published_at ? r.published_at.toISOString() : null,
   publishedBy: r.published_by,
+  createdBy: r.created_by,
   targets: r.targets,
   files: r.files,
   createdAt: r.created_at.toISOString(),
@@ -193,11 +198,31 @@ export class NoticesService {
   ): Promise<{ rows: NoticeRow[]; total: number }> {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
-    const v = await this.viewer.resolve(ctx, DAILY.noticeView);
+    const all = await this.viewer.resolve(ctx, DAILY.noticeView);
+    // a family may ask for one child: only what is for that child's class, section or the child
+    const one =
+      all.kind === 'family' && q.studentId
+        ? all.students.filter((x) => x.id === q.studentId)
+        : null;
+    const v: Viewer = one
+      ? {
+          ...all,
+          students: one,
+          sectionIds: one.map((x) => x.classSectionId).filter((x): x is string => x !== null),
+        }
+      : all;
     return this.db.tenant(tenant, async (c) => {
       const params: unknown[] = [yearId];
       const where: string[] = ['n.deleted_at IS NULL', 'n.academic_year_id = $1'];
       where.push(this.visibility(ctx, v, params));
+      if (q.from) {
+        params.push(q.from);
+        where.push(`n.publish_from >= $${params.length}::date`);
+      }
+      if (q.to) {
+        params.push(q.to);
+        where.push(`n.publish_from <= $${params.length}::date`);
+      }
       if (q.kind) {
         params.push(q.kind);
         where.push(`n.kind = $${params.length}::notice_kind`);
@@ -618,6 +643,10 @@ export class NoticesService {
           targets: n.targets.map((t) => t.label).join(', ') || 'All',
           publishFrom: n.publishFrom,
           publishedBy: n.publishedBy,
+          // when it was written, and when the portal started to show it
+          uploadedAt: n.createdAt,
+          uploadedBy: n.createdBy ?? n.publishedBy,
+          publishedAt: n.publishAt ?? n.publishedAt,
           students: reach.rows[0]!.pupils,
           employees: reach.rows[0]!.staff,
           ackRequired: n.ackRequired,
@@ -643,6 +672,17 @@ export class NoticesService {
       circular: 'Circular',
       office_order: 'Office order',
     };
+    const at = (v: string | null) =>
+      v
+        ? new Date(v).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
     return registerFile(
       {
         school: head.name,
@@ -660,7 +700,9 @@ export class NoticesService {
           { label: 'Kind', width: 7 },
           { label: 'Title', width: 22 },
           { label: 'For', width: 14 },
-          { label: 'Published by', width: 10 },
+          { label: 'Uploaded', width: 10 },
+          { label: 'Uploaded by', width: 10 },
+          { label: 'Published', width: 10 },
           { label: 'Students', width: 5, right: true },
           { label: 'Employees', width: 5, right: true },
           { label: 'Acknowledged', width: 6, right: true },
@@ -672,7 +714,9 @@ export class NoticesService {
           KIND[n.kind] ?? n.kind,
           n.title,
           n.targets,
-          n.publishedBy ?? '',
+          at(n.uploadedAt),
+          n.uploadedBy ?? '',
+          at(n.publishedAt),
           n.students,
           n.employees,
           n.ackRequired ? n.acknowledged : '-',

@@ -9,6 +9,23 @@ import { reopenAttendance } from '@/lib/attendance-actions';
 import { istToday, type AttendanceSetup, type LeaveSetup } from '@/lib/attendance-plus';
 import { when } from '@/lib/appointments';
 
+interface AbsentTemplate {
+  id: string;
+  name: string;
+  subject: string | null;
+  body: string;
+  active: boolean;
+  reference: string | null;
+}
+interface AbsentTemplates {
+  code: string;
+  variables: string[];
+  whatsapp: AbsentTemplate | null;
+  sms: AbsentTemplate | null;
+  email: AbsentTemplate | null;
+  emailFallback: { subject: string; body: string };
+}
+
 /**
  * Attendance set-up: the marking windows, the teacher of each bus route and trip, who the class teacher
  * of each class is (mapped under Academics), and reopening a closed day for a teacher.
@@ -19,11 +36,13 @@ export default async function AttendanceSetupPage({
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
-  const [me, setup, leave] = await Promise.all([
+  const [me, setup, leave, absent] = await Promise.all([
     getMe(),
     apiFetch<AttendanceSetup>('/attendance/desk/setup'),
     apiFetch<LeaveSetup>('/attendance/leaves/setup'),
+    apiFetch<AbsentTemplates>('/attendance/desk/absent-templates').catch(() => null),
   ]);
+  const canTemplates = me.permissions.includes('comms.template.view');
   const unmapped = setup.sections.filter((s) => !s.teacher);
   return (
     <>
@@ -87,6 +106,88 @@ export default async function AttendanceSetupPage({
       >
         <LeaveSetupForm setup={leave} />
       </Card>
+      {absent ? (
+        <Card
+          title="Message to parents when a student is absent"
+          style={{ marginBottom: 'var(--sp-4)' }}
+          actions={
+            canTemplates ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/comms/templates">
+                Open the templates
+              </a>
+            ) : null
+          }
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The school’s templates with the code <strong>{absent.code}</strong>, one for each
+            channel. The words in double braces are filled in: {absent.variables.join(', ')}. To
+            change a message, or to add a channel that is missing, use Communication → Templates.
+          </p>
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Absence messages">
+            <table className="ep-table ep-table--dense">
+              <caption className="ep-sr-only">The absence message of each channel</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Channel</th>
+                  <th scope="col">Used when</th>
+                  <th scope="col">Message</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    ['WhatsApp', 'A teacher marks the class register', absent.whatsapp],
+                    ['SMS', 'Attendance from Excel, with the SMS tick', absent.sms],
+                    ['E-mail', 'Attendance from Excel, with the e-mail tick', absent.email],
+                  ] as Array<[string, string, AbsentTemplate | null]>
+                ).map(([channel, used, tpl]) => (
+                  <tr key={channel}>
+                    <th scope="row">{channel}</th>
+                    <td>{used}</td>
+                    <td>
+                      {tpl ? (
+                        <>
+                          {tpl.subject ? <strong>{tpl.subject}</strong> : null}
+                          <div style={{ whiteSpace: 'pre-wrap' }}>{tpl.body}</div>
+                          {tpl.reference ? (
+                            <div className="ep-field__help">Provider template: {tpl.reference}</div>
+                          ) : null}
+                        </>
+                      ) : channel === 'E-mail' ? (
+                        <>
+                          <strong>{absent.emailFallback.subject}</strong>
+                          <div>{absent.emailFallback.body}</div>
+                          <div className="ep-field__help">
+                            The standard card; add an e-mail template with this code to use your own
+                            words.
+                          </div>
+                        </>
+                      ) : (
+                        <span className="ep-field__help">
+                          No {channel} template with the code {absent.code}: nothing is sent on this
+                          channel.
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {tpl ? (
+                        <Badge tone={tpl.active ? 'success' : 'warning'}>
+                          {tpl.active ? 'Active' : 'Not active'}
+                        </Badge>
+                      ) : channel === 'E-mail' ? (
+                        <Badge tone="info">Standard</Badge>
+                      ) : (
+                        <Badge tone="neutral">Not set</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
       <Card title="Reopen a day for a teacher">
         <p className="ep-field__help" style={{ marginTop: 0 }}>
           When a teacher missed the window: open the day again for that class or route for some

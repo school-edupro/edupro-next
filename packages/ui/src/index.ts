@@ -45,3 +45,4 @@ export {
 export { RichEditor } from './components/RichEditor';
 export { ClassSectionPicker, type ClassSectionOption } from './components/ClassSectionPicker';
 export { FilePick } from './components/FilePick';
+export { FilesPick } from './components/FilesPick';

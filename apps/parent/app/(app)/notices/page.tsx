@@ -2,6 +2,7 @@ import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupr
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
+import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { currentLang, t } from '@/lib/i18n';
 import { dayParts, excerpt, type Notice } from './shared';
@@ -29,6 +30,8 @@ export default async function NoticesPage({
     const query = new URLSearchParams({ size: '200' });
     if (kind) query.set('kind', kind);
     if (q) query.set('q', q);
+    // one child at a time: what is for that child's class, section or the child
+    if (kid) query.set('studentId', kid.id);
     notices = await bff.api
       .fetch<{ data: Notice[] }>(`/academics/notices?${query.toString()}`)
       .then((r) => r.data);
@@ -61,6 +64,7 @@ export default async function NoticesPage({
           </a>
         }
       />
+      <ChildSwitch lang={lang} back="/notices" current={kid?.id} />
       <Card style={{ marginBottom: 'var(--sp-3)' }}>
         <form
           method="get"

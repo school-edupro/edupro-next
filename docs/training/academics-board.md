@@ -73,3 +73,10 @@ Three tabs. **Calendar** is the month grid (holidays green, vacations blue, exam
 - **Notices and office orders** in the menu opens the report. The tiles (all, notices, circulars, office orders) list that kind; a title opens the notice in full. People without the office permission land on their own notices.
 - An employee sees only the notices, circulars and office orders that are for them; a parent or student only theirs.
 - **Parent portal → Notices**: filters (type, from, to, words), a card per notice with its date; *Details* opens it with attachments and the acknowledgement.
+
+## Notices: second round (8 October 2026)
+
+- **Parent portal → Notices**: with two children the child tabs show on top (as in Messages from school); each child shows only the notices and circulars for that child's class, section or the child.
+- **Attachments on compose**: *Add file* adds one or several at a time; each file is listed with *Remove*; up to the number set in Academics → Settings (default 5).
+- **Employees on Notices and office orders**: the title opens the notice in full; when an acknowledgement is asked, the list shows an *Acknowledge* button and the detail page has it; the list has From / To dates.
+- **Report**: shows when it was uploaded, by whom, and when it was published (screen, Excel and PDF).

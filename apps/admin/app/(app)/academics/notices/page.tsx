@@ -15,6 +15,8 @@ export default async function NoticesPage({
     detail?: string;
     status?: string;
     q?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -27,6 +29,8 @@ export default async function NoticesPage({
   const canManage = me.permissions.includes('academics.notice.manage');
   const query = new URLSearchParams({ size: '100', status: sp.status ?? 'all' });
   if (sp.q) query.set('q', sp.q);
+  for (const k of ['from', 'to'] as const)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) query.set(k, sp[k]!);
   const notices = await apiFetch<Page<NoticeRow>>(`/academics/notices?${query.toString()}`);
 
   return (
@@ -56,10 +60,13 @@ export default async function NoticesPage({
             display: 'flex',
             gap: 'var(--sp-3)',
             alignItems: 'flex-end',
+            flexWrap: 'wrap',
             marginBottom: 'var(--sp-4)',
           }}
         >
           <InputField id="q" name="q" label={c('filter')} defaultValue={sp.q ?? ''} />
+          <InputField id="from" name="from" label="From" type="date" defaultValue={sp.from ?? ''} />
+          <InputField id="to" name="to" label="To" type="date" defaultValue={sp.to ?? ''} />
           {canManage ? (
             <SelectField
               id="status"
@@ -97,7 +104,9 @@ export default async function NoticesPage({
               render: (n) => (
                 <span>
                   {n.isPinned ? '📌 ' : ''}
-                  <strong>{n.title}</strong>
+                  <a href={`/academics/notices/${n.id}`} style={{ textDecoration: 'underline' }}>
+                    <strong>{n.title}</strong>
+                  </a>
                   <br />
                   <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-small)' }}>
                     {n.body
@@ -119,7 +128,18 @@ export default async function NoticesPage({
               key: 'ack',
               header: 'Acknowledged',
               render: (n) =>
-                n.ackRequired ? (
+                n.ackRequired && !canManage ? (
+                  n.ackedByMe ? (
+                    <Badge tone="success">Acknowledged</Badge>
+                  ) : (
+                    <a
+                      className="ep-btn ep-btn--primary ep-btn--sm"
+                      href={`/academics/notices/${n.id}`}
+                    >
+                      Acknowledge
+                    </a>
+                  )
+                ) : n.ackRequired ? (
                   <a
                     href={`/academics/acknowledgements?type=notice&id=${n.id}`}
                     style={{ textDecoration: 'underline' }}

@@ -9,6 +9,9 @@ interface Row {
   targets: string;
   publishFrom: string;
   publishedBy: string | null;
+  uploadedAt: string;
+  uploadedBy: string | null;
+  publishedAt: string | null;
   students: number;
   employees: number;
   ackRequired: boolean;
@@ -16,6 +19,16 @@ interface Row {
   emailed: number | null;
   attachments: number;
 }
+const at = (v: string | null) =>
+  v
+    ? new Date(v).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '–';
 const KIND: Record<string, string> = {
   notice: 'Notice',
   circular: 'Circular',
@@ -155,7 +168,9 @@ export default async function NoticesReportPage({
                   <th scope="col">Kind</th>
                   <th scope="col">Title</th>
                   <th scope="col">For</th>
-                  <th scope="col">Published by</th>
+                  <th scope="col">Uploaded</th>
+                  <th scope="col">Uploaded by</th>
+                  <th scope="col">Published</th>
                   <th scope="col" className="ep-num">
                     Students
                   </th>
@@ -189,7 +204,9 @@ export default async function NoticesReportPage({
                       </a>
                     </th>
                     <td>{n.targets}</td>
-                    <td>{n.publishedBy ?? ''}</td>
+                    <td>{at(n.uploadedAt)}</td>
+                    <td>{n.uploadedBy ?? ''}</td>
+                    <td>{at(n.publishedAt)}</td>
                     <td className="ep-num">{n.students}</td>
                     <td className="ep-num">{n.employees}</td>
                     <td className="ep-num">

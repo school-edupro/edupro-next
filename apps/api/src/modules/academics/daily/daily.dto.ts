@@ -193,6 +193,10 @@ export const ListNoticesQuerySchema = z.object({
   kind: NoticeKindSchema.optional(),
   status: z.enum(['draft', 'published', 'all']).default('all'),
   q: z.string().trim().max(100).optional(),
+  /** A family: only what is for this child. */
+  studentId: IdSchema.optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });

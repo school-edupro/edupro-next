@@ -679,4 +679,48 @@ export class AttendanceDeskService {
       };
     });
   }
+
+  /** The message a parent gets when a child is marked absent, on each channel: for the set-up screen. */
+  async absentTemplates(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        channel: string;
+        name: string;
+        subject: string | null;
+        body: string;
+        status: string;
+        dlt_template_id: string | null;
+        wa_template_name: string | null;
+      }>(
+        `SELECT id::text, channel::text, name, subject, body, status::text, dlt_template_id, wa_template_name
+           FROM comms_templates WHERE code = 'absent_alert' AND deleted_at IS NULL ORDER BY channel`,
+      );
+      const of = (channel: string) => {
+        const t = r.rows.find((x) => x.channel === channel);
+        return t
+          ? {
+              id: t.id,
+              name: t.name,
+              subject: t.subject,
+              body: t.body,
+              active: t.status === 'active',
+              reference: t.dlt_template_id ?? t.wa_template_name,
+            }
+          : null;
+      };
+      return {
+        code: 'absent_alert',
+        variables: ['student_name', 'section', 'date'],
+        whatsapp: of('whatsapp'),
+        sms: of('sms'),
+        email: of('email'),
+        // without an e-mail template the upload sends the school's standard card
+        emailFallback: {
+          subject: 'Absent today: {{student_name}}',
+          body: '{{student_name}} was marked absent in school on {{date}}. Student, class and date follow in a table. If your child is on leave, please apply for leave from the parent portal. For any question, contact the class teacher.',
+        },
+      };
+    });
+  }
 }

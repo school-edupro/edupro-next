@@ -508,6 +508,7 @@ export interface NoticeTarget {
 export interface Notice {
   ackRequired?: boolean;
   ackCount?: number;
+  ackedByMe?: boolean;
   emailedCount?: number | null;
   bodyFormat?: 'text' | 'html';
   id: string;

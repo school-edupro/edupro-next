@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { ChipPicker, fileBase64, type ChipOption } from '@/components/ChipPicker';
+import { FilesPick } from '@edupro/ui';
 import { HtmlEditor } from '@/components/comms/HtmlEditor';
 import { publishNoticeNow, saveNoticeDraft } from '@/lib/actions';
 import { noticeAudienceFile, noticeReach, searchNoticeStudents } from '@/lib/notice-actions';
@@ -182,7 +183,6 @@ export function NoticeCompose({
   const [students, setStudents] = useState<ChipOption[]>([]);
   const [deptIds, setDeptIds] = useState<string[]>([]);
   const [extraStaff, setExtraStaff] = useState<ChipOption[]>([]);
-  const [fileNote, setFileNote] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [ack, setAck] = useState(false);
@@ -383,30 +383,12 @@ export function NoticeCompose({
               value={body}
               onChange={setBody}
             />
-            <label className="ep-field" htmlFor="nc-files">
-              <span className="ep-field__label">
-                Attachments (PDF or image, up to {maxFiles} files)
-              </span>
-              <input
-                id="nc-files"
-                name="files"
-                type="file"
-                className="ep-input"
-                multiple
-                accept=".pdf,.png,.jpg,.jpeg,.webp"
-                onChange={(e) => {
-                  if ((e.target.files?.length ?? 0) > maxFiles) {
-                    e.target.value = '';
-                    setFileNote(`Choose up to ${String(maxFiles)} files.`);
-                  } else setFileNote('');
-                }}
-              />
-              {fileNote ? (
-                <span className="ep-field__help" role="alert">
-                  {fileNote}
-                </span>
-              ) : null}
-            </label>
+            <FilesPick
+              name="files"
+              label={`Attachments (PDF or image, up to ${String(maxFiles)} files)`}
+              max={maxFiles}
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+            />
           </div>
         </section>
         <section className="ep-card" aria-labelledby="nc-step4">

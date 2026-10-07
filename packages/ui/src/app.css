@@ -6172,3 +6172,21 @@ a.ep-tabs__tab {
 .ep-tile-link[aria-current='true'] .ep-card {
   border-color: var(--action-primary);
 }
+.ep-filespick__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-filespick__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  overflow-wrap: anywhere;
+}

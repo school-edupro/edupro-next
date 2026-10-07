@@ -51,6 +51,13 @@ export class AttendanceDeskController {
     return this.desk.dashboard(ctx, q.date);
   }
 
+  @Get('absent-templates')
+  @ApiOperation({ summary: 'The absence message of each channel (WhatsApp, SMS, e-mail)' })
+  @RequirePermission(ATTENDANCE.view)
+  absentTemplates(@ReqCtx() ctx: RequestContext) {
+    return this.desk.absentTemplates(ctx);
+  }
+
   @Get('mine/today')
   @ApiOperation({
     summary: 'A family’s home card: the month so far, today in class and on the bus',

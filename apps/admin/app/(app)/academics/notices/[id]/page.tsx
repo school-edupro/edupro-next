@@ -1,6 +1,8 @@
-import { Badge, Card, PageHeader } from '@edupro/ui';
+import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { FileLinks } from '@/components/FileLinks';
+import { Notice as Flash } from '@/components/Notice';
+import { acknowledgeNotice } from '@/lib/actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 
 interface Notice {
@@ -16,6 +18,7 @@ interface Notice {
   publishedBy: string | null;
   isPinned: boolean;
   ackRequired?: boolean;
+  ackedByMe?: boolean;
   targets: Array<{ type: string; id: string; label: string }>;
   files: Array<{ id: string }>;
 }
@@ -27,8 +30,15 @@ const FOR: Record<string, string> = {
 };
 
 /** One notice, circular or office order in full: what it says, whom it is for, its attachments. */
-export default async function NoticeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function NoticeDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
   let n: Notice;
   const me = await getMe();
@@ -54,6 +64,28 @@ export default async function NoticeDetailPage({ params }: { params: Promise<{ i
           </a>
         }
       />
+      <Flash params={sp} />
+      {n.ackRequired && n.audience !== 'students' && n.publishedAt ? (
+        <Card style={{ marginBottom: 'var(--sp-4)' }}>
+          {n.ackedByMe ? (
+            <Badge tone="success">You have acknowledged this</Badge>
+          ) : (
+            <form
+              action={acknowledgeNotice}
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-3)',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <input type="hidden" name="id" value={n.id} />
+              <span>Please confirm that you have read this.</span>
+              <Button type="submit">Acknowledge</Button>
+            </form>
+          )}
+        </Card>
+      ) : null}
       <Card title="Who it is for" style={{ marginBottom: 'var(--sp-4)' }}>
         <p style={{ marginTop: 0 }}>
           <Badge tone="info">{FOR[n.audience] ?? n.audience}</Badge>{' '}

@@ -310,6 +310,69 @@ describe('attendance from Excel and targeted notices (e2e)', () => {
     expect((await get(other, `/academics/notices/${forAna.json().id}`)).statusCode).toBe(404);
   });
 
+  it('shows a parent of two the notices of each child; an employee acknowledges; the report has the times', async () => {
+    // the same guardian is also Bala's
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO student_guardians (school_id, student_id, guardian_id, relation)
+         SELECT $1, $3, sg.guardian_id, 'mother' FROM student_guardians sg WHERE sg.student_id = $2 LIMIT 1`,
+        [school.id, ids.st1, ids.st2],
+      ),
+    );
+    const of = async (qs: string) =>
+      (
+        (await get(parent, `/academics/notices?size=50${qs}`)).json().data as Array<{
+          title: string;
+        }>
+      )
+        .map((n) => n.title)
+        .sort();
+    expect(await of('')).toEqual(['For Ana only', 'For Bala only']);
+    expect(await of(`&studentId=${ids.st1}`)).toEqual(['For Ana only']);
+    expect(await of(`&studentId=${ids.st2}`)).toEqual(['For Bala only']);
+    expect(await of('&to=2020-01-01')).toEqual([]);
+
+    const order = await post(admin, '/academics/notices', {
+      kind: 'office_order',
+      title: 'Read and sign',
+      body: 'Duty list.',
+      publish: true,
+      ackRequired: true,
+      targets: [{ type: 'employee', id: ids.emp1 }],
+    });
+    const id = order.json().id as string;
+    expect((await get(teacher, `/academics/notices/${id}`)).json()).toMatchObject({
+      ackRequired: true,
+      ackedByMe: false,
+    });
+    expect((await post(teacher, '/academics/acks', { type: 'notice', id })).statusCode).toBe(200);
+    expect((await get(teacher, `/academics/notices/${id}`)).json().ackedByMe).toBe(true);
+
+    const row = (
+      (await get(admin, '/academics/notices/report?kind=office_order')).json().data as Array<
+        Record<string, unknown>
+      >
+    ).find((r) => r.id === id)!;
+    expect(row.uploadedBy).toBe(`${s}-admin`);
+    expect(String(row.uploadedAt)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(String(row.publishedAt)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(row.acknowledged).toBe(1);
+  });
+
+  it('shows the absence message of each channel for the set-up screen', async () => {
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO comms_templates (school_id, code, channel, name, body, status, is_alert)
+         VALUES ($1, 'absent_alert', 'sms', 'Absent SMS', 'Dear parent, {{student_name}} of {{section}} was absent on {{date}}.', 'active', true)`,
+        [school.id],
+      ),
+    );
+    const t = (await get(admin, '/attendance/desk/absent-templates')).json();
+    expect(t).toMatchObject({ code: 'absent_alert', whatsapp: null, email: null });
+    expect(t.sms).toMatchObject({ name: 'Absent SMS', active: true });
+    expect(t.emailFallback.subject).toContain('Absent today');
+  });
+
   it('lets the school set how many files a notice may carry', async () => {
     const fileIds = await withMigrator(async (c) => {
       const out: string[] = [];

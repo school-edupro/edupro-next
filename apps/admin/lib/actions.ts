@@ -1176,6 +1176,14 @@ async function saveNotice(fd: FormData, publish: boolean) {
   });
 }
 
+/** An employee acknowledges a notice, a circular or an office order that asks for it. */
+export async function acknowledgeNotice(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/academics/notices/${id}`, () =>
+    apiFetch('/academics/acks', { method: 'POST', body: JSON.stringify({ type: 'notice', id }) }),
+  );
+}
+
 export async function createNotice(fd: FormData) {
   return saveNotice(fd, fd.get('publish') !== null);
 }

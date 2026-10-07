@@ -429,6 +429,13 @@ export class AttendanceBulkService {
       );
       return r.rows;
     });
+    // the school's own e-mail template (code absent_alert) is used when there is one; else the standard card
+    const ownMail = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM comms_templates WHERE code = 'absent_alert' AND channel = 'email' AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
+      );
+      return (r.rowCount ?? 0) > 0;
+    });
     let sms = 0;
     let email = 0;
     let smsProblem: string | null = null;
@@ -456,7 +463,19 @@ export class AttendanceBulkService {
           smsProblem = (error as Error).message;
           this.logger.warn(`upload ${uploadId}: SMS not sent: ${smsProblem}`);
         }
-      if (dto.email && p.email)
+      if (dto.email && p.email && ownMail) {
+        const row = await this.db
+          .tenant(tenant, (c) =>
+            this.messages.sendAlert(c, ctx, {
+              templateCode: 'absent_alert',
+              channel: 'email',
+              recipientAddress: p.email,
+              variables: { student_name: p.student, section: p.section, date },
+            } as SendMessageDto),
+          )
+          .catch(() => null);
+        if (row) email += 1;
+      } else if (dto.email && p.email)
         await this.db.tenant(tenant, async (c) => {
           await c.query(
             `SELECT app.queue_mail($1, $2, app.mail_card_html($3, $4, $5, $6, $7::jsonb, NULL, NULL, $8), '[]'::jsonb,
