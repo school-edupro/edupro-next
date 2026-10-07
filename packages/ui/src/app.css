@@ -6190,3 +6190,48 @@ a.ep-tabs__tab {
   background: var(--surface-subtle);
   overflow-wrap: anywhere;
 }
+/* The employee's daily activity log */
+.ep-actlog {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-actlog .ep-tabs-links {
+  margin-bottom: 0;
+}
+.ep-actlog .ep-tabs-links a[data-state='missing'] {
+  border-style: dashed;
+}
+.ep-actlog .ep-tabs-links a[data-state='returned'] {
+  border-color: var(--status-warning);
+}
+.ep-actlog__state {
+  margin: 0;
+  color: var(--text-heading);
+}
+.ep-actlog__table input[type='time'] {
+  min-width: 7rem;
+}
+.ep-actlog__table .ep-select {
+  min-width: 11rem;
+}
+.ep-actlog__what {
+  width: 100%;
+  min-width: 16rem;
+}
+.ep-actlog__notes {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  margin-top: var(--sp-3);
+}
+.ep-actlog__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  margin-top: var(--sp-3);
+}
+.ep-actlog__foot > p {
+  flex: 1 1 18rem;
+  margin: 0;
+}

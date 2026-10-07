@@ -67,6 +67,12 @@ export default async function HomePage() {
       '/office-orders',
     ],
     [
+      t(lang, 'My day (activity log)'),
+      t(lang, 'What I did today, in time slots; submit before the cut-off'),
+      can('staff.activity.fill'),
+      '/activity-log',
+    ],
+    [
       t(lang, 'My syllabus'),
       t(lang, 'Chapters and topics of my classes; mark what is taught'),
       can('academics.lesson_plan.manage'),

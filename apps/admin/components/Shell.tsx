@@ -21,6 +21,7 @@ const NAV: Array<{
     items: [
       { href: '/people/students', label: 'students', permission: 'people.student.view' },
       { href: '/people/employees', label: 'employees', permission: 'people.employee.view' },
+      { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
       { href: '/people/search', label: 'peopleSearch', permission: 'people.person.search' },
       { href: '/people/import', label: 'import', permission: 'people.import.run' },
       { href: '/people/tc', label: 'transferCertificates', permission: 'people.tc.view' },
