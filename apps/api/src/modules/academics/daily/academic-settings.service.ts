@@ -16,6 +16,8 @@ export interface AcademicSettings {
   teacherMobile: ContactShow;
   teacherEmail: ContactShow;
   maxMb: Record<UploadSection, number>;
+  /** How many files a notice, circular or office order may carry. */
+  maxNoticeFiles: number;
 }
 
 const SECTION_LABEL: Record<UploadSection, string> = {
@@ -44,9 +46,10 @@ export class AcademicSettingsService {
       max_mb_documents: number;
       max_mb_notices: number;
       max_mb_gallery: number;
+      max_notice_files: number;
     }>(
       `SELECT to_char(publish_time, 'HH24:MI') AS publish_time, teacher_mobile, teacher_email, max_mb_daily_work,
-              max_mb_assignment, max_mb_documents, max_mb_notices, max_mb_gallery
+              max_mb_assignment, max_mb_documents, max_mb_notices, max_mb_gallery, max_notice_files
          FROM academic_settings WHERE school_id = app.current_school_id()`,
     );
     const s = r.rows[0];
@@ -61,6 +64,7 @@ export class AcademicSettingsService {
         notices: s?.max_mb_notices ?? 10,
         gallery: s?.max_mb_gallery ?? 10,
       },
+      maxNoticeFiles: s?.max_notice_files ?? 5,
     };
   }
 
@@ -73,12 +77,12 @@ export class AcademicSettingsService {
       const before = await this.read(c);
       await c.query(
         `INSERT INTO academic_settings (school_id, publish_time, teacher_mobile, teacher_email, max_mb_daily_work,
-                                        max_mb_assignment, max_mb_documents, max_mb_notices, max_mb_gallery, updated_by)
-         VALUES (app.current_school_id(), $1::time, $2, $3, $4, $5, $6, $7, $8, app.current_user_id())
+                                        max_mb_assignment, max_mb_documents, max_mb_notices, max_mb_gallery, max_notice_files, updated_by)
+         VALUES (app.current_school_id(), $1::time, $2, $3, $4, $5, $6, $7, $8, $9, app.current_user_id())
          ON CONFLICT (school_id) DO UPDATE SET publish_time = EXCLUDED.publish_time, teacher_mobile = EXCLUDED.teacher_mobile,
            teacher_email = EXCLUDED.teacher_email, max_mb_daily_work = EXCLUDED.max_mb_daily_work,
            max_mb_assignment = EXCLUDED.max_mb_assignment, max_mb_documents = EXCLUDED.max_mb_documents,
-           max_mb_notices = EXCLUDED.max_mb_notices, max_mb_gallery = EXCLUDED.max_mb_gallery,
+           max_mb_notices = EXCLUDED.max_mb_notices, max_mb_gallery = EXCLUDED.max_mb_gallery, max_notice_files = EXCLUDED.max_notice_files,
            updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.publishTime ?? null,
@@ -89,6 +93,7 @@ export class AcademicSettingsService {
           dto.maxMb.documents,
           dto.maxMb.notices,
           dto.maxMb.gallery,
+          dto.maxNoticeFiles,
         ],
       );
       const after = await this.read(c);

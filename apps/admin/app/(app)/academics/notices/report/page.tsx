@@ -1,5 +1,6 @@
 import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
-import { apiFetch } from '@/lib/api';
+import { redirect } from 'next/navigation';
+import { apiFetch, getMe } from '@/lib/api';
 
 interface Row {
   id: string;
@@ -32,12 +33,23 @@ export default async function NoticesReportPage({
   searchParams: Promise<{ kind?: string; from?: string; to?: string }>;
 }) {
   const sp = await searchParams;
+  // the report is the office's; everyone else reads the notices that are for them
+  const me = await getMe();
+  if (!me.permissions.includes('academics.notice.manage')) redirect('/academics/notices');
   const filters: Record<string, string> = {};
   if (sp.kind && KIND[sp.kind]) filters.kind = sp.kind;
   for (const k of ['from', 'to'] as const)
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) filters[k] = sp[k]!;
   const qs = new URLSearchParams(filters).toString();
-  const r = await apiFetch<{ data: Row[] }>(`/academics/notices/report?${qs}`);
+  const dates: Record<string, string> = {};
+  for (const k of ['from', 'to'] as const) if (filters[k]) dates[k] = filters[k]!;
+  // the tiles count every kind of the chosen dates; the table follows the tile clicked
+  const all = (
+    await apiFetch<{ data: Row[] }>(
+      `/academics/notices/report?${new URLSearchParams(dates).toString()}`,
+    )
+  ).data;
+  const r = { data: filters.kind ? all.filter((x) => x.kind === filters.kind) : all };
   const sum = (k: 'students' | 'employees' | 'acknowledged') =>
     r.data.reduce((n, x) => n + x[k], 0);
   return (
@@ -97,20 +109,37 @@ export default async function NoticesReportPage({
       <div className="ep-cdash__kpis">
         {(
           [
-            ['Published', String(r.data.length)],
-            ['Office orders', String(r.data.filter((x) => x.kind === 'office_order').length)],
-            ['Acknowledgements', String(sum('acknowledged'))],
-            ['E-mails sent', String(r.data.reduce((n, x) => n + (x.emailed ?? 0), 0))],
-          ] as Array<[string, string]>
-        ).map(([title, value]) => (
-          <Card key={title} title={title}>
-            <div className="ep-cdash__big">
-              <span className="ep-cdash__num">{value}</span>
-            </div>
-          </Card>
+            ['All published', String(all.length), ''],
+            ['Notices', String(all.filter((x) => x.kind === 'notice').length), 'notice'],
+            ['Circulars', String(all.filter((x) => x.kind === 'circular').length), 'circular'],
+            [
+              'Office orders',
+              String(all.filter((x) => x.kind === 'office_order').length),
+              'office_order',
+            ],
+          ] as Array<[string, string, string]>
+        ).map(([title, value, kind]) => (
+          <a
+            key={title}
+            href={`/academics/notices/report?${new URLSearchParams({ ...dates, ...(kind ? { kind } : {}) }).toString()}#list`}
+            className="ep-tile-link"
+            aria-current={(filters.kind ?? '') === kind ? 'true' : undefined}
+            aria-label={`${title}: ${value}. Show the list`}
+          >
+            <Card title={title}>
+              <div className="ep-cdash__big">
+                <span className="ep-cdash__num">{value}</span>
+              </div>
+            </Card>
+          </a>
         ))}
       </div>
-      <Card style={{ marginTop: 'var(--sp-4)' }}>
+      <p className="ep-field__help">
+        {String(sum('acknowledged'))} acknowledgement(s) ·{' '}
+        {String(r.data.reduce((n, x) => n + (x.emailed ?? 0), 0))} e-mail(s) sent for what is
+        listed. Click a tile to list that kind; click a title to open it.
+      </p>
+      <Card style={{ marginTop: 'var(--sp-4)' }} id="list">
         {r.data.length === 0 ? (
           <p className="ep-field__help" style={{ margin: 0 }}>
             Nothing was published for these filters.
@@ -151,7 +180,14 @@ export default async function NoticesReportPage({
                         {KIND[n.kind] ?? n.kind}
                       </Badge>
                     </td>
-                    <th scope="row">{n.title}</th>
+                    <th scope="row">
+                      <a
+                        href={`/academics/notices/${n.id}`}
+                        style={{ textDecoration: 'underline' }}
+                      >
+                        {n.title}
+                      </a>
+                    </th>
                     <td>{n.targets}</td>
                     <td>{n.publishedBy ?? ''}</td>
                     <td className="ep-num">{n.students}</td>

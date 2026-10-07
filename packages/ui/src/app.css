@@ -6161,3 +6161,14 @@ a.ep-tabs__tab {
   color: var(--text-body);
   overflow-wrap: anywhere;
 }
+/* A dashboard tile that is a link to its list */
+.ep-tile-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-lg);
+}
+.ep-tile-link:hover .ep-card,
+.ep-tile-link[aria-current='true'] .ep-card {
+  border-color: var(--action-primary);
+}

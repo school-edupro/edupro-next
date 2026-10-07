@@ -56,7 +56,7 @@ describe('compat teacher writes (e2e)', () => {
         json: { name: 'B' },
       })
     ).json().id;
-    await inject({
+    const science = await inject({
       method: 'POST',
       url: '/academics/subjects',
       headers: h(),
@@ -69,6 +69,18 @@ describe('compat teacher writes (e2e)', () => {
       url: '/academics/teacher-assignments',
       headers: h(),
       json: { employeeId: emp.id, classSectionId: sectionId, kind: 'class_teacher' },
+    });
+    // a teacher, the class teacher too, posts work for the subjects given to them
+    await inject({
+      method: 'POST',
+      url: '/academics/teacher-assignments',
+      headers: h(),
+      json: {
+        employeeId: emp.id,
+        classSectionId: sectionId,
+        kind: 'subject_teacher',
+        subjectId: science.json().id,
+      },
     });
     for (const [adm, first, roll] of [
       ['CW11-1', 'Aman', 1],

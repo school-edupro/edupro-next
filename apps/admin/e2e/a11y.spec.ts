@@ -30,6 +30,7 @@ const PAGES = [
   '/academics/daily-work?date=2026-10-07&c=169&s=143',
   '/academics/daily-work?view=assignments&c=169',
   '/academics/settings',
+  '/attendance/upload',
   '/academics/documents?new=1',
   '/academics/teacher-assignments?new=1',
   '/academics/calendar?new=event',

@@ -235,3 +235,59 @@ export async function saveLeaveSetup(input: {
     return { ok: false, error: said(error) };
   }
 }
+
+// ---- attendance from an Excel list (0093) ------------------------------------------------------------
+/** Reads the file and shows the list for checking; nothing is marked yet. */
+export async function verifyAttendanceUpload(fd: FormData) {
+  const here = '/attendance/upload';
+  const file = fd.get('file');
+  let id = '';
+  try {
+    if (!(file instanceof File) || file.size === 0)
+      throw new ApiError(400, { type: 'validation-failed', detail: 'Choose the Excel file.' });
+    const r = await apiFetch<{ id: string }>('/attendance/bulk/verify', {
+      method: 'POST',
+      body: JSON.stringify({
+        date: str(fd, 'date'),
+        code: str(fd, 'code') === 'P' ? 'P' : 'A',
+        fileName: file.name.slice(0, 200),
+        fileBase64: Buffer.from(await file.arrayBuffer()).toString('base64'),
+      }),
+    });
+    id = r.id;
+  } catch (error) {
+    fail(here, error);
+  }
+  redirect(`${here}?id=${id}`);
+}
+
+/** Marks the checked list and tells the parents of the absent, as ticked. */
+export async function commitAttendanceUpload(fd: FormData) {
+  const id = str(fd, 'id');
+  const here = `/attendance/upload?id=${id}`;
+  try {
+    await apiFetch(`/attendance/bulk/${id}/commit`, {
+      method: 'POST',
+      body: JSON.stringify({
+        replace: fd.get('replace') !== null,
+        restPresent: fd.get('restPresent') !== null,
+        sms: fd.get('sms') !== null,
+        email: fd.get('email') !== null,
+      }),
+    });
+  } catch (error) {
+    fail(here, error);
+  }
+  revalidatePath('/attendance');
+  redirect(`${here}&ok=upload_marked`);
+}
+
+export async function cancelAttendanceUpload(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`/attendance/bulk/${id}/cancel`, { method: 'POST' });
+  } catch (error) {
+    fail(`/attendance/upload?id=${id}`, error);
+  }
+  redirect('/attendance/upload?ok=upload_cancelled');
+}

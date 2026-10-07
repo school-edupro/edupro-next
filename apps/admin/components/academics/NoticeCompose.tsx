@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { ChipPicker, type ChipOption } from '@/components/ChipPicker';
+import { ChipPicker, fileBase64, type ChipOption } from '@/components/ChipPicker';
 import { HtmlEditor } from '@/components/comms/HtmlEditor';
 import { publishNoticeNow, saveNoticeDraft } from '@/lib/actions';
-import { noticeReach } from '@/lib/notice-actions';
+import { noticeAudienceFile, noticeReach, searchNoticeStudents } from '@/lib/notice-actions';
 
 type Kind = 'notice' | 'circular' | 'office_order';
 type Who = 'students' | 'employees' | 'everyone';
@@ -18,6 +18,143 @@ const KINDS: Array<{ id: Kind; label: string; help: string }> = [
 ];
 const nowLocal = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 16);
 
+/** An Excel list of admission numbers or employee codes: the people it names are added to the choice. */
+function ExcelList({
+  kind,
+  onFound,
+}: {
+  kind: 'student' | 'employee';
+  onFound: (people: ChipOption[]) => void;
+}) {
+  const [note, setNote] = useState('');
+  const what = kind === 'student' ? 'admission numbers' : 'employee codes';
+  return (
+    <div className="ep-field">
+      <span className="ep-field__label">Or upload an Excel list of {what}</span>
+      <span style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          className="ep-input"
+          type="file"
+          accept=".xlsx"
+          aria-label={`Excel list of ${what}`}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            setNote('Reading the file…');
+            const r = await noticeAudienceFile(kind, await fileBase64(file));
+            if (r.error) return setNote(r.error);
+            onFound(r.found);
+            setNote(
+              `${String(r.found.length)} added.${r.missing.length ? ` Not found: ${r.missing.slice(0, 20).join(', ')}${r.missing.length > 20 ? '…' : ''}` : ''}`,
+            );
+          }}
+        />
+        <a
+          className="ep-btn ep-btn--ghost ep-btn--sm"
+          href={`/api/academics/notice-audience-format?kind=${kind}`}
+        >
+          Download the format
+        </a>
+      </span>
+      {note ? (
+        <span className="ep-field__help" role="status">
+          {note}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Students one by one: type a name or an admission number, pick from what is found. */
+function StudentPick({
+  value,
+  onChange,
+}: {
+  value: ChipOption[];
+  onChange: (v: ChipOption[]) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState<ChipOption[]>([]);
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => {
+      void searchNoticeStudents(q).then((r) => {
+        if (live) setFound(r);
+      });
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [q]);
+  const chosen = new Set(value.map((v) => v.value));
+  return (
+    <div className="ep-field">
+      <label className="ep-field__label" htmlFor="nc-student-q">
+        Only these students (type a name or an admission number)
+      </label>
+      <input
+        id="nc-student-q"
+        className="ep-input"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search a student…"
+        autoComplete="off"
+      />
+      {found.filter((f) => !chosen.has(f.value)).length ? (
+        <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+          {found
+            .filter((f) => !chosen.has(f.value))
+            .map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                onClick={() => {
+                  onChange([...value, f]);
+                  setQ('');
+                }}
+              >
+                + {f.label}
+              </button>
+            ))}
+        </span>
+      ) : null}
+      {value.length ? (
+        <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+          {value.slice(0, 60).map((v) => (
+            <span key={v.value} className="ep-chip">
+              {v.label}
+              <button
+                type="button"
+                className="ep-chip__x"
+                aria-label={`Remove ${v.label}`}
+                onClick={() => onChange(value.filter((x) => x.value !== v.value))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {value.length > 60 ? (
+            <span className="ep-field__help">and {value.length - 60} more</span>
+          ) : null}
+          <button
+            type="button"
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            onClick={() => onChange([])}
+          >
+            Clear all {value.length}
+          </button>
+        </span>
+      ) : null}
+      {value.map((v) => (
+        <input key={v.value} type="hidden" name="studentIds" value={v.value} />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Compose a notice or an office order, laid out like Communication → Compose: what it is, who it is
  * for (with a live count), the subject and the message in the same editor, attachments and options;
@@ -27,16 +164,25 @@ export function NoticeCompose({
   classes,
   sections,
   employees,
+  departments,
+  maxFiles,
 }: {
   classes: ChipOption[];
   sections: ChipOption[];
   employees: ChipOption[];
+  departments: ChipOption[];
+  /** How many attachments the school allows on a notice. */
+  maxFiles: number;
 }) {
   const [kind, setKind] = useState<Kind>('notice');
   const [who, setWho] = useState<Who>('students');
   const [classIds, setClassIds] = useState<string[]>([]);
   const [sectionIds, setSectionIds] = useState<string[]>([]);
   const [employeeIds, setEmployeeIds] = useState<string[]>([]);
+  const [students, setStudents] = useState<ChipOption[]>([]);
+  const [deptIds, setDeptIds] = useState<string[]>([]);
+  const [extraStaff, setExtraStaff] = useState<ChipOption[]>([]);
+  const [fileNote, setFileNote] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [ack, setAck] = useState(false);
@@ -50,12 +196,19 @@ export function NoticeCompose({
     ...(forStudents ? classIds.map((id) => ({ type: 'class', id })) : []),
     ...(forStudents || forStaff ? sectionIds.map((id) => ({ type: 'class_section', id })) : []),
     ...(forStaff ? employeeIds.map((id) => ({ type: 'employee', id })) : []),
+    ...(forStudents ? students.map((x) => ({ type: 'student', id: x.value })) : []),
   ];
-  const key = JSON.stringify([kind, audience, targets]);
+  const depts = forStaff ? deptIds : [];
+  // an Excel list may name employees beyond the first ones loaded for the picker
+  const staffOptions = [
+    ...employees,
+    ...extraStaff.filter((x) => !employees.some((e) => e.value === x.value)),
+  ];
+  const key = JSON.stringify([kind, audience, targets, depts]);
   useEffect(() => {
     let live = true;
     const t = setTimeout(() => {
-      void noticeReach({ kind, audience, targets }).then((r) => {
+      void noticeReach({ kind, audience, targets, departments: depts }).then((r) => {
         if (live) setReach(r);
       });
     }, 250);
@@ -154,20 +307,48 @@ export function NoticeCompose({
                   value={sectionIds}
                   onChange={setSectionIds}
                 />
+                <StudentPick value={students} onChange={setStudents} />
+                <ExcelList
+                  kind="student"
+                  onFound={(people) =>
+                    setStudents((cur) => [
+                      ...cur,
+                      ...people.filter((p) => !cur.some((c) => c.value === p.value)),
+                    ])
+                  }
+                />
               </>
             ) : null}
             {forStaff ? (
-              <ChipPicker
-                name="employeeIds"
-                label="Only these employees"
-                options={employees}
-                value={employeeIds}
-                onChange={setEmployeeIds}
-              />
+              <>
+                <ChipPicker
+                  name="departments"
+                  label="Only these departments (every employee of the department)"
+                  options={departments}
+                  value={deptIds}
+                  onChange={setDeptIds}
+                />
+                <ChipPicker
+                  name="employeeIds"
+                  label="Only these employees"
+                  options={staffOptions}
+                  value={employeeIds}
+                  onChange={setEmployeeIds}
+                />
+                <ExcelList
+                  kind="employee"
+                  onFound={(people) => {
+                    setExtraStaff((cur) => [...cur, ...people]);
+                    setEmployeeIds((cur) => [...new Set([...cur, ...people.map((p) => p.value)])]);
+                  }}
+                />
+              </>
             ) : null}
           </div>
           <p className="ep-field__help" role="status" style={{ marginBottom: 0 }}>
-            {targets.length === 0 ? 'Nothing chosen: it goes to all of them. ' : ''}
+            {targets.length === 0 && depts.length === 0
+              ? 'Nothing chosen: it goes to all of them. '
+              : ''}
             {reach
               ? `Reaches ${[
                   forStudents ? `${String(reach.students)} student(s)` : '',
@@ -203,7 +384,9 @@ export function NoticeCompose({
               onChange={setBody}
             />
             <label className="ep-field" htmlFor="nc-files">
-              <span className="ep-field__label">Attachments (PDF or image, up to 10)</span>
+              <span className="ep-field__label">
+                Attachments (PDF or image, up to {maxFiles} files)
+              </span>
               <input
                 id="nc-files"
                 name="files"
@@ -211,7 +394,18 @@ export function NoticeCompose({
                 className="ep-input"
                 multiple
                 accept=".pdf,.png,.jpg,.jpeg,.webp"
+                onChange={(e) => {
+                  if ((e.target.files?.length ?? 0) > maxFiles) {
+                    e.target.value = '';
+                    setFileNote(`Choose up to ${String(maxFiles)} files.`);
+                  } else setFileNote('');
+                }}
               />
+              {fileNote ? (
+                <span className="ep-field__help" role="alert">
+                  {fileNote}
+                </span>
+              ) : null}
             </label>
           </div>
         </section>

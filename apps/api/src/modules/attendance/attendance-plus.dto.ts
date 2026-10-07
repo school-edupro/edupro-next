@@ -116,6 +116,26 @@ export const RouteTeachersImportSchema = z.object({
 });
 export class RouteTeachersImportDto extends createZodDto(RouteTeachersImportSchema) {}
 
+// ---- attendance from an Excel list (0093) ------------------------------------------------------------
+export const BulkVerifySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD'),
+  /** Every admission number of the file gets this. */
+  code: z.enum(['P', 'A']),
+  fileName: z.string().trim().max(200).optional(),
+  fileBase64: z.string().min(100).max(1_400_000),
+});
+export class BulkVerifyDto extends createZodDto(BulkVerifySchema) {}
+
+export const BulkCommitSchema = z.object({
+  /** Change a mark that is already there and differs. */
+  replace: z.boolean().default(false),
+  /** With an Absent list: the others of those classes, not yet marked, are Present. */
+  restPresent: z.boolean().default(false),
+  sms: z.boolean().default(false),
+  email: z.boolean().default(false),
+});
+export class BulkCommitDto extends createZodDto(BulkCommitSchema) {}
+
 // ---- student leave (0088) ---------------------------------------------------------------------------
 export const LeaveApplySchema = z
   .object({

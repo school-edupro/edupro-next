@@ -34,6 +34,7 @@ import {
   CreateDocumentDto,
   DocumentReportQueryDto,
   ListDocumentsQueryDto,
+  NoticeAudienceFileDto,
   NoticeReachDto,
   NoticeReportQueryDto,
   SaveSheetDto,
@@ -210,6 +211,32 @@ export class NoticesController {
   @RequirePermission(DAILY.noticeManage)
   reach(@ReqCtx() ctx: RequestContext, @Body() dto: NoticeReachDto) {
     return this.notices.reach(ctx, dto);
+  }
+
+  @Get('departments')
+  @ApiOperation({ summary: 'Departments with active employees, for "who is it for"' })
+  @RequirePermission(DAILY.noticeManage)
+  async departments(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.notices.departments(ctx) };
+  }
+
+  @Get('audience-format.xlsx')
+  @ApiOperation({ summary: 'The Excel format for a list of students or employees' })
+  @RequirePermission(DAILY.noticeManage)
+  async audienceFormat(@Query('kind') kind: string, @Res() reply: FastifyReply) {
+    const f = await this.notices.audienceFormat(kind === 'employee' ? 'employee' : 'student');
+    reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
+  }
+
+  @Post('audience-file')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Read an Excel list of admission numbers or employee codes' })
+  @RequirePermission(DAILY.noticeManage)
+  audienceFile(@ReqCtx() ctx: RequestContext, @Body() dto: NoticeAudienceFileDto) {
+    return this.notices.audienceFile(ctx, dto);
   }
 
   @Get('report')

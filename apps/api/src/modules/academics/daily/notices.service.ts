@@ -13,10 +13,13 @@ import type {
   NoticeReachDto,
   NoticeReportQueryDto,
   UpdateNoticeDto,
+  NoticeAudienceFileDto,
 } from './daily.dto';
 import { schoolTime, type AttachedFile } from './daily-work.service';
 import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
 import { DAILY } from './daily.permissions';
+import { readSheet, templateSheet } from '../../../common/excel/sheet';
+import { AcademicSettingsService } from './academic-settings.service';
 import { ViewerService, type Viewer } from './viewer.service';
 
 export interface NoticeTarget {
@@ -138,6 +141,7 @@ export class NoticesService {
     private readonly viewer: ViewerService,
     private readonly files: FilesService,
     private readonly push: PushService,
+    private readonly settings: AcademicSettingsService,
   ) {}
 
   /** A file attached to a notice the viewer may read (families included), as a signed link. */
@@ -265,11 +269,94 @@ export class NoticesService {
       );
   }
 
+  /** No more files than the school allows on a notice. */
+  private async assertFileCount(ctx: RequestContext, fileIds: string[]): Promise<void> {
+    const max = (await this.settings.get(ctx)).maxNoticeFiles;
+    if (new Set(fileIds).size > max)
+      throw new DomainError(
+        'validation-failed',
+        `A notice may carry up to ${String(max)} attachment(s); the school sets this in Academics settings`,
+        { status: 400 },
+      );
+  }
+
+  /** The departments that have active employees, for the compose screen. */
+  async departments(ctx: RequestContext): Promise<Array<{ name: string; employees: number }>> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ name: string; employees: number }>(
+        `SELECT department AS name, count(*)::int AS employees FROM employees
+          WHERE deleted_at IS NULL AND status = 'active' AND COALESCE(department, '') <> '' GROUP BY 1 ORDER BY 1`,
+      );
+      return r.rows;
+    });
+  }
+
+  async audienceFormat(kind: 'student' | 'employee') {
+    const header = kind === 'student' ? 'Admission no' : 'Employee code';
+    return {
+      filename: `notice-${kind}s-format.xlsx`,
+      bytes: await templateSheet({
+        sheet: kind === 'student' ? 'Students' : 'Employees',
+        columns: [{ header, width: 20, required: true }],
+        guide: [
+          `Type one ${header.toLowerCase()} in each row, in the first column. Nothing else is needed.`,
+          'Upload the file on the compose screen: the people it names are added to "Who is it for".',
+        ],
+      }),
+    };
+  }
+
+  /** Reads an Excel list of admission numbers or employee codes: who was found, and what was not. */
+  async audienceFile(ctx: RequestContext, dto: NoticeAudienceFileDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.viewer.requireYear(tenant);
+    const header = dto.kind === 'student' ? 'Admission no' : 'Employee code';
+    const rows = await readSheet(dto.fileBase64, [header]);
+    const codes = [...new Set(rows.map((r) => r.cells[header]!.trim()).filter(Boolean))];
+    return this.db.tenant(tenant, async (c) => {
+      const r =
+        dto.kind === 'student'
+          ? await c.query<{ id: string; code: string; label: string }>(
+              `SELECT s.id::text, s.admission_no AS code, s.display_name || ' · ' || k.code || '-' || cs.name || ' (' || s.admission_no || ')' AS label
+                 FROM students s JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active'
+                 JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                WHERE s.deleted_at IS NULL AND lower(s.admission_no) = ANY($1::text[])`,
+              [codes.map((x) => x.toLowerCase()), yearId],
+            )
+          : await c.query<{ id: string; code: string; label: string }>(
+              `SELECT e.id::text, e.employee_code AS code, e.display_name || ' (' || e.employee_code || ')' AS label
+                 FROM employees e WHERE e.deleted_at IS NULL AND e.status = 'active' AND lower(e.employee_code) = ANY($1::text[])`,
+              [codes.map((x) => x.toLowerCase())],
+            );
+      const got = new Set(r.rows.map((x) => x.code.toLowerCase()));
+      return {
+        kind: dto.kind,
+        found: r.rows.map((x) => ({ id: x.id, label: x.label })),
+        missing: codes.filter((x) => !got.has(x.toLowerCase())),
+      };
+    });
+  }
+
   async create(ctx: RequestContext, dto: CreateNoticeDto): Promise<NoticeRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
+    await this.assertFileCount(ctx, dto.fileIds);
     await this.viewer.assertFilesReady(ctx, dto.fileIds, 'notices');
     return this.db.tenant(tenant, async (c) => {
+      // a department stands for its active employees
+      if (dto.departments.length) {
+        const staff = await c.query<{ id: string }>(
+          `SELECT id::text FROM employees WHERE deleted_at IS NULL AND status = 'active' AND department = ANY($1::text[])`,
+          [dto.departments],
+        );
+        const have = new Set(dto.targets.filter((t) => t.type === 'employee').map((t) => t.id));
+        for (const e of staff.rows)
+          if (!have.has(e.id)) dto.targets.push({ type: 'employee', id: e.id });
+        if (!dto.targets.length)
+          throw new DomainError('validation-failed', 'No active employee is in that department', {
+            status: 400,
+          });
+      }
       const r = await c.query<{ id: string }>(
         `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by,
                               body_format, ack_required, publish_at, also_email, created_by, updated_by)
@@ -323,7 +410,10 @@ export class NoticesService {
 
   async update(ctx: RequestContext, id: string, dto: UpdateNoticeDto): Promise<NoticeRow> {
     const tenant = requireTenant(ctx);
-    if (dto.fileIds) await this.viewer.assertFilesReady(ctx, dto.fileIds, 'notices');
+    if (dto.fileIds) {
+      await this.assertFileCount(ctx, dto.fileIds);
+      await this.viewer.assertFilesReady(ctx, dto.fileIds, 'notices');
+    }
     return this.db.tenant(tenant, async (c) => {
       const before = await this.find(c, id);
       if (!before) throw new DomainError('not-found', 'Notice not found');
@@ -472,16 +562,17 @@ export class NoticesService {
                     AND (NOT $3 OR en.class_section_id = ANY($4::bigint[]) OR cs.class_id = ANY($5::bigint[]) OR en.student_id = ANY($6::bigint[])))::int AS pupils,
                 (SELECT count(*) FROM employees e
                   WHERE e.status = 'active' AND e.deleted_at IS NULL AND $2 IN ('everyone', 'employees')
-                    AND (NOT $3 OR e.id = ANY($7::bigint[])
+                    AND (NOT $3 OR e.id = ANY($7::bigint[]) OR e.department = ANY($8::text[])
                          OR EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = ANY($4::bigint[]) AND ta.valid_to IS NULL)))::int AS staff`,
         [
           yearId,
           audience,
-          dto.targets.length > 0,
+          dto.targets.length > 0 || dto.departments.length > 0,
           of('class_section'),
           of('class'),
           of('student'),
           of('employee'),
+          dto.departments,
         ],
       );
       return { students: r.rows[0]!.pupils, employees: r.rows[0]!.staff };

@@ -6,12 +6,18 @@ import type { ClassRow, Employee, Page } from '@/lib/types';
 
 /** New notice or office order, composed like Communication → Compose. */
 export default async function NewNoticePage() {
-  const [classes, sections, employees] = await Promise.all([
+  const [classes, sections, employees, departments, settings] = await Promise.all([
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
     sectionOptions(),
     apiFetch<Page<Employee>>('/people/employees?size=200')
       .then((r) => r.data)
       .catch(() => [] as Employee[]),
+    apiFetch<{ data: Array<{ name: string; employees: number }> }>('/academics/notices/departments')
+      .then((r) => r.data)
+      .catch(() => []),
+    apiFetch<{ maxNoticeFiles: number }>('/academics/settings').catch(() => ({
+      maxNoticeFiles: 5,
+    })),
   ]);
   return (
     <>
@@ -26,6 +32,11 @@ export default async function NewNoticePage() {
         }
       />
       <NoticeCompose
+        departments={departments.map((d) => ({
+          value: d.name,
+          label: `${d.name} (${String(d.employees)})`,
+        }))}
+        maxFiles={settings.maxNoticeFiles}
         classes={classes.map((k) => ({ value: k.id, label: `${k.code} · ${k.name}` }))}
         sections={sections}
         employees={employees.map((e) => ({

@@ -46,6 +46,7 @@
     "feeDemands": "Demands",
     "attendance": "Attendance",
     "attendanceDashboard": "Attendance dashboard",
+    "attendanceUpload": "Attendance from Excel",
     "busRoll": "Bus attendance (teacher)",
     "attendanceRegisters": "Monthly registers",
     "attendanceSetup": "Attendance set-up",

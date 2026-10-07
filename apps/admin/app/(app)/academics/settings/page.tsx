@@ -17,6 +17,7 @@ interface Settings {
   teacherMobile: 'full' | 'masked' | 'hidden';
   teacherEmail: 'full' | 'masked' | 'hidden';
   maxMb: Record<'daily_work' | 'assignment' | 'documents' | 'notices' | 'gallery', number>;
+  maxNoticeFiles: number;
 }
 
 const SHOW = [
@@ -101,6 +102,18 @@ export default async function AcademicSettingsPage({
                 help="1 to 25 MB for each file"
               />
             ))}
+            <InputField
+              id="maxNoticeFiles"
+              name="maxNoticeFiles"
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              required
+              label="Attachments on a notice or office order (how many)"
+              defaultValue={String(s.maxNoticeFiles)}
+              help="1 to 10 files on one notice"
+            />
           </FormRow>
           {canManage ? (
             <FormActions>

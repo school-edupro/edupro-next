@@ -134,6 +134,7 @@ export const UpdateAcademicSettingsSchema = z.object({
     notices: Mb,
     gallery: Mb,
   }),
+  maxNoticeFiles: z.coerce.number().int().min(1).max(10).default(5),
 });
 export class UpdateAcademicSettingsDto extends createZodDto(UpdateAcademicSettingsSchema) {}
 
@@ -149,7 +150,9 @@ export const CreateNoticeSchema = z
     publishFrom: DateSchema.optional(),
     publishUntil: DateSchema.optional(),
     isPinned: z.boolean().default(false),
-    targets: z.array(TargetSchema).max(200).default([]),
+    targets: z.array(TargetSchema).max(2500).default([]),
+    /** Departments: every active employee of each becomes a target. */
+    departments: z.array(z.string().trim().min(1).max(120)).max(60).default([]),
     fileIds: z.array(IdSchema).max(10).default([]),
     publish: z.boolean().default(false),
     /** `html`: the body is formatted text from the editor (cleaned on the server). */
@@ -310,6 +313,14 @@ export class NoticeReportQueryDto extends createZodDto(NoticeReportQuerySchema) 
 export const NoticeReachSchema = z.object({
   kind: NoticeKindSchema.default('notice'),
   audience: AudienceSchema.default('everyone'),
-  targets: z.array(TargetSchema).max(400).default([]),
+  targets: z.array(TargetSchema).max(2500).default([]),
+  departments: z.array(z.string().trim().min(1).max(120)).max(60).default([]),
 });
 export class NoticeReachDto extends createZodDto(NoticeReachSchema) {}
+
+/** An Excel list of admission numbers (students) or employee codes, turned into the people it names. */
+export const NoticeAudienceFileSchema = z.object({
+  kind: z.enum(['student', 'employee']),
+  fileBase64: z.string().min(100).max(1_400_000),
+});
+export class NoticeAudienceFileDto extends createZodDto(NoticeAudienceFileSchema) {}

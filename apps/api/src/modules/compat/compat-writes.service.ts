@@ -175,6 +175,7 @@ export class CompatWritesService {
       publishFrom: date,
       isPinned: false,
       targets,
+      departments: [],
       fileIds: [],
       ackRequired: false,
       bodyFormat: 'text',

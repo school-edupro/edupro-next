@@ -98,6 +98,11 @@ const NAV: Array<{
         label: 'attendanceRegister',
         permission: 'attendance.session.view',
       },
+      {
+        href: '/attendance/upload',
+        label: 'attendanceUpload',
+        permission: 'attendance.bulk.upload',
+      },
       { href: '/attendance/bus-roll', label: 'busRoll', permission: 'attendance.bus.mark' },
       {
         href: '/attendance/registers',
@@ -184,7 +189,7 @@ const NAV: Array<{
       { href: '/comms', label: 'commsDashboard', permission: 'comms.report.view' },
       { href: '/comms/compose', label: 'compose', permission: 'comms.request.create' },
       // notices and office orders are written like a message: they sit with Communication
-      { href: '/academics/notices', label: 'notices', permission: 'academics.notice.view' },
+      { href: '/academics/notices/report', label: 'notices', permission: 'academics.notice.view' },
       { href: '/comms/requests', label: 'requests', permission: 'comms.request.view' },
       { href: '/comms/groups', label: 'groups', permission: 'comms.group.view' },
       { href: '/comms/consents', label: 'consents', permission: 'comms.consent.view' },
@@ -468,8 +473,14 @@ export async function Shell({
       }))
     : [];
   const allowed = new Set(me.permissions);
-  const matches = (href: string) =>
-    href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
+  // a menu entry that opens a sub-page (the notices report) still stands for its whole section
+  const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
+  const matches = (link: string) => {
+    const href = SECTION_OF[link] ?? link;
+    return href === '/'
+      ? currentPath === '/'
+      : currentPath === href || currentPath.startsWith(`${href}/`);
+  };
   // the most specific link wins: /comms/templates, not also /comms; /people/withdrawals/bulk, not also /people/withdrawals
   const best = NAV.flatMap((g) => g.items.map((i) => i.href))
     .filter(matches)

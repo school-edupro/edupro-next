@@ -1129,6 +1129,7 @@ export async function saveAcademicSettings(fd: FormData) {
           notices: Number(str(fd, 'mb_notices')),
           gallery: Number(str(fd, 'mb_gallery')),
         },
+        maxNoticeFiles: Number(str(fd, 'maxNoticeFiles') || '5'),
       }),
     }),
   );
@@ -1150,6 +1151,7 @@ async function saveNotice(fd: FormData, publish: boolean) {
       ...fd.getAll('classIds').map((id) => ({ type: 'class', id: String(id) })),
       ...fd.getAll('classSectionIds').map((id) => ({ type: 'class_section', id: String(id) })),
       ...fd.getAll('employeeIds').map((id) => ({ type: 'employee', id: String(id) })),
+      ...fd.getAll('studentIds').map((id) => ({ type: 'student', id: String(id) })),
     ];
     await apiFetch('/academics/notices', {
       method: 'POST',
@@ -1162,6 +1164,7 @@ async function saveNotice(fd: FormData, publish: boolean) {
         publishUntil: opt(fd, 'publishUntil'),
         isPinned: fd.get('isPinned') !== null,
         targets,
+        departments: fd.getAll('departments').map(String).filter(Boolean),
         fileIds,
         publish,
         bodyFormat: str(fd, 'bodyFormat') === 'html' ? 'html' : 'text',

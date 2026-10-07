@@ -4,9 +4,12 @@ import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { AttendanceBulkService } from './attendance-bulk.service';
 import { AttendanceDeskService } from './attendance-desk.service';
 import {
   AttendanceSetupDto,
+  BulkCommitDto,
+  BulkVerifyDto,
   BusRegisterFileDto,
   BusRegisterQueryDto,
   BusRollMarkDto,
@@ -316,5 +319,65 @@ export class LeaveController {
   @AuthenticatedOnly()
   file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
     return this.leaves.fileUrl(ctx, id, fileId, false);
+  }
+}
+
+const BULK = 'attendance.bulk.upload';
+
+@ApiTags('attendance')
+@ApiBearerAuth()
+@Controller('attendance/bulk')
+export class AttendanceBulkController {
+  constructor(private readonly bulk: AttendanceBulkService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'The log of attendance uploads of the working year' })
+  @RequirePermission(BULK, {
+    description: 'Mark attendance from an Excel list of admission numbers',
+  })
+  async list(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.bulk.list(ctx) };
+  }
+
+  @Get('template.xlsx')
+  @ApiOperation({ summary: 'The Excel format: one column of admission numbers' })
+  @RequirePermission(BULK)
+  async template(@Res() reply: FastifyReply) {
+    const f = await this.bulk.template();
+    reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
+  }
+
+  @Post('verify')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Read the file and check every admission number; nothing is marked yet',
+  })
+  @RequirePermission(BULK)
+  verify(@ReqCtx() ctx: RequestContext, @Body() body: BulkVerifyDto) {
+    return this.bulk.verify(ctx, body);
+  }
+
+  @Get(':id')
+  @RequirePermission(BULK)
+  detail(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.bulk.detail(ctx, id);
+  }
+
+  @Post(':id/commit')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Mark the checked list and tell the parents of the absent, as ticked' })
+  @RequirePermission(BULK)
+  commit(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: BulkCommitDto) {
+    return this.bulk.commit(ctx, id, body);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(200)
+  @RequirePermission(BULK)
+  cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.bulk.cancel(ctx, id);
   }
 }

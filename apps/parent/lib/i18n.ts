@@ -856,6 +856,9 @@ const DICT: Record<string, string> = {
   given: 'दिया गया',
   'Past the due date': 'अंतिम तिथि निकल चुकी',
   'Given from': 'दिए जाने की तिथि से',
+  'to acknowledge': 'की पुष्टि बाकी',
+  Circulars: 'परिपत्र',
+  'Words in the notice': 'सूचना के शब्द',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

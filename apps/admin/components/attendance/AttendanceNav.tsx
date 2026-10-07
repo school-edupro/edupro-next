@@ -9,6 +9,7 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
     label: 'Monthly registers',
     permission: 'attendance.session.view',
   },
+  { href: '/attendance/upload', label: 'From Excel', permission: 'attendance.bulk.upload' },
   { href: '/attendance/leaves', label: 'Student leave', permission: 'attendance.leave.decide' },
   { href: '/masters/attendance', label: 'Leave types', permission: 'attendance.setup.manage' },
   { href: '/attendance/setup', label: 'Set-up', permission: 'attendance.setup.manage' },

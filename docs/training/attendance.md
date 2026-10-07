@@ -76,3 +76,18 @@
 - **Registers.** Class and bus registers (Excel and PDF) carry the school's name and address, the report name, the class or route, the month and when it was generated. The bus register of a route shows **M** (morning) and **A** (afternoon) under each date. Teachers open it in the teacher app: Bus attendance → Monthly register.
 - **Parent portal → Attendance.** Month (tiles, a ring, a calendar, the bus), Year (a bar per month and a table) and Leave.
 - Not yet: SMS / WhatsApp / e-mail about a leave; the status shows in the portals.
+
+## Attendance from Excel (8 October 2026)
+
+For the coordinator and the office (permission `attendance.bulk.upload`): Attendance → **From Excel**.
+
+1. Download the format: one column, *Admission no*. Type the admission numbers.
+2. Choose the **date** and whether these students are **Absent** or **Present**, choose the file, press *Check the list*.
+3. The screen shows who each number is, the class, what is already marked, and the rows with a problem (unknown number, not enrolled, repeated, register locked, on approved leave). Problem rows are left out. Nothing is marked yet.
+4. Tick what you want and press *Mark attendance*:
+   - *Replace existing marks that differ*: without it, only students not yet marked are filled.
+   - *Mark the other students of these classes as Present* (with an Absent list).
+   - *Send an SMS* / *Send an e-mail* to the parents of the absent. The SMS needs an active SMS template with the code `absent_alert`; without it no SMS goes and the log says so. The e-mail is queued to the first guardian who takes notifications.
+5. The **log** at the bottom keeps every upload: who, when, for which date, rows, problems, marked, replaced, SMS and e-mail counts.
+
+A holiday, a weekly off or a future date is refused. A parent who muted absence alerts is not told.

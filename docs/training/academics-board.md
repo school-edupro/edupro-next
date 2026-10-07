@@ -65,3 +65,11 @@ Three tabs. **Calendar** is the month grid (holidays green, vacations blue, exam
 - **Class documents report**: filter by what, class and published from / to; download as Excel or PDF (admin and teacher app).
 - **School magazine and almanac** are uploaded by the office only; teachers still see the published ones.
 - **Holidays** and **Timetable periods** are entered only in Academics → Setup. Calendar and Timetable show them read-only with a *Manage in Setup* link; Calendar still adds almanac events.
+
+## Notices: audience, attachments, report (8 October 2026)
+
+- **Who is it for.** Students: classes, sections, *only these students* (type a name or admission number), or an **Excel list of admission numbers**. Employees: *only these departments*, *only these employees*, or an **Excel list of employee codes**. "Download the format" gives the one-column sheet.
+- **Attachments on a notice**: as many as the school allows in Academics → Settings (1–10, default 5).
+- **Notices and office orders** in the menu opens the report. The tiles (all, notices, circulars, office orders) list that kind; a title opens the notice in full. People without the office permission land on their own notices.
+- An employee sees only the notices, circulars and office orders that are for them; a parent or student only theirs.
+- **Parent portal → Notices**: filters (type, from, to, words), a card per notice with its date; *Details* opens it with attachments and the acknowledgement.

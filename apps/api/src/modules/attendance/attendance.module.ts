@@ -9,9 +9,11 @@ import {
   RfidController,
   RulesController,
 } from './attendance.controller';
+import { AttendanceBulkService } from './attendance-bulk.service';
 import { AttendanceDeskService } from './attendance-desk.service';
 import { AttendanceGate } from './attendance-gate';
 import {
+  AttendanceBulkController,
   AttendanceDeskController,
   BusRollController,
   LeaveController,
@@ -37,10 +39,12 @@ import { RulesService } from './rules.service';
     AttendanceDeskController,
     BusRollController,
     LeaveController,
+    AttendanceBulkController,
   ],
   providers: [
     AttendanceGate,
     AttendanceDeskService,
+    AttendanceBulkService,
     BusRollService,
     LeaveService,
     AttendanceService,
