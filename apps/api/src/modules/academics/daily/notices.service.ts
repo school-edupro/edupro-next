@@ -268,7 +268,7 @@ export class NoticesService {
   async create(ctx: RequestContext, dto: CreateNoticeDto): Promise<NoticeRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
-    await this.viewer.assertFilesReady(ctx, dto.fileIds);
+    await this.viewer.assertFilesReady(ctx, dto.fileIds, 'notices');
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<{ id: string }>(
         `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by,
@@ -323,7 +323,7 @@ export class NoticesService {
 
   async update(ctx: RequestContext, id: string, dto: UpdateNoticeDto): Promise<NoticeRow> {
     const tenant = requireTenant(ctx);
-    if (dto.fileIds) await this.viewer.assertFilesReady(ctx, dto.fileIds);
+    if (dto.fileIds) await this.viewer.assertFilesReady(ctx, dto.fileIds, 'notices');
     return this.db.tenant(tenant, async (c) => {
       const before = await this.find(c, id);
       if (!before) throw new DomainError('not-found', 'Notice not found');

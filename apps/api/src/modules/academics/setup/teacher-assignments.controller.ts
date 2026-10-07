@@ -27,6 +27,21 @@ export class TeacherAssignmentsController {
     return { data: await this.assignments.list(ctx, q) };
   }
 
+  @Get('export')
+  @ApiOperation({ summary: 'The list with its filters as Excel or PDF' })
+  @RequirePermission(ACADEMICS.assignmentView)
+  async export(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: ListTeacherAssignmentsQueryDto,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.assignments.exportFile(ctx, q, q.format ?? 'xlsx');
+    reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
+  }
+
   @Get('mine')
   @ApiOperation({ summary: 'My own assignments (teacher app)' })
   @RequirePermission(ACADEMICS.assignmentView)

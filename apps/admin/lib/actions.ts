@@ -1081,6 +1081,59 @@ export async function postDailyWork(fd: FormData) {
   });
 }
 
+/** The day's sheet: every filled box of every subject, for the ticked classes, in one save. */
+export async function saveWorkSheet(fd: FormData) {
+  const view = str(fd, 'view') || 'sheet';
+  const sections = fd.getAll('sections').map(String).filter(Boolean);
+  const here = `/academics/daily-work?view=${view}&date=${str(fd, 'date')}${sections.map((x) => `&s=${x}`).join('')}`;
+  return run(here, async () => {
+    const rows = [];
+    for (const subjectId of fd.getAll('subject').map(String))
+      rows.push({
+        subjectId,
+        homework: str(fd, `hw:${subjectId}`),
+        classwork: str(fd, `cw:${subjectId}`),
+        assignment: str(fd, `as:${subjectId}`),
+        dueOn: opt(fd, `due:${subjectId}`),
+        homeworkFileIds: await uploadAll(fd, `hwf:${subjectId}`),
+        classworkFileIds: await uploadAll(fd, `cwf:${subjectId}`),
+        assignmentFileIds: await uploadAll(fd, `asf:${subjectId}`),
+      });
+    await apiFetch('/academics/daily-work/sheet', {
+      method: 'POST',
+      body: JSON.stringify({
+        date: str(fd, 'date'),
+        classSectionIds: sections,
+        mode: str(fd, 'mode') || 'daily',
+        publishAt: opt(fd, 'publishAt'),
+        ackRequired: fd.get('ackRequired') !== null,
+        rows,
+      }),
+    });
+  });
+}
+
+/** Publish time, how a teacher's contact shows to families, and the largest file of each section. */
+export async function saveAcademicSettings(fd: FormData) {
+  return run('/academics/settings', () =>
+    apiFetch('/academics/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        publishTime: opt(fd, 'publishTime') ?? null,
+        teacherMobile: str(fd, 'teacherMobile'),
+        teacherEmail: str(fd, 'teacherEmail'),
+        maxMb: {
+          daily_work: Number(str(fd, 'mb_daily_work')),
+          assignment: Number(str(fd, 'mb_assignment')),
+          documents: Number(str(fd, 'mb_documents')),
+          notices: Number(str(fd, 'mb_notices')),
+          gallery: Number(str(fd, 'mb_gallery')),
+        },
+      }),
+    }),
+  );
+}
+
 export async function deleteDailyWork(fd: FormData) {
   const id = str(fd, 'id');
   return run(str(fd, 'returnTo') || '/academics/daily-work', () =>

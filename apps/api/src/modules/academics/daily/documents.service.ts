@@ -143,7 +143,7 @@ export class DocumentsService {
       );
     for (const sectionId of dto.classSectionIds)
       await this.scopes.assert(tenant, DAILY.workPost, 'class_section', sectionId);
-    await this.viewer.assertFilesReady(ctx, dto.fileIds);
+    await this.viewer.assertFilesReady(ctx, dto.fileIds, 'documents');
     const v = await this.viewer.resolve(ctx, DAILY.workPost);
     return this.db.tenant(tenant, async (c) => {
       const sections = await c.query(

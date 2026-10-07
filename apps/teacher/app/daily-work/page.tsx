@@ -1,69 +1,64 @@
-import { Badge, Button, Card, DataTable, PageHeader } from '@edupro/ui';
+import {
+  Card,
+  PageHeader,
+  WorkReport,
+  WorkSheet,
+  type WorkReportItem,
+  type WorkSheetData,
+} from '@edupro/ui';
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
-import { postDailyWork } from './actions';
+import { saveSheet } from './actions';
 
-interface Work {
-  id: string;
-  kind: 'homework' | 'classwork' | 'assignment';
-  section: string;
-  subjectName: string | null;
-  title: string;
-  body: string;
-  assignedOn: string;
-  dueOn: string | null;
-  files: Array<{ id: string; name: string | null }>;
-  publishAt: string;
-  scheduled: boolean;
-  ackRequired: boolean;
-  ackCount: number;
-}
-interface Assignment {
-  classSectionId: string;
-  classCode: string;
-  section: string;
-  subjectId: string | null;
-  subjectName: string | null;
-  canPostHomework: boolean;
-}
-interface Subject {
-  id: string;
-  code: string;
-  name: string;
-}
+type View = 'sheet' | 'assignments' | 'report';
 
-/** The school's time now, as a date-time field takes it. */
-const nowLocal = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 16);
-const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+const daysAgo = (n: number) =>
+  new Date(Date.now() + 5.5 * 3600 * 1000 - n * 86_400_000).toISOString().slice(0, 10);
+const isDate = (v: string | undefined): v is string => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+const ids = (v: string | string[] | undefined) =>
+  (Array.isArray(v) ? v : v ? [v] : []).filter((x) => /^\d{1,18}$/.test(x));
 
-/** S7-07: the teacher posts homework and classwork for the sections assigned to them. */
+/**
+ * Daily work for the teacher: the day's sheet (a row per subject: the class teacher has every subject of
+ * the class, a subject teacher the ones given to them), the same sheet for assignments, and what was posted.
+ */
 export default async function DailyWorkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    date?: string;
+    s?: string | string[];
+    from?: string;
+    to?: string;
+    classSectionId?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
-  let work: Work[];
-  let assignments: Assignment[];
-  let subjects: Subject[];
+  const view: View = sp.view === 'assignments' || sp.view === 'report' ? sp.view : 'sheet';
+  const mode = view === 'assignments' ? 'assignment' : 'daily';
+  const date = isDate(sp.date) ? sp.date : today();
+  const from = isDate(sp.from) ? sp.from : daysAgo(6);
+  const to = isDate(sp.to) ? sp.to : today();
+  const chosen = ids(sp.s);
+  let sheet: WorkSheetData;
+  let items: WorkReportItem[] = [];
   try {
-    [work, assignments, subjects] = await Promise.all([
-      bff.api.fetch<{ data: Work[] }>('/academics/daily-work?size=50').then((r) => r.data),
-      bff.api
-        .fetch<{ data: Assignment[] }>('/academics/teacher-assignments/mine')
-        .then((r) => r.data),
-      bff.api
-        .fetch<{ data: Subject[] }>('/academics/subjects?size=200&status=active')
-        .then((r) => r.data),
-    ]);
+    sheet = await bff.api.fetch<WorkSheetData>(
+      `/academics/daily-work/sheet?mode=${mode}&date=${date}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
+    );
+    if (view === 'report') {
+      const q = new URLSearchParams({ size: '200', from, to });
+      if (/^\d{1,18}$/.test(sp.classSectionId ?? '')) q.set('classSectionId', sp.classSectionId!);
+      items = (
+        await bff.api.fetch<{ data: WorkReportItem[] }>(`/academics/daily-work?${q.toString()}`)
+      ).data;
+    }
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)
@@ -75,17 +70,28 @@ export default async function DailyWorkPage({
       );
     throw error;
   }
-  const sections = [
-    ...new Map(
-      assignments.filter((a) => a.canPostHomework).map((a) => [a.classSectionId, a]),
-    ).values(),
-  ];
+  const tab = (v: View, label: string) => (
+    <a
+      key={v}
+      href={v === 'sheet' ? '/daily-work' : `/daily-work?view=${v}`}
+      aria-current={view === v ? 'page' : undefined}
+    >
+      {label}
+    </a>
+  );
+  const [created, updated] = (sp.ok ?? '').split('-').map(Number);
   return (
-    <main style={{ padding: 'var(--sp-4)', maxWidth: 960, margin: '0 auto' }}>
+    <main style={{ padding: 'var(--sp-4)', maxWidth: 1180, margin: '0 auto' }}>
       <PageHeader
         kicker="Daily work"
-        title="Homework and classwork"
-        description={`${work.length} recent posts for your sections`}
+        title={
+          view === 'sheet'
+            ? 'Homework and classwork'
+            : view === 'assignments'
+              ? 'Assignments'
+              : 'What was posted'
+        }
+        description="A class teacher sees every subject of the class; a subject teacher sees the subjects given to them."
         actions={
           <>
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/documents">
@@ -97,13 +103,22 @@ export default async function DailyWorkPage({
           </>
         }
       />
+      <nav
+        className="ep-tabs-links"
+        aria-label="Daily work"
+        style={{ marginBottom: 'var(--sp-3)' }}
+      >
+        {tab('sheet', 'Homework and classwork')}
+        {tab('assignments', 'Assignments')}
+        {tab('report', 'Report')}
+      </nav>
       {sp.ok ? (
         <div
           className="ep-alert ep-alert--success"
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          Posted.
+          Saved: {created || 0} new, {updated || 0} updated.
         </div>
       ) : null}
       {sp.error ? (
@@ -112,168 +127,71 @@ export default async function DailyWorkPage({
           role="alert"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          {sp.error === 'scope-denied'
-            ? 'That section is not assigned to you.'
-            : `Could not post (${sp.error}). ${sp.detail ?? ''}`}
+          {sp.detail || `Could not save (${sp.error}).`}
         </div>
       ) : null}
-      {sections.length > 0 ? (
-        <Card title="Post for your section" style={{ marginBottom: 'var(--sp-4)' }}>
+      {view === 'report' ? (
+        <Card>
           <form
-            action={postDailyWork}
-
-            style={{ display: 'grid', gap: 'var(--sp-3)' }}
+            method="get"
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              flexWrap: 'wrap',
+              alignItems: 'flex-end',
+              marginBottom: 'var(--sp-4)',
+            }}
           >
-            <div
-              style={{
-                display: 'grid',
-                gap: 'var(--sp-3)',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              }}
-            >
-              <label className="ep-field">
-                <span className="ep-field__label">Section</span>
-                <select name="classSectionId" className="ep-select" required>
-                  {sections.map((s) => (
-                    <option key={s.classSectionId} value={s.classSectionId}>
-                      {s.classCode}-{s.section}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ep-field">
-                <span className="ep-field__label">Kind</span>
-                <select name="kind" className="ep-select">
-                  <option value="homework">Homework</option>
-                  <option value="classwork">Classwork</option>
-                  <option value="assignment">Assignment</option>
-                </select>
-              </label>
-              <label className="ep-field">
-                <span className="ep-field__label">Subject</span>
-                <select name="subjectId" className="ep-select">
-                  <option value="">None</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ep-field">
-                <span className="ep-field__label">Due on</span>
-                <input name="dueOn" type="date" className="ep-input" />
-              </label>
-            </div>
+            <input type="hidden" name="view" value="report" />
             <label className="ep-field">
-              <span className="ep-field__label">Title</span>
-              <input name="title" className="ep-input" required maxLength={160} />
+              <span className="ep-field__label">From</span>
+              <input className="ep-input" type="date" name="from" defaultValue={from} />
             </label>
             <label className="ep-field">
-              <span className="ep-field__label">Details</span>
-              <textarea name="body" className="ep-input" rows={3} maxLength={8000} />
+              <span className="ep-field__label">To</span>
+              <input className="ep-input" type="date" name="to" defaultValue={to} />
             </label>
-            <div
-              style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap', alignItems: 'end' }}
-            >
-              <label className="ep-field">
-                <span className="ep-field__label">Publish on (date and time)</span>
-                <input
-                  name="publishAt"
-                  type="datetime-local"
-                  className="ep-input"
-                  defaultValue={nowLocal()}
-                />
-                <span className="ep-field__help">
-                  Parents and students see it from this time. Now by default.
-                </span>
-              </label>
-              <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                <input type="checkbox" name="ackRequired" value="1" />
-                Ask the parent / student to acknowledge
-              </label>
-            </div>
             <label className="ep-field">
-              <span className="ep-field__label">Attachment (PDF or image)</span>
-              <input
-                name="files"
-                type="file"
-                className="ep-input"
-                multiple
-                accept=".pdf,.png,.jpg,.jpeg,.webp"
-              />
+              <span className="ep-field__label">Class</span>
+              <select
+                className="ep-select"
+                name="classSectionId"
+                defaultValue={sp.classSectionId ?? ''}
+              >
+                <option value="">All my classes</option>
+                {sheet.options.map((o) => (
+                  <option key={o.classSectionId} value={o.classSectionId}>
+                    {o.section}
+                  </option>
+                ))}
+              </select>
             </label>
-            <div>
-              <Button type="submit">Post</Button>
-            </div>
+            <button type="submit" className="ep-btn ep-btn--secondary">
+              Show
+            </button>
           </form>
+          <h2 className="ep-card__title">Homework and classwork</h2>
+          <WorkReport
+            items={items}
+            mode="daily"
+            extra={(w) =>
+              w.ackRequired ? (
+                <a href={`/acknowledgements?type=daily_work&id=${w.id}`}>
+                  · {w.ackCount} acknowledged
+                </a>
+              ) : null
+            }
+          />
+          <h2 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
+            Assignments
+          </h2>
+          <WorkReport items={items} mode="assignment" />
         </Card>
-      ) : null}
-      <Card title="Recent posts">
-        <DataTable<Work>
-          caption="Recent posts"
-          density="dense"
-          columns={[
-            { key: 'date', header: 'Given', render: (w) => w.assignedOn },
-            {
-              key: 'kind',
-              header: 'Kind',
-              render: (w) => (
-                <Badge
-                  tone={
-                    w.kind === 'homework' ? 'info' : w.kind === 'assignment' ? 'warning' : 'neutral'
-                  }
-                >
-                  {w.kind}
-                </Badge>
-              ),
-            },
-            { key: 'section', header: 'Section', render: (w) => w.section },
-            { key: 'subject', header: 'Subject', render: (w) => w.subjectName ?? '' },
-            {
-              key: 'title',
-              header: 'Title',
-              render: (w) => (
-                <span>
-                  <strong>{w.title}</strong>
-                  {w.files.length ? (
-                    <span className="ep-kicker"> · {w.files.length} file(s)</span>
-                  ) : null}
-                </span>
-              ),
-            },
-            { key: 'due', header: 'Due', render: (w) => w.dueOn ?? '' },
-            {
-              key: 'publish',
-              header: 'Published',
-              render: (w) => (
-                <span>
-                  {when(w.publishAt)} {w.scheduled ? <Badge tone="warning">Scheduled</Badge> : null}
-                </span>
-              ),
-            },
-            {
-              key: 'ack',
-              header: 'Acknowledged',
-              render: (w) =>
-                w.ackRequired ? (
-                  <a
-                    href={`/acknowledgements?type=daily_work&id=${w.id}`}
-                    style={{ textDecoration: 'underline' }}
-                    aria-label={`Who acknowledged ${w.title}`}
-                  >
-                    {w.ackCount} · view
-                  </a>
-                ) : (
-                  '–'
-                ),
-            },
-          ]}
-          rows={work}
-          rowKey={(w) => w.id}
-          emptyTitle="Nothing posted yet"
-        />
-      </Card>
+      ) : (
+        <Card>
+          <WorkSheet sheet={sheet} path="/daily-work" view={view} action={saveSheet} />
+        </Card>
+      )}
     </main>
   );
 }

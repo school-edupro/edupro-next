@@ -1,84 +1,110 @@
 import {
-  Badge,
   Button,
   Card,
-  DataTable,
-  FormActions,
-  FormRow,
   InputField,
   PageHeader,
   SelectField,
+  WorkReport,
+  WorkSheet,
+  type WorkReportItem,
+  type WorkSheetData,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { deleteDailyWork, postDailyWork } from '@/lib/actions';
+import { deleteDailyWork, saveWorkSheet } from '@/lib/actions';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
-import { sectionOptions } from '@/lib/sections';
-import type { DailyWork, DailyWorkKind, Page, Subject, Viewer } from '@/lib/types';
+import type { Page } from '@/lib/types';
 
-const KINDS: DailyWorkKind[] = ['homework', 'classwork', 'assignment'];
+type View = 'sheet' | 'assignments' | 'report';
 
-/** S7-03: daily work list with a posting form; the API scopes both by section. */
+const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+const daysAgo = (n: number) =>
+  new Date(Date.now() + 5.5 * 3600 * 1000 - n * 86_400_000).toISOString().slice(0, 10);
+const isDate = (v: string | undefined): v is string => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+const ids = (v: string | string[] | undefined) =>
+  (Array.isArray(v) ? v : v ? [v] : []).filter((x) => /^\d{1,18}$/.test(x));
+
+/**
+ * Daily work: the day's sheet (date, classes, then a row per subject with homework and classwork), the
+ * same sheet for assignments with a due date, and the report of what was posted and when it publishes.
+ */
 export default async function DailyWorkPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    new?: string;
+    view?: string;
+    date?: string;
+    s?: string | string[];
+    from?: string;
+    to?: string;
+    classSectionId?: string;
     ok?: string;
     error?: string;
     detail?: string;
-    classSectionId?: string;
-    kind?: string;
-    from?: string;
-    to?: string;
   }>;
 }) {
   const sp = await searchParams;
-  const adding = sp.new === '1';
-  const [t, d, c, me] = await Promise.all([
-    getTranslations('pages.academics_daily_work'),
-    getTranslations('daily'),
-    getTranslations('common'),
-    getMe(),
-  ]);
+  const view: View = sp.view === 'assignments' || sp.view === 'report' ? sp.view : 'sheet';
+  const mode = view === 'assignments' ? 'assignment' : 'daily';
+  const date = isDate(sp.date) ? sp.date : today();
+  const from = isDate(sp.from) ? sp.from : daysAgo(6);
+  const to = isDate(sp.to) ? sp.to : today();
+  const chosen = ids(sp.s);
+  const [t, me] = await Promise.all([getTranslations('pages.academics_daily_work'), getMe()]);
   const canPost = me.permissions.includes('academics.daily_work.post');
-  const query = new URLSearchParams({ size: '100' });
-  for (const k of ['classSectionId', 'kind', 'from', 'to'] as const)
-    if (sp[k]) query.set(k, sp[k]!);
-  const [work, viewer, sections, subjects] = await Promise.all([
-    apiFetch<Page<DailyWork>>(`/academics/daily-work?${query.toString()}`),
-    apiFetch<Viewer>('/academics/daily-work/viewer'),
-    sectionOptions(),
-    apiFetch<Page<Subject>>('/academics/subjects?size=200&status=active').then((r) => r.data),
+  const reportQuery = new URLSearchParams({ size: '200', from, to });
+  if (/^\d{1,18}$/.test(sp.classSectionId ?? ''))
+    reportQuery.set('classSectionId', sp.classSectionId!);
+  const [sheet, report] = await Promise.all([
+    canPost
+      ? apiFetch<WorkSheetData>(
+          `/academics/daily-work/sheet?mode=${mode}&date=${date}${chosen.length ? `&sections=${chosen.join(',')}` : ''}`,
+        )
+      : Promise.resolve<WorkSheetData | null>(null),
+    view === 'report' || !canPost
+      ? apiFetch<Page<WorkReportItem>>(`/academics/daily-work?${reportQuery.toString()}`).then(
+          (r) => r.data,
+        )
+      : Promise.resolve<WorkReportItem[]>([]),
   ]);
-  const allowedSections =
-    viewer.sectionIds === null
-      ? sections
-      : sections.filter((s) => viewer.sectionIds!.includes(s.value));
-  const self = `/academics/daily-work?${query.toString()}`;
+  const showReport = view === 'report' || !sheet;
+  const self = `/academics/daily-work?view=report&from=${from}&to=${to}${sp.classSectionId ? `&classSectionId=${sp.classSectionId}` : ''}`;
+  const tab = (v: View, label: string) => (
+    <a
+      key={v}
+      href={v === 'sheet' ? '/academics/daily-work' : `/academics/daily-work?view=${v}`}
+      aria-current={(showReport ? 'report' : view) === v ? 'page' : undefined}
+    >
+      {label}
+    </a>
+  );
+  const remove = (w: WorkReportItem) =>
+    canPost ? (
+      <form action={deleteDailyWork} style={{ display: 'inline' }}>
+        <input type="hidden" name="id" value={w.id} />
+        <input type="hidden" name="returnTo" value={self} />
+        <Button type="submit" variant="ghost" size="sm" aria-label={`Remove: ${w.title}`}>
+          Remove
+        </Button>
+      </form>
+    ) : null;
 
   return (
     <>
-      <PageHeader
-        kicker={t('kicker')}
-        title={adding ? d('postWork') : t('title')}
-        description={t('description')}
-        actions={
-          adding ? (
-            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/academics/daily-work">
-              Back to the list
-            </a>
-          ) : canPost ? (
-            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/academics/daily-work?new=1">
-              + Post work
-            </a>
-          ) : null
-        }
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <AcademicsNav current="/academics/daily-work" permissions={me.permissions} />
       <Notice params={sp} />
-      <div hidden={adding}>
+      <nav
+        className="ep-tabs-links"
+        aria-label="Daily work"
+        style={{ marginBottom: 'var(--sp-3)' }}
+      >
+        {sheet ? tab('sheet', 'Homework and classwork') : null}
+        {sheet ? tab('assignments', 'Assignments') : null}
+        {tab('report', 'Report')}
+      </nav>
+      {showReport ? (
         <Card>
           <form
             method="get"
@@ -90,165 +116,42 @@ export default async function DailyWorkPage({
               marginBottom: 'var(--sp-4)',
             }}
           >
-            <SelectField
-              id="classSectionId"
-              name="classSectionId"
-              label={d('section')}
-              defaultValue={sp.classSectionId ?? ''}
-              options={[{ value: '', label: c('all') }, ...allowedSections]}
-            />
-            <SelectField
-              id="kind"
-              name="kind"
-              label={c('filter')}
-              defaultValue={sp.kind ?? ''}
-              options={[
-                { value: '', label: d('allKinds') },
-                ...KINDS.map((k) => ({ value: k, label: d(`kinds.${k}`) })),
-              ]}
-            />
-            <InputField
-              id="from"
-              name="from"
-              label={d('from')}
-              type="date"
-              defaultValue={sp.from ?? ''}
-            />
-            <InputField id="to" name="to" label={d('to')} type="date" defaultValue={sp.to ?? ''} />
-            <Button type="submit" variant="secondary">
-              {c('apply')}
-            </Button>
-          </form>
-          <DataTable<DailyWork>
-            caption={t('title')}
-            density="dense"
-            columns={[
-              { key: 'date', header: d('assignedOn'), render: (w) => w.assignedOn },
-              {
-                key: 'kind',
-                header: c('filter'),
-                render: (w) => (
-                  <Badge
-                    tone={
-                      w.kind === 'homework'
-                        ? 'info'
-                        : w.kind === 'assignment'
-                          ? 'warning'
-                          : 'neutral'
-                    }
-                  >
-                    {d(`kinds.${w.kind}`)}
-                  </Badge>
-                ),
-              },
-              { key: 'section', header: d('section'), render: (w) => w.section },
-              { key: 'subject', header: d('subject'), render: (w) => w.subjectName ?? '' },
-              {
-                key: 'title',
-                header: d('title'),
-                render: (w) => (
-                  <span>
-                    <strong>{w.title}</strong>
-                    {w.body ? (
-                      <>
-                        <br />
-                        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-small)' }}>
-                          {w.body.slice(0, 140)}
-                        </span>
-                      </>
-                    ) : null}
-                    {w.files.length > 0 ? (
-                      <>
-                        <br />
-                        <span className="ep-kicker">
-                          {w.files.map((f) => f.name ?? f.id).join(', ')}
-                        </span>
-                      </>
-                    ) : null}
-                  </span>
-                ),
-              },
-              { key: 'due', header: d('dueOn'), render: (w) => w.dueOn ?? '' },
-              { key: 'by', header: d('postedBy'), render: (w) => w.postedBy ?? '' },
-              {
-                key: 'actions',
-                header: '',
-                render: (w) =>
-                  canPost ? (
-                    <form action={deleteDailyWork}>
-                      <input type="hidden" name="id" value={w.id} />
-                      <input type="hidden" name="returnTo" value={self} />
-                      <Button type="submit" variant="ghost" size="sm">
-                        {d('delete')}
-                      </Button>
-                    </form>
-                  ) : null,
-              },
-            ]}
-            rows={work.data}
-            rowKey={(w) => w.id}
-            emptyTitle={d('noWork')}
-          />
-        </Card>
-      </div>
-      {canPost && allowedSections.length > 0 && adding ? (
-        <Card>
-          <form action={postDailyWork}>
-            <input type="hidden" name="returnTo" value={self} />
-            <FormRow columns={4}>
+            <input type="hidden" name="view" value="report" />
+            <InputField id="from" name="from" label="From" type="date" defaultValue={from} />
+            <InputField id="to" name="to" label="To" type="date" defaultValue={to} />
+            {sheet ? (
               <SelectField
-                id="postSection"
+                id="classSectionId"
                 name="classSectionId"
-                label={d('section')}
-                required
-                options={allowedSections}
-                defaultValue={sp.classSectionId ?? allowedSections[0]?.value}
-              />
-              <SelectField
-                id="postKind"
-                name="kind"
-                label={c('filter')}
-                options={KINDS.map((k) => ({ value: k, label: d(`kinds.${k}`) }))}
-              />
-              <SelectField
-                id="postSubject"
-                name="subjectId"
-                label={d('subject')}
+                label="Class"
+                defaultValue={sp.classSectionId ?? ''}
                 options={[
-                  { value: '', label: c('none') },
-                  ...subjects.map((s) => ({ value: s.id, label: `${s.code} · ${s.name}` })),
+                  { value: '', label: 'All classes' },
+                  ...sheet.options.map((o) => ({ value: o.classSectionId, label: o.section })),
                 ]}
               />
-              <InputField id="assignedOn" name="assignedOn" label={d('assignedOn')} type="date" />
-            </FormRow>
-            <FormRow columns={1}>
-              <InputField id="title" name="title" label={d('title')} required maxLength={160} />
-            </FormRow>
-            <FormRow columns={1}>
-              <div className="ep-field">
-                <label className="ep-field__label" htmlFor="body">
-                  {d('details')}
-                </label>
-                <textarea id="body" name="body" className="ep-input" rows={4} maxLength={8000} />
-              </div>
-            </FormRow>
-            <FormRow columns={2}>
-              <InputField id="dueOn" name="dueOn" label={d('dueOn')} type="date" />
-              <InputField
-                id="files"
-                name="files"
-                label={d('attachments')}
-                type="file"
-                multiple
-                accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx"
-              />
-            </FormRow>
-            <FormActions>
-              <Button type="submit">{d('post')}</Button>
-            </FormActions>
+            ) : null}
+            <Button type="submit" variant="secondary">
+              Show
+            </Button>
           </form>
+          <h3 className="ep-card__title">Homework and classwork</h3>
+          <WorkReport items={report} mode="daily" extra={remove} />
+          <h3 className="ep-card__title" style={{ marginTop: 'var(--sp-4)' }}>
+            Assignments
+          </h3>
+          <WorkReport items={report} mode="assignment" extra={remove} />
         </Card>
-      ) : null}
+      ) : (
+        <Card>
+          <WorkSheet
+            sheet={sheet}
+            path="/academics/daily-work"
+            view={view}
+            action={saveWorkSheet}
+          />
+        </Card>
+      )}
     </>
   );
 }

@@ -118,7 +118,7 @@ export class GalleryService {
   async create(ctx: RequestContext, dto: CreateAlbumDto): Promise<AlbumRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
-    await this.viewer.assertFilesReady(ctx, dto.fileIds);
+    await this.viewer.assertFilesReady(ctx, dto.fileIds, 'gallery');
     return this.db.tenant(tenant, async (c) => {
       const r = await c.query<{ id: string }>(
         `INSERT INTO gallery_albums (school_id, academic_year_id, title, description, event_on, audience, created_by, updated_by)
@@ -155,6 +155,7 @@ export class GalleryService {
     await this.viewer.assertFilesReady(
       ctx,
       dto.items.map((i) => i.fileId),
+      'gallery',
     );
     return this.db.tenant(tenant, async (c) => {
       const before = await this.find(c, id);

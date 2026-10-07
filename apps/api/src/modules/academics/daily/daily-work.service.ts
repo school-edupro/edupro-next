@@ -146,6 +146,10 @@ export class DailyWorkService {
         params.push(v.sectionIds);
         where.push(`w.class_section_id = ANY($${params.length}::bigint[])`);
       }
+      if (q.subjectId) {
+        params.push(q.subjectId);
+        where.push(`w.subject_id = $${params.length}`);
+      }
       if (q.kind) {
         params.push(q.kind);
         where.push(`w.kind = $${params.length}::daily_work_kind`);
@@ -195,11 +199,20 @@ export class DailyWorkService {
     return row;
   }
 
-  async create(ctx: RequestContext, dto: CreateDailyWorkDto): Promise<DailyWorkRow> {
+  /** `quiet`: no push for this one (a sheet of many subjects tells the families once). */
+  async create(
+    ctx: RequestContext,
+    dto: CreateDailyWorkDto,
+    opts: { quiet?: boolean } = {},
+  ): Promise<DailyWorkRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
     await this.scopes.assert(tenant, DAILY.workPost, 'class_section', dto.classSectionId);
-    await this.viewer.assertFilesReady(ctx, dto.fileIds);
+    await this.viewer.assertFilesReady(
+      ctx,
+      dto.fileIds,
+      dto.kind === 'assignment' ? 'assignment' : 'daily_work',
+    );
     const v = await this.viewer.resolve(ctx, DAILY.workPost);
     return this.db.tenant(tenant, async (c) => {
       const section = await c.query<{ academic_year_id: string }>(
@@ -263,7 +276,7 @@ export class DailyWorkService {
           [id, fileId],
         );
       const created = (await this.find(c, id))!;
-      if (!created.scheduled)
+      if (!created.scheduled && !opts.quiet)
         await this.push.send(c, ctx, {
           userIds: await this.push.familyUsersOfSections(c, [dto.classSectionId]),
           title: dto.kind === 'homework' ? 'New homework' : `New ${dto.kind}`,
@@ -283,7 +296,14 @@ export class DailyWorkService {
 
   async update(ctx: RequestContext, id: string, dto: UpdateDailyWorkDto): Promise<DailyWorkRow> {
     const tenant = requireTenant(ctx);
-    if (dto.fileIds) await this.viewer.assertFilesReady(ctx, dto.fileIds);
+    if (dto.fileIds) {
+      const kind = await this.db.tenant(tenant, async (c) => (await this.find(c, id))?.kind);
+      await this.viewer.assertFilesReady(
+        ctx,
+        dto.fileIds,
+        kind === 'assignment' ? 'assignment' : 'daily_work',
+      );
+    }
     return this.db.tenant(tenant, async (c) => {
       const before = await this.find(c, id);
       if (!before) throw new DomainError('not-found', 'Not found');

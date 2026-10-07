@@ -836,6 +836,25 @@ const DICT: Record<string, string> = {
   'Nothing is scheduled on this day.': 'इस दिन कुछ निर्धारित नहीं है।',
   'holidays this session': 'अवकाश इस सत्र में',
   'days in all': 'दिन कुल',
+  'My teachers': 'मेरे शिक्षक',
+  'The class teacher and the teacher of each subject.': 'कक्षा अध्यापक और हर विषय के शिक्षक।',
+  'Co-class teacher': 'सह-कक्षा अध्यापक',
+  'Subject teacher': 'विषय शिक्षक',
+  'The school has not assigned teachers to this class yet.':
+    'विद्यालय ने अभी इस कक्षा के शिक्षक तय नहीं किए हैं।',
+  'The school shows part of the number and e-mail only. To reach a teacher, raise a query or book an appointment from the Help desk.':
+    'विद्यालय नंबर और ई-मेल का केवल एक भाग दिखाता है। शिक्षक से संपर्क के लिए हेल्प डेस्क से प्रश्न भेजें या मुलाक़ात का समय लें।',
+  'Homework and classwork': 'गृहकार्य और कक्षा-कार्य',
+  Assignments: 'असाइनमेंट',
+  'Assignments with their due dates': 'असाइनमेंट और उनकी अंतिम तिथि',
+  overdue: 'समय निकल गया',
+  'Days with work': 'कार्य वाले दिन',
+  'Nothing has been published for today yet.': 'आज के लिए अभी कुछ प्रकाशित नहीं हुआ।',
+  'Nothing was posted on this day.': 'इस दिन कुछ नहीं दिया गया।',
+  'To do': 'करना है',
+  'No assignment is pending.': 'कोई असाइनमेंट बाकी नहीं।',
+  given: 'दिया गया',
+  'Past the due date': 'अंतिम तिथि निकल चुकी',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

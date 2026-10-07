@@ -18,6 +18,7 @@ export default async function TeacherAssignmentsPage({
     error?: string;
     detail?: string;
     classSectionId?: string;
+    employeeId?: string;
     includeEnded?: string;
   }>;
 }) {
@@ -32,15 +33,14 @@ export default async function TeacherAssignmentsPage({
   const canManage = me.permissions.includes('academics.teacher_assignment.manage');
   const query = new URLSearchParams();
   if (sp.classSectionId) query.set('classSectionId', sp.classSectionId);
+  if (/^\d{1,18}$/.test(sp.employeeId ?? '')) query.set('employeeId', sp.employeeId!);
   if (sp.includeEnded) query.set('includeEnded', 'true');
   const [assignments, sections, employees, subjects] = await Promise.all([
     apiFetch<{ data: TeacherAssignment[] }>(`/academics/teacher-assignments?${query.toString()}`),
     sectionOptions(),
-    canManage
-      ? apiFetch<Page<Employee>>('/people/employees?size=200&employeeType=teaching').then(
-          (r) => r.data,
-        )
-      : Promise.resolve<Employee[]>([]),
+    apiFetch<Page<Employee>>('/people/employees?size=200&employeeType=teaching')
+      .then((r) => r.data)
+      .catch(() => [] as Employee[]),
     apiFetch<Page<Subject>>('/academics/subjects?size=200&status=active').then((r) => r.data),
   ]);
 
@@ -90,6 +90,7 @@ export default async function TeacherAssignmentsPage({
               display: 'flex',
               gap: 'var(--sp-3)',
               alignItems: 'flex-end',
+              flexWrap: 'wrap',
               marginBottom: 'var(--sp-4)',
             }}
           >
@@ -99,6 +100,19 @@ export default async function TeacherAssignmentsPage({
               label={a('section')}
               defaultValue={sp.classSectionId ?? ''}
               options={[{ value: '', label: a('allSections') }, ...sections]}
+            />
+            <SelectField
+              id="employeeId"
+              name="employeeId"
+              label="Teacher"
+              defaultValue={sp.employeeId ?? ''}
+              options={[
+                { value: '', label: 'All teachers' },
+                ...employees.map((e) => ({
+                  value: e.id,
+                  label: `${e.displayName} (${e.employeeCode})`,
+                })),
+              ]}
             />
             <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
               <input
@@ -112,6 +126,18 @@ export default async function TeacherAssignmentsPage({
             <Button type="submit" variant="secondary">
               {c('filter')}
             </Button>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/academics/teacher-assignments-export?format=xlsx&${query.toString()}`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/academics/teacher-assignments-export?format=pdf&${query.toString()}`}
+            >
+              PDF
+            </a>
           </form>
           <DataTable<TeacherAssignment>
             caption={a('assignments')}

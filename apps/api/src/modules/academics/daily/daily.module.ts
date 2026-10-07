@@ -4,12 +4,15 @@ import { CommsModule } from '../../comms/comms.module';
 import { FilesModule } from '../../files/files.module';
 import { CalendarService } from './calendar.service';
 import {
+  AcademicSettingsController,
   CalendarController,
   DailyWorkController,
   DocumentsController,
   GalleryController,
   NoticesController,
 } from './daily.controller';
+import { AcademicSettingsService } from './academic-settings.service';
+import { WorkSheetService } from './work-sheet.service';
 import { DailyWorkService } from './daily-work.service';
 import { DocumentsService } from './documents.service';
 import { GalleryService } from './gallery.service';
@@ -25,8 +28,11 @@ import { ViewerService } from './viewer.service';
     CalendarController,
     GalleryController,
     DocumentsController,
+    AcademicSettingsController,
   ],
   providers: [
+    AcademicSettingsService,
+    WorkSheetService,
     ViewerService,
     DailyWorkService,
     DocumentsService,

@@ -5867,3 +5867,233 @@ a.ep-tabs__tab {
     max-height: 2.5em;
   }
 }
+/* The day's sheet of homework and classwork: a row per subject */
+.ep-sheet__filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-end;
+  margin-bottom: var(--sp-4);
+}
+.ep-sheet__classes {
+  flex: 1 1 18rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ep-sheet__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  max-height: 9rem;
+  overflow: auto;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-sheet__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.ep-sheet__chip:has(input:checked) {
+  border-color: var(--action-primary);
+  font-weight: var(--fw-semibold);
+}
+.ep-sheet__hint {
+  margin: 0;
+  padding: var(--sp-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-body);
+}
+.ep-sheet__table th,
+.ep-sheet__table td {
+  vertical-align: top;
+}
+.ep-sheet__subject {
+  min-width: 12rem;
+  text-align: left;
+}
+.ep-sheet__name {
+  display: block;
+  letter-spacing: normal;
+  font-size: var(--fs-small);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  overflow-wrap: break-word;
+}
+.ep-sheet__box {
+  width: 100%;
+  min-width: 14rem;
+  resize: vertical;
+}
+.ep-sheet__pick {
+  max-width: 13rem;
+  font-size: var(--fs-caption);
+}
+.ep-sheet__posted,
+.ep-sheet__meta {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+.ep-sheet__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-end;
+  margin-top: var(--sp-4);
+}
+.ep-sheet__foot > p {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+.ep-sheet__ack {
+  display: inline-flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-sheet__report td {
+  vertical-align: top;
+}
+.ep-sheet__entry + .ep-sheet__entry {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-sheet__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Family portal: the teachers of a child, and the day's homework by subject */
+.ep-tcards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+.ep-tcard {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+.ep-tcard[data-role='class_teacher'] {
+  border-color: var(--action-primary);
+}
+.ep-tcard__photo {
+  flex: none;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-subtle);
+}
+.ep-tcard__photo--none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  border: 1px solid var(--border-default);
+}
+.ep-tcard__body {
+  min-width: 0;
+  display: grid;
+  gap: var(--sp-1);
+  align-content: start;
+}
+.ep-tcard__name {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-family: var(--font-heading);
+  color: var(--text-heading);
+}
+.ep-tcard__line {
+  font-size: var(--fs-small);
+  color: var(--text-body);
+  overflow-wrap: anywhere;
+}
+.ep-tcard__line > span {
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-hw__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.ep-hw__subject {
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-hw__subject:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.ep-hw__subject > h3 {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-heading);
+  font-size: var(--fs-body);
+  color: var(--text-heading);
+}
+.ep-hw__pair {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+.ep-hw__box {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  border-left: 4px solid var(--border-strong);
+}
+.ep-hw__box[data-kind='homework'] {
+  border-left-color: var(--status-info);
+}
+.ep-hw__box[data-kind='assignment'] {
+  border-left-color: var(--status-warning);
+}
+.ep-hw__box[data-late] {
+  border-left-color: var(--status-danger);
+}
+.ep-hw__label {
+  display: block;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+.ep-hw__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-heading);
+}
+.ep-hw__meta {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}

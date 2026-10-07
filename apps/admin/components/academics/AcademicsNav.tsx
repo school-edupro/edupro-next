@@ -31,6 +31,7 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
   },
   { href: '/academics/gallery', label: 'Gallery', permission: 'academics.gallery.view' },
   { href: '/masters/academics', label: 'Setup', permission: 'academics.class.view' },
+  { href: '/academics/settings', label: 'Settings', permission: 'academics.subject.manage' },
 ];
 
 export function AcademicsNav({ current, permissions }: { current: string; permissions: string[] }) {

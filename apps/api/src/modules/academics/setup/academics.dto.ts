@@ -97,6 +97,7 @@ export const ListTeacherAssignmentsQuerySchema = z.object({
   classSectionId: IdSchema.optional(),
   kind: AssignmentKindSchema.optional(),
   includeEnded: z.coerce.boolean().default(false),
+  format: z.enum(['xlsx', 'pdf']).optional(),
 });
 export class ListTeacherAssignmentsQueryDto extends createZodDto(
   ListTeacherAssignmentsQuerySchema,

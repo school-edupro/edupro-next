@@ -7,6 +7,7 @@ import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { AccessService } from '../../access/access.service';
 import { codeOf, readSheet, templateSheet } from '../../../common/excel/sheet';
+import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
 import type {
   BulkTeacherAssignmentDto,
   CreateTeacherAssignmentDto,
@@ -147,6 +148,59 @@ export class TeacherAssignmentsService {
       );
       return r.rows.map(toRow);
     });
+  }
+
+  /** The list with the filters on screen, as Excel or PDF with the school's header. */
+  async exportFile(ctx: RequestContext, q: ListTeacherAssignmentsQueryDto, format: 'xlsx' | 'pdf') {
+    const rows = await this.list(ctx, q);
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const KIND: Record<string, string> = {
+      class_teacher: 'Class teacher',
+      subject_teacher: 'Subject teacher',
+      coordinator: 'Coordinator',
+      indicator: 'Indicator',
+    };
+    const one = <T>(pick: (r: TeacherAssignmentRow) => T) => (rows[0] ? pick(rows[0]) : null);
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Teacher assignments',
+        details: [
+          q.classSectionId
+            ? `Class ${one((r) => `${r.classCode}-${r.section}`) ?? ''}`
+            : 'All classes',
+          q.employeeId
+            ? `Teacher ${one((r) => `${r.employeeName} (${r.employeeCode})`) ?? ''}`
+            : 'All teachers',
+          q.includeEnded ? 'Ended ones included' : '',
+          generatedOn(),
+        ].filter(Boolean),
+        legend: `${String(rows.length)} assignment(s)`,
+        columns: [
+          { label: 'Sl.', width: 3, right: true },
+          { label: 'Emp. code', width: 7 },
+          { label: 'Teacher', width: 16 },
+          { label: 'Type', width: 10 },
+          { label: 'Class', width: 6 },
+          { label: 'Subject', width: 14 },
+          { label: 'Since', width: 7 },
+          { label: 'Status', width: 8 },
+        ],
+        rows: rows.map((r, i) => [
+          i + 1,
+          r.employeeCode,
+          r.employeeName,
+          r.kind === 'class_teacher' && !r.isActual ? 'Co-class teacher' : (KIND[r.kind] ?? r.kind),
+          `${r.classCode}-${r.section}`,
+          r.subjectName ? `${r.subjectName} (${r.subjectCode ?? ''})` : '',
+          r.validFrom,
+          r.validTo ? `Ended ${r.validTo}` : 'Active',
+        ]),
+        filename: `teacher-assignments-${new Date().toISOString().slice(0, 10)}`,
+      },
+      format,
+    );
   }
 
   /** Assignments of the signed-in user's own employee record (teacher app "my classes"). */

@@ -31,6 +31,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@edupro/ui', '@edupro/bff'],
   output: 'standalone',
+  // a sheet of homework carries its attachments (the school sets the size of each, up to 25 MB)
+  experimental: { serverActions: { bodySizeLimit: '32mb' } },
   async headers() {
     return [
       {

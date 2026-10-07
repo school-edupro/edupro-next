@@ -5,6 +5,7 @@ import { DbService } from '../../../common/db/db.service';
 import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { FilesService } from '../../files/files.service';
+import { AcademicSettingsService, type UploadSection } from './academic-settings.service';
 
 export interface Viewer {
   /** Staff read through class_section scopes (null = unrestricted); families read their children only. */
@@ -31,6 +32,7 @@ export class ViewerService {
     private readonly db: DbService,
     private readonly scopes: ScopePolicy,
     private readonly files: FilesService,
+    private readonly settings: AcademicSettingsService,
   ) {}
 
   requireYear(tenant: TenantContext): string {
@@ -100,8 +102,16 @@ export class ViewerService {
     });
   }
 
-  /** Attachments must be uploaded, ready and visible to the tenant (row-level security). */
-  async assertFilesReady(ctx: RequestContext, fileIds: string[]): Promise<void> {
+  /**
+   * Attachments must be uploaded, ready and visible to the tenant (row-level security), and no larger
+   * than the school allows in that academics section.
+   */
+  async assertFilesReady(
+    ctx: RequestContext,
+    fileIds: string[],
+    section?: UploadSection,
+  ): Promise<void> {
+    const seen: Array<{ name: string | null; sizeBytes: number }> = [];
     for (const id of new Set(fileIds)) {
       const file = await this.files.get(ctx, id);
       if (file.status !== 'ready')
@@ -109,6 +119,8 @@ export class ViewerService {
           status: 409,
           extra: { fileId: id },
         });
+      seen.push({ name: file.fileName, sizeBytes: file.sizeBytes });
     }
+    if (section) await this.settings.assertSize(ctx, section, seen);
   }
 }

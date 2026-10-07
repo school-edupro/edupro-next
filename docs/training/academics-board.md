@@ -30,3 +30,20 @@
 ## Parent portal: Calendar
 
 Three tabs. **Calendar** is the month grid (holidays green, vacations blue, exams red, declared working days amber, events outlined); Previous / Today / Next change the month and a tap on a day lists what falls on it. **Holiday list** has the holidays of the session with the number of days. **Events** has the almanac.
+
+## Daily work sheet, assignments and settings (October 2026)
+
+**Posting (teacher app → Daily work, or admin → Academics → Daily work).** Pick the date, tick one or more classes and press *Show subjects*. There is one row per subject with a box for Homework and one for Classwork, each with its own attachment. Fill only the subjects you want; *Save and publish* posts the same entry to every ticked class. Opening the same date again shows what is already posted; changing the text updates it, an empty box changes nothing. *Assignments* is the same sheet with a due date.
+
+- A **class teacher** (and co-class teacher) sees every subject mapped to the class in *Class and subject mapping*. A **subject teacher** sees only the class and subject given in *Teacher assignments*. Admin and coordinator see all.
+- **Publish on** is one date and time for the sheet. Parents and students see the work only from that time. It starts with the school's usual publish time.
+- **Report** lists what was posted between two dates: homework beside classwork for each class and subject, with the publish time and who posted it.
+
+**Parent / student portal.** *Homework* opens on today: each subject with its homework and classwork, Previous / Today / Next and quick links to the recent days that have work. *Assignments* lists the pending ones by due date; overdue ones are marked. *My teachers* shows the class teacher and each subject teacher with photo, mobile and e-mail.
+
+**Academics → Settings** (admin):
+- Usual publish time for daily work.
+- Teacher mobile and e-mail in the portal: masked (98XXXXXX10, an***@school.in), shown in full, or not shown.
+- Largest file (1–25 MB) for homework/classwork, assignments, class documents, notices and gallery.
+
+**Teacher assignments** can be filtered by class and by teacher, and downloaded as Excel or PDF.

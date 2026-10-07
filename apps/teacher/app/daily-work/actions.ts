@@ -6,9 +6,9 @@ import { bff } from '@/lib/bff';
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').trim();
 
 /** Uploads the files of a form through the file service; returns their ids. */
-async function uploadFiles(fd: FormData): Promise<string[]> {
+async function uploadFiles(fd: FormData, key = 'files'): Promise<string[]> {
   const fileIds: string[] = [];
-  for (const entry of fd.getAll('files')) {
+  for (const entry of fd.getAll(key)) {
     if (!(entry instanceof File) || entry.size === 0) continue;
     const reg = await bff.api.fetch<{
       file: { id: string };
@@ -66,6 +66,53 @@ export async function postDailyWork(fd: FormData) {
     throw error;
   }
   redirect('/daily-work?ok=1');
+}
+
+/** The day's sheet: every filled box of every subject, for the ticked classes, in one save. */
+export async function saveSheet(fd: FormData) {
+  const view = str(fd, 'view') || 'sheet';
+  const sections = fd.getAll('sections').map(String).filter(Boolean);
+  const here = `/daily-work?view=${view}&date=${str(fd, 'date')}${sections.map((s) => `&s=${s}`).join('')}`;
+  let done: { created: number; updated: number };
+  try {
+    const rows = [];
+    for (const subjectId of fd.getAll('subject').map(String)) {
+      const row = {
+        subjectId,
+        homework: str(fd, `hw:${subjectId}`),
+        classwork: str(fd, `cw:${subjectId}`),
+        assignment: str(fd, `as:${subjectId}`),
+        dueOn: str(fd, `due:${subjectId}`) || undefined,
+        homeworkFileIds: await uploadFiles(fd, `hwf:${subjectId}`),
+        classworkFileIds: await uploadFiles(fd, `cwf:${subjectId}`),
+        assignmentFileIds: await uploadFiles(fd, `asf:${subjectId}`),
+      };
+      rows.push(row);
+    }
+    done = await bff.api.fetch<{ created: number; updated: number }>(
+      '/academics/daily-work/sheet',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          date: str(fd, 'date'),
+          classSectionIds: sections,
+          mode: str(fd, 'mode') || 'daily',
+          publishAt: str(fd, 'publishAt') || undefined,
+          ackRequired: fd.get('ackRequired') !== null,
+          rows,
+        }),
+      },
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const detail = typeof error.problem.detail === 'string' ? error.problem.detail : '';
+      redirect(
+        `${here}&error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 200))}`,
+      );
+    }
+    throw error;
+  }
+  redirect(`${here}&ok=${String(done.created)}-${String(done.updated)}`);
 }
 
 const back = (path: string, error: unknown): never => {

@@ -57,6 +57,7 @@ export class UpdateDailyWorkDto extends createZodDto(UpdateDailyWorkSchema) {}
 
 export const ListDailyWorkQuerySchema = z.object({
   classSectionId: IdSchema.optional(),
+  subjectId: IdSchema.optional(),
   kind: DailyWorkKindSchema.optional(),
   from: DateSchema.optional(),
   to: DateSchema.optional(),
@@ -64,6 +65,63 @@ export const ListDailyWorkQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListDailyWorkQueryDto extends createZodDto(ListDailyWorkQuerySchema) {}
+
+// ---- the day's sheet: a row per subject, for one or more sections --------------------------------
+const SheetText = z.string().trim().max(8000).default('');
+const SheetFiles = z.array(IdSchema).max(10).default([]);
+export const SheetModeSchema = z.enum(['daily', 'assignment']);
+export const SheetQuerySchema = z.object({
+  date: DateSchema.optional(),
+  /** Section ids, comma-separated. */
+  sections: z
+    .string()
+    .regex(/^\d{1,18}(,\d{1,18}){0,29}$/)
+    .optional(),
+  mode: SheetModeSchema.default('daily'),
+});
+export class SheetQueryDto extends createZodDto(SheetQuerySchema) {}
+
+export const SaveSheetSchema = z.object({
+  date: DateSchema,
+  classSectionIds: z.array(IdSchema).min(1).max(30),
+  mode: SheetModeSchema.default('daily'),
+  /** When the families see the whole sheet: now when left out. */
+  publishAt: PublishAtSchema.optional(),
+  ackRequired: z.boolean().default(false),
+  rows: z
+    .array(
+      z.object({
+        subjectId: IdSchema,
+        homework: SheetText,
+        classwork: SheetText,
+        assignment: SheetText,
+        dueOn: DateSchema.optional(),
+        homeworkFileIds: SheetFiles,
+        classworkFileIds: SheetFiles,
+        assignmentFileIds: SheetFiles,
+      }),
+    )
+    .min(1)
+    .max(80),
+});
+export class SaveSheetDto extends createZodDto(SaveSheetSchema) {}
+
+// ---- what the school decides for the module ---------------------------------------------------------
+const ContactShowSchema = z.enum(['full', 'masked', 'hidden']);
+const Mb = z.coerce.number().int().min(1).max(25);
+export const UpdateAcademicSettingsSchema = z.object({
+  publishTime: TimeSchema.nullable().optional(),
+  teacherMobile: ContactShowSchema,
+  teacherEmail: ContactShowSchema,
+  maxMb: z.object({
+    daily_work: Mb,
+    assignment: Mb,
+    documents: Mb,
+    notices: Mb,
+    gallery: Mb,
+  }),
+});
+export class UpdateAcademicSettingsDto extends createZodDto(UpdateAcademicSettingsSchema) {}
 
 // ---- notices ------------------------------------------------------------------------------------
 export const TargetSchema = z.object({ type: TargetTypeSchema, id: IdSchema });

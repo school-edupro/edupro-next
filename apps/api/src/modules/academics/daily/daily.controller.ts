@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Res,
 } from '@nestjs/common';
@@ -34,9 +35,14 @@ import {
   ListDocumentsQueryDto,
   NoticeReachDto,
   NoticeReportQueryDto,
+  SaveSheetDto,
+  SheetQueryDto,
+  UpdateAcademicSettingsDto,
 } from './daily.dto';
 import { DAILY } from './daily.permissions';
+import { AcademicSettingsService } from './academic-settings.service';
 import { DailyWorkService } from './daily-work.service';
+import { WorkSheetService } from './work-sheet.service';
 import { DocumentsService } from './documents.service';
 import { GalleryService } from './gallery.service';
 import { NoticesService } from './notices.service';
@@ -49,7 +55,32 @@ export class DailyWorkController {
   constructor(
     private readonly work: DailyWorkService,
     private readonly viewer: ViewerService,
+    private readonly sheets: WorkSheetService,
   ) {}
+
+  @Get('sheet/options')
+  @ApiOperation({ summary: 'The sections the caller posts for, each with its subjects' })
+  @RequirePermission(DAILY.workPost)
+  async sheetOptions(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.sheets.options(ctx) };
+  }
+
+  @Get('sheet')
+  @ApiOperation({ summary: "The day's sheet: a row per subject for the chosen sections" })
+  @RequirePermission(DAILY.workPost)
+  sheet(@ReqCtx() ctx: RequestContext, @Query() q: SheetQueryDto) {
+    return this.sheets.sheet(ctx, q);
+  }
+
+  @Post('sheet')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Save the sheet: homework and classwork (or assignments) of many subjects',
+  })
+  @RequirePermission(DAILY.workPost)
+  saveSheet(@ReqCtx() ctx: RequestContext, @Body() body: SaveSheetDto) {
+    return this.sheets.save(ctx, body);
+  }
 
   @Get()
   @ApiOperation({
@@ -102,6 +133,45 @@ export class DailyWorkController {
   @RequirePermission(DAILY.workPost)
   async remove(@ReqCtx() ctx: RequestContext, @Param('id') id: string): Promise<void> {
     await this.work.remove(ctx, id);
+  }
+}
+
+@ApiTags('academics')
+@ApiBearerAuth()
+@Controller('academics')
+export class AcademicSettingsController {
+  constructor(
+    private readonly settings: AcademicSettingsService,
+    private readonly sheets: WorkSheetService,
+  ) {}
+
+  @Get('settings')
+  @ApiOperation({
+    summary: 'Publish time, teacher contact display and upload sizes of the academics module',
+  })
+  @RequirePermission(DAILY.workView)
+  get(@ReqCtx() ctx: RequestContext) {
+    return this.settings.get(ctx);
+  }
+
+  @Put('settings')
+  @ApiOperation({ summary: 'Change the academics settings' })
+  @RequirePermission('academics.subject.manage')
+  update(@ReqCtx() ctx: RequestContext, @Body() body: UpdateAcademicSettingsDto) {
+    return this.settings.update(ctx, body);
+  }
+
+  @Get('my-teachers')
+  @ApiOperation({ summary: "The class teacher and subject teachers of the family's children" })
+  @RequirePermission(DAILY.workView)
+  myTeachers(@ReqCtx() ctx: RequestContext) {
+    return this.sheets.myTeachers(ctx);
+  }
+
+  @Get('my-teachers/:employeeId/photo')
+  @RequirePermission(DAILY.workView)
+  teacherPhoto(@ReqCtx() ctx: RequestContext, @Param('employeeId') employeeId: string) {
+    return this.sheets.teacherPhoto(ctx, employeeId);
   }
 }
 
