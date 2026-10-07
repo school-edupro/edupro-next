@@ -4,9 +4,10 @@ import { ApiError, apiFetch } from '@/lib/api';
 const BASE: Record<string, string> = {
   document: '/academics/documents',
   notice: '/academics/notices',
+  work: '/academics/daily-work',
 };
 
-/** An attachment of a class document or a notice: opens in the browser; `?save=1` downloads. */
+/** An attachment of a class document, a notice or daily work: opens in the browser; `?save=1` downloads. */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ kind: string; id: string; file: string }> },

@@ -11,13 +11,12 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { createEvent, createHoliday, deleteEvent, deleteHoliday } from '@/lib/actions';
+import { createEvent, deleteEvent } from '@/lib/actions';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import type { AlmanacEvent, Audience, Calendar, Holiday } from '@/lib/types';
 
 const AUDIENCES: Audience[] = ['everyone', 'students', 'employees'];
-const HOLIDAY_KINDS = ['holiday', 'vacation', 'working_day'] as const;
 const EVENT_KINDS = ['event', 'exam', 'meeting', 'activity', 'deadline'] as const;
 
 /** S7-05: holidays and almanac of the working year. */
@@ -56,20 +55,12 @@ export default async function CalendarPage({
           title={d('holidays')}
           actions={
             canManage ? (
-              <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-                <a
-                  className="ep-btn ep-btn--secondary ep-btn--sm"
-                  href="/academics/calendar?new=holiday"
-                >
-                  + Holiday
-                </a>
-                <a
-                  className="ep-btn ep-btn--ghost ep-btn--sm"
-                  href="/masters/academics?tab=holidays"
-                >
-                  Excel upload
-                </a>
-              </span>
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href="/masters/academics?tab=holidays"
+              >
+                Manage in Setup
+              </a>
             ) : null
           }
         >
@@ -89,52 +80,14 @@ export default async function CalendarPage({
                 ),
               },
               { key: 'who', header: d('appliesTo'), render: (h) => d(`audiences.${h.appliesTo}`) },
-              {
-                key: 'actions',
-                header: '',
-                render: (h) =>
-                  canManage ? (
-                    <form action={deleteHoliday}>
-                      <input type="hidden" name="id" value={h.id} />
-                      <Button type="submit" variant="ghost" size="sm">
-                        {d('delete')}
-                      </Button>
-                    </form>
-                  ) : null,
-              },
             ]}
             rows={cal.holidays}
             rowKey={(h) => h.id}
             emptyTitle={d('noHolidays')}
           />
-          {canManage && sp.new === 'holiday' ? (
-            <form action={createHoliday} style={{ marginTop: 'var(--sp-4)' }}>
-              <FormRow columns={2}>
-                <InputField id="hname" name="name" label={d('name')} required maxLength={120} />
-                <SelectField
-                  id="hkind"
-                  name="kind"
-                  label={d('kind')}
-                  options={HOLIDAY_KINDS.map((k) => ({ value: k, label: d(`holidayKinds.${k}`) }))}
-                />
-              </FormRow>
-              <FormRow columns={3}>
-                <InputField id="hfrom" name="startsOn" label={d('startsOn')} type="date" required />
-                <InputField id="hto" name="endsOn" label={d('endsOn')} type="date" />
-                <SelectField
-                  id="happlies"
-                  name="appliesTo"
-                  label={d('appliesTo')}
-                  options={AUDIENCES.map((a) => ({ value: a, label: d(`audiences.${a}`) }))}
-                />
-              </FormRow>
-              <FormActions>
-                <Button type="submit" variant="secondary">
-                  {d('addHoliday')}
-                </Button>
-              </FormActions>
-            </form>
-          ) : null}
+          <p className="ep-field__help" style={{ marginBottom: 0 }}>
+            Holidays are added, corrected and uploaded by Excel in Academics → Setup → Holidays.
+          </p>
         </Card>
 
         <Card

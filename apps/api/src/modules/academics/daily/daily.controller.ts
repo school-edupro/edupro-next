@@ -32,6 +32,7 @@ import {
   AckDto,
   AckStatusQueryDto,
   CreateDocumentDto,
+  DocumentReportQueryDto,
   ListDocumentsQueryDto,
   NoticeReachDto,
   NoticeReportQueryDto,
@@ -373,6 +374,27 @@ export class DocumentsController {
   @RequirePermission(DAILY.workView)
   list(@ReqCtx() ctx: RequestContext, @Query() q: ListDocumentsQueryDto) {
     return this.docs.list(ctx, q);
+  }
+
+  @Get('documents/report')
+  @ApiOperation({ summary: 'Class documents with the filters, as Excel or PDF' })
+  @RequirePermission(DAILY.workView)
+  async documentsReport(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: DocumentReportQueryDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const f = await this.docs.reportFile(ctx, q);
+    if (q.wrap)
+      return {
+        filename: f.filename,
+        contentType: f.contentType,
+        base64: Buffer.from(f.bytes).toString('base64'),
+      };
+    reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`);
+    return reply.send(f.bytes);
   }
 
   @Post('documents')

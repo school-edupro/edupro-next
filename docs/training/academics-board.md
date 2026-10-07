@@ -57,3 +57,11 @@ Three tabs. **Calendar** is the month grid (holidays green, vacations blue, exam
 - **Class documents** (session plan, curriculum, date sheet, magazine): no subject; the remark is written in the formatted-text editor; up to 5 files.
 - **Parent portal → Homework**: a date box on the day view; *Given from / To* on Assignments.
 - **Notices and office orders** are under **Communication** in the left menu (the address `/academics/notices` is unchanged).
+
+## Changes of 7 October 2026 (third round)
+
+- **Attachments open** from the admin report and sheet (the admin file link now knows daily work).
+- **Attach file** is a button with an upload icon under each Homework / Classwork / Assignment box; the chosen file names show beside it.
+- **Class documents report**: filter by what, class and published from / to; download as Excel or PDF (admin and teacher app).
+- **School magazine and almanac** are uploaded by the office only; teachers still see the published ones.
+- **Holidays** and **Timetable periods** are entered only in Academics → Setup. Calendar and Timetable show them read-only with a *Manage in Setup* link; Calendar still adds almanac events.

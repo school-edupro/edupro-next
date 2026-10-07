@@ -40,6 +40,15 @@ const when = (iso: string) =>
     minute: '2-digit',
   });
 
+const ALL_KINDS = [
+  { value: 'session_plan', label: 'Session plan' },
+  { value: 'curriculum', label: 'Curriculum / syllabus' },
+  { value: 'date_sheet', label: 'Date sheet' },
+  { value: 'magazine', label: 'School magazine' },
+  { value: 'almanac', label: 'School almanac' },
+  { value: 'other', label: 'Other' },
+];
+
 /**
  * Class documents: session plans, the curriculum and date sheets by class, and the school magazine and
  * almanac for everyone. Teachers upload for their own classes in the teacher app; the office uploads
@@ -53,15 +62,24 @@ export default async function DocumentsPage({
     error?: string;
     detail?: string;
     kind?: string;
+    classSectionId?: string;
+    from?: string;
+    to?: string;
     new?: string;
   }>;
 }) {
   const sp = await searchParams;
   const adding = sp.new === '1';
+  const query = new URLSearchParams();
+  if (/^[a-z_]{3,20}$/.test(sp.kind ?? '')) query.set('kind', sp.kind!);
+  if (/^\d{1,18}$/.test(sp.classSectionId ?? '')) query.set('classSectionId', sp.classSectionId!);
+  for (const k of ['from', 'to'] as const)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) query.set(k, sp[k]!);
+  const filters = query.toString();
   const [me, list, classOptions] = await Promise.all([
     getMe(),
     apiFetch<{ data: Doc[]; kinds: Array<{ value: string; label: string }> }>(
-      `/academics/documents${sp.kind ? `?kind=${encodeURIComponent(sp.kind)}` : ''}`,
+      `/academics/documents?${filters}`,
     ),
     apiFetch<{ data: ClassSectionOption[] }>('/academics/daily-work/sheet/options')
       .then((r) => r.data)
@@ -138,28 +156,62 @@ export default async function DocumentsPage({
         </Card>
       ) : null}
       <div hidden={adding}>
-        <nav
-          className="ep-tabs-links"
-          aria-label="Kind"
-          style={{ marginBottom: 'var(--sp-3)', flexWrap: 'wrap' }}
-        >
-          <a href="/academics/documents" aria-current={!sp.kind ? 'page' : undefined}>
-            All
-          </a>
-          {list.kinds.map((k) => (
+        <Card title="Report" style={{ marginBottom: 'var(--sp-3)' }}>
+          <form
+            method="get"
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap',
+            }}
+          >
+            <SelectField
+              id="f-kind"
+              name="kind"
+              label="What"
+              defaultValue={sp.kind ?? ''}
+              options={[{ value: '', label: 'All kinds' }, ...ALL_KINDS]}
+            />
+            <SelectField
+              id="f-class"
+              name="classSectionId"
+              label="Class"
+              defaultValue={sp.classSectionId ?? ''}
+              options={[
+                { value: '', label: 'All classes' },
+                ...classOptions.map((o) => ({ value: o.classSectionId, label: o.section })),
+              ]}
+            />
+            <InputField
+              id="f-from"
+              name="from"
+              label="Published from"
+              type="date"
+              defaultValue={sp.from ?? ''}
+            />
+            <InputField id="f-to" name="to" label="To" type="date" defaultValue={sp.to ?? ''} />
+            <Button type="submit" variant="secondary">
+              Show
+            </Button>
             <a
-              key={k.value}
-              href={`/academics/documents?kind=${k.value}`}
-              aria-current={sp.kind === k.value ? 'page' : undefined}
+              className="ep-btn ep-btn--secondary"
+              href={`/api/academics/documents-report?format=xlsx&${filters}`}
             >
-              {k.label}
+              Excel
             </a>
-          ))}
-        </nav>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/academics/documents-report?format=pdf&${filters}`}
+            >
+              PDF
+            </a>
+          </form>
+        </Card>
         <Card>
           {list.data.length === 0 ? (
             <p className="ep-field__help" style={{ margin: 0 }}>
-              Nothing uploaded yet.
+              Nothing found.
             </p>
           ) : (
             <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Documents">

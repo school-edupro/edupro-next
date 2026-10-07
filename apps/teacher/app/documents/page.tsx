@@ -53,14 +53,28 @@ const when = (iso: string) =>
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    kind?: string;
+    classSectionId?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
   const sp = await searchParams;
+  const query = new URLSearchParams();
+  if (/^[a-z_]{3,20}$/.test(sp.kind ?? '')) query.set('kind', sp.kind!);
+  if (/^\d{1,18}$/.test(sp.classSectionId ?? '')) query.set('classSectionId', sp.classSectionId!);
+  for (const k of ['from', 'to'] as const)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) query.set(k, sp[k]!);
+  const filters = query.toString();
   let docs: Doc[] = [];
   let sections: ClassSectionOption[] = [];
   try {
     [docs, sections] = await Promise.all([
-      bff.api.fetch<{ data: Doc[] }>('/academics/documents').then((r) => r.data),
+      bff.api.fetch<{ data: Doc[] }>(`/academics/documents?${filters}`).then((r) => r.data),
       bff.api
         .fetch<{ data: ClassSectionOption[] }>('/academics/daily-work/sheet/options')
         .then((r) => r.data),
@@ -159,6 +173,68 @@ export default async function DocumentsPage({
         </Card>
       )}
       <Card title="Uploaded">
+        <form
+          method="get"
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            flexWrap: 'wrap',
+            alignItems: 'flex-end',
+            marginBottom: 'var(--sp-4)',
+          }}
+        >
+          <label className="ep-field">
+            <span className="ep-field__label">What</span>
+            <select className="ep-select" name="kind" defaultValue={sp.kind ?? ''}>
+              <option value="">All kinds</option>
+              {[...KINDS, ['magazine', 'School magazine'], ['almanac', 'School almanac']].map(
+                ([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <label className="ep-field">
+            <span className="ep-field__label">Class</span>
+            <select
+              className="ep-select"
+              name="classSectionId"
+              defaultValue={sp.classSectionId ?? ''}
+            >
+              <option value="">All my classes</option>
+              {sections.map((o) => (
+                <option key={o.classSectionId} value={o.classSectionId}>
+                  {o.section}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ep-field">
+            <span className="ep-field__label">Published from</span>
+            <input className="ep-input" type="date" name="from" defaultValue={sp.from ?? ''} />
+          </label>
+          <label className="ep-field">
+            <span className="ep-field__label">To</span>
+            <input className="ep-input" type="date" name="to" defaultValue={sp.to ?? ''} />
+          </label>
+          <button type="submit" className="ep-btn ep-btn--secondary">
+            Show
+          </button>
+          <a
+            className="ep-btn ep-btn--secondary"
+            href={`/api/documents-report?format=xlsx&${filters}`}
+          >
+            Excel
+          </a>
+          <a
+            className="ep-btn ep-btn--secondary"
+            href={`/api/documents-report?format=pdf&${filters}`}
+          >
+            PDF
+          </a>
+        </form>
         {docs.length === 0 ? (
           <p className="ep-field__help" style={{ margin: 0 }}>
             Nothing uploaded yet.

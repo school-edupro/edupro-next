@@ -276,8 +276,17 @@ export class CreateDocumentDto extends createZodDto(CreateDocumentSchema) {}
 export const ListDocumentsQuerySchema = z.object({
   kind: DocumentKindSchema.optional(),
   classSectionId: IdSchema.optional(),
+  /** Published from / to (dates, school time). */
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
 });
 export class ListDocumentsQueryDto extends createZodDto(ListDocumentsQuerySchema) {}
+export const DocumentReportQuerySchema = ListDocumentsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+  /** `1`: the file inside a JSON answer (the teacher app's own download route reads it). */
+  wrap: z.enum(['1']).optional(),
+});
+export class DocumentReportQueryDto extends createZodDto(DocumentReportQuerySchema) {}
 
 export const AckItemSchema = z.enum(['daily_work', 'document', 'notice']);
 export const AckSchema = z.object({

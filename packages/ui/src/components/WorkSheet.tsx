@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { FilePick } from './FilePick';
 
 export interface WorkSheetEntry {
   text: string;
@@ -92,19 +93,12 @@ export function WorkSheet({ sheet, path, view, action, fileLinks }: WorkSheetPro
         placeholder={`Enter ${label.toLowerCase()}…`}
         aria-label={`${row.subject.name}: ${label}`}
       />
-      <Posted entry={entry} all={all} fileLinks={fileLinks} />
-    </td>
-  );
-  const pick = (row: WorkSheetRow, key: 'hwf' | 'cwf' | 'asf', label: string) => (
-    <td>
-      <input
-        className="ep-input ep-sheet__pick"
-        type="file"
-        name={`${key}:${row.subject.id}`}
-        multiple
+      <FilePick
+        name={`${key}f:${row.subject.id}`}
+        label={`${row.subject.name}: ${label.toLowerCase()} file`}
         accept={ACCEPT}
-        aria-label={`${row.subject.name}: ${label}`}
       />
+      <Posted entry={entry} all={all} fileLinks={fileLinks} />
     </td>
   );
   return (
@@ -181,14 +175,11 @@ export function WorkSheet({ sheet, path, view, action, fileLinks }: WorkSheetPro
                     <>
                       <th scope="col">Assignment</th>
                       <th scope="col">Due on</th>
-                      <th scope="col">Attachment</th>
                     </>
                   ) : (
                     <>
                       <th scope="col">Homework</th>
                       <th scope="col">Classwork</th>
-                      <th scope="col">Homework file</th>
-                      <th scope="col">Classwork file</th>
                     </>
                   )}
                 </tr>
@@ -216,14 +207,11 @@ export function WorkSheet({ sheet, path, view, action, fileLinks }: WorkSheetPro
                             aria-label={`${row.subject.name}: due on`}
                           />
                         </td>
-                        {pick(row, 'asf', 'attachment')}
                       </>
                     ) : (
                       <>
                         {box(row, 'hw', 'Homework', row.homework)}
                         {box(row, 'cw', 'Classwork', row.classwork)}
-                        {pick(row, 'hwf', 'homework file')}
-                        {pick(row, 'cwf', 'classwork file')}
                       </>
                     )}
                   </tr>

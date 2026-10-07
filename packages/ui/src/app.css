@@ -6119,3 +6119,45 @@ a.ep-tabs__tab {
   align-items: flex-end;
   margin-bottom: var(--sp-3);
 }
+/* An upload button under a text box */
+.ep-filepick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+.ep-filepick__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.ep-filepick__btn:hover {
+  border-color: var(--action-primary);
+}
+.ep-filepick__btn:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ep-filepick__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.ep-filepick__names {
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+  overflow-wrap: anywhere;
+}

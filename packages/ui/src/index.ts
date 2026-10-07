@@ -44,3 +44,4 @@ export {
 } from './components/WorkSheet';
 export { RichEditor } from './components/RichEditor';
 export { ClassSectionPicker, type ClassSectionOption } from './components/ClassSectionPicker';
+export { FilePick } from './components/FilePick';

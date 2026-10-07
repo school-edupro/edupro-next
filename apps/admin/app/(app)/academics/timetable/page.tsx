@@ -10,13 +10,12 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { clearSlot, createPeriod, deletePeriod, setSlot } from '@/lib/actions';
+import { clearSlot, setSlot } from '@/lib/actions';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
-import type { Employee, Page, Period, PeriodKind, Slot, Subject } from '@/lib/types';
+import type { Employee, Page, Period, Slot, Subject } from '@/lib/types';
 
-const PERIOD_KINDS: PeriodKind[] = ['teaching', 'break', 'assembly', 'activity'];
 const WEEKDAYS = [1, 2, 3, 4, 5, 6];
 
 /** S6-03: periods and the weekly timetable grid of one section; the API refuses double-booked teachers. */
@@ -199,7 +198,20 @@ export default async function TimetablePage({
         </Card>
       ) : null}
 
-      <Card title={a('periods')} style={{ marginTop: 'var(--sp-5)' }}>
+      <Card
+        title={a('periods')}
+        style={{ marginTop: 'var(--sp-5)' }}
+        actions={
+          canManage ? (
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/masters/academics?tab=timetable_periods"
+            >
+              Manage in Setup
+            </a>
+          ) : null
+        }
+      >
         <DataTable<Period>
           caption={a('periods')}
           density="dense"
@@ -209,60 +221,15 @@ export default async function TimetablePage({
             { key: 'starts', header: a('startsAt'), render: (p) => p.startsAt },
             { key: 'ends', header: a('endsAt'), render: (p) => p.endsAt },
             { key: 'kind', header: a('periodKind'), render: (p) => a(`periodKinds.${p.kind}`) },
-            {
-              key: 'actions',
-              header: '',
-              render: (p) =>
-                canManage ? (
-                  <form action={deletePeriod}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <Button type="submit" variant="ghost" size="sm">
-                      {a('delete')}
-                    </Button>
-                  </form>
-                ) : null,
-            },
           ]}
           rows={periods}
           rowKey={(p) => p.id}
           emptyTitle={a('noPeriods')}
         />
-        {canManage ? (
-          <form action={createPeriod} style={{ marginTop: 'var(--sp-4)' }}>
-            <FormRow columns={4}>
-              <InputField
-                id="number"
-                name="number"
-                label={a('number')}
-                type="number"
-                min={1}
-                max={20}
-                required
-                defaultValue={periods.length + 1}
-              />
-              <InputField id="pname" name="name" label={a('name')} required maxLength={40} />
-              <InputField
-                id="startsAt"
-                name="startsAt"
-                label={a('startsAt')}
-                type="time"
-                required
-              />
-              <InputField id="endsAt" name="endsAt" label={a('endsAt')} type="time" required />
-              <SelectField
-                id="pkind"
-                name="kind"
-                label={a('periodKind')}
-                options={PERIOD_KINDS.map((k) => ({ value: k, label: a(`periodKinds.${k}`) }))}
-              />
-            </FormRow>
-            <FormActions>
-              <Button type="submit" variant="secondary">
-                {a('addPeriod')}
-              </Button>
-            </FormActions>
-          </form>
-        ) : null}
+        <p className="ep-field__help" style={{ marginBottom: 0 }}>
+          Periods are added, corrected and uploaded by Excel in Academics → Setup → Timetable
+          periods.
+        </p>
       </Card>
     </>
   );

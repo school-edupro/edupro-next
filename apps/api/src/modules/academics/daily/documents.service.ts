@@ -8,12 +8,14 @@ import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { FilesService } from '../../files/files.service';
 import { sanitizeEmailHtml } from '../../comms/email-html';
+import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
 import { schoolTime } from './daily-work.service';
 import type {
   AckDto,
   AckStatusQueryDto,
   CreateDocumentDto,
   ListDocumentsQueryDto,
+  DocumentReportQueryDto,
 } from './daily.dto';
 import { DAILY } from './daily.permissions';
 import { ViewerService } from './viewer.service';
@@ -27,6 +29,8 @@ export const DOCUMENT_KIND: Record<string, string> = {
   almanac: 'School almanac',
   other: 'Other',
 };
+/** Uploaded by the office only. */
+const OFFICE_KINDS = ['magazine', 'almanac'];
 const text = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 /** The children of the family asking (a guardian's, or the student themself). */
 const MY_KIDS = `(SELECT sg.student_id FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE g.user_id = app.current_user_id()
@@ -86,6 +90,7 @@ export class DocumentsService {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
     const v = await this.viewer.resolve(ctx, DAILY.workView);
+    const office = ctx.permissions?.has(DAILY.noticeManage) === true;
     return this.db.tenant(tenant, async (c) => {
       const params: unknown[] = [yearId];
       const w = ['d.deleted_at IS NULL', 'd.academic_year_id = $1'];
@@ -104,15 +109,92 @@ export class DocumentsService {
         params.push(q.classSectionId);
         w.push(`(d.class_section_id IS NULL OR d.class_section_id = $${String(params.length)})`);
       }
+      if (q.from) {
+        params.push(q.from);
+        w.push(
+          `(d.publish_at AT TIME ZONE 'Asia/Kolkata')::date >= $${String(params.length)}::date`,
+        );
+      }
+      if (q.to) {
+        params.push(q.to);
+        w.push(
+          `(d.publish_at AT TIME ZONE 'Asia/Kolkata')::date <= $${String(params.length)}::date`,
+        );
+      }
       const r = await c.query<Row>(
         `${DOC} WHERE ${w.join(' AND ')} ORDER BY d.publish_at DESC, d.id DESC LIMIT 500`,
         params,
       );
       return {
         data: r.rows.map(toDoc),
-        kinds: Object.entries(DOCUMENT_KIND).map(([value, label]) => ({ value, label })),
+        // the magazine and the almanac are the office's to upload
+        kinds: Object.entries(DOCUMENT_KIND)
+          .filter(([value]) => office || !OFFICE_KINDS.includes(value))
+          .map(([value, label]) => ({ value, label })),
       };
     });
+  }
+
+  /** The documents with the filters on screen, as Excel or PDF with the school's header. */
+  async reportFile(ctx: RequestContext, q: DocumentReportQueryDto) {
+    const { data } = await this.list(ctx, q);
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const at = (v: string) =>
+      new Date(v).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    const plain = (html: string | null) =>
+      (html ?? '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Class documents',
+        details: [
+          q.kind ? (DOCUMENT_KIND[q.kind] ?? q.kind) : 'All kinds',
+          q.classSectionId
+            ? `Class ${data.find((d) => d.section)?.section ?? ''} and whole school`
+            : 'All classes',
+          q.from || q.to ? `Published from ${q.from ?? '…'} to ${q.to ?? '…'}` : '',
+          generatedOn(),
+        ].filter(Boolean),
+        legend: `${String(data.length)} document(s)`,
+        columns: [
+          { label: 'Sl.', width: 3, right: true },
+          { label: 'What', width: 10 },
+          { label: 'Title', width: 20 },
+          { label: 'Remark', width: 20 },
+          { label: 'For', width: 8 },
+          { label: 'Files', width: 4, right: true },
+          { label: 'Published', width: 11 },
+          { label: 'Acknowledged', width: 7, right: true },
+          { label: 'Uploaded by', width: 10 },
+        ],
+        rows: data.map((d, i) => [
+          i + 1,
+          d.kindLabel,
+          d.title,
+          plain(d.remark),
+          d.section ?? 'Whole school',
+          d.fileIds.length,
+          `${at(d.publishAt)}${d.scheduled ? ' (scheduled)' : ''}`,
+          d.ackRequired ? d.ackCount : '-',
+          d.postedBy ?? '',
+        ]),
+        filename: `class-documents-${new Date().toISOString().slice(0, 10)}`,
+      },
+      q.format,
+    );
   }
 
   private async find(c: PoolClient, id: string): Promise<AcademicDocument> {
@@ -141,6 +223,12 @@ export class DocumentsService {
       throw new DomainError(
         'documents.choose_class',
         'Choose the class this is for; only the office uploads for the whole school',
+        { status: 403 },
+      );
+    if (OFFICE_KINDS.includes(dto.kind) && !ctx.permissions?.has(DAILY.noticeManage))
+      throw new DomainError(
+        'documents.office_only',
+        'The school magazine and the almanac are uploaded by the office',
         { status: 403 },
       );
     for (const sectionId of dto.classSectionIds)

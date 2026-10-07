@@ -314,6 +314,47 @@ describe('daily work sheet (e2e)', () => {
     }
   });
 
+  it('keeps the magazine and the almanac for the office, and reports class documents', async () => {
+    const fileId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, original_name, status, created_by)
+         VALUES ($1, 'test', $2, 'application/pdf', 1200, 'plan.pdf', 'ready', $3) RETURNING id::text`,
+        [school.id, `ws-${Date.now()}/plan.pdf`, classTeacher.id],
+      );
+      return r.rows[0]!.id;
+    });
+    const upload = (u: SeededUser, json: Record<string, unknown>) =>
+      inject({ method: 'POST', url: '/academics/documents', headers: h(u), json });
+    const doc = {
+      title: 'Term 2 plan',
+      remark: '<p>Read <strong>before</strong> Monday</p><script>alert(1)</script>',
+      classSectionIds: [ids.secA],
+      fileIds: [fileId],
+    };
+    expect((await upload(classTeacher, { ...doc, kind: 'almanac' })).statusCode).toBe(403);
+    expect((await upload(classTeacher, { ...doc, kind: 'session_plan' })).statusCode).toBe(201);
+    const list = (await get(classTeacher, '/academics/documents?kind=session_plan')).json();
+    expect(list.data[0].remark).toBe('<p>Read <strong>before</strong> Monday</p>');
+    expect(list.kinds.map((k: { value: string }) => k.value)).not.toContain('almanac');
+    expect(
+      (await get(admin, '/academics/documents'))
+        .json()
+        .kinds.map((k: { value: string }) => k.value),
+    ).toContain('almanac');
+    expect(
+      (await get(classTeacher, '/academics/documents?to=2020-01-01')).json().data,
+    ).toHaveLength(0);
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await get(admin, `/academics/documents/report?format=${format}&kind=session_plan`);
+      expect(f.statusCode).toBe(200);
+      expect(f.rawPayload.length).toBeGreaterThan(800);
+    }
+    const wrapped = (
+      await get(classTeacher, '/academics/documents/report?format=pdf&wrap=1')
+    ).json();
+    expect(wrapped).toMatchObject({ contentType: 'application/pdf' });
+  });
+
   it('exports teacher assignments by class and by teacher', async () => {
     const byTeacher = (
       await get(admin, `/academics/teacher-assignments?employeeId=${ids.empMt}`)
