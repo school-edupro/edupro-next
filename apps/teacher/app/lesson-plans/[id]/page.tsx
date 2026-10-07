@@ -30,6 +30,7 @@ interface Plan {
     activities?: string;
     resources?: string;
     homework?: string;
+    topicId?: string;
   }>;
   assessment: string | null;
   status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'returned';
@@ -56,9 +57,42 @@ export default async function LessonPlanPage({
   let plan: Plan | null = null;
   let assignments: Assignment[] = [];
   let subjects: Subject[] = [];
+  let syllabus: Array<{ id: string; label: string; name: string }> = [];
   try {
-    if (!isNew) plan = await bff.api.fetch<Plan>(`/academics/lesson-plans/${id}`);
-    else
+    if (!isNew) {
+      plan = await bff.api.fetch<Plan>(`/academics/lesson-plans/${id}`);
+      // the syllabus of this class and subject, to pick the day's topic from
+      const mine = await bff.api
+        .fetch<{ data: Array<{ classSectionId: string; subjectId: string; classId: string }> }>(
+          '/academics/syllabus/mine',
+        )
+        .then((r) => r.data)
+        .catch(() => []);
+      const row = mine.find(
+        (m) => m.classSectionId === plan!.classSectionId && m.subjectId === plan!.subjectId,
+      );
+      if (row)
+        syllabus = await bff.api
+          .fetch<{
+            chapters: Array<{
+              number: number;
+              name: string;
+              topics: Array<{ id: string; number: number; name: string; status: string | null }>;
+            }>;
+          }>(
+            `/academics/syllabus/tree?classId=${row.classId}&subjectId=${row.subjectId}&classSectionId=${row.classSectionId}`,
+          )
+          .then((t) =>
+            t.chapters.flatMap((c) =>
+              c.topics.map((t2) => ({
+                id: t2.id,
+                label: `${String(c.number)}.${String(t2.number)} ${t2.name}${t2.status === 'done' ? ' (done)' : ''}`,
+                name: t2.name,
+              })),
+            ),
+          )
+          .catch(() => []);
+    } else
       [assignments, subjects] = await Promise.all([
         bff.api
           .fetch<{ data: Assignment[] }>('/academics/teacher-assignments/mine')
@@ -204,6 +238,7 @@ export default async function LessonPlanPage({
             <thead>
               <tr>
                 <th>Day</th>
+                {syllabus.length ? <th>Syllabus topic</th> : null}
                 <th>Topic</th>
                 <th>Activities</th>
                 <th>Resources</th>
@@ -214,6 +249,28 @@ export default async function LessonPlanPage({
               {[1, 2, 3, 4, 5, 6].map((day) => (
                 <tr key={day}>
                   <td>{DAYS[day]}</td>
+                  {syllabus.length ? (
+                    <td>
+                      <select
+                        className="ep-select"
+                        name={`syllabus-${day}`}
+                        defaultValue={
+                          syllabus
+                            .filter((x) => x.id === topic(day)?.topicId)
+                            .map((x) => `${x.id}|${x.name}`)[0] ?? ''
+                        }
+                        disabled={!editable}
+                        aria-label={`${DAYS[day]} syllabus topic`}
+                      >
+                        <option value="">Not from the syllabus</option>
+                        {syllabus.map((x) => (
+                          <option key={x.id} value={`${x.id}|${x.name}`}>
+                            {x.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  ) : null}
                   <td>
                     <input
                       className="ep-input"

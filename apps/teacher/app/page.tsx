@@ -67,6 +67,12 @@ export default async function HomePage() {
       '/office-orders',
     ],
     [
+      t(lang, 'My syllabus'),
+      t(lang, 'Chapters and topics of my classes; mark what is taught'),
+      can('academics.lesson_plan.manage'),
+      '/syllabus',
+    ],
+    [
       t(lang, 'Lesson plans'),
       t(lang, 'Weekly plans with approvals'),
       can('academics.lesson_plan.manage'),

@@ -31,6 +31,8 @@ const PAGES = [
   '/academics/daily-work?view=assignments&c=169',
   '/academics/settings',
   '/attendance/upload',
+  '/academics/syllabus',
+  '/academics/syllabus/coverage',
   '/academics/documents?new=1',
   '/academics/teacher-assignments?new=1',
   '/academics/calendar?new=event',

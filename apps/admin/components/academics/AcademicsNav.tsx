@@ -19,6 +19,12 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
     label: 'Lesson plans',
     permission: 'academics.lesson_plan.view',
   },
+  { href: '/academics/syllabus', label: 'Syllabus', permission: 'academics.lesson_plan.view' },
+  {
+    href: '/academics/syllabus/coverage',
+    label: 'Syllabus coverage',
+    permission: 'academics.syllabus.report',
+  },
   {
     href: '/academics/teacher-assignments',
     label: 'Teacher assignments',

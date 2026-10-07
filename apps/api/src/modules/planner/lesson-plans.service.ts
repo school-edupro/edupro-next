@@ -25,6 +25,7 @@ export interface LessonPlanRow {
     activities?: string;
     resources?: string;
     homework?: string;
+    topicId?: string;
   }>;
   assessment: string | null;
   status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'returned';

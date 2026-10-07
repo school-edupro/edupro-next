@@ -12,13 +12,17 @@ function topicsFrom(fd: FormData) {
     activities?: string;
     resources?: string;
     homework?: string;
+    topicId?: string;
   }> = [];
   for (let day = 1; day <= 6; day++) {
-    const topic = str(fd, `topic-${day}`);
+    // the syllabus topic chosen for the day ("id|name"); its name stands when nothing is typed
+    const [topicId, picked] = str(fd, `syllabus-${day}`).split('|');
+    const topic = str(fd, `topic-${day}`) || (picked ?? '').slice(0, 200);
     if (!topic) continue;
     topics.push({
       day,
       topic,
+      topicId: /^\d{1,18}$/.test(topicId ?? '') ? topicId : undefined,
       activities: str(fd, `activities-${day}`) || undefined,
       resources: str(fd, `resources-${day}`) || undefined,
       homework: str(fd, `homework-${day}`) || undefined,

@@ -18,6 +18,7 @@ const PAGES = [
   '/documents',
   '/office-orders',
   '/daily-work',
+  '/syllabus',
   '/daily-work?date=2026-10-07&c=169&s=143',
   '/daily-work?view=assignments&c=169',
   '/daily-work?view=report&kind=daily',
