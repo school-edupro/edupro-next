@@ -217,7 +217,11 @@ export class MastersService {
       });
       if (f.type === 'ref' && f.lookup) {
         const options = (refs[f.key] ?? []).map((o) =>
-          f.lookup!.showLabel && o.label ? `${o.value} · ${o.label}` : o.value,
+          f.lookup!.nameFirst && o.label
+            ? `${o.label} (${o.value})`
+            : f.lookup!.showLabel && o.label
+              ? `${o.value} · ${o.label}`
+              : o.value,
         );
         if (!options.length || options.length > 1500) return;
         const range = listOf(f.header, options);
@@ -418,7 +422,7 @@ export class MastersService {
             ok = false;
           } else if (value !== undefined) out[f.key] = value;
         }
-        for (const e of crossChecks(fields, out)) {
+        for (const e of crossChecks(fields, out, lookups)) {
           rejects.push({ row: rowNo, ...e });
           ok = false;
         }
@@ -556,7 +560,7 @@ export class MastersService {
           for (const x of nullable.rows) out[x.column_name] = null;
         }
       }
-      errors.push(...crossChecks(fields, out).map((e) => `${e.column}: ${e.message}`));
+      errors.push(...crossChecks(fields, out, lookups).map((e) => `${e.column}: ${e.message}`));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       const openKeys = editableKeys(def);
@@ -818,11 +822,7 @@ export class MastersService {
       if (wanted.size) {
         // a cell may carry the value (a code), what the grid shows ("code · name"), or just the name
         const asked = new Set<string>();
-        for (const w of wanted) {
-          asked.add(w);
-          const head = w.split(' · ')[0]!.trim();
-          if (head) asked.add(head);
-        }
+        for (const w of wanted) for (const k of refReadings(w)) asked.add(k);
         const label = f.lookup.labelColumn ?? 'name';
         const r = await c.query<{ id: string; v: string; label: string | null }>(
           // eslint-disable-next-line no-restricted-syntax -- table, columns and the fixed filter come from the registry; values bound
@@ -868,13 +868,44 @@ function toImport(r: Record<string, unknown>): MasterImportRow {
   };
 }
 
+/**
+ * What a cell of a ref column may stand for, most exact first: the text as typed, the code of
+ * "Name (CODE)", the code of "CODE · name", then the name of "Name (CODE)".
+ */
+function refReadings(text: string): string[] {
+  const t = text.trim();
+  const out = [t];
+  const paren = /^(.*\S)\s*\(([^()]+)\)$/.exec(t);
+  if (paren) out.push(paren[2]!.trim());
+  const head = t.split(' · ')[0]!.trim();
+  if (head && head !== t) out.push(head);
+  if (paren) out.push(paren[1]!.trim());
+  return out.filter(Boolean);
+}
+
 /** Rules across two fields of a row: a date that may not be before another. */
 function crossChecks(
   fields: MasterField[],
   out: Record<string, unknown>,
+  lookups: Record<string, Map<string, string>> = {},
 ): Array<{ column: string; message: string }> {
   const errors: Array<{ column: string; message: string }> = [];
   for (const f of fields) {
+    if (f.after) {
+      const a = out[f.after];
+      const b = out[f.key];
+      if (typeof a === 'string' && typeof b === 'string' && b <= a)
+        errors.push({
+          column: f.header,
+          message: `Must be after ${fields.find((x) => x.key === f.after)?.header ?? f.after}`,
+        });
+    }
+    if (f.notSelf && f.lookup && out[f.key] !== undefined && out[f.key] !== null) {
+      // the row's own value in the lookup column (its code) resolves to the row itself
+      const own = out[f.lookup.column];
+      if (typeof own === 'string' && lookups[f.key]?.get(norm(own)) === out[f.key])
+        errors.push({ column: f.header, message: 'Cannot be the row itself' });
+    }
     if (!f.notBefore) continue;
     const a = out[f.notBefore];
     const b = out[f.key];
@@ -898,7 +929,11 @@ function ruleFor(f: MasterField): string {
   if (f.type === 'date') parts.push('YYYY-MM-DD or an Excel date');
   if (f.type === 'boolean') parts.push('yes / no');
   if (f.type === 'ref' && f.lookup)
-    parts.push(`the ${f.lookup.column} of an existing ${f.lookup.table} row`);
+    parts.push(
+      f.lookup.nameFirst
+        ? `an existing ${f.lookup.table} row: choose from the drop-down (the name, or its ${f.lookup.column}, is accepted)`
+        : `the ${f.lookup.column} of an existing ${f.lookup.table} row`,
+    );
   if (f.maxLength) parts.push(`up to ${f.maxLength} characters`);
   if (f.help) parts.push(f.help);
   return parts.join('; ');
@@ -980,8 +1015,9 @@ function coerce(
     }
     case 'ref': {
       const text = String(raw).trim();
-      const idv =
-        lookups[f.key]?.get(norm(text)) ?? lookups[f.key]?.get(norm(text.split(' · ')[0] ?? ''));
+      const idv = refReadings(text)
+        .map((k) => lookups[f.key]?.get(norm(k)))
+        .find((x) => x !== undefined);
       if (!idv) return { error: `"${text}" is not on the list: choose one from the drop-down` };
       return { value: idv };
     }

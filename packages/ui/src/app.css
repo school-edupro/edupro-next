@@ -5753,3 +5753,117 @@ a.ep-tabs__tab {
 .ep-row--leave .ep-field__help {
   color: var(--text-heading);
 }
+/* Family calendar: the month as a grid, holidays and events coloured */
+.ep-hcal {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: var(--sp-1);
+  table-layout: fixed;
+}
+.ep-hcal th {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--text-body);
+  text-align: center;
+}
+.ep-hcal td {
+  vertical-align: top;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid transparent;
+}
+.ep-hcal td[data-empty] {
+  background: transparent;
+}
+.ep-hcal td a {
+  display: block;
+  min-height: 4.25rem;
+  padding: var(--sp-1);
+  color: var(--text-heading);
+  text-decoration: none;
+  overflow: hidden;
+}
+.ep-hcal td a:hover .ep-hcal__no,
+.ep-hcal td a:focus-visible .ep-hcal__no {
+  text-decoration: underline;
+}
+.ep-hcal__no {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.ep-hcal__what {
+  display: block;
+  font-size: var(--fs-caption);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ep-hcal td[data-mark='sunday'] .ep-hcal__no {
+  color: var(--status-danger);
+}
+.ep-hcal td[data-mark='holiday'],
+.ep-hcal__legend span[data-mark='holiday'] {
+  background: var(--status-success-bg);
+}
+.ep-hcal td[data-mark='vacation'],
+.ep-hcal__legend span[data-mark='vacation'] {
+  background: var(--status-info-bg);
+}
+.ep-hcal td[data-mark='exam'],
+.ep-hcal__legend span[data-mark='exam'] {
+  background: var(--status-danger-bg);
+}
+.ep-hcal td[data-mark='working_day'],
+.ep-hcal__legend span[data-mark='working_day'] {
+  background: var(--status-warning-bg);
+}
+.ep-hcal td[data-mark='event'],
+.ep-hcal__legend span[data-mark='event'] {
+  background: var(--surface-card);
+  border-color: var(--border-strong);
+}
+.ep-hcal td[data-today] {
+  border-color: var(--action-primary);
+}
+.ep-hcal td[data-picked] {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.ep-hcal__legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+.ep-hcal__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-hcal__legend span {
+  display: inline-block;
+  width: var(--sp-3);
+  height: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+}
+.ep-hcal__note {
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+@media (max-width: 560px) {
+  .ep-hcal td a {
+    min-height: 3rem;
+  }
+  .ep-hcal__what {
+    white-space: normal;
+    max-height: 2.5em;
+  }
+}

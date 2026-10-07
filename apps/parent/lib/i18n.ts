@@ -824,6 +824,18 @@ const DICT: Record<string, string> = {
   'Profile PDF': 'प्रोफ़ाइल PDF',
   Attachments: 'संलग्नक',
   Attachment: 'संलग्नक',
+  'Holiday list': 'अवकाश सूची',
+  Events: 'कार्यक्रम',
+  Event: 'कार्यक्रम',
+  Holiday: 'अवकाश',
+  Vacation: 'छुट्टियाँ',
+  'Working day': 'कार्य दिवस',
+  Days: 'दिन',
+  Colours: 'रंग',
+  'This month': 'इस महीने',
+  'Nothing is scheduled on this day.': 'इस दिन कुछ निर्धारित नहीं है।',
+  'holidays this session': 'अवकाश इस सत्र में',
+  'days in all': 'दिन कुल',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

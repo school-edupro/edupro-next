@@ -15,6 +15,7 @@ export interface MasterField {
     yearScoped?: boolean;
     labelColumn?: string;
     showLabel?: boolean;
+    nameFirst?: boolean;
     parent?: { table: string; column: string; valueColumn: string; label: string };
   };
   scale?: number;
@@ -25,6 +26,8 @@ export interface MasterField {
   patternHelp?: string;
   input?: 'email' | 'tel' | 'url';
   notBefore?: string;
+  after?: string;
+  notSelf?: boolean;
   widget?: 'map';
   width?: number;
   bulk?: boolean;

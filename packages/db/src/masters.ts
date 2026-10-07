@@ -35,6 +35,8 @@ export interface MasterField {
     labelColumn?: string;
     /** The grid and the exports show "value · label" (a crew code alone says little). */
     showLabel?: boolean;
+    /** Shown and typed by the name with the value after it, "English (ENG)": the grid, the form and the Excel list. Uploads take that, the name alone or the code alone. */
+    nameFirst?: boolean;
     /** A fixed condition on the lookup table (alias `t`) that narrows the options, e.g. drivers only. */
     filter?: string;
     /** The option list is narrowed by a parent lookup (cities by state → country): `column` on the lookup table, `valueColumn` on the parent table. */
@@ -52,6 +54,10 @@ export interface MasterField {
   input?: 'email' | 'tel' | 'url';
   /** This date may not be before that other date field of the row (a "to" after its "from"). */
   notBefore?: string;
+  /** This value must come after that other field of the row (a period ends after it starts). */
+  after?: string;
+  /** A ref to the master's own table may not point at the row itself (a subject is not part of itself). */
+  notSelf?: boolean;
   /** `lat`: the form shows a map to search a place and drop the pin (fills this field and `lng`). */
   widget?: 'map';
   width?: number;
@@ -253,10 +259,13 @@ function buildList(spec: ListSpec): (p: MasterListParams) => DatasetQuery {
         const a = `r${i + 1}`;
         // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry definitions; values are bound
         joins.push(`LEFT JOIN ${f.lookup.table} ${a} ON ${a}.id = t.${f.key}`);
+        const label = `${a}.${f.lookup.labelColumn ?? 'name'}::text`;
         cols.push(
-          f.lookup.showLabel
-            ? `concat_ws(' · ', ${a}.${f.lookup.column}::text, ${a}.${f.lookup.labelColumn ?? 'name'}::text) AS ${f.key}`
-            : `${a}.${f.lookup.column}::text AS ${f.key}`,
+          f.lookup.nameFirst
+            ? `CASE WHEN ${a}.id IS NULL THEN NULL ELSE ${label} || ' (' || ${a}.${f.lookup.column}::text || ')' END AS ${f.key}`
+            : f.lookup.showLabel
+              ? `concat_ws(' · ', ${a}.${f.lookup.column}::text, ${label}) AS ${f.key}`
+              : `${a}.${f.lookup.column}::text AS ${f.key}`,
         );
       } else if (f.array) cols.push(`array_to_string(t.${f.key}, ',') AS ${f.key}`);
       else if (f.type === 'date') cols.push(`t.${f.key}::text AS ${f.key}`);
@@ -324,14 +333,6 @@ const classRef = (key: string, header: string, identity = false): MasterField =>
   required: identity,
   width: 10,
 });
-const campusRef: MasterField = {
-  key: 'campus_id',
-  header: 'Campus code',
-  type: 'ref',
-  lookup: { table: 'campuses', column: 'code' },
-  width: 12,
-  help: 'blank = every campus',
-};
 const time = (key: string, header: string, required = false): MasterField => ({
   key,
   header,
@@ -352,6 +353,20 @@ const tcode = (header = 'Code'): MasterField => ({
   maxLength: 20,
   pattern: '^[A-Z0-9][A-Z0-9\\/_\\-]*$',
   patternHelp: 'capital letters and digits (hyphen, slash or underscore allowed), without spaces',
+});
+/** Academics set-up: a code is letters and digits (hyphen, slash, dot or underscore allowed), no spaces. */
+const acode = (header = 'Code'): MasterField => ({
+  ...code(header),
+  maxLength: 20,
+  pattern: '^[A-Za-z0-9][A-Za-z0-9\\/_.\\-]*$',
+  patternHelp: 'letters and digits (hyphen, slash, dot or underscore allowed), without spaces',
+});
+/** A name people read: starts with a letter or a digit and is not only signs. */
+const aname = (header = 'Name', maxLength = 120): MasterField => ({
+  ...name(header),
+  maxLength,
+  pattern: "^[A-Za-z0-9\\u0900-\\u097F][A-Za-z0-9\\u0900-\\u097F .,&'()\\/+\\-]*$",
+  patternHelp: "a name that starts with a letter or a digit (. , & ' ( ) / + - allowed)",
 });
 const mobile = (key = 'mobile', header = 'Mobile'): MasterField => ({
   key,
@@ -895,12 +910,13 @@ export const MASTERS: MasterDefinition[] = [
     title: 'Classes',
     group: 'academics',
     order: 10,
-    uploadHelp: 'The classes of the school (Nursery, I, II … XII). The sections of a class are on the Sections tab.',
+    uploadHelp:
+      'The classes of the school (Nursery, I, II … XII). The sections of a class are on the Sections tab.',
     table: 'classes',
     permission: { view: 'academics.class.view', manage: 'academics.class.edit' },
     naturalKey: ['code'],
     conflict: '(school_id, code) WHERE deleted_at IS NULL',
-    fields: [code(), name(), order('display_order')],
+    fields: [acode('Class code'), aname('Class name', 60), order('display_order')],
     status: STATUS,
     search: ['t.code', 't.name'],
     orderBy: 't.display_order, t.code',
@@ -925,8 +941,9 @@ export const MASTERS: MasterDefinition[] = [
         identity: true,
         maxLength: 10,
         width: 8,
+        pattern: '^[A-Za-z0-9][A-Za-z0-9 \\-]*$',
+        patternHelp: 'letters and digits, like A, B or A1',
       },
-      campusRef,
       {
         key: 'capacity',
         header: 'Capacity',
@@ -957,8 +974,8 @@ export const MASTERS: MasterDefinition[] = [
     naturalKey: ['code'],
     conflict: '(school_id, code) WHERE deleted_at IS NULL',
     fields: [
-      code(),
-      name(),
+      acode('Subject code'),
+      aname('Subject name'),
       {
         key: 'kind',
         header: 'Kind',
@@ -970,10 +987,11 @@ export const MASTERS: MasterDefinition[] = [
       },
       {
         key: 'parent_id',
-        header: 'Part of (subject code)',
+        header: 'Part of (subject)',
         type: 'ref',
-        lookup: { table: 'subjects', column: 'code' },
-        width: 14,
+        lookup: { table: 'subjects', column: 'code', labelColumn: 'name', nameFirst: true },
+        notSelf: true,
+        width: 26,
         bulk: true,
         help: 'For a teaching subject under a report-card subject: PHY, CHE and BIO are part of SCI. Blank for a subject on its own.',
       },
@@ -990,10 +1008,9 @@ export const MASTERS: MasterDefinition[] = [
     order: 50,
     table: 'timetable_periods',
     permission: { view: 'academics.timetable.view', manage: 'academics.timetable.manage' },
-    naturalKey: ['campus_id', 'number'],
+    naturalKey: ['number'],
     conflict: '(school_id, COALESCE(campus_id, 0), number)',
     fields: [
-      { ...campusRef, identity: true },
       {
         key: 'number',
         header: 'Period number',
@@ -1005,9 +1022,9 @@ export const MASTERS: MasterDefinition[] = [
         identity: true,
         width: 8,
       },
-      name('Period name'),
+      aname('Period name', 60),
       time('starts_at', 'Starts at', true),
-      time('ends_at', 'Ends at', true),
+      { ...time('ends_at', 'Ends at', true), after: 'starts_at' },
       {
         key: 'kind',
         header: 'Kind',
@@ -1019,7 +1036,7 @@ export const MASTERS: MasterDefinition[] = [
       },
     ],
     search: ['t.name'],
-    orderBy: 'r1.code NULLS FIRST, t.number',
+    orderBy: 't.number',
   }),
   master({
     id: 'holidays',
@@ -1031,10 +1048,20 @@ export const MASTERS: MasterDefinition[] = [
     yearScoped: true,
     naturalKey: ['name', 'starts_on'],
     conflict: '(school_id, academic_year_id, name, starts_on)',
+    // a wrong name or date is corrected on the row itself
+    rekey: true,
     fields: [
-      { ...name('Holiday'), identity: true },
+      { ...aname('Holiday'), identity: true },
       { key: 'starts_on', header: 'From', type: 'date', required: true, identity: true, width: 12 },
-      { key: 'ends_on', header: 'To', type: 'date', required: true, width: 12 },
+      {
+        key: 'ends_on',
+        header: 'To',
+        type: 'date',
+        required: true,
+        width: 12,
+        notBefore: 'starts_on',
+        help: 'The same as From for a one-day holiday.',
+      },
       {
         key: 'kind',
         header: 'Kind',
@@ -1053,7 +1080,6 @@ export const MASTERS: MasterDefinition[] = [
         width: 12,
         bulk: true,
       },
-      campusRef,
     ],
     search: ['t.name'],
     orderBy: 't.starts_on',
@@ -1520,10 +1546,10 @@ export const MASTERS: MasterDefinition[] = [
         key: 'subject_id',
         header: 'Subject',
         type: 'ref',
-        lookup: { table: 'subjects', column: 'code', labelColumn: 'name' },
+        lookup: { table: 'subjects', column: 'code', labelColumn: 'name', nameFirst: true },
         required: true,
         identity: true,
-        width: 20,
+        width: 26,
       },
       { key: 'is_elective', header: 'Elective', type: 'boolean', width: 8 },
       {

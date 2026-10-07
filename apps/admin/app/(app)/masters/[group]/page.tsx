@@ -746,7 +746,9 @@ function FieldInput({
     );
   if (f.type === 'ref' && f.lookup && !f.lookup.parent) {
     // the box shows "code · name": people pick by the name, the server reads the code
-    const shown = (o: MasterLookupOption) => (o.label ? `${o.value} · ${o.label}` : o.value);
+    const nameFirst = f.lookup.nameFirst === true;
+    const shown = (o: MasterLookupOption) =>
+      !o.label ? o.value : nameFirst ? `${o.label} (${o.value})` : `${o.value} · ${o.label}`;
     const options = lookups[f.key] ?? [];
     const current = options.find((o) => o.value === value || shown(o) === value);
     return (

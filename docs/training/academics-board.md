@@ -19,3 +19,14 @@
 
 ## Parent and student portal
 - Homework (with publish time and Acknowledge), **Session plan and date sheets**, Notices (Acknowledge), Calendar, **School directory**.
+
+## Academics setup: rules of the fields (October 2026)
+
+- **Every field is checked** on the form and in an Excel upload. Codes are letters and digits without spaces (`-` `/` `.` `_` allowed); names start with a letter or a digit; a section is letters and digits (A, B, A1); a period must end after it starts.
+- **Campus is not asked** on Sections, Timetable periods and Holidays. What is entered applies to the whole school.
+- **Holidays**: the name and the From date can be corrected on the edit form. To cannot be before From; for one day keep both the same.
+- **Subjects**: "Part of (subject)" and the Subject of the class-subject mapping show the full name, as `English (ENG)`. The Excel template has the same list as a drop-down; an upload also accepts the name alone or the code alone. A subject cannot be part of itself.
+
+## Parent portal: Calendar
+
+Three tabs. **Calendar** is the month grid (holidays green, vacations blue, exams red, declared working days amber, events outlined); Previous / Today / Next change the month and a tap on a day lists what falls on it. **Holiday list** has the holidays of the session with the number of days. **Events** has the almanac.
