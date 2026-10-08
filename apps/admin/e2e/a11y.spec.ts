@@ -132,7 +132,7 @@ const PAGES = [
   '/insights/reports',
   '/insights/assistant/costs',
   // master-data framework
-  '/masters/fees?tab=fee_periods',
+  '/masters/fees?tab=fee_heads',
   '/masters/academics?tab=class_sections&add=1',
   '/masters/exams?tab=grade_bands&upload=1',
   // Sprint 17

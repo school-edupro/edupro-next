@@ -174,3 +174,15 @@ a class to slabs, fill the late fee of every quarter; an empty one means the sch
 - **Another fee structure for a class**: on Class fee structure choose the class, type the new group's
   name (for example "staff ward") and press **Start new group**; an empty grid opens. Fill and save it,
   then put pupils on that group from their fee profile.
+
+### Adding a payment mode
+
+Fee setup → Class calendar, late fee, payment modes → **Add a payment mode**: type the name (for
+example "NEFT / RTGS", "Paytm QR", "POS machine"), choose the built-in mode it **works like**, tick the
+mandatory fields and press **Add payment mode**. The cashier sees the new name at once; receipts, the
+ledger and the day book show it. A mode that works like Cheque can bounce and goes on the deposit slip.
+**Remove** deletes a mode the school added; receipts already made keep its name. The seven built-in
+modes cannot be removed, only switched off at the counter.
+
+The "Month–instalment mapping" list is no longer shown: the class calendar holds the quarter and the
+dates of every month.

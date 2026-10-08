@@ -622,4 +622,69 @@ describe('fee set-up, second pass (e2e)', () => {
       'daywise',
     );
   });
+  it("the school adds its own payment mode; the receipt keeps the mode's name", async () => {
+    const add = await inject({
+      method: 'POST',
+      url: '/fees/payment-modes',
+      headers: h(),
+      json: { label: 'NEFT / RTGS', kind: 'bank', needReference: true },
+    });
+    expect(add.statusCode).toBe(201);
+    const mine = add.json().data.find((m: { label: string }) => m.label === 'NEFT / RTGS');
+    expect(mine).toMatchObject({
+      kind: 'bank',
+      code: 'x_neft_rtgs',
+      atCounter: true,
+      needReference: true,
+    });
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: '/fees/payment-modes',
+          headers: h(),
+          json: { label: 'neft / rtgs', kind: 'bank' },
+        })
+      ).statusCode,
+    ).toBe(409);
+    const missing = await receipt({
+      studentId: students.multi,
+      amount: 200,
+      mode: 'bank',
+      modeCode: mine.code,
+    });
+    expect(missing.statusCode).toBe(422);
+    const wrongKind = await receipt({
+      studentId: students.multi,
+      amount: 200,
+      mode: 'cash',
+      modeCode: mine.code,
+    });
+    expect(wrongKind.statusCode).toBe(422);
+    const ok = await receipt({
+      studentId: students.multi,
+      amount: 200,
+      mode: 'bank',
+      modeCode: mine.code,
+      reference: 'N123',
+    });
+    expect(ok.statusCode).toBe(201);
+    const ledger = (
+      await inject({ method: 'GET', url: `/fees/students/${students.multi}/ledger`, headers: h() })
+    ).json() as { payments: Array<{ id: string; mode: string }> };
+    expect(ledger.payments.find((p) => p.id === ok.json().paymentId)!.mode).toBe('NEFT / RTGS');
+    const builtIn = await inject({
+      method: 'DELETE',
+      url: '/fees/payment-modes/cash',
+      headers: h(),
+    });
+    expect(builtIn.statusCode).toBe(404);
+    const gone = await inject({
+      method: 'DELETE',
+      url: `/fees/payment-modes/${mine.code}`,
+      headers: h(),
+    });
+    expect(gone.statusCode).toBe(200);
+    expect(gone.json().data).toHaveLength(7);
+  });
 });

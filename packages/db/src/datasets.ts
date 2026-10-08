@@ -551,7 +551,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       // refunds are negative lines on the day they were paid out
       text: `SELECT * FROM (
                SELECT 'receipt' AS kind, p.ledger::text AS ledger, p.receipt_no, p.received_on, s.admission_no, s.display_name AS payer,
-                      k.code || '-' || cs.name AS section, p.mode, p.instrument_no, p.bank_name, p.reference,
+                      k.code || '-' || cs.name AS section, COALESCE(p.mode_label, p.mode) AS mode, p.instrument_no, p.bank_name, p.reference,
                       (p.amount - p.late_fee) AS principal, p.late_fee, p.amount, p.status, COALESCE(u.display_name, 'Online') AS received_by, p.cleared_on
                  FROM fee_payments p JOIN students s ON s.id = p.student_id LEFT JOIN users u ON u.id = p.received_by
                  LEFT JOIN enrolments e ON e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id AND e.status = 'active'
@@ -597,7 +597,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       text: `SELECT x.on_date, x.ledger, x.mode, sum(x.receipts)::int AS receipts, sum(x.fee) AS fee, sum(x.late_fee) AS late_fee, sum(x.refunds) AS refunds,
                     sum(x.fee + x.late_fee - x.refunds) AS amount
                FROM (
-                 SELECT p.received_on AS on_date, p.ledger::text AS ledger, p.mode, 1 AS receipts, (p.amount - p.late_fee) AS fee, p.late_fee, 0::numeric AS refunds
+                 SELECT p.received_on AS on_date, p.ledger::text AS ledger, COALESCE(p.mode_label, p.mode) AS mode, 1 AS receipts, (p.amount - p.late_fee) AS fee, p.late_fee, 0::numeric AS refunds
                    FROM fee_payments p
                   WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced')
                  UNION ALL

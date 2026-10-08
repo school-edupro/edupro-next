@@ -2465,7 +2465,9 @@ export async function postCashierReceipt(fd: FormData) {
       body: JSON.stringify({
         studentId,
         amount: Number(str(fd, 'amount')),
-        mode: str(fd, 'mode') || 'cash',
+        // a mode the school added is sent as its kind plus its own code
+        mode: (str(fd, 'mode') || 'cash').split('|')[0],
+        modeCode: str(fd, 'mode').split('|')[1],
         reference: opt(fd, 'reference'),
         receivedOn: opt(fd, 'receivedOn'),
         remarks: opt(fd, 'remarks'),

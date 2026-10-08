@@ -13,6 +13,7 @@ import { FeeDepositService } from './fee-deposit.service';
 import { FeeDocumentsService } from './fee-documents.service';
 import {
   ClassSummaryQueryDto,
+  AddPaymentModeDto,
   CloneClassRulesDto,
   BillQueryDto,
   ClassBillsQueryDto,
@@ -250,6 +251,20 @@ export class FeesController {
   @RequirePermission(FEES.demandView)
   async paymentModes(@ReqCtx() ctx: RequestContext) {
     return { data: await this.setup.paymentModes(ctx) };
+  }
+
+  @Post('payment-modes')
+  @ApiOperation({ summary: "Add the school's own payment mode" })
+  @RequirePermission(FEES.masterManage)
+  async addPaymentMode(@ReqCtx() ctx: RequestContext, @Body() body: AddPaymentModeDto) {
+    return { data: await this.setup.addPaymentMode(ctx, body) };
+  }
+
+  @Delete('payment-modes/:code')
+  @ApiOperation({ summary: 'Remove a payment mode the school added' })
+  @RequirePermission(FEES.masterManage)
+  async removePaymentMode(@ReqCtx() ctx: RequestContext, @Param('code') code: string) {
+    return { data: await this.setup.removePaymentMode(ctx, code) };
   }
 
   @Put('payment-modes/:code')

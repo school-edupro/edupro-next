@@ -112,7 +112,7 @@ export function amountInWords(value: number | string): string {
 
 async function feeReceipt(c: PoolClient, id: string): Promise<Row | null> {
   const r = await c.query<Row>(
-    `SELECT p.id::text, p.receipt_no AS "no", to_char(p.received_on, 'DD Mon YYYY') AS "receivedOn", p.amount::text, p.mode, p.reference, p.remarks,
+    `SELECT p.id::text, p.receipt_no AS "no", to_char(p.received_on, 'DD Mon YYYY') AS "receivedOn", p.amount::text, COALESCE(p.mode_label, p.mode) AS mode, p.reference, p.remarks,
             p.student_id::text AS "studentId", y.code AS "academicYear", fy.code AS "financialYear", p.ledger::text,
             COALESCE(u.display_name, 'Online') AS "receivedBy",
             (p.amount - COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0))::text AS unallocated

@@ -60,6 +60,11 @@ export const PostReceiptSchema = RecordOfflinePaymentSchema.extend({
   ledger: z.enum(['school', 'hostel', 'misc']).default('school'),
   /** false leaves the late fee outstanding (needs fees.late_fee.manage). */
   collectLateFee: z.boolean().default(true),
+  /** A mode the school added (fee_payment_modes.code); `mode` is then the kind it works like. */
+  modeCode: z
+    .string()
+    .regex(/^[a-z0-9_]{2,30}$/)
+    .optional(),
 });
 export class PostReceiptDto extends createZodDto(PostReceiptSchema) {}
 

@@ -536,3 +536,14 @@ export class CollectionSubmitDto extends createZodDto(CollectionSubmitSchema) {}
 
 export const CloneClassRulesSchema = z.object({ toClassIds: z.array(IdSchema).min(1).max(60) });
 export class CloneClassRulesDto extends createZodDto(CloneClassRulesSchema) {}
+
+export const AddPaymentModeSchema = z.object({
+  label: z.string().trim().min(2).max(40),
+  /** The built-in kind the new mode works like. */
+  kind: z.enum(['cash', 'cheque', 'dd', 'upi', 'card', 'bank']),
+  needReference: z.boolean().default(false),
+  needInstrumentNo: z.boolean().default(false),
+  needInstrumentDate: z.boolean().default(false),
+  needBank: z.boolean().default(false),
+});
+export class AddPaymentModeDto extends createZodDto(AddPaymentModeSchema) {}

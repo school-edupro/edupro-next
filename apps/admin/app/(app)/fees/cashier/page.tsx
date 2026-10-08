@@ -55,6 +55,7 @@ export default async function CashierPage({
   const counterModes = await apiFetch<{
     data: Array<{
       code: string;
+      kind: string;
       label: string;
       atCounter: boolean;
       needReference: boolean;
@@ -242,7 +243,11 @@ export default async function CashierPage({
                   help={modeHelp || undefined}
                   options={
                     counterModes.length > 0
-                      ? counterModes.map((m) => ({ value: m.code, label: m.label }))
+                      ? counterModes.map((m) => ({
+                          // a mode the school added travels as kind|code
+                          value: m.code === m.kind ? m.code : `${m.kind}|${m.code}`,
+                          label: m.label,
+                        }))
                       : (['cash', 'upi', 'card', 'bank', 'cheque', 'dd'] as const).map((m) => ({
                           value: m,
                           label: k(`modes.${m}`),

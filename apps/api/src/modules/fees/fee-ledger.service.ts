@@ -494,7 +494,7 @@ export class FeeLedgerService {
       settled: boolean;
       cleared_on: string | null;
     }>(
-      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, p.mode, p.reference, p.remarks, u.display_name AS received_by, p.intent_id::text, p.cleared_on::text,
+      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, COALESCE(p.mode_label, p.mode) AS mode, p.reference, p.remarks, u.display_name AS received_by, p.intent_id::text, p.cleared_on::text,
               COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated,
               p.late_fee::text, p.refunded::text, p.status, p.instrument_no, p.bank_name, (p.settlement_line_id IS NOT NULL) AS settled
          FROM fee_payments p LEFT JOIN users u ON u.id = p.received_by

@@ -14,7 +14,13 @@ import { apiFetch, getMe } from '@/lib/api';
 import { ClassCalendarGrid, type CalendarPeriod } from '@/components/fees/ClassCalendarGrid';
 import { GridTools } from '@/components/fees/GridTools';
 import { createFeeMonths, importClassCalendar } from '@/lib/fee-grid-actions';
-import { cloneClassRules, saveClassRules, savePaymentMode } from '@/lib/fee-setup-actions';
+import {
+  addPaymentMode,
+  cloneClassRules,
+  removePaymentMode,
+  saveClassRules,
+  savePaymentMode,
+} from '@/lib/fee-setup-actions';
 import type { ClassRow, Page } from '@/lib/types';
 
 interface ClassRules {
@@ -30,6 +36,7 @@ interface ClassRules {
 }
 interface PaymentMode {
   code: string;
+  kind: string;
   label: string;
   atCounter: boolean;
   needReference: boolean;
@@ -247,7 +254,9 @@ export default async function FeeRulesPage({
                   );
                   return (
                     <tr key={m.code}>
-                      <th scope="row">{m.code.toUpperCase()}</th>
+                      <th scope="row">
+                        {m.code === m.kind ? m.code.toUpperCase() : `Like ${m.kind.toUpperCase()}`}
+                      </th>
                       <td>
                         <input
                           className="ep-input"
@@ -274,9 +283,21 @@ export default async function FeeRulesPage({
                         <form id={form} action={savePaymentMode}>
                           <input type="hidden" name="code" value={m.code} />
                           {canManage ? (
-                            <Button type="submit" variant="secondary" size="sm">
-                              Save
-                            </Button>
+                            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                              <Button type="submit" variant="secondary" size="sm">
+                                Save
+                              </Button>
+                              {m.code !== m.kind ? (
+                                <Button
+                                  type="submit"
+                                  variant="ghost"
+                                  size="sm"
+                                  formAction={removePaymentMode.bind(null, m.code)}
+                                >
+                                  Remove
+                                </Button>
+                              ) : null}
+                            </span>
                           ) : null}
                         </form>
                       </td>
@@ -286,6 +307,63 @@ export default async function FeeRulesPage({
               </tbody>
             </table>
           </div>
+          {canManage ? (
+            <form action={addPaymentMode} style={{ marginTop: 'var(--sp-4)' }}>
+              <h3 className="ep-h4">Add a payment mode</h3>
+              <p className="ep-field__help">
+                For example “NEFT / RTGS”, “Paytm QR” or “POS machine”. Choose the built-in mode it
+                works like: that decides how it is treated (a mode like Cheque can bounce and goes
+                on the deposit slip). The cashier sees the new name; receipts and the day book show
+                it.
+              </p>
+              <FormRow columns={4}>
+                <InputField
+                  id="newModeLabel"
+                  name="label"
+                  label="Name"
+                  required
+                  minLength={2}
+                  maxLength={40}
+                />
+                <SelectField
+                  id="newModeKind"
+                  name="kind"
+                  label="Works like"
+                  options={[
+                    { value: 'bank', label: 'Bank transfer' },
+                    { value: 'upi', label: 'UPI' },
+                    { value: 'card', label: 'Card' },
+                    { value: 'cash', label: 'Cash' },
+                    { value: 'cheque', label: 'Cheque' },
+                    { value: 'dd', label: 'Demand draft' },
+                  ]}
+                />
+              </FormRow>
+              <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+                <Checkbox
+                  id="newModeRef"
+                  name="needReference"
+                  label="Reference / UTR no. mandatory"
+                />
+                <Checkbox
+                  id="newModeNo"
+                  name="needInstrumentNo"
+                  label="Cheque / DD no. mandatory"
+                />
+                <Checkbox
+                  id="newModeDate"
+                  name="needInstrumentDate"
+                  label="Cheque / DD date mandatory"
+                />
+                <Checkbox id="newModeBank" name="needBank" label="Bank name mandatory" />
+              </div>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  Add payment mode
+                </Button>
+              </FormActions>
+            </form>
+          ) : null}
         </Card>
       </div>
     </>

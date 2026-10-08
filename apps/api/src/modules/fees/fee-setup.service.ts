@@ -4,7 +4,12 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { SetClassRulesDto, SetPaymentModeDto, StudentDiscountInput } from './fees.dto';
+import type {
+  AddPaymentModeDto,
+  SetClassRulesDto,
+  SetPaymentModeDto,
+  StudentDiscountInput,
+} from './fees.dto';
 
 export interface ClassRulePeriod {
   periodId: string;
@@ -40,6 +45,8 @@ export interface ClassRules {
 }
 export interface PaymentModeRow {
   code: string;
+  /** The built-in kind it works like; a built-in mode is its own kind. */
+  kind: string;
   label: string;
   atCounter: boolean;
   needReference: boolean;
@@ -61,7 +68,7 @@ export interface StudentDiscountRow {
   toName: string | null;
 }
 
-const MODE_COLS = `code, label, at_counter AS "atCounter", need_reference AS "needReference", need_instrument_no AS "needInstrumentNo",
+const MODE_COLS = `code, kind, label, at_counter AS "atCounter", need_reference AS "needReference", need_instrument_no AS "needInstrumentNo",
   need_instrument_date AS "needInstrumentDate", need_bank AS "needBank"`;
 
 /**
@@ -382,20 +389,93 @@ export class FeeSetupService {
     });
   }
 
-  /** The counter's check before a receipt is posted: the mode is offered and its fields are filled. */
+  /** The school's own mode: a name and the built-in kind it works like. */
+  async addPaymentMode(ctx: RequestContext, dto: AddPaymentModeDto): Promise<PaymentModeRow[]> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.fee_seed_payment_modes()`);
+      const base = dto.label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 24);
+      const code = `x_${base || 'mode'}`;
+      const dup = await c.query(
+        `SELECT 1 FROM fee_payment_modes WHERE code = $1 OR lower(label) = lower($2)`,
+        [code, dto.label],
+      );
+      if (dup.rowCount)
+        throw new DomainError('conflict', `A payment mode named "${dto.label}" already exists`, {
+          status: 409,
+        });
+      await c.query(
+        `INSERT INTO fee_payment_modes (school_id, code, kind, label, at_counter, need_reference, need_instrument_no, need_instrument_date, need_bank, sort_order, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, true, $4, $5, $6, $7, 50, app.current_user_id())`,
+        [
+          code,
+          dto.kind,
+          dto.label,
+          dto.needReference,
+          // a mode that works like a cheque or a draft always needs its number
+          dto.needInstrumentNo || dto.kind === 'cheque' || dto.kind === 'dd',
+          dto.needInstrumentDate,
+          dto.needBank,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'fees.payment_mode.add',
+        entityType: 'fee_payment_modes',
+        entityId: code,
+        after: dto,
+      });
+      return this.paymentModesWith(c);
+    });
+  }
+
+  /** Only a mode the school added can be removed; receipts already made keep its name. */
+  async removePaymentMode(ctx: RequestContext, code: string): Promise<PaymentModeRow[]> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(`DELETE FROM fee_payment_modes WHERE code = $1 AND code <> kind`, [
+        code,
+      ]);
+      if (r.rowCount === 0)
+        throw new DomainError('not-found', 'Only a mode added by the school can be removed', {
+          status: 404,
+        });
+      await this.audit.stage(ctx, c, {
+        action: 'fees.payment_mode.remove',
+        entityType: 'fee_payment_modes',
+        entityId: code,
+        after: { code },
+      });
+      return this.paymentModesWith(c);
+    });
+  }
+
+  /**
+   * The counter's check before a receipt is posted: the mode is offered and its fields are filled.
+   * Returns the school's own name of the mode when the cashier chose one the school added.
+   */
   async assertModeFields(
     c: PoolClient,
     input: {
       mode: string;
+      modeCode?: string | null;
       reference?: string | null;
       instrumentNo?: string | null;
       instrumentDate?: string | null;
       bankName?: string | null;
     },
-  ): Promise<void> {
+  ): Promise<string | null> {
     const modes = await this.paymentModesWith(c);
-    const m = modes.find((x) => x.code === input.mode);
-    if (!m) return;
+    const own = input.modeCode
+      ? modes.find((x) => x.code === input.modeCode && x.kind === input.mode)
+      : undefined;
+    if (input.modeCode && !own)
+      throw new DomainError('fees.mode_invalid', 'This payment mode is not set up', {
+        status: 422,
+      });
+    const m = own ?? modes.find((x) => x.code === input.mode);
+    if (!m) return null;
     if (!m.atCounter)
       throw new DomainError('fees.mode_not_offered', `${m.label} is not accepted at the counter`, {
         status: 409,
@@ -418,6 +498,7 @@ export class FeeSetupService {
           status: 422,
         },
       );
+    return own ? own.label : null;
   }
 
   // ---- a pupil's discounts ----------------------------------------------------------------------

@@ -220,3 +220,34 @@ export async function cancelDepositSlip(fd: FormData) {
   }
   redirect('/fees/deposit-slips?ok=1');
 }
+
+/** The school's own payment mode: a name and the built-in kind it works like. */
+export async function addPaymentMode(fd: FormData) {
+  const path = '/fees/rules';
+  try {
+    await apiFetch('/fees/payment-modes', {
+      method: 'POST',
+      body: JSON.stringify({
+        label: str(fd, 'label'),
+        kind: str(fd, 'kind') || 'bank',
+        needReference: fd.get('needReference') !== null,
+        needInstrumentNo: fd.get('needInstrumentNo') !== null,
+        needInstrumentDate: fd.get('needInstrumentDate') !== null,
+        needBank: fd.get('needBank') !== null,
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  done(path);
+}
+
+export async function removePaymentMode(code: string) {
+  const path = '/fees/rules';
+  try {
+    await apiFetch(`/fees/payment-modes/${code}`, { method: 'DELETE' });
+  } catch (error) {
+    fail(path, error);
+  }
+  done(path);
+}

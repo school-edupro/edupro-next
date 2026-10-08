@@ -497,6 +497,8 @@ export const MASTERS: MasterDefinition[] = [
     id: 'fee_periods',
     title: 'Month–instalment mapping',
     group: 'fees',
+    // kept class by class on the Class calendar tab; the grid stays for the yearly copy and old links
+    hidden: true,
     table: 'fee_periods',
     permission: { view: 'fees.master.view', manage: 'fees.master.manage' },
     yearScoped: true,

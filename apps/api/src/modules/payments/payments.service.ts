@@ -764,7 +764,7 @@ export class PaymentsService {
       // Sprint 23: a closed fee month refuses back-dated receipts
       await assertPeriodOpen(c, dto.ledger, dto.receivedOn ?? null);
       // the payment mode master: offered at the counter, and its mandatory fields are filled
-      await this.feeSetup.assertModeFields(c, dto);
+      const modeLabel = await this.feeSetup.assertModeFields(c, dto);
       let out: ReceiptResult;
       try {
         out = await this.post(c, {
@@ -786,6 +786,12 @@ export class PaymentsService {
       } catch (error) {
         throw translate(error);
       }
+      // the receipt keeps the school's own name of the mode
+      if (modeLabel)
+        await c.query(`UPDATE fee_payments SET mode_label = $2 WHERE id = $1`, [
+          out.paymentId,
+          modeLabel,
+        ]);
       await this.audit.stage(ctx, c, {
         action: 'fees.receipt.post',
         entityType: 'fee_payments',
