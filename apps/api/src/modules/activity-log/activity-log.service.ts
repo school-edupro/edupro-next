@@ -267,12 +267,11 @@ export class ActivityLogService {
         categories: setup.categories.filter((k) => k.active),
         cutoffTime: setup.cutoffTime,
         backDays: setup.backDays,
-        // a submitted day may still be corrected until someone reviews it
+        // only a draft (or a log sent back) can be changed: a submitted day is locked
         editable:
           day <= today() &&
           (log.state === 'returned' ||
-            (day >= oldest &&
-              (log.state === null || log.state === 'draft' || log.state === 'submitted'))),
+            (day >= oldest && (log.state === null || log.state === 'draft'))),
         leaveTypes: [...LEAVE_TYPES],
         recent: recent.rows.map((x) => ({ date: x.d, state: x.state, late: Boolean(x.late) })),
       };
@@ -293,15 +292,14 @@ export class ActivityLogService {
         [me.id, dto.date],
       );
       const state = cur.rows[0]?.state ?? null;
-      if (state === 'reviewed')
+      if (state === 'submitted' || state === 'reviewed')
         throw new DomainError(
           'activity.locked',
-          'This day is reviewed; it can be changed only when it is sent back',
+          'This day is already submitted; it can be changed only when it is sent back',
           { status: 409 },
         );
-      // a submitted day that is corrected stays submitted
-      const wasSubmitted = state === 'submitted';
-      const submit = dto.submit || wasSubmitted;
+      const wasSubmitted = false;
+      const submit = dto.submit;
       const leave = dto.leave ?? null;
       if (state !== 'returned' && dto.date < shift(today(), -setup.backDays))
         throw new DomainError(
@@ -317,7 +315,10 @@ export class ActivityLogService {
             : 'Add at least one activity before submitting (or mark the day as leave)',
           { status: 400 },
         );
-      const sorted = [...dto.entries].sort((a, b) => a.from.localeCompare(b.from));
+      // a full day of leave carries no activity
+      const sorted = (leave?.kind === 'full' ? [] : [...dto.entries]).sort((a, b) =>
+        a.from.localeCompare(b.from),
+      );
       for (let i = 1; i < sorted.length; i += 1)
         if (sorted[i]!.from < sorted[i - 1]!.to)
           throw new DomainError(

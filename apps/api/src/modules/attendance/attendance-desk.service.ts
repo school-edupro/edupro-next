@@ -1,4 +1,5 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are constant fragments (time zone, column lists); every value is bound */
+import { templateStatus } from '../engagement/template-status';
 import { Injectable } from '@nestjs/common';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
@@ -709,7 +710,10 @@ export class AttendanceDeskService {
             }
           : null;
       };
+      // the same list the other modules show under "Message templates": ready, or what it still needs
+      await c.query(`SELECT app.attendance_seed_templates(app.current_school_id())`);
       return {
+        templates: await templateStatus(c, 'absent'),
         code: 'absent_alert',
         variables: ['student_name', 'section', 'date'],
         whatsapp: of('whatsapp'),

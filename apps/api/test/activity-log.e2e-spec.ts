@@ -67,7 +67,7 @@ describe('employee daily activity log (e2e)', () => {
     ids.meeting = mine.categories.find((k: { code: string }) => k.code === 'meeting').id;
   });
 
-  it('saves a draft, refuses overlaps, and keeps a submitted day open until it is reviewed', async () => {
+  it('saves a draft, refuses overlaps, and locks the day once it is submitted', async () => {
     const date = today();
     const a = { from: '08:00', to: '10:30', categoryId: ids.office, description: 'Fee counter' };
     const b = { from: '10:30', to: '11:00', categoryId: ids.meeting, description: 'Staff meeting' };
@@ -95,11 +95,9 @@ describe('employee daily activity log (e2e)', () => {
     });
     expect(done.json()).toMatchObject({ state: 'submitted', tomorrowPlan: 'Receipts of class VI' });
     ids.log = done.json().id;
-    // a submitted day can still be corrected until it is reviewed; it stays submitted
-    const fixed = await put(clerk, { date, entries: [a, b] });
-    expect(fixed.json()).toMatchObject({ state: 'submitted' });
-    expect(fixed.json().editedAt).toBeTruthy();
-    expect((await get(clerk, '/staff/activity/mine')).json().editable).toBe(true);
+    // a submitted day is locked: only a draft (or a log sent back) can be changed
+    expect((await put(clerk, { date, entries: [a] })).statusCode).toBe(409);
+    expect((await get(clerk, '/staff/activity/mine')).json().editable).toBe(false);
   });
 
   it('shows the reviewer the day; a log sent back can be corrected and submitted again', async () => {
@@ -165,9 +163,10 @@ describe('employee daily activity log (e2e)', () => {
     expect(
       (
         await put(clerk, {
-          date: yesterday,
+          date: new Date(Date.now() + 5.5 * 3_600_000 - 2 * 86_400_000).toISOString().slice(0, 10),
           entries: [],
           leave: { kind: 'half', type: 'Casual leave' },
+          submit: true,
         })
       ).statusCode,
     ).toBe(400);

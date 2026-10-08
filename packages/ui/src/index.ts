@@ -47,3 +47,4 @@ export { ClassSectionPicker, type ClassSectionOption } from './components/ClassS
 export { FilePick } from './components/FilePick';
 export { FilesPick } from './components/FilesPick';
 export { ActivityDay, activityEntriesFrom, type ActivityDayData } from './components/ActivityDay';
+export { LeaveKindSelect } from './components/LeaveKindSelect';

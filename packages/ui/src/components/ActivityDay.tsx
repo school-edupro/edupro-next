@@ -1,3 +1,5 @@
+import { LeaveKindSelect } from './LeaveKindSelect';
+
 export interface ActivityDayData {
   employee: { id: string; name: string };
   log: {
@@ -140,11 +142,7 @@ export function ActivityDay({
             <legend className="ep-field__label">Leave</legend>
             <label className="ep-field">
               <span className="ep-field__label">This day is</span>
-              <select className="ep-select" name="leaveKind" defaultValue={log.leave?.kind ?? ''}>
-                <option value="">A working day</option>
-                <option value="full">Leave, full day</option>
-                <option value="half">Leave, half day</option>
-              </select>
+              <LeaveKindSelect name="leaveKind" defaultValue={log.leave?.kind ?? ''} />
             </label>
             <label className="ep-field">
               <span className="ep-field__label">Kind of leave</span>
@@ -167,8 +165,8 @@ export function ActivityDay({
               />
             </label>
             <p className="ep-field__help">
-              A full day of leave needs no activity below. For a half day, fill what you did in the
-              other half.
+              Choosing a full day of leave empties the rows below. For a half day, fill what you did
+              in the other half.
             </p>
           </fieldset>
         ) : null}
@@ -203,6 +201,7 @@ export function ActivityDay({
                         className="ep-input"
                         type="time"
                         name={`from-${String(i)}`}
+                        data-day-row=""
                         defaultValue={r?.from ?? ''}
                         aria-label={`Row ${String(i + 1)}: from`}
                       />
@@ -212,6 +211,7 @@ export function ActivityDay({
                         className="ep-input"
                         type="time"
                         name={`to-${String(i)}`}
+                        data-day-row=""
                         defaultValue={r?.to ?? ''}
                         aria-label={`Row ${String(i + 1)}: to`}
                       />
@@ -220,6 +220,7 @@ export function ActivityDay({
                       <select
                         className="ep-select"
                         name={`cat-${String(i)}`}
+                        data-day-row=""
                         defaultValue={r?.categoryId ?? ''}
                         aria-label={`Row ${String(i + 1)}: category`}
                       >
@@ -240,6 +241,7 @@ export function ActivityDay({
                       <input
                         className="ep-input ep-actlog__what"
                         name={`desc-${String(i)}`}
+                        data-day-row=""
                         defaultValue={r?.description ?? ''}
                         maxLength={1000}
                         aria-label={`Row ${String(i + 1)}: what was done`}
@@ -285,8 +287,9 @@ export function ActivityDay({
             <div className="ep-actlog__foot">
               <p className="ep-field__help">
                 A row needs its from, to, category and what was done; an empty row is ignored.
-                Submit by {data.cutoffTime}; later it is marked late. A submitted day can still be
-                corrected until it is reviewed, up to {data.backDays} day(s) later.
+                Submit by {data.cutoffTime}; later it is marked late. A draft can be changed any
+                time; once submitted the day is locked unless it is sent back. A day can be filled
+                up to {data.backDays} day(s) later.
               </p>
               {submitted ? null : (
                 <button type="submit" className="ep-btn ep-btn--secondary" formAction={saveDraft}>
@@ -312,7 +315,7 @@ export function ActivityDay({
             ) : null}
             <p className="ep-field__help">
               {log.state === 'submitted' || log.state === 'reviewed'
-                ? 'This day is reviewed. It can be changed only if it is sent back to you.'
+                ? 'This day is submitted and locked. It can be changed only if it is sent back to you.'
                 : 'This day can no longer be filled; ask the office if it must be reopened.'}
             </p>
           </>

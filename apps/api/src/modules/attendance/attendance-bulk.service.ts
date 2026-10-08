@@ -436,9 +436,17 @@ export class AttendanceBulkService {
       );
       return (r.rowCount ?? 0) > 0;
     });
+    // an SMS goes only when the school's SMS template is active and carries its DLT id
+    const smsReady = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM comms_templates WHERE code = 'absent_alert' AND channel = 'sms' AND status = 'active' AND deleted_at IS NULL
+            AND COALESCE(btrim(dlt_template_id), '') <> '' LIMIT 1`,
+      );
+      return (r.rowCount ?? 0) > 0;
+    });
     let sms = 0;
     let email = 0;
-    let smsProblem: string | null = null;
+    let smsProblem: string | null = smsReady ? null : 'not ready';
     const pretty = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-IN', {
       timeZone: 'UTC',
       weekday: 'long',
@@ -501,7 +509,7 @@ export class AttendanceBulkService {
         });
     }
     const note = smsProblem
-      ? 'SMS not sent: the school has no active SMS template with the code absent_alert.'
+      ? 'SMS not sent: the absence SMS template (code absent_alert) is not ready; it needs to be active with its DLT template id.'
       : null;
     return { sms, email, note };
   }

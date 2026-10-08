@@ -368,7 +368,13 @@ describe('attendance from Excel and targeted notices (e2e)', () => {
       ),
     );
     const t = (await get(admin, '/attendance/desk/absent-templates')).json();
-    expect(t).toMatchObject({ code: 'absent_alert', whatsapp: null, email: null });
+    expect(t).toMatchObject({ code: 'absent_alert', email: null });
+    // the module's templates are listed per channel, as on the other set-up pages
+    expect(
+      t.templates.map(
+        (x: { channel: string; ready: boolean }) => `${x.channel}:${String(x.ready)}`,
+      ),
+    ).toEqual(['sms:false', 'whatsapp:false']);
     expect(t.sms).toMatchObject({ name: 'Absent SMS', active: true });
     expect(t.emailFallback.subject).toContain('Absent today');
   });
