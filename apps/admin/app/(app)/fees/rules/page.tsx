@@ -12,6 +12,8 @@ import { Notice } from '@/components/Notice';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { ClassCalendarGrid, type CalendarPeriod } from '@/components/fees/ClassCalendarGrid';
+import { GridTools } from '@/components/fees/GridTools';
+import { createFeeMonths, importClassCalendar } from '@/lib/fee-grid-actions';
 import { cloneClassRules, saveClassRules, savePaymentMode } from '@/lib/fee-setup-actions';
 import type { ClassRow, Page } from '@/lib/types';
 
@@ -60,7 +62,7 @@ export default async function FeeRulesPage({
     <>
       <PageHeader
         kicker="Fees"
-        title="Class rules and payment modes"
+        title="Class calendar, late fee and payment modes"
         description="A class can have its own last date, late fee and cheque-bounce charge. Payment modes decide what the counter accepts and which fields are mandatory."
       />
       <FeeSetupNav current="/fees/rules" />
@@ -147,12 +149,29 @@ export default async function FeeRulesPage({
                   bills move to a new last date as soon as you save.
                 </p>
                 <ClassCalendarGrid periods={rules.periods} canManage={canManage} />
+                {rules.periods.length === 0 ? (
+                  <p className="ep-field__help">
+                    This year has no fee months yet: use “Create the twelve months” below.
+                  </p>
+                ) : null}
                 {canManage ? (
                   <FormActions>
                     <Button type="submit">Save the calendar of {cls.name}</Button>
                   </FormActions>
                 ) : null}
               </form>
+              <GridTools
+                fileHref={`/api/fees/grid-file?kind=calendar&classId=${cls.id}`}
+                upload={importClassCalendar}
+                hidden={[['classId', cls.id]]}
+                canManage={canManage}
+              />
+              {canManage && rules.periods.length === 0 ? (
+                <form action={createFeeMonths}>
+                  <input type="hidden" name="back" value={`/fees/rules?classId=${cls.id}`} />
+                  <Button type="submit">Create the twelve months</Button>
+                </form>
+              ) : null}
               {canManage ? (
                 <form action={cloneClassRules} style={{ marginTop: 'var(--sp-5)' }}>
                   <input type="hidden" name="classId" value={cls.id} />

@@ -18,6 +18,8 @@ export async function templateSheet(t: {
   sheet: string;
   columns: TemplateColumn[];
   guide: string[];
+  /** Rows already there, so the sheet can be corrected and uploaded again. */
+  rows?: Array<Array<string | number | null>>;
 }): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(t.sheet);
@@ -26,6 +28,7 @@ export async function templateSheet(t: {
   ws.addRow(t.columns.map((c) => (c.required ? `${c.header} *` : c.header)));
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: 'frozen', ySplit: 1 }];
+  (t.rows ?? []).forEach((r) => ws.addRow(r));
   let listCol = 0;
   t.columns.forEach((c, i) => {
     ws.getColumn(i + 1).width = c.width;

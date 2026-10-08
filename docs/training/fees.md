@@ -52,8 +52,8 @@ Exports (every PDF and Excel you asked for).
 
 ## Set-up added in October 2026
 
-**Fees → Fee setup** is one menu with four tabs: Heads, discounts, slabs, banks · Fee calendar, late fee,
-receipt numbers · Class fee structure · Class rules, payment modes. Each thing is set in one tab only.
+**Fees → Fee setup** is one menu with five tabs: Heads, discounts, slabs, banks · Class calendar, late
+fee, payment modes · Class fee structure · Discount by head · Receipt numbers. Each thing is set in one tab only.
 
 - **Class rules**: pick a class and give its own last date, late fee and cheque-bounce charge. An empty
   box follows the school. Unpaid bills of the class move to the new last date when you save.
@@ -146,3 +146,18 @@ Choose a class. One row per month, like the old month–quarter mapping screen:
 
 An empty box follows the school. Months with the same last date form one instalment. After switching
 a class to slabs, fill the late fee of every quarter; an empty one means the school's slab amount.
+
+## Class fee structure and discount by head (grids)
+
+- **Class fee structure** tab: choose the class, student type (all / old / new) and fee group, then
+  **Load grid**. Fee heads run down, the twelve months across; type each month's amount (empty or 0 =
+  not charged that month). "→" copies the first month across the year, "↓" copies the first head down
+  a month. **Save the structure**.
+- **Discount by head** tab: choose a discount type and **Load fee heads**; give a percentage _or_ a
+  fixed amount per month on each head. Once a discount has head lines, only those lines apply.
+- On every grid (calendar, structure, discount): **Excel** downloads the grid as a file you can correct
+  and send back with **Upload Excel** (nothing is saved if one row is wrong; the wrong rows are named),
+  **PDF** gives a printable copy, and **Clone to the ticked classes** copies the saved grid to other
+  classes (calendar and structure).
+- The school-wide "periods" and "late fee slabs" forms are gone: dates and late fee are kept class by
+  class on the Class calendar tab. A new year's twelve months are made with **Create the twelve months**.

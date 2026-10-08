@@ -1,9 +1,10 @@
 /** Fee set-up is one menu entry; these tabs are its screens. Each thing is set in one place only. */
 const TABS: Array<{ href: string; label: string }> = [
   { href: '/masters/fees', label: 'Heads, discounts, slabs, banks' },
-  { href: '/fees/masters', label: 'Fee calendar, late fee, receipt numbers' },
+  { href: '/fees/rules', label: 'Class calendar, late fee, payment modes' },
   { href: '/fees/structures', label: 'Class fee structure' },
-  { href: '/fees/rules', label: 'Class rules, payment modes' },
+  { href: '/fees/discounts', label: 'Discount by head' },
+  { href: '/fees/masters', label: 'Receipt numbers' },
 ];
 
 export function FeeSetupNav({ current }: { current: string }) {

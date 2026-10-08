@@ -272,7 +272,7 @@ export class FeeMastersService {
     // eslint-disable-next-line no-restricted-syntax -- fixed SQL fragments assembled in code; values are bound parameters
     return `SELECT fs.id::text, fs.class_id::text AS "classId", fs.head_id::text AS "headId", h.code AS "headCode", h.name AS "headName", fs.fee_group AS "feeGroup",
                    fs.student_type AS "studentType", fs.amount::text, fs.frequency, fs.periods,
-                   (fs.amount * CASE WHEN fs.periods IS NOT NULL THEN cardinality(fs.periods) WHEN fs.frequency = 'monthly' THEN 12 WHEN fs.frequency = 'quarterly' THEN 4 WHEN fs.frequency = 'half_yearly' THEN 2 ELSE 1 END)::text AS annual
+                   (CASE WHEN fs.amounts IS NOT NULL THEN (SELECT COALESCE(sum(a), 0) FROM unnest(fs.amounts) a) ELSE fs.amount * CASE WHEN fs.periods IS NOT NULL THEN cardinality(fs.periods) WHEN fs.frequency = 'monthly' THEN 12 WHEN fs.frequency = 'quarterly' THEN 4 WHEN fs.frequency = 'half_yearly' THEN 2 ELSE 1 END END)::text AS annual
               FROM fee_structures fs JOIN fee_heads h ON h.id = fs.head_id
              WHERE ${where} ORDER BY fs.fee_group, fs.student_type, h.sort_order, h.code`;
   }

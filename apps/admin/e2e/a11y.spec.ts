@@ -76,6 +76,8 @@ const PAGES = [
   '/fees/masters',
   '/fees/rules',
   '/fees/rules?classId=3282',
+  '/fees/structures?classId=3282',
+  '/fees/discounts',
   '/fees/carry-forward',
   '/fees/deposit-slips',
   '/fees/requests',

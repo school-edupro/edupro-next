@@ -489,7 +489,7 @@ export async function Shell({
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
   const ALSO: Record<string, string[]> = {
-    '/masters/fees': ['/fees/masters', '/fees/structures', '/fees/rules'],
+    '/masters/fees': ['/fees/masters', '/fees/structures', '/fees/rules', '/fees/discounts'],
   };
   const matches = (link: string) => {
     const href = SECTION_OF[link] ?? link;
