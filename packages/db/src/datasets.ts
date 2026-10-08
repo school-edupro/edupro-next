@@ -577,6 +577,83 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [str(p.from) ?? str(p.to), str(p.to) ?? str(p.from), str(p.ledger), str(p.mode)],
     }),
   },
+  // day-wise and mode-wise collection: one row per day, ledger and payment mode (refunds paid are minus)
+  fee_mode_summary: {
+    id: 'fee_mode_summary',
+    title: 'Mode-wise collection',
+    permission: 'fees.ledger.view',
+    maxRows: 50_000,
+    columns: [
+      { key: 'on_date', header: 'Date', type: 'date', width: 12 },
+      { key: 'ledger', header: 'Ledger', width: 10 },
+      { key: 'mode', header: 'Mode', width: 10 },
+      { key: 'receipts', header: 'Receipts', type: 'number', width: 10 },
+      { key: 'fee', header: 'Fee', type: 'number', width: 14 },
+      { key: 'late_fee', header: 'Late fee', type: 'number', width: 12 },
+      { key: 'refunds', header: 'Refunds', type: 'number', width: 12 },
+      { key: 'amount', header: 'Net amount', type: 'number', width: 14 },
+    ],
+    query: (p) => ({
+      text: `SELECT x.on_date, x.ledger, x.mode, sum(x.receipts)::int AS receipts, sum(x.fee) AS fee, sum(x.late_fee) AS late_fee, sum(x.refunds) AS refunds,
+                    sum(x.fee + x.late_fee - x.refunds) AS amount
+               FROM (
+                 SELECT p.received_on AS on_date, p.ledger::text AS ledger, p.mode, 1 AS receipts, (p.amount - p.late_fee) AS fee, p.late_fee, 0::numeric AS refunds
+                   FROM fee_payments p
+                  WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status NOT IN ('reversed', 'bounced')
+                 UNION ALL
+                 SELECT m.received_on, 'misc', m.mode, 1, m.amount, 0, 0
+                   FROM misc_receipts m
+                  WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status = 'posted'
+                 UNION ALL
+                 SELECT r.paid_on, p.ledger::text, r.mode, 0, 0, 0, r.amount
+                   FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id
+                  WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
+               ) x
+              WHERE ($3::text IS NULL OR x.ledger = $3)
+              GROUP BY x.on_date, x.ledger, x.mode
+              ORDER BY x.on_date, x.ledger, x.mode`,
+      values: [str(p.from) ?? str(p.to), str(p.to) ?? str(p.from), str(p.ledger)],
+    }),
+  },
+  // cheques and drafts that came back: the receipt, the instrument, the charge raised and whether it is paid
+  fee_cheque_bounce: {
+    id: 'fee_cheque_bounce',
+    title: 'Cheque bounce report',
+    permission: 'fees.ledger.view',
+    maxRows: 20_000,
+    columns: [
+      { key: 'bounced_on', header: 'Bounced on', type: 'date', width: 12 },
+      { key: 'received_on', header: 'Received on', type: 'date', width: 12 },
+      { key: 'receipt_no', header: 'Receipt no.', width: 20 },
+      { key: 'admission_no', header: 'Admission no.', width: 14 },
+      { key: 'student', header: 'Student', width: 28 },
+      { key: 'section', header: 'Section', width: 8 },
+      { key: 'ledger', header: 'Ledger', width: 8 },
+      { key: 'mode', header: 'Mode', width: 8 },
+      { key: 'instrument_no', header: 'Cheque / DD no.', width: 14 },
+      { key: 'instrument_date', header: 'Cheque date', type: 'date', width: 12 },
+      { key: 'bank_name', header: 'Bank', width: 18 },
+      { key: 'amount', header: 'Amount', type: 'number', width: 12 },
+      { key: 'charge', header: 'Bounce charge', type: 'number', width: 12 },
+      { key: 'charge_paid', header: 'Charge paid', type: 'number', width: 12 },
+      { key: 'reason', header: 'Reason', width: 30 },
+      { key: 'approved_by', header: 'Approved by', width: 18 },
+    ],
+    query: (p) => ({
+      text: `SELECT (a.decided_at AT TIME ZONE 'Asia/Kolkata')::date AS bounced_on, p.received_on, p.receipt_no, s.admission_no, s.display_name AS student,
+                    k.code || '-' || cs.name AS section, p.ledger::text AS ledger, p.mode, p.instrument_no, p.instrument_date, p.bank_name, p.amount,
+                    a.charge, COALESCE(cd.paid, 0) AS charge_paid, a.reason, u.display_name AS approved_by
+               FROM fee_adjustments a JOIN fee_payments p ON p.id = a.payment_id JOIN students s ON s.id = p.student_id
+               LEFT JOIN fee_demands cd ON cd.id = a.charge_demand_id LEFT JOIN users u ON u.id = a.decided_by
+               LEFT JOIN enrolments e ON e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id AND e.status = 'active'
+               LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+              WHERE a.kind = 'bounce' AND a.status = 'approved'
+                AND (a.decided_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN COALESCE($1::date, CURRENT_DATE - 30) AND COALESCE($2::date, CURRENT_DATE)
+                AND ($3::text IS NULL OR p.ledger::text = $3)
+              ORDER BY a.decided_at DESC`,
+      values: [str(p.from), str(p.to), str(p.ledger)],
+    }),
+  },
   fee_head_tally: {
     id: 'fee_head_tally',
     title: 'Head-wise tally',
@@ -931,7 +1008,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [(idList(p.ids) ?? []).filter((x) => /^\d{1,18}$/.test(x))],
     }),
   },
-    visitor_register: {
+  visitor_register: {
     id: 'visitor_register',
     title: 'Visitor register',
     permission: 'engagement.visitor.manage',

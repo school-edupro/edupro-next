@@ -76,6 +76,8 @@ const PAGES = [
   '/fees/masters',
   '/fees/rules',
   '/fees/carry-forward',
+  '/fees/reports?report=mode_summary&from=2026-04-01&to=2026-10-08',
+  '/fees/reports?report=cheque_bounce',
   '/fees/rules?classId=164',
   '/fees/structures',
   '/insights/principal',

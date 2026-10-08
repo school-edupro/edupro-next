@@ -15,11 +15,20 @@ import { notifyDefaulters, requestFeeReportExport } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ClassRow, DatasetRows } from '@/lib/types';
 
-type Report = 'day_book' | 'head_tally' | 'defaulters' | 'forecast' | 'tally';
+type Report =
+  | 'day_book'
+  | 'head_tally'
+  | 'mode_summary'
+  | 'cheque_bounce'
+  | 'defaulters'
+  | 'forecast'
+  | 'tally';
 type Row = Record<string, unknown>;
 const DATASET: Record<Report, string> = {
   day_book: 'fee_day_book',
   head_tally: 'fee_head_tally',
+  mode_summary: 'fee_mode_summary',
+  cheque_bounce: 'fee_cheque_bounce',
   defaulters: 'fee_defaulters',
   forecast: 'fee_forecast',
   tally: 'fee_tally_vouchers',
@@ -49,10 +58,21 @@ export default async function FeeReportsPage({
   const monthEnd = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)
     .toISOString()
     .slice(0, 10);
-  const from = sp.from || (report === 'head_tally' ? `${month}-01` : today);
+  const monthAgo = new Date(Date.now() + 5.5 * 3600 * 1000 - 30 * 86400 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const from =
+    sp.from ||
+    (report === 'head_tally' ? `${month}-01` : report === 'cheque_bounce' ? monthAgo : today);
   const to = sp.to || (report === 'head_tally' ? monthEnd : today);
   const params = new URLSearchParams();
-  if (report === 'day_book' || report === 'tally' || report === 'head_tally') {
+  if (
+    report === 'day_book' ||
+    report === 'tally' ||
+    report === 'head_tally' ||
+    report === 'mode_summary' ||
+    report === 'cheque_bounce'
+  ) {
     params.set('from', from);
     params.set('to', to);
     if (sp.ledger) params.set('ledger', sp.ledger);
@@ -108,10 +128,20 @@ export default async function FeeReportsPage({
       </Button>
     </form>
   ) : null;
-  const tabs: Report[] = ['day_book', 'head_tally', 'defaulters', 'forecast', 'tally'];
+  const tabs: Report[] = [
+    'day_book',
+    'head_tally',
+    'mode_summary',
+    'cheque_bounce',
+    'defaulters',
+    'forecast',
+    'tally',
+  ];
   const tabLabel: Record<Report, string> = {
     day_book: r('dayBook'),
     head_tally: r('headTally'),
+    mode_summary: 'Mode-wise collection',
+    cheque_bounce: 'Cheque bounce',
     defaulters: r('defaulters'),
     forecast: r('forecast'),
     tally: r('tally'),
@@ -264,6 +294,45 @@ export default async function FeeReportsPage({
         {report === 'defaulters' ? (
           <Defaulters rows={rows} r={r} canNotify={canNotify} hidden={hidden} />
         ) : null}
+        {report === 'mode_summary' ? (
+          <Plain
+            rows={rows}
+            caption="Day-wise and mode-wise collection"
+            columns={[
+              ['on_date', 'Date', 'date'],
+              ['ledger', 'Ledger', 'text'],
+              ['mode', 'Mode', 'upper'],
+              ['receipts', 'Receipts', 'count'],
+              ['fee', 'Fee', 'money'],
+              ['late_fee', 'Late fee', 'money'],
+              ['refunds', 'Refunds', 'money'],
+              ['amount', 'Net amount', 'money'],
+            ]}
+            totals={['receipts', 'fee', 'late_fee', 'refunds', 'amount']}
+            empty="No collection in these dates."
+          />
+        ) : null}
+        {report === 'cheque_bounce' ? (
+          <Plain
+            rows={rows}
+            caption="Cheques and drafts returned by the bank"
+            columns={[
+              ['bounced_on', 'Bounced on', 'date'],
+              ['receipt_no', 'Receipt no.', 'text'],
+              ['admission_no', 'Adm. no.', 'text'],
+              ['student', 'Student', 'text'],
+              ['section', 'Class', 'text'],
+              ['instrument_no', 'Cheque / DD no.', 'text'],
+              ['bank_name', 'Bank', 'text'],
+              ['amount', 'Amount', 'money'],
+              ['charge', 'Bounce charge', 'money'],
+              ['charge_paid', 'Charge paid', 'money'],
+              ['reason', 'Reason', 'text'],
+            ]}
+            totals={['amount', 'charge', 'charge_paid']}
+            empty="No cheque bounced in these dates."
+          />
+        ) : null}
         {report === 'forecast' ? <Forecast rows={rows} r={r} /> : null}
         {report === 'tally' ? <TallyPreview rows={rows} r={r} /> : null}
         {data.truncated ? <p className="ep-field__help">{r('truncated')}</p> : null}
@@ -273,6 +342,83 @@ export default async function FeeReportsPage({
 }
 
 type Tr = (key: string, values?: Record<string, string | number>) => string;
+
+type PlainKind = 'text' | 'upper' | 'date' | 'money' | 'count';
+const dmy = (v: unknown) => {
+  const [y, m, d] = String(v ?? '')
+    .slice(0, 10)
+    .split('-');
+  return d ? `${d}-${m}-${y}` : '';
+};
+
+/** A straight table with a total line, for the reports that need no pivot. */
+function Plain({
+  rows,
+  caption,
+  columns,
+  totals,
+  empty,
+}: {
+  rows: Row[];
+  caption: string;
+  columns: Array<[key: string, header: string, kind: PlainKind]>;
+  totals: string[];
+  empty: string;
+}) {
+  if (rows.length === 0) return <p className="ep-field__help">{empty}</p>;
+  const cell = (r: Row, key: string, kind: PlainKind) =>
+    kind === 'money'
+      ? money(r[key])
+      : kind === 'date'
+        ? dmy(r[key])
+        : kind === 'upper'
+          ? String(r[key] ?? '').toUpperCase()
+          : String(r[key] ?? '');
+  const right = (kind: PlainKind) =>
+    kind === 'money' || kind === 'count' ? ({ textAlign: 'right' } as const) : undefined;
+  return (
+    <div className="ep-table-wrap">
+      <table className="ep-table ep-table--dense">
+        <caption className="ep-sr-only">{caption}</caption>
+        <thead>
+          <tr>
+            {columns.map(([key, header, kind]) => (
+              <th key={key} scope="col" style={right(kind)}>
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {columns.map(([key, , kind]) => (
+                <td key={key} style={right(kind)}>
+                  {cell(r, key, kind)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            {columns.map(([key, , kind], i) => (
+              <th key={key} scope={i === 0 ? 'row' : undefined} style={right(kind)}>
+                {i === 0
+                  ? 'Total'
+                  : totals.includes(key)
+                    ? kind === 'money'
+                      ? money(sum(rows, key))
+                      : sum(rows, key)
+                    : ''}
+              </th>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
 function DayBook({ rows, r }: { rows: Row[]; r: Tr }) {
   const counted = (x: Row) => x.status !== 'bounced';
