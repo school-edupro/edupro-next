@@ -49,9 +49,12 @@ const COLS: Col[] = [
 export function ClassCalendarGrid({
   periods,
   canManage,
+  hide = [],
 }: {
   periods: CalendarPeriod[];
   canManage: boolean;
+  /** Columns that do not apply to the class's way of charging late fee. They stay in the form, unseen, so nothing saved is lost. */
+  hide?: string[];
 }) {
   const table = useRef<HTMLTableElement>(null);
   const copyDown = (key: string) => {
@@ -98,7 +101,7 @@ export function ClassCalendarGrid({
             <th scope="col">Month</th>
             <th scope="col">School quarter · last date</th>
             {COLS.map((c) => (
-              <th key={c.key} scope="col">
+              <th key={c.key} scope="col" hidden={hide.includes(c.key)}>
                 {c.label}
                 {canManage ? (
                   <>
@@ -129,7 +132,7 @@ export function ClassCalendarGrid({
                 Q{p.schoolInstalment} · {dmy(p.schoolDueOn)}
               </td>
               {COLS.map((c) => (
-                <td key={c.key}>
+                <td key={c.key} hidden={hide.includes(c.key)}>
                   {c.type === 'yesno' ? (
                     <select
                       className="ep-select"

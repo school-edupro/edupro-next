@@ -76,7 +76,6 @@ const NAV: Array<{
     items: [
       { href: '/masters/fees', label: 'feesSetup', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
-      { href: '/fees/bills', label: 'feeBills', permission: 'fees.ledger.view' },
       { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },
       { href: '/fees/cashier', label: 'cashier', permission: 'fees.receipt.post' },
       { href: '/fees/refunds', label: 'refunds', permission: 'fees.refund.request' },
@@ -489,6 +488,7 @@ export async function Shell({
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
   const ALSO: Record<string, string[]> = {
+    '/fees/demands': ['/fees/bills'],
     '/masters/fees': ['/fees/masters', '/fees/structures', '/fees/rules', '/fees/discounts'],
   };
   const matches = (link: string) => {

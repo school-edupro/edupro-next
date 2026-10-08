@@ -11,7 +11,8 @@ import {
 import { Notice } from '@/components/Notice';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { apiFetch, getMe } from '@/lib/api';
-import { ClassCalendarGrid, type CalendarPeriod } from '@/components/fees/ClassCalendarGrid';
+import { ClassCalendarEditor } from '@/components/fees/ClassCalendarEditor';
+import type { CalendarPeriod } from '@/components/fees/ClassCalendarGrid';
 import { GridTools } from '@/components/fees/GridTools';
 import { createFeeMonths, importClassCalendar } from '@/lib/fee-grid-actions';
 import {
@@ -29,6 +30,7 @@ interface ClassRules {
   schoolBounceCharge: string;
   lateFeeMode: 'slab' | 'daywise';
   classLateMode: 'slab' | 'daywise' | null;
+  schoolLateMode: 'slab' | 'daywise';
   classLatePerDay: string | null;
   lateMax: string | null;
   schoolLatePerDay: string;
@@ -98,64 +100,7 @@ export default async function FeeRulesPage({
             <>
               <form action={saveClassRules} style={{ marginTop: 'var(--sp-4)' }}>
                 <input type="hidden" name="classId" value={cls.id} />
-                <FormRow columns={4}>
-                  <SelectField
-                    id="lateMode"
-                    name="lateMode"
-                    label="Late fee of this class"
-                    defaultValue={rules.classLateMode ?? ''}
-                    disabled={!canManage}
-                    options={[
-                      { value: '', label: 'As the school' },
-                      { value: 'daywise', label: 'Per day after the last date' },
-                      { value: 'slab', label: 'By slabs (dates and amounts)' },
-                    ]}
-                  />
-                  <InputField
-                    id="latePerDay"
-                    name="latePerDay"
-                    label="Per day (₹)"
-                    help={`School: ₹${rules.schoolLatePerDay} a day`}
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    defaultValue={rules.classLatePerDay ?? ''}
-                    disabled={!canManage}
-                  />
-                  <InputField
-                    id="lateMax"
-                    name="lateMax"
-                    label="Maximum per instalment (₹)"
-                    help="Per-day only. Empty = no limit."
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    defaultValue={rules.lateMax ?? ''}
-                    disabled={!canManage}
-                  />
-                  <InputField
-                    id="bounceCharge"
-                    name="bounceCharge"
-                    label="Bounce charge of the class (₹)"
-                    help={`School: ₹${rules.schoolBounceCharge}. A month’s own Bounce wins.`}
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    defaultValue={rules.bounceCharge ?? ''}
-                    disabled={!canManage}
-                  />
-                </FormRow>
-                <p className="ep-field__help">
-                  In force now:{' '}
-                  <strong>{rules.lateFeeMode === 'slab' ? 'slabs' : 'per day'}</strong>. Per day:
-                  the rate above is charged for every day after the last date. Slabs: “Late fees”
-                  applies after the last date; after “Last date 1” the fee becomes “Late fee 1”, and
-                  so on (the later amount replaces the earlier one). An empty box follows the
-                  school. Months with the same last date form one instalment. Show = No hides the
-                  instalment from parents; Fee pay = No lets them see it but not pay online. Unpaid
-                  bills move to a new last date as soon as you save.
-                </p>
-                <ClassCalendarGrid periods={rules.periods} canManage={canManage} />
+                <ClassCalendarEditor rules={rules} canManage={canManage} />
                 {rules.periods.length === 0 ? (
                   <p className="ep-field__help">
                     This year has no fee months yet: use “Create the twelve months” below.

@@ -91,7 +91,7 @@ statements now show only the year chosen in the year switch at the top.
 
 ## Papers and reports added in October 2026
 
-- **Fees → Fee bills (print)**: choose a class and the "dues up to" date; one bill per pupil who owes
+- **Fee bills** (Fees → Demands → choose a class → **Print fee bills**): set the "dues up to" date; one bill per pupil who owes
   something, head by head (heads with one print name are one line), with the late fee. For one pupil
   open the ledger and press **Fee bill**.
 - **Fees → Bank deposit slips**: tick the cheques and drafts in hand, choose the school bank account and
@@ -186,3 +186,11 @@ modes cannot be removed, only switched off at the counter.
 
 The "Month–instalment mapping" list is no longer shown: the class calendar holds the quarter and the
 dates of every month.
+
+### What the class calendar shows for each late fee choice
+
+- **Per day**: the rate, the maximum and the class's bounce charge at the top; the grid shows only
+  Quarter, Start fees date, Last fees date, Challan date, Fee pay and Show.
+- **By slabs**: the grid also shows Late fees, Last date 1–3, Late fee 1–3 and the month's Bounce; the
+  per-day boxes are not shown.
+- What is not shown is kept as saved, so switching back loses nothing.

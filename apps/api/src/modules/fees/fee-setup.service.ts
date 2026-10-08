@@ -38,6 +38,7 @@ export interface ClassRules {
   /** What is in force for the class, and the class's own choice (null = the school's). */
   lateFeeMode: 'slab' | 'daywise';
   classLateMode: 'slab' | 'daywise' | null;
+  schoolLateMode: 'slab' | 'daywise';
   classLatePerDay: string | null;
   lateMax: string | null;
   schoolLatePerDay: string;
@@ -134,6 +135,7 @@ export class FeeSetupService {
         schoolBounceCharge: x?.school ?? '0',
         lateFeeMode: (x?.class_mode ?? x?.mode) === 'slab' ? 'slab' : 'daywise',
         classLateMode: x?.class_mode ?? null,
+        schoolLateMode: x?.mode === 'slab' ? 'slab' : 'daywise',
         classLatePerDay: x?.class_per_day ?? null,
         lateMax: x?.late_max ?? null,
         schoolLatePerDay: x?.school_per_day ?? '0',

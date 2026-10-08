@@ -1,4 +1,4 @@
-import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
+import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { generateClassDemand } from '@/lib/actions';
@@ -62,6 +62,30 @@ export default async function FeeDemandsPage({
             </Button>
           ) : null}
         </form>
+        {cls ? (
+          <form
+            method="get"
+            action="/fees/bills"
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              alignItems: 'flex-end',
+              marginBottom: 'var(--sp-4)',
+            }}
+          >
+            <input type="hidden" name="classId" value={cls.id} />
+            <InputField
+              id="upTo"
+              name="upTo"
+              label="Fee bills: dues up to"
+              type="date"
+              defaultValue={new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10)}
+            />
+            <Button type="submit" variant="secondary">
+              Print fee bills of {cls.name}
+            </Button>
+          </form>
+        ) : null}
         {cls ? (
           <DataTable<FeeClassSummaryRow>
             caption={`${cls.name}: ${f('demand')} · ${f('total')} ₹${total.toFixed(2)}`}

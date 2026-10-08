@@ -1,8 +1,7 @@
-import { Button, Card, FormRow, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { Button, InputField, PageHeader } from '@edupro/ui';
 import { PrintButton } from '@/components/PrintButton';
 import { PupilMeta, SheetHead, dmy, rupees } from '@/components/fees/sheets';
 import { ApiError, apiFetch } from '@/lib/api';
-import type { ClassRow, Page } from '@/lib/types';
 
 interface Bill {
   school: { name: string; address: string };
@@ -38,7 +37,6 @@ export default async function FeeBillsPage({
   const sp = await searchParams;
   const upTo = sp.upTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.upTo) ? sp.upTo : today();
   const parentView = sp.view === 'parent' && Boolean(sp.studentId);
-  const classes = await apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data);
   let bills: Bill[] = [];
   let problem: string | null = null;
   try {
@@ -64,22 +62,27 @@ export default async function FeeBillsPage({
       <div className="ep-noprint">
         <PageHeader
           kicker="Fees"
-          title="Fee bills"
-          description="The bill shows what is payable up to the date, head by head, with the late fee. Choose a class and print; pupils who owe nothing are left out."
+          title="Fee bills for print"
+          description="What is payable up to the date, head by head, with the late fee. Pupils who owe nothing are left out. Bills are opened from Fees → Demands (a class) or from a pupil’s ledger."
         />
-        <Card>
-          <form method="get">
-            <FormRow columns={4}>
-              <SelectField
-                id="classId"
-                name="classId"
-                label="Class"
-                defaultValue={sp.classId ?? ''}
-                options={[
-                  { value: '', label: '—' },
-                  ...classes.map((k) => ({ value: k.id, label: `${k.code} · ${k.name}` })),
-                ]}
-              />
+        <form
+          method="get"
+          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
+        >
+          <a
+            className="ep-btn ep-btn--ghost"
+            href={
+              sp.studentId
+                ? `/fees/ledger/${sp.studentId}`
+                : `/fees/demands${sp.classId ? `?classId=${sp.classId}` : ''}`
+            }
+          >
+            Back
+          </a>
+          {sp.classId ? <input type="hidden" name="classId" value={sp.classId} /> : null}
+          {sp.studentId ? <input type="hidden" name="studentId" value={sp.studentId} /> : null}
+          {!parentView ? (
+            <>
               <InputField
                 id="upTo"
                 name="upTo"
@@ -87,33 +90,40 @@ export default async function FeeBillsPage({
                 type="date"
                 defaultValue={upTo}
               />
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--sp-3)' }}>
-                <Button type="submit" variant="secondary">
-                  Show bills
-                </Button>
-                {bills.length > 0 ? <PrintButton label={`Print ${bills.length} bill(s)`} /> : null}
-              </div>
-            </FormRow>
-          </form>
-          {problem ? (
-            <p className="ep-alert ep-alert--danger" role="alert">
-              {problem}
-            </p>
+              <Button type="submit" variant="secondary">
+                Show
+              </Button>
+            </>
           ) : null}
-          {parentView ? (
-            <p className="ep-field__help">
-              Parent’s view: the instalments the school has opened to the family, head by head, as
-              the parent app shows them today. Receipts are on the pupil’s ledger.
-            </p>
+          {bills.some((b) => b.instalments.length > 0) ? (
+            <PrintButton
+              label={`Print ${bills.filter((b) => b.instalments.length > 0).length} bill(s)`}
+            />
           ) : null}
-          {asked && !problem && bills.every((b) => b.instalments.length === 0) ? (
-            <p className="ep-field__help">
-              {parentView
-                ? 'Nothing is payable for the parent today.'
-                : `Nothing is payable up to ${dmy(upTo)}.`}
-            </p>
-          ) : null}
-        </Card>
+        </form>
+        {problem ? (
+          <p className="ep-alert ep-alert--danger" role="alert">
+            {problem}
+          </p>
+        ) : null}
+        {!asked ? (
+          <p className="ep-field__help">
+            Open Fees → Demands, choose a class and press “Print fee bills”.
+          </p>
+        ) : null}
+        {parentView ? (
+          <p className="ep-field__help">
+            Parent’s view: the instalments the school has opened to the family, head by head, as the
+            parent app shows them today. Receipts are on the pupil’s ledger.
+          </p>
+        ) : null}
+        {asked && !problem && bills.every((b) => b.instalments.length === 0) ? (
+          <p className="ep-field__help">
+            {parentView
+              ? 'Nothing is payable for the parent today.'
+              : `Nothing is payable up to ${dmy(upTo)}.`}
+          </p>
+        ) : null}
       </div>
       {bills
         .filter((b) => b.instalments.length > 0)
