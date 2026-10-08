@@ -237,9 +237,7 @@ export default async function FeeCarryForwardPage({
                                 type="submit"
                                 variant="ghost"
                                 size="sm"
-                                formAction={undoCarry}
-                                name="studentId"
-                                value={r.studentId}
+                                formAction={undoCarry.bind(null, r.studentId)}
                               >
                                 Undo
                               </Button>

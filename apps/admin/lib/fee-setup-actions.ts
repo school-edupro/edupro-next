@@ -157,7 +157,8 @@ export async function carryAll(fd: FormData) {
   return carry(fd);
 }
 
-export async function undoCarry(fd: FormData) {
+/** The pupil is bound by the page: a submit button's own name and value do not reach a server action. */
+export async function undoCarry(studentId: string, fd: FormData) {
   const path = carryPath(fd);
   try {
     await apiFetch('/fees/carry-forward/undo', {
@@ -165,7 +166,7 @@ export async function undoCarry(fd: FormData) {
       body: JSON.stringify({
         toYearId: str(fd, 'toYearId'),
         fromYearId: str(fd, 'fromYearId'),
-        studentId: str(fd, 'studentId'),
+        studentId,
       }),
     });
   } catch (error) {

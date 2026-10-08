@@ -57,10 +57,9 @@ export default async function FeeDemandsPage({
             {f('show')}
           </Button>
           {cls && canGenerate ? (
-            <form action={generateClassDemand}>
-              <input type="hidden" name="classId" value={cls.id} />
-              <Button type="submit">{f('generateClass')}</Button>
-            </form>
+            <Button type="submit" formAction={generateClassDemand} formMethod="post">
+              {f('generateClass')}
+            </Button>
           ) : null}
         </form>
         {cls ? (

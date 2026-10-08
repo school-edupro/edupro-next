@@ -34,9 +34,31 @@ export default async function AdjustmentsPage({
   ]);
   const canApprove = me.permissions.includes('fees.adjustment.approve');
   const canDecideChange = me.permissions.includes('fees.profile.manage');
+  // month-wise discounts of a change are shown by name and months, not as raw ids
+  const [discountNames, monthNames] = changes.some((c) => Array.isArray(c.changes.discounts))
+    ? await Promise.all([
+        apiFetch<{ data: Array<{ id: string; name: string }> }>('/fees/discounts')
+          .then((r) => new Map(r.data.map((d) => [d.id, d.name])))
+          .catch(() => new Map<string, string>()),
+        apiFetch<{ data: Array<{ sequence: number; name: string }> }>('/fees/periods')
+          .then((r) => new Map(r.data.map((p) => [p.sequence, p.name])))
+          .catch(() => new Map<number, string>()),
+      ])
+    : [new Map<string, string>(), new Map<number, string>()];
   const describe = (c: FeeProfileChange) =>
     Object.entries(c.changes)
       .map(([k, v]) => {
+        if (k === 'discounts' && Array.isArray(v))
+          return `Discounts by month: ${
+            v.length === 0
+              ? 'none'
+              : (v as Array<{ discountId: string; fromSeq: number; toSeq: number }>)
+                  .map(
+                    (d) =>
+                      `${discountNames.get(String(d.discountId)) ?? d.discountId} (${monthNames.get(d.fromSeq) ?? d.fromSeq} to ${monthNames.get(d.toSeq) ?? d.toSeq})`,
+                  )
+                  .join('; ')
+          }`;
         if (k === 'discountId') return `${a('discount')}: ${v === null ? f('none') : String(v)}`;
         if (k === 'hosteller') return `${a('hosteller')}: ${v ? a('yes') : a('no')}`;
         if (k === 'studentType') return `${a('studentType')}: ${String(v)}`;

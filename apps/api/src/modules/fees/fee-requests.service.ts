@@ -332,13 +332,14 @@ export class FeeRequestsService {
       deposit_slip_id: string | null;
       status: string;
       refunded: string;
+      late_fee: string;
       financial_year_id: string | null;
       student_id: string;
       academic_year_id: string;
       id: string;
     }>(
       `SELECT id::text, receipt_no, amount::text, received_on::text, mode, reference, instrument_no, instrument_date::text, bank_name, ledger::text, cleared_on::text,
-              deposit_slip_id::text, status, refunded::text, financial_year_id::text, student_id::text, academic_year_id::text
+              deposit_slip_id::text, status, refunded::text, late_fee::text, financial_year_id::text, student_id::text, academic_year_id::text
          FROM fee_payments WHERE id = $1 FOR UPDATE`,
       [r.payment_id],
     );
@@ -372,7 +373,7 @@ export class FeeRequestsService {
       `Moved to ${label(r.to_student_id)}: ${r.reason}`.slice(0, 300),
     ]);
     const n = await c.query<{ o_payment_id: string; o_receipt_no: string | null }>(
-      `SELECT o_payment_id::text, o_receipt_no FROM app.post_receipt($1, $2, $3, $4::date, $5, $6, $7, $8, $9::date, $10, NULL, $11::ledger_type, true, false)`,
+      `SELECT o_payment_id::text, o_receipt_no FROM app.post_receipt($1, $2, $3, $4::date, $5, $6, $7, $8, $9::date, $10, NULL, $11::ledger_type, $12, false)`,
       [
         r.to_student_id,
         pay.academic_year_id,
@@ -385,6 +386,8 @@ export class FeeRequestsService {
         pay.instrument_date,
         pay.bank_name,
         pay.ledger,
+        // late fee is taken on the new receipt only if the cashier took it on the first one
+        Number(pay.late_fee) > 0,
       ],
     );
     // the money did not move at the bank: its clearing date and deposit slip follow the new receipt
