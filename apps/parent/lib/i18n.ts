@@ -514,6 +514,13 @@ const DICT: Record<string, string> = {
     'यह पृष्ठ इस डिवाइस पर सहेजा नहीं है। कनेक्शन जाँचें और फिर कोशिश करें।',
   'Try again': 'फिर कोशिश करें',
   'Dues and receipts': 'बकाया और रसीदें',
+  'Tax certificate': 'कर प्रमाणपत्र',
+  'Tuition fee paid in a financial year, for your income-tax return. Choose the year and print or save as PDF.':
+    'एक वित्तीय वर्ष में चुकाया गया शिक्षण शुल्क, आयकर विवरणी के लिए। वर्ष चुनें और प्रिंट करें या PDF के रूप में सहेजें।',
+  'Financial year': 'वित्तीय वर्ष',
+  'Print / save as PDF': 'प्रिंट / PDF सहेजें',
+  'The certificate is not available. Please contact the school office.':
+    'प्रमाणपत्र उपलब्ध नहीं है। कृपया विद्यालय कार्यालय से संपर्क करें।',
   'Instalments the school has opened, what is payable today, and every receipt of this session.':
     'विद्यालय द्वारा खोली गई किस्तें, आज देय राशि और इस सत्र की हर रसीद।',
   'Payment received. The receipt is listed below.': 'भुगतान प्राप्त हुआ। रसीद नीचे दी गई है।',

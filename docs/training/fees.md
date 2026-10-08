@@ -87,3 +87,20 @@ months outside the range keep the full fee; a month that is already paid is not 
 Pupils with no class in the new year (left, or not promoted yet) are listed but not carried; promote
 them and run it again. Lists of online payments, refunds, misc receipts, settlements and bank
 statements now show only the year chosen in the year switch at the top.
+
+## Papers and reports added in October 2026
+
+- **Fees → Fee bills (print)**: choose a class and the "dues up to" date; one bill per pupil who owes
+  something, head by head (heads with one print name are one line), with the late fee. For one pupil
+  open the ledger and press **Fee bill**.
+- **Fees → Bank deposit slips**: tick the cheques and drafts in hand, choose the school bank account and
+  the deposit date, **Make deposit slip**, then **Print slip**. A cheque sits on one slip only;
+  **Cancel slip** frees its cheques (the slip number is not reused).
+- **Tax certificate**: ledger → **Tax certificate**; choose the financial year and print. It counts only
+  the heads ticked "Tax certificate". Parents get the same from the parent app (Fees → Tax certificate).
+- **Provisional bill (withdrawal)**: ledger → **Provisional bill (withdrawal)**; choose the last month
+  to charge. Part A is what the parent still owes (fee up to that month and late fee); part B is what
+  comes back (fee paid for later months, refundable heads, excess paid). Nothing is posted: settle it
+  with a receipt or a refund.
+- **Reports centre**: two new tabs, **Mode-wise collection** (day, fee type and mode, with refunds) and
+  **Cheque bounce** (cheque, bank, amount, charge raised and charge paid).

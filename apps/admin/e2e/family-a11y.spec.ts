@@ -15,6 +15,7 @@ const PAGES = [
   '/calendar?view=holidays',
   '/calendar?view=events',
   '/fees',
+  '/fees/tax-certificate',
   '/homework',
   '/homework?date=2026-10-07',
   '/homework?view=assignments&from=2026-09-01&to=2026-10-31',

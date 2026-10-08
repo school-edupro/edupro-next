@@ -10,8 +10,14 @@ import { FeeReportsService } from './fee-reports.service';
 import { FeeSetupService } from './fee-setup.service';
 import { FeeCarryService } from './fee-carry.service';
 import { FeeDepositService } from './fee-deposit.service';
+import { FeeDocumentsService } from './fee-documents.service';
 import {
   ClassSummaryQueryDto,
+  BillQueryDto,
+  ClassBillsQueryDto,
+  TaxCertificateQueryDto,
+  MyTaxCertificateQueryDto,
+  FnfQueryDto,
   CreateDepositSlipDto,
   PendingInstrumentsQueryDto,
   CarryPreviewQueryDto,
@@ -57,6 +63,7 @@ export class FeesController {
     private readonly setup: FeeSetupService,
     private readonly carry: FeeCarryService,
     private readonly deposits: FeeDepositService,
+    private readonly papers: FeeDocumentsService,
   ) {}
 
   // ---- masters ------------------------------------------------------------------------------------
@@ -317,6 +324,46 @@ export class FeesController {
   @RequirePermission(FEES.depositSlip)
   cancelDepositSlip(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.deposits.cancel(ctx, id);
+  }
+
+  // ---- printed papers: fee bill, tax certificate, provisional bill of a withdrawal -----------------
+  @Get('students/:id/bill')
+  @ApiOperation({ summary: 'The fee bill of one pupil: what is payable now, head by head' })
+  @RequirePermission(FEES.ledgerView)
+  studentBill(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: BillQueryDto) {
+    return this.papers.bill(ctx, id, q.upTo);
+  }
+
+  @Get('bills')
+  @ApiOperation({ summary: 'The fee bills of a class or a section, for printing' })
+  @RequirePermission(FEES.ledgerView)
+  async classBills(@ReqCtx() ctx: RequestContext, @Query() q: ClassBillsQueryDto) {
+    return { data: await this.papers.bills(ctx, q) };
+  }
+
+  @Get('students/:id/tax-certificate')
+  @ApiOperation({ summary: 'Fee paid in a financial year on the heads that count for income tax' })
+  @RequirePermission(FEES.ledgerView)
+  taxCertificate(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: TaxCertificateQueryDto,
+  ) {
+    return this.papers.taxCertificate(ctx, id, q.financialYearId);
+  }
+
+  @Get('mine/tax-certificate')
+  @ApiOperation({ summary: "A parent's tax certificate for one of their children" })
+  @RequirePermission(FEES.familyView)
+  myTaxCertificate(@ReqCtx() ctx: RequestContext, @Query() q: MyTaxCertificateQueryDto) {
+    return this.papers.myTaxCertificate(ctx, q.studentId, q.financialYearId);
+  }
+
+  @Get('students/:id/fnf')
+  @ApiOperation({ summary: 'Provisional bill of a withdrawal: payable and refundable' })
+  @RequirePermission(FEES.ledgerView)
+  fnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: FnfQueryDto) {
+    return this.papers.fnf(ctx, id, q.lastSeq);
   }
 
   @Get('receipt-sequences')

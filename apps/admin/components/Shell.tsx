@@ -79,6 +79,7 @@ const NAV: Array<{
       { href: '/fees/structures', label: 'feeStructures', permission: 'fees.master.view' },
       { href: '/fees/rules', label: 'feeRules', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
+      { href: '/fees/bills', label: 'feeBills', permission: 'fees.ledger.view' },
       { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },
       { href: '/fees/cashier', label: 'cashier', permission: 'fees.receipt.post' },
       { href: '/fees/refunds', label: 'refunds', permission: 'fees.refund.request' },

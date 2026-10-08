@@ -75,8 +75,28 @@ export default async function FeeLedgerPage({
         actions={
           <form
             method="get"
-            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-2)',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap',
+            }}
           >
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/fees/bills?studentId=${studentId}`}
+            >
+              Fee bill
+            </a>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/fees/tax-certificate/${studentId}`}
+            >
+              Tax certificate
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/fees/fnf/${studentId}`}>
+              Provisional bill (withdrawal)
+            </a>
             <InputField
               id="asOf"
               name="asOf"

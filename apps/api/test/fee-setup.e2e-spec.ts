@@ -468,4 +468,60 @@ describe('fee set-up, second pass (e2e)', () => {
     expect(again.statusCode).toBe(201);
     expect(again.json().slipNo).toBe(2);
   });
+  it('prints the fee bill, the tax certificate and the provisional bill of a withdrawal', async () => {
+    const bill = await inject({
+      method: 'GET',
+      url: `/fees/students/${students.other}/bill?upTo=2026-10-31`,
+      headers: h(accountant),
+    });
+    expect(bill.statusCode).toBe(200);
+    const b = bill.json();
+    expect(b.student.admissionNo).toBe('FS2-other');
+    expect(b.instalments.length).toBeGreaterThan(0);
+    expect(b.instalments[0].lines.every((l: { head: string }) => l.head === 'Composite fee')).toBe(
+      true,
+    );
+    expect(Number(b.totals.payable)).toBeGreaterThan(0);
+    const all = await inject({
+      method: 'GET',
+      url: `/fees/bills?classId=${otherClassId}&upTo=2026-10-31`,
+      headers: h(accountant),
+    });
+    expect(all.json().data).toHaveLength(1);
+    // tuition counts for the certificate, the annual charge does not; together they are what was paid
+    const cert = await inject({
+      method: 'GET',
+      url: `/fees/students/${students.other}/tax-certificate`,
+      headers: h(accountant),
+    });
+    expect(cert.statusCode).toBe(200);
+    const t = cert.json();
+    expect(t.rows.every((r: { head: string }) => r.head === 'Tuition fee')).toBe(true);
+    expect(Number(t.total)).toBeGreaterThan(0);
+    expect(Number(t.total) + Number(t.otherPaid)).toBe(3600); // 3 700 received less 100 late fee
+    expect(t.years.length).toBeGreaterThan(0);
+    // leaving after the first month: what was paid for later months comes back
+    const fnf = await inject({
+      method: 'GET',
+      url: `/fees/students/${students.other}/fnf?lastSeq=1`,
+      headers: h(accountant),
+    });
+    expect(fnf.statusCode).toBe(200);
+    const f = fnf.json();
+    expect(f.lastMonth.sequence).toBe(1);
+    expect(f.dues).toHaveLength(0);
+    expect(f.paidAhead.reduce((a: number, x: { paid: string }) => a + Number(x.paid), 0)).toBe(
+      1100,
+    );
+    expect(['refund', 'pay']).toContain(f.totals.direction);
+    const stay = (
+      await inject({
+        method: 'GET',
+        url: `/fees/students/${students.other}/fnf?lastSeq=12`,
+        headers: h(accountant),
+      })
+    ).json();
+    expect(stay.paidAhead).toHaveLength(0);
+    expect(stay.totals.direction).toBe('pay');
+  });
 });

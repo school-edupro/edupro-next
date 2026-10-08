@@ -120,9 +120,19 @@ export default async function FeesPage({
           'Instalments the school has opened, what is payable today, and every receipt of this session.',
         )}
         actions={
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
-            {t(lang, 'Home')}
-          </a>
+          <>
+            {(kid ?? children[0]?.student) ? (
+              <a
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                href={`/fees/tax-certificate?student=${(kid ?? children[0]!.student).id}`}
+              >
+                {t(lang, 'Tax certificate')}
+              </a>
+            ) : null}
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
+              {t(lang, 'Home')}
+            </a>
+          </>
         }
       />
       <ChildSwitch lang={lang} back="/fees" current={kid?.id} />

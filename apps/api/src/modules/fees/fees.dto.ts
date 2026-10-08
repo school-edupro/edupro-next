@@ -426,3 +426,30 @@ export const CreateDepositSlipSchema = z.object({
   remarks: z.string().trim().max(200).optional(),
 });
 export class CreateDepositSlipDto extends createZodDto(CreateDepositSlipSchema) {}
+
+// ---- Printed fee papers: bill, tax certificate, provisional bill of a withdrawal ----------------------
+export const BillQuerySchema = z.object({ upTo: DateSchema.optional() });
+export class BillQueryDto extends createZodDto(BillQuerySchema) {}
+
+export const ClassBillsQuerySchema = z
+  .object({
+    classId: IdSchema.optional(),
+    sectionId: IdSchema.optional(),
+    upTo: DateSchema.optional(),
+  })
+  .refine((v) => v.classId || v.sectionId, { message: 'choose a class or a section' });
+export class ClassBillsQueryDto extends createZodDto(ClassBillsQuerySchema) {}
+
+export const TaxCertificateQuerySchema = z.object({ financialYearId: IdSchema.optional() });
+export class TaxCertificateQueryDto extends createZodDto(TaxCertificateQuerySchema) {}
+
+export const MyTaxCertificateQuerySchema = z.object({
+  studentId: IdSchema,
+  financialYearId: IdSchema.optional(),
+});
+export class MyTaxCertificateQueryDto extends createZodDto(MyTaxCertificateQuerySchema) {}
+
+export const FnfQuerySchema = z.object({
+  lastSeq: z.coerce.number().int().min(1).max(12).optional(),
+});
+export class FnfQueryDto extends createZodDto(FnfQuerySchema) {}
