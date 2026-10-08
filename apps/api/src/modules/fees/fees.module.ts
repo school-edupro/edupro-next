@@ -12,6 +12,7 @@ import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
 import { FeeReportsService } from './fee-reports.service';
 import { FeeSetupService } from './fee-setup.service';
+import { FeeCarryService } from './fee-carry.service';
 import { FeesController } from './fees.controller';
 
 /**
@@ -29,6 +30,7 @@ import { FeesController } from './fees.controller';
     FeeAdjustmentsService,
     FeeReportsService,
     FeeSetupService,
+    FeeCarryService,
     AuditService,
   ],
   exports: [

@@ -89,6 +89,11 @@ const NAV: Array<{
       { href: '/fees/bank', label: 'bankStatements', permission: 'payments.settlement.view' },
       { href: '/fees/shadow', label: 'shadowRun', permission: 'fees.shadow.view' },
       { href: '/fees/month-end', label: 'monthEnd', permission: 'fees.period.view' },
+      {
+        href: '/fees/carry-forward',
+        label: 'feeCarryForward',
+        permission: 'fees.carry_forward.run',
+      },
     ],
   },
   {

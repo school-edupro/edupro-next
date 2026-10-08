@@ -230,7 +230,11 @@ export class BankStatementsService {
       const r = await c.query(
         `SELECT b.id::text, b.bank_name, b.account_ref, b.from_date::text, b.to_date::text, b.file_name, b.rows, b.matched, b.unmatched, b.returned,
                 b.credits::text, b.debits::text, u.display_name AS uploaded_by, b.created_at
-           FROM bank_statements b LEFT JOIN users u ON u.id = b.uploaded_by ORDER BY b.created_at DESC LIMIT 200`,
+           FROM bank_statements b LEFT JOIN users u ON u.id = b.uploaded_by
+          WHERE $1::bigint IS NULL OR (COALESCE(b.to_date, b.created_at::date) >= (SELECT start_date FROM academic_years WHERE id = $1::bigint)
+                                   AND COALESCE(b.from_date, b.created_at::date) <= (SELECT end_date FROM academic_years WHERE id = $1::bigint))
+          ORDER BY b.created_at DESC LIMIT 200`,
+        [requireTenant(ctx).academicYearId ?? null], // only statements that touch the working year
       );
       return r.rows.map(toStatement);
     });

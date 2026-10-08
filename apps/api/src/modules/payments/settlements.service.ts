@@ -188,7 +188,10 @@ export class SettlementsService {
       const r = await c.query<Record<string, unknown>>(
         `SELECT s.id::text, s.provider, s.settlement_ref AS "settlementRef", s.settled_on::text AS "settledOn", s.utr, s.gross::text, s.charges::text, s.tax::text, s.net::text,
                 s.rows, s.matched, s.unmatched, s.mismatched, s.file_name AS "fileName", u.display_name AS "uploadedBy", s.created_at AS "createdAt"
-           FROM payment_settlements s LEFT JOIN users u ON u.id = s.uploaded_by ORDER BY s.settled_on DESC, s.id DESC LIMIT 200`,
+           FROM payment_settlements s LEFT JOIN users u ON u.id = s.uploaded_by
+          WHERE $1::bigint IS NULL OR s.settled_on BETWEEN (SELECT start_date FROM academic_years WHERE id = $1::bigint) AND (SELECT end_date FROM academic_years WHERE id = $1::bigint)
+          ORDER BY s.settled_on DESC, s.id DESC LIMIT 200`,
+        [requireTenant(ctx).academicYearId ?? null], // only the working year's settlements
       );
       return r.rows.map(toRow);
     });

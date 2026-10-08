@@ -25,6 +25,7 @@ export const FEES = {
   miscView: 'fees.misc.view',
   reconcileView: 'payments.reconcile.view',
   reconcileRun: 'payments.reconcile.run',
+  carryForward: 'fees.carry_forward.run',
 } as const;
 
 export const HeadKindSchema = z.enum([
@@ -381,3 +382,26 @@ export const SetPaymentModeSchema = z.object({
   needBank: z.boolean().default(false),
 });
 export class SetPaymentModeDto extends createZodDto(SetPaymentModeSchema) {}
+
+// ---- Year-end carry-forward (0099) -------------------------------------------------------------------
+export const CarryPreviewQuerySchema = z.object({
+  toYearId: IdSchema,
+  /** The closing year; the working year when left out. */
+  fromYearId: IdSchema.optional(),
+});
+export class CarryPreviewQueryDto extends createZodDto(CarryPreviewQuerySchema) {}
+
+export const RunCarryForwardSchema = z.object({
+  toYearId: IdSchema,
+  fromYearId: IdSchema.optional(),
+  /** Leave out to carry every pupil that can be carried. */
+  studentIds: z.array(IdSchema).min(1).max(5000).optional(),
+});
+export class RunCarryForwardDto extends createZodDto(RunCarryForwardSchema) {}
+
+export const UndoCarryForwardSchema = z.object({
+  toYearId: IdSchema,
+  fromYearId: IdSchema.optional(),
+  studentId: IdSchema,
+});
+export class UndoCarryForwardDto extends createZodDto(UndoCarryForwardSchema) {}

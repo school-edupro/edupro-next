@@ -74,6 +74,12 @@ export class RefundsService {
         params.push(q.studentId);
         where.push(`p.student_id = $${params.length}`);
       }
+      // the working year: refunds of that year's receipts
+      const yearId = requireTenant(ctx).academicYearId;
+      if (yearId) {
+        params.push(yearId);
+        where.push(`p.academic_year_id = $${params.length}`);
+      }
       const whereSql = where.join(' AND ');
       const total = await c.query<{ n: string }>(
         // eslint-disable-next-line no-restricted-syntax -- whereSql is a conjunction of fixed fragments; values are bound parameters

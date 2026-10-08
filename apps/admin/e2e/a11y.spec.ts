@@ -75,6 +75,7 @@ const PAGES = [
   '/system/privacy',
   '/fees/masters',
   '/fees/rules',
+  '/fees/carry-forward',
   '/fees/rules?classId=164',
   '/fees/structures',
   '/insights/principal',

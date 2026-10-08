@@ -8,8 +8,12 @@ import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
 import { FeeReportsService } from './fee-reports.service';
 import { FeeSetupService } from './fee-setup.service';
+import { FeeCarryService } from './fee-carry.service';
 import {
   ClassSummaryQueryDto,
+  CarryPreviewQueryDto,
+  RunCarryForwardDto,
+  UndoCarryForwardDto,
   SetClassRulesDto,
   SetPaymentModeDto,
   CreateDiscountDto,
@@ -48,6 +52,7 @@ export class FeesController {
     private readonly adj: FeeAdjustmentsService,
     private readonly feeReports: FeeReportsService,
     private readonly setup: FeeSetupService,
+    private readonly carry: FeeCarryService,
   ) {}
 
   // ---- masters ------------------------------------------------------------------------------------
@@ -240,6 +245,30 @@ export class FeesController {
   @RequirePermission(FEES.demandView)
   async studentDiscounts(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return { data: await this.setup.studentDiscounts(ctx, id) };
+  }
+
+  // ---- year-end carry-forward ---------------------------------------------------------------------
+  @Get('carry-forward')
+  @ApiOperation({ summary: 'What every pupil of the working year would carry to the new year' })
+  @RequirePermission(FEES.carryForward, {
+    description: 'Carry unpaid fee, late fine and advance to the new year, and undo it',
+  })
+  async carryPreview(@ReqCtx() ctx: RequestContext, @Query() q: CarryPreviewQueryDto) {
+    return { data: await this.carry.preview(ctx, q.toYearId, q.fromYearId) };
+  }
+
+  @Post('carry-forward')
+  @ApiOperation({ summary: 'Carry the chosen pupils (or all) to the new year' })
+  @RequirePermission(FEES.carryForward)
+  runCarry(@ReqCtx() ctx: RequestContext, @Body() body: RunCarryForwardDto) {
+    return this.carry.run(ctx, body);
+  }
+
+  @Post('carry-forward/undo')
+  @ApiOperation({ summary: "Take one pupil's carry back while nothing is paid against it" })
+  @RequirePermission(FEES.carryForward)
+  undoCarry(@ReqCtx() ctx: RequestContext, @Body() body: UndoCarryForwardDto) {
+    return this.carry.undo(ctx, body.toYearId, body.studentId, body.fromYearId);
   }
 
   @Get('receipt-sequences')

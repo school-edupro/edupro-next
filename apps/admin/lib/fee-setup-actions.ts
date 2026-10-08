@@ -120,3 +120,56 @@ export async function requestDiscountChange(fd: FormData) {
   }
   done(path);
 }
+
+// ---- year-end carry-forward (0099) ----------------------------------------------------------------
+const carryPath = (fd: FormData) =>
+  `/fees/carry-forward?from=${str(fd, 'fromYearId')}&to=${str(fd, 'toYearId')}`;
+
+async function carry(fd: FormData, studentIds?: string[]) {
+  const path = carryPath(fd);
+  let done = 0;
+  try {
+    const r = await apiFetch<{ students: number }>('/fees/carry-forward', {
+      method: 'POST',
+      body: JSON.stringify({
+        toYearId: str(fd, 'toYearId'),
+        fromYearId: str(fd, 'fromYearId'),
+        ...(studentIds ? { studentIds } : {}),
+      }),
+    });
+    done = r.students;
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}&ok=1&carried=${done}`);
+}
+
+/** Carries the pupils ticked in the list. */
+export async function carrySelected(fd: FormData) {
+  const ids = fd.getAll('studentIds').map(String);
+  if (ids.length === 0)
+    redirect(`${carryPath(fd)}&error=1&detail=${encodeURIComponent('Tick at least one pupil')}`);
+  return carry(fd, ids);
+}
+
+/** Carries every pupil that can be carried. */
+export async function carryAll(fd: FormData) {
+  return carry(fd);
+}
+
+export async function undoCarry(fd: FormData) {
+  const path = carryPath(fd);
+  try {
+    await apiFetch('/fees/carry-forward/undo', {
+      method: 'POST',
+      body: JSON.stringify({
+        toYearId: str(fd, 'toYearId'),
+        fromYearId: str(fd, 'fromYearId'),
+        studentId: str(fd, 'studentId'),
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}&ok=1`);
+}

@@ -610,6 +610,15 @@ export class PaymentsService {
         params.push(q.purpose);
         where.push(`purpose = $${params.length}::payment_purpose`);
       }
+      // the working year: payments started between its first and last day
+      const yearId = requireTenant(ctx).academicYearId;
+      if (yearId) {
+        params.push(yearId);
+        where.push(
+          // eslint-disable-next-line no-restricted-syntax -- only the parameter position is interpolated
+          `(created_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN (SELECT start_date FROM academic_years WHERE id = $${params.length}) AND (SELECT end_date FROM academic_years WHERE id = $${params.length})`,
+        );
+      }
       const whereSql = where.join(' AND ');
       const total = await c.query<{ n: string }>(
         // eslint-disable-next-line no-restricted-syntax -- whereSql is a conjunction of fixed fragments; values are bound parameters

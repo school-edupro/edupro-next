@@ -70,3 +70,20 @@ profile (pupil → Fees tab).
 each with its first and last month, give the reason and send for approval. After the school admin
 approves, the bill is rebuilt: the discounts on one head add up and never exceed the head's fee;
 months outside the range keep the full fee; a month that is already paid is not changed.
+
+## Year end: carry forward to the new year
+
+**Fees → Carry forward to new year** (accountant, school admin).
+
+1. Open the new year first (System → Years) and create its fee calendar (Fees → Heads, periods, slabs).
+2. Choose the closing year and the new year. The list shows every pupil with unpaid fee, unpaid late
+   fine or excess paid, with what the new year would open with.
+3. Untick anyone you want to leave out, then **Carry the ticked pupils** (or **Carry all**).
+4. In the new year the pupil's first instalment shows **Previous dues**, **Previous late fine** and, for
+   excess paid, a minus line (**Advance**). Hostel dues go to the hostel ledger.
+5. The old year's unpaid bills are closed as "carried", so defaulter lists do not count them twice.
+6. **Undo** takes one pupil's carry back, as long as no receipt has been posted against it.
+
+Pupils with no class in the new year (left, or not promoted yet) are listed but not carried; promote
+them and run it again. Lists of online payments, refunds, misc receipts, settlements and bank
+statements now show only the year chosen in the year switch at the top.

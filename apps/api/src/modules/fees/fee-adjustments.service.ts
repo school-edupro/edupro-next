@@ -632,8 +632,15 @@ export class FeeAdjustmentsService {
     q: ListMiscReceiptsQueryDto,
   ): Promise<{ rows: MiscReceiptRow[]; total: number }> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const where = `WHERE ($1::date IS NULL OR m.received_on >= $1::date) AND ($2::date IS NULL OR m.received_on <= $2::date) AND ($3::payer_kind IS NULL OR m.payer_kind = $3::payer_kind)`;
-      const params = [q.from ?? null, q.to ?? null, q.payerKind ?? null];
+      // only the working year's receipts
+      const where = `WHERE ($1::date IS NULL OR m.received_on >= $1::date) AND ($2::date IS NULL OR m.received_on <= $2::date) AND ($3::payer_kind IS NULL OR m.payer_kind = $3::payer_kind)
+        AND ($4::bigint IS NULL OR m.academic_year_id = $4::bigint)`;
+      const params = [
+        q.from ?? null,
+        q.to ?? null,
+        q.payerKind ?? null,
+        requireTenant(ctx).academicYearId ?? null,
+      ];
       const total = await c.query<{ n: string }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound parameters
         `SELECT count(*)::text AS n FROM misc_receipts m ${where}`,
@@ -641,7 +648,7 @@ export class FeeAdjustmentsService {
       );
       const r = await c.query<MiscReceiptRow>(
         // eslint-disable-next-line no-restricted-syntax -- MISC_SELECT and where are constants; values are bound parameters
-        `${MISC_SELECT} ${where} ORDER BY m.received_on DESC, m.id DESC LIMIT $4 OFFSET $5`,
+        `${MISC_SELECT} ${where} ORDER BY m.received_on DESC, m.id DESC LIMIT $5 OFFSET $6`,
         [...params, q.size, (q.page - 1) * q.size],
       );
       return { rows: r.rows, total: Number(total.rows[0]?.n ?? 0) };
