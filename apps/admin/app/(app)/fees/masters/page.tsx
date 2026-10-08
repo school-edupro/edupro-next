@@ -1,5 +1,4 @@
 import {
-  Badge,
   Button,
   Card,
   DataTable,
@@ -8,49 +7,40 @@ import {
   InputField,
   PageHeader,
   SelectField,
-  toneForStatus,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import {
-  createFeeDiscount,
-  createFeeHead,
-  createTransportSlab,
-  generateFeePeriods,
-  setFeeHeadStatus,
-  setPeriodLateFee,
-  setReceiptSequence,
-} from '@/lib/actions';
+import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
+import { generateFeePeriods, setPeriodLateFee, setReceiptSequence } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { FeeDiscount, FeeHead, FeePeriod, ReceiptSequence, TransportSlab } from '@/lib/types';
+import type { FeePeriod, ReceiptSequence } from '@/lib/types';
 
-const KINDS = ['regular', 'transport', 'opening_balance', 'late_fee', 'misc'] as const;
-
-/** S8-06: fee heads, periods, transport slabs and discounts of the working year. */
+/** The fee calendar of the working year, the late fee of each instalment and receipt numbering. */
 export default async function FeeMastersPage({
   searchParams,
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
-  const [t, f, c, me] = await Promise.all([
+  const [t, f, me] = await Promise.all([
     getTranslations('pages.fees_masters'),
     getTranslations('fees'),
-    getTranslations('common'),
     getMe(),
   ]);
   const canManage = me.permissions.includes('fees.master.manage');
-  const [heads, periods, slabs, discounts, sequences] = await Promise.all([
-    apiFetch<{ data: FeeHead[] }>('/fees/heads').then((r) => r.data),
+  const [periods, sequences] = await Promise.all([
     apiFetch<{ data: FeePeriod[] }>('/fees/periods').then((r) => r.data),
-    apiFetch<{ data: TransportSlab[] }>('/fees/slabs').then((r) => r.data),
-    apiFetch<{ data: FeeDiscount[] }>('/fees/discounts').then((r) => r.data),
     apiFetch<{ data: ReceiptSequence[] }>('/fees/receipt-sequences').then((r) => r.data),
   ]);
   const anchors = periods.filter((p, i) => i === 0 || periods[i - 1]!.instalment !== p.instalment);
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker={t('kicker')}
+        title="Fee calendar, late fee and receipt numbers"
+        description="The twelve months of the year with their instalments and last dates, the late fee of each instalment, and receipt numbering. Heads, discounts, slabs and banks are on the first tab."
+      />
+      <FeeSetupNav current="/fees/masters" />
       <Notice params={sp} />
       <div
         style={{
@@ -59,76 +49,6 @@ export default async function FeeMastersPage({
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
-        <Card title={f('heads')}>
-          <DataTable<FeeHead>
-            caption={f('heads')}
-            density="dense"
-            columns={[
-              { key: 'code', header: f('code'), render: (h) => <strong>{h.code}</strong> },
-              { key: 'name', header: f('name'), render: (h) => h.name },
-              { key: 'kind', header: f('kind'), render: (h) => f(`kinds.${h.kind}`) },
-              {
-                key: 'status',
-                header: c('status'),
-                render: (h) => <Badge tone={toneForStatus(h.status)}>{c(h.status)}</Badge>,
-              },
-              {
-                key: 'actions',
-                header: '',
-                render: (h) =>
-                  canManage ? (
-                    <form action={setFeeHeadStatus}>
-                      <input type="hidden" name="id" value={h.id} />
-                      <input
-                        type="hidden"
-                        name="status"
-                        value={h.status === 'active' ? 'inactive' : 'active'}
-                      />
-                      <Button type="submit" variant="ghost" size="sm">
-                        {h.status === 'active' ? f('deactivate') : f('activate')}
-                      </Button>
-                    </form>
-                  ) : null,
-              },
-            ]}
-            rows={heads}
-            rowKey={(h) => h.id}
-            emptyTitle={f('noHeads')}
-          />
-          {canManage ? (
-            <form action={createFeeHead} style={{ marginTop: 'var(--sp-4)' }}>
-              <FormRow columns={4}>
-                <InputField
-                  id="hcode"
-                  name="code"
-                  label={f('code')}
-                  required
-                  pattern="[A-Za-z0-9_]{2,20}"
-                />
-                <InputField id="hname" name="name" label={f('name')} required maxLength={80} />
-                <SelectField
-                  id="hkind"
-                  name="kind"
-                  label={f('kind')}
-                  options={KINDS.map((k) => ({ value: k, label: f(`kinds.${k}`) }))}
-                />
-                <InputField
-                  id="horder"
-                  name="sortOrder"
-                  label={f('order')}
-                  type="number"
-                  min={0}
-                  defaultValue={heads.length + 1}
-                />
-              </FormRow>
-              <FormActions>
-                <Button type="submit" variant="secondary">
-                  {f('addHead')}
-                </Button>
-              </FormActions>
-            </form>
-          ) : null}
-        </Card>
         <Card title={f('periods')}>
           <DataTable<FeePeriod>
             caption={f('periods')}
@@ -310,150 +230,6 @@ export default async function FeeMastersPage({
               <FormActions>
                 <Button type="submit" variant="secondary">
                   {f('saveSequence')}
-                </Button>
-              </FormActions>
-            </form>
-          ) : null}
-        </Card>
-        <Card title={f('slabs')}>
-          <DataTable<TransportSlab>
-            caption={f('slabs')}
-            density="dense"
-            columns={[
-              { key: 'code', header: f('code'), render: (s) => <strong>{s.code}</strong> },
-              { key: 'name', header: f('name'), render: (s) => s.name },
-              {
-                key: 'km',
-                header: f('from'),
-                render: (s) => `${s.distanceFromKm ?? '…'} – ${s.distanceToKm ?? '…'}`,
-              },
-              {
-                key: 'amount',
-                header: f('monthly'),
-                numeric: true,
-                render: (s) => s.monthlyAmount,
-              },
-            ]}
-            rows={slabs}
-            rowKey={(s) => s.id}
-            emptyTitle={f('noSlabs')}
-          />
-          {canManage ? (
-            <form action={createTransportSlab} style={{ marginTop: 'var(--sp-4)' }}>
-              <FormRow columns={4}>
-                <InputField
-                  id="scode"
-                  name="code"
-                  label={f('code')}
-                  required
-                  pattern="[A-Za-z0-9_]{1,20}"
-                />
-                <InputField id="sname" name="name" label={f('name')} required maxLength={80} />
-                <InputField
-                  id="sfrom"
-                  name="distanceFromKm"
-                  label={f('from')}
-                  type="number"
-                  min={0}
-                  step="0.1"
-                />
-                <InputField
-                  id="sto"
-                  name="distanceToKm"
-                  label={f('to')}
-                  type="number"
-                  min={0}
-                  step="0.1"
-                />
-                <InputField
-                  id="samount"
-                  name="monthlyAmount"
-                  label={f('monthly')}
-                  type="number"
-                  min={0}
-                  required
-                />
-              </FormRow>
-              <FormActions>
-                <Button type="submit" variant="secondary">
-                  {f('addSlab')}
-                </Button>
-              </FormActions>
-            </form>
-          ) : null}
-        </Card>
-        <Card title={f('discounts')}>
-          <DataTable<FeeDiscount>
-            caption={f('discounts')}
-            density="dense"
-            columns={[
-              { key: 'code', header: f('code'), render: (d) => <strong>{d.code}</strong> },
-              { key: 'name', header: f('name'), render: (d) => d.name },
-              { key: 'head', header: f('head'), render: (d) => d.headCode ?? f('allHeads') },
-              {
-                key: 'value',
-                header: f('amount'),
-                numeric: true,
-                render: (d) => (d.percent ? `${d.percent}%` : `₹${d.amount}`),
-              },
-              {
-                key: 'trn',
-                header: f('appliesToTransport'),
-                render: (d) => (d.appliesToTransport ? c('yes') : c('no')),
-              },
-            ]}
-            rows={discounts}
-            rowKey={(d) => d.id}
-            emptyTitle={f('noDiscounts')}
-          />
-          {canManage ? (
-            <form action={createFeeDiscount} style={{ marginTop: 'var(--sp-4)' }}>
-              <FormRow columns={4}>
-                <InputField
-                  id="dcode"
-                  name="code"
-                  label={f('code')}
-                  required
-                  pattern="[A-Za-z0-9_]{1,20}"
-                />
-                <InputField id="dname" name="name" label={f('name')} required maxLength={80} />
-                <SelectField
-                  id="dhead"
-                  name="headId"
-                  label={f('head')}
-                  options={[
-                    { value: '', label: f('allHeads') },
-                    ...heads
-                      .filter((h) => h.kind === 'regular')
-                      .map((h) => ({ value: h.id, label: h.code })),
-                  ]}
-                />
-                <SelectField
-                  id="dmode"
-                  name="mode"
-                  label={f('mode')}
-                  options={[
-                    { value: 'percent', label: f('percent') },
-                    { value: 'amount', label: f('amount') },
-                  ]}
-                />
-                <InputField
-                  id="dvalue"
-                  name="value"
-                  label={f('amount')}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  required
-                />
-              </FormRow>
-              <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                <input type="checkbox" name="appliesToTransport" value="1" />{' '}
-                {f('appliesToTransport')}
-              </label>
-              <FormActions>
-                <Button type="submit" variant="secondary">
-                  {f('addDiscount')}
                 </Button>
               </FormActions>
             </form>

@@ -28,24 +28,6 @@ const fail = (path: string, error: unknown): never => {
 };
 const done = (path: string) => redirect(`${path}${path.includes('?') ? '&' : '?'}ok=1`);
 
-export async function saveHeadPrinting(fd: FormData) {
-  const id = str(fd, 'id');
-  const path = '/fees/rules';
-  try {
-    await apiFetch(`/fees/heads/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        printGroup: str(fd, 'printGroup') || null,
-        taxCertificate: fd.get('taxCertificate') !== null,
-        isOptional: fd.get('isOptional') !== null,
-      }),
-    });
-  } catch (error) {
-    fail(path, error);
-  }
-  done(path);
-}
-
 export async function saveClassRules(fd: FormData) {
   const classId = str(fd, 'classId');
   const path = `/fees/rules?classId=${classId}`;

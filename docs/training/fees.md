@@ -52,17 +52,18 @@ Exports (every PDF and Excel you asked for).
 
 ## Set-up added in October 2026
 
-**Fees → Class rules, payment modes**
+**Fees → Fee setup** is one menu with four tabs: Heads, discounts, slabs, banks · Fee calendar, late fee,
+receipt numbers · Class fee structure · Class rules, payment modes. Each thing is set in one tab only.
 
 - **Class rules**: pick a class and give its own last date, late fee and cheque-bounce charge. An empty
   box follows the school. Unpaid bills of the class move to the new last date when you save.
 - **Payment modes**: tick what the counter accepts and which fields must be filled (reference number,
   cheque number, cheque date, bank name). The cashier cannot save a receipt without them.
-- **How heads print**: give the same print name ("Composite fee") to heads that should show as one line
+- **How heads print** (tab Heads, discounts, slabs, banks → Fee heads → edit a head, "Prints as"): give the same print name ("Composite fee") to heads that should show as one line
   on the bill and the receipt; the ledger and reports still keep each head. Tick "Tax certificate" on
   the heads that count for the parents' income-tax certificate.
 
-**Fees → Structures**: a class can have several structures, one per fee group (general, staff ward,
+**Class fee structure** tab: a class can have several structures, one per fee group (general, staff ward,
 EWS ...). Choose the group at the top, or type a new one. A pupil follows the group on their fee
 profile (pupil → Fees tab).
 

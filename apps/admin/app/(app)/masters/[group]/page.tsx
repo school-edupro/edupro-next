@@ -2,6 +2,7 @@ import { Badge, Button, Card, FormRow, InputField, PageHeader, SelectField } fro
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
+import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { MapPicker } from '@/components/MapPicker';
@@ -151,6 +152,7 @@ export default async function MasterGroupPage({
       {groupKey === 'academics' ? (
         <AcademicsNav current="/masters/academics" permissions={me.permissions} />
       ) : null}
+      {groupKey === 'fees' ? <FeeSetupNav current="/masters/fees" /> : null}
       <Notice params={sp} />
       {exportRow ? (
         <ExportWatcher

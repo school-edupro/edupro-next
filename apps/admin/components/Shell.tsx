@@ -74,10 +74,7 @@ const NAV: Array<{
   {
     section: 'fees',
     items: [
-      { href: '/fees/masters', label: 'feeMasters', permission: 'fees.master.view' },
       { href: '/masters/fees', label: 'feesSetup', permission: 'fees.master.view' },
-      { href: '/fees/structures', label: 'feeStructures', permission: 'fees.master.view' },
-      { href: '/fees/rules', label: 'feeRules', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
       { href: '/fees/bills', label: 'feeBills', permission: 'fees.ledger.view' },
       { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },
@@ -491,11 +488,16 @@ export async function Shell({
   const allowed = new Set(me.permissions);
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
+  const ALSO: Record<string, string[]> = {
+    '/masters/fees': ['/fees/masters', '/fees/structures', '/fees/rules'],
+  };
   const matches = (link: string) => {
     const href = SECTION_OF[link] ?? link;
+    // one menu entry can stand for several screens (Fee setup and its tabs)
+    const also = ALSO[link] ?? [];
     return href === '/'
       ? currentPath === '/'
-      : currentPath === href || currentPath.startsWith(`${href}/`);
+      : [href, ...also].some((h) => currentPath === h || currentPath.startsWith(`${h}/`));
   };
   // the most specific link wins: /comms/templates, not also /comms; /people/withdrawals/bulk, not also /people/withdrawals
   const best = NAV.flatMap((g) => g.items.map((i) => i.href))

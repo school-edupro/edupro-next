@@ -8,9 +8,10 @@ import {
   SelectField,
 } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
+import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { apiFetch, getMe } from '@/lib/api';
-import { saveClassRules, saveHeadPrinting, savePaymentMode } from '@/lib/fee-setup-actions';
-import type { ClassRow, FeeHead, Page } from '@/lib/types';
+import { saveClassRules, savePaymentMode } from '@/lib/fee-setup-actions';
+import type { ClassRow, Page } from '@/lib/types';
 
 interface RulePeriod {
   periodId: string;
@@ -57,8 +58,7 @@ export default async function FeeRulesPage({
   const sp = await searchParams;
   const me = await getMe();
   const canManage = me.permissions.includes('fees.master.manage');
-  const [heads, modes, classes, rules] = await Promise.all([
-    apiFetch<{ data: FeeHead[] }>('/fees/heads').then((r) => r.data),
+  const [modes, classes, rules] = await Promise.all([
     apiFetch<{ data: PaymentMode[] }>('/fees/payment-modes').then((r) => r.data),
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
     sp.classId
@@ -66,14 +66,14 @@ export default async function FeeRulesPage({
       : Promise.resolve<ClassRules | null>(null),
   ]);
   const cls = classes.find((k) => k.id === sp.classId);
-  const printNames = [...new Set(heads.map((h) => h.printGroup).filter(Boolean))] as string[];
   return (
     <>
       <PageHeader
         kicker="Fees"
-        title="Class rules, payment modes and head printing"
-        description="A class can have its own last date, late fee and cheque-bounce charge. Payment modes decide what the counter accepts and which fields are mandatory. Heads with the same print name show as one line on the bill and the receipt."
+        title="Class rules and payment modes"
+        description="A class can have its own last date, late fee and cheque-bounce charge. Payment modes decide what the counter accepts and which fields are mandatory."
       />
+      <FeeSetupNav current="/fees/rules" />
       <Notice params={sp} />
       <div style={{ display: 'grid', gap: 'var(--sp-5)' }}>
         <Card title="Class rules">
@@ -307,97 +307,6 @@ export default async function FeeRulesPage({
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card title="How heads print">
-          <p className="ep-field__help">
-            Give the same print name (for example “Composite fee”) to heads that should show as one
-            line on the fee bill and the receipt. The ledger and reports still keep every head
-            apart. Tick “Tax certificate” on heads that count for the parents’ income-tax
-            certificate (tuition).
-          </p>
-          <datalist id="print-names">
-            {printNames.map((n) => (
-              <option key={n} value={n} />
-            ))}
-          </datalist>
-          <div className="ep-table-wrap">
-            <table className="ep-table ep-table--dense">
-              <caption className="ep-sr-only">
-                Fee heads: print name, optional, tax certificate
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Head</th>
-                  <th scope="col">Prints as</th>
-                  <th scope="col">Optional head</th>
-                  <th scope="col">Tax certificate</th>
-                  <th scope="col">
-                    <span className="ep-sr-only">Save</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {heads
-                  .filter((h) => h.status === 'active')
-                  .map((h) => {
-                    const form = `head-${h.id}`;
-                    return (
-                      <tr key={h.id}>
-                        <th scope="row">
-                          {h.name} <span className="ep-field__help">({h.code})</span>
-                        </th>
-                        <td>
-                          <input
-                            className="ep-input"
-                            name="printGroup"
-                            form={form}
-                            list="print-names"
-                            defaultValue={h.printGroup ?? ''}
-                            placeholder={h.name}
-                            maxLength={80}
-                            disabled={!canManage}
-                            aria-label={`${h.name}: prints as`}
-                          />
-                        </td>
-                        <td>
-                          <Checkbox
-                            id={`${form}-opt`}
-                            name="isOptional"
-                            form={form}
-                            label={<span className="ep-sr-only">{`${h.name}: optional head`}</span>}
-                            defaultChecked={h.isOptional}
-                            disabled={!canManage}
-                          />
-                        </td>
-                        <td>
-                          <Checkbox
-                            id={`${form}-tax`}
-                            name="taxCertificate"
-                            form={form}
-                            label={
-                              <span className="ep-sr-only">{`${h.name}: counts for tax certificate`}</span>
-                            }
-                            defaultChecked={h.taxCertificate}
-                            disabled={!canManage}
-                          />
-                        </td>
-                        <td>
-                          <form id={form} action={saveHeadPrinting}>
-                            <input type="hidden" name="id" value={h.id} />
-                            {canManage ? (
-                              <Button type="submit" variant="secondary" size="sm">
-                                Save
-                              </Button>
-                            ) : null}
-                          </form>
-                        </td>
-                      </tr>
-                    );
-                  })}
               </tbody>
             </table>
           </div>

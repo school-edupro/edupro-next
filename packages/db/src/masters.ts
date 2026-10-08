@@ -483,6 +483,9 @@ export const MASTERS: MasterDefinition[] = [
       },
       { key: 'is_optional', header: 'Optional', type: 'boolean', width: 8, bulk: true },
       { key: 'refundable', header: 'Refundable', type: 'boolean', width: 8, bulk: true },
+      // heads sharing this name print as one line on the bill and the receipt
+      { key: 'print_group', header: 'Prints as', type: 'text', maxLength: 80, width: 18 },
+      { key: 'tax_certificate', header: 'Tax certificate', type: 'boolean', width: 10, bulk: true },
       order(),
     ],
     status: STATUS,
