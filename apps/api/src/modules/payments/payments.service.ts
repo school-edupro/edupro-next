@@ -9,6 +9,7 @@ import { ENV, type Env } from '../../config/env';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { assertPeriodOpen } from '../ops/ops.service';
 import { FeeLedgerService } from '../fees/fee-ledger.service';
+import { FeeSetupService } from '../fees/fee-setup.service';
 import {
   ccavenue,
   ccavenueCredentials,
@@ -125,6 +126,7 @@ export class PaymentsService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly ledger: FeeLedgerService,
+    private readonly feeSetup: FeeSetupService,
   ) {}
 
   onSuccess(purpose: IntentRow['purpose'], handler: SuccessHandler): void {
@@ -752,6 +754,8 @@ export class PaymentsService {
       if (s.rowCount === 0) throw new DomainError('not-found', 'Student not found');
       // Sprint 23: a closed fee month refuses back-dated receipts
       await assertPeriodOpen(c, dto.ledger, dto.receivedOn ?? null);
+      // the payment mode master: offered at the counter, and its mandatory fields are filled
+      await this.feeSetup.assertModeFields(c, dto);
       let out: ReceiptResult;
       try {
         out = await this.post(c, {

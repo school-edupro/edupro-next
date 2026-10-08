@@ -11,6 +11,7 @@ import { FeeDemandsService } from './fee-demands.service';
 import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
 import { FeeReportsService } from './fee-reports.service';
+import { FeeSetupService } from './fee-setup.service';
 import { FeesController } from './fees.controller';
 
 /**
@@ -27,9 +28,16 @@ import { FeesController } from './fees.controller';
     FeeLedgerService,
     FeeAdjustmentsService,
     FeeReportsService,
+    FeeSetupService,
     AuditService,
   ],
-  exports: [FeeMastersService, FeeDemandsService, FeeLedgerService, FeeAdjustmentsService],
+  exports: [
+    FeeMastersService,
+    FeeDemandsService,
+    FeeLedgerService,
+    FeeAdjustmentsService,
+    FeeSetupService,
+  ],
 })
 export class FeesModule implements OnModuleInit {
   constructor(

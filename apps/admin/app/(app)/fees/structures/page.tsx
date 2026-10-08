@@ -1,4 +1,12 @@
-import { Button, Card, DataTable, FormActions, PageHeader, SelectField } from '@edupro/ui';
+import {
+  Button,
+  Card,
+  DataTable,
+  FormActions,
+  InputField,
+  PageHeader,
+  SelectField,
+} from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { setFeeStructure } from '@/lib/actions';
@@ -11,7 +19,14 @@ const FREQ = ['monthly', 'quarterly', 'half_yearly', 'annual', 'one_time'] as co
 export default async function FeeStructuresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; classId?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    classId?: string;
+    group?: string;
+    newGroup?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const [t, f, me] = await Promise.all([
@@ -32,11 +47,17 @@ export default async function FeeStructuresPage({
       : Promise.resolve<FeeStructure[]>([]),
   ]);
   const cls = classes.find((k) => k.id === sp.classId);
-  const byHead = new Map(
-    structure.filter((s) => s.feeGroup === 'general').map((s) => [s.headId, s]),
-  );
+  // a class can have several structures: one per fee group (general, staff ward, EWS ...)
+  const typed = (sp.newGroup ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]+/g, '_')
+    .replace(/^_|_$/g, '');
+  const group = typed || sp.group || 'general';
+  const groups = [...new Set(['general', ...structure.map((s) => s.feeGroup), group])];
+  const byHead = new Map(structure.filter((s) => s.feeGroup === group).map((s) => [s.headId, s]));
   const yearTotal = structure
-    .filter((s) => s.feeGroup === 'general' && s.studentType !== 'new')
+    .filter((s) => s.feeGroup === group && s.studentType !== 'new')
     .reduce((sum, s) => sum + Number(s.annual), 0);
   return (
     <>
@@ -54,14 +75,34 @@ export default async function FeeStructuresPage({
               ...classes.map((k) => ({ value: k.id, label: `${k.code} · ${k.name}` })),
             ]}
           />
+          <SelectField
+            id="group"
+            name="group"
+            label="Fee structure (group)"
+            defaultValue={group}
+            options={groups.map((g) => ({ value: g, label: g.replace(/_/g, ' ') }))}
+          />
+          <InputField
+            id="newGroup"
+            name="newGroup"
+            label="Or a new group"
+            placeholder="staff ward"
+            maxLength={30}
+          />
           <Button type="submit" variant="secondary">
             {f('show')}
           </Button>
         </form>
         {cls ? (
+          <p className="ep-field__help">
+            Showing the <strong>{group.replace(/_/g, ' ')}</strong> structure of {cls.name}. A pupil
+            follows the group chosen on their fee profile; everyone else follows “general”.
+          </p>
+        ) : null}
+        {cls ? (
           <form action={setFeeStructure} style={{ marginTop: 'var(--sp-4)' }}>
             <input type="hidden" name="classId" value={cls.id} />
-            <input type="hidden" name="feeGroup" value="general" />
+            <input type="hidden" name="feeGroup" value={group} />
             <DataTable<FeeHead>
               caption={`${cls.name}: ${f('structure')}`}
               density="dense"

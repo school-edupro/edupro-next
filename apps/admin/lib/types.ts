@@ -812,6 +812,8 @@ export interface FeeHead {
   refundable: boolean;
   sortOrder: number;
   status: 'active' | 'inactive';
+  printGroup: string | null;
+  taxCertificate: boolean;
 }
 export interface FeePeriod {
   id: string;

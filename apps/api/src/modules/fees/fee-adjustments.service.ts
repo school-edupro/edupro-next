@@ -7,7 +7,9 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { SETTINGS_CATALOGUE } from '../platform/settings.catalogue';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
+import { FeeSetupService } from './fee-setup.service';
 import type {
+  StudentDiscountInput,
   DecideAdjustmentDto,
   ListAdjustmentsQueryDto,
   ListMiscReceiptsQueryDto,
@@ -157,6 +159,7 @@ export class FeeAdjustmentsService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
+    private readonly setup: FeeSetupService,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -267,8 +270,10 @@ export class FeeAdjustmentsService {
           const setting = await c.query<{ v: string | null }>(
             `SELECT app.setting('fees.bounce_charge') #>> '{}' AS v`,
           );
+          // the class's own charge when it has one, else the school's
           charge =
             dto.charge ??
+            (await this.setup.bounceChargeFor(c, studentId, yearId)) ??
             Number(setting.rows[0]?.v ?? SETTINGS_CATALOGUE['fees.bounce_charge']!.default);
         }
       }
@@ -435,6 +440,15 @@ export class FeeAdjustmentsService {
         [studentId, yearId],
       );
       const { reason, ...changes } = dto;
+      const beforeDiscounts =
+        dto.discounts === undefined
+          ? undefined
+          : (await this.setup.studentDiscountsWith(c, studentId, yearId)).map((d) => ({
+              discountId: d.discountId,
+              name: d.name,
+              fromSeq: d.fromSeq,
+              toSeq: d.toSeq,
+            }));
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
@@ -444,7 +458,10 @@ export class FeeAdjustmentsService {
             studentId,
             yearId,
             JSON.stringify(changes),
-            JSON.stringify(before.rows[0] ?? {}),
+            JSON.stringify({
+              ...(before.rows[0] ?? {}),
+              ...(beforeDiscounts ? { discounts: beforeDiscounts } : {}),
+            }),
             reason,
           ],
         );
@@ -584,6 +601,14 @@ export class FeeAdjustmentsService {
           ch.transportSlabId !== undefined,
         ],
       );
+      if (Array.isArray(ch.discounts))
+        await this.setup.replaceStudentDiscounts(
+          c,
+          r.student_id,
+          r.academic_year_id,
+          ch.discounts as StudentDiscountInput[],
+          id,
+        );
       const gen = await c.query<{ run_id: string }>(
         `SELECT o_run_id::text AS run_id FROM app.generate_fee_demand($1, $2)`,
         [r.student_id, r.academic_year_id],
@@ -668,6 +693,7 @@ export class FeeAdjustmentsService {
           'Cheque and DD receipts need the instrument number',
           { status: 400 },
         );
+      await this.setup.assertModeFields(c, dto);
       let payerName = dto.payerName ?? '';
       let payerMobile = dto.payerMobile ?? null;
       if (dto.payerKind === 'student') {

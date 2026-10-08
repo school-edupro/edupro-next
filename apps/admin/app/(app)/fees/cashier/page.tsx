@@ -51,6 +51,32 @@ export default async function CashierPage({
     ? await apiFetch<FeeLedger>(`/fees/students/${sp.studentId}/ledger`).catch(() => null)
     : null;
   const canWaive = me.permissions.includes('fees.late_fee.manage');
+  // the payment mode master: what the counter accepts and what each mode needs filled
+  const counterModes = await apiFetch<{
+    data: Array<{
+      code: string;
+      label: string;
+      atCounter: boolean;
+      needReference: boolean;
+      needInstrumentNo: boolean;
+      needInstrumentDate: boolean;
+      needBank: boolean;
+    }>;
+  }>('/fees/payment-modes')
+    .then((r) => r.data.filter((m) => m.atCounter))
+    .catch(() => []);
+  const modeHelp = counterModes
+    .map((m) => {
+      const need = [
+        m.needReference ? 'reference no.' : '',
+        m.needInstrumentNo ? 'cheque/DD no.' : '',
+        m.needInstrumentDate ? 'cheque/DD date' : '',
+        m.needBank ? 'bank name' : '',
+      ].filter(Boolean);
+      return need.length > 0 ? `${m.label}: ${need.join(', ')}` : '';
+    })
+    .filter(Boolean)
+    .join(' · ');
   const yearOpen = ledger?.year.status === 'active';
   const posted = ledger?.payments.find((p) => p.id === sp.paymentId) ?? null;
   const today = new Date().toISOString().slice(0, 10);
@@ -213,10 +239,15 @@ export default async function CashierPage({
                   id="mode"
                   name="mode"
                   label={k('mode')}
-                  options={(['cash', 'upi', 'card', 'bank', 'cheque', 'dd'] as const).map((m) => ({
-                    value: m,
-                    label: k(`modes.${m}`),
-                  }))}
+                  help={modeHelp || undefined}
+                  options={
+                    counterModes.length > 0
+                      ? counterModes.map((m) => ({ value: m.code, label: m.label }))
+                      : (['cash', 'upi', 'card', 'bank', 'cheque', 'dd'] as const).map((m) => ({
+                          value: m,
+                          label: k(`modes.${m}`),
+                        }))
+                  }
                 />
                 <InputField
                   id="receivedOn"

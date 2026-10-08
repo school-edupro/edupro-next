@@ -49,3 +49,24 @@
 Fees → Heads, Structures, Demand, Cashier, Adjustments, Misc receipts, Reports centre, Bank
 statements, Variance workbench (shadow run). Payments → Intents, Settlements, Refunds. Reports →
 Exports (every PDF and Excel you asked for).
+
+## Set-up added in October 2026
+
+**Fees → Class rules, payment modes**
+
+- **Class rules**: pick a class and give its own last date, late fee and cheque-bounce charge. An empty
+  box follows the school. Unpaid bills of the class move to the new last date when you save.
+- **Payment modes**: tick what the counter accepts and which fields must be filled (reference number,
+  cheque number, cheque date, bank name). The cashier cannot save a receipt without them.
+- **How heads print**: give the same print name ("Composite fee") to heads that should show as one line
+  on the bill and the receipt; the ledger and reports still keep each head. Tick "Tax certificate" on
+  the heads that count for the parents' income-tax certificate.
+
+**Fees → Structures**: a class can have several structures, one per fee group (general, staff ward,
+EWS ...). Choose the group at the top, or type a new one. A pupil follows the group on their fee
+profile (pupil → Fees tab).
+
+**Several discounts for one pupil** (pupil → Fees tab → Discounts by month): set up to five discounts,
+each with its first and last month, give the reason and send for approval. After the school admin
+approves, the bill is rebuilt: the discounts on one head add up and never exceed the head's fee;
+months outside the range keep the full fee; a month that is already paid is not changed.

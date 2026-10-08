@@ -1820,7 +1820,7 @@ export async function setFeeStructure(fd: FormData) {
       studentType: str(fd, `studentType:${headId}`) || 'all',
     });
   }
-  return run(`/fees/structures?classId=${classId}`, () =>
+  return run(`/fees/structures?classId=${classId}&group=${feeGroup}`, () =>
     apiFetch(`/fees/structures/${classId}`, {
       method: 'PUT',
       body: JSON.stringify({ feeGroup, entries }),

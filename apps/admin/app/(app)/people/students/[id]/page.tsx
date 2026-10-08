@@ -14,6 +14,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
+import { StudentDiscounts } from '@/components/fees/StudentDiscounts';
 import { StudentDocuments, expectedDocuments } from '@/components/StudentDocuments';
 import { STUDENT_TABS, StudentHero, type StudentTab } from '@/components/StudentHero';
 import { StudentOverview } from '@/components/StudentOverview';
@@ -126,6 +127,12 @@ export default async function StudentPage({
     getTranslations('fees'),
     getTranslations('adjustments'),
   ]);
+  // every fee group that has a structure this year, so a pupil can be moved to another structure
+  const feeGroups = can('fees.profile.manage')
+    ? await apiFetch<{ data: Array<{ feeGroup: string }> }>('/fees/structures')
+        .then((r) => [...new Set(['general', ...r.data.map((x) => x.feeGroup)])])
+        .catch(() => ['general'])
+    : ['general'];
   const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
     <>
@@ -715,8 +722,17 @@ export default async function StudentPage({
             {can('fees.profile.manage') ? (
               <form action={setFeeProfile} style={{ marginTop: 'var(--sp-3)' }}>
                 <input type="hidden" name="studentId" value={student.id} />
-                <input type="hidden" name="feeGroup" value={feeProfile.feeGroup} />
                 <FormRow columns={4}>
+                  <SelectField
+                    id="feeGroup"
+                    name="feeGroup"
+                    label="Fee structure (group)"
+                    defaultValue={feeProfile.feeGroup}
+                    options={[...new Set([feeProfile.feeGroup, ...feeGroups])].map((g) => ({
+                      value: g,
+                      label: g.replace(/_/g, ' '),
+                    }))}
+                  />
                   <SelectField
                     id="feeStudentType"
                     name="studentType"
@@ -834,6 +850,10 @@ export default async function StudentPage({
                 </FormActions>
               </form>
             ) : null}
+            <StudentDiscounts
+              studentId={student.id}
+              canRequest={can('fees.profile_change.request')}
+            />
             {can('fees.demand.generate') ? (
               <form action={generateStudentDemand} style={{ marginTop: 'var(--sp-2)' }}>
                 <input type="hidden" name="studentId" value={student.id} />

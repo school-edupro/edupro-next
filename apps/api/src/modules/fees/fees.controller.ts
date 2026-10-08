@@ -7,8 +7,11 @@ import { FeeDemandsService } from './fee-demands.service';
 import { FeeLedgerService } from './fee-ledger.service';
 import { FeeMastersService } from './fee-masters.service';
 import { FeeReportsService } from './fee-reports.service';
+import { FeeSetupService } from './fee-setup.service';
 import {
   ClassSummaryQueryDto,
+  SetClassRulesDto,
+  SetPaymentModeDto,
   CreateDiscountDto,
   DecideAdjustmentDto,
   ListAdjustmentsQueryDto,
@@ -44,6 +47,7 @@ export class FeesController {
     private readonly ledger: FeeLedgerService,
     private readonly adj: FeeAdjustmentsService,
     private readonly feeReports: FeeReportsService,
+    private readonly setup: FeeSetupService,
   ) {}
 
   // ---- masters ------------------------------------------------------------------------------------
@@ -190,6 +194,52 @@ export class FeesController {
     @Body() body: SetPeriodLateFeeDto,
   ) {
     return this.ledger.setPeriodLateFee(ctx, id, body);
+  }
+
+  // ---- set-up, second pass: class rules, payment modes, a pupil's discounts -------------------------
+  @Get('class-rules/:classId')
+  @ApiOperation({
+    summary: "A class's own last dates, late fee and bounce charge beside the school's",
+  })
+  @RequirePermission(FEES.masterView)
+  async classRules(@ReqCtx() ctx: RequestContext, @Param('classId') classId: string) {
+    return { data: await this.setup.classRules(ctx, classId) };
+  }
+
+  @Put('class-rules/:classId')
+  @ApiOperation({ summary: "Set a class's own last dates, late fee and bounce charge" })
+  @RequirePermission(FEES.masterManage)
+  async setClassRules(
+    @ReqCtx() ctx: RequestContext,
+    @Param('classId') classId: string,
+    @Body() body: SetClassRulesDto,
+  ) {
+    return { data: await this.setup.setClassRules(ctx, classId, body) };
+  }
+
+  @Get('payment-modes')
+  @ApiOperation({ summary: 'Payment modes and the fields each one demands' })
+  @RequirePermission(FEES.demandView)
+  async paymentModes(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.setup.paymentModes(ctx) };
+  }
+
+  @Put('payment-modes/:code')
+  @ApiOperation({ summary: 'Set a payment mode: offered at the counter, mandatory fields' })
+  @RequirePermission(FEES.masterManage)
+  async setPaymentMode(
+    @ReqCtx() ctx: RequestContext,
+    @Param('code') code: string,
+    @Body() body: SetPaymentModeDto,
+  ) {
+    return { data: await this.setup.setPaymentMode(ctx, code, body) };
+  }
+
+  @Get('students/:id/discounts')
+  @ApiOperation({ summary: "A pupil's discounts month by month" })
+  @RequirePermission(FEES.demandView)
+  async studentDiscounts(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return { data: await this.setup.studentDiscounts(ctx, id) };
   }
 
   @Get('receipt-sequences')

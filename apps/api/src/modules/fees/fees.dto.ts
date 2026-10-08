@@ -53,6 +53,9 @@ export const CreateHeadSchema = z.object({
   isOptional: z.boolean().default(false),
   refundable: z.boolean().default(false),
   sortOrder: z.number().int().min(0).max(1000).default(0),
+  /** Heads sharing this name print as one line ("Composite fee"); empty = the head's own name. */
+  printGroup: z.string().trim().max(80).nullable().optional(),
+  taxCertificate: z.boolean().default(false),
 });
 export class CreateHeadDto extends createZodDto(CreateHeadSchema) {}
 
@@ -131,7 +134,22 @@ export const CreateDiscountSchema = z
   });
 export class CreateDiscountDto extends createZodDto(CreateDiscountSchema) {}
 
+/** One discount of a pupil for a run of months (fee period sequence, 1 = first month of the year). */
+export const StudentDiscountSchema = z
+  .object({
+    discountId: IdSchema,
+    fromSeq: z.number().int().min(1).max(12).default(1),
+    toSeq: z.number().int().min(1).max(12).default(12),
+  })
+  .refine((v) => v.fromSeq <= v.toSeq, {
+    message: 'from month is after to month',
+    path: ['toSeq'],
+  });
+export type StudentDiscountInput = z.infer<typeof StudentDiscountSchema>;
+
 export const SetProfileSchema = z.object({
+  /** The pupil's additional discounts; the whole list replaces what is there. */
+  discounts: z.array(StudentDiscountSchema).max(10).optional(),
   feeGroup: z
     .string()
     .trim()
@@ -252,6 +270,8 @@ export const RequestProfileChangeSchema = z
     hosteller: z.boolean().optional(),
     transportSlabId: IdSchema.nullable().optional(),
     transportDisabled: z.boolean().optional(),
+    /** The pupil's additional discounts after approval (the whole list). */
+    discounts: z.array(StudentDiscountSchema).max(10).optional(),
     reason: z.string().trim().min(3).max(300),
   })
   .refine(
@@ -261,7 +281,8 @@ export const RequestProfileChangeSchema = z
       v.discountId !== undefined ||
       v.hosteller !== undefined ||
       v.transportSlabId !== undefined ||
-      v.transportDisabled !== undefined,
+      v.transportDisabled !== undefined ||
+      v.discounts !== undefined,
     { message: 'nothing to change' },
   );
 export class RequestProfileChangeDto extends createZodDto(RequestProfileChangeSchema) {}
@@ -324,3 +345,39 @@ export const NotifyDefaultersSchema = z.object({
   asOf: DateSchema.optional(),
 });
 export class NotifyDefaultersDto extends createZodDto(NotifyDefaultersSchema) {}
+
+// ---- Fee set-up, second pass (0098): class rules and payment modes --------------------------------
+export const SetClassRulesSchema = z.object({
+  /** Cheque-bounce charge of this class; null = the school's. */
+  bounceCharge: Money.nullable().optional(),
+  periods: z
+    .array(
+      z.object({
+        periodId: IdSchema,
+        /** null = the school's last date */
+        dueOn: DateSchema.nullable().optional(),
+        /** null = the school's late fee and slabs */
+        lateFeeAmount: Money.nullable().optional(),
+        slabs: z
+          .array(z.object({ on: DateSchema, amount: Money }))
+          .max(3)
+          .default([]),
+        /** day-wise mode: rupees per day; null = the school's */
+        latePerDay: Money.nullable().optional(),
+      }),
+    )
+    .max(12)
+    .default([]),
+});
+export class SetClassRulesDto extends createZodDto(SetClassRulesSchema) {}
+
+export const PAYMENT_MODES = ['cash', 'cheque', 'dd', 'upi', 'card', 'bank', 'online'] as const;
+export const SetPaymentModeSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  atCounter: z.boolean(),
+  needReference: z.boolean().default(false),
+  needInstrumentNo: z.boolean().default(false),
+  needInstrumentDate: z.boolean().default(false),
+  needBank: z.boolean().default(false),
+});
+export class SetPaymentModeDto extends createZodDto(SetPaymentModeSchema) {}

@@ -128,9 +128,10 @@ async function feeReceipt(c: PoolClient, id: string): Promise<Row | null> {
   // Sprint 13: the late fee collected on the receipt prints as its own line per instalment
   const lines = await c.query<Row>(
     `SELECT head, period, amount::text FROM (
-       SELECT h.name AS head, fp.name AS period, a.amount, fp.sequence, h.sort_order AS ord
+       SELECT COALESCE(NULLIF(h.print_group, ''), h.name) AS head, fp.name AS period, sum(a.amount) AS amount, fp.sequence, min(h.sort_order) AS ord
          FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
         WHERE a.payment_id = $1
+        GROUP BY COALESCE(NULLIF(h.print_group, ''), h.name), fp.name, fp.sequence
        UNION ALL
        SELECT 'Late fee', COALESCE(fp.name, to_char(l.due_on, 'DD Mon YYYY')), l.amount, COALESCE(fp.sequence, 99), 1000
          FROM fee_late_fee_postings l LEFT JOIN fee_periods fp ON fp.id = l.period_id WHERE l.payment_id = $1

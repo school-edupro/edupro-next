@@ -23,6 +23,10 @@ export interface HeadRow {
   refundable: boolean;
   sortOrder: number;
   status: 'active' | 'inactive';
+  /** Heads sharing this name print as one line on the bill and the receipt. */
+  printGroup: string | null;
+  /** Counts for the income-tax certificate (tuition). */
+  taxCertificate: boolean;
 }
 export interface PeriodRow {
   id: string;
@@ -71,7 +75,7 @@ export interface DiscountRow {
   status: 'active' | 'inactive';
 }
 
-const HEAD_COLS = `id::text, code, name, kind, ledger::text, is_optional AS "isOptional", refundable, sort_order AS "sortOrder", status`;
+const HEAD_COLS = `id::text, code, name, kind, ledger::text, is_optional AS "isOptional", refundable, sort_order AS "sortOrder", status, print_group AS "printGroup", tax_certificate AS "taxCertificate"`;
 const PERIOD_COLS = `id::text, sequence, name, month, year, instalment, due_on::text AS "dueOn", late_fee_amount::text AS "lateFeeAmount", visible_from::text AS "visibleFrom",
   (SELECT jsonb_agg(jsonb_build_object('on', s.on_date::text, 'amount', s.amount::text) ORDER BY s.on_date)
      FROM (VALUES (late_slab_1_on, late_slab_1_amount), (late_slab_2_on, late_slab_2_amount), (late_slab_3_on, late_slab_3_amount)) AS s(on_date, amount)
@@ -134,9 +138,19 @@ export class FeeMastersService {
       try {
         const r = await c.query<HeadRow>(
           // eslint-disable-next-line no-restricted-syntax -- column list constant; values are bound parameters
-          `INSERT INTO fee_heads (school_id, code, name, kind, ledger, is_optional, refundable, sort_order, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3::fee_head_kind, $4::ledger_type, $5, $6, $7, app.current_user_id(), app.current_user_id()) RETURNING ${HEAD_COLS}`,
-          [dto.code, dto.name, dto.kind, dto.ledger, dto.isOptional, dto.refundable, dto.sortOrder],
+          `INSERT INTO fee_heads (school_id, code, name, kind, ledger, is_optional, refundable, sort_order, print_group, tax_certificate, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3::fee_head_kind, $4::ledger_type, $5, $6, $7, $8, $9, app.current_user_id(), app.current_user_id()) RETURNING ${HEAD_COLS}`,
+          [
+            dto.code,
+            dto.name,
+            dto.kind,
+            dto.ledger,
+            dto.isOptional,
+            dto.refundable,
+            dto.sortOrder,
+            dto.printGroup || null,
+            dto.taxCertificate,
+          ],
         );
         row = r.rows[0]!;
       } catch (error) {
@@ -169,6 +183,8 @@ export class FeeMastersService {
       if (dto.refundable !== undefined) set('refundable', dto.refundable);
       if (dto.sortOrder !== undefined) set('sort_order', dto.sortOrder);
       if (dto.status !== undefined) set('status', dto.status, '::row_status');
+      if (dto.printGroup !== undefined) set('print_group', dto.printGroup || null);
+      if (dto.taxCertificate !== undefined) set('tax_certificate', dto.taxCertificate);
       params.push(id);
       const r = await c.query<HeadRow>(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters

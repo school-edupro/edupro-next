@@ -42,6 +42,7 @@
     "applications": "Applications",
     "fees": "Fees",
     "feeMasters": "Heads, periods, slabs",
+    "feeRules": "Class rules, payment modes",
     "feeStructures": "Class fee structure",
     "feeDemands": "Demands",
     "attendance": "Attendance",

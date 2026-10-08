@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
+import { FeeSetupService } from './fee-setup.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -68,6 +69,7 @@ export class FeeDemandsService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly setup: FeeSetupService,
   ) {}
 
   private year(tenant: TenantContext): string {
@@ -143,13 +145,15 @@ export class FeeDemandsService {
           dto.hosteller,
         ],
       );
+      if (dto.discounts !== undefined)
+        await this.setup.replaceStudentDiscounts(c, studentId, yearId, dto.discounts, null);
       const after = await this.findProfile(c, studentId, yearId);
       await this.audit.stage(ctx, c, {
         action: 'fees.profile.set',
         entityType: 'student_fee_profiles',
         entityId: studentId,
         before,
-        after,
+        after: dto.discounts === undefined ? after : { ...after, discounts: dto.discounts },
       });
       return after;
     });
