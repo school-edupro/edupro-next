@@ -32,16 +32,22 @@ const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice
 export default async function FeeBillsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string; studentId?: string; upTo?: string }>;
+  searchParams: Promise<{ classId?: string; studentId?: string; upTo?: string; view?: string }>;
 }) {
   const sp = await searchParams;
   const upTo = sp.upTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.upTo) ? sp.upTo : today();
+  const parentView = sp.view === 'parent' && Boolean(sp.studentId);
   const classes = await apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data);
   let bills: Bill[] = [];
   let problem: string | null = null;
   try {
+    // the parent's view: only the instalments the school has opened to the family, as in the parent app
     if (sp.studentId)
-      bills = [await apiFetch<Bill>(`/fees/students/${sp.studentId}/bill?upTo=${upTo}`)];
+      bills = [
+        await apiFetch<Bill>(
+          `/fees/students/${sp.studentId}/bill${parentView ? '' : `?upTo=${upTo}`}`,
+        ),
+      ];
     else if (sp.classId)
       bills = (await apiFetch<{ data: Bill[] }>(`/fees/bills?classId=${sp.classId}&upTo=${upTo}`))
         .data;
@@ -93,8 +99,18 @@ export default async function FeeBillsPage({
               {problem}
             </p>
           ) : null}
+          {parentView ? (
+            <p className="ep-field__help">
+              Parent’s view: the instalments the school has opened to the family, head by head, as
+              the parent app shows them today. Receipts are on the pupil’s ledger.
+            </p>
+          ) : null}
           {asked && !problem && bills.every((b) => b.instalments.length === 0) ? (
-            <p className="ep-field__help">Nothing is payable up to {dmy(upTo)}.</p>
+            <p className="ep-field__help">
+              {parentView
+                ? 'Nothing is payable for the parent today.'
+                : `Nothing is payable up to ${dmy(upTo)}.`}
+            </p>
           ) : null}
         </Card>
       </div>

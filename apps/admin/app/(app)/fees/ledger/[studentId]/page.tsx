@@ -90,6 +90,12 @@ export default async function FeeLedgerPage({
             </a>
             <a
               className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/fees/bills?studentId=${studentId}&view=parent`}
+            >
+              Parent’s view
+            </a>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
               href={`/fees/tax-certificate/${studentId}`}
             >
               Tax certificate

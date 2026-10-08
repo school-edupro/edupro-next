@@ -82,6 +82,7 @@ const PAGES = [
   '/fees/requests?tab=settlement',
   '/fees/requests?tab=collection',
   '/fees/bills?classId=164',
+  '/fees/bills?studentId=12229&view=parent',
   '/fees/tax-certificate/12229',
   '/fees/fnf/12229',
   '/fees/reports?report=mode_summary&from=2026-04-01&to=2026-10-08',
