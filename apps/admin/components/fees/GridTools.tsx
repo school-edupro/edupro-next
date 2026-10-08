@@ -6,12 +6,20 @@ import { Button } from '@edupro/ui';
  */
 export function GridTools({
   fileHref,
+  allHref,
+  allLabel,
+  sample = true,
   upload,
   hidden,
   canManage,
 }: {
   /** Address of the Excel file; `&format=pdf` gives the PDF. */
   fileHref: string;
+  /** Address of the whole list (every class, or every discount type); `&format=pdf` gives the PDF. */
+  allHref?: string;
+  allLabel?: string;
+  /** The sample format: the same sheet without values. Left out where the Excel itself is the format. */
+  sample?: boolean;
   upload: (fd: FormData) => Promise<void>;
   hidden: Array<[name: string, value: string]>;
   canManage: boolean;
@@ -27,11 +35,26 @@ export function GridTools({
       }}
     >
       <a className="ep-btn ep-btn--ghost ep-btn--sm" href={fileHref}>
-        Excel
+        This grid: Excel
       </a>
       <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`${fileHref}&format=pdf`}>
-        PDF
+        This grid: PDF
       </a>
+      {allHref ? (
+        <>
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={allHref}>
+            {allLabel}: Excel
+          </a>
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`${allHref}&format=pdf`}>
+            {allLabel}: PDF
+          </a>
+        </>
+      ) : null}
+      {sample ? (
+        <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`${fileHref}&blank=1`}>
+          Download sample format (Excel)
+        </a>
+      ) : null}
       {canManage ? (
         <form
           action={upload}
@@ -41,7 +64,7 @@ export function GridTools({
             <input key={n} type="hidden" name={n} value={v} />
           ))}
           <label className="ep-field">
-            <span className="ep-field__label">Upload the corrected Excel</span>
+            <span className="ep-field__label">Upload the filled Excel</span>
             <input className="ep-input" type="file" name="file" accept=".xlsx" required />
           </label>
           <Button type="submit" variant="secondary" size="sm">

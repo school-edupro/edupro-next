@@ -605,45 +605,28 @@ export const MASTERS: MasterDefinition[] = [
     yearScoped: true,
     naturalKey: ['code'],
     conflict: '(academic_year_id, code)',
-    fields: [
-      code(),
-      name(),
-      {
-        key: 'head_id',
-        header: 'Fee head code',
-        type: 'ref',
-        lookup: { table: 'fee_heads', column: 'code' },
-        width: 12,
-        help: 'blank = every regular head',
-      },
-      {
-        key: 'percent',
-        header: 'Percent',
-        type: 'number',
-        scale: 2,
-        min: 0,
-        max: 100,
-        width: 8,
-        bulk: true,
-        help: 'give percent or amount, not both',
-      },
-      { key: 'amount', header: 'Amount', type: 'number', scale: 2, min: 0, width: 10, bulk: true },
-      {
-        key: 'applies_to_transport',
-        header: 'Applies to transport',
-        type: 'boolean',
-        width: 8,
-        bulk: true,
-      },
-    ],
+    fields: [code(), name()],
     status: STATUS,
     search: ['t.code', 't.name'],
     orderBy: 't.code',
-    clone: cloneSql(
-      'fee_discounts',
-      ['code', 'name', 'head_id', 'percent', 'amount', 'applies_to_transport', 'status'],
-      ['code'],
-    ),
+    // the type and its head lines travel to the new year together
+    clone: (fromYearId: string, toYearId: string): DatasetQuery => ({
+      text: `WITH ins AS (
+               INSERT INTO fee_discounts (school_id, academic_year_id, code, name, status)
+               SELECT s.school_id, $2::bigint, s.code, s.name, s.status
+                 FROM fee_discounts s
+                WHERE s.academic_year_id = $1::bigint
+                  AND NOT EXISTS (SELECT 1 FROM fee_discounts d WHERE d.academic_year_id = $2::bigint AND d.code = s.code)
+               RETURNING id, school_id, code
+             ), lines AS (
+               INSERT INTO fee_discount_lines (school_id, discount_id, head_id, percent, amount)
+               SELECT ins.school_id, ins.id, l.head_id, l.percent, l.amount
+                 FROM ins JOIN fee_discounts s ON s.code = ins.code AND s.academic_year_id = $1::bigint
+                 JOIN fee_discount_lines l ON l.discount_id = s.id
+             )
+             SELECT 1 FROM ins`,
+      values: [fromYearId, toYearId],
+    }),
   }),
   master({
     id: 'banks',

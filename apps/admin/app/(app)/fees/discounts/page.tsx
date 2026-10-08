@@ -1,9 +1,9 @@
-import { Button, Card, FormActions, PageHeader, SelectField } from '@edupro/ui';
+import { Button, Card, FormActions, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { GridTools } from '@/components/fees/GridTools';
 import { apiFetch, getMe } from '@/lib/api';
-import { importDiscountLines, saveDiscountLines } from '@/lib/fee-grid-actions';
+import { createDiscountType, importDiscountLines, saveDiscountLines } from '@/lib/fee-grid-actions';
 import type { FeeDiscount } from '@/lib/types';
 
 interface Grid {
@@ -42,7 +42,7 @@ export default async function FeeDiscountsPage({
       <PageHeader
         kicker="Fees"
         title="Discount by head"
-        description="For each discount type, give a percentage or a fixed amount per month on every fee head it should reduce. Discount types themselves are added on the first tab."
+        description="For each discount type, give a percentage or a fixed amount per month on every fee head it should reduce. Add a new discount type here with its code and name, then fill its heads."
       />
       <FeeSetupNav current="/fees/discounts" />
       <Notice params={sp} />
@@ -66,10 +66,58 @@ export default async function FeeDiscountsPage({
           <Button type="submit" variant="secondary">
             Load fee heads
           </Button>
-          <a className="ep-btn ep-btn--ghost" href="/masters/fees">
-            Add a discount type
-          </a>
         </form>
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-2)',
+            flexWrap: 'wrap',
+            marginTop: 'var(--sp-3)',
+          }}
+        >
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/api/fees/grid-file?kind=discounts">
+            All discount types: Excel
+          </a>
+          <a
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            href="/api/fees/grid-file?kind=discounts&format=pdf"
+          >
+            All discount types: PDF
+          </a>
+        </div>
+        {canManage ? (
+          <form
+            action={createDiscountType}
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap',
+              marginTop: 'var(--sp-4)',
+            }}
+          >
+            <InputField
+              id="newCode"
+              name="code"
+              label="New discount type: code"
+              placeholder="BUS"
+              required
+              maxLength={20}
+              pattern="[A-Za-z0-9_]{1,20}"
+            />
+            <InputField
+              id="newName"
+              name="name"
+              label="Name"
+              placeholder="Bus fee concession"
+              required
+              maxLength={80}
+            />
+            <Button type="submit" variant="secondary">
+              Add discount type
+            </Button>
+          </form>
+        ) : null}
         {grid ? (
           <>
             <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>

@@ -18,7 +18,11 @@ const Key = z.object({
     .default('general'),
   studentType: z.enum(['all', 'new', 'old']).default('all'),
 });
-const Format = z.object({ format: z.enum(['xlsx', 'pdf']).default('xlsx') });
+const Format = z.object({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+  /** the sample format: the rows without values */
+  blank: z.enum(['1']).optional(),
+});
 const File = z.object({ fileBase64: z.string().min(20).max(4_000_000) });
 const Money = z.number().min(0).max(100_000_000);
 
@@ -98,8 +102,30 @@ export class FeeGridsController {
     @Query() q: KeyFileDto,
     @Res() reply: FastifyReply,
   ) {
-    const { format, ...key } = q;
-    send(reply, await this.grids.structureFile(ctx, key, format));
+    const { format, blank, ...key } = q;
+    send(reply, await this.grids.structureFile(ctx, key, format, blank === '1'));
+  }
+
+  @Get('structures/file')
+  @ApiOperation({ summary: 'Every class fee structure of the year as Excel or PDF' })
+  @RequirePermission(FEES.masterView)
+  async allStructuresFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: FormatDto,
+    @Res() reply: FastifyReply,
+  ) {
+    send(reply, await this.grids.allStructuresFile(ctx, q.format));
+  }
+
+  @Get('discounts/file')
+  @ApiOperation({ summary: 'Every discount type with its head lines as Excel or PDF' })
+  @RequirePermission(FEES.masterView)
+  async allDiscountsFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: FormatDto,
+    @Res() reply: FastifyReply,
+  ) {
+    send(reply, await this.grids.allDiscountsFile(ctx, q.format));
   }
 
   @Post('structure/import')
@@ -138,7 +164,7 @@ export class FeeGridsController {
     @Query() q: FormatDto,
     @Res() reply: FastifyReply,
   ) {
-    send(reply, await this.grids.discountFile(ctx, id, q.format));
+    send(reply, await this.grids.discountFile(ctx, id, q.format, q.blank === '1'));
   }
 
   @Post('discount/:id/import')

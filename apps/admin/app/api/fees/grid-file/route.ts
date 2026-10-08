@@ -7,15 +7,18 @@ export async function GET(req: Request) {
   const kind = q.get('kind');
   const format = q.get('format') === 'pdf' ? 'pdf' : 'xlsx';
   const id = (k: string) => (/^\d{1,18}$/.test(q.get(k) ?? '') ? q.get(k)! : '');
+  const blank = q.get('blank') === '1' ? '&blank=1' : '';
   let path = '';
   if (kind === 'structure' && id('classId')) {
     const group = /^[a-z_]{1,30}$/.test(q.get('feeGroup') ?? '') ? q.get('feeGroup')! : 'general';
     const type = ['all', 'new', 'old'].includes(q.get('studentType') ?? '')
       ? q.get('studentType')!
       : 'all';
-    path = `/fees/grids/structure/file?classId=${id('classId')}&feeGroup=${group}&studentType=${type}&format=${format}`;
+    path = `/fees/grids/structure/file?classId=${id('classId')}&feeGroup=${group}&studentType=${type}&format=${format}${blank}`;
   } else if (kind === 'discount' && id('id'))
-    path = `/fees/grids/discount/${id('id')}/file?format=${format}`;
+    path = `/fees/grids/discount/${id('id')}/file?format=${format}${blank}`;
+  else if (kind === 'structures') path = `/fees/grids/structures/file?format=${format}`;
+  else if (kind === 'discounts') path = `/fees/grids/discounts/file?format=${format}`;
   else if (kind === 'calendar' && id('classId'))
     path = `/fees/grids/calendar/file?classId=${id('classId')}&format=${format}`;
   if (!path) return NextResponse.json({ type: 'not-found' }, { status: 404 });

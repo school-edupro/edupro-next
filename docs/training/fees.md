@@ -161,3 +161,16 @@ a class to slabs, fill the late fee of every quarter; an empty one means the sch
   classes (calendar and structure).
 - The school-wide "periods" and "late fee slabs" forms are gone: dates and late fee are kept class by
   class on the Class calendar tab. A new year's twelve months are made with **Create the twelve months**.
+
+### Discount types, sample formats and full lists
+
+- A **discount type** is only its code and name (tab Heads, discounts, slabs, banks, or the "Add
+  discount type" box on Discount by head). What it takes off is always set on **Discount by head**.
+  Older discounts that had one percentage or amount were turned into head lines with the same effect.
+- **Download sample format (Excel)** on Class fee structure and Discount by head gives the sheet with
+  the heads listed and no values: fill it and send it with **Upload Excel**.
+- **All classes: Excel / PDF** lists every class, fee group and student type; **All discount types:
+  Excel / PDF** lists every discount with its heads.
+- **Another fee structure for a class**: on Class fee structure choose the class, type the new group's
+  name (for example "staff ward") and press **Start new group**; an empty grid opens. Fill and save it,
+  then put pupils on that group from their fee profile.

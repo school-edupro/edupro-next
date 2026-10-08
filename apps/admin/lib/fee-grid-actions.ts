@@ -178,3 +178,25 @@ export async function createFeeMonths(fd: FormData) {
   }
   back(path, 'ok=1');
 }
+
+/** A new discount type: only its code and name; what it takes off is set head by head. */
+export async function createDiscountType(fd: FormData) {
+  const path = '/fees/discounts';
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>('/fees/discounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code')
+          .toUpperCase()
+          .replace(/[^A-Z0-9_]+/g, '_'),
+        name: str(fd, 'name'),
+        percent: 0,
+      }),
+    });
+    id = r.id;
+  } catch (error) {
+    fail(path, error);
+  }
+  back(`${path}?id=${id}`, 'ok=1');
+}

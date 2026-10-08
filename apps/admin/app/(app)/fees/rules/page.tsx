@@ -163,6 +163,7 @@ export default async function FeeRulesPage({
               <GridTools
                 fileHref={`/api/fees/grid-file?kind=calendar&classId=${cls.id}`}
                 upload={importClassCalendar}
+                sample={false}
                 hidden={[['classId', cls.id]]}
                 canManage={canManage}
               />

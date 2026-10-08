@@ -130,16 +130,44 @@ export default async function FeeStructuresPage({
             defaultValue={group}
             options={groups.map((g) => ({ value: g, label: g.replace(/_/g, ' ') }))}
           />
-          <InputField
-            id="newGroup"
-            name="newGroup"
-            label="Or a new group"
-            placeholder="staff ward"
-            maxLength={30}
-          />
           <Button type="submit" variant="secondary">
             Load grid
           </Button>
+        </form>
+        <form
+          method="get"
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            marginTop: 'var(--sp-4)',
+          }}
+        >
+          <input type="hidden" name="classId" value={sp.classId ?? ''} />
+          <input type="hidden" name="studentType" value={studentType} />
+          <InputField
+            id="newGroup"
+            name="newGroup"
+            label="Another fee structure for this class: name of the new group"
+            help="For example “staff ward” or “EWS”. An empty grid opens; fill and save it. Pupils are put on a group from their fee profile."
+            placeholder="staff ward"
+            required
+            maxLength={30}
+            disabled={!sp.classId}
+          />
+          <Button type="submit" variant="secondary" disabled={!sp.classId}>
+            Start new group
+          </Button>
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/api/fees/grid-file?kind=structures">
+            All classes: Excel
+          </a>
+          <a
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            href="/api/fees/grid-file?kind=structures&format=pdf"
+          >
+            All classes: PDF
+          </a>
         </form>
         {noMonths ? (
           <form action={createFeeMonths} style={{ marginTop: 'var(--sp-4)' }}>

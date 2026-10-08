@@ -226,14 +226,15 @@ export class FeeGridsService {
     });
   }
 
-  async structureFile(ctx: RequestContext, k: Key, format: 'xlsx' | 'pdf') {
+  /** `blank`: the sample format, heads listed with no amounts. */
+  async structureFile(ctx: RequestContext, k: Key, format: 'xlsx' | 'pdf', blank = false) {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const g = await this.structureWith(c, yearId, k);
       const name = `fee-structure-${g.className.replace(/\s+/g, '-')}-${k.feeGroup}-${k.studentType}`;
-      if (format === 'xlsx')
+      if (format === 'xlsx' || blank)
         return {
-          filename: `${name}.xlsx`,
+          filename: blank ? 'fee-structure-sample-format.xlsx' : `${name}.xlsx`,
           contentType: XLSX,
           bytes: await templateSheet({
             sheet: 'Fee structure',
@@ -242,7 +243,11 @@ export class FeeGridsService {
               { header: 'Fee head', width: 28 },
               ...g.months.map((m) => ({ header: m.name.split(' ')[0]!, width: 11 })),
             ],
-            rows: g.rows.map((r) => [r.code, r.name, ...r.amounts.map(Number)]),
+            rows: g.rows.map((r) => [
+              r.code,
+              r.name,
+              ...(blank ? Array<null>(12).fill(null) : r.amounts.map(Number)),
+            ]),
             guide: [
               `Class ${g.className}, fee group "${k.feeGroup}", student type "${k.studentType}".`,
               'One row per fee head; do not change the head code. Type the amount of each month; 0 or empty means not charged that month.',
@@ -312,6 +317,116 @@ export class FeeGridsService {
         });
       }
       return { rows: sheet.length, saved: bad.length === 0 ? rows.length : 0, bad };
+    });
+  }
+
+  /** Every class, fee group and student type of the year in one list. */
+  async allStructuresFile(ctx: RequestContext, format: 'xlsx' | 'pdf') {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const months = await c.query<{ name: string }>(
+        `SELECT name FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence`,
+        [yearId],
+      );
+      const r = await c.query<{
+        cls: string;
+        fee_group: string;
+        student_type: string;
+        head: string;
+        amounts: string[];
+        total: string;
+      }>(
+        `SELECT k.name AS cls, fs.fee_group, fs.student_type, h.name AS head, x.amounts, x.total::text
+           FROM fee_structures fs JOIN classes k ON k.id = fs.class_id JOIN fee_heads h ON h.id = fs.head_id
+           CROSS JOIN LATERAL (
+             SELECT array_agg(v::numeric(12,2)::text ORDER BY m) AS amounts, sum(v) AS total FROM (
+               SELECT m, COALESCE(CASE WHEN fs.amounts IS NOT NULL THEN fs.amounts[m]
+                                       WHEN fs.periods IS NOT NULL THEN CASE WHEN m = ANY(fs.periods) THEN fs.amount END
+                                       WHEN fs.frequency = 'monthly' THEN fs.amount
+                                       WHEN fs.frequency = 'quarterly' THEN CASE WHEN m IN (1, 4, 7, 10) THEN fs.amount END
+                                       WHEN fs.frequency = 'half_yearly' THEN CASE WHEN m IN (1, 7) THEN fs.amount END
+                                       ELSE CASE WHEN m = 1 THEN fs.amount END END, 0) AS v
+                 FROM generate_series(1, 12) m) q) x
+          WHERE fs.academic_year_id = $1
+          ORDER BY k.display_order, k.name, fs.fee_group, fs.student_type, h.sort_order, h.code`,
+        [yearId],
+      );
+      const head = await schoolHead(c);
+      return registerFile(
+        {
+          school: head.name,
+          address: head.address,
+          report: 'Class fee structure: all classes',
+          details: [`${r.rows.length} row(s)`, generatedOn()],
+          legend: 'Amounts in rupees; 0 = not charged that month.',
+          columns: [
+            { label: 'Class', width: 12 },
+            { label: 'Fee group', width: 12 },
+            { label: 'Student type', width: 10 },
+            { label: 'Fee head', width: 22 },
+            ...months.rows.map((m) => ({ label: m.name.slice(0, 3), width: 9, right: true })),
+            { label: 'Total', width: 11, right: true },
+          ],
+          rows: r.rows.map((x) => [
+            x.cls,
+            x.fee_group.replace(/_/g, ' '),
+            x.student_type,
+            x.head,
+            ...x.amounts.map((a) => (format === 'xlsx' ? Number(a) : a)),
+            format === 'xlsx' ? Number(x.total) : Number(x.total).toFixed(2),
+          ]),
+          filename: 'fee-structure-all-classes',
+        },
+        format,
+      );
+    });
+  }
+
+  /** Every discount type of the year with its head lines. */
+  async allDiscountsFile(ctx: RequestContext, format: 'xlsx' | 'pdf') {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        code: string;
+        name: string;
+        status: string;
+        head: string | null;
+        percent: string | null;
+        amount: string | null;
+      }>(
+        `SELECT d.code, d.name, d.status::text, h.name AS head, l.percent::text, l.amount::text
+           FROM fee_discounts d LEFT JOIN fee_discount_lines l ON l.discount_id = d.id LEFT JOIN fee_heads h ON h.id = l.head_id
+          WHERE d.academic_year_id = $1 ORDER BY d.code, h.sort_order, h.code`,
+        [yearId],
+      );
+      const head = await schoolHead(c);
+      return registerFile(
+        {
+          school: head.name,
+          address: head.address,
+          report: 'Discounts and concessions: all types',
+          details: [`${new Set(r.rows.map((x) => x.code)).size} discount type(s)`, generatedOn()],
+          legend: 'Percentage of the head, or a fixed amount per month.',
+          columns: [
+            { label: 'Code', width: 12 },
+            { label: 'Discount type', width: 28 },
+            { label: 'Status', width: 10 },
+            { label: 'Fee head', width: 26 },
+            { label: 'Percentage (%)', width: 14, right: true },
+            { label: 'Fix amount (₹)', width: 14, right: true },
+          ],
+          rows: r.rows.map((x) => [
+            x.code,
+            x.name,
+            x.status,
+            x.head ?? '(no head yet)',
+            x.percent ?? '',
+            x.amount ?? '',
+          ]),
+          filename: 'discounts-all-types',
+        },
+        format,
+      );
     });
   }
 
@@ -392,14 +507,14 @@ export class FeeGridsService {
     });
   }
 
-  async discountFile(ctx: RequestContext, id: string, format: 'xlsx' | 'pdf') {
+  async discountFile(ctx: RequestContext, id: string, format: 'xlsx' | 'pdf', blank = false) {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const g = await this.discountWith(c, yearId, id);
       const name = `discount-${g.discount.code}`;
-      if (format === 'xlsx')
+      if (format === 'xlsx' || blank)
         return {
-          filename: `${name}.xlsx`,
+          filename: blank ? 'discount-sample-format.xlsx' : `${name}.xlsx`,
           contentType: XLSX,
           bytes: await templateSheet({
             sheet: 'Discount',
@@ -412,8 +527,8 @@ export class FeeGridsService {
             rows: g.rows.map((r) => [
               r.code,
               r.name,
-              r.percent === null ? null : Number(r.percent),
-              r.amount === null ? null : Number(r.amount),
+              blank || r.percent === null ? null : Number(r.percent),
+              blank || r.amount === null ? null : Number(r.amount),
             ]),
             guide: [
               `Discount "${g.discount.name}" (${g.discount.code}).`,
