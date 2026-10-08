@@ -48,3 +48,12 @@ export { FilePick } from './components/FilePick';
 export { FilesPick } from './components/FilesPick';
 export { ActivityDay, activityEntriesFrom, type ActivityDayData } from './components/ActivityDay';
 export { LeaveKindSelect } from './components/LeaveKindSelect';
+export { LessonUploadForm, type LessonOptions } from './components/LessonUploadForm';
+export {
+  LessonReport,
+  LessonDetail,
+  type LessonListData,
+  type LessonListRow,
+  type LessonFilters,
+  type LessonDetailData,
+} from './components/LessonReport';

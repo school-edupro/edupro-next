@@ -6,17 +6,31 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { LessonPlansService } from './lesson-plans.service';
 import {
   LessonPlansController,
+  LessonUploadsController,
   SubstitutionsController,
   SyllabusController,
 } from './planner.controller';
 import { SyllabusService } from './syllabus.service';
+import { LessonUploadsService } from './lesson-uploads.service';
+import { FilesModule } from '../files/files.module';
 import { SubstitutionsService } from './substitutions.service';
 
 /** Sprint 11: lesson planner with L1–L3 approvals and timetable substitutions with conflict checks. */
 @Module({
-  imports: [DailyAcademicsModule, WorkflowModule],
-  controllers: [LessonPlansController, SubstitutionsController, SyllabusController],
-  providers: [LessonPlansService, SubstitutionsService, SyllabusService, AuditService],
+  imports: [DailyAcademicsModule, WorkflowModule, FilesModule],
+  controllers: [
+    LessonPlansController,
+    SubstitutionsController,
+    SyllabusController,
+    LessonUploadsController,
+  ],
+  providers: [
+    LessonPlansService,
+    SubstitutionsService,
+    SyllabusService,
+    LessonUploadsService,
+    AuditService,
+  ],
   exports: [LessonPlansService, SubstitutionsService],
 })
 export class PlannerModule implements OnModuleInit {

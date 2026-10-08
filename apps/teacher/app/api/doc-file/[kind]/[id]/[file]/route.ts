@@ -6,6 +6,7 @@ const BASE: Record<string, string> = {
   document: '/academics/documents',
   notice: '/academics/notices',
   work: '/academics/daily-work',
+  lesson: '/academics/lessons',
 };
 
 /** An attachment of a class document, a notice or daily work: opens in the browser; `?save=1` downloads. */

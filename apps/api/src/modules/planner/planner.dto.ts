@@ -121,3 +121,71 @@ export const SyllabusReportSchema = CoverageQuerySchema.extend({
 export class SyllabusReportDto extends createZodDto(SyllabusReportSchema) {}
 export const WeekQuerySchema = z.object({ week: DateSchema.optional() });
 export class WeekQueryDto extends createZodDto(WeekQuerySchema) {}
+
+// ---- lessons uploaded for approval (0097) ------------------------------------------------------------
+export const LessonUploadSchema = z.object({
+  date: DateSchema,
+  targetType: z.enum(['class', 'section']),
+  classIds: z.array(IdSchema).max(40).default([]),
+  sectionIds: z.array(IdSchema).max(80).default([]),
+  topic: z.string().trim().min(2, 'Write the topic name').max(200),
+  description: z.string().trim().max(40000).optional(),
+  fileIds: z.array(IdSchema).max(2).default([]),
+});
+export class LessonUploadDto extends createZodDto(LessonUploadSchema) {}
+
+export const LessonListSchema = z.object({
+  by: z.enum(['any', 'employee_code', 'employee', 'class', 'topic']).default('any'),
+  q: z.string().trim().max(80).optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  status: z.enum(['pending', 'acknowledged', 'rejected']).optional(),
+  level: z.coerce.number().int().min(1).max(3).optional(),
+  record: z.enum(['active', 'deleted']).default('active'),
+  /** `approve`: only what waits for me; `own`: only what I uploaded. */
+  mine: z.enum(['approve', 'own']).optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+  wrap: z.enum(['1']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(1000).default(50),
+});
+export class LessonListDto extends createZodDto(LessonListSchema) {}
+
+export const LessonDecideSchema = z
+  .object({
+    action: z.enum(['acknowledge', 'reject']),
+    remark: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.action !== 'reject' || !!v.remark, {
+    message: 'Write why the lesson is rejected',
+    path: ['remark'],
+  });
+export class LessonDecideDto extends createZodDto(LessonDecideSchema) {}
+
+export const LessonRuleSchema = z.object({
+  scope: z.enum(['employee', 'class', 'department', 'default']),
+  employeeId: IdSchema.optional(),
+  classId: IdSchema.optional(),
+  department: z.string().trim().max(120).optional(),
+  levels: z
+    .array(
+      z
+        .object({
+          kind: z.enum(['employee', 'role']),
+          employeeId: IdSchema.optional(),
+          roleCode: z.string().trim().max(60).optional(),
+        })
+        .refine((v) => (v.kind === 'employee' ? !!v.employeeId : !!v.roleCode), {
+          message: 'Choose who approves at each level',
+        }),
+    )
+    .min(1, 'Add at least one level')
+    .max(3),
+});
+export class LessonRuleDto extends createZodDto(LessonRuleSchema) {}
+
+export const LessonRangeSchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+});
+export class LessonRangeDto extends createZodDto(LessonRangeSchema) {}

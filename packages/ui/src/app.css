@@ -6254,3 +6254,140 @@ a.ep-tabs__tab {
   padding-top: var(--sp-3);
   border-top: 1px solid var(--border-subtle);
 }
+/* Lesson planner: upload form, report and one lesson */
+.ep-lesson,
+.ep-lesson__form {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-lesson__top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.ep-lesson__topic {
+  flex: 1 1 16rem;
+}
+.ep-lesson__topic .ep-input {
+  width: 100%;
+}
+.ep-lesson__tiles {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+.ep-lesson__tile {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  color: var(--text-heading);
+  text-decoration: none;
+}
+.ep-lesson__tile:hover {
+  border-color: var(--action-primary);
+}
+.ep-lesson__tile[data-tone='total'] {
+  border-left-color: var(--status-info);
+}
+.ep-lesson__tile[data-tone='pending'] {
+  border-left-color: var(--status-warning);
+}
+.ep-lesson__tile[data-tone='acknowledged'] {
+  border-left-color: var(--status-success);
+}
+.ep-lesson__tile[data-tone='rejected'] {
+  border-left-color: var(--status-danger);
+}
+.ep-lesson__tilelabel {
+  font-size: var(--fs-small);
+  color: var(--text-body);
+}
+.ep-lesson__tilenum {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+.ep-lesson__filters {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  align-items: end;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+.ep-lesson__filters .ep-input,
+.ep-lesson__filters .ep-select {
+  width: 100%;
+}
+.ep-lesson__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  grid-column: 1 / -1;
+}
+.ep-lesson__status {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+}
+.ep-lesson__status[data-status='pending'] {
+  background: var(--status-warning-bg);
+}
+.ep-lesson__status[data-status='acknowledged'] {
+  background: var(--status-success-bg);
+}
+.ep-lesson__status[data-status='rejected'] {
+  background: var(--status-danger-bg);
+}
+.ep-lesson__level {
+  display: block;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+.ep-lesson__pager {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: flex-end;
+}
+.ep-lesson__facts {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: 0 0 var(--sp-3);
+}
+.ep-lesson__facts dt {
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+.ep-lesson__facts dd {
+  margin: 0;
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-lesson__decide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+  margin-top: var(--sp-3);
+}
+.ep-lesson__decide .ep-field {
+  flex: 1 1 16rem;
+}
+.ep-lesson__decide .ep-input {
+  width: 100%;
+}

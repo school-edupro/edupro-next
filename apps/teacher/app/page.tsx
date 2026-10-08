@@ -80,7 +80,7 @@ export default async function HomePage() {
     ],
     [
       t(lang, 'Lesson plans'),
-      t(lang, 'Weekly plans with approvals'),
+      t(lang, 'Upload a lesson for approval; see where each one stands'),
       can('academics.lesson_plan.manage'),
       '/lesson-plans',
     ],

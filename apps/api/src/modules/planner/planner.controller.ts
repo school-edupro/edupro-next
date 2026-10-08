@@ -15,9 +15,15 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { LessonPlansService } from './lesson-plans.service';
+import { LessonUploadsService } from './lesson-uploads.service';
 import {
   CoverageQueryDto,
   CreateLessonPlanDto,
+  LessonDecideDto,
+  LessonListDto,
+  LessonRangeDto,
+  LessonRuleDto,
+  LessonUploadDto,
   MarkTopicDto,
   SaveChapterDto,
   SaveTopicDto,
@@ -237,5 +243,110 @@ export class SyllabusController {
   @RequirePermission(PLANNER.planManage)
   mark(@ReqCtx() ctx: RequestContext, @Body() body: MarkTopicDto) {
     return this.syllabus.mark(ctx, body);
+  }
+}
+
+const LESSON_SETUP = 'academics.lesson_plan.setup';
+
+@ApiTags('academics')
+@ApiBearerAuth()
+@Controller('academics/lessons')
+export class LessonUploadsController {
+  constructor(private readonly lessons: LessonUploadsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'Lessons uploaded for approval: mine, those I approve, or all (the office)',
+  })
+  @RequirePermission(PLANNER.planView)
+  async list(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: LessonListDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    if (!q.format) return this.lessons.list(ctx, q);
+    const f = await this.lessons.exportFile(ctx, q, q.format);
+    if (q.wrap)
+      return {
+        filename: f.filename,
+        contentType: f.contentType,
+        base64: Buffer.from(f.bytes).toString('base64'),
+      };
+    reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`);
+    return reply.send(f.bytes);
+  }
+
+  @Get('options')
+  @ApiOperation({ summary: 'The classes and sections I upload lessons for' })
+  @RequirePermission(PLANNER.planManage)
+  options(@ReqCtx() ctx: RequestContext) {
+    return this.lessons.options(ctx);
+  }
+
+  @Get('dashboard')
+  @RequirePermission(LESSON_SETUP, {
+    description: 'Set who approves lessons (by employee, class or department) and see every lesson',
+  })
+  dashboard(@ReqCtx() ctx: RequestContext, @Query() q: LessonRangeDto) {
+    return this.lessons.dashboard(ctx, q);
+  }
+
+  @Get('approvers')
+  @RequirePermission(LESSON_SETUP)
+  rules(@ReqCtx() ctx: RequestContext) {
+    return this.lessons.rules(ctx);
+  }
+
+  @Post('approvers')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Who approves lessons of an employee, a class, a department, or by default',
+  })
+  @RequirePermission(LESSON_SETUP)
+  saveRule(@ReqCtx() ctx: RequestContext, @Body() body: LessonRuleDto) {
+    return this.lessons.saveRule(ctx, body);
+  }
+
+  @Delete('approvers/:id')
+  @RequirePermission(LESSON_SETUP)
+  removeRule(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.lessons.removeRule(ctx, id);
+  }
+
+  @Post()
+  @ApiOperation({
+    summary: 'Upload a lesson: it goes to the approvers set for me, my class or department',
+  })
+  @RequirePermission(PLANNER.planManage)
+  create(@ReqCtx() ctx: RequestContext, @Body() body: LessonUploadDto) {
+    return this.lessons.create(ctx, body);
+  }
+
+  @Get(':id')
+  @RequirePermission(PLANNER.planView)
+  get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.lessons.get(ctx, id);
+  }
+
+  @Get(':id/files/:fileId')
+  @RequirePermission(PLANNER.planView)
+  file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.lessons.fileUrl(ctx, id, fileId);
+  }
+
+  @Post(':id/decide')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Acknowledge the lesson at my level, or reject it with a remark' })
+  @RequirePermission(PLANNER.planView)
+  decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: LessonDecideDto) {
+    return this.lessons.decide(ctx, id, body);
+  }
+
+  @Delete(':id')
+  @RequirePermission(PLANNER.planView)
+  remove(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.lessons.remove(ctx, id);
   }
 }

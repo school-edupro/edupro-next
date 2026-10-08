@@ -1,82 +1,82 @@
-import { Badge, Breadcrumbs, Card, DataTable, PageHeader } from '@edupro/ui';
-import { getTranslations } from 'next-intl/server';
-import { apiFetch } from '@/lib/api';
-import type { LessonPlan } from '@/lib/types';
+import { LessonDetail, PageHeader, type LessonDetailData } from '@edupro/ui';
+import { notFound } from 'next/navigation';
+import { AcademicsNav } from '@/components/academics/AcademicsNav';
+import { FileLinks } from '@/components/FileLinks';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { acknowledgeLesson, deleteLesson, rejectLesson } from '@/lib/lesson-actions';
 
-const DAYS = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const STATUS = { pending: 'Pending', acknowledged: 'Acknowledged', rejected: 'Rejected' };
 
-export default async function LessonPlanPage({ params }: { params: Promise<{ id: string }> }) {
+/** One lesson: what was uploaded, the approval levels, and (when it waits for me) acknowledge or reject. */
+export default async function LessonPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+}) {
   const { id } = await params;
-  const [t, pl, p] = await Promise.all([
-    getTranslations('pages.academics_lesson_plans'),
-    getTranslations('planner'),
-    apiFetch<LessonPlan>(`/academics/lesson-plans/${id}`),
-  ]);
-  const tone =
-    p.status === 'approved'
-      ? 'success'
-      : p.status === 'submitted'
-        ? 'warning'
-        : p.status === 'rejected' || p.status === 'returned'
-          ? 'danger'
-          : 'neutral';
+  const sp = await searchParams;
+  if (!/^\d{1,18}$/.test(id)) notFound();
+  const me = await getMe();
+  let lesson: LessonDetailData;
+  try {
+    lesson = await apiFetch<LessonDetailData>(`/academics/lessons/${id}`);
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 403)) notFound();
+    throw error;
+  }
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: t('kicker'), href: '/academics/lesson-plans' },
-          { label: t('title'), href: '/academics/lesson-plans' },
-          { label: p.title },
-        ]}
-      />
       <PageHeader
-        kicker={`${pl('week')} ${p.weekStart}`}
-        title={p.title}
-        description={`${p.teacher} · ${p.section} · ${p.subject}`}
+        kicker={`Academics · Lesson planner · Request #${lesson.id}`}
+        title={lesson.topic}
+        description={`${STATUS[lesson.status]}${lesson.status === 'pending' ? ` · level ${String(lesson.currentLevel)} of ${String(lesson.levels)}: ${lesson.approver ?? 'not set'}` : ''}`}
         actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
-            <Badge tone={tone}>{pl(`statuses.${p.status}`)}</Badge>
-            {p.status === 'submitted' ? <a href="/workflow/inbox">{pl('openInbox')}</a> : null}
-          </span>
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href="/academics/lesson-plans?tab=report"
+          >
+            Lesson Report
+          </a>
         }
       />
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--sp-5)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
-        }}
-      >
-        <Card title={pl('objectives')}>
-          <p style={{ whiteSpace: 'pre-wrap' }}>{p.objectives ?? '—'}</p>
-          {p.assessment ? (
-            <p className="ep-field__help">
-              <strong>{pl('assessment')}</strong>: {p.assessment}
-            </p>
-          ) : null}
-          {p.decisionNote ? (
-            <p className="ep-field__help">
-              <strong>{pl('decision')}</strong>: {p.decisionNote}
-            </p>
-          ) : null}
-        </Card>
-        <Card title={pl('topics')}>
-          <DataTable<LessonPlan['topics'][number]>
-            caption={pl('topics')}
-            density="dense"
-            columns={[
-              { key: 'day', header: pl('day'), render: (x) => DAYS[x.day] ?? String(x.day) },
-              { key: 'topic', header: pl('topic'), render: (x) => <strong>{x.topic}</strong> },
-              { key: 'activities', header: pl('activities'), render: (x) => x.activities ?? '' },
-              { key: 'resources', header: pl('resources'), render: (x) => x.resources ?? '' },
-              { key: 'homework', header: pl('homework'), render: (x) => x.homework ?? '' },
-            ]}
-            rows={p.topics}
-            rowKey={(x) => String(x.day)}
-            emptyTitle={pl('topics')}
+      <AcademicsNav current="/academics/lesson-plans" permissions={me.permissions} />
+      {sp.ok ? (
+        <div
+          className="ep-alert ep-alert--success"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {sp.ok === 'uploaded'
+            ? 'The lesson is uploaded and sent for approval.'
+            : sp.ok === 'reject'
+              ? 'Rejected.'
+              : 'Acknowledged.'}
+        </div>
+      ) : null}
+      {sp.error ? (
+        <div
+          className="ep-alert ep-alert--danger"
+          role="alert"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {sp.detail || 'Could not save.'}
+        </div>
+      ) : null}
+      <LessonDetail
+        lesson={lesson}
+        office={me.permissions.includes('academics.lesson_plan.setup')}
+        acknowledge={acknowledgeLesson}
+        reject={rejectLesson}
+        remove={deleteLesson}
+        fileLinks={(fileId, n) => (
+          <FileLinks
+            href={`/api/academics/doc-file/lesson/${lesson.id}/${fileId}`}
+            label={`attachment ${String(n)}`}
           />
-        </Card>
-      </div>
+        )}
+      />
     </>
   );
 }

@@ -12,6 +12,7 @@ export interface ApprovalGroup {
     | 'withdrawal'
     | 'transfer'
     | 'gate_pass'
+    | 'lesson'
     | 'transport'
     | 'leave'
     | 'file';
@@ -241,6 +242,32 @@ export async function myApprovals(
                     detail: `raised by ${n.createdBy}`,
                     href: `/workflow/files/${n.id}`,
                     since: n.submittedAt,
+                  })),
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null,
+    // lessons uploaded by teachers wait for the approver of their level
+    has.has('academics.lesson_plan.view')
+      ? apiFetch<{
+          data: Array<{ id: string; topic: string; employee: string; requestedAt: string }>;
+          page: { total: number };
+        }>('/academics/lessons?mine=approve&size=20')
+          .then((r): ApprovalGroup | null =>
+            r.data.length
+              ? {
+                  key: 'lesson',
+                  title: 'Lessons',
+                  help: 'Lessons uploaded by teachers that wait for you',
+                  href: '/academics/lesson-plans?tab=report&mine=approve',
+                  count: r.page.total,
+                  items: r.data.slice(0, size).map((n) => ({
+                    id: n.id,
+                    title: `#${n.id} · ${n.topic}`,
+                    detail: `uploaded by ${n.employee}`,
+                    href: `/academics/lesson-plans/${n.id}`,
+                    since: n.requestedAt,
                   })),
                 }
               : null,

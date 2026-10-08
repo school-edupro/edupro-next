@@ -550,33 +550,22 @@ export class SyllabusService {
     return this.db.tenant(requireTenant(ctx), (c) => this.coverageIn(c, yearId, q));
   }
 
-  /** Teachers who have not written the plan of a week for a class and subject they teach. */
+  /** Teachers (anyone with a class assigned) who uploaded no lesson in the week. */
   private async missingIn(c: PoolClient, yearId: string, weekStart: string) {
-    const r = await c.query<{
-      teacher: string;
-      code: string;
-      section: string;
-      subject: string;
-      status: string | null;
-    }>(
-      `SELECT e.display_name AS teacher, e.employee_code AS code, k.code || '-' || cs.name AS section, s.name AS subject, lp.status::text
-         FROM teacher_assignments ta
-         JOIN employees e ON e.id = ta.employee_id AND e.deleted_at IS NULL
-         JOIN class_sections cs ON cs.id = ta.class_section_id JOIN classes k ON k.id = cs.class_id
-         JOIN subjects s ON s.id = ta.subject_id
-         LEFT JOIN lesson_plans lp ON lp.employee_id = ta.employee_id AND lp.class_section_id = ta.class_section_id
-              AND lp.subject_id = ta.subject_id AND lp.week_start = $2::date AND lp.deleted_at IS NULL
-        WHERE ta.academic_year_id = $1 AND ta.valid_to IS NULL AND ta.subject_id IS NOT NULL
-          AND (lp.id IS NULL OR lp.status IN ('draft', 'returned', 'rejected'))
-        ORDER BY e.display_name, k.display_order, cs.name, s.name`,
+    const r = await c.query<{ teacher: string; code: string; department: string }>(
+      `SELECT e.display_name AS teacher, e.employee_code AS code, COALESCE(e.department, '') AS department
+         FROM employees e
+        WHERE e.deleted_at IS NULL AND e.status = 'active'
+          AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.academic_year_id = $1 AND ta.valid_to IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM lesson_uploads l WHERE l.employee_id = e.id AND l.academic_year_id = $1 AND l.deleted_at IS NULL
+                           AND l.on_date BETWEEN $2::date AND $2::date + 6)
+        ORDER BY e.display_name`,
       [yearId, weekStart],
     );
     return r.rows.map((x) => ({
       teacher: x.teacher,
       employeeCode: x.code,
-      section: x.section,
-      subject: x.subject,
-      status: x.status ?? 'not written',
+      department: x.department,
     }));
   }
 
@@ -598,7 +587,7 @@ export class SyllabusService {
       const rows = await this.coverageIn(c, yearId, {});
       const missing = await this.missingIn(c, yearId, weekStart);
       const plans = await c.query<{ status: string; n: number }>(
-        `SELECT status::text, count(*)::int AS n FROM lesson_plans WHERE academic_year_id = $1 AND week_start = $2::date AND deleted_at IS NULL GROUP BY 1`,
+        `SELECT status, count(*)::int AS n FROM lesson_uploads WHERE academic_year_id = $1 AND on_date BETWEEN $2::date AND $2::date + 6 AND deleted_at IS NULL GROUP BY 1`,
         [yearId, weekStart],
       );
       const group = (key: (r: CoverageRow) => string) => {
@@ -628,8 +617,8 @@ export class SyllabusService {
           sections: rows.length,
           lagging: rows.filter((r) => r.behind > 0).length,
           noTeacher: rows.filter((r) => !r.teacher).length,
-          plansApproved: count('approved'),
-          plansWaiting: count('submitted'),
+          plansApproved: count('acknowledged'),
+          plansWaiting: count('pending'),
           plansMissing: missing.length,
         },
         byClass: group((r) => r.section.split('-')[0]!),
@@ -660,26 +649,17 @@ export class SyllabusService {
         {
           school: head.name,
           address: head.address,
-          report: 'Lesson plans not submitted',
+          report: 'Teachers who uploaded no lesson',
           details: [`Week starting ${weekStart}`, generatedOn()],
-          legend: `${String(rows.length)} plan(s) not submitted`,
+          legend: `${String(rows.length)} teacher(s)`,
           columns: [
             { label: 'Sl.', width: 3, right: true },
             { label: 'Emp. code', width: 8 },
-            { label: 'Teacher', width: 18 },
-            { label: 'Class', width: 7 },
-            { label: 'Subject', width: 16 },
-            { label: 'Plan', width: 10 },
+            { label: 'Teacher', width: 20 },
+            { label: 'Department', width: 14 },
           ],
-          rows: rows.map((r, i) => [
-            i + 1,
-            r.employeeCode,
-            r.teacher,
-            r.section,
-            r.subject,
-            r.status,
-          ]),
-          filename: `lesson-plans-missing-${weekStart}`,
+          rows: rows.map((r, i) => [i + 1, r.employeeCode, r.teacher, r.department]),
+          filename: `lessons-not-uploaded-${weekStart}`,
         },
         q.format,
       );
