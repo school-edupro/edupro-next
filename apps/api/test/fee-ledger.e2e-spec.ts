@@ -311,6 +311,13 @@ describe('fee ledger, fleet and insights (e2e, Sprint 12)', () => {
     });
     expect(partial.instalments[0]!.lateFee).toMatchObject({ days: 188, amount: '1880.00' });
 
+    // this suite checks the direct override; the approval route has its own suite (fee-requests)
+    await inject({
+      method: 'PUT',
+      url: '/platform/settings/fees.late_fee_waiver_approval',
+      headers: h(),
+      json: { value: 'off' },
+    });
     // override: waive July for the on-time student, then revoke
     const julyPeriod = ontime.instalments[1]!.lateFee.periodId;
     const forbidden = await inject({

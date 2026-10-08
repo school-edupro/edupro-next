@@ -179,6 +179,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Code of the misc fee head that carries the bounce charge (created if missing)',
     module: 'fees',
   },
+  'fees.late_fee_waiver_approval': {
+    schema: z.enum(['on', 'off']),
+    default: 'on',
+    description:
+      'on: a late-fee waiver by the accounts desk waits for the approver; off: anyone with fees.late_fee.manage sets it directly',
+    module: 'fees',
+  },
   'fees.late_fee_mode': {
     schema: z.enum(['daywise', 'slab']),
     default: 'daywise',

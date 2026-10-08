@@ -506,6 +506,18 @@ export class FeeLedgerService {
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
       await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      // the accounts desk asks; only an approver changes the late fee at once (setting fees.late_fee_waiver_approval)
+      if (!ctx.permissions?.has('fees.adjustment.approve')) {
+        const rule = await c.query<{ v: string | null }>(
+          `SELECT app.setting('fees.late_fee_waiver_approval') #>> '{}' AS v`,
+        );
+        if ((rule.rows[0]?.v ?? 'on') !== 'off')
+          throw new DomainError(
+            'fees.approval_required',
+            'A late-fee waiver needs approval: raise it under Fees → Approvals and uploads',
+            { status: 403 },
+          );
+      }
       const p = await c.query<{ name: string }>(
         `SELECT name FROM fee_periods WHERE id = $1 AND academic_year_id = $2`,
         [dto.periodId, yearId],

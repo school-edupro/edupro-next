@@ -453,3 +453,68 @@ export const FnfQuerySchema = z.object({
   lastSeq: z.coerce.number().int().min(1).max(12).optional(),
 });
 export class FnfQueryDto extends createZodDto(FnfQuerySchema) {}
+
+// ---- Fee changes that wait for approval (0101) -----------------------------------------------------------
+export const RequestChangeSchema = z
+  .object({
+    kind: z.enum(['late_fee', 'transfer', 'date_change']),
+    /** late_fee: the pupil, by id or by admission number */
+    studentId: IdSchema.optional(),
+    admissionNo: z.string().trim().min(1).max(40).optional(),
+    /** late_fee: the instalment's month, its ledger and the late fee to charge instead (0 waives it) */
+    periodId: IdSchema.optional(),
+    ledger: z.enum(['school', 'hostel']).optional(),
+    amount: Money.optional(),
+    /** transfer, date_change: the receipt as printed */
+    receiptNo: z.string().trim().min(1).max(60).optional(),
+    /** transfer: the pupil who should have got the money */
+    toAdmissionNo: z.string().trim().min(1).max(40).optional(),
+    /** date_change */
+    newReceivedOn: DateSchema.optional(),
+    newClearedOn: DateSchema.optional(),
+    reason: z.string().trim().min(3).max(300),
+  })
+  .refine(
+    (v) =>
+      v.kind === 'late_fee'
+        ? (v.studentId !== undefined || v.admissionNo !== undefined) &&
+          v.periodId !== undefined &&
+          v.amount !== undefined
+        : v.kind === 'transfer'
+          ? v.receiptNo !== undefined && v.toAdmissionNo !== undefined
+          : v.receiptNo !== undefined &&
+            (v.newReceivedOn !== undefined || v.newClearedOn !== undefined),
+    { message: 'the request is incomplete for its kind' },
+  );
+export class RequestChangeDto extends createZodDto(RequestChangeSchema) {}
+
+export const DecideChangeSchema = z.object({
+  outcome: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(300).optional(),
+});
+export class DecideChangeDto extends createZodDto(DecideChangeSchema) {}
+
+export const ListChangeRequestsQuerySchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  kind: z.enum(['late_fee', 'transfer', 'date_change']).optional(),
+});
+export class ListChangeRequestsQueryDto extends createZodDto(ListChangeRequestsQuerySchema) {}
+
+const FileBase64 = z.string().min(20).max(4_000_000);
+export const SettlementUploadSchema = z.object({
+  fileBase64: FileBase64,
+  reason: z.string().trim().min(3).max(300),
+});
+export class SettlementUploadDto extends createZodDto(SettlementUploadSchema) {}
+
+export const CollectionUploadSchema = z.object({
+  fileBase64: FileBase64,
+  fileName: z.string().trim().max(200).optional(),
+});
+export class CollectionUploadDto extends createZodDto(CollectionUploadSchema) {}
+
+export const CollectionSubmitSchema = z.object({
+  action: z.enum(['submit', 'cancel']),
+  reason: z.string().trim().max(300).optional(),
+});
+export class CollectionSubmitDto extends createZodDto(CollectionSubmitSchema) {}
