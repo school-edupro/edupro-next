@@ -395,4 +395,77 @@ describe('fee set-up, second pass (e2e)', () => {
     expect(composite.length).toBeGreaterThan(0);
     expect(lines.some((l) => l.head === 'Tuition fee' || l.head === 'Annual charge')).toBe(false);
   });
+  it('a deposit slip takes cheques in hand once; cancelling frees them', async () => {
+    const accountId = await withMigrator(async (c) => {
+      const b = await c.query<{ id: string }>(
+        `INSERT INTO banks (school_id, code, name) VALUES ($1, 'HDFC', 'HDFC Bank') RETURNING id::text`,
+        [school.id],
+      );
+      const a = await c.query<{ id: string }>(
+        `INSERT INTO school_bank_accounts (school_id, bank_id, account_name, account_no, ifsc) VALUES ($1, $2, 'School Fee Account', '50100012345678', 'HDFC0001234') RETURNING id::text`,
+        [school.id, b.rows[0]!.id],
+      );
+      return a.rows[0]!.id;
+    });
+    const chq = await receipt({
+      studentId: students.other,
+      amount: 1000,
+      mode: 'cheque',
+      instrumentNo: '778899',
+      instrumentDate: '2026-10-01',
+      bankName: 'Axis',
+    });
+    expect(chq.statusCode).toBe(201);
+    const pending = await inject({
+      method: 'GET',
+      url: '/fees/deposit-slips/pending',
+      headers: h(accountant),
+    });
+    expect(pending.statusCode).toBe(200);
+    const items = pending.json().data as Array<{ key: string; instrumentNo: string; mode: string }>;
+    expect(items.every((x) => x.mode === 'cheque' || x.mode === 'dd')).toBe(true);
+    const mine = items.find((x) => x.instrumentNo === '778899')!;
+    expect(pending.json().accounts).toHaveLength(1);
+    const slip = await inject({
+      method: 'POST',
+      url: '/fees/deposit-slips',
+      headers: h(accountant),
+      json: { bankAccountId: accountId, depositOn: '2026-10-08', items: [mine.key] },
+    });
+    expect(slip.statusCode).toBe(201);
+    expect(slip.json()).toMatchObject({
+      slipNo: 1,
+      instruments: 1,
+      total: '1000.00',
+      status: 'open',
+    });
+    const twice = await inject({
+      method: 'POST',
+      url: '/fees/deposit-slips',
+      headers: h(accountant),
+      json: { bankAccountId: accountId, depositOn: '2026-10-08', items: [mine.key] },
+    });
+    expect(twice.statusCode).toBe(409);
+    const detail = await inject({
+      method: 'GET',
+      url: `/fees/deposit-slips/${slip.json().id}`,
+      headers: h(accountant),
+    });
+    expect(detail.json().lines).toHaveLength(1);
+    expect(detail.json().totalWords).toMatch(/One Thousand/i);
+    const cancel = await inject({
+      method: 'POST',
+      url: `/fees/deposit-slips/${slip.json().id}/cancel`,
+      headers: h(accountant),
+    });
+    expect(cancel.json().status).toBe('cancelled');
+    const again = await inject({
+      method: 'POST',
+      url: '/fees/deposit-slips',
+      headers: h(accountant),
+      json: { bankAccountId: accountId, depositOn: '2026-10-09', items: [mine.key] },
+    });
+    expect(again.statusCode).toBe(201);
+    expect(again.json().slipNo).toBe(2);
+  });
 });

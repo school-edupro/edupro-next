@@ -173,3 +173,37 @@ export async function undoCarry(fd: FormData) {
   }
   redirect(`${path}&ok=1`);
 }
+
+// ---- bank deposit slips (0100) --------------------------------------------------------------------
+export async function createDepositSlip(fd: FormData) {
+  const path = '/fees/deposit-slips';
+  const items = fd.getAll('items').map(String);
+  if (items.length === 0)
+    redirect(`${path}?error=1&detail=${encodeURIComponent('Tick at least one cheque or draft')}`);
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>('/fees/deposit-slips', {
+      method: 'POST',
+      body: JSON.stringify({
+        bankAccountId: str(fd, 'bankAccountId'),
+        depositOn: str(fd, 'depositOn'),
+        items,
+        remarks: str(fd, 'remarks') || undefined,
+      }),
+    });
+    id = r.id;
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`/fees/deposit-slips/${id}`);
+}
+
+export async function cancelDepositSlip(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`/fees/deposit-slips/${id}/cancel`, { method: 'POST' });
+  } catch (error) {
+    fail(`/fees/deposit-slips/${id}`, error);
+  }
+  redirect('/fees/deposit-slips?ok=1');
+}

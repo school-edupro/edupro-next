@@ -26,6 +26,7 @@ export const FEES = {
   reconcileView: 'payments.reconcile.view',
   reconcileRun: 'payments.reconcile.run',
   carryForward: 'fees.carry_forward.run',
+  depositSlip: 'fees.deposit_slip.manage',
 } as const;
 
 export const HeadKindSchema = z.enum([
@@ -405,3 +406,23 @@ export const UndoCarryForwardSchema = z.object({
   studentId: IdSchema,
 });
 export class UndoCarryForwardDto extends createZodDto(UndoCarryForwardSchema) {}
+
+// ---- Bank deposit slips (0100) ------------------------------------------------------------------------
+export const PendingInstrumentsQuerySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  ledger: z.enum(['school', 'hostel', 'misc', 'admission']).optional(),
+});
+export class PendingInstrumentsQueryDto extends createZodDto(PendingInstrumentsQuerySchema) {}
+
+export const CreateDepositSlipSchema = z.object({
+  bankAccountId: IdSchema,
+  depositOn: DateSchema,
+  /** `p:<fee receipt id>` or `m:<misc receipt id>` */
+  items: z
+    .array(z.string().regex(/^[pm]:\d{1,18}$/))
+    .min(1)
+    .max(500),
+  remarks: z.string().trim().max(200).optional(),
+});
+export class CreateDepositSlipDto extends createZodDto(CreateDepositSlipSchema) {}

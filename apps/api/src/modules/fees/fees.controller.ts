@@ -9,8 +9,11 @@ import { FeeMastersService } from './fee-masters.service';
 import { FeeReportsService } from './fee-reports.service';
 import { FeeSetupService } from './fee-setup.service';
 import { FeeCarryService } from './fee-carry.service';
+import { FeeDepositService } from './fee-deposit.service';
 import {
   ClassSummaryQueryDto,
+  CreateDepositSlipDto,
+  PendingInstrumentsQueryDto,
   CarryPreviewQueryDto,
   RunCarryForwardDto,
   UndoCarryForwardDto,
@@ -53,6 +56,7 @@ export class FeesController {
     private readonly feeReports: FeeReportsService,
     private readonly setup: FeeSetupService,
     private readonly carry: FeeCarryService,
+    private readonly deposits: FeeDepositService,
   ) {}
 
   // ---- masters ------------------------------------------------------------------------------------
@@ -269,6 +273,50 @@ export class FeesController {
   @RequirePermission(FEES.carryForward)
   undoCarry(@ReqCtx() ctx: RequestContext, @Body() body: UndoCarryForwardDto) {
     return this.carry.undo(ctx, body.toYearId, body.studentId, body.fromYearId);
+  }
+
+  // ---- bank deposit slips --------------------------------------------------------------------------
+  @Get('deposit-slips')
+  @ApiOperation({ summary: 'Deposit slips of the working year' })
+  @RequirePermission(FEES.ledgerView)
+  async depositSlips(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.deposits.list(ctx) };
+  }
+
+  @Get('deposit-slips/pending')
+  @ApiOperation({
+    summary: 'Cheques and drafts in hand that are on no slip yet, and the bank accounts',
+  })
+  @RequirePermission(FEES.ledgerView)
+  async pendingInstruments(@ReqCtx() ctx: RequestContext, @Query() q: PendingInstrumentsQueryDto) {
+    const [data, accounts] = await Promise.all([
+      this.deposits.pending(ctx, q),
+      this.deposits.accounts(ctx),
+    ]);
+    return { data, accounts };
+  }
+
+  @Get('deposit-slips/:id')
+  @ApiOperation({ summary: 'One deposit slip with its cheques, for printing' })
+  @RequirePermission(FEES.ledgerView)
+  depositSlip(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.deposits.get(ctx, id);
+  }
+
+  @Post('deposit-slips')
+  @ApiOperation({ summary: 'Make a deposit slip from the chosen cheques and drafts' })
+  @RequirePermission(FEES.depositSlip, {
+    description: 'Make and cancel bank deposit slips for cheques and drafts',
+  })
+  createDepositSlip(@ReqCtx() ctx: RequestContext, @Body() body: CreateDepositSlipDto) {
+    return this.deposits.create(ctx, body);
+  }
+
+  @Post('deposit-slips/:id/cancel')
+  @ApiOperation({ summary: 'Cancel a slip and free its cheques' })
+  @RequirePermission(FEES.depositSlip)
+  cancelDepositSlip(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.deposits.cancel(ctx, id);
   }
 
   @Get('receipt-sequences')

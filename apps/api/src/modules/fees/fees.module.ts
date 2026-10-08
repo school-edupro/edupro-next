@@ -13,6 +13,7 @@ import { FeeMastersService } from './fee-masters.service';
 import { FeeReportsService } from './fee-reports.service';
 import { FeeSetupService } from './fee-setup.service';
 import { FeeCarryService } from './fee-carry.service';
+import { FeeDepositService } from './fee-deposit.service';
 import { FeesController } from './fees.controller';
 
 /**
@@ -31,6 +32,7 @@ import { FeesController } from './fees.controller';
     FeeReportsService,
     FeeSetupService,
     FeeCarryService,
+    FeeDepositService,
     AuditService,
   ],
   exports: [

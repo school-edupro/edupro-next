@@ -6391,3 +6391,51 @@ a.ep-tabs__tab {
 .ep-lesson__decide .ep-input {
   width: 100%;
 }
+
+/* A sheet meant for paper (deposit slip, fee bill, certificate): on screen a bordered page, in print
+   only the sheet, without the menu and the header. */
+.ep-print-sheet {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: var(--sp-5);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-body);
+}
+.ep-print-sheet + .ep-print-sheet {
+  margin-top: var(--sp-5);
+}
+.ep-print-sheet__head {
+  text-align: center;
+  margin-bottom: var(--sp-4);
+}
+.ep-print-sheet__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-2) var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+.ep-print-sheet__sign {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  margin-top: var(--sp-8);
+}
+@media print {
+  body:has(.ep-print-sheet) .ep-sidebar,
+  body:has(.ep-print-sheet) .ep-header,
+  body:has(.ep-print-sheet) nextjs-portal,
+  .ep-noprint {
+    display: none !important;
+  }
+  .ep-print-sheet {
+    border: 0;
+    padding: 0;
+    max-width: none;
+    break-after: page;
+  }
+  .ep-print-sheet:last-of-type {
+    break-after: auto;
+  }
+}
