@@ -11,6 +11,8 @@ import { FeeLedgerService, type Ledger } from './fee-ledger.service';
 export interface BillInstalment {
   label: string;
   dueOn: string;
+  /** The class's challan (bill) date of the instalment, when set. */
+  challanOn: string | null;
   ledger: string;
   /** Heads sharing a print name are one line. */
   lines: Array<{ head: string; fee: string; discount: string; paid: string; balance: string }>;
@@ -162,6 +164,7 @@ export class FeeDocumentsService {
       const instalments: BillInstalment[] = due.map((i) => ({
         label: i.label,
         dueOn: i.dueOn,
+        challanOn: i.challanOn,
         ledger: i.ledger,
         lines: lines.rows
           .filter((l) => l.due_on === i.dueOn && l.ledger === i.ledger)

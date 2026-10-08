@@ -18,6 +18,7 @@ interface Bill {
   instalments: Array<{
     label: string;
     dueOn: string;
+    challanOn: string | null;
     ledger: string;
     lines: Array<{ head: string; fee: string; discount: string; paid: string; balance: string }>;
     balance: string;
@@ -153,7 +154,12 @@ export default async function FeeBillsPage({
                       <td>
                         {n === 0 ? `${i.label}${i.ledger === 'hostel' ? ' (hostel)' : ''}` : ''}
                       </td>
-                      <td>{n === 0 ? dmy(i.dueOn) : ''}</td>
+                      <td>
+                        {n === 0 ? dmy(i.dueOn) : ''}
+                        {n === 0 && i.challanOn ? (
+                          <div className="ep-field__help">Challan: {dmy(i.challanOn)}</div>
+                        ) : null}
+                      </td>
                       <td>{l.head}</td>
                       <td style={{ textAlign: 'right' }}>{rupees(l.fee)}</td>
                       <td style={{ textAlign: 'right' }}>{rupees(l.discount)}</td>

@@ -35,6 +35,11 @@ export interface LedgerInstalment {
   lateFee: LateFee;
   visibleFrom: string;
   visible: boolean;
+  /** The class calendar: parents see the instalment at all, and may pay it online. */
+  show: boolean;
+  feePay: boolean;
+  /** Bill date of the instalment for the class, when one is set. */
+  challanOn: string | null;
   /** paid, overdue, due (visible, not yet overdue) or upcoming (not yet visible) */
   status: 'paid' | 'overdue' | 'due' | 'upcoming';
 }
@@ -178,10 +183,10 @@ export class FeeLedgerService {
         throw error;
       }
       const visible = ledger.instalments.filter((i) => i.visible);
-      const payableNow = visible.reduce(
-        (sum, i) => sum + Number(i.balance) + Number(i.lateFee.outstanding),
-        0,
-      );
+      // what the parent can pay online now: instalments the class has opened for online payment
+      const payableNow = visible
+        .filter((i) => i.feePay)
+        .reduce((sum, i) => sum + Number(i.balance) + Number(i.lateFee.outstanding), 0);
       children.push({
         ...ledger,
         instalments: visible,
@@ -242,6 +247,22 @@ export class FeeLedgerService {
         [yearId],
       );
       const bySeq = new Map(periods.rows.map((p) => [p.sequence, p]));
+      // the class's own calendar: start date, challan date, and whether parents see and may pay the instalment
+      const classRules = await c.query<{
+        period_id: string;
+        start_on: string | null;
+        challan_on: string | null;
+        fee_pay: boolean;
+        show: boolean;
+      }>(
+        `SELECT cr.period_id::text, cr.start_on::text, cr.challan_on::text, cr.fee_pay, cr.show
+           FROM fee_period_class_rules cr JOIN fee_periods fp ON fp.id = cr.period_id
+          WHERE fp.academic_year_id = $2 AND cr.class_id = (
+            SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+             WHERE e.student_id = $1 AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1)`,
+        [studentId, yearId],
+      );
+      const ruleOf = new Map(classRules.rows.map((r) => [r.period_id, r]));
       const groups = await c.query<{
         due_on: string;
         ledger: string;
@@ -284,8 +305,12 @@ export class FeeLedgerService {
           periods.rows.find((p) => p.due_on === g.due_on && p.sequence === g.sequences[0]) ??
           periods.rows.find((p) => p.due_on === g.due_on) ??
           first;
+        // the rule of the instalment's first month speaks for the instalment
+        const rule = first ? ruleOf.get(first.id) : undefined;
         const visibleFrom =
-          anchor?.visible_from ?? shiftDate(g.due_on, -Math.max(0, Number(daysBefore)));
+          rule?.start_on ??
+          anchor?.visible_from ??
+          shiftDate(g.due_on, -Math.max(0, Number(daysBefore)));
         const net = Number(g.net);
         const paid = Number(g.paid);
         const balance = net - paid;
@@ -297,7 +322,8 @@ export class FeeLedgerService {
         totLate += late;
         totPosted += posted;
         totOutstanding += outstanding;
-        const visible = visibleFrom <= asOfDate;
+        const show = rule?.show ?? true;
+        const visible = show && visibleFrom <= asOfDate;
         const status: LedgerInstalment['status'] =
           balance <= 0 ? 'paid' : asOfDate > g.due_on ? 'overdue' : visible ? 'due' : 'upcoming';
         instalments.push({
@@ -324,6 +350,9 @@ export class FeeLedgerService {
           },
           visibleFrom,
           visible,
+          show,
+          feePay: rule?.fee_pay ?? true,
+          challanOn: rule?.challan_on ?? null,
           status,
         });
       }

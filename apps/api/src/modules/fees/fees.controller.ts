@@ -13,6 +13,7 @@ import { FeeDepositService } from './fee-deposit.service';
 import { FeeDocumentsService } from './fee-documents.service';
 import {
   ClassSummaryQueryDto,
+  CloneClassRulesDto,
   BillQueryDto,
   ClassBillsQueryDto,
   TaxCertificateQueryDto,
@@ -231,6 +232,17 @@ export class FeesController {
     @Body() body: SetClassRulesDto,
   ) {
     return { data: await this.setup.setClassRules(ctx, classId, body) };
+  }
+
+  @Post('class-rules/:classId/clone')
+  @ApiOperation({ summary: "Copy a class's fee calendar onto other classes" })
+  @RequirePermission(FEES.masterManage)
+  cloneClassRules(
+    @ReqCtx() ctx: RequestContext,
+    @Param('classId') classId: string,
+    @Body() body: CloneClassRulesDto,
+  ) {
+    return this.setup.cloneClassRules(ctx, classId, body.toClassIds);
   }
 
   @Get('payment-modes')

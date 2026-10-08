@@ -524,4 +524,102 @@ describe('fee set-up, second pass (e2e)', () => {
     expect(stay.paidAhead).toHaveLength(0);
     expect(stay.totals.direction).toBe('pay');
   });
+  it('the class calendar: per-day late fee with a maximum, show, fee pay, month bounce charge, clone', async () => {
+    const at = (seq: number) => periods.find((p) => p.sequence === seq)!.id;
+    const set = await inject({
+      method: 'PUT',
+      url: `/fees/class-rules/${otherClassId}`,
+      headers: h(),
+      json: {
+        lateMode: 'daywise',
+        latePerDay: 25,
+        lateMax: 300,
+        periods: [
+          { periodId: at(8), show: false, challanOn: '2026-11-01' },
+          { periodId: at(9), feePay: false, startOn: '2026-11-15', instalment: 9 },
+          { periodId: at(7), bounceCharge: 900 },
+        ],
+      },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().data).toMatchObject({
+      lateFeeMode: 'daywise',
+      classLateMode: 'daywise',
+      classLatePerDay: '25.00',
+      lateMax: '300.00',
+    });
+    expect(set.json().data.periods[7]).toMatchObject({ show: false, challanOn: '2026-11-01' });
+    expect(set.json().data.periods[8]).toMatchObject({
+      feePay: false,
+      startOn: '2026-11-15',
+      instalment: 9,
+    });
+    // the school charges by slab; this class now pays 25 a day, never more than 300 an instalment
+    const june = (await ledgerOf(students.other!, '2026-08-18')).instalments[4]!; // August, due on the 10th
+    expect(june.lateFee).toMatchObject({ amount: '200.00', mode: 'daywise' });
+    expect((await ledgerOf(students.other!, '2026-12-31')).instalments[4]!.lateFee.amount).toBe(
+      '300.00',
+    );
+    expect((await ledgerOf(students.rules!, '2026-08-18')).instalments[4]!.lateFee.mode).toBe(
+      'slab',
+    );
+    // hidden and counter-only instalments
+    const l = (
+      await inject({
+        method: 'GET',
+        url: `/fees/students/${students.other}/ledger?asOf=2026-12-31`,
+        headers: h(),
+      })
+    ).json() as {
+      instalments: Array<{
+        show: boolean;
+        feePay: boolean;
+        visible: boolean;
+        visibleFrom: string;
+        challanOn: string | null;
+      }>;
+    };
+    expect(l.instalments[7]).toMatchObject({
+      show: false,
+      visible: false,
+      challanOn: '2026-11-01',
+    });
+    expect(l.instalments[8]).toMatchObject({
+      feePay: false,
+      visible: true,
+      visibleFrom: '2026-11-15',
+    });
+    expect(l.instalments[6]).toMatchObject({ show: true, feePay: true });
+    // this month's own bounce charge wins over the class's and the school's
+    const chq = await receipt({
+      studentId: students.other,
+      amount: 500,
+      mode: 'cheque',
+      instrumentNo: '909090',
+      bankName: 'PNB',
+    });
+    const bounce = await inject({
+      method: 'POST',
+      url: '/fees/adjustments',
+      headers: h(accountant),
+      json: { kind: 'bounce', paymentId: chq.json().paymentId, reason: 'Signature differs' },
+    });
+    expect(bounce.json().charge).toBe('900.00');
+    // the whole calendar copies to another class
+    const clone = await inject({
+      method: 'POST',
+      url: `/fees/class-rules/${otherClassId}/clone`,
+      headers: h(),
+      json: { toClassIds: [classId] },
+    });
+    expect(clone.statusCode).toBe(201);
+    const copy = (
+      await inject({ method: 'GET', url: `/fees/class-rules/${classId}`, headers: h() })
+    ).json().data;
+    expect(copy).toMatchObject({ classLateMode: 'daywise', lateMax: '300.00', bounceCharge: null });
+    expect(copy.periods[7].show).toBe(false);
+    expect((await ledgerOf(students.rules!, '2026-08-18')).instalments[4]!.lateFee.mode).toBe(
+      'daywise',
+    );
+  });
 });

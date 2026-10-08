@@ -43,16 +43,46 @@ export async function saveClassRules(fd: FormData) {
         .filter((s): s is { on: string; amount: number } => s.on !== '' && s.amount !== null);
       return {
         periodId,
+        instalment: num(fd, `instalment:${periodId}`),
+        startOn: str(fd, `startOn:${periodId}`) || null,
         dueOn: str(fd, `dueOn:${periodId}`) || null,
         lateFeeAmount: num(fd, `lateFee:${periodId}`),
         slabs,
-        latePerDay: num(fd, `perDay:${periodId}`),
+        challanOn: str(fd, `challanOn:${periodId}`) || null,
+        bounceCharge: num(fd, `bounce:${periodId}`),
+        feePay: str(fd, `feePay:${periodId}`) !== 'no',
+        show: str(fd, `show:${periodId}`) !== 'no',
       };
     });
+  const mode = str(fd, 'lateMode');
   try {
     await apiFetch(`/fees/class-rules/${classId}`, {
       method: 'PUT',
-      body: JSON.stringify({ bounceCharge: num(fd, 'bounceCharge'), periods }),
+      body: JSON.stringify({
+        bounceCharge: num(fd, 'bounceCharge'),
+        lateMode: mode === 'daywise' || mode === 'slab' ? mode : null,
+        latePerDay: num(fd, 'latePerDay'),
+        lateMax: num(fd, 'lateMax'),
+        periods,
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  done(path);
+}
+
+/** Copies the class's whole calendar onto the classes ticked. */
+export async function cloneClassRules(fd: FormData) {
+  const classId = str(fd, 'classId');
+  const path = `/fees/rules?classId=${classId}`;
+  const toClassIds = fd.getAll('toClassIds').map(String);
+  if (toClassIds.length === 0)
+    redirect(`${path}&error=1&detail=${encodeURIComponent('Tick at least one class to copy to')}`);
+  try {
+    await apiFetch(`/fees/class-rules/${classId}/clone`, {
+      method: 'POST',
+      body: JSON.stringify({ toClassIds }),
     });
   } catch (error) {
     fail(path, error);

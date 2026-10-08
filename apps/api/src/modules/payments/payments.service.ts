@@ -848,7 +848,11 @@ export class PaymentsService {
       throw new DomainError('year.closed', 'Payments are accepted for the current session only', {
         status: 409,
       });
-    const payable = Number(ledger.totals.payable);
+    // instalments the class keeps off online payment (Fee Pay = No) or hidden (Show = No) are paid at the counter
+    const blocked = ledger.instalments
+      .filter((i) => !i.feePay || !i.show)
+      .reduce((a, i) => a + Number(i.balance) + Number(i.lateFee.outstanding), 0);
+    const payable = Math.max(Number(ledger.totals.payable) - blocked, 0);
     if (dto.amount > payable + 0.005)
       throw new DomainError(
         'payments.amount_exceeds_dues',

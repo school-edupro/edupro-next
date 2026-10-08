@@ -3,6 +3,7 @@ import {
   Card,
   Checkbox,
   FormActions,
+  FormRow,
   InputField,
   PageHeader,
   SelectField,
@@ -10,26 +11,20 @@ import {
 import { Notice } from '@/components/Notice';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { apiFetch, getMe } from '@/lib/api';
-import { saveClassRules, savePaymentMode } from '@/lib/fee-setup-actions';
+import { ClassCalendarGrid, type CalendarPeriod } from '@/components/fees/ClassCalendarGrid';
+import { cloneClassRules, saveClassRules, savePaymentMode } from '@/lib/fee-setup-actions';
 import type { ClassRow, Page } from '@/lib/types';
 
-interface RulePeriod {
-  periodId: string;
-  sequence: number;
-  name: string;
-  schoolDueOn: string;
-  schoolLateFee: string;
-  dueOn: string | null;
-  lateFeeAmount: string | null;
-  slabs: Array<{ on: string; amount: string }>;
-  latePerDay: string | null;
-}
 interface ClassRules {
   classId: string;
   bounceCharge: string | null;
   schoolBounceCharge: string;
   lateFeeMode: 'slab' | 'daywise';
-  periods: RulePeriod[];
+  classLateMode: 'slab' | 'daywise' | null;
+  classLatePerDay: string | null;
+  lateMax: string | null;
+  schoolLatePerDay: string;
+  periods: CalendarPeriod[];
 }
 interface PaymentMode {
   code: string;
@@ -40,11 +35,6 @@ interface PaymentMode {
   needInstrumentDate: boolean;
   needBank: boolean;
 }
-
-const date = (iso: string) => {
-  const [y, m, d] = iso.split('-');
-  return `${d}-${m}-${y}`;
-};
 
 /**
  * Fee set-up, second pass: how a head prints and whether it counts for the tax certificate, a class's
@@ -96,139 +86,105 @@ export default async function FeeRulesPage({
             </Button>
           </form>
           {cls && rules ? (
-            <form action={saveClassRules} style={{ marginTop: 'var(--sp-4)' }}>
-              <input type="hidden" name="classId" value={cls.id} />
-              <p className="ep-field__help">
-                Leave a box empty to follow the school. Late fee works{' '}
-                <strong>{rules.lateFeeMode === 'slab' ? 'by slab' : 'per day'}</strong> in this
-                school
-                {rules.lateFeeMode === 'slab'
-                  ? ': the amount applies after the last date, and each later date raises it.'
-                  : ': give the rupees per day for this class.'}{' '}
-                Unpaid bills of the class move to a new last date as soon as you save.
-              </p>
-              <div className="ep-table-wrap">
-                <table className="ep-table ep-table--dense">
-                  <caption className="ep-sr-only">{cls.name}: own last dates and late fee</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Month</th>
-                      <th scope="col">School last date</th>
-                      <th scope="col">Class last date</th>
-                      {rules.lateFeeMode === 'slab' ? (
-                        <>
-                          <th scope="col">Late fee (school)</th>
-                          <th scope="col">Late fee (class)</th>
-                          <th scope="col">From date → amount</th>
-                        </>
-                      ) : (
-                        <th scope="col">Late fee per day (class)</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rules.periods.map((p) => (
-                      <tr key={p.periodId}>
-                        <th scope="row">
-                          <input type="hidden" name="periodIds" value={p.periodId} />
-                          {p.name}
-                        </th>
-                        <td>{date(p.schoolDueOn)}</td>
-                        <td>
-                          <input
-                            className="ep-input"
-                            type="date"
-                            name={`dueOn:${p.periodId}`}
-                            defaultValue={p.dueOn ?? ''}
-                            disabled={!canManage}
-                            aria-label={`${p.name}: class last date`}
-                          />
-                        </td>
-                        {rules.lateFeeMode === 'slab' ? (
-                          <>
-                            <td>₹{p.schoolLateFee}</td>
-                            <td>
-                              <input
-                                className="ep-input"
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                name={`lateFee:${p.periodId}`}
-                                defaultValue={p.lateFeeAmount ?? ''}
-                                disabled={!canManage}
-                                aria-label={`${p.name}: class late fee`}
-                              />
-                            </td>
-                            <td>
-                              <div
-                                style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}
-                              >
-                                {[1, 2, 3].map((i) => (
-                                  <span
-                                    key={i}
-                                    style={{ display: 'inline-flex', gap: 'var(--sp-1)' }}
-                                  >
-                                    <input
-                                      className="ep-input"
-                                      type="date"
-                                      name={`slabOn${i}:${p.periodId}`}
-                                      defaultValue={p.slabs[i - 1]?.on ?? ''}
-                                      disabled={!canManage}
-                                      aria-label={`${p.name}: slab ${i} from date`}
-                                    />
-                                    <input
-                                      className="ep-input"
-                                      type="number"
-                                      min={0}
-                                      step="0.01"
-                                      name={`slabAmt${i}:${p.periodId}`}
-                                      defaultValue={p.slabs[i - 1]?.amount ?? ''}
-                                      disabled={!canManage}
-                                      aria-label={`${p.name}: slab ${i} amount`}
-                                    />
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-                          </>
-                        ) : (
-                          <td>
-                            <input
-                              className="ep-input"
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              name={`perDay:${p.periodId}`}
-                              defaultValue={p.latePerDay ?? ''}
-                              disabled={!canManage}
-                              aria-label={`${p.name}: class late fee per day`}
-                            />
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ marginTop: 'var(--sp-4)', maxWidth: '22rem' }}>
-                <InputField
-                  id="bounceCharge"
-                  name="bounceCharge"
-                  label="Cheque-bounce charge of this class"
-                  help={`School charge: ₹${rules.schoolBounceCharge}. Empty = the school's.`}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  defaultValue={rules.bounceCharge ?? ''}
-                  disabled={!canManage}
-                />
-              </div>
+            <>
+              <form action={saveClassRules} style={{ marginTop: 'var(--sp-4)' }}>
+                <input type="hidden" name="classId" value={cls.id} />
+                <FormRow columns={4}>
+                  <SelectField
+                    id="lateMode"
+                    name="lateMode"
+                    label="Late fee of this class"
+                    defaultValue={rules.classLateMode ?? ''}
+                    disabled={!canManage}
+                    options={[
+                      { value: '', label: 'As the school' },
+                      { value: 'daywise', label: 'Per day after the last date' },
+                      { value: 'slab', label: 'By slabs (dates and amounts)' },
+                    ]}
+                  />
+                  <InputField
+                    id="latePerDay"
+                    name="latePerDay"
+                    label="Per day (₹)"
+                    help={`School: ₹${rules.schoolLatePerDay} a day`}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={rules.classLatePerDay ?? ''}
+                    disabled={!canManage}
+                  />
+                  <InputField
+                    id="lateMax"
+                    name="lateMax"
+                    label="Maximum per instalment (₹)"
+                    help="Per-day only. Empty = no limit."
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={rules.lateMax ?? ''}
+                    disabled={!canManage}
+                  />
+                  <InputField
+                    id="bounceCharge"
+                    name="bounceCharge"
+                    label="Bounce charge of the class (₹)"
+                    help={`School: ₹${rules.schoolBounceCharge}. A month’s own Bounce wins.`}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={rules.bounceCharge ?? ''}
+                    disabled={!canManage}
+                  />
+                </FormRow>
+                <p className="ep-field__help">
+                  In force now:{' '}
+                  <strong>{rules.lateFeeMode === 'slab' ? 'slabs' : 'per day'}</strong>. Per day:
+                  the rate above is charged for every day after the last date. Slabs: “Late fees”
+                  applies after the last date; after “Last date 1” the fee becomes “Late fee 1”, and
+                  so on (the later amount replaces the earlier one). An empty box follows the
+                  school. Months with the same last date form one instalment. Show = No hides the
+                  instalment from parents; Fee pay = No lets them see it but not pay online. Unpaid
+                  bills move to a new last date as soon as you save.
+                </p>
+                <ClassCalendarGrid periods={rules.periods} canManage={canManage} />
+                {canManage ? (
+                  <FormActions>
+                    <Button type="submit">Save the calendar of {cls.name}</Button>
+                  </FormActions>
+                ) : null}
+              </form>
               {canManage ? (
-                <FormActions>
-                  <Button type="submit">Save class rules</Button>
-                </FormActions>
+                <form action={cloneClassRules} style={{ marginTop: 'var(--sp-5)' }}>
+                  <input type="hidden" name="classId" value={cls.id} />
+                  <fieldset>
+                    <legend className="ep-field__label">
+                      Clone the saved calendar of {cls.name} to other classes
+                    </legend>
+                    <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
+                      {classes
+                        .filter((k) => k.id !== cls.id)
+                        .map((k) => (
+                          <Checkbox
+                            key={k.id}
+                            id={`clone-${k.id}`}
+                            name="toClassIds"
+                            value={k.id}
+                            label={k.code}
+                          />
+                        ))}
+                    </div>
+                  </fieldset>
+                  <p className="ep-field__help">
+                    Save first. Cloning replaces the whole calendar of the ticked classes.
+                  </p>
+                  <FormActions>
+                    <Button type="submit" variant="secondary">
+                      Clone to the ticked classes
+                    </Button>
+                  </FormActions>
+                </form>
               ) : null}
-            </form>
+            </>
           ) : null}
         </Card>
 

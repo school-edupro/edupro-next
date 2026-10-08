@@ -352,6 +352,11 @@ export class NotifyDefaultersDto extends createZodDto(NotifyDefaultersSchema) {}
 export const SetClassRulesSchema = z.object({
   /** Cheque-bounce charge of this class; null = the school's. */
   bounceCharge: Money.nullable().optional(),
+  /** How this class is charged late fee; null = as the school */
+  lateMode: z.enum(['daywise', 'slab']).nullable().optional(),
+  latePerDay: Money.nullable().optional(),
+  /** day-wise: the most one instalment can be charged; null = no limit */
+  lateMax: Money.nullable().optional(),
   periods: z
     .array(
       z.object({
@@ -366,6 +371,16 @@ export const SetClassRulesSchema = z.object({
           .default([]),
         /** day-wise mode: rupees per day; null = the school's */
         latePerDay: Money.nullable().optional(),
+        /** the class's own quarter number; null = the school's */
+        instalment: z.number().int().min(1).max(12).nullable().optional(),
+        /** parents see the instalment from this date */
+        startOn: DateSchema.nullable().optional(),
+        challanOn: DateSchema.nullable().optional(),
+        bounceCharge: Money.nullable().optional(),
+        /** parents may pay it online */
+        feePay: z.boolean().optional(),
+        /** parents see it at all */
+        show: z.boolean().optional(),
       }),
     )
     .max(12)
@@ -518,3 +533,6 @@ export const CollectionSubmitSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 });
 export class CollectionSubmitDto extends createZodDto(CollectionSubmitSchema) {}
+
+export const CloneClassRulesSchema = z.object({ toClassIds: z.array(IdSchema).min(1).max(60) });
+export class CloneClassRulesDto extends createZodDto(CloneClassRulesSchema) {}

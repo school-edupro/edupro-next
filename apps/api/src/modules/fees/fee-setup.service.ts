@@ -17,12 +17,25 @@ export interface ClassRulePeriod {
   lateFeeAmount: string | null;
   slabs: Array<{ on: string; amount: string }>;
   latePerDay: string | null;
+  /** The school's quarter number and the class's own (null = the school's). */
+  schoolInstalment: number;
+  instalment: number | null;
+  startOn: string | null;
+  challanOn: string | null;
+  bounceCharge: string | null;
+  feePay: boolean;
+  show: boolean;
 }
 export interface ClassRules {
   classId: string;
   bounceCharge: string | null;
   schoolBounceCharge: string;
+  /** What is in force for the class, and the class's own choice (null = the school's). */
   lateFeeMode: 'slab' | 'daywise';
+  classLateMode: 'slab' | 'daywise' | null;
+  classLatePerDay: string | null;
+  lateMax: string | null;
+  schoolLatePerDay: string;
   periods: ClassRulePeriod[];
 }
 export interface PaymentModeRow {
@@ -83,6 +96,8 @@ export class FeeSetupService {
       >(
         `SELECT fp.id::text AS "periodId", fp.sequence, fp.name, fp.due_on::text AS "schoolDueOn", fp.late_fee_amount::text AS "schoolLateFee",
                 r.due_on::text AS "dueOn", r.late_fee_amount::text AS "lateFeeAmount", r.late_per_day::text AS "latePerDay",
+                fp.instalment AS "schoolInstalment", r.instalment, r.start_on::text AS "startOn", r.challan_on::text AS "challanOn",
+                r.bounce_charge::text AS "bounceCharge", COALESCE(r.fee_pay, true) AS "feePay", COALESCE(r.show, true) AS show,
                 (SELECT jsonb_agg(jsonb_build_object('on', s.on_date::text, 'amount', s.amount::text) ORDER BY s.on_date)
                    FROM (VALUES (r.late_slab_1_on, r.late_slab_1_amount), (r.late_slab_2_on, r.late_slab_2_amount), (r.late_slab_3_on, r.late_slab_3_amount)) AS s(on_date, amount)
                   WHERE s.on_date IS NOT NULL) AS slabs
@@ -94,16 +109,27 @@ export class FeeSetupService {
         bounce: string | null;
         school: string | null;
         mode: string | null;
+        class_mode: 'slab' | 'daywise' | null;
+        class_per_day: string | null;
+        late_max: string | null;
+        school_per_day: string | null;
       }>(
-        `SELECT (SELECT bounce_charge::text FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2) AS bounce,
-                app.setting('fees.bounce_charge') #>> '{}' AS school, app.setting('fees.late_fee_mode') #>> '{}' AS mode`,
+        `SELECT cc.bounce_charge::text AS bounce, cc.late_mode AS class_mode, cc.late_per_day::text AS class_per_day, cc.late_max::text AS late_max,
+                app.setting('fees.bounce_charge') #>> '{}' AS school, app.setting('fees.late_fee_mode') #>> '{}' AS mode,
+                app.setting('fees.late_fee_per_day') #>> '{}' AS school_per_day
+           FROM (SELECT 1) one LEFT JOIN fee_class_charges cc ON cc.academic_year_id = $1 AND cc.class_id = $2`,
         [yearId, classId],
       );
+      const x = extra.rows[0];
       return {
         classId,
-        bounceCharge: extra.rows[0]?.bounce ?? null,
-        schoolBounceCharge: extra.rows[0]?.school ?? '0',
-        lateFeeMode: extra.rows[0]?.mode === 'slab' ? 'slab' : 'daywise',
+        bounceCharge: x?.bounce ?? null,
+        schoolBounceCharge: x?.school ?? '0',
+        lateFeeMode: (x?.class_mode ?? x?.mode) === 'slab' ? 'slab' : 'daywise',
+        classLateMode: x?.class_mode ?? null,
+        classLatePerDay: x?.class_per_day ?? null,
+        lateMax: x?.late_max ?? null,
+        schoolLatePerDay: x?.school_per_day ?? '0',
         periods: p.rows.map((r) => ({ ...r, slabs: r.slabs ?? [] })),
       };
     });
@@ -133,7 +159,16 @@ export class FeeSetupService {
           throw new DomainError('not-found', 'Fee period not found', { status: 404 });
         const slabs = [...p.slabs].sort((a, b) => a.on.localeCompare(b.on));
         const lateFee = p.lateFeeAmount ?? (slabs.length > 0 ? 0 : null);
-        const empty = !p.dueOn && lateFee === null && (p.latePerDay ?? null) === null;
+        const empty =
+          !p.dueOn &&
+          lateFee === null &&
+          (p.latePerDay ?? null) === null &&
+          (p.instalment ?? null) === null &&
+          !p.startOn &&
+          !p.challanOn &&
+          (p.bounceCharge ?? null) === null &&
+          p.feePay !== false &&
+          p.show !== false;
         if (empty) {
           await c.query(
             `DELETE FROM fee_period_class_rules WHERE period_id = $1 AND class_id = $2`,
@@ -142,13 +177,16 @@ export class FeeSetupService {
         } else {
           await c.query(
             `INSERT INTO fee_period_class_rules (school_id, period_id, class_id, due_on, late_fee_amount, late_slab_1_on, late_slab_1_amount,
-                    late_slab_2_on, late_slab_2_amount, late_slab_3_on, late_slab_3_amount, late_per_day, updated_by)
-             VALUES (app.current_school_id(), $1, $2, $3::date, $4, $5::date, $6, $7::date, $8, $9::date, $10, $11, app.current_user_id())
+                    late_slab_2_on, late_slab_2_amount, late_slab_3_on, late_slab_3_amount, late_per_day,
+                    instalment, start_on, challan_on, bounce_charge, fee_pay, show, updated_by)
+             VALUES (app.current_school_id(), $1, $2, $3::date, $4, $5::date, $6, $7::date, $8, $9::date, $10, $11,
+                     $12, $13::date, $14::date, $15, $16, $17, app.current_user_id())
              ON CONFLICT (period_id, class_id) DO UPDATE SET due_on = EXCLUDED.due_on, late_fee_amount = EXCLUDED.late_fee_amount,
                late_slab_1_on = EXCLUDED.late_slab_1_on, late_slab_1_amount = EXCLUDED.late_slab_1_amount,
                late_slab_2_on = EXCLUDED.late_slab_2_on, late_slab_2_amount = EXCLUDED.late_slab_2_amount,
                late_slab_3_on = EXCLUDED.late_slab_3_on, late_slab_3_amount = EXCLUDED.late_slab_3_amount,
-               late_per_day = EXCLUDED.late_per_day, updated_at = now(), updated_by = app.current_user_id()`,
+               late_per_day = EXCLUDED.late_per_day, instalment = EXCLUDED.instalment, start_on = EXCLUDED.start_on, challan_on = EXCLUDED.challan_on,
+               bounce_charge = EXCLUDED.bounce_charge, fee_pay = EXCLUDED.fee_pay, show = EXCLUDED.show, updated_at = now(), updated_by = app.current_user_id()`,
             [
               p.periodId,
               classId,
@@ -161,6 +199,12 @@ export class FeeSetupService {
               slabs[2]?.on ?? null,
               slabs[2] ? slabs[2].amount.toFixed(2) : null,
               p.latePerDay ?? null,
+              p.instalment ?? null,
+              p.startOn ?? null,
+              p.challanOn ?? null,
+              p.bounceCharge ?? null,
+              p.feePay !== false,
+              p.show !== false,
             ],
           );
         }
@@ -175,19 +219,40 @@ export class FeeSetupService {
           [p.periodId, classId, yearId],
         );
       }
-      if (dto.bounceCharge !== undefined) {
-        if (dto.bounceCharge === null)
-          await c.query(
-            `DELETE FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2`,
-            [yearId, classId],
-          );
-        else
-          await c.query(
-            `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, updated_by)
-             VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id())
-             ON CONFLICT (academic_year_id, class_id) DO UPDATE SET bounce_charge = EXCLUDED.bounce_charge, updated_at = now(), updated_by = app.current_user_id()`,
-            [yearId, classId, dto.bounceCharge.toFixed(2)],
-          );
+      // the class's own bounce charge and way of charging late fee; a row with nothing of its own goes
+      if (
+        dto.bounceCharge !== undefined ||
+        dto.lateMode !== undefined ||
+        dto.latePerDay !== undefined ||
+        dto.lateMax !== undefined
+      ) {
+        await c.query(
+          `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, late_mode, late_per_day, late_max, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
+           ON CONFLICT (academic_year_id, class_id) DO UPDATE SET
+             bounce_charge = CASE WHEN $7 THEN EXCLUDED.bounce_charge ELSE fee_class_charges.bounce_charge END,
+             late_mode = CASE WHEN $8 THEN EXCLUDED.late_mode ELSE fee_class_charges.late_mode END,
+             late_per_day = CASE WHEN $9 THEN EXCLUDED.late_per_day ELSE fee_class_charges.late_per_day END,
+             late_max = CASE WHEN $10 THEN EXCLUDED.late_max ELSE fee_class_charges.late_max END,
+             updated_at = now(), updated_by = app.current_user_id()`,
+          [
+            yearId,
+            classId,
+            dto.bounceCharge ?? null,
+            dto.lateMode ?? null,
+            dto.latePerDay ?? null,
+            dto.lateMax ?? null,
+            dto.bounceCharge !== undefined,
+            dto.lateMode !== undefined,
+            dto.latePerDay !== undefined,
+            dto.lateMax !== undefined,
+          ],
+        );
+        await c.query(
+          `DELETE FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2
+              AND bounce_charge IS NULL AND late_mode IS NULL AND late_per_day IS NULL AND late_max IS NULL`,
+          [yearId, classId],
+        );
       }
       await this.audit.stage(ctx, c, {
         action: 'fees.class_rules.set',
@@ -199,17 +264,74 @@ export class FeeSetupService {
     return this.classRules(ctx, classId);
   }
 
-  /** The bounce charge for a pupil: the class's own, else null (the caller falls back to the school's). */
+  /** The bounce charge for a pupil: this month's own for the class, then the class's, else null (the school's). */
   async bounceChargeFor(c: PoolClient, studentId: string, yearId: string): Promise<number | null> {
-    const r = await c.query<{ v: string }>(
-      `SELECT cc.bounce_charge::text AS v
-         FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
-         JOIN fee_class_charges cc ON cc.class_id = cs.class_id AND cc.academic_year_id = e.academic_year_id
-        WHERE e.student_id = $1 AND e.academic_year_id = $2
-        ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1`,
+    const r = await c.query<{ v: string | null }>(
+      `SELECT COALESCE(
+                (SELECT cr.bounce_charge FROM fee_period_class_rules cr JOIN fee_periods fp ON fp.id = cr.period_id
+                  WHERE cr.class_id = k.class_id AND fp.academic_year_id = $2 AND cr.bounce_charge IS NOT NULL
+                    AND make_date(fp.year, fp.month, 1) <= CURRENT_DATE ORDER BY fp.sequence DESC LIMIT 1),
+                (SELECT cc.bounce_charge FROM fee_class_charges cc WHERE cc.class_id = k.class_id AND cc.academic_year_id = $2))::text AS v
+         FROM (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                WHERE e.student_id = $1 AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) k`,
       [studentId, yearId],
     );
-    return r.rows[0] ? Number(r.rows[0].v) : null;
+    return r.rows[0]?.v != null ? Number(r.rows[0].v) : null;
+  }
+
+  /** Copies one class's whole calendar (months, late fee choice, bounce charge) onto other classes. */
+  async cloneClassRules(ctx: RequestContext, classId: string, toClassIds: string[]) {
+    const yearId = this.year(ctx);
+    const targets = [...new Set(toClassIds)].filter((id) => id !== classId);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      const ok = await c.query(`SELECT id FROM classes WHERE id = ANY($1::bigint[])`, [
+        [classId, ...targets],
+      ]);
+      if (ok.rowCount !== targets.length + 1)
+        throw new DomainError('not-found', 'Class not found', { status: 404 });
+      for (const to of targets) {
+        await c.query(
+          `DELETE FROM fee_period_class_rules r USING fee_periods fp WHERE fp.id = r.period_id AND fp.academic_year_id = $1 AND r.class_id = $2`,
+          [yearId, to],
+        );
+        await c.query(
+          `INSERT INTO fee_period_class_rules (school_id, period_id, class_id, due_on, late_fee_amount, late_slab_1_on, late_slab_1_amount, late_slab_2_on,
+                  late_slab_2_amount, late_slab_3_on, late_slab_3_amount, late_per_day, instalment, start_on, challan_on, bounce_charge, fee_pay, show, updated_by)
+           SELECT r.school_id, r.period_id, $3, r.due_on, r.late_fee_amount, r.late_slab_1_on, r.late_slab_1_amount, r.late_slab_2_on, r.late_slab_2_amount,
+                  r.late_slab_3_on, r.late_slab_3_amount, r.late_per_day, r.instalment, r.start_on, r.challan_on, r.bounce_charge, r.fee_pay, r.show, app.current_user_id()
+             FROM fee_period_class_rules r JOIN fee_periods fp ON fp.id = r.period_id WHERE fp.academic_year_id = $1 AND r.class_id = $2`,
+          [yearId, classId, to],
+        );
+        await c.query(
+          `DELETE FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2`,
+          [yearId, to],
+        );
+        await c.query(
+          `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, late_mode, late_per_day, late_max, updated_by)
+           SELECT school_id, academic_year_id, $3, bounce_charge, late_mode, late_per_day, late_max, app.current_user_id()
+             FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2`,
+          [yearId, classId, to],
+        );
+        // bills not yet settled follow the last dates now in force for the class
+        await c.query(
+          `UPDATE fee_demands d SET due_on = app.fee_due_on(fp.id, $2, fp.due_on), updated_at = now()
+             FROM fee_periods fp
+            WHERE fp.academic_year_id = $1 AND d.period_id = fp.id AND d.status IN ('pending', 'partial')
+              AND d.due_on IS DISTINCT FROM app.fee_due_on(fp.id, $2, fp.due_on)
+              AND d.student_id IN (SELECT e.student_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                                    WHERE cs.class_id = $2 AND e.academic_year_id = $1 AND e.status = 'active')`,
+          [yearId, to],
+        );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'fees.class_rules.clone',
+        entityType: 'classes',
+        entityId: classId,
+        after: { toClassIds: targets },
+      });
+      return { cloned: targets.length };
+    });
   }
 
   // ---- payment modes ----------------------------------------------------------------------------

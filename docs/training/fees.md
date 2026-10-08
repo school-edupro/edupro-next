@@ -126,3 +126,23 @@ before approval and every step is logged.
 - **Collection from Excel**: download the format, one payment per row (admission no., amount, mode,
   date, and what the payment mode demands). Upload to check; when every row is good, send it for
   approval. On approval all receipts are made together; if one row fails, none is made.
+
+## Class-wise fee calendar (Fee setup → Class rules, payment modes)
+
+Choose a class. One row per month, like the old month–quarter mapping screen:
+
+- **Quarter**, **Start fees date** (parents see the instalment from this date), **Last fees date**,
+  **Challan date** (printed on the fee bill), **Bounce** (cheque-bounce charge of that month).
+- **Late fee of this class**: _As the school_, _Per day_ or _By slabs_.
+  - Per day: the rate (for example ₹25) is charged for every day after the last date; "Maximum per
+    instalment" stops it growing.
+  - Slabs: "Late fees" applies after the last date; after "Last date 1" the fee becomes "Late fee 1",
+    then "Late fee 2", "Late fee 3". The later amount replaces the earlier one. Example: last date the
+    10th, Late fees 100, Last date 1 the 20th → 500, Last date 2 the 25th → 1,000.
+- **Show = No**: parents do not see the instalment (app and parent's bill); the office ledger and the
+  cashier still do. **Fee pay = No**: parents see it but cannot pay it online.
+- The **↓** in a column head copies the first month's value down the column.
+- **Clone to the ticked classes** copies the saved calendar to other classes (it replaces theirs).
+
+An empty box follows the school. Months with the same last date form one instalment. After switching
+a class to slabs, fill the late fee of every quarter; an empty one means the school's slab amount.
