@@ -104,3 +104,24 @@ statements now show only the year chosen in the year switch at the top.
   with a receipt or a refund.
 - **Reports centre**: two new tabs, **Mode-wise collection** (day, fee type and mode, with refunds) and
   **Cheque bounce** (cheque, bank, amount, charge raised and charge paid).
+
+## Approvals and uploads (Fees → Approvals and uploads)
+
+The accounts desk asks; the school admin approves or rejects under **Requests**. Nothing changes
+before approval and every step is logged.
+
+- **Late-fee waiver**: admission no., the instalment's first month, and the late fee to charge instead
+  (0 waives it fully; any smaller amount is a part waiver). The accounts desk can no longer change a
+  late fee directly; the school admin still can from the ledger. (Setting
+  `fees.late_fee_waiver_approval`: on by default.)
+- **Move a receipt to another pupil**: the printed receipt number and the other pupil's admission no.
+  On approval the receipt is cancelled for the first pupil and a new receipt, same date, mode and
+  amount, is made for the other. Use it when a parent paid twice into one child's account.
+- **Date correction**: a new receipt date and / or the bank settlement date of one receipt. The receipt
+  date must stay in the same financial year and in a month that is not closed.
+- **Settlement dates from Excel**: download the format, one receipt per row, upload with the reason.
+  Good rows wait as one file (the admin can approve the whole file at once); refused rows are listed
+  with the reason.
+- **Collection from Excel**: download the format, one payment per row (admission no., amount, mode,
+  date, and what the payment mode demands). Upload to check; when every row is good, send it for
+  approval. On approval all receipts are made together; if one row fails, none is made.
