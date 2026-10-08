@@ -22,3 +22,7 @@
 - **Coverage report** with class, subject and teacher filters (Excel, PDF) and a topic-wise status sheet per class and subject.
 
 Parents and students do not see the syllabus (kept internal for now).
+
+## Where to find it (8 October 2026)
+- Admin left menu → Academics: **Lesson plans**, **Syllabus (chapters and topics)**, **Syllabus coverage** (also on the Academics tab bar).
+- Teacher app home: **My syllabus** and **Lesson plans**.

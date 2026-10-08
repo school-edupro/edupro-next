@@ -14,6 +14,19 @@ const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be HH:MM'
 export const DateQuerySchema = z.object({ date: DateSchema.optional() });
 export class DateQueryDto extends createZodDto(DateQuerySchema) {}
 
+export const LEAVE_TYPES = [
+  'Casual leave',
+  'Sick leave',
+  'Earned leave',
+  'On duty',
+  'Other',
+] as const;
+const LeaveSchema = z.object({
+  kind: z.enum(['full', 'half']),
+  type: z.string().trim().min(2).max(60),
+  reason: z.string().trim().max(300).optional(),
+});
+
 export const SaveLogSchema = z.object({
   date: DateSchema,
   entries: z
@@ -31,6 +44,8 @@ export const SaveLogSchema = z.object({
     .max(40),
   tomorrowPlan: z.string().trim().max(2000).optional(),
   pendingNote: z.string().trim().max(2000).optional(),
+  /** The day is leave: a full day needs no activity, a half day has the rest of the day in rows. */
+  leave: LeaveSchema.nullable().optional(),
   submit: z.boolean().default(false),
 });
 export class SaveLogDto extends createZodDto(SaveLogSchema) {}
@@ -38,7 +53,7 @@ export class SaveLogDto extends createZodDto(SaveLogSchema) {}
 export const DayQuerySchema = z.object({
   date: DateSchema.optional(),
   department: z.string().trim().max(120).optional(),
-  state: z.enum(['submitted', 'reviewed', 'returned', 'draft', 'missing']).optional(),
+  state: z.enum(['submitted', 'reviewed', 'returned', 'draft', 'missing', 'leave']).optional(),
 });
 export class DayQueryDto extends createZodDto(DayQuerySchema) {}
 
@@ -81,3 +96,19 @@ export const CategorySchema = z.object({
   status: z.enum(['active', 'inactive']).default('active'),
 });
 export class CategoryDto extends createZodDto(CategorySchema) {}
+
+/** The office marks an employee on leave for a day (they did not, or could not, do it themselves). */
+export const MarkLeaveSchema = LeaveSchema.extend({
+  employeeId: IdSchema,
+  date: DateSchema,
+});
+export class MarkLeaveDto extends createZodDto(MarkLeaveSchema) {}
+
+export const MyReportSchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+  /** `1`: the file inside a JSON answer (the teacher app's own download route reads it). */
+  wrap: z.enum(['1']).optional(),
+});
+export class MyReportDto extends createZodDto(MyReportSchema) {}

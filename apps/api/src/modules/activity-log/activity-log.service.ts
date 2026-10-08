@@ -10,11 +10,13 @@ import type {
   ActivitySettingsDto,
   CategoryDto,
   DayQueryDto,
+  MarkLeaveDto,
+  MyReportDto,
   RangeQueryDto,
   ReviewDto,
   SaveLogDto,
 } from './activity-log.dto';
-import { ACTIVITY } from './activity-log.dto';
+import { ACTIVITY, LEAVE_TYPES } from './activity-log.dto';
 
 const DEFAULTS: Array<[string, string]> = [
   ['teaching', 'Teaching'],
@@ -160,7 +162,7 @@ export class ActivityLogService {
 
   private async logIn(c: PoolClient, employeeId: string, date: string) {
     const l = await c.query<Record<string, unknown>>(
-      `SELECT l.id::text, l.state, l.tomorrow_plan, l.pending_note, l.submitted_at, l.late, l.review_note, l.reviewed_at,
+      `SELECT l.id::text, l.state, l.tomorrow_plan, l.pending_note, l.submitted_at, l.late, l.review_note, l.reviewed_at, l.leave_kind, l.leave_type, l.leave_reason, l.edited_at,
               (SELECT display_name FROM users WHERE id = l.reviewed_by) AS reviewed_by
          FROM activity_logs l WHERE l.employee_id = $1 AND l.on_date = $2::date`,
       [employeeId, date],
@@ -194,6 +196,14 @@ export class ActivityLogService {
       reviewNote: (log?.review_note as string | null) ?? null,
       reviewedBy: (log?.reviewed_by as string | null) ?? null,
       reviewedAt: log?.reviewed_at ? (log.reviewed_at as Date).toISOString() : null,
+      leave: log?.leave_kind
+        ? {
+            kind: log.leave_kind as 'full' | 'half',
+            type: (log.leave_type as string | null) ?? '',
+            reason: (log.leave_reason as string | null) ?? null,
+          }
+        : null,
+      editedAt: log?.edited_at ? (log.edited_at as Date).toISOString() : null,
       entries,
       minutes: entries.reduce((n, x) => n + minutes(x.to) - minutes(x.from), 0),
     };
@@ -257,10 +267,13 @@ export class ActivityLogService {
         categories: setup.categories.filter((k) => k.active),
         cutoffTime: setup.cutoffTime,
         backDays: setup.backDays,
+        // a submitted day may still be corrected until someone reviews it
         editable:
           day <= today() &&
           (log.state === 'returned' ||
-            (day >= oldest && (log.state === null || log.state === 'draft'))),
+            (day >= oldest &&
+              (log.state === null || log.state === 'draft' || log.state === 'submitted'))),
+        leaveTypes: [...LEAVE_TYPES],
         recent: recent.rows.map((x) => ({ date: x.d, state: x.state, late: Boolean(x.late) })),
       };
     });
@@ -280,22 +293,30 @@ export class ActivityLogService {
         [me.id, dto.date],
       );
       const state = cur.rows[0]?.state ?? null;
-      if (state === 'submitted' || state === 'reviewed')
+      if (state === 'reviewed')
         throw new DomainError(
           'activity.locked',
-          'This day is already submitted; it can be changed only when it is sent back',
+          'This day is reviewed; it can be changed only when it is sent back',
           { status: 409 },
         );
+      // a submitted day that is corrected stays submitted
+      const wasSubmitted = state === 'submitted';
+      const submit = dto.submit || wasSubmitted;
+      const leave = dto.leave ?? null;
       if (state !== 'returned' && dto.date < shift(today(), -setup.backDays))
         throw new DomainError(
           'activity.too_old',
           `A day can be filled up to ${String(setup.backDays)} day(s) later; ask the office to reopen it`,
           { status: 409 },
         );
-      if (dto.submit && dto.entries.length === 0)
-        throw new DomainError('validation-failed', 'Add at least one activity before submitting', {
-          status: 400,
-        });
+      if (submit && dto.entries.length === 0 && leave?.kind !== 'full')
+        throw new DomainError(
+          'validation-failed',
+          leave
+            ? 'For a half day of leave, add what you did in the other half'
+            : 'Add at least one activity before submitting (or mark the day as leave)',
+          { status: 400 },
+        );
       const sorted = [...dto.entries].sort((a, b) => a.from.localeCompare(b.from));
       for (let i = 1; i < sorted.length; i += 1)
         if (sorted[i]!.from < sorted[i - 1]!.to)
@@ -311,7 +332,7 @@ export class ActivityLogService {
         });
       // late: submitted after the cut-off of its own day, or on a later day
       const nowTime = istNow().toISOString().slice(11, 16);
-      const late = dto.submit && (dto.date < today() || nowTime > setup.cutoffTime);
+      const late = submit && (dto.date < today() || nowTime > setup.cutoffTime);
       const id =
         cur.rows[0]?.id ??
         (
@@ -323,9 +344,23 @@ export class ActivityLogService {
       await c.query(
         `UPDATE activity_logs SET tomorrow_plan = $2, pending_note = $3, updated_at = now(),
                 state = CASE WHEN $4 THEN 'submitted' ELSE CASE WHEN state = 'returned' THEN 'returned' ELSE 'draft' END END,
-                submitted_at = CASE WHEN $4 THEN now() ELSE submitted_at END, late = CASE WHEN $4 THEN $5 ELSE late END
+                submitted_at = CASE WHEN $4 AND NOT $6 THEN now() ELSE submitted_at END,
+                late = CASE WHEN $4 AND NOT $6 THEN $5 ELSE late END,
+                edited_at = CASE WHEN $6 THEN now() ELSE edited_at END,
+                leave_kind = $7, leave_type = $8, leave_reason = $9,
+                leave_by = CASE WHEN $7::text IS NULL THEN NULL ELSE app.current_user_id() END
           WHERE id = $1`,
-        [id, dto.tomorrowPlan ?? null, dto.pendingNote ?? null, dto.submit, late],
+        [
+          id,
+          dto.tomorrowPlan ?? null,
+          dto.pendingNote ?? null,
+          submit,
+          late,
+          wasSubmitted,
+          leave?.kind ?? null,
+          leave?.type ?? null,
+          leave?.reason ?? null,
+        ],
       );
       await c.query(`DELETE FROM activity_entries WHERE log_id = $1`, [id]);
       for (const e of sorted)
@@ -334,12 +369,12 @@ export class ActivityLogService {
            VALUES (app.current_school_id(), $1, $2::time, $3::time, $4, $5, $6)`,
           [id, e.from, e.to, e.categoryId, e.description, e.source],
         );
-      if (dto.submit)
+      if (submit)
         await this.audit.stage(ctx, c, {
-          action: 'staff.activity.submit',
+          action: wasSubmitted ? 'staff.activity.edit' : 'staff.activity.submit',
           entityType: 'activity_logs',
           entityId: id,
-          after: { date: dto.date, entries: sorted.length, late },
+          after: { date: dto.date, entries: sorted.length, late, leave: leave?.kind ?? null },
         });
       return this.logIn(c, me.id, dto.date);
     });
@@ -350,7 +385,7 @@ export class ActivityLogService {
   private async dayIn(c: PoolClient, date: string, q: { department?: string; state?: string }) {
     const r = await c.query<Record<string, unknown>>(
       `SELECT e.id::text AS employee_id, e.employee_code, e.display_name AS name, COALESCE(e.department, '') AS department,
-              e.designation, l.id::text AS log_id, l.state, l.late, l.submitted_at,
+              e.designation, l.id::text AS log_id, l.state, l.late, l.submitted_at, l.leave_kind, l.leave_type, l.edited_at,
               COALESCE((SELECT sum(EXTRACT(EPOCH FROM (x.to_time - x.from_time)) / 60) FROM activity_entries x WHERE x.log_id = l.id), 0)::int AS minutes,
               (SELECT count(*) FROM activity_entries x WHERE x.log_id = l.id)::int AS entries
          FROM employees e LEFT JOIN activity_logs l ON l.employee_id = e.id AND l.on_date = $1::date
@@ -367,12 +402,17 @@ export class ActivityLogService {
         designation: (x.designation as string | null) ?? null,
         logId: (x.log_id as string | null) ?? null,
         state: ((x.state as State | null) ?? 'missing') as State | 'missing',
+        leave: (x.leave_kind as 'full' | 'half' | null) ?? null,
+        leaveType: (x.leave_type as string | null) ?? null,
+        edited: Boolean(x.edited_at),
         late: Boolean(x.late),
         submittedAt: x.submitted_at ? (x.submitted_at as Date).toISOString() : null,
         minutes: Number(x.minutes),
         entries: Number(x.entries),
       }))
-      .filter((x) => !q.state || x.state === q.state);
+      .filter((x) =>
+        !q.state ? true : q.state === 'leave' ? x.leave !== null : x.state === q.state,
+      );
   }
 
   async day(ctx: RequestContext, q: DayQueryDto) {
@@ -393,9 +433,15 @@ export class ActivityLogService {
           draft: count('draft'),
           missing: count('missing'),
           late: all.filter((x) => x.late).length,
+          leave: all.filter((x) => x.leave === 'full').length,
+          halfLeave: all.filter((x) => x.leave === 'half').length,
         },
         departments: departments.rows.map((x) => x.d),
-        data: q.state ? all.filter((x) => x.state === q.state) : all,
+        data: !q.state
+          ? all
+          : q.state === 'leave'
+            ? all.filter((x) => x.leave !== null)
+            : all.filter((x) => x.state === q.state),
       };
     });
   }
@@ -453,6 +499,48 @@ export class ActivityLogService {
     });
   }
 
+  /** The office marks an employee on leave for a day: the day counts as leave, not as "not filled". */
+  async markLeave(ctx: RequestContext, dto: MarkLeaveDto) {
+    if (dto.date > shift(today(), 60))
+      throw new DomainError('validation-failed', 'That date is too far ahead', { status: 400 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const e = await c.query(
+        `SELECT 1 FROM employees WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+        [dto.employeeId],
+      );
+      if (!e.rowCount) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO activity_logs (school_id, employee_id, on_date, state, submitted_at, leave_kind, leave_type, leave_reason, leave_by)
+         VALUES (app.current_school_id(), $1, $2::date, 'submitted', now(), $3, $4, $5, app.current_user_id())
+         ON CONFLICT (employee_id, on_date) DO UPDATE SET leave_kind = EXCLUDED.leave_kind, leave_type = EXCLUDED.leave_type,
+           leave_reason = EXCLUDED.leave_reason, leave_by = app.current_user_id(), updated_at = now(),
+           state = CASE WHEN activity_logs.state IN ('draft', 'returned') THEN 'submitted' ELSE activity_logs.state END,
+           submitted_at = COALESCE(activity_logs.submitted_at, now())
+         RETURNING id::text`,
+        [dto.employeeId, dto.date, dto.kind, dto.type, dto.reason ?? null],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'staff.activity.leave',
+        entityType: 'activity_logs',
+        entityId: r.rows[0]!.id,
+        after: { employeeId: dto.employeeId, date: dto.date, kind: dto.kind, type: dto.type },
+      });
+      return { id: r.rows[0]!.id };
+    });
+  }
+
+  /** My own log between two dates, as Excel or PDF. */
+  async myReport(ctx: RequestContext, q: MyReportDto) {
+    const me = await this.db.tenant(requireTenant(ctx), (c) => this.me(c));
+    return this.reportFile(ctx, {
+      report: 'employee',
+      employeeId: me.id,
+      from: q.from,
+      to: q.to,
+      format: q.format,
+    });
+  }
+
   // ---- dashboard and reports -----------------------------------------------------------------------
   private range(q: RangeQueryDto) {
     const to = q.to ?? today();
@@ -475,7 +563,9 @@ export class ActivityLogService {
       `WITH days AS (${ActivityLogService.DAYS})
        SELECT e.id::text AS employee_id, e.employee_code, e.display_name AS name, COALESCE(e.department, 'No department') AS department,
               (SELECT count(*) FROM days)::int AS working,
-              count(l.id) FILTER (WHERE l.state IN ('submitted', 'reviewed'))::int AS submitted,
+              count(l.id) FILTER (WHERE l.state IN ('submitted', 'reviewed') AND l.leave_kind IS DISTINCT FROM 'full')::int AS submitted,
+              count(l.id) FILTER (WHERE l.state IN ('submitted', 'reviewed') AND l.leave_kind = 'full')::int AS on_leave,
+              count(l.id) FILTER (WHERE l.state IN ('submitted', 'reviewed') AND l.leave_kind = 'half')::int AS half_leave,
               count(l.id) FILTER (WHERE l.state IN ('submitted', 'reviewed') AND l.late)::int AS late,
               count(l.id) FILTER (WHERE l.state = 'returned')::int AS returned,
               COALESCE(sum((SELECT sum(EXTRACT(EPOCH FROM (x.to_time - x.from_time)) / 60) FROM activity_entries x WHERE x.log_id = l.id))
@@ -491,6 +581,7 @@ export class ActivityLogService {
     return r.rows.map((x) => {
       const working = Number(x.working);
       const submitted = Number(x.submitted);
+      const leave = Number(x.on_leave);
       return {
         employeeId: String(x.employee_id),
         employeeCode: String(x.employee_code),
@@ -498,11 +589,14 @@ export class ActivityLogService {
         department: String(x.department),
         working,
         submitted,
-        missed: Math.max(0, working - submitted),
+        // full days of leave are not working days to fill; half days were filled
+        leave,
+        halfLeave: Number(x.half_leave),
+        missed: Math.max(0, working - submitted - leave),
         late: Number(x.late),
         returned: Number(x.returned),
         minutes: Number(x.minutes),
-        percent: working ? Math.round((submitted / working) * 100) : 0,
+        percent: working - leave > 0 ? Math.round((submitted / (working - leave)) * 100) : 0,
       };
     });
   }
@@ -541,12 +635,12 @@ export class ActivityLogService {
       const depts = new Map<string, { working: number; submitted: number; people: number }>();
       for (const p of people) {
         const g = depts.get(p.department) ?? { working: 0, submitted: 0, people: 0 };
-        g.working += p.working;
+        g.working += p.working - p.leave;
         g.submitted += p.submitted;
         g.people += 1;
         depts.set(p.department, g);
       }
-      const working = people.reduce((n, p) => n + p.working, 0);
+      const working = people.reduce((n, p) => n + p.working - p.leave, 0);
       const submitted = people.reduce((n, p) => n + p.submitted, 0);
       const done = todayRows.filter((x) => x.state === 'submitted' || x.state === 'reviewed');
       return {
@@ -557,6 +651,9 @@ export class ActivityLogService {
           percent: working ? Math.round((submitted / working) * 100) : 0,
           todaySubmitted: done.length,
           todayMissing: todayRows.length - done.length,
+          todayLeave: todayRows.filter((x) => x.leave === 'full').length,
+          leaveDays: people.reduce((n, p) => n + p.leave, 0),
+          halfLeaveDays: people.reduce((n, p) => n + p.halfLeave, 0),
           late: people.reduce((n, p) => n + p.late, 0),
           returned: people.reduce((n, p) => n + p.returned, 0),
           hours: Math.round(people.reduce((n, p) => n + p.minutes, 0) / 60),
@@ -577,6 +674,24 @@ export class ActivityLogService {
           .filter((p) => p.missed > 0)
           .sort((a, b) => b.missed - a.missed)
           .slice(0, 15),
+        onLeaveToday: todayRows
+          .filter((x) => x.leave !== null)
+          .map((x) => ({
+            name: x.name,
+            department: x.department,
+            kind: x.leave,
+            type: x.leaveType,
+          })),
+        leaveByEmployee: [...people]
+          .filter((p) => p.leave + p.halfLeave > 0)
+          .sort((a, b) => b.leave + b.halfLeave / 2 - (a.leave + a.halfLeave / 2))
+          .slice(0, 15)
+          .map((p) => ({
+            name: p.name,
+            department: p.department,
+            full: p.leave,
+            half: p.halfLeave,
+          })),
         missingToday: todayRows
           .filter((x) => x.state !== 'submitted' && x.state !== 'reviewed')
           .slice(0, 30)
@@ -622,6 +737,7 @@ export class ActivityLogService {
             { label: 'Employee', width: 18 },
             { label: 'Department', width: 12 },
             { label: 'Status', width: 8 },
+            { label: 'Leave', width: 10 },
             { label: 'Late', width: 4 },
             { label: 'Activities', width: 5, right: true },
             { label: 'Time logged', width: 7 },
@@ -632,6 +748,9 @@ export class ActivityLogService {
             r.name,
             r.department,
             STATE[r.state],
+            r.leave
+              ? `${r.leave === 'full' ? 'Full day' : 'Half day'}${r.leaveType ? ` · ${r.leaveType}` : ''}`
+              : '',
             r.late ? 'Yes' : '',
             r.entries,
             r.minutes ? hours(r.minutes) : '',
@@ -686,7 +805,12 @@ export class ActivityLogService {
                   k.name AS category, x.description
              FROM activity_logs l JOIN activity_entries x ON x.log_id = l.id JOIN activity_categories k ON k.id = x.category_id
             WHERE l.employee_id = $1 AND l.on_date BETWEEN $2::date AND $3::date AND l.state <> 'draft'
-            ORDER BY l.on_date, x.from_time`,
+            UNION ALL
+           SELECT l.on_date::text, l.state, l.late, '', '', 'Leave',
+                  CASE l.leave_kind WHEN 'full' THEN 'Full day' ELSE 'Half day' END || ' · ' || COALESCE(l.leave_type, '') || COALESCE(' · ' || l.leave_reason, '')
+             FROM activity_logs l
+            WHERE l.employee_id = $1 AND l.on_date BETWEEN $2::date AND $3::date AND l.state <> 'draft' AND l.leave_kind IS NOT NULL
+            ORDER BY 1, 4`,
           [q.employeeId, from, to],
         );
         return { who: e.rows[0], rows: r.rows };
@@ -732,6 +856,8 @@ export class ActivityLogService {
           { label: 'Department', width: 12 },
           { label: 'Working days', width: 6, right: true },
           { label: 'Submitted', width: 6, right: true },
+          { label: 'On leave', width: 5, right: true },
+          { label: 'Half leave', width: 5, right: true },
           { label: 'Not filled', width: 6, right: true },
           { label: 'Late', width: 4, right: true },
           { label: 'Sent back', width: 5, right: true },
@@ -745,6 +871,8 @@ export class ActivityLogService {
           r.department,
           r.working,
           r.submitted,
+          r.leave,
+          r.halfLeave,
           r.missed,
           r.late,
           r.returned,

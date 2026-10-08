@@ -56,56 +56,6 @@ export default async function AttendanceSetupPage({
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <AttendanceSetupForm setup={setup} />
       </Card>
-      <Card title="Bus attendance: teacher of each route" style={{ marginBottom: 'var(--sp-4)' }}>
-        <RouteTeachersPanel setup={setup} />
-      </Card>
-      <Card
-        title="Class teachers (class attendance)"
-        actions={
-          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/academics/teacher-assignments">
-            Teacher assignments
-          </a>
-        }
-        style={{ marginBottom: 'var(--sp-4)' }}
-      >
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          A class is marked by its class teacher (mapped under Academics → Teacher assignments), a
-          coordinator or an admin.{' '}
-          {unmapped.length
-            ? `${String(unmapped.length)} class(es) have no class teacher: ${unmapped.map((s) => s.name).join(', ')}.`
-            : 'Every class has a class teacher.'}
-        </p>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Class teachers">
-          <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">The class teacher of each class</caption>
-            <thead>
-              <tr>
-                <th scope="col">Class</th>
-                <th scope="col">Class teacher</th>
-              </tr>
-            </thead>
-            <tbody>
-              {setup.sections.map((s) => (
-                <tr key={s.id}>
-                  <th scope="row">{s.name}</th>
-                  <td>{s.teacher ?? <Badge tone="warning">Not mapped</Badge>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-      <Card
-        title="Student leave: approval levels"
-        style={{ marginBottom: 'var(--sp-4)' }}
-        actions={
-          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/masters/attendance">
-            Leave types
-          </a>
-        }
-      >
-        <LeaveSetupForm setup={leave} />
-      </Card>
       {absent ? (
         <Card
           title="Message to parents when a student is absent"
@@ -188,6 +138,56 @@ export default async function AttendanceSetupPage({
           </div>
         </Card>
       ) : null}
+      <Card title="Bus attendance: teacher of each route" style={{ marginBottom: 'var(--sp-4)' }}>
+        <RouteTeachersPanel setup={setup} />
+      </Card>
+      <Card
+        title="Class teachers (class attendance)"
+        actions={
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/academics/teacher-assignments">
+            Teacher assignments
+          </a>
+        }
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          A class is marked by its class teacher (mapped under Academics → Teacher assignments), a
+          coordinator or an admin.{' '}
+          {unmapped.length
+            ? `${String(unmapped.length)} class(es) have no class teacher: ${unmapped.map((s) => s.name).join(', ')}.`
+            : 'Every class has a class teacher.'}
+        </p>
+        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Class teachers">
+          <table className="ep-table ep-table--dense">
+            <caption className="ep-sr-only">The class teacher of each class</caption>
+            <thead>
+              <tr>
+                <th scope="col">Class</th>
+                <th scope="col">Class teacher</th>
+              </tr>
+            </thead>
+            <tbody>
+              {setup.sections.map((s) => (
+                <tr key={s.id}>
+                  <th scope="row">{s.name}</th>
+                  <td>{s.teacher ?? <Badge tone="warning">Not mapped</Badge>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card
+        title="Student leave: approval levels"
+        style={{ marginBottom: 'var(--sp-4)' }}
+        actions={
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/masters/attendance">
+            Leave types
+          </a>
+        }
+      >
+        <LeaveSetupForm setup={leave} />
+      </Card>
       <Card title="Reopen a day for a teacher">
         <p className="ep-field__help" style={{ marginTop: 0 }}>
           When a teacher missed the window: open the day again for that class or route for some

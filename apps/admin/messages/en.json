@@ -48,6 +48,8 @@
     "attendanceDashboard": "Attendance dashboard",
     "attendanceUpload": "Attendance from Excel",
     "activityLog": "Daily activity log",
+    "syllabus": "Syllabus (chapters and topics)",
+    "syllabusCoverage": "Syllabus coverage",
     "busRoll": "Bus attendance (teacher)",
     "attendanceRegisters": "Monthly registers",
     "attendanceSetup": "Attendance set-up",

@@ -26,7 +26,7 @@ const fail = (path: string, error: unknown): never => {
 
 async function saveDay(fd: FormData, submit: boolean) {
   const here = `/staff/activity?date=${str(fd, 'date')}`;
-  const { entries, problem } = activityEntriesFrom(fd);
+  const { entries, problem, leave } = activityEntriesFrom(fd);
   if (problem) redirect(`${here}&error=1&detail=${encodeURIComponent(problem)}`);
   try {
     await apiFetch('/staff/activity/mine', {
@@ -36,6 +36,7 @@ async function saveDay(fd: FormData, submit: boolean) {
         entries,
         tomorrowPlan: str(fd, 'tomorrowPlan') || undefined,
         pendingNote: str(fd, 'pendingNote') || undefined,
+        leave,
         submit,
       }),
     });
@@ -98,4 +99,24 @@ export async function saveActivityCategory(fd: FormData) {
     fail('/staff/activity/setup', error);
   }
   redirect('/staff/activity/setup?ok=1');
+}
+
+/** The office marks an employee on leave for the day shown on the Review screen. */
+export async function markEmployeeLeave(fd: FormData) {
+  const here = `/staff/activity/review?date=${str(fd, 'date')}`;
+  try {
+    await apiFetch('/staff/activity/leave', {
+      method: 'POST',
+      body: JSON.stringify({
+        employeeId: str(fd, 'employeeId'),
+        date: str(fd, 'date'),
+        kind: str(fd, 'kind') === 'half' ? 'half' : 'full',
+        type: str(fd, 'type'),
+        reason: str(fd, 'reason') || undefined,
+      }),
+    });
+  } catch (error) {
+    fail(here, error);
+  }
+  redirect(`${here}&ok=leave`);
 }

@@ -1,5 +1,6 @@
 import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { ActivityNav } from '@/components/staff/ActivityNav';
+import { markEmployeeLeave } from '@/lib/activity-actions';
 import { apiFetch, getMe } from '@/lib/api';
 
 interface Row {
@@ -10,6 +11,9 @@ interface Row {
   logId: string | null;
   state: 'draft' | 'submitted' | 'reviewed' | 'returned' | 'missing';
   late: boolean;
+  leave: 'full' | 'half' | null;
+  leaveType: string | null;
+  edited: boolean;
   submittedAt: string | null;
   minutes: number;
   entries: number;
@@ -24,6 +28,8 @@ interface Day {
     draft: number;
     missing: number;
     late: number;
+    leave: number;
+    halfLeave: number;
   };
   departments: string[];
   data: Row[];
@@ -35,6 +41,7 @@ const STATE = {
   draft: ['Draft', 'neutral'],
   missing: ['Not filled', 'danger'],
 } as const;
+const LEAVE_TYPES = ['Casual leave', 'Sick leave', 'Earned leave', 'On duty', 'Other'];
 const hm = (m: number) => `${String(Math.floor(m / 60))}h ${String(m % 60).padStart(2, '0')}m`;
 const when = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-IN', {
@@ -47,14 +54,23 @@ const when = (iso: string) =>
 export default async function ActivityReviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; department?: string; state?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    department?: string;
+    state?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   const q = new URLSearchParams();
   if (/^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? '')) q.set('date', sp.date!);
   if (sp.department) q.set('department', sp.department.slice(0, 120));
-  const state = sp.state && sp.state in STATE ? sp.state : '';
+  const state = sp.state && (sp.state in STATE || sp.state === 'leave') ? sp.state : '';
+  // the whole staff list (for the leave form), whatever tile is chosen
+  const all = (await apiFetch<Day>(`/staff/activity/day?${q.toString()}`)).data;
   const day = await apiFetch<Day>(
     `/staff/activity/day?${q.toString()}${state ? `&state=${state}` : ''}`,
   );
@@ -118,15 +134,34 @@ export default async function ActivityReviewPage({
           </Button>
         </form>
       </Card>
+      {sp.ok ? (
+        <div
+          className="ep-alert ep-alert--success"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          Marked on leave.
+        </div>
+      ) : null}
+      {sp.error ? (
+        <div
+          className="ep-alert ep-alert--danger"
+          role="alert"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {sp.detail || 'Could not save.'}
+        </div>
+      ) : null}
       <div className="ep-cdash__kpis">
         {tile('All employees', day.counts.employees, '')}
         {tile('Submitted', day.counts.submitted, 'submitted')}
         {tile('Not filled', day.counts.missing, 'missing')}
+        {tile('On leave', day.counts.leave + day.counts.halfLeave, 'leave')}
         {tile('Sent back', day.counts.returned, 'returned')}
       </div>
       <p className="ep-field__help">
         {day.counts.late} submitted late · {day.counts.reviewed} reviewed · {day.counts.draft} still
-        a draft. Click a tile to list those employees.
+        a draft · {day.counts.halfLeave} on half-day leave. Click a tile to list those employees.
       </p>
       <Card id="list" style={{ marginTop: 'var(--sp-3)' }}>
         {day.data.length === 0 ? (
@@ -159,7 +194,14 @@ export default async function ActivityReviewPage({
                     <td>{r.department}</td>
                     <td>
                       <Badge tone={STATE[r.state][1]}>{STATE[r.state][0]}</Badge>{' '}
-                      {r.late ? <Badge tone="warning">Late</Badge> : null}
+                      {r.late ? <Badge tone="warning">Late</Badge> : null}{' '}
+                      {r.leave ? (
+                        <Badge tone="info">
+                          {r.leave === 'full' ? 'On leave' : 'Half day leave'}
+                          {r.leaveType ? ` · ${r.leaveType}` : ''}
+                        </Badge>
+                      ) : null}{' '}
+                      {r.edited ? <Badge tone="neutral">Edited</Badge> : null}
                     </td>
                     <td>{r.submittedAt ? when(r.submittedAt) : '–'}</td>
                     <td className="ep-num">{r.entries}</td>
@@ -183,6 +225,47 @@ export default async function ActivityReviewPage({
             </table>
           </div>
         )}
+      </Card>
+      <Card title="Mark an employee on leave" style={{ marginTop: 'var(--sp-4)' }}>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          For someone who could not mark it on their own day. The day then counts as leave, not as
+          “not filled”.
+        </p>
+        <form
+          action={markEmployeeLeave}
+          style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}
+        >
+          <input type="hidden" name="date" value={day.date} />
+          <SelectField
+            id="ml-emp"
+            name="employeeId"
+            label={`Employee (for ${day.date})`}
+            required
+            options={[
+              { value: '', label: 'Choose' },
+              ...all.map((r) => ({ value: r.employeeId, label: `${r.name} (${r.employeeCode})` })),
+            ]}
+          />
+          <SelectField
+            id="ml-kind"
+            name="kind"
+            label="Leave"
+            options={[
+              { value: 'full', label: 'Full day' },
+              { value: 'half', label: 'Half day' },
+            ]}
+          />
+          <SelectField
+            id="ml-type"
+            name="type"
+            label="Kind of leave"
+            options={LEAVE_TYPES.map((x) => ({ value: x, label: x }))}
+          />
+          <InputField id="ml-reason" name="reason" label="Reason" maxLength={300} />
+          <Button type="submit" variant="secondary">
+            Mark on leave
+          </Button>
+        </form>
       </Card>
     </>
   );

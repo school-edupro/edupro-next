@@ -56,6 +56,7 @@ export default async function MyActivityPage({
             path="/staff/activity"
             saveDraft={saveActivityDraft}
             submit={submitActivityDay}
+            reportPath="/api/staff/my-activity-report"
           />
         ) : (
           problem

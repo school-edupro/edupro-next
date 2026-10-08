@@ -10,6 +10,8 @@ export interface ActivityDayData {
     late: boolean;
     reviewNote: string | null;
     reviewedBy: string | null;
+    leave?: { kind: 'full' | 'half'; type: string; reason: string | null } | null;
+    editedAt?: string | null;
     entries: Array<{
       from: string;
       to: string;
@@ -31,6 +33,7 @@ export interface ActivityDayData {
   cutoffTime: string;
   backDays: number;
   editable: boolean;
+  leaveTypes?: string[];
   recent: Array<{ date: string; state: string | null; late: boolean }>;
 }
 type Act = (fd: FormData) => void | Promise<void>;
@@ -61,14 +64,21 @@ export function ActivityDay({
   path,
   saveDraft,
   submit,
+  reportPath,
 }: {
   data: ActivityDayData;
   /** The page itself, e.g. `/activity-log`: the day links and the date box reload it. */
   path: string;
   saveDraft: Act;
   submit: Act;
+  /** The app's own route that downloads my log (`from`, `to`, `format`), e.g. `/api/my-activity-report`. */
+  reportPath?: string;
 }) {
   const { log } = data;
+  const submitted = log.state === 'submitted';
+  const weekAgo = new Date(new Date(`${log.date}T00:00:00Z`).getTime() - 6 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   const filled = log.entries.length
     ? log.entries.map((e) => ({ ...e, categoryId: e.categoryId as string | null }))
     : data.suggested.map((s) => ({ ...s, category: '' }));
@@ -101,7 +111,11 @@ export function ActivityDay({
       <p className="ep-actlog__state">
         <strong>{day(log.date, true)}</strong> · {log.state ? STATE[log.state] : 'Not filled yet'}
         {log.late ? ' (late)' : ''}
+        {log.leave
+          ? ` · ${log.leave.kind === 'full' ? 'On leave' : 'Half day leave'} (${log.leave.type})`
+          : ''}
         {log.minutes ? ` · ${hm(log.minutes)} logged` : ''}
+        {log.editedAt ? ' · edited after submission' : ''}
       </p>
       {log.state === 'returned' && log.reviewNote ? (
         <div className="ep-alert ep-alert--warning" role="status">
@@ -121,6 +135,43 @@ export function ActivityDay({
       ) : null}
       <form>
         <input type="hidden" name="date" value={log.date} />
+        {data.editable ? (
+          <fieldset className="ep-actlog__leave">
+            <legend className="ep-field__label">Leave</legend>
+            <label className="ep-field">
+              <span className="ep-field__label">This day is</span>
+              <select className="ep-select" name="leaveKind" defaultValue={log.leave?.kind ?? ''}>
+                <option value="">A working day</option>
+                <option value="full">Leave, full day</option>
+                <option value="half">Leave, half day</option>
+              </select>
+            </label>
+            <label className="ep-field">
+              <span className="ep-field__label">Kind of leave</span>
+              <select className="ep-select" name="leaveType" defaultValue={log.leave?.type ?? ''}>
+                <option value="">Choose when on leave</option>
+                {(data.leaveTypes ?? []).map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ep-field">
+              <span className="ep-field__label">Reason</span>
+              <input
+                className="ep-input"
+                name="leaveReason"
+                maxLength={300}
+                defaultValue={log.leave?.reason ?? ''}
+              />
+            </label>
+            <p className="ep-field__help">
+              A full day of leave needs no activity below. For a half day, fill what you did in the
+              other half.
+            </p>
+          </fieldset>
+        ) : null}
         <input type="hidden" name="rows" value={rows.length} />
         <div
           className="ep-table-wrap"
@@ -234,15 +285,16 @@ export function ActivityDay({
             <div className="ep-actlog__foot">
               <p className="ep-field__help">
                 A row needs its from, to, category and what was done; an empty row is ignored.
-                Submit by {data.cutoffTime}; later it is marked late. After submitting, the day can
-                be changed only if it is sent back. A day can be filled up to {data.backDays} day(s)
-                later.
+                Submit by {data.cutoffTime}; later it is marked late. A submitted day can still be
+                corrected until it is reviewed, up to {data.backDays} day(s) later.
               </p>
-              <button type="submit" className="ep-btn ep-btn--secondary" formAction={saveDraft}>
-                Save draft
-              </button>
+              {submitted ? null : (
+                <button type="submit" className="ep-btn ep-btn--secondary" formAction={saveDraft}>
+                  Save draft
+                </button>
+              )}
               <button type="submit" className="ep-btn ep-btn--primary" formAction={submit}>
-                Submit my day
+                {submitted ? 'Save changes' : 'Submit my day'}
               </button>
             </div>
           </>
@@ -260,12 +312,30 @@ export function ActivityDay({
             ) : null}
             <p className="ep-field__help">
               {log.state === 'submitted' || log.state === 'reviewed'
-                ? 'This day is submitted. It can be changed only if it is sent back to you.'
+                ? 'This day is reviewed. It can be changed only if it is sent back to you.'
                 : 'This day can no longer be filled; ask the office if it must be reopened.'}
             </p>
           </>
         )}
       </form>
+      {reportPath ? (
+        <form method="get" action={reportPath} className="ep-hw__filter ep-actlog__download">
+          <label className="ep-field">
+            <span className="ep-field__label">Download my log from</span>
+            <input className="ep-input" type="date" name="from" defaultValue={weekAgo} required />
+          </label>
+          <label className="ep-field">
+            <span className="ep-field__label">To</span>
+            <input className="ep-input" type="date" name="to" defaultValue={log.date} required />
+          </label>
+          <button type="submit" name="format" value="xlsx" className="ep-btn ep-btn--secondary">
+            Excel
+          </button>
+          <button type="submit" name="format" value="pdf" className="ep-btn ep-btn--secondary">
+            PDF
+          </button>
+        </form>
+      ) : null}
     </div>
   );
 }
@@ -280,6 +350,7 @@ export function activityEntriesFrom(fd: FormData): {
     source: string;
   }>;
   problem: string | null;
+  leave: { kind: 'full' | 'half'; type: string; reason?: string } | null;
 } {
   const s = (k: string) => String(fd.get(k) ?? '').trim();
   const entries = [];
@@ -298,5 +369,15 @@ export function activityEntriesFrom(fd: FormData): {
       problem ??= `Row ${String(i + 1)}: fill from, to, category and what was done (or empty the row)`;
     else entries.push(row);
   }
-  return { entries, problem };
+  const kind = s('leaveKind');
+  const leave =
+    kind === 'full' || kind === 'half'
+      ? {
+          kind: kind as 'full' | 'half',
+          type: s('leaveType'),
+          reason: s('leaveReason') || undefined,
+        }
+      : null;
+  if (leave && !leave.type) problem ??= 'Choose the kind of leave';
+  return { entries, problem, leave };
 }

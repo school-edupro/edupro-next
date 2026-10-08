@@ -67,7 +67,7 @@ describe('employee daily activity log (e2e)', () => {
     ids.meeting = mine.categories.find((k: { code: string }) => k.code === 'meeting').id;
   });
 
-  it('saves a draft, refuses overlaps, and locks the day once it is submitted', async () => {
+  it('saves a draft, refuses overlaps, and keeps a submitted day open until it is reviewed', async () => {
     const date = today();
     const a = { from: '08:00', to: '10:30', categoryId: ids.office, description: 'Fee counter' };
     const b = { from: '10:30', to: '11:00', categoryId: ids.meeting, description: 'Staff meeting' };
@@ -95,8 +95,11 @@ describe('employee daily activity log (e2e)', () => {
     });
     expect(done.json()).toMatchObject({ state: 'submitted', tomorrowPlan: 'Receipts of class VI' });
     ids.log = done.json().id;
-    expect((await put(clerk, { date, entries: [a] })).statusCode).toBe(409);
-    expect((await get(clerk, '/staff/activity/mine')).json().editable).toBe(false);
+    // a submitted day can still be corrected until it is reviewed; it stays submitted
+    const fixed = await put(clerk, { date, entries: [a, b] });
+    expect(fixed.json()).toMatchObject({ state: 'submitted' });
+    expect(fixed.json().editedAt).toBeTruthy();
+    expect((await get(clerk, '/staff/activity/mine')).json().editable).toBe(true);
   });
 
   it('shows the reviewer the day; a log sent back can be corrected and submitted again', async () => {
@@ -138,6 +141,84 @@ describe('employee daily activity log (e2e)', () => {
     });
     expect(again.json()).toMatchObject({ state: 'submitted', minutes: 300 });
     expect((await review({ action: 'reviewed' })).json().state).toBe('reviewed');
+    // reviewed: now it is locked
+    expect((await put(clerk, { date: today(), entries: [] })).statusCode).toBe(409);
+    expect((await get(clerk, '/staff/activity/mine')).json().editable).toBe(false);
+  });
+
+  it('counts a day of leave as leave, marked by the employee or by the office', async () => {
+    const yesterday = new Date(Date.now() + 5.5 * 3_600_000 - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    // the employee: a full day needs no activity
+    const mine = await put(clerk, {
+      date: yesterday,
+      entries: [],
+      leave: { kind: 'full', type: 'Sick leave', reason: 'Fever' },
+      submit: true,
+    });
+    expect(mine.json()).toMatchObject({
+      state: 'submitted',
+      leave: { kind: 'full', type: 'Sick leave', reason: 'Fever' },
+    });
+    // a half day still needs the other half
+    expect(
+      (
+        await put(clerk, {
+          date: yesterday,
+          entries: [],
+          leave: { kind: 'half', type: 'Casual leave' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    // the office marks the other employee for today
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: '/staff/activity/leave',
+          headers: h(clerk),
+          json: { employeeId: ids.emp2, date: today(), kind: 'full', type: 'Casual leave' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: '/staff/activity/leave',
+          headers: h(admin),
+          json: { employeeId: ids.emp2, date: today(), kind: 'full', type: 'Casual leave' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const day = (await get(admin, '/staff/activity/day')).json();
+    expect(day.counts).toMatchObject({ leave: 1, missing: 0 });
+    expect(
+      (await get(admin, '/staff/activity/day?state=leave'))
+        .json()
+        .data.map((x: { name: string }) => x.name),
+    ).toEqual(['Omar Staff']);
+    const people = (await get(admin, '/staff/activity/compliance')).json().data as Array<{
+      name: string;
+      leave: number;
+      missed: number;
+    }>;
+    expect(people.find((p) => p.name === 'Omar Staff')!.leave).toBe(1);
+    const d = (await get(admin, '/staff/activity/dashboard')).json();
+    expect(d.kpis.todayLeave).toBe(1);
+    expect(d.onLeaveToday).toEqual([
+      { name: 'Omar Staff', department: 'Sports', kind: 'full', type: 'Casual leave' },
+    ]);
+    // my own log as a file, and inside JSON for the teacher app
+    const f = await get(clerk, '/staff/activity/mine/report?format=pdf');
+    expect(f.statusCode).toBe(200);
+    expect(f.rawPayload.length).toBeGreaterThan(800);
+    expect(
+      (await get(clerk, '/staff/activity/mine/report?format=xlsx&wrap=1')).json(),
+    ).toMatchObject({
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
   });
 
   it('has the dashboard, the compliance list and the reports; the office sets the rules', async () => {

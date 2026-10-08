@@ -93,3 +93,5 @@ For the coordinator and the office (permission `attendance.bulk.upload`): Attend
 A holiday, a weekly off or a future date is refused. A parent who muted absence alerts is not told.
 
 **Set-up → Message to parents when a student is absent**: shows the school's WhatsApp, SMS and e-mail templates with the code `absent_alert`, whether each is active, and where it is used. A channel without a template sends nothing (e-mail falls back to the standard card). Templates are edited in Communication → Templates.
+
+The *Message to parents when a student is absent* card is the second card of Attendance → Set-up, just below Marking windows.

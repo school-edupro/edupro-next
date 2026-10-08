@@ -8,7 +8,7 @@ const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').tri
 
 async function save(fd: FormData, submit: boolean) {
   const here = `/activity-log?date=${str(fd, 'date')}`;
-  const { entries, problem } = activityEntriesFrom(fd);
+  const { entries, problem, leave } = activityEntriesFrom(fd);
   if (problem) redirect(`${here}&error=1&detail=${encodeURIComponent(problem)}`);
   try {
     await bff.api.fetch('/staff/activity/mine', {
@@ -18,6 +18,7 @@ async function save(fd: FormData, submit: boolean) {
         entries,
         tomorrowPlan: str(fd, 'tomorrowPlan') || undefined,
         pendingNote: str(fd, 'pendingNote') || undefined,
+        leave,
         submit,
       }),
     });

@@ -63,6 +63,7 @@ export default async function ActivityLogPage({
             path="/activity-log"
             saveDraft={saveActivityDraft}
             submit={submitActivityDay}
+            reportPath="/api/my-activity-report"
           />
         ) : (
           problem

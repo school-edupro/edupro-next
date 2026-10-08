@@ -11,6 +11,8 @@ interface Person {
   working: number;
   submitted: number;
   missed: number;
+  leave: number;
+  halfLeave: number;
   late: number;
   returned: number;
   minutes: number;
@@ -24,6 +26,9 @@ interface Dashboard {
     percent: number;
     todaySubmitted: number;
     todayMissing: number;
+    todayLeave: number;
+    leaveDays: number;
+    halfLeaveDays: number;
     late: number;
     returned: number;
     hours: number;
@@ -33,6 +38,13 @@ interface Dashboard {
   trend: Array<{ date: string; submitted: number; late: number }>;
   defaulters: Person[];
   missingToday: Array<{ name: string; department: string; state: string }>;
+  onLeaveToday: Array<{
+    name: string;
+    department: string;
+    kind: 'full' | 'half';
+    type: string | null;
+  }>;
+  leaveByEmployee: Array<{ name: string; department: string; full: number; half: number }>;
 }
 const tone = (p: number): ChartTone => (p >= 90 ? 'success' : p >= 60 ? 'warning' : 'danger');
 const hm = (m: number) => `${String(Math.floor(m / 60))}h ${String(m % 60).padStart(2, '0')}m`;
@@ -104,6 +116,11 @@ export default async function ActivityDashboardPage({
               `${String(k.todayMissing)} have not submitted yet`,
             ],
             ['Submitted late', String(k.late), `${String(k.returned)} sent back`],
+            [
+              'On leave',
+              String(k.leaveDays),
+              `full days · ${String(k.halfLeaveDays)} half days · ${String(k.todayLeave)} today`,
+            ],
             ['Time logged', `${String(k.hours)} h`, 'in submitted logs'],
           ] as Array<[string, string, string]>
         ).map(([title, value, note]) => (
@@ -206,6 +223,52 @@ export default async function ActivityDashboardPage({
           </p>
         </Card>
       </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: 'var(--sp-4)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
+          marginBottom: 'var(--sp-4)',
+        }}
+      >
+        <Card title="On leave today">
+          {d.onLeaveToday.length === 0 ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              Nobody is marked on leave today.
+            </p>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
+              {d.onLeaveToday.map((m, i) => (
+                <li key={String(i)}>
+                  {m.name} <span className="ep-kicker">{m.department}</span>{' '}
+                  <Badge tone="info">
+                    {m.kind === 'full' ? 'Full day' : 'Half day'}
+                    {m.type ? ` · ${m.type}` : ''}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card title="Leave in these dates, by employee">
+          {d.leaveByEmployee.length === 0 ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              No leave is marked in these dates.
+            </p>
+          ) : (
+            <ProgressRows
+              label="Days of leave by employee"
+              rows={d.leaveByEmployee.map((p) => ({
+                name: `${p.name} (${p.department})`,
+                value: p.full + p.half / 2,
+                of: Math.max(1, ...d.leaveByEmployee.map((x) => x.full + x.half / 2)),
+                text: `${String(p.full)} full${p.half ? ` + ${String(p.half)} half` : ''}`,
+                tone: 'info',
+              }))}
+            />
+          )}
+        </Card>
+      </div>
       <Card title="Submission by employee" id="report">
         <p style={{ marginTop: 0, display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
           <a
@@ -240,6 +303,9 @@ export default async function ActivityDashboardPage({
                   Submitted
                 </th>
                 <th scope="col" className="ep-num">
+                  On leave
+                </th>
+                <th scope="col" className="ep-num">
                   Not filled
                 </th>
                 <th scope="col" className="ep-num">
@@ -261,6 +327,10 @@ export default async function ActivityDashboardPage({
                   <td>{p.department}</td>
                   <td className="ep-num">{p.working}</td>
                   <td className="ep-num">{p.submitted}</td>
+                  <td className="ep-num">
+                    {p.leave}
+                    {p.halfLeave ? ` + ${String(p.halfLeave)} half` : ''}
+                  </td>
                   <td className="ep-num">
                     {p.missed ? <Badge tone="danger">{p.missed}</Badge> : '0'}
                   </td>

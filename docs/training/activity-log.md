@@ -27,3 +27,10 @@ Every employee writes what they did in the day. Submitting is enough; the head r
 - Categories of work: rename, reorder, mark *Not used*, add new.
 
 Not included yet: an evening reminder message, attachments on a row, and an employee-leave link (an employee on leave shows as "not filled").
+
+## Changes of 8 October 2026
+
+- **Edit after submitting**: a submitted day stays open for correction (within the allowed days) until a reviewer marks it reviewed. The button reads *Save changes*; the log shows "edited after submission".
+- **Leave**: on My day choose *Leave, full day* or *Leave, half day*, the kind of leave and a reason. A full day needs no activity; a half day needs the other half. The office can mark it for someone from Review → *Mark an employee on leave*. No approval.
+- Leave shows as its own tile and badge on Review, as a tile and two cards (on leave today; leave by employee) on the dashboard, and as *On leave* / *Half leave* columns in the reports. A full day of leave is not counted as "not filled" and is left out of the working days for the submitted %.
+- **Download my log**: at the bottom of My day, pick From and To and press Excel or PDF.

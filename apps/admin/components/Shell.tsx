@@ -166,6 +166,12 @@ const NAV: Array<{
         label: 'lessonPlans',
         permission: 'academics.lesson_plan.view',
       },
+      { href: '/academics/syllabus', label: 'syllabus', permission: 'academics.lesson_plan.view' },
+      {
+        href: '/academics/syllabus/coverage',
+        label: 'syllabusCoverage',
+        permission: 'academics.syllabus.report',
+      },
       {
         href: '/academics/daily-work',
         label: 'dailyWork',

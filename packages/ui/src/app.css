@@ -6235,3 +6235,22 @@ a.ep-tabs__tab {
   flex: 1 1 18rem;
   margin: 0;
 }
+.ep-actlog__leave {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.ep-actlog__leave > p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+.ep-actlog__download {
+  margin: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+}

@@ -10,6 +10,8 @@ import {
   CategoryDto,
   DateQueryDto,
   DayQueryDto,
+  MarkLeaveDto,
+  MyReportDto,
   RangeQueryDto,
   ReviewDto,
   SaveLogDto,
@@ -34,6 +36,35 @@ export class ActivityLogController {
   @RequirePermission(ACTIVITY.fill)
   save(@ReqCtx() ctx: RequestContext, @Body() body: SaveLogDto) {
     return this.logs.save(ctx, body);
+  }
+
+  @Get('mine/report')
+  @ApiOperation({ summary: 'My own log between two dates, as Excel or PDF' })
+  @RequirePermission(ACTIVITY.fill)
+  async myReport(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: MyReportDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const f = await this.logs.myReport(ctx, q);
+    if (q.wrap)
+      return {
+        filename: f.filename,
+        contentType: f.contentType,
+        base64: Buffer.from(f.bytes).toString('base64'),
+      };
+    reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`);
+    return reply.send(f.bytes);
+  }
+
+  @Post('leave')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Mark an employee on leave for a day (the office, for them)' })
+  @RequirePermission(ACTIVITY.review)
+  markLeave(@ReqCtx() ctx: RequestContext, @Body() body: MarkLeaveDto) {
+    return this.logs.markLeave(ctx, body);
   }
 
   @Get('setup')
