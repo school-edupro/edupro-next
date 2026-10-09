@@ -19,6 +19,7 @@ import {
   addPaymentMode,
   cloneClassRules,
   removePaymentMode,
+  saveTransportMonths,
   saveClassRules,
   savePaymentMode,
 } from '@/lib/fee-setup-actions';
@@ -54,12 +55,21 @@ interface PaymentMode {
 export default async function FeeRulesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; classId?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    classId?: string;
+    transportRemoved?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   const canManage = me.permissions.includes('fees.master.manage');
-  const [modes, classes, rules] = await Promise.all([
+  const [transportMonths, modes, classes, rules] = await Promise.all([
+    apiFetch<{ data: Array<{ sequence: number; name: string; charged: boolean }> }>(
+      '/fees/transport-months',
+    ).then((r) => r.data),
     apiFetch<{ data: PaymentMode[] }>('/fees/payment-modes').then((r) => r.data),
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
     sp.classId
@@ -158,6 +168,46 @@ export default async function FeeRulesPage({
               ) : null}
             </>
           ) : null}
+        </Card>
+
+        <Card title="Transport fee months">
+          <p className="ep-field__help">
+            Tick the months in which transport is charged this year, for the whole school. Untick
+            the vacation month to charge eleven months. Unpaid transport lines of an unticked month
+            are removed at once; a month you tick again is billed when the class bills are generated
+            again (Fees → Demands).
+          </p>
+          {sp.transportRemoved !== undefined ? (
+            <p className="ep-alert ep-alert--success" role="status">
+              Saved. {sp.transportRemoved} unpaid transport line(s) removed.
+            </p>
+          ) : null}
+          <form action={saveTransportMonths}>
+            <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+              {transportMonths.map((m) => (
+                <Checkbox
+                  key={m.sequence}
+                  id={`tm-${m.sequence}`}
+                  name="charged"
+                  value={m.sequence}
+                  label={m.name}
+                  defaultChecked={m.charged}
+                  disabled={!canManage}
+                />
+              ))}
+            </div>
+            <p className="ep-field__help">
+              Charged in {transportMonths.filter((m) => m.charged).length} of{' '}
+              {transportMonths.length} months.
+            </p>
+            {canManage ? (
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  Save transport months
+                </Button>
+              </FormActions>
+            ) : null}
+          </form>
         </Card>
 
         <Card title="Payment modes">

@@ -251,3 +251,19 @@ export async function removePaymentMode(code: string) {
   }
   done(path);
 }
+
+/** The months of the year in which transport is charged (many schools charge eleven). */
+export async function saveTransportMonths(fd: FormData) {
+  const path = '/fees/rules';
+  let removed = 0;
+  try {
+    const r = await apiFetch<{ removedLines: number }>('/fees/transport-months', {
+      method: 'PUT',
+      body: JSON.stringify({ charged: fd.getAll('charged').map(Number) }),
+    });
+    removed = r.removedLines;
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}?ok=1&transportRemoved=${removed}`);
+}

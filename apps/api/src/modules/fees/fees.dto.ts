@@ -547,3 +547,9 @@ export const AddPaymentModeSchema = z.object({
   needBank: z.boolean().default(false),
 });
 export class AddPaymentModeDto extends createZodDto(AddPaymentModeSchema) {}
+
+export const SetTransportMonthsSchema = z.object({
+  /** Fee period sequences (1 = first month of the year) in which transport is charged. */
+  charged: z.array(z.number().int().min(1).max(12)).max(12),
+});
+export class SetTransportMonthsDto extends createZodDto(SetTransportMonthsSchema) {}

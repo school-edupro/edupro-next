@@ -361,4 +361,46 @@ describe('fee set-up grids (e2e)', () => {
     expect(rules.periods[0].slabs).toHaveLength(2);
     expect(rules.periods[1].show).toBe(false);
   });
+  it('transport is charged only in the months the school ticks', async () => {
+    const tr = await inject({
+      method: 'POST',
+      url: '/fees/heads',
+      headers: h(),
+      json: { code: 'TRN', name: 'Transport', kind: 'transport', sortOrder: 9 },
+    });
+    expect(tr.statusCode).toBe(201);
+    const slab = await inject({
+      method: 'POST',
+      url: '/fees/slabs',
+      headers: h(),
+      json: { code: 'S1', name: 'Up to 5 km', monthlyAmount: 1000 },
+    });
+    await inject({
+      method: 'PUT',
+      url: `/fees/students/${studentId}/profile`,
+      headers: h(),
+      json: { studentType: 'old', transportSlabId: slab.json().id },
+    });
+    await regenerate();
+    const transportRows = async () =>
+      (
+        (
+          await inject({ method: 'GET', url: `/fees/students/${studentId}/demands`, headers: h() })
+        ).json().rows as Array<{ source: string }>
+      ).filter((r) => r.source === 'transport').length;
+    expect(await transportRows()).toBe(12);
+    const months = await inject({ method: 'GET', url: '/fees/transport-months', headers: h() });
+    expect(months.json().data).toHaveLength(12);
+    const set = await inject({
+      method: 'PUT',
+      url: '/fees/transport-months',
+      headers: h(),
+      json: { charged: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().removedLines).toBe(1); // June's unpaid line goes at once
+    expect(await transportRows()).toBe(11);
+    await regenerate();
+    expect(await transportRows()).toBe(11);
+  });
 });

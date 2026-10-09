@@ -343,6 +343,51 @@ export class FeeSetupService {
     });
   }
 
+  // ---- transport fee months ---------------------------------------------------------------------
+  async transportMonths(ctx: RequestContext) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ sequence: number; name: string; charged: boolean }>(
+        `SELECT sequence, name, transport_charged AS charged FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence`,
+        [yearId],
+      );
+      return r.rows;
+    });
+  }
+
+  /**
+   * The months of the working year in which transport is charged. Unpaid transport lines of a month
+   * that is no longer charged are removed at once; a month ticked again is billed when bills are
+   * generated again.
+   */
+  async setTransportMonths(ctx: RequestContext, charged: number[]) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      await c.query(
+        `UPDATE fee_periods SET transport_charged = (sequence = ANY($2::int[])) WHERE academic_year_id = $1`,
+        [yearId, charged],
+      );
+      const gone = await c.query(
+        `DELETE FROM fee_demands d USING fee_periods fp
+          WHERE fp.id = d.period_id AND fp.academic_year_id = $1 AND NOT fp.transport_charged
+            AND d.source = 'transport' AND d.paid = 0 AND d.status = 'pending'`,
+        [yearId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'fees.transport_months.set',
+        entityType: 'academic_years',
+        entityId: yearId,
+        after: { charged, removedLines: gone.rowCount },
+      });
+      const r = await c.query<{ sequence: number; name: string; charged: boolean }>(
+        `SELECT sequence, name, transport_charged AS charged FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence`,
+        [yearId],
+      );
+      return { months: r.rows, removedLines: gone.rowCount ?? 0 };
+    });
+  }
+
   // ---- payment modes ----------------------------------------------------------------------------
   async paymentModesWith(c: PoolClient): Promise<PaymentModeRow[]> {
     await c.query(`SELECT app.fee_seed_payment_modes()`);

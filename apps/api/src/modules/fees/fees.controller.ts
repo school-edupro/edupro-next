@@ -13,6 +13,7 @@ import { FeeDepositService } from './fee-deposit.service';
 import { FeeDocumentsService } from './fee-documents.service';
 import {
   ClassSummaryQueryDto,
+  SetTransportMonthsDto,
   AddPaymentModeDto,
   CloneClassRulesDto,
   BillQueryDto,
@@ -251,6 +252,20 @@ export class FeesController {
   @RequirePermission(FEES.demandView)
   async paymentModes(@ReqCtx() ctx: RequestContext) {
     return { data: await this.setup.paymentModes(ctx) };
+  }
+
+  @Get('transport-months')
+  @ApiOperation({ summary: 'The months of the year in which transport is charged' })
+  @RequirePermission(FEES.masterView)
+  async transportMonths(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.setup.transportMonths(ctx) };
+  }
+
+  @Put('transport-months')
+  @ApiOperation({ summary: 'Set the months in which transport is charged' })
+  @RequirePermission(FEES.masterManage)
+  setTransportMonths(@ReqCtx() ctx: RequestContext, @Body() body: SetTransportMonthsDto) {
+    return this.setup.setTransportMonths(ctx, body.charged);
   }
 
   @Post('payment-modes')

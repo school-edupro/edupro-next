@@ -194,3 +194,11 @@ dates of every month.
 - **By slabs**: the grid also shows Late fees, Last date 1–3, Late fee 1–3 and the month's Bounce; the
   per-day boxes are not shown.
 - What is not shown is kept as saved, so switching back loses nothing.
+
+### Transport fee for eleven months
+
+Fee setup → Class calendar, late fee, payment modes → **Transport fee months**: tick the months in
+which transport is charged this year (whole school) and untick the vacation month. **Save transport
+months**. Unpaid transport lines of the unticked month are removed from every pupil's bill at once; a
+paid one stays. A month ticked again is billed when the class bills are generated again. The choice is
+per year: set it again after opening a new year.
