@@ -114,7 +114,7 @@ describe('engagement plus, scheduled reports, MIS and the shadow close (e2e, Spr
     }>;
 
   describe('the last approvals on the workflow engine', () => {
-    it('installs the four Sprint 19 definitions with the defaults', async () => {
+    it('installs the Sprint 19 definitions that still ride the engine', async () => {
       const r = await inject({
         method: 'POST',
         url: '/workflow/definitions/defaults',
@@ -122,8 +122,10 @@ describe('engagement plus, scheduled reports, MIS and the shadow close (e2e, Spr
       });
       expect(r.statusCode).toBe(201);
       const codes = (r.json().data as Array<{ code: string }>).map((d) => d.code);
-      for (const code of ['appointment_request', 'cctv_request', 'employee_query'])
-        expect(codes).toContain(code);
+      for (const code of ['cctv_request', 'employee_query']) expect(codes).toContain(code);
+      // gate passes, appointments and transport requests are set up in their own modules
+      for (const code of ['gate_pass', 'appointment_request', 'transport_request'])
+        expect(codes).not.toContain(code);
     });
 
     // appointments moved to slots and the front desk in 0059: see appointments.e2e-spec.ts

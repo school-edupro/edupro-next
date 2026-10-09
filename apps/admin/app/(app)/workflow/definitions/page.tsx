@@ -9,6 +9,28 @@ import {
 import { apiFetch, getMe } from '@/lib/api';
 import type { WorkflowDefinition, WorkflowResolver } from '@/lib/types';
 
+/** Requests whose approvers are chosen in the module's own set-up, not on this page. */
+const ELSEWHERE = [
+  {
+    name: 'Gate pass',
+    href: '/engagement/gate-passes/setup',
+    permission: 'engagement.gate_pass_setup.manage',
+    help: 'approval levels for pupil and staff passes: Gate passes → Set-up',
+  },
+  {
+    name: 'Transport request',
+    href: '/transport/setup',
+    permission: 'transport.setup.manage',
+    help: 'approval levels for new transport, change and withdrawal: Transport → Settings',
+  },
+  {
+    name: 'Appointment',
+    href: '/engagement/appointments/setup',
+    permission: 'engagement.appointment_setup.manage',
+    help: 'the front desk confirms, or bookings confirm by themselves: Appointments → Set-up',
+  },
+];
+
 /**
  * Approval set-up: one card per kind of request, read as a chain (who creates it, then each approval
  * level). Editing ticks roles from the school's list; no codes are typed.
@@ -51,6 +73,7 @@ export default async function WorkflowDefinitionsPage({
           : r.kind === 'position'
             ? `designation “${r.designation}”`
             : 'the creator’s reporting officer';
+  const elsewhere = ELSEWHERE.filter((e) => me.permissions.includes(e.permission));
   return (
     <>
       <PageHeader
@@ -161,6 +184,32 @@ export default async function WorkflowDefinitionsPage({
             </Card>
           ))}
       </div>
+      {elsewhere.length > 0 ? (
+        <Card title="Set up on their own screens">
+          <p className="ep-field__help">
+            These requests are not approved from this page. Each has its own set-up, and that is the
+            only place to change who approves it.
+          </p>
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'grid',
+              gap: 'var(--sp-2)',
+            }}
+          >
+            {elsewhere.map((e) => (
+              <li key={e.href}>
+                <a href={e.href}>
+                  <strong>{e.name}</strong>
+                </a>{' '}
+                · {e.help}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </>
   );
 }

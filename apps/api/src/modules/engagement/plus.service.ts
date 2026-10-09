@@ -142,37 +142,6 @@ export class EngagementPlusService {
     });
   }
 
-  // ---- appointments -------------------------------------------------------------------------------
-  /**
-   * Appointments live in AppointmentsService since 0059 (slots, front desk, gate). Only this remains: a
-   * request that an approval flow from before then still holds ends here. With a slot it is confirmed or
-   * declined; without one it stays in the front-desk queue to be given a slot.
-   */
-  async applyAppointment(
-    c: PoolClient,
-    ctx: RequestContext,
-    id: string,
-    outcome: 'approved' | 'rejected',
-    note: string | null,
-  ) {
-    const r = await c.query<{ state: string }>(
-      `UPDATE appointments SET status = $2::workflow_status, decision_note = $3, decided_at = now(), updated_at = now(),
-              state = CASE WHEN $2 = 'rejected' THEN 'rejected' WHEN starts_at IS NOT NULL THEN 'approved' ELSE state END,
-              confirmed_at = CASE WHEN $2 = 'approved' THEN starts_at END
-        WHERE id = $1 AND state = 'requested' RETURNING state`,
-      [id, outcome, note],
-    );
-    const state = r.rows[0]?.state;
-    if (state === 'approved' || state === 'rejected')
-      await c.query(`SELECT app.appointment_notify($1, $2, $3, NULL)`, [id, state, note]);
-    await this.audit.stage(ctx, c, {
-      action: `engagement.appointment.${outcome}`,
-      entityType: 'appointments',
-      entityId: id,
-      after: { note },
-    });
-  }
-
   // ---- visitors ----------------------------------------------------------------------------------
   async visitorIn(ctx: RequestContext, dto: VisitorInDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1003,7 +972,7 @@ export class EngagementPlusService {
     });
   }
 
-  /** Completion handlers registered by the module for the four entity types. */
+  /** Completion handlers registered by the module (CCTV requests, employee queries). */
   async onWorkflowComplete(
     c: PoolClient,
     ctx: RequestContext,
@@ -1012,8 +981,6 @@ export class EngagementPlusService {
   ) {
     const note = instance.steps.find((s) => s.status === outcome)?.note ?? null;
     switch (instance.entityType) {
-      case 'appointment_request':
-        return this.applyAppointment(c, ctx, instance.entityId, outcome, note);
       case 'cctv_request':
         return this.applySimple(c, ctx, 'cctv_requests', instance.entityId, outcome, note);
       case 'employee_query':

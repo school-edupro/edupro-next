@@ -103,7 +103,7 @@ export class EngagementModule implements OnModuleInit {
         [intent.entityId],
       );
     });
-    for (const entityType of ['appointment_request', 'cctv_request', 'employee_query'])
+    for (const entityType of ['cctv_request', 'employee_query'])
       this.workflow.onComplete(entityType, (c, ctx, instance, outcome) =>
         this.plus.onWorkflowComplete(c, ctx, instance, outcome),
       );

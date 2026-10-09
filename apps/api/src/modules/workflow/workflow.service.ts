@@ -138,6 +138,12 @@ const toInstance = (r: InstanceDb, steps: StepRow[] = []): InstanceRow => ({
  */
 @Injectable()
 export class WorkflowService {
+  /**
+   * Requests whose approval levels live in the module's own set-up (gate pass 0069, transport 0077) or
+   * that the front desk decides (appointments 0059). Their old definitions are not listed or seeded.
+   */
+  static readonly MODULE_OWNED = ['gate_pass', 'appointment_request', 'transport_request'] as const;
+
   private readonly logger = new Logger(WorkflowService.name);
   private readonly handlers = new Map<string, CompletionHandler>();
   /** told when a step lands with people (push notifications to approvers) */
@@ -183,7 +189,8 @@ export class WorkflowService {
       open: number;
     }>(
       `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.creator_roles, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
-         FROM workflow_definitions d WHERE d.deleted_at IS NULL ORDER BY d.entity_type, d.code`,
+         FROM workflow_definitions d WHERE d.deleted_at IS NULL AND d.code <> ALL($1::text[]) ORDER BY d.entity_type, d.code`,
+      [[...WorkflowService.MODULE_OWNED]],
     );
     return r.rows.map((x) => ({
       id: x.id,
@@ -337,21 +344,7 @@ export class WorkflowService {
         ],
       },
       // Sprint 19: the last approval flows on the engine
-      {
-        code: 'appointment_request',
-        name: 'Appointment request',
-        entityType: 'appointment_request',
-        levels: [
-          {
-            level: 1,
-            name: 'Class teacher confirms',
-            resolver: { kind: 'role', roleCode: 'class_teacher' },
-            slaHours: 48,
-            escalateTo: { kind: 'role', roleCode: 'academic_coordinator' },
-          },
-        ],
-      },
-      // gate passes keep their own approval levels since 0069 (GatePassService)
+      // gate passes, appointments and transport requests are set up in their own modules (MODULE_OWNED)
       {
         code: 'cctv_request',
         name: 'CCTV footage request',
@@ -376,20 +369,6 @@ export class WorkflowService {
             resolver: { kind: 'role', roleCode: 'academic_coordinator' },
             slaHours: 72,
             escalateTo: { kind: 'role', roleCode: 'school_admin' },
-          },
-        ],
-      },
-      {
-        // Sprint 13: a family's bus request (join, change stop, leave) is approved by the office
-        code: 'transport_request',
-        name: 'Transport request',
-        entityType: 'transport_request',
-        levels: [
-          {
-            level: 1,
-            name: 'Transport in-charge approval',
-            resolver: { kind: 'role', roleCode: 'school_admin' },
-            slaHours: 72,
           },
         ],
       },
