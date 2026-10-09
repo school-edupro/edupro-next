@@ -1859,8 +1859,27 @@ export async function generateStudentDemand(fd: FormData) {
 
 export async function generateClassDemand(fd: FormData) {
   const classId = str(fd, 'classId');
-  return run(`/fees/demands?classId=${classId}`, () =>
-    apiFetch('/fees/demands/generate', { method: 'POST', body: JSON.stringify({ classId }) }),
+  const path = `/fees/demands?classId=${classId}`;
+  let out: {
+    generated: number;
+    skipped: Array<{ name: string; reason: string }>;
+  } = { generated: 0, skipped: [] };
+  try {
+    out = await apiFetch('/fees/demands/generate', {
+      method: 'POST',
+      body: JSON.stringify({ classId }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back_(path, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  // a pupil whose bill could not be made is named, never passed over in silence
+  const skipped = out.skipped
+    .slice(0, 6)
+    .map((s) => `${s.name}: ${s.reason}`)
+    .join('; ');
+  redirect(
+    `${path}&ok=1&generated=${out.generated}&skippedCount=${out.skipped.length}&skipped=${encodeURIComponent(skipped.slice(0, 500))}`,
   );
 }
 

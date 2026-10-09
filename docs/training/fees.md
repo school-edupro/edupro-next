@@ -230,3 +230,16 @@ On the pupil's **Receipts** tab, under the receipt:
 - **Refund**: amount, how it is paid back and the reason; approved under Fees → Refunds.
 
 A receipt is never deleted or edited; a wrong one is cancelled and posted again.
+
+### Why pupils of one class have different totals (Fees → Demands)
+
+The class list now shows the parts of each pupil's total: **Fee + Transport + Previous / other −
+Discount = Net**, with the pupil's type (old / new), fee group and discounts. Totals differ because of
+old or new student, fee group, discounts, transport, dues or advance carried from last year, hostel,
+and lines already paid: a paid line keeps the amount it was paid at when the bill is made again.
+"Bill older than the structure" marks a pupil whose bill was made before the class structure last
+changed. After **Generate for the whole class** the screen says how many bills were made and names any
+pupil that could not be done, with the reason.
+
+On a pupil's fee page the **Head and month** tab shows every fee head against every month: the fee
+after discount, the discount, and what is paid.

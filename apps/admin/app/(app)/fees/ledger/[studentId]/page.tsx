@@ -33,6 +33,7 @@ import type {
 const TABS = [
   ['pay', 'Take payment'],
   ['dues', 'Dues'],
+  ['matrix', 'Head and month'],
   ['receipts', 'Receipts'],
   ['latefee', 'Late fee'],
   ['more', 'Bill tools'],
@@ -104,6 +105,12 @@ export default async function FeeLedgerPage({
           .catch(() => [])
       : Promise.resolve([]),
   ]);
+  const allRows =
+    tab === 'matrix'
+      ? await apiFetch<FeeDemandSummary>(`/fees/students/${studentId}/demands`)
+          .then((d) => d.rows)
+          .catch(() => [])
+      : [];
   const link = (k: Tab) => `/fees/ledger/${studentId}?tab=${k}${sp.asOf ? `&asOf=${sp.asOf}` : ''}`;
   const diff = ledger.lastRun?.diff ?? null;
   const canAsk = can('fees.adjustment.request') && yearOpen;
@@ -290,6 +297,12 @@ export default async function FeeLedgerPage({
         </Card>
       ) : null}
 
+      {tab === 'matrix' ? (
+        <Card title="Fee head by month">
+          <Matrix rows={allRows} />
+        </Card>
+      ) : null}
+
       {tab === 'receipts' ? (
         <Card title="Receipts of the year">
           {ledger.payments.length === 0 ? (
@@ -450,6 +463,107 @@ export default async function FeeLedgerPage({
           )}
         </Card>
       ) : null}
+    </>
+  );
+}
+
+/** Heads down, months across: what is charged, with the paid part and the balance under it. */
+function Matrix({ rows }: { rows: FeeDemandSummary['rows'] }) {
+  const live = rows.filter((r) => ['pending', 'partial', 'paid'].includes(r.status));
+  if (live.length === 0) return <p>No bill has been made for this pupil yet.</p>;
+  const months = [...new Map(live.map((r) => [r.sequence, r.periodName])).entries()].sort(
+    (a, b) => a[0] - b[0],
+  );
+  const heads = [...new Map(live.map((r) => [r.headId, r.headName])).entries()];
+  const cell = new Map(live.map((r) => [`${r.headId}:${r.sequence}`, r]));
+  const sum = (list: typeof live, k: 'net' | 'paid' | 'discount') =>
+    list.reduce((a, r) => a + Number(r[k]), 0);
+  const num = (v: number) => v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  return (
+    <>
+      <p className="ep-field__help">
+        Each box shows the fee of the month after discount. Under it: the discount taken off, and
+        what is paid. A green box is fully paid; an amber one is part paid.
+      </p>
+      <div className="ep-table-wrap">
+        <table className="ep-table ep-table--dense">
+          <caption className="ep-sr-only">Fee per head and month</caption>
+          <thead>
+            <tr>
+              <th scope="col">Fee head</th>
+              {months.map(([seq, name]) => (
+                <th key={seq} scope="col" style={{ textAlign: 'right' }}>
+                  {name.split(' ')[0]!.slice(0, 3)}
+                </th>
+              ))}
+              <th scope="col" style={{ textAlign: 'right' }}>
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {heads.map(([headId, headName]) => {
+              const mine = live.filter((r) => r.headId === headId);
+              return (
+                <tr key={headId}>
+                  <th scope="row">{headName}</th>
+                  {months.map(([seq]) => {
+                    const r = cell.get(`${headId}:${seq}`);
+                    if (!r)
+                      return (
+                        <td key={seq} style={{ textAlign: 'right' }}>
+                          —
+                        </td>
+                      );
+                    const paid = Number(r.paid);
+                    const net = Number(r.net);
+                    return (
+                      <td key={seq} style={{ textAlign: 'right' }}>
+                        <strong>{num(net)}</strong>
+                        {Number(r.discount) > 0 ? (
+                          <div className="ep-field__help">disc. {num(Number(r.discount))}</div>
+                        ) : null}
+                        {paid > 0 ? (
+                          <div>
+                            <Badge tone={paid >= net ? 'success' : 'warning'}>
+                              paid {num(paid)}
+                            </Badge>
+                          </div>
+                        ) : null}
+                      </td>
+                    );
+                  })}
+                  <td style={{ textAlign: 'right' }}>
+                    <strong>{num(sum(mine, 'net'))}</strong>
+                    <div className="ep-field__help">paid {num(sum(mine, 'paid'))}</div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              {months.map(([seq]) => {
+                const col = live.filter((r) => r.sequence === seq);
+                return (
+                  <th key={seq} style={{ textAlign: 'right' }}>
+                    {num(sum(col, 'net'))}
+                    <div className="ep-field__help">paid {num(sum(col, 'paid'))}</div>
+                  </th>
+                );
+              })}
+              <th style={{ textAlign: 'right' }}>
+                {num(sum(live, 'net'))}
+                <div className="ep-field__help">
+                  paid {num(sum(live, 'paid'))} · balance{' '}
+                  {num(sum(live, 'net') - sum(live, 'paid'))}
+                </div>
+              </th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </>
   );
 }

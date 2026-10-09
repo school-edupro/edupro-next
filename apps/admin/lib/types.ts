@@ -915,6 +915,14 @@ export interface FeeClassSummaryRow {
   balance: string;
   rows: number;
   hasProfile: boolean;
+  studentType: string;
+  feeGroup: string;
+  discounts: string | null;
+  fee: string;
+  discount: string;
+  transport: string;
+  other: string;
+  stale: boolean;
 }
 
 // ---- Sprint 9: workflow, payments, attendance ----------------------------------------------------

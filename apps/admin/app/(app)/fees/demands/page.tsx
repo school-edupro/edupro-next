@@ -9,7 +9,15 @@ import type { ClassRow, FeeClassSummaryRow, Page } from '@/lib/types';
 export default async function FeeDemandsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; classId?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    classId?: string;
+    generated?: string;
+    skippedCount?: string;
+    skipped?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const [t, f, me] = await Promise.all([
@@ -33,6 +41,17 @@ export default async function FeeDemandsPage({
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
+      {sp.generated !== undefined ? (
+        <p
+          className={`ep-alert ${Number(sp.skippedCount) > 0 ? 'ep-alert--warning' : 'ep-alert--success'}`}
+          role="status"
+        >
+          Bills made for {sp.generated} pupil(s).
+          {Number(sp.skippedCount) > 0
+            ? ` ${sp.skippedCount} pupil(s) could not be done: ${sp.skipped ?? ''}`
+            : ''}
+        </p>
+      ) : null}
       <Card>
         <form
           method="get"
@@ -87,6 +106,14 @@ export default async function FeeDemandsPage({
           </form>
         ) : null}
         {cls ? (
+          <p className="ep-field__help">
+            Net = Fee + Transport + Previous / other − Discount. Totals differ between pupils
+            because of: old or new student, fee group, discounts, transport, dues or advance carried
+            from last year, hostel, and lines already paid (a paid line keeps the amount it was paid
+            at). Open the ledger’s “Head and month” tab to see one pupil line by line.
+          </p>
+        ) : null}
+        {cls ? (
           <DataTable<FeeClassSummaryRow>
             caption={`${cls.name}: ${f('demand')} · ${f('total')} ₹${total.toFixed(2)}`}
             density="dense"
@@ -111,15 +138,24 @@ export default async function FeeDemandsPage({
                 ),
               },
               {
-                key: 'profile',
-                header: f('hasProfile'),
+                key: 'why',
+                header: 'Type · group · discount',
                 render: (r) => (
-                  <Badge tone={r.hasProfile ? 'success' : 'neutral'}>
-                    {r.hasProfile ? '✓' : '—'}
-                  </Badge>
+                  <span>
+                    {r.studentType === 'new' ? 'New' : 'Old'}
+                    {r.feeGroup !== 'general' ? ` · ${r.feeGroup.replace(/_/g, ' ')}` : ''}
+                    {r.discounts ? ` · ${r.discounts}` : ''}{' '}
+                    {r.stale ? <Badge tone="warning">Bill older than the structure</Badge> : null}
+                    {Number(r.paid) > 0 ? (
+                      <span className="ep-field__help"> paid lines keep their old amounts</span>
+                    ) : null}
+                  </span>
                 ),
               },
-              { key: 'rows', header: f('rows'), numeric: true, render: (r) => r.rows },
+              { key: 'fee', header: 'Fee', numeric: true, render: (r) => r.fee },
+              { key: 'transport', header: 'Transport', numeric: true, render: (r) => r.transport },
+              { key: 'other', header: 'Previous / other', numeric: true, render: (r) => r.other },
+              { key: 'discount', header: 'Discount', numeric: true, render: (r) => r.discount },
               { key: 'net', header: f('net'), numeric: true, render: (r) => r.net },
               { key: 'paid', header: f('paid'), numeric: true, render: (r) => r.paid },
               {

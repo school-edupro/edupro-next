@@ -403,4 +403,36 @@ describe('fee set-up grids (e2e)', () => {
     await regenerate();
     expect(await transportRows()).toBe(11);
   });
+  it('a bill is made again even when a fee line has a waiver request on it', async () => {
+    const rows = (
+      await inject({ method: 'GET', url: `/fees/students/${studentId}/demands`, headers: h() })
+    ).json().rows as Array<{ id: string; net: string; paid: string }>;
+    const line = rows.find((r) => Number(r.net) > 500 && Number(r.paid) === 0)!;
+    const ask = await inject({
+      method: 'POST',
+      url: '/fees/adjustments',
+      headers: h(),
+      json: { kind: 'waiver', demandId: line.id, amount: 100, reason: 'Hardship' },
+    });
+    expect(ask.statusCode).toBe(201);
+    // before the fix this stopped with "still referenced from fee_adjustments"
+    expect((await regenerate()).statusCode).toBe(201);
+    const cls = await inject({
+      method: 'POST',
+      url: '/fees/demands/generate',
+      headers: h(),
+      json: { classId },
+    });
+    expect(cls.json().skipped).toHaveLength(0);
+    const summary = (
+      await inject({ method: 'GET', url: `/fees/demands/summary?classId=${classId}`, headers: h() })
+    ).json().data as Array<{
+      studentType: string;
+      feeGroup: string;
+      fee: string;
+      transport: string;
+    }>;
+    expect(summary[0]).toMatchObject({ studentType: 'old', feeGroup: 'general' });
+    expect(Number(summary[0]!.transport)).toBe(11000);
+  });
 });

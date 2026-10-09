@@ -332,12 +332,35 @@ export class FeeDemandsService {
         paid: string;
         rows: number;
         profile: boolean;
+        student_type: string;
+        fee_group: string;
+        discounts: string | null;
+        gross: string;
+        discount: string;
+        transport: string;
+        other: string;
+        stale: boolean;
       }>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, cl.code || '-' || cs.name AS section, e.roll_no,
                 COALESCE((SELECT sum(net) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1), 0)::text AS net,
                 COALESCE((SELECT sum(paid) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1), 0)::text AS paid,
                 (SELECT count(*)::int FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1) AS rows,
-                EXISTS (SELECT 1 FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $1) AS profile
+                EXISTS (SELECT 1 FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $1) AS profile,
+                -- what makes one pupil's total differ from another's
+                COALESCE((SELECT p.student_type FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $1),
+                         CASE WHEN s.admitted_on >= (SELECT start_date FROM academic_years WHERE id = $1) THEN 'new' ELSE 'old' END) AS student_type,
+                COALESCE((SELECT p.fee_group FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $1), 'general') AS fee_group,
+                (SELECT string_agg(DISTINCT x.name, ', ') FROM (
+                   SELECT d.name FROM student_fee_profiles p JOIN fee_discounts d ON d.id = p.discount_id WHERE p.student_id = s.id AND p.academic_year_id = $1
+                   UNION SELECT d.name FROM student_fee_discounts sd JOIN fee_discounts d ON d.id = sd.discount_id
+                          WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active') x) AS discounts,
+                COALESCE((SELECT sum(gross) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1 AND d.source = 'structure'), 0)::text AS gross,
+                COALESCE((SELECT sum(discount) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1), 0)::text AS discount,
+                COALESCE((SELECT sum(gross) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1 AND d.source = 'transport'), 0)::text AS transport,
+                COALESCE((SELECT sum(gross) FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1 AND d.source NOT IN ('structure', 'transport')), 0)::text AS other,
+                -- the class structure was changed after this pupil's bill was last made
+                COALESCE((SELECT max(r.ran_at) FROM fee_demand_runs r WHERE r.student_id = s.id AND r.academic_year_id = $1), 'epoch'::timestamptz)
+                  < COALESCE((SELECT max(fs.updated_at) FROM fee_structures fs WHERE fs.academic_year_id = $1 AND fs.class_id = $2), 'epoch'::timestamptz) AS stale
            FROM enrolments e JOIN students s ON s.id = e.student_id JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes cl ON cl.id = cs.class_id
           WHERE e.academic_year_id = $1 AND cs.class_id = $2 AND e.status = 'active' AND s.deleted_at IS NULL ORDER BY cs.name, e.roll_no NULLS LAST, s.display_name`,
         [yearId, classId],
@@ -353,6 +376,14 @@ export class FeeDemandsService {
         balance: (Number(x.net) - Number(x.paid)).toFixed(2),
         rows: x.rows,
         hasProfile: x.profile,
+        studentType: x.student_type,
+        feeGroup: x.fee_group,
+        discounts: x.discounts,
+        fee: x.gross,
+        discount: x.discount,
+        transport: x.transport,
+        other: x.other,
+        stale: x.stale,
       }));
     });
   }
