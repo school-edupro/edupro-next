@@ -21,6 +21,8 @@ export interface Level {
   resolver: Resolver;
   slaHours?: number;
   escalateTo?: Resolver;
+  /** Approved by itself when the requester is one of its approvers; ignored on the last level. */
+  autoIfRequester?: boolean;
 }
 
 export interface EventRow {
@@ -316,6 +318,13 @@ export class WorkflowService {
         levels: [
           {
             level: 1,
+            name: 'Fee in-charge',
+            resolver: { kind: 'role', roleCode: 'accountant' },
+            slaHours: 24,
+            autoIfRequester: true,
+          },
+          {
+            level: 2,
             name: 'Principal approval',
             resolver: { kind: 'role', roleCode: 'school_admin' },
             slaHours: 48,
@@ -565,7 +574,36 @@ export class WorkflowService {
       );
     }
     await this.event(c, id, null, 'started', ctx.user.id, null, { subject: input.subject });
-    for (const l of this.assignListeners) await l(c, ctx, firstAssignees, input.subject);
+    // a level marked "autoIfRequester" is approved by itself when its approver raised the request;
+    // the last level always needs somebody to act
+    const ordered = [...def.rows[0].levels].sort((a, b) => a.level - b.level);
+    let waiting = firstAssignees;
+    for (let i = 0; i < ordered.length - 1; i += 1) {
+      const level = ordered[i]!;
+      if (!level.autoIfRequester) break;
+      const mine = await this.resolveAssignees(c, level.resolver, requester);
+      if (!mine.includes(requester)) break;
+      const next = ordered[i + 1]!;
+      const step = await c.query<{ id: string }>(
+        `UPDATE workflow_steps SET status = 'approved', acted_by = app.current_user_id(), acted_at = now(), note = 'Raised by this level''s approver'
+          WHERE instance_id = $1 AND level = $2 RETURNING id::text`,
+        [id, level.level],
+      );
+      await c.query(
+        `UPDATE workflow_instances SET current_level = $2, updated_at = now() WHERE id = $1`,
+        [id, next.level],
+      );
+      await c.query(
+        `UPDATE workflow_steps SET due_at = CASE WHEN $3::int IS NOT NULL THEN now() + make_interval(hours => $3::int) END WHERE instance_id = $1 AND level = $2`,
+        [id, next.level, next.slaHours ?? null],
+      );
+      await this.event(c, id, step.rows[0]?.id ?? null, 'approved', ctx.user.id, null, {
+        level: level.level,
+        auto: true,
+      });
+      waiting = await this.resolveAssignees(c, next.resolver, requester);
+    }
+    for (const l of this.assignListeners) await l(c, ctx, waiting, input.subject);
     await this.audit.stage(ctx, c, {
       action: 'workflow.instance.started',
       entityType: 'workflow_instances',

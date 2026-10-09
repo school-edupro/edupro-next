@@ -149,6 +149,19 @@ export const StudentDiscountSchema = z
   });
 export type StudentDiscountInput = z.infer<typeof StudentDiscountSchema>;
 
+/** One optional head a pupil has opted in for, with its months. */
+export const StudentOptionalHeadSchema = z
+  .object({
+    headId: IdSchema,
+    fromSeq: z.number().int().min(1).max(12).default(1),
+    toSeq: z.number().int().min(1).max(12).default(12),
+  })
+  .refine((v) => v.fromSeq <= v.toSeq, {
+    message: 'from month is after to month',
+    path: ['toSeq'],
+  });
+export type StudentOptionalHeadInput = z.infer<typeof StudentOptionalHeadSchema>;
+
 export const SetProfileSchema = z.object({
   /** The pupil's additional discounts; the whole list replaces what is there. */
   discounts: z.array(StudentDiscountSchema).max(10).optional(),
@@ -274,6 +287,8 @@ export const RequestProfileChangeSchema = z
     transportDisabled: z.boolean().optional(),
     /** The pupil's additional discounts after approval (the whole list). */
     discounts: z.array(StudentDiscountSchema).max(10).optional(),
+    /** The optional heads the pupil is charged after approval (the whole list). */
+    optionalHeads: z.array(StudentOptionalHeadSchema).max(20).optional(),
     reason: z.string().trim().min(3).max(300),
   })
   .refine(
@@ -284,7 +299,8 @@ export const RequestProfileChangeSchema = z
       v.hosteller !== undefined ||
       v.transportSlabId !== undefined ||
       v.transportDisabled !== undefined ||
-      v.discounts !== undefined,
+      v.discounts !== undefined ||
+      v.optionalHeads !== undefined,
     { message: 'nothing to change' },
   );
 export class RequestProfileChangeDto extends createZodDto(RequestProfileChangeSchema) {}

@@ -254,6 +254,15 @@ export class FeesController {
     return { data: await this.setup.paymentModes(ctx) };
   }
 
+  @Get('students/:id/optional-heads')
+  @ApiOperation({
+    summary: "The school's optional heads and the months this pupil has opted in for",
+  })
+  @RequirePermission(FEES.demandView)
+  async studentOptionalHeads(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return { data: await this.setup.studentOptionalHeads(ctx, id) };
+  }
+
   @Get('cashier/search')
   @ApiOperation({ summary: 'Pupils by name or admission number, with class and father' })
   @RequirePermission(FEES.ledgerView)

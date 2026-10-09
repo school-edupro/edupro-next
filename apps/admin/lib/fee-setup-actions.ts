@@ -114,7 +114,7 @@ export async function savePaymentMode(fd: FormData) {
 /** The pupil's whole discount list goes to the school admin for approval. */
 export async function requestDiscountChange(fd: FormData) {
   const studentId = str(fd, 'studentId');
-  const path = `/people/students/${studentId}`;
+  const path = `/people/students/${studentId}?tab=fees`;
   const discounts = [0, 1, 2, 3, 4]
     .map((i) => ({
       discountId: str(fd, `discountId${i}`),
@@ -266,4 +266,27 @@ export async function saveTransportMonths(fd: FormData) {
     fail(path, error);
   }
   redirect(`${path}?ok=1&transportRemoved=${removed}`);
+}
+
+/** The pupil's whole list of optional heads goes for approval (fee in-charge, then principal). */
+export async function requestOptionalHeads(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const path = `/people/students/${studentId}?tab=fees`;
+  const optionalHeads = fd
+    .getAll('headIds')
+    .map(String)
+    .map((headId) => ({
+      headId,
+      fromSeq: Number(str(fd, `fromSeq:${headId}`) || '1'),
+      toSeq: Number(str(fd, `toSeq:${headId}`) || '12'),
+    }));
+  try {
+    await apiFetch(`/fees/students/${studentId}/profile-changes`, {
+      method: 'POST',
+      body: JSON.stringify({ optionalHeads, reason: str(fd, 'reason') }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  done(path);
 }

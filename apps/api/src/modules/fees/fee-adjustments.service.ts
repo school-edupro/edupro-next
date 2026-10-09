@@ -10,6 +10,7 @@ import { WorkflowService, type InstanceRow } from '../workflow/workflow.service'
 import { FeeSetupService } from './fee-setup.service';
 import type {
   StudentDiscountInput,
+  StudentOptionalHeadInput,
   DecideAdjustmentDto,
   ListAdjustmentsQueryDto,
   ListMiscReceiptsQueryDto,
@@ -483,7 +484,10 @@ export class FeeAdjustmentsService {
           definitionCode: def.rows[0].code,
           entityType: 'fee_profile_change',
           entityId: id,
-          subject: `Fee change: ${s.rows[0].name}`,
+          subject: `Fee change: ${s.rows[0].name}: ${await this.describeChange(c, changes)}`.slice(
+            0,
+            240,
+          ),
           payload: { changes, reason },
         });
         await c.query(`UPDATE fee_profile_changes SET workflow_instance_id = $2 WHERE id = $1`, [
@@ -557,6 +561,46 @@ export class FeeAdjustmentsService {
   }
 
   /** Approval writes the profile and regenerates the demand (paid rows are kept, as always). */
+  /** One line for the approver: what the request would change. */
+  private async describeChange(c: PoolClient, ch: Record<string, unknown>): Promise<string> {
+    const parts: string[] = [];
+    if (ch.feeGroup !== undefined)
+      parts.push(`fee group ${String(ch.feeGroup).replace(/_/g, ' ')}`);
+    if (ch.studentType !== undefined) parts.push(`${String(ch.studentType)} student`);
+    if (ch.hosteller !== undefined) parts.push(ch.hosteller ? 'hosteller' : 'not a hosteller');
+    if (ch.discountId !== undefined) {
+      const d = ch.discountId
+        ? await c.query<{ name: string }>(`SELECT name FROM fee_discounts WHERE id = $1`, [
+            ch.discountId,
+          ])
+        : null;
+      parts.push(d?.rows[0] ? `discount ${d.rows[0].name}` : 'no discount');
+    }
+    if (Array.isArray(ch.discounts)) {
+      const ids = (ch.discounts as Array<{ discountId: string }>).map((x) => x.discountId);
+      const d = await c.query<{ name: string }>(
+        `SELECT name FROM fee_discounts WHERE id = ANY($1::bigint[]) ORDER BY name`,
+        [ids],
+      );
+      parts.push(
+        ids.length
+          ? `discounts by month: ${d.rows.map((x) => x.name).join(', ')}`
+          : 'no month-wise discount',
+      );
+    }
+    if (Array.isArray(ch.optionalHeads)) {
+      const ids = (ch.optionalHeads as Array<{ headId: string }>).map((x) => x.headId);
+      const h = await c.query<{ name: string }>(
+        `SELECT name FROM fee_heads WHERE id = ANY($1::bigint[]) ORDER BY name`,
+        [ids],
+      );
+      parts.push(
+        ids.length ? `optional heads: ${h.rows.map((x) => x.name).join(', ')}` : 'no optional head',
+      );
+    }
+    return parts.join('; ') || 'change';
+  }
+
   private async applyChange(
     c: PoolClient,
     id: string,
@@ -601,6 +645,14 @@ export class FeeAdjustmentsService {
           ch.transportSlabId !== undefined,
         ],
       );
+      if (Array.isArray(ch.optionalHeads))
+        await this.setup.replaceStudentOptionalHeads(
+          c,
+          r.student_id,
+          r.academic_year_id,
+          ch.optionalHeads as StudentOptionalHeadInput[],
+          id,
+        );
       if (Array.isArray(ch.discounts))
         await this.setup.replaceStudentDiscounts(
           c,

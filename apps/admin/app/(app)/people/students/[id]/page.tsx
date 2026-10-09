@@ -15,6 +15,7 @@ import { getTranslations } from 'next-intl/server';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { StudentDiscounts } from '@/components/fees/StudentDiscounts';
+import { StudentOptionalHeads } from '@/components/fees/StudentOptionalHeads';
 import { StudentDocuments, expectedDocuments } from '@/components/StudentDocuments';
 import { STUDENT_TABS, StudentHero, type StudentTab } from '@/components/StudentHero';
 import { StudentOverview } from '@/components/StudentOverview';
@@ -128,11 +129,12 @@ export default async function StudentPage({
     getTranslations('adjustments'),
   ]);
   // every fee group that has a structure this year, so a pupil can be moved to another structure
-  const feeGroups = can('fees.profile.manage')
-    ? await apiFetch<{ data: Array<{ feeGroup: string }> }>('/fees/structures')
-        .then((r) => [...new Set(['general', ...r.data.map((x) => x.feeGroup)])])
-        .catch(() => ['general'])
-    : ['general'];
+  const feeGroups =
+    can('fees.profile.manage') || can('fees.profile_change.request')
+      ? await apiFetch<{ data: Array<{ feeGroup: string }> }>('/fees/structures')
+          .then((r) => [...new Set(['general', ...r.data.map((x) => x.feeGroup)])])
+          .catch(() => ['general'])
+      : ['general'];
   const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
     <>
@@ -719,7 +721,7 @@ export default async function StudentPage({
                 ? ` · ${f('openingBalance')} ${feeProfile.openingBalance}`
                 : ''}
             </p>
-            {can('fees.profile.manage') ? (
+            {can('fees.profile.manage') && can('fees.adjustment.approve') ? (
               <form action={setFeeProfile} style={{ marginTop: 'var(--sp-3)' }}>
                 <input type="hidden" name="studentId" value={student.id} />
                 <FormRow columns={4}>
@@ -805,6 +807,15 @@ export default async function StudentPage({
                 <p className="ep-field__help">{f('requestChange')}</p>
                 <FormRow columns={4}>
                   <SelectField
+                    id="chgGroup"
+                    name="feeGroup"
+                    label="Fee structure (group)"
+                    options={[
+                      { value: '', label: a('keep') },
+                      ...feeGroups.map((g) => ({ value: g, label: g.replace(/_/g, ' ') })),
+                    ]}
+                  />
+                  <SelectField
                     id="chgType"
                     name="studentType"
                     label={f('studentType')}
@@ -850,6 +861,10 @@ export default async function StudentPage({
                 </FormActions>
               </form>
             ) : null}
+            <StudentOptionalHeads
+              studentId={student.id}
+              canRequest={can('fees.profile_change.request')}
+            />
             <StudentDiscounts
               studentId={student.id}
               canRequest={can('fees.profile_change.request')}

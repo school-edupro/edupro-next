@@ -9,6 +9,7 @@ import type {
   SetClassRulesDto,
   SetPaymentModeDto,
   StudentDiscountInput,
+  StudentOptionalHeadInput,
 } from './fees.dto';
 
 export interface ClassRulePeriod {
@@ -546,6 +547,66 @@ export class FeeSetupService {
         },
       );
     return own ? own.label : null;
+  }
+
+  // ---- a pupil's optional heads -----------------------------------------------------------------
+  /** Every optional head of the school with the pupil's opt-in months, if any. */
+  async studentOptionalHeadsWith(c: PoolClient, studentId: string, yearId: string) {
+    const r = await c.query<{
+      headId: string;
+      code: string;
+      name: string;
+      opted: boolean;
+      fromSeq: number | null;
+      toSeq: number | null;
+      fromName: string | null;
+      toName: string | null;
+    }>(
+      `SELECT h.id::text AS "headId", h.code, h.name, (o.id IS NOT NULL) AS opted, o.from_seq AS "fromSeq", o.to_seq AS "toSeq",
+              (SELECT name FROM fee_periods WHERE academic_year_id = $2 AND sequence = o.from_seq) AS "fromName",
+              (SELECT name FROM fee_periods WHERE academic_year_id = $2 AND sequence = o.to_seq) AS "toName"
+         FROM fee_heads h
+         LEFT JOIN student_fee_optional_heads o ON o.head_id = h.id AND o.student_id = $1 AND o.academic_year_id = $2 AND o.status = 'active'
+        WHERE h.is_optional AND h.deleted_at IS NULL AND h.status = 'active' ORDER BY h.sort_order, h.code`,
+      [studentId, yearId],
+    );
+    return r.rows;
+  }
+
+  async studentOptionalHeads(ctx: RequestContext, studentId: string) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), (c) =>
+      this.studentOptionalHeadsWith(c, studentId, yearId),
+    );
+  }
+
+  /** Replaces the pupil's opt-in list: what is there is closed, the new list is written. */
+  async replaceStudentOptionalHeads(
+    c: PoolClient,
+    studentId: string,
+    yearId: string,
+    list: StudentOptionalHeadInput[],
+    changeId: string | null,
+  ): Promise<void> {
+    for (const h of list) {
+      const ok = await c.query(
+        `SELECT 1 FROM fee_heads WHERE id = $1 AND is_optional AND deleted_at IS NULL`,
+        [h.headId],
+      );
+      if (ok.rowCount === 0)
+        throw new DomainError('not-found', 'This head is not an optional head', { status: 404 });
+    }
+    await c.query(
+      `UPDATE student_fee_optional_heads SET status = 'removed', removed_at = now(), removed_by = app.current_user_id()
+        WHERE student_id = $1 AND academic_year_id = $2 AND status = 'active'`,
+      [studentId, yearId],
+    );
+    for (const h of list)
+      await c.query(
+        `INSERT INTO student_fee_optional_heads (school_id, student_id, academic_year_id, head_id, from_seq, to_seq, change_id, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())`,
+        [studentId, yearId, h.headId, h.fromSeq, h.toSeq, changeId],
+      );
   }
 
   // ---- the counter: search, banks, school accounts ----------------------------------------------

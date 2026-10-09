@@ -47,6 +47,8 @@ export const LevelSchema = z.object({
   slaHours: z.number().int().min(1).max(720).optional(),
   /** Sprint 17: who joins the step when it is overdue (default: the roles in workflow.escalate_roles). */
   escalateTo: ResolverSchema.optional(),
+  /** The level is approved by itself when the person who raised the request is one of its approvers (never the last level). */
+  autoIfRequester: z.boolean().optional(),
 });
 
 export const CreateDefinitionSchema = z.object({

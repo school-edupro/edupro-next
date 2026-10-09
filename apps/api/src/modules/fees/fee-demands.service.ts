@@ -125,6 +125,20 @@ export class FeeDemandsService {
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
       const before = await this.findProfile(c, studentId, yearId);
+      // what decides the fee goes through the approval; only an approver sets it here
+      const feeChanged =
+        dto.feeGroup !== before.feeGroup ||
+        dto.studentType !== before.studentType ||
+        (dto.discountId ?? null) !== before.discountId ||
+        dto.hosteller !== before.hosteller ||
+        (dto.transportSlabId ?? null) !== before.transportSlabId ||
+        dto.discounts !== undefined;
+      if (feeChanged && !ctx.permissions?.has('fees.adjustment.approve'))
+        throw new DomainError(
+          'fees.approval_required',
+          'Fee group, student type, discount, transport and hostel changes need approval: use “Request change”',
+          { status: 403 },
+        );
       await c.query(
         `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, transport_slab_id, transport_disabled, discount_id, opening_balance, notes, instalments_override, hosteller, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, app.current_user_id(), app.current_user_id())

@@ -243,3 +243,20 @@ pupil that could not be done, with the reason.
 
 On a pupil's fee page the **Head and month** tab shows every fee head against every month: the fee
 after discount, the discount, and what is paid.
+
+## A pupil's fee changes and their approval (October 2026)
+
+**What goes for approval**: fee structure group, old / new student, discount, discounts by month,
+hosteller, and optional fee heads. Raise them on the pupil's page → Fees tab ("Request change",
+"Optional fee heads", "Discounts by month"). The accountant and the clerk can no longer save these
+directly; only the approver (school admin) still can.
+
+**Two levels**: level 1 is the fee in-charge (accountant role), level 2 the principal (school admin).
+When the fee in-charge raises the request, level 1 is approved by itself and it goes straight to the
+principal. Requests wait in **Workflow → Inbox**; the line says what is being changed. The bill is
+rebuilt after the last approval. Who approves each level is set under **Workflow → Definitions** ("Fee
+change of a pupil").
+
+**Optional heads**: tick "Optional" on the head (Fee setup → first tab). An optional head is then
+charged only to pupils opted in for it, for the months chosen on their Fees tab, after approval.
+Pupils who are not opted in lose the optional heads from their bill the next time it is made.
