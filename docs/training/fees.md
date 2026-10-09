@@ -266,15 +266,15 @@ Pupils who are not opted in lose the optional heads from their bill the next tim
 - A pupil is billed from **one** fee structure: old pupils from "Old students only" and new pupils from
   "New students only" when the class has it; "All students" is used only for a class that keeps a
   single structure. The All-students grid shows a warning when the class has its own old / new grids.
-- **Approval levels**: Fee setup → **Approval levels** tab (the same screen as Approvals → Workflows →
-  "Fee change of a pupil" → Edit). Each level has a name, who approves (role holders, a designation, a
-  named user or the reporting chain), the hours allowed, and a tick "Approve this level by itself when
-  the person who raised the request is one of its approvers". Fill a new level's name to add it; clear
-  a level's name to remove it; **Save definition**.
+- **Approval levels**: Fee setup → **Approval levels** tab. This is the only screen that sets who may
+  ask for a fee change of a pupil and who approves it; it is no longer a card under Approvals →
+  Approval set-up. The top card shows the chain in use; the form below it changes the creators and
+  the levels, and **Save** returns to the same tab.
 
 ### Approval set-up screen (rebuilt)
 
-**Approvals → Approval set-up** (or Fee setup → Approval levels). Each kind of request is a card read
+**Approvals → Approval set-up** (the fee change approval uses the same form under Fee setup → Approval
+levels; gate pass, transport and appointment are set in their own modules). Each kind of request is a card read
 left to right: **Created by → Level 1 → Level 2 → Applied**. Press **Edit**:
 
 1. **Who creates the request**: tick the roles that may raise it. Nothing ticked = anyone whose
