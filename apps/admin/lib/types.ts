@@ -939,6 +939,8 @@ export interface WorkflowLevel {
   slaHours?: number;
   /** Sprint 17: who joins the step when it is overdue */
   escalateTo?: WorkflowResolver;
+  /** Approved by itself when the person who raised the request is one of its approvers. */
+  autoIfRequester?: boolean;
 }
 export interface WorkflowDefinition {
   id: string;

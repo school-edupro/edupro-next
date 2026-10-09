@@ -1,4 +1,5 @@
 import {
+  Checkbox,
   Badge,
   Button,
   Card,
@@ -49,6 +50,7 @@ export default async function DefinitionsPage({
 }: {
   searchParams: Promise<{
     edit?: string;
+    code?: string;
     new?: string;
     ok?: string;
     error?: string;
@@ -64,7 +66,12 @@ export default async function DefinitionsPage({
     apiFetch<{ data: WorkflowDefinition[] }>('/workflow/definitions').then((r) => r.data),
   ]);
   const canManage = me.permissions.includes('workflow.definition.manage');
-  const editing = sp.edit ? (defs.find((d) => d.id === sp.edit) ?? null) : null;
+  // ?code= opens a workflow by its code (the link from Fee setup)
+  const editing = sp.edit
+    ? (defs.find((d) => d.id === sp.edit) ?? null)
+    : sp.code
+      ? (defs.find((d) => d.code === sp.code) ?? null)
+      : null;
   const showForm = canManage && (sp.new || editing);
   const kinds = ['role', 'position', 'named_user', 'approver_chain'].map((k) => ({
     value: k,
@@ -176,6 +183,12 @@ export default async function DefinitionsPage({
                       maxLength={40}
                     />
                   </FormRow>
+                  <Checkbox
+                    id={`l${n}a`}
+                    name={`level${n}:auto`}
+                    label="Approve this level by itself when the person who raised the request is one of its approvers (not used on the last level)"
+                    defaultChecked={Boolean(l?.autoIfRequester)}
+                  />
                 </fieldset>
               );
             })}

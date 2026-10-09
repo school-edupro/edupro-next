@@ -260,3 +260,14 @@ change of a pupil").
 **Optional heads**: tick "Optional" on the head (Fee setup → first tab). An optional head is then
 charged only to pupils opted in for it, for the months chosen on their Fees tab, after approval.
 Pupils who are not opted in lose the optional heads from their bill the next time it is made.
+
+### One structure per pupil, and where to set the approval levels
+
+- A pupil is billed from **one** fee structure: old pupils from "Old students only" and new pupils from
+  "New students only" when the class has it; "All students" is used only for a class that keeps a
+  single structure. The All-students grid shows a warning when the class has its own old / new grids.
+- **Approval levels**: Fee setup → **Approval levels** tab (the same screen as Approvals → Workflows →
+  "Fee change of a pupil" → Edit). Each level has a name, who approves (role holders, a designation, a
+  named user or the reporting chain), the hours allowed, and a tick "Approve this level by itself when
+  the person who raised the request is one of its approvers". Fill a new level's name to add it; clear
+  a level's name to remove it; **Save definition**.

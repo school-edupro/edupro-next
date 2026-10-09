@@ -5,6 +5,7 @@ const TABS: Array<{ href: string; label: string }> = [
   { href: '/fees/structures', label: 'Class fee structure' },
   { href: '/fees/discounts', label: 'Discount by head' },
   { href: '/fees/masters', label: 'Receipt numbers' },
+  { href: '/workflow/definitions?code=fee_profile_change', label: 'Approval levels' },
 ];
 
 export function FeeSetupNav({ current }: { current: string }) {

@@ -3222,6 +3222,7 @@ function levelsFrom(fd: FormData) {
       resolver,
       ...(sla > 0 ? { slaHours: sla } : {}),
       ...(esc ? { escalateTo: { kind: 'role', roleCode: esc } } : {}),
+      ...(fd.get(`level${i}:auto`) !== null ? { autoIfRequester: true } : {}),
     });
   }
   return levels;

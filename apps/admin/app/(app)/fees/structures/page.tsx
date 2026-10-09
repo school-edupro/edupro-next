@@ -222,10 +222,22 @@ export default async function FeeStructuresPage({
               {TYPES.find((t) => t.value === studentType)!.label.toLowerCase()}. Type the amount of
               each month; empty or 0 means the head is not charged that month. “→” copies the first
               month across the year, “↓” copies the first head down a month. A pupil follows the
-              group on their fee profile; a head filled under “old” or “new” replaces its “all
-              students” amount for those pupils; heads left empty there still come from “all
-              students”. Bills already made change only when they are generated again.
+              group on their fee profile; a pupil is billed from one structure only: old pupils from
+              “old students only” and new pupils from “new students only” when the class has it,
+              otherwise from “all students”. Bills already made change only when they are generated
+              again.
             </p>
+            {studentType === 'all' &&
+            grid.saved.some((x) => x.feeGroup === group && x.studentType !== 'all') ? (
+              <p className="ep-alert ep-alert--warning" role="status">
+                This class also has its own structure for{' '}
+                {grid.saved
+                  .filter((x) => x.feeGroup === group && x.studentType !== 'all')
+                  .map((x) => (x.studentType === 'old' ? 'old students' : 'new students'))
+                  .join(' and ')}
+                . Those pupils are billed from their own structure, not from this one.
+              </p>
+            ) : null}
             <GridTools
               fileHref={fileHref}
               upload={importStructureGrid}
