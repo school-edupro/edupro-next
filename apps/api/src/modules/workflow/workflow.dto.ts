@@ -62,6 +62,16 @@ export const CreateDefinitionSchema = z.object({
     .trim()
     .regex(/^[a-z_]{2,40}$/),
   levels: z.array(LevelSchema).min(1).max(10),
+  /** Role codes that may raise the request; empty = anyone whose permissions allow it. */
+  creatorRoles: z
+    .array(
+      z
+        .string()
+        .trim()
+        .regex(/^[a-z_]{2,40}$/),
+    )
+    .max(20)
+    .default([]),
 });
 export class CreateDefinitionDto extends createZodDto(CreateDefinitionSchema) {}
 

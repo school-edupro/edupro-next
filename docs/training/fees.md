@@ -271,3 +271,17 @@ Pupils who are not opted in lose the optional heads from their bill the next tim
   named user or the reporting chain), the hours allowed, and a tick "Approve this level by itself when
   the person who raised the request is one of its approvers". Fill a new level's name to add it; clear
   a level's name to remove it; **Save definition**.
+
+### Approval set-up screen (rebuilt)
+
+**Approvals → Approval set-up** (or Fee setup → Approval levels). Each kind of request is a card read
+left to right: **Created by → Level 1 → Level 2 → Applied**. Press **Edit**:
+
+1. **Who creates the request**: tick the roles that may raise it. Nothing ticked = anyone whose
+   permissions allow it. With roles ticked, anybody else is refused when they try to raise it.
+2. **Approval level**: give the level a name; under "Approved by" choose _People holding a role_ and
+   tick one or more roles (any one of those people can approve), or _One named person_, _People with a
+   designation_, or _The creator's reporting officer_; set the hours allowed.
+3. Tick "If the person who creates the request is an approver of this level, approve this level by
+   itself" where you want that (never offered on the last level).
+4. **＋ Add approval level** adds one (up to six); **Remove this level** takes one out. **Save**.

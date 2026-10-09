@@ -41,6 +41,8 @@ export interface DefinitionRow {
   name: string;
   entityType: string;
   levels: Level[];
+  /** Role codes that may raise the request; empty = by permission only. */
+  creatorRoles: string[];
   status: 'active' | 'inactive';
   open: number;
 }
@@ -176,10 +178,11 @@ export class WorkflowService {
       name: string;
       entity_type: string;
       levels: Level[];
+      creator_roles: string[];
       status: DefinitionRow['status'];
       open: number;
     }>(
-      `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
+      `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.creator_roles, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
          FROM workflow_definitions d WHERE d.deleted_at IS NULL ORDER BY d.entity_type, d.code`,
     );
     return r.rows.map((x) => ({
@@ -188,6 +191,7 @@ export class WorkflowService {
       name: x.name,
       entityType: x.entity_type,
       levels: x.levels,
+      creatorRoles: x.creator_roles,
       status: x.status,
       open: x.open,
     }));
@@ -198,9 +202,9 @@ export class WorkflowService {
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
-          [dto.code, dto.name, dto.entityType, JSON.stringify(dto.levels)],
+          `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, creator_roles, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::text[], app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+          [dto.code, dto.name, dto.entityType, JSON.stringify(dto.levels), dto.creatorRoles],
         );
         id = r.rows[0]!.id;
       } catch (error) {
@@ -233,6 +237,7 @@ export class WorkflowService {
       if (dto.name !== undefined) set('name', dto.name);
       if (dto.levels !== undefined) set('levels', JSON.stringify(dto.levels), '::jsonb');
       if (dto.status !== undefined) set('status', dto.status, '::row_status');
+      if (dto.creatorRoles !== undefined) set('creator_roles', dto.creatorRoles, '::text[]');
       params.push(id);
       const r = await c.query(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters
@@ -252,7 +257,7 @@ export class WorkflowService {
 
   /** Installs the default definitions a school starts with (admission approval: coordinator, then admin). */
   async installDefaults(ctx: RequestContext): Promise<DefinitionRow[]> {
-    const defaults: CreateDefinitionDto[] = [
+    const defaults: Array<Omit<CreateDefinitionDto, 'creatorRoles'>> = [
       {
         code: 'admission_approval',
         name: 'Admission approval',
@@ -401,6 +406,30 @@ export class WorkflowService {
     return this.definitions(ctx);
   }
 
+  /** What the editor offers: roles, designations in use and staff who can sign in. */
+  async options(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const roles = await c.query<{ code: string; name: string }>(
+        `SELECT DISTINCT ON (r.code) r.code, r.name FROM roles r
+          WHERE (r.school_id IS NULL OR r.school_id = app.current_school_id()) AND r.code NOT IN ('parent', 'student')
+          ORDER BY r.code, r.school_id NULLS LAST`,
+      );
+      const designations = await c.query<{ d: string }>(
+        `SELECT DISTINCT designation AS d FROM employees WHERE deleted_at IS NULL AND status = 'active' AND designation IS NOT NULL AND designation <> '' ORDER BY 1 LIMIT 200`,
+      );
+      const people = await c.query<{ id: string; name: string }>(
+        `SELECT u.id::text, e.display_name || COALESCE(' · ' || NULLIF(e.designation, ''), '') AS name
+           FROM employees e JOIN users u ON u.id = e.user_id
+          WHERE e.deleted_at IS NULL AND e.status = 'active' ORDER BY e.display_name LIMIT 500`,
+      );
+      return {
+        roles: roles.rows.sort((a, b) => a.name.localeCompare(b.name)),
+        designations: designations.rows.map((x) => x.d),
+        people: people.rows,
+      };
+    });
+  }
+
   // ---- resolvers --------------------------------------------------------------------------------
   async resolveAssignees(
     c: PoolClient,
@@ -513,8 +542,8 @@ export class WorkflowService {
       payload?: Record<string, unknown>;
     },
   ): Promise<InstanceRow> {
-    const def = await c.query<{ id: string; levels: Level[] }>(
-      `SELECT id::text, levels FROM workflow_definitions WHERE code = $1 AND entity_type = $2 AND status = 'active' AND deleted_at IS NULL`,
+    const def = await c.query<{ id: string; levels: Level[]; creator_roles: string[] }>(
+      `SELECT id::text, levels, creator_roles FROM workflow_definitions WHERE code = $1 AND entity_type = $2 AND status = 'active' AND deleted_at IS NULL`,
       [input.definitionCode, input.entityType],
     );
     if (!def.rows[0])
@@ -523,6 +552,21 @@ export class WorkflowService {
         `No active workflow "${input.definitionCode}"; install the defaults first`,
         { status: 409 },
       );
+    // the workflow names who may raise it; an empty list leaves it to the permissions
+    if (def.rows[0].creator_roles.length > 0) {
+      const mine = await c.query(
+        `SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = app.current_user_id() AND ur.school_id = app.current_school_id() AND r.code = ANY($1::text[])
+            AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE) LIMIT 1`,
+        [def.rows[0].creator_roles],
+      );
+      if (mine.rowCount === 0)
+        throw new DomainError(
+          'workflow.creator_not_allowed',
+          'Your role cannot raise this request; ask the office to raise it',
+          { status: 403 },
+        );
+    }
     let id: string;
     try {
       const r = await c.query<{ id: string }>(

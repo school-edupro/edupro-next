@@ -948,6 +948,7 @@ export interface WorkflowDefinition {
   name: string;
   entityType: string;
   levels: WorkflowLevel[];
+  creatorRoles: string[];
   status: 'active' | 'inactive';
   open: number;
 }

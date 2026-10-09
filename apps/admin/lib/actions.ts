@@ -3199,56 +3199,23 @@ export async function masterUploadCommit(fd: FormData) {
 }
 
 // ---- Sprint 17: workflow GA ---------------------------------------------------------------------
-function levelsFrom(fd: FormData) {
-  const levels: Array<Record<string, unknown>> = [];
-  for (let i = 1; i <= 6; i += 1) {
-    const name = str(fd, `level${i}:name`);
-    if (!name) continue;
-    const kind = str(fd, `level${i}:kind`) || 'role';
-    const value = str(fd, `level${i}:value`);
-    const resolver =
-      kind === 'named_user'
-        ? { kind, userId: value }
-        : kind === 'position'
-          ? { kind, designation: value }
-          : kind === 'approver_chain'
-            ? { kind, depth: Number(value || 1) }
-            : { kind: 'role', roleCode: value || 'school_admin' };
-    const sla = Number(str(fd, `level${i}:sla`));
-    const esc = str(fd, `level${i}:escalate`);
-    levels.push({
-      level: levels.length + 1,
-      name,
-      resolver,
-      ...(sla > 0 ? { slaHours: sla } : {}),
-      ...(esc ? { escalateTo: { kind: 'role', roleCode: esc } } : {}),
-      ...(fd.get(`level${i}:auto`) !== null ? { autoIfRequester: true } : {}),
-    });
-  }
-  return levels;
-}
-
+/** The approval editor sends the whole chain as one value: name, creator roles and the levels. */
 export async function saveWorkflowDefinition(fd: FormData) {
-  const id = opt(fd, 'id');
-  const levels = levelsFrom(fd);
-  if (levels.length === 0)
-    back_('/workflow/definitions', 'validation-failed', 'Add at least one level');
-  return run('/workflow/definitions', () =>
-    id
-      ? apiFetch(`/workflow/definitions/${id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ name: str(fd, 'name'), levels }),
-        })
-      : apiFetch('/workflow/definitions', {
-          method: 'POST',
-          body: JSON.stringify({
-            code: str(fd, 'code'),
-            name: str(fd, 'name'),
-            entityType: str(fd, 'entityType'),
-            levels,
-          }),
-        }),
-  );
+  const id = str(fd, 'id');
+  const path = `/workflow/definitions?edit=${id}`;
+  let body: unknown;
+  try {
+    body = JSON.parse(str(fd, 'payload'));
+  } catch {
+    back_(path, 'validation-failed', 'The form could not be read; reload the page');
+  }
+  try {
+    await apiFetch(`/workflow/definitions/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  } catch (error) {
+    if (error instanceof ApiError) back_(path, error.problem.type, error.problem.detail);
+    throw error;
+  }
+  redirect('/workflow/definitions?ok=1');
 }
 
 export async function setWorkflowDefinitionStatus(fd: FormData) {

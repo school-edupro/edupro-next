@@ -218,4 +218,63 @@ describe('fee changes through two approval levels (e2e)', () => {
     });
     expect(harmless.statusCode).toBe(200);
   });
+  it('the workflow names who may create the request, and a level can have several roles', async () => {
+    const opts = await inject({ method: 'GET', url: '/workflow/options', headers: h() });
+    expect(opts.statusCode).toBe(200);
+    expect(opts.json().roles.some((r: { code: string }) => r.code === 'accountant')).toBe(true);
+    expect(opts.json().roles.some((r: { code: string }) => r.code === 'parent')).toBe(false);
+    const defs = (
+      await inject({ method: 'GET', url: '/workflow/definitions', headers: h() })
+    ).json().data as Array<{ id: string; code: string; creatorRoles: string[] }>;
+    const def = defs.find((d) => d.code === 'fee_profile_change')!;
+    expect(def.creatorRoles).toEqual([]);
+    const save = await inject({
+      method: 'PATCH',
+      url: `/workflow/definitions/${def.id}`,
+      headers: h(),
+      json: {
+        creatorRoles: ['accountant'],
+        levels: [
+          {
+            level: 1,
+            name: 'Office',
+            resolver: { kind: 'any_of', roleCodes: ['accountant', 'front_desk'], userIds: [] },
+            autoIfRequester: true,
+          },
+          { level: 2, name: 'Principal', resolver: { kind: 'role', roleCode: 'school_admin' } },
+        ],
+      },
+    });
+    expect(save.statusCode).toBe(200);
+    expect(save.json().creatorRoles).toEqual(['accountant']);
+    // the principal holds no creator role: refused
+    const refused = await inject({
+      method: 'POST',
+      url: `/fees/students/${studentId}/profile-changes`,
+      headers: h(),
+      json: { hosteller: false, reason: 'Left the hostel' },
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().type).toBe('workflow.creator_not_allowed');
+    // the accountant may, and being among level 1's roles passes it at once
+    const ok = await inject({
+      method: 'POST',
+      url: `/fees/students/${studentId}/profile-changes`,
+      headers: h(accountant),
+      json: { hosteller: false, reason: 'Left the hostel' },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(await pendingStep(ok.json().workflowInstanceId)).toMatchObject({ level: 2, auto: true });
+    // switching it off and on keeps the creator roles
+    await inject({
+      method: 'PATCH',
+      url: `/workflow/definitions/${def.id}`,
+      headers: h(),
+      json: { status: 'active' },
+    });
+    const again = (
+      await inject({ method: 'GET', url: '/workflow/definitions', headers: h() })
+    ).json().data as Array<{ id: string; creatorRoles: string[] }>;
+    expect(again.find((d) => d.id === def.id)!.creatorRoles).toEqual(['accountant']);
+  });
 });

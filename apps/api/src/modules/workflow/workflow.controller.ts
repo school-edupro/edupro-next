@@ -24,6 +24,13 @@ export class WorkflowController {
     return { data: await this.workflow.definitions(ctx) };
   }
 
+  @Get('options')
+  @ApiOperation({ summary: 'Roles, designations and staff offered by the workflow editor' })
+  @RequirePermission('workflow.definition.view')
+  options(@ReqCtx() ctx: RequestContext) {
+    return this.workflow.options(ctx);
+  }
+
   @Post('definitions/defaults')
   @ApiOperation({ summary: 'Install the default definitions the school does not have yet' })
   @RequirePermission(WORKFLOW.definitionManage, {
