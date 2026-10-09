@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { ApproversForm } from './ApproversForm';
 import {
   addCredit,
   savePolicy,
@@ -739,7 +738,21 @@ export function CommsSettingsForm({
         ))}
       </div>
       <Policy settings={settings} />
-      <ApproversForm initial={settings.approvers} roles={settings.roles} />
+      <section className="ep-card" aria-labelledby="approvers-title">
+        <h2 className="ep-card__title" id="approvers-title">
+          Who approves bulk messages
+        </h2>
+        <p className="ep-field__help">
+          The approvers, their order and who may send for approval are set in one place: Approval
+          set-up → Message approval. The limit and the roles that never need approval stay above.
+        </p>
+        <a
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          href="/workflow/definitions?open=message_approval"
+        >
+          Open Approval set-up
+        </a>
+      </section>
       {canCredit ? <Credits balances={credits.balances} ledger={credits.ledger} /> : null}
     </div>
   );

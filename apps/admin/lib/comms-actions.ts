@@ -329,26 +329,6 @@ export async function deleteCustomVariable(key: string) {
   );
 }
 
-export async function saveApprovers(p: {
-  roleCodes: string[];
-  employeeIds: string[];
-  keepUserIds: string[];
-}) {
-  return call(
-    () =>
-      apiFetch<{
-        roleCodes: string[];
-        people: Array<{
-          userId: string;
-          name: string;
-          code: string | null;
-          designation: string | null;
-        }>;
-      }>('/comms/approvers', { method: 'PUT', body: JSON.stringify(p) }),
-    '/comms/settings',
-  );
-}
-
 export async function testPushToMe() {
   return call(() =>
     apiFetch<{ devices: number }>('/comms/push/test', { method: 'POST', body: '{}' }),
