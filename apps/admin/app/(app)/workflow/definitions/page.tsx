@@ -12,6 +12,12 @@ import type { WorkflowDefinition, WorkflowResolver } from '@/lib/types';
 /** Requests whose approvers are chosen in the module's own set-up, not on this page. */
 const ELSEWHERE = [
   {
+    name: 'Fee change of a pupil',
+    href: '/fees/approval',
+    permission: 'workflow.definition.view',
+    help: 'discount, fee group, hostel and optional heads: Fee setup → Approval levels',
+  },
+  {
     name: 'Gate pass',
     href: '/engagement/gate-passes/setup',
     permission: 'engagement.gate_pass_setup.manage',
@@ -50,7 +56,10 @@ export default async function WorkflowDefinitionsPage({
   const me = await getMe();
   const canManage = me.permissions.includes('workflow.definition.manage');
   const [defs, options] = await Promise.all([
-    apiFetch<{ data: WorkflowDefinition[] }>('/workflow/definitions').then((r) => r.data),
+    apiFetch<{ data: WorkflowDefinition[] }>('/workflow/definitions').then((r) =>
+      // the fee change approval is edited under Fee setup → Approval levels
+      r.data.filter((d) => d.entityType !== 'fee_profile_change'),
+    ),
     apiFetch<WorkflowOptions>('/workflow/options').catch(
       () => ({ roles: [], designations: [], people: [] }) as WorkflowOptions,
     ),

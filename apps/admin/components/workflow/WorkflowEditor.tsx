@@ -89,10 +89,13 @@ export function WorkflowEditor({
   def,
   options,
   action,
+  backHref = '/workflow/definitions',
 }: {
   def: WorkflowDefinition;
   options: WorkflowOptions;
   action: (fd: FormData) => Promise<void>;
+  /** The screen this editor sits on: Save and Cancel return there. */
+  backHref?: string;
 }) {
   const [name, setName] = useState(def.name);
   const [creators, setCreators] = useState<string[]>(def.creatorRoles ?? []);
@@ -138,6 +141,7 @@ export function WorkflowEditor({
     <form action={action}>
       <input type="hidden" name="id" value={def.id} />
       <input type="hidden" name="payload" value={payload} />
+      <input type="hidden" name="returnTo" value={backHref} />
       <label className="ep-field" style={{ maxWidth: '36rem' }}>
         <span className="ep-field__label">Name of this approval *</span>
         <input
@@ -339,7 +343,7 @@ export function WorkflowEditor({
         <button type="submit" className="ep-btn" disabled={problems.length > 0 || !name.trim()}>
           Save
         </button>
-        <a className="ep-btn ep-btn--ghost" href="/workflow/definitions">
+        <a className="ep-btn ep-btn--ghost" href={backHref}>
           Cancel
         </a>
       </div>

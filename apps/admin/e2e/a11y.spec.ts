@@ -78,7 +78,7 @@ const PAGES = [
   '/fees/rules?classId=3282',
   '/fees/structures?classId=3282',
   '/fees/discounts',
-  '/workflow/definitions?open=fee_profile_change',
+  '/fees/approval',
   '/workflow/definitions',
   '/fees/carry-forward',
   '/fees/deposit-slips',

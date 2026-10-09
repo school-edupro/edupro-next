@@ -490,7 +490,7 @@ export async function Shell({
   const ALSO: Record<string, string[]> = {
     '/fees/demands': ['/fees/bills'],
     '/fees/cashier': ['/fees/ledger', '/fees/receipt'],
-    '/masters/fees': ['/fees/masters', '/fees/structures', '/fees/rules', '/fees/discounts'],
+    '/masters/fees': ['/fees/masters', '/fees/structures', '/fees/rules', '/fees/discounts', '/fees/approval'],
   };
   const matches = (link: string) => {
     const href = SECTION_OF[link] ?? link;

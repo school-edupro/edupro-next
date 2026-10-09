@@ -1884,9 +1884,10 @@ export async function generateClassDemand(fd: FormData) {
 }
 
 // ---- Sprint 9: workflow, admissions decisions, payments, attendance --------------------------------
-export async function installWorkflowDefaults() {
-  return run('/workflow/definitions', () =>
-    apiFetch('/workflow/definitions/defaults', { method: 'POST' }),
+export async function installWorkflowDefaults(fd: FormData) {
+  return run(
+    opt(fd, 'returnTo') === '/fees/approval' ? '/fees/approval' : '/workflow/definitions',
+    () => apiFetch('/workflow/definitions/defaults', { method: 'POST' }),
   );
 }
 
@@ -3200,9 +3201,13 @@ export async function masterUploadCommit(fd: FormData) {
 
 // ---- Sprint 17: workflow GA ---------------------------------------------------------------------
 /** The approval editor sends the whole chain as one value: name, creator roles and the levels. */
+/** Approvals edited on a module's own set-up screen return there, not to Approval set-up. */
+const WORKFLOW_HOMES = ['/fees/approval'];
+
 export async function saveWorkflowDefinition(fd: FormData) {
   const id = str(fd, 'id');
-  const path = `/workflow/definitions?edit=${id}`;
+  const home = WORKFLOW_HOMES.find((h) => h === opt(fd, 'returnTo'));
+  const path = home ?? `/workflow/definitions?edit=${id}`;
   let body: unknown;
   try {
     body = JSON.parse(str(fd, 'payload'));
@@ -3215,11 +3220,12 @@ export async function saveWorkflowDefinition(fd: FormData) {
     if (error instanceof ApiError) back_(path, error.problem.type, error.problem.detail);
     throw error;
   }
-  redirect('/workflow/definitions?ok=1');
+  redirect(`${home ?? '/workflow/definitions'}?ok=1`);
 }
 
 export async function setWorkflowDefinitionStatus(fd: FormData) {
-  return run('/workflow/definitions', () =>
+  const home = WORKFLOW_HOMES.find((h) => h === opt(fd, 'returnTo'));
+  return run(home ?? '/workflow/definitions', () =>
     apiFetch(`/workflow/definitions/${str(fd, 'id')}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active' }),
