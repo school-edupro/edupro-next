@@ -21,6 +21,8 @@ export interface StructureGrid {
   total: string;
   /** Fee groups that have a structure for the class, and the student types of this group. */
   groups: string[];
+  /** Every structure saved for this class, so none looks lost behind the selectors. */
+  saved: Array<{ feeGroup: string; studentType: string; heads: number; total: string }>;
 }
 export interface DiscountGrid {
   discount: { id: string; code: string; name: string };
@@ -115,6 +117,20 @@ export class FeeGridsService {
       `SELECT DISTINCT fee_group AS g FROM fee_structures WHERE academic_year_id = $1 ORDER BY 1`,
       [yearId],
     );
+    const saved = await c.query<{
+      feeGroup: string;
+      studentType: string;
+      heads: number;
+      total: string;
+    }>(
+      `SELECT fs.fee_group AS "feeGroup", fs.student_type AS "studentType", count(*)::int AS heads,
+              sum(CASE WHEN fs.amounts IS NOT NULL THEN (SELECT COALESCE(sum(a), 0) FROM unnest(fs.amounts) a)
+                       ELSE fs.amount * CASE WHEN fs.periods IS NOT NULL THEN cardinality(fs.periods) WHEN fs.frequency = 'monthly' THEN 12
+                                             WHEN fs.frequency = 'quarterly' THEN 4 WHEN fs.frequency = 'half_yearly' THEN 2 ELSE 1 END END)::numeric(14,2)::text AS total
+         FROM fee_structures fs WHERE fs.academic_year_id = $1 AND fs.class_id = $2
+        GROUP BY fs.fee_group, fs.student_type ORDER BY fs.fee_group, fs.student_type`,
+      [yearId, k.classId],
+    );
     const grid = rows.rows.map((r) => ({
       ...r,
       amounts: r.amounts ?? Array<string>(12).fill('0.00'),
@@ -132,6 +148,7 @@ export class FeeGridsService {
       monthTotals,
       total: monthTotals.reduce((a, v) => a + Number(v), 0).toFixed(2),
       groups: [...new Set(['general', ...groups.rows.map((x) => x.g), k.feeGroup])],
+      saved: saved.rows,
     };
   }
 

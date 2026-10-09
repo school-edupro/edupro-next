@@ -11,6 +11,7 @@ import { Notice } from '@/components/Notice';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { GridTools } from '@/components/fees/GridTools';
 import { StructureGridTable, type StructureRow } from '@/components/fees/StructureGridTable';
+import { redirect } from 'next/navigation';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import {
   cloneStructureGrid,
@@ -30,6 +31,7 @@ interface Grid {
   monthTotals: string[];
   total: string;
   groups: string[];
+  saved: Array<{ feeGroup: string; studentType: string; heads: number; total: string }>;
 }
 
 const TYPES = [
@@ -71,6 +73,12 @@ export default async function FeeStructuresPage({
       grid = await apiFetch<Grid>(
         `/fees/grids/structure?classId=${sp.classId}&feeGroup=${group}&studentType=${studentType}`,
       );
+      // nothing was asked for and this view is empty: open a structure the class does have
+      const first = grid.saved[0];
+      if (!sp.studentType && !sp.group && !typed && Number(grid.total) === 0 && first)
+        redirect(
+          `/fees/structures?classId=${sp.classId}&group=${first.feeGroup}&studentType=${first.studentType}`,
+        );
     } catch (error) {
       if (error instanceof ApiError && error.problem.type === 'fees.no_periods') noMonths = true;
       else throw error;
@@ -185,13 +193,38 @@ export default async function FeeStructuresPage({
         ) : null}
         {grid ? (
           <>
+            <div style={{ marginTop: 'var(--sp-4)' }}>
+              <strong>Structures saved for {grid.className}:</strong>{' '}
+              {grid.saved.length === 0 ? (
+                <span className="ep-field__help">none yet</span>
+              ) : (
+                <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                  {grid.saved.map((x) => {
+                    const here = x.feeGroup === group && x.studentType === studentType;
+                    return (
+                      <a
+                        key={`${x.feeGroup}-${x.studentType}`}
+                        className={`ep-btn ep-btn--sm ${here ? 'ep-btn--secondary' : 'ep-btn--ghost'}`}
+                        aria-current={here ? 'true' : undefined}
+                        href={`/fees/structures?classId=${grid!.classId}&group=${x.feeGroup}&studentType=${x.studentType}`}
+                      >
+                        {x.feeGroup.replace(/_/g, ' ')} ·{' '}
+                        {TYPES.find((t) => t.value === x.studentType)?.label.toLowerCase()} · ₹
+                        {Number(x.total).toLocaleString('en-IN')}
+                      </a>
+                    );
+                  })}
+                </span>
+              )}
+            </div>
             <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
               {grid.className} · group <strong>{group.replace(/_/g, ' ')}</strong> ·{' '}
               {TYPES.find((t) => t.value === studentType)!.label.toLowerCase()}. Type the amount of
               each month; empty or 0 means the head is not charged that month. “→” copies the first
               month across the year, “↓” copies the first head down a month. A pupil follows the
-              group on their fee profile; “old” and “new” rows are added to the “all students” rows.
-              Bills already made change only when they are generated again.
+              group on their fee profile; a head filled under “old” or “new” replaces its “all
+              students” amount for those pupils; heads left empty there still come from “all
+              students”. Bills already made change only when they are generated again.
             </p>
             <GridTools
               fileHref={fileHref}
