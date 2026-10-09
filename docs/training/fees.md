@@ -202,3 +202,31 @@ which transport is charged this year (whole school) and untick the vacation mont
 months**. Unpaid transport lines of the unticked month are removed from every pupil's bill at once; a
 paid one stays. A month ticked again is billed when the class bills are generated again. The choice is
 per year: set it again after opening a new year.
+
+## The fee counter (rebuilt October 2026)
+
+1. **Fees → Cashier**: type the pupil's name or admission number and press Search. The list shows
+   admission no., name, class and father. Press **Take payment** (an exact admission number opens the
+   pupil at once).
+2. The pupil's fee page opens: name, admission no., class and father at the top, then Payable today,
+   Fee balance, Late fee to collect and Paid this year. Tabs: **Take payment · Dues · Receipts · Late
+   fee · Bill tools**.
+3. **Take payment**: amount, payment mode and date. The other boxes follow the mode: a cheque or draft
+   asks for its number, date and the bank it is drawn on (pick from the list or type it); UPI, card and
+   bank transfer ask for the reference; every mode except cash shows the school bank account the money
+   goes into (chosen by the cashier when the fee type has more than one). Boxes marked * must be filled.
+4. **Post receipt and print**: the receipt opens with a school copy and a parent copy on one A4 sheet.
+   Press **Print receipt**. Any old receipt prints again from the **Receipts** tab.
+
+### Cancelling a receipt, a bounced cheque, a refund
+
+On the pupil's **Receipts** tab, under the receipt:
+
+- **Cancel this receipt**: type why, send. After the school admin approves (Fees → Adjustments) the
+  receipt is marked Cancelled, the fee it had paid becomes due again, and the day book leaves it out.
+- **Cheque bounced** (cheque and draft receipts only): type the bank's reason; the bounce charge of the
+  class calendar is added unless you type another. After approval the receipt is marked Cheque bounced,
+  the fee becomes due again and the charge shows as a new line. It appears in the Cheque bounce report.
+- **Refund**: amount, how it is paid back and the reason; approved under Fees → Refunds.
+
+A receipt is never deleted or edited; a wrong one is cancelled and posted again.

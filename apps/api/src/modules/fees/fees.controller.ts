@@ -254,6 +254,27 @@ export class FeesController {
     return { data: await this.setup.paymentModes(ctx) };
   }
 
+  @Get('cashier/search')
+  @ApiOperation({ summary: 'Pupils by name or admission number, with class and father' })
+  @RequirePermission(FEES.ledgerView)
+  async cashierSearch(@ReqCtx() ctx: RequestContext, @Query('q') q?: string) {
+    return { data: await this.setup.cashierSearch(ctx, String(q ?? '').slice(0, 60)) };
+  }
+
+  @Get('cashier/options')
+  @ApiOperation({ summary: 'Bank names and school accounts for the receipt form' })
+  @RequirePermission(FEES.ledgerView)
+  cashierOptions(@ReqCtx() ctx: RequestContext) {
+    return this.setup.cashierOptions(ctx);
+  }
+
+  @Get('payments/:id/receipt-view')
+  @ApiOperation({ summary: 'One receipt as it prints: pupil, lines, mode, amount in words' })
+  @RequirePermission(FEES.ledgerView)
+  receiptView(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.papers.receiptView(ctx, id);
+  }
+
   @Get('transport-months')
   @ApiOperation({ summary: 'The months of the year in which transport is charged' })
   @RequirePermission(FEES.masterView)

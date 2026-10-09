@@ -132,6 +132,89 @@ export class FeeDocumentsService {
     };
   }
 
+  // ---- receipt as it prints -----------------------------------------------------------------------
+  async receiptView(ctx: RequestContext, paymentId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const p = await c.query<{
+        id: string;
+        student_id: string;
+        academic_year_id: string;
+        year: string;
+        receipt_no: string | null;
+        received_on: string;
+        amount: string;
+        late_fee: string;
+        refunded: string;
+        status: string;
+        mode: string;
+        mode_kind: string;
+        ledger: string;
+        reference: string | null;
+        instrument_no: string | null;
+        instrument_date: string | null;
+        bank_name: string | null;
+        remarks: string | null;
+        received_by: string | null;
+        deposit_account: string | null;
+        allocated: string;
+      }>(
+        `SELECT p.id::text, p.student_id::text, p.academic_year_id::text, y.code AS year, p.receipt_no, p.received_on::text, p.amount::text, p.late_fee::text,
+                p.refunded::text, p.status, COALESCE(p.mode_label, p.mode) AS mode, p.mode AS mode_kind, p.ledger::text, p.reference, p.instrument_no,
+                p.instrument_date::text, p.bank_name, p.remarks, COALESCE(u.display_name, 'Online') AS received_by,
+                (SELECT b.name || ', A/c …' || right(a.account_no, 4) FROM school_bank_accounts a JOIN banks b ON b.id = a.bank_id WHERE a.id = p.bank_account_id) AS deposit_account,
+                COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated
+           FROM fee_payments p JOIN academic_years y ON y.id = p.academic_year_id LEFT JOIN users u ON u.id = p.received_by WHERE p.id = $1`,
+        [paymentId],
+      );
+      const r = p.rows[0];
+      if (!r) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+      const head = await this.head(c, r.student_id, r.academic_year_id);
+      const lines = await c.query<{ head: string; period: string; amount: string }>(
+        `SELECT head, period, amount::numeric(12,2)::text AS amount FROM (
+           SELECT COALESCE(NULLIF(h.print_group, ''), h.name) AS head,
+                  CASE WHEN min(fp.sequence) = max(fp.sequence) THEN min(fp.name)
+                       ELSE split_part(min(fp.name) FILTER (WHERE fp.sequence = x.lo), ' ', 1) || ' – ' || min(fp.name) FILTER (WHERE fp.sequence = x.hi) END AS period,
+                  sum(a.amount) AS amount, min(fp.sequence) AS seq, min(h.sort_order) AS ord
+             FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
+             CROSS JOIN LATERAL (SELECT min(fp2.sequence) AS lo, max(fp2.sequence) AS hi
+                                   FROM fee_payment_allocations a2 JOIN fee_demands d2 ON d2.id = a2.demand_id JOIN fee_periods fp2 ON fp2.id = d2.period_id
+                                  WHERE a2.payment_id = a.payment_id AND d2.due_on = d.due_on) x
+            WHERE a.payment_id = $1
+            GROUP BY COALESCE(NULLIF(h.print_group, ''), h.name), d.due_on, x.lo, x.hi
+         ) t ORDER BY seq, ord`,
+        [paymentId],
+      );
+      const advance = Math.max(
+        Number(r.amount) - Number(r.late_fee) - Number(r.refunded) - Number(r.allocated),
+        0,
+      );
+      return {
+        ...head,
+        year: r.year,
+        id: r.id,
+        receiptNo: r.receipt_no,
+        receivedOn: r.received_on,
+        amount: r.amount,
+        amountWords: amountInWords(r.amount),
+        lateFee: r.late_fee,
+        advance: fmt(advance),
+        refunded: r.refunded,
+        status: r.status,
+        mode: r.mode,
+        modeKind: r.mode_kind,
+        feeType: r.ledger,
+        reference: r.reference,
+        instrumentNo: r.instrument_no,
+        instrumentDate: r.instrument_date,
+        bankName: r.bank_name,
+        remarks: r.remarks,
+        receivedBy: r.received_by,
+        depositAccount: r.deposit_account,
+        lines: lines.rows,
+      };
+    });
+  }
+
   // ---- fee bill ---------------------------------------------------------------------------------
   /** What is payable now: every instalment with a balance that is due up to the date (default: visible to the family). */
   async bill(ctx: RequestContext, studentId: string, upTo?: string): Promise<FeeBill> {

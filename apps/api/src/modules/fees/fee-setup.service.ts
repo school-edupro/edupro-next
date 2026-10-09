@@ -548,6 +548,86 @@ export class FeeSetupService {
     return own ? own.label : null;
   }
 
+  // ---- the counter: search, banks, school accounts ----------------------------------------------
+  /** Pupils by name or admission number, with what the cashier needs to tell them apart. */
+  async cashierSearch(ctx: RequestContext, q: string) {
+    const yearId = this.year(ctx);
+    const term = q.trim();
+    if (term.length < 2) return [];
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        name: string;
+        admissionNo: string;
+        section: string | null;
+        father: string | null;
+        status: string;
+      }>(
+        `SELECT s.id::text, s.display_name AS name, s.admission_no AS "admissionNo", s.status::text,
+                (SELECT k.name || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                  WHERE e.student_id = s.id AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS section,
+                (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                  WHERE sg.student_id = s.id AND g.deleted_at IS NULL ORDER BY (sg.relation = 'father') DESC, sg.is_primary DESC, sg.id LIMIT 1) AS father
+           FROM students s
+          WHERE s.deleted_at IS NULL AND (s.display_name ILIKE '%' || $1 || '%' OR s.admission_no ILIKE $1 || '%')
+          ORDER BY (lower(s.admission_no) = lower($1)) DESC, (s.status = 'active') DESC, s.display_name LIMIT 40`,
+        [term, yearId],
+      );
+      return r.rows;
+    });
+  }
+
+  /** Bank names for the cheque's "drawn on" box, and the school accounts money can go into. */
+  async cashierOptions(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const banks = await c.query<{ name: string }>(
+        `SELECT name FROM banks WHERE status = 'active' ORDER BY name`,
+      );
+      const accounts = await c.query<{
+        id: string;
+        label: string;
+        purpose: string;
+        isDefault: boolean;
+      }>(
+        `SELECT a.id::text, b.name || ' · ' || a.account_name || ' · …' || right(a.account_no, 4) AS label, a.purpose, a.is_default AS "isDefault"
+           FROM school_bank_accounts a JOIN banks b ON b.id = a.bank_id WHERE a.status = 'active' ORDER BY a.is_default DESC, a.account_name`,
+      );
+      return { banks: banks.rows.map((b) => b.name), accounts: accounts.rows };
+    });
+  }
+
+  /**
+   * The school account a receipt goes into. Cash has none. One account for the fee type is taken by
+   * itself; with several the cashier must choose one of them.
+   */
+  async depositAccountFor(
+    c: PoolClient,
+    input: { mode: string; ledger: string; bankAccountId?: string | null },
+  ): Promise<string | null> {
+    if (input.mode === 'cash') return null;
+    const r = await c.query<{ id: string }>(
+      `SELECT id::text FROM school_bank_accounts WHERE status = 'active' AND purpose IN ($1, 'any') ORDER BY is_default DESC, id`,
+      [input.ledger],
+    );
+    const ids = r.rows.map((x) => x.id);
+    if (input.bankAccountId) {
+      if (!ids.includes(input.bankAccountId))
+        throw new DomainError(
+          'fees.account_invalid',
+          'This school bank account is not set up for this fee type',
+          { status: 422 },
+        );
+      return input.bankAccountId;
+    }
+    if (ids.length > 1)
+      throw new DomainError(
+        'fees.account_required',
+        'Choose the school bank account the money goes into',
+        { status: 422 },
+      );
+    return ids[0] ?? null;
+  }
+
   // ---- a pupil's discounts ----------------------------------------------------------------------
   async studentDiscountsWith(
     c: PoolClient,

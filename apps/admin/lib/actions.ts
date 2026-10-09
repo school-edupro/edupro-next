@@ -2457,7 +2457,7 @@ export async function refreshMarts() {
 // ---- Sprint 13: cashier, refunds, settlements, transport requests, vehicle logs --------------------
 export async function postCashierReceipt(fd: FormData) {
   const studentId = str(fd, 'studentId');
-  const back = `/fees/cashier?studentId=${studentId}`;
+  const back = `/fees/ledger/${studentId}?tab=pay`;
   let out: { paymentId: string; receiptNo: string | null } | null = null;
   try {
     out = await apiFetch<{ paymentId: string; receiptNo: string | null }>('/payments/receipts', {
@@ -2475,6 +2475,7 @@ export async function postCashierReceipt(fd: FormData) {
         instrumentDate: opt(fd, 'instrumentDate'),
         bankName: opt(fd, 'bankName'),
         ledger: str(fd, 'ledger') || 'school',
+        bankAccountId: opt(fd, 'bankAccountId'),
         collectLateFee: str(fd, 'collectLateFee') !== 'no',
       }),
     });
@@ -2484,9 +2485,8 @@ export async function postCashierReceipt(fd: FormData) {
     if (error instanceof ApiError) back_(back, error.problem.type, error.problem.detail);
     throw error;
   }
-  redirect(
-    `${back}&ok=1&paymentId=${out!.paymentId}&receiptNo=${encodeURIComponent(out!.receiptNo ?? '')}`,
-  );
+  // the receipt opens for printing straight away
+  redirect(`/fees/receipt/${out!.paymentId}?posted=1`);
 }
 
 function back_(path: string, type: string, detail?: string): never {

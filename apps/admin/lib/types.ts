@@ -1428,6 +1428,8 @@ export interface FeeLedgerPayment {
   receivedOn: string;
   amount: string;
   mode: string;
+  modeKind: string;
+  depositAccount: string | null;
   reference: string | null;
   remarks: string | null;
   receivedBy: string | null;
@@ -1436,7 +1438,7 @@ export interface FeeLedgerPayment {
   intentId: string | null;
   lateFee: string;
   refunded: string;
-  status: 'posted' | 'partly_refunded' | 'refunded' | 'bounced';
+  status: 'posted' | 'partly_refunded' | 'refunded' | 'bounced' | 'reversed';
   instrumentNo: string | null;
   bankName: string | null;
   settled: boolean;
@@ -1466,7 +1468,13 @@ export interface FeeDemandDiff {
   totalAfter: string;
 }
 export interface FeeLedger {
-  student: { id: string; name: string; admissionNo: string; section: string | null };
+  student: {
+    id: string;
+    name: string;
+    admissionNo: string;
+    section: string | null;
+    father: string | null;
+  };
   year: { id: string; code: string; status: string };
   asOf: string;
   lateFeeMode: string;

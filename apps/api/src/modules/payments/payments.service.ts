@@ -765,6 +765,7 @@ export class PaymentsService {
       await assertPeriodOpen(c, dto.ledger, dto.receivedOn ?? null);
       // the payment mode master: offered at the counter, and its mandatory fields are filled
       const modeLabel = await this.feeSetup.assertModeFields(c, dto);
+      const bankAccountId = await this.feeSetup.depositAccountFor(c, dto);
       let out: ReceiptResult;
       try {
         out = await this.post(c, {
@@ -786,6 +787,11 @@ export class PaymentsService {
       } catch (error) {
         throw translate(error);
       }
+      if (bankAccountId)
+        await c.query(`UPDATE fee_payments SET bank_account_id = $2 WHERE id = $1`, [
+          out.paymentId,
+          bankAccountId,
+        ]);
       // the receipt keeps the school's own name of the mode
       if (modeLabel)
         await c.query(`UPDATE fee_payments SET mode_label = $2 WHERE id = $1`, [

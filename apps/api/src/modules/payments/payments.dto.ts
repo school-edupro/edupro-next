@@ -60,6 +60,8 @@ export const PostReceiptSchema = RecordOfflinePaymentSchema.extend({
   ledger: z.enum(['school', 'hostel', 'misc']).default('school'),
   /** false leaves the late fee outstanding (needs fees.late_fee.manage). */
   collectLateFee: z.boolean().default(true),
+  /** The school bank account the money goes into (not for cash). */
+  bankAccountId: IdSchema.optional(),
   /** A mode the school added (fee_payment_modes.code); `mode` is then the kind it works like. */
   modeCode: z
     .string()

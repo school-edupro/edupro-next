@@ -50,6 +50,10 @@ export interface LedgerPayment {
   receivedOn: string;
   amount: string;
   mode: string;
+  /** The built-in kind behind the mode's name (cash, cheque, dd, upi, card, bank, online). */
+  modeKind: string;
+  /** The school bank account the money went into, when recorded. */
+  depositAccount: string | null;
   reference: string | null;
   remarks: string | null;
   receivedBy: string | null;
@@ -104,7 +108,14 @@ export interface DemandDiff {
 }
 
 export interface Ledger {
-  student: { id: string; name: string; admissionNo: string; section: string | null };
+  student: {
+    id: string;
+    name: string;
+    admissionNo: string;
+    section: string | null;
+    /** The father, else the first guardian on record. */
+    father: string | null;
+  };
   year: { id: string; code: string; status: string };
   asOf: string;
   lateFeeMode: string;
@@ -216,8 +227,11 @@ export class FeeLedgerService {
         name: string;
         admission_no: string;
         section: string | null;
+        father: string | null;
       }>(
         `SELECT s.id::text, s.display_name AS name, s.admission_no,
+                (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                  WHERE sg.student_id = s.id AND g.deleted_at IS NULL ORDER BY (sg.relation = 'father') DESC, sg.is_primary DESC, sg.id LIMIT 1) AS father,
                 (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
                   WHERE e.student_id = s.id AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS section
            FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL`,
@@ -387,6 +401,7 @@ export class FeeLedgerService {
           name: st.rows[0].name,
           admissionNo: st.rows[0].admission_no,
           section: st.rows[0].section,
+          father: st.rows[0].father,
         },
         year: y.rows[0]!,
         asOf: asOfDate,
@@ -481,6 +496,8 @@ export class FeeLedgerService {
       received_on: string;
       amount: string;
       mode: string;
+      mode_kind: string;
+      deposit_account: string | null;
       reference: string | null;
       remarks: string | null;
       received_by: string | null;
@@ -494,7 +511,8 @@ export class FeeLedgerService {
       settled: boolean;
       cleared_on: string | null;
     }>(
-      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, COALESCE(p.mode_label, p.mode) AS mode, p.reference, p.remarks, u.display_name AS received_by, p.intent_id::text, p.cleared_on::text,
+      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, COALESCE(p.mode_label, p.mode) AS mode, p.mode AS mode_kind, p.reference, p.remarks,
+              (SELECT b.name || ' · …' || right(a.account_no, 4) FROM school_bank_accounts a JOIN banks b ON b.id = a.bank_id WHERE a.id = p.bank_account_id) AS deposit_account, u.display_name AS received_by, p.intent_id::text, p.cleared_on::text,
               COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated,
               p.late_fee::text, p.refunded::text, p.status, p.instrument_no, p.bank_name, (p.settlement_line_id IS NOT NULL) AS settled
          FROM fee_payments p LEFT JOIN users u ON u.id = p.received_by
@@ -507,6 +525,8 @@ export class FeeLedgerService {
       receivedOn: x.received_on,
       amount: x.amount,
       mode: x.mode,
+      modeKind: x.mode_kind,
+      depositAccount: x.deposit_account,
       reference: x.reference,
       remarks: x.remarks,
       receivedBy: x.received_by,

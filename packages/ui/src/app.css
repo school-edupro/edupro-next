@@ -6439,3 +6439,21 @@ a.ep-tabs__tab {
     break-after: auto;
   }
 }
+
+/* Two receipt copies on one A4 sheet: no page break between them, a cut line in the middle. */
+.ep-receipt__cut {
+  border: 0;
+  border-top: 1px dashed var(--border-default);
+  margin: var(--sp-4) auto;
+  max-width: 56rem;
+}
+@media print {
+  .ep-print-sheet.ep-receipt {
+    break-after: auto;
+    break-inside: avoid;
+  }
+  .ep-receipt__cut {
+    margin: var(--sp-5) 0;
+    max-width: none;
+  }
+}
