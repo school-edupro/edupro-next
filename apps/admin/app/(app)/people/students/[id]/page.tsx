@@ -14,6 +14,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
+import { StudentFeeRequests } from '@/components/fees/StudentFeeRequests';
 import { StudentDiscounts } from '@/components/fees/StudentDiscounts';
 import { StudentOptionalHeads } from '@/components/fees/StudentOptionalHeads';
 import { StudentDocuments, expectedDocuments } from '@/components/StudentDocuments';
@@ -860,6 +861,9 @@ export default async function StudentPage({
                   </Button>
                 </FormActions>
               </form>
+            ) : null}
+            {can('fees.profile_change.request') ? (
+              <StudentFeeRequests studentId={student.id} />
             ) : null}
             <StudentOptionalHeads
               studentId={student.id}

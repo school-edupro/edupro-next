@@ -1819,6 +1819,8 @@ export interface FeeProfileChange {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
+  summary: string | null;
+  waitingWith: string | null;
 }
 export interface MiscReceipt {
   id: string;

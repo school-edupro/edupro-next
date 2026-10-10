@@ -57,6 +57,10 @@ export interface ProfileChangeRow {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
+  /** What was asked, in words (from the approval's subject). */
+  summary: string | null;
+  /** The level it waits at and the people who can approve it; null once decided. */
+  waitingWith: string | null;
 }
 
 export interface MiscReceiptRow {
@@ -110,7 +114,11 @@ const ADJ_SELECT = `SELECT a.id::text, a.student_id::text AS "studentId", s.disp
    LEFT JOIN users ru ON ru.id = a.requested_by LEFT JOIN users du ON du.id = a.decided_by`;
 
 const CHANGE_SELECT = `SELECT c.id::text, c.student_id::text AS "studentId", s.display_name AS "studentName", s.admission_no AS "admissionNo", c.changes, c.before, c.reason, c.status::text,
-        ru.display_name AS "requestedBy", c.requested_at AS "requestedAt", c.workflow_instance_id::text AS "workflowInstanceId", du.display_name AS "decidedBy", c.decided_at AS "decidedAt", c.decision_note AS "decisionNote"
+        ru.display_name AS "requestedBy", c.requested_at AS "requestedAt", c.workflow_instance_id::text AS "workflowInstanceId", du.display_name AS "decidedBy", c.decided_at AS "decidedAt", c.decision_note AS "decisionNote",
+        (SELECT regexp_replace(i.subject, '^Fee change: [^:]*: ', '') FROM workflow_instances i WHERE i.id = c.workflow_instance_id) AS "summary",
+        (SELECT st.name || ' (' || COALESCE((SELECT string_agg(au.display_name, ', ' ORDER BY au.display_name) FROM users au WHERE au.id = ANY(st.assignee_user_ids)), 'nobody holds this role yet') || ')'
+           FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level AND st.status = 'pending'
+          WHERE i.id = c.workflow_instance_id AND i.status = 'pending') AS "waitingWith"
    FROM fee_profile_changes c JOIN students s ON s.id = c.student_id LEFT JOIN users ru ON ru.id = c.requested_by LEFT JOIN users du ON du.id = c.decided_by`;
 
 const MISC_SELECT = `SELECT m.id::text, m.receipt_no AS "receiptNo", m.payer_kind::text AS "payerKind", m.student_id::text AS "studentId", m.employee_id::text AS "employeeId",

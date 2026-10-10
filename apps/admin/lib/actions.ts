@@ -2684,7 +2684,7 @@ export async function requestProfileChange(fd: FormData) {
   const hosteller = str(fd, 'hosteller');
   if (hosteller === 'yes') body.hosteller = true;
   if (hosteller === 'no') body.hosteller = false;
-  return run(`/people/students/${studentId}`, () =>
+  return run(`/people/students/${studentId}?tab=fees`, () =>
     apiFetch(`/fees/students/${studentId}/profile-changes`, {
       method: 'POST',
       body: JSON.stringify(body),
