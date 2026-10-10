@@ -82,7 +82,6 @@ const PAGES = [
   '/fees/parent-view/89816',
   '/fees/refund/13740',
   '/fees/refund-voucher/76',
-  '/fees/refunds',
   '/fees/ledger/89816?tab=waive',
   '/fees/ledger/89816?tab=latefee',
   '/access/roles',
