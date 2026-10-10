@@ -47,19 +47,34 @@ const opt = (fd: FormData, key: string): string | undefined => str(fd, key) || u
 
 // ---- roles ---------------------------------------------------------------------------------------
 export async function createRole(fd: FormData) {
-  return run('/access/roles', () =>
-    apiFetch('/access/roles', {
+  const name = str(fd, 'name');
+  // the code is made from the name (lower snake case) unless one is typed
+  const code =
+    str(fd, 'code') ||
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^[^a-z]+|_+$/g, '')
+      .slice(0, 40);
+  let created: { id: string };
+  try {
+    created = await apiFetch<{ id: string }>('/access/roles', {
       method: 'POST',
       body: JSON.stringify({
-        code: str(fd, 'code'),
-        name: str(fd, 'name'),
+        code,
+        name,
         kind: str(fd, 'kind') || 'module',
         description: str(fd, 'description'),
         copyFromRoleId: opt(fd, 'copyFromRoleId'),
         permissions: fd.getAll('permissions').map(String),
       }),
-    }),
-  );
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back('/access/roles', error.problem.type, error.problem.detail);
+    throw error;
+  }
+  // open the new role so its rights can be ticked straight away
+  redirect(`/access/roles/${created.id}?ok=1`);
 }
 
 export async function updateRole(fd: FormData) {

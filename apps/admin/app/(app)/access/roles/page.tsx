@@ -1,177 +1,185 @@
-import {
-  Badge,
-  Button,
-  Card,
-  DataTable,
-  InputField,
-  PageHeader,
-  SelectField,
-  toneForStatus,
-} from '@edupro/ui';
-import { getTranslations } from 'next-intl/server';
+import { Badge, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { createRole, disableRole } from '@/lib/actions';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
+import { buildMatrix } from '@/lib/permission-matrix';
 import type { Permission, Role } from '@/lib/types';
 
+/**
+ * Roles and permissions: the school's own roles (changeable) and the standard roles (read-only, to
+ * copy). Each row says in words where the role has access; opening it shows the rights grid.
+ */
 export default async function RolesPage({
   searchParams,
 }: {
   searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
 }) {
-  const t = await getTranslations('pages.access_roles');
-  const params = await searchParams;
-  const [roles, permissions] = await Promise.all([
+  const sp = await searchParams;
+  const [me, roles, permissions] = await Promise.all([
+    getMe(),
     apiFetch<{ data: Role[] }>('/access/roles'),
     apiFetch<{ data: Permission[] }>('/access/permissions'),
   ]);
-  const templates = roles.data.filter((r) => r.isSystem);
-  const modules = [...new Set(permissions.data.map((p) => p.module))].sort();
+  const canManage = me.permissions.includes('access.role.manage');
+  const modules = buildMatrix(permissions.data);
+  const access = (r: Role) => {
+    const held = new Set(r.permissions);
+    const full: string[] = [];
+    const part: string[] = [];
+    for (const m of modules) {
+      const n = m.codes.filter((c) => held.has(c)).length;
+      if (n === m.codes.length) full.push(m.label);
+      else if (n > 0) part.push(m.label);
+    }
+    return { full, part };
+  };
+  const own = roles.data.filter((r) => !r.isSystem);
+  const standard = roles.data.filter((r) => r.isSystem);
+
+  const table = (list: Role[], caption: string) => (
+    <div className="ep-table-wrap">
+      <table className="ep-table">
+        <caption className="ep-sr-only">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Role</th>
+            <th scope="col">Where it has access</th>
+            <th scope="col">Users</th>
+            <th scope="col">Status</th>
+            <th scope="col">
+              <span className="ep-sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((r) => {
+            const a = access(r);
+            return (
+              <tr key={r.id}>
+                <td>
+                  <a href={`/access/roles/${r.id}`}>
+                    <strong>{r.name}</strong>
+                  </a>
+                  {r.description ? <div className="ep-field__help">{r.description}</div> : null}
+                </td>
+                <td>
+                  {a.full.length === 0 && a.part.length === 0 ? (
+                    'No access yet'
+                  ) : (
+                    <>
+                      {a.full.length > 0 ? <div>Full: {a.full.join(', ')}</div> : null}
+                      {a.part.length > 0 ? <div>Part: {a.part.join(', ')}</div> : null}
+                    </>
+                  )}
+                </td>
+                <td>{r.activeAssignments}</td>
+                <td>
+                  <Badge tone={r.isSystem ? 'info' : r.status === 'active' ? 'success' : 'neutral'}>
+                    {r.isSystem ? 'Standard' : r.status === 'active' ? 'In use' : 'Switched off'}
+                  </Badge>
+                </td>
+                <td>
+                  <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/access/roles/${r.id}`}
+                    >
+                      {r.isSystem || !canManage ? 'View rights' : 'Change rights'}
+                    </a>
+                    {!r.isSystem && canManage && r.status === 'active' ? (
+                      <form action={disableRole}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                          disabled={r.activeAssignments > 0}
+                          title={
+                            r.activeAssignments > 0
+                              ? 'Take the role back from its users first'
+                              : undefined
+                          }
+                        >
+                          Switch off
+                        </Button>
+                      </form>
+                    ) : null}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
-      <Notice params={params} />
-      <Card>
-        <DataTable<Role>
-          caption="Roles"
-          columns={[
-            {
-              key: 'name',
-              header: 'Role',
-              render: (r) => <a href={`/access/roles/${r.id}`}>{r.name}</a>,
-            },
-            { key: 'code', header: 'Code', render: (r) => <code>{r.code}</code> },
-            { key: 'kind', header: 'Kind', render: (r) => (r.isSystem ? 'template' : r.kind) },
-            {
-              key: 'perms',
-              header: 'Permissions',
-              numeric: true,
-              render: (r) => r.permissions.length,
-            },
-            {
-              key: 'holders',
-              header: 'Active holders',
-              numeric: true,
-              render: (r) => r.activeAssignments,
-            },
-            {
-              key: 'status',
-              header: 'Status',
-              render: (r) => <Badge tone={toneForStatus(r.status)}>{r.status}</Badge>,
-            },
-            {
-              key: 'actions',
-              header: '',
-              render: (r) =>
-                r.isSystem ? null : (
-                  <form action={disableRole}>
-                    <input type="hidden" name="id" value={r.id} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      disabled={r.activeAssignments > 0}
-                    >
-                      Disable
-                    </Button>
-                  </form>
-                ),
-            },
-          ]}
-          rows={roles.data}
-          rowKey={(r) => r.id}
-        />
-      </Card>
-
-      <Card title="Create a school role" style={{ marginTop: 'var(--sp-5)' }}>
-        <form action={createRole} style={{ display: 'grid', gap: 'var(--sp-4)' }}>
-          <div
+      <PageHeader
+        kicker="Access"
+        title="Roles and permissions"
+        description="A role is a set of rights (view, add / edit, delete, approve). Give a role to a user under Assignments; change what a role allows here."
+      />
+      <Notice params={sp} />
+      {canManage ? (
+        <Card title="New role">
+          <form
+            action={createRole}
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
               gap: 'var(--sp-4)',
+              alignItems: 'end',
             }}
           >
             <InputField
-              id="code"
-              name="code"
-              label="Code"
+              id="name"
+              name="name"
+              label="Role name"
               required
-              placeholder="fee_cashier"
-              help="Lower snake case"
-              pattern="[a-z][a-z0-9_]{1,39}"
+              placeholder="Fee cashier"
             />
-            <InputField id="name" name="name" label="Name" required placeholder="Fee cashier" />
-            <SelectField
-              id="kind"
-              name="kind"
-              label="Kind"
-              options={[
-                { value: 'module', label: 'Module role' },
-                { value: 'global', label: 'Global role' },
-              ]}
+            <InputField
+              id="description"
+              name="description"
+              label="What it is for"
+              placeholder="Collects fees at the counter"
             />
             <SelectField
               id="copyFromRoleId"
               name="copyFromRoleId"
-              label="Copy permissions from"
+              label="Start with the rights of"
               options={[
-                { value: '', label: 'Start empty' },
-                ...templates.map((t) => ({ value: t.id, label: `${t.name} (template)` })),
+                { value: '', label: 'Nothing (tick the rights yourself)' },
+                ...roles.data.map((r) => ({
+                  value: r.id,
+                  label: r.isSystem ? `${r.name} (standard)` : r.name,
+                })),
               ]}
             />
-          </div>
-          <InputField
-            id="description"
-            name="description"
-            label="Description"
-            placeholder="Collects fees at the counter"
-          />
-          <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-            <legend className="ep-field__label">Additional permissions</legend>
-            {modules.map((m) => (
-              <details key={m} style={{ marginBottom: 'var(--sp-2)' }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 'var(--fw-semibold)' }}>
-                  {m}
-                </summary>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                    gap: 'var(--sp-2)',
-                    padding: 'var(--sp-2) 0 var(--sp-3)',
-                  }}
-                >
-                  {permissions.data
-                    .filter((p) => p.module === m)
-                    .map((p) => (
-                      <label key={p.code} className="ep-check" htmlFor={`perm-${p.code}`}>
-                        <input
-                          id={`perm-${p.code}`}
-                          type="checkbox"
-                          name="permissions"
-                          value={p.code}
-                          className="ep-check__input"
-                        />
-                        <span className="ep-check__box" aria-hidden="true" />
-                        <span className="ep-check__text">
-                          <code>{p.code}</code>
-                          <span className="ep-field__help">
-                            {p.description}
-                            {p.requiresMfa ? ' (MFA)' : ''}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                </div>
-              </details>
-            ))}
-          </fieldset>
-          <div>
-            <Button type="submit">Create role</Button>
-          </div>
-        </form>
+            <div>
+              <Button type="submit">Create and choose rights</Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+      <Card title={`School roles (${own.length})`} style={{ marginTop: 'var(--sp-4)' }}>
+        {own.length === 0 ? (
+          <p>
+            No school role yet. The standard roles below work as they are; make a new role (or a
+            copy of a standard one) when you need different rights.
+          </p>
+        ) : (
+          table(own, 'School roles')
+        )}
+      </Card>
+      <Card title={`Standard roles (${standard.length})`} style={{ marginTop: 'var(--sp-4)' }}>
+        <p className="ep-field__help">
+          Ready-made and the same in every school, so they cannot be changed here. Open one to see
+          its rights or to make your own copy.
+        </p>
+        {table(standard, 'Standard roles')}
       </Card>
     </>
   );

@@ -79,6 +79,8 @@ const PAGES = [
   '/fees/structures?classId=3282',
   '/fees/discounts',
   '/fees/approval',
+  '/access/roles',
+  '/access/roles/37',
   '/workflow/definitions',
   '/fees/carry-forward',
   '/fees/deposit-slips',
