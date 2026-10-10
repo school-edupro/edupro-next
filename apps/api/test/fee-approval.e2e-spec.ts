@@ -346,6 +346,48 @@ describe('fee changes through two approval levels (e2e)', () => {
     expect(await yearTotal()).toBe(before - 100 - Number(two.net));
   });
 
+  it('a receipt cancellation rides the same levels and is applied on the last approval', async () => {
+    const paid = await inject({
+      method: 'POST',
+      url: '/payments/receipts',
+      headers: h(accountant),
+      json: { studentId, amount: 500, mode: 'cash' },
+    });
+    expect(paid.statusCode).toBe(201);
+    const req = await inject({
+      method: 'POST',
+      url: '/fees/adjustments',
+      headers: h(accountant),
+      json: { kind: 'reversal', paymentId: paid.json().paymentId, reason: 'Entered twice' },
+    });
+    expect(req.statusCode).toBe(201);
+    expect(req.json()).toMatchObject({ kind: 'reversal', status: 'pending' });
+    expect(req.json().workflowInstanceId).toBeTruthy();
+    expect(req.json().waitingWith).toContain('Principal');
+    const direct = await inject({
+      method: 'POST',
+      url: `/fees/adjustments/${req.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect([403, 409]).toContain(direct.statusCode);
+    const step = await pendingStep(req.json().workflowInstanceId);
+    expect(step).toMatchObject({ level: 2, auto: true });
+    const ok = await inject({
+      method: 'POST',
+      url: `/workflow/steps/${step.id}/approve`,
+      headers: h(),
+      json: { note: 'cancel it' },
+    });
+    expect([200, 201]).toContain(ok.statusCode);
+    const view = await inject({
+      method: 'GET',
+      url: `/fees/payments/${paid.json().paymentId}/receipt-view`,
+      headers: h(),
+    });
+    expect(view.json().status).toBe('reversed');
+  });
+
   it('the workflow names who may create the request, and a level can have several roles', async () => {
     const opts = await inject({ method: 'GET', url: '/workflow/options', headers: h() });
     expect(opts.statusCode).toBe(200);

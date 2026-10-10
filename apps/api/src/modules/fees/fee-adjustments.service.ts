@@ -111,6 +111,7 @@ export interface ReconciliationRow {
 
 /** The approval a fee waiver rides; its levels mirror the fee change approval. */
 export const FEE_WAIVER_FLOW = 'fee_waiver';
+const FEE_WAIVER_NAME = 'Fee waiver, receipt cancellation and cheque bounce';
 
 // eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
 const ADJ_SELECT = `SELECT a.id::text, a.student_id::text AS "studentId", s.display_name AS "studentName", s.admission_no AS "admissionNo", a.kind::text,
@@ -278,7 +279,7 @@ export class FeeAdjustmentsService {
         this.workflow,
         c,
         ctx,
-        { code: FEE_WAIVER_FLOW, name: 'Fee waiver' },
+        { code: FEE_WAIVER_FLOW, name: FEE_WAIVER_NAME },
         made[0]!,
         `Fee waiver: ${st.rows[0].name}: ${made.length} fee line${made.length === 1 ? '' : 's'}, Rs. ${total.toFixed(2)}`,
         {
@@ -305,7 +306,10 @@ export class FeeAdjustmentsService {
     });
   }
 
-  /** The last level approved (or a level rejected): every line of the waiver is applied or closed. */
+  /**
+   * The last level approved (or a level rejected): every line of the waiver, or the receipt
+   * cancellation / cheque bounce, is applied or closed.
+   */
   async onWaiverComplete(
     c: PoolClient,
     ctx: RequestContext,
@@ -323,7 +327,8 @@ export class FeeAdjustmentsService {
       : (
           await c.query<{ id: string }>(
             `SELECT a.id::text FROM fee_adjustments a
-              WHERE a.status = 'pending' AND a.batch_id = (SELECT batch_id FROM fee_adjustments WHERE id = $1) ORDER BY a.id`,
+              WHERE a.status = 'pending'
+                AND (a.id = $1 OR a.batch_id = (SELECT batch_id FROM fee_adjustments WHERE id = $1)) ORDER BY a.id`,
             [instance.entityId],
           )
         ).rows.map((r) => r.id);
@@ -461,6 +466,24 @@ export class FeeAdjustmentsService {
         entityId: id,
         after: { ...dto, studentId, amount, charge },
       });
+      // a receipt cancellation or a cheque bounce rides the fee approval levels, like a waiver
+      const made = await this.findAdjustment(c, id);
+      const instanceId = await startFeeApproval(
+        this.workflow,
+        c,
+        ctx,
+        { code: FEE_WAIVER_FLOW, name: FEE_WAIVER_NAME },
+        id,
+        dto.kind === 'bounce'
+          ? `Cheque bounced: receipt ${made.receiptNo ?? ''} of ${made.studentName}, Rs. ${made.receiptAmount ?? ''}; bounce charge Rs. ${charge.toFixed(2)}`
+          : `Cancel receipt ${made.receiptNo ?? ''} of ${made.studentName}, Rs. ${made.receiptAmount ?? ''}`,
+        { kind: dto.kind, reason: dto.reason, charge: charge.toFixed(2) },
+      );
+      if (instanceId)
+        await c.query(`UPDATE fee_adjustments SET workflow_instance_id = $2 WHERE id = $1`, [
+          id,
+          instanceId,
+        ]);
       return this.findAdjustment(c, id);
     });
   }
@@ -476,7 +499,7 @@ export class FeeAdjustmentsService {
       if (row.status === 'pending' && row.workflowInstanceId)
         throw new DomainError(
           'fees.adjustment_in_workflow',
-          'This waiver goes through the approval levels: approve it from My approvals',
+          'This request goes through the approval levels: approve it from My approvals',
           { status: 409 },
         );
       return this.decideWith(c, ctx, id, dto);

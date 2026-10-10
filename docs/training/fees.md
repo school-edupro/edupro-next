@@ -342,3 +342,8 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   with **Pay online** for a parent who cannot pay from home: choose the instalments, enter the payer's
   name, mobile and email, and the gateway opens on the school's screen. The receipt posts by itself.
 - **Fee bill**: opens for the full year; "Bill for" narrows it to what is due up to today or a date.
+
+- **Receipt cancellation and cheque bounce** (ledger → Receipts) also go through Fee setup → Approval
+  levels and are approved from My approvals; the receipt is cancelled, or bounced with its charge, on
+  the last approval. The bounce charge box is filled from Fee setup. A request raised before this
+  change is still approved on Fees → Adjustments and shows under "Fee requests" in My approvals.

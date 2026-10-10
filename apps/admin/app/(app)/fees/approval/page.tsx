@@ -51,7 +51,7 @@ export default async function FeeApprovalPage({
       <PageHeader
         kicker="Fee setup"
         title="Approval levels"
-        description="A discount, fee group, pay plan, hostel or optional head of a pupil changes only after approval. The same levels approve a late-fee waiver and the transfer of a receipt to a brother or sister. Choose who may ask and who approves at each level."
+        description="A discount, fee group, pay plan, hostel or optional head of a pupil changes only after approval. The same levels approve a fee waiver, a late-fee waiver, a receipt cancellation, a cheque bounce, a paid charge adjusted in fee and the transfer of a receipt to a brother or sister. Choose who may ask and who approves at each level."
       />
       <FeeSetupNav current={HOME} />
       <Notice params={sp} />
