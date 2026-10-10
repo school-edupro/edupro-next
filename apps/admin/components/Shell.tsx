@@ -490,6 +490,7 @@ export async function Shell({
   const ALSO: Record<string, string[]> = {
     '/fees/demands': ['/fees/bills'],
     '/fees/cashier': ['/fees/ledger', '/fees/receipt', '/fees/parent-view'],
+    '/fees/refunds': ['/fees/refund', '/fees/refund-voucher'],
     '/masters/fees': [
       '/fees/masters',
       '/fees/structures',

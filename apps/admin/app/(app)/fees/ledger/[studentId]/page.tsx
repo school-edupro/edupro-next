@@ -1,5 +1,9 @@
 import { WaiverGrid } from '@/components/fees/WaiverGrid';
-import { requestFeeWaivers, requestPaidChargeToFee } from '@/lib/fee-request-actions';
+import {
+  requestAdvanceRefund,
+  requestFeeWaivers,
+  requestPaidChargeToFee,
+} from '@/lib/fee-request-actions';
 import {
   Badge,
   Button,
@@ -20,7 +24,6 @@ import {
   postCashierReceipt,
   regenerateStudentDemand,
   requestAdjustment,
-  requestRefund,
   revokeLateFeeOverride,
   setLateFeeOverride,
 } from '@/lib/actions';
@@ -121,6 +124,13 @@ export default async function FeeLedgerPage({
           .then((d) => d.rows)
           .catch(() => [])
       : [];
+  // credit carried from last year that is not used yet: it can be refunded without a receipt
+  const openingAdvance =
+    tab === 'receipts' && can('fees.refund.request')
+      ? await apiFetch<{ available: string; open: boolean }>(
+          `/payments/refunds/opening-advance/${studentId}`,
+        ).catch(() => ({ available: '0', open: false }))
+      : { available: '0', open: false };
   // charges already paid, which can be adjusted in fee through approval
   const paidLate =
     tab === 'latefee'
@@ -317,6 +327,71 @@ export default async function FeeLedgerPage({
 
       {tab === 'receipts' ? (
         <Card title="Receipts of the year">
+          {Number(openingAdvance.available) > 0 && can('fees.refund.request') && yearOpen ? (
+            <details style={{ marginBottom: 'var(--sp-4)' }}>
+              <summary>
+                Advance from last year: {money(openingAdvance.available)} · refund it
+              </summary>
+              {openingAdvance.open ? (
+                <p className="ep-field__help">
+                  A refund of this advance is already waiting (Fees → Refunds).
+                </p>
+              ) : (
+                <form
+                  action={requestAdvanceRefund}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))',
+                    gap: 'var(--sp-3)',
+                    alignItems: 'end',
+                    marginTop: 'var(--sp-2)',
+                  }}
+                >
+                  <input type="hidden" name="studentId" value={studentId} />
+                  <label className="ep-field">
+                    <span className="ep-field__label">Amount to refund (₹) *</span>
+                    <input
+                      className="ep-input"
+                      name="amount"
+                      type="number"
+                      min={1}
+                      max={Number(openingAdvance.available)}
+                      step="0.01"
+                      defaultValue={Number(openingAdvance.available)}
+                      required
+                    />
+                  </label>
+                  <label className="ep-field">
+                    <span className="ep-field__label">Pay back by</span>
+                    <select className="ep-select" name="mode" defaultValue="bank">
+                      <option value="bank">Bank transfer</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="cash">Cash</option>
+                    </select>
+                  </label>
+                  <label className="ep-field">
+                    <span className="ep-field__label">Cheque no. / UTR</span>
+                    <input className="ep-input" name="reference" maxLength={80} />
+                  </label>
+                  <label className="ep-field">
+                    <span className="ep-field__label">Reason *</span>
+                    <input
+                      className="ep-input"
+                      name="reason"
+                      required
+                      minLength={3}
+                      maxLength={300}
+                    />
+                  </label>
+                  <div>
+                    <Button type="submit" variant="secondary" size="sm">
+                      Send refund for approval
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </details>
+          ) : null}
           {ledger.payments.length === 0 ? (
             <p className="ep-field__help">No receipt yet.</p>
           ) : (
@@ -903,47 +978,9 @@ function ReceiptRow({
             </details>
           ) : null}
           {canRefund && refundable > 0 ? (
-            <details>
-              <summary>Refund</summary>
-              <form action={requestRefund} style={{ marginTop: 'var(--sp-2)' }}>
-                <input type="hidden" name="studentId" value={studentId} />
-                <input type="hidden" name="paymentId" value={p.id} />
-                <label className="ep-field">
-                  <span className="ep-field__label">Amount to refund (₹) *</span>
-                  <input
-                    className="ep-input"
-                    name="amount"
-                    type="number"
-                    min={1}
-                    max={refundable}
-                    step="0.01"
-                    required
-                  />
-                  <span className="ep-field__help">Up to {money(refundable)}.</span>
-                </label>
-                <label className="ep-field">
-                  <span className="ep-field__label">Pay back by</span>
-                  <select className="ep-select" name="mode" defaultValue="bank">
-                    <option value="bank">Bank transfer</option>
-                    <option value="cash">Cash</option>
-                    <option value="cheque">Cheque</option>
-                  </select>
-                </label>
-                <label className="ep-field">
-                  <span className="ep-field__label">Reason *</span>
-                  <input
-                    className="ep-input"
-                    name="reason"
-                    required
-                    minLength={3}
-                    maxLength={300}
-                  />
-                </label>
-                <Button type="submit" variant="secondary" size="sm">
-                  Send refund for approval
-                </Button>
-              </form>
-            </details>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/fees/refund/${p.id}`}>
+              Refund (by fee head)
+            </a>
           ) : null}
         </div>
       ) : null}

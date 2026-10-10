@@ -57,9 +57,28 @@ const fit = (font: PDFFont, text: string | null, size: number, width: number): s
  * The fee receipt as a PDF, made at once (no worker): the same content and order as the printed
  * receipt page, one A4 page per copy ("School copy", "Parent copy").
  */
-export async function receiptPdf(r: ReceiptPaper, copies: string[]): Promise<Buffer> {
+export async function receiptPdf(
+  r: ReceiptPaper,
+  copies: string[],
+  /** Another paper in the same layout (the refund voucher): its own words. */
+  paper: {
+    title: string;
+    numberLabel: string;
+    totalLabel: string;
+    paidLine: string;
+    signLeft: string;
+    signRight: string;
+  } = {
+    title: 'Fee receipt',
+    numberLabel: 'Receipt no.',
+    totalLabel: 'Total received',
+    paidLine: 'Paid by',
+    signLeft: 'Received by',
+    signRight: "Cashier's signature",
+  },
+): Promise<Buffer> {
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`Fee receipt ${r.receiptNo ?? ''}`.trim());
+  pdf.setTitle(`${paper.title} ${r.receiptNo ?? ''}`.trim());
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const cancelled = r.status === 'reversed' || r.status === 'bounced';
@@ -85,13 +104,13 @@ export async function receiptPdf(r: ReceiptPaper, copies: string[]): Promise<Buf
     centre(r.school.name, bold, 16, NAVY);
     if (r.school.address) centre(r.school.address, regular, 9, MUTED);
     y -= 2;
-    centre(`Fee receipt - ${label}`, bold, 11);
+    centre(label ? `${paper.title} - ${label}` : paper.title, bold, 11);
     if (cancelled) centre(r.status === 'bounced' ? 'CHEQUE BOUNCED' : 'CANCELLED', bold, 11, RED);
     rule();
 
     // two columns of facts, as on the printed page
     const facts: Array<[string, string]> = [
-      ['Receipt no.', r.receiptNo ?? '-'],
+      [paper.numberLabel, r.receiptNo ?? '-'],
       ['Date', dmy(r.receivedOn)],
       ['Student', r.student.name],
       ['Admission no.', r.student.admissionNo],
@@ -169,7 +188,7 @@ export async function receiptPdf(r: ReceiptPaper, copies: string[]): Promise<Buf
     for (const l of r.lines) row(l.head, l.period, l.amount);
     if (Number(r.lateFee) > 0) row('Late fee', '', r.lateFee);
     if (Number(r.advance) > 0) row('Advance (kept for the next dues)', '', r.advance);
-    row('Total received', '', r.amount, bold);
+    row(paper.totalLabel, '', r.amount, bold);
     y -= 4;
 
     const para = (text: string, font: PDFFont = regular, color = INK) => {
@@ -179,7 +198,7 @@ export async function receiptPdf(r: ReceiptPaper, copies: string[]): Promise<Buf
     };
     para(`Rupees ${r.amountWords} only.`, bold);
     para(
-      `Paid by ${r.mode}` +
+      `${paper.paidLine} ${r.mode}` +
         (r.instrumentNo ? ` no. ${r.instrumentNo}` : '') +
         (r.instrumentDate ? ` dated ${dmy(r.instrumentDate)}` : '') +
         (r.bankName ? `, ${r.bankName}` : '') +
@@ -193,14 +212,14 @@ export async function receiptPdf(r: ReceiptPaper, copies: string[]): Promise<Buf
 
     room(70);
     y -= 36;
-    page.drawText(fit(regular, `Received by: ${r.receivedBy ?? ''}`, 10, half), {
+    page.drawText(fit(regular, `${paper.signLeft}: ${r.receivedBy ?? ''}`, 10, half), {
       x: M,
       y,
       size: 10,
       font: regular,
       color: INK,
     });
-    const sign = "Cashier's signature";
+    const sign = paper.signRight;
     page.drawText(sign, {
       x: W - M - regular.widthOfTextAtSize(sign, 10),
       y,

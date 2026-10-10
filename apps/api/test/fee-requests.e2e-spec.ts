@@ -470,4 +470,196 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(l.instalments[0]!.lateFee).toMatchObject({ amount: '0.00', overridden: true });
     expect(l.instalments[1]!.balance).toBe('800.00');
   });
+
+  it('a refund names the fee heads it gives back; the fee is cancelled or stays due; a voucher is numbered', async () => {
+    const sectionId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT class_section_id::text AS id FROM enrolments WHERE student_id = $1 LIMIT 1`,
+        [students.a],
+      );
+      return r.rows[0]!.id;
+    });
+    const mk = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: {
+        admissionNo: 'FRQ-refund',
+        firstName: 'refund',
+        lastName: 'Request',
+        dob: '2015-01-01',
+        admittedOn: '2025-04-05',
+        enrolment: { classSectionId: sectionId, rollNo: 45 },
+      },
+    });
+    const sid = mk.json().id as string;
+    await inject({ method: 'POST', url: `/fees/students/${sid}/demands/generate`, headers: h() });
+    // April 1000 + its late fee 200, May 1000, June 1000
+    const paid = await receipt({ studentId: sid, amount: 3200, mode: 'cash' });
+    expect(paid.statusCode).toBe(201);
+    const can = (
+      await inject({
+        method: 'GET',
+        url: `/payments/receipts/${paid.json().paymentId}/refundable`,
+        headers: h(),
+      })
+    ).json() as {
+      lateFee: string;
+      advance: string;
+      lines: Array<{ demandId: string; sequence: number; paid: string }>;
+    };
+    expect(can.lines.map((l) => l.sequence)).toEqual([1, 2, 3]);
+    expect(can.lateFee).toBe('200.00');
+    const line = (seq: number) => can.lines.find((l) => l.sequence === seq)!;
+    const ask2 = (json: Record<string, unknown>) =>
+      inject({
+        method: 'POST',
+        url: `/payments/receipts/${paid.json().paymentId}/refunds`,
+        headers: h(accountant),
+        json,
+      });
+    const tooMuch = await ask2({
+      lines: [{ part: 'fee', demandId: line(3).demandId, amount: 5000 }],
+      mode: 'bank',
+      reason: 'too much',
+    });
+    expect(tooMuch.statusCode).toBe(409);
+    // June is given back and cancelled: the pupil stops a service
+    const req = await ask2({
+      lines: [{ part: 'fee', demandId: line(3).demandId, amount: 1000 }],
+      feeAction: 'cancel',
+      mode: 'bank',
+      reference: 'UTR-RF-1',
+      reason: 'Service stopped from June',
+    });
+    expect(req.statusCode).toBe(201);
+    expect(req.json()).toMatchObject({
+      status: 'requested',
+      amount: '1000.00',
+      feeAction: 'cancel',
+    });
+    const decideRefund = (id: string) =>
+      inject({
+        method: 'POST',
+        url: `/payments/refunds/${id}/decide`,
+        headers: h(),
+        json: { outcome: 'approved' },
+      });
+    const ok = await decideRefund(req.json().id);
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json().status).toBe('paid');
+    expect(ok.json().voucherNo).toMatch(/^RF\/.+\/000001$/);
+    let l = await ledgerOf(sid);
+    expect(l.instalments[2]).toMatchObject({ balance: '0.00' }); // June: not asked again
+    expect(l.payments[0]).toMatchObject({ status: 'partly_refunded' });
+    // May is given back and stays due: a wrong payment
+    const req2 = await ask2({
+      lines: [{ part: 'fee', demandId: line(2).demandId, amount: 1000 }],
+      feeAction: 'due',
+      mode: 'cash',
+      reason: 'Paid twice by mistake',
+    });
+    expect(req2.statusCode).toBe(201);
+    expect((await decideRefund(req2.json().id)).json().voucherNo).toMatch(/000002$/);
+    l = await ledgerOf(sid);
+    expect(l.instalments[1]).toMatchObject({ balance: '1000.00' });
+    const voucher = await inject({
+      method: 'GET',
+      url: `/payments/refunds/${req.json().id}/voucher`,
+      headers: h(),
+    });
+    expect(voucher.json()).toMatchObject({ amount: '1000.00', feeAction: 'cancel', mode: 'bank' });
+    expect(voucher.json().lines).toHaveLength(1);
+    const file = await inject({
+      method: 'GET',
+      url: `/payments/refunds/${req.json().id}/voucher-file`,
+      headers: h(),
+    });
+    expect(file.json().base64.startsWith('JVBER')).toBe(true);
+  });
+
+  it("last year's advance is refunded without a receipt and the advance reduces", async () => {
+    const sectionId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT class_section_id::text AS id FROM enrolments WHERE student_id = $1 LIMIT 1`,
+        [students.a],
+      );
+      return r.rows[0]!.id;
+    });
+    const mk = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: {
+        admissionNo: 'FRQ-adv',
+        firstName: 'adv',
+        lastName: 'Request',
+        dob: '2015-01-01',
+        admittedOn: '2025-04-05',
+        enrolment: { classSectionId: sectionId, rollNo: 46 },
+      },
+    });
+    const sid = mk.json().id as string;
+    const opb = await inject({
+      method: 'POST',
+      url: '/fees/heads',
+      headers: h(),
+      json: { code: 'OPB', name: 'Opening balance', kind: 'opening_balance', sortOrder: 0 },
+    });
+    expect(opb.statusCode).toBe(201);
+    const prof = await inject({
+      method: 'PUT',
+      url: `/fees/students/${sid}/profile`,
+      headers: h(),
+      json: { feeGroup: 'general', openingBalance: -1500 },
+    });
+    expect(prof.statusCode).toBe(200);
+    const gen = await inject({
+      method: 'POST',
+      url: `/fees/students/${sid}/demands/generate`,
+      headers: h(),
+    });
+    expect(gen.statusCode).toBe(201);
+    const left = () =>
+      inject({ method: 'GET', url: `/payments/refunds/opening-advance/${sid}`, headers: h() });
+    expect((await left()).json()).toMatchObject({ available: '1500.00', open: false });
+    const over = await inject({
+      method: 'POST',
+      url: '/payments/refunds/opening-advance',
+      headers: h(accountant),
+      json: { studentId: sid, amount: 2000, mode: 'bank', reason: 'too much' },
+    });
+    expect(over.statusCode).toBe(409);
+    const req = await inject({
+      method: 'POST',
+      url: '/payments/refunds/opening-advance',
+      headers: h(accountant),
+      json: {
+        studentId: sid,
+        amount: 500,
+        mode: 'cheque',
+        reference: '000123',
+        reason: 'Parent asked',
+      },
+    });
+    expect(req.statusCode).toBe(201);
+    expect(req.json()).toMatchObject({ kind: 'opening_advance', paymentId: null });
+    expect((await left()).json().open).toBe(true);
+    const ok = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${req.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ status: 'paid' });
+    expect(ok.json().voucherNo).toMatch(/^RF\//);
+    expect((await left()).json()).toMatchObject({ available: '1000.00', open: false });
+    const after = await inject({
+      method: 'GET',
+      url: `/fees/students/${sid}/profile`,
+      headers: h(),
+    });
+    expect(Number(after.json().openingBalance)).toBe(-1000);
+  });
 });

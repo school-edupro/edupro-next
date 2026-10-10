@@ -1694,6 +1694,12 @@ export interface FeeRefund {
   provider: string | null;
   providerRef: string | null;
   paidOn: string | null;
+  kind?: 'receipt' | 'opening_advance';
+  feeAction?: 'due' | 'cancel';
+  voucherNo?: string | null;
+  workflowInstanceId?: string | null;
+  waitingWith?: string | null;
+  lines?: Array<{ head: string; period: string | null; amount: string }> | null;
 }
 export interface SettlementLine {
   id: string;

@@ -226,3 +226,51 @@ export async function requestPaidChargeToFee(fd: FormData) {
   }
   redirect(`${path}&ok=1`);
 }
+
+/** A refund of one receipt, head by head, sent for approval. */
+export async function requestHeadRefund(fd: FormData) {
+  const paymentId = str(fd, 'paymentId');
+  const path = `/fees/refund/${paymentId}`;
+  let lines: unknown = [];
+  try {
+    lines = JSON.parse(str(fd, 'lines') || '[]');
+  } catch {
+    lines = [];
+  }
+  try {
+    await apiFetch(`/payments/receipts/${paymentId}/refunds`, {
+      method: 'POST',
+      body: JSON.stringify({
+        lines,
+        feeAction: str(fd, 'feeAction') === 'due' ? 'due' : 'cancel',
+        mode: str(fd, 'mode') || 'bank',
+        reference: str(fd, 'reference') || undefined,
+        reason: str(fd, 'reason'),
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect('/fees/refunds?ok=1');
+}
+
+/** A refund of the advance carried from last year, sent for approval. */
+export async function requestAdvanceRefund(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const path = `/fees/ledger/${studentId}?tab=receipts`;
+  try {
+    await apiFetch('/payments/refunds/opening-advance', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        amount: Number(str(fd, 'amount')),
+        mode: str(fd, 'mode') || 'bank',
+        reference: str(fd, 'reference') || undefined,
+        reason: str(fd, 'reason'),
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect('/fees/refunds?ok=1');
+}

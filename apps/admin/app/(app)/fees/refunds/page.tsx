@@ -90,7 +90,23 @@ export default async function RefundsPage({
             {
               key: 'receipt',
               header: r('receipt'),
-              render: (x) => `${x.receiptNo ?? '—'} (₹${x.receiptAmount})`,
+              render: (x) => (
+                <>
+                  {x.kind === 'opening_advance'
+                    ? 'Advance from last year'
+                    : `${x.receiptNo ?? '—'} (₹${x.receiptAmount})`}
+                  {x.lines && x.kind !== 'opening_advance' ? (
+                    <div className="ep-field__help">
+                      {x.lines
+                        .slice(0, 4)
+                        .map((l) => `${l.head}${l.period ? ` ${l.period.split(' ')[0]}` : ''}`)
+                        .join(', ')}
+                      {x.lines.length > 4 ? ` +${x.lines.length - 4} more` : ''} ·{' '}
+                      {x.feeAction === 'cancel' ? 'fee cancelled' : 'fee stays due'}
+                    </div>
+                  ) : null}
+                </>
+              ),
             },
             { key: 'amount', header: r('amount'), numeric: true, render: (x) => `₹${x.amount}` },
             {
@@ -106,6 +122,14 @@ export default async function RefundsPage({
                 <span title={x.decisionNote ?? ''}>
                   <Badge tone={tone(x.status)}>{r(`statuses.${x.status}`)}</Badge>
                   {x.decidedBy ? <small> · {x.decidedBy}</small> : null}
+                  {x.status === 'requested' && x.waitingWith ? (
+                    <div className="ep-field__help">with {x.waitingWith}</div>
+                  ) : null}
+                  <div>
+                    <a href={`/fees/refund-voucher/${x.id}`}>
+                      {x.voucherNo ? `Voucher ${x.voucherNo}` : 'Voucher'}
+                    </a>
+                  </div>
                 </span>
               ),
             },
@@ -113,7 +137,9 @@ export default async function RefundsPage({
               key: 'decide',
               header: canDecide ? r('decide') : '',
               render: (x) =>
-                canDecide && x.status === 'requested' ? (
+                x.status === 'requested' && x.workflowInstanceId ? (
+                  <a href="/workflow/inbox">Approve in My approvals</a>
+                ) : canDecide && x.status === 'requested' ? (
                   <form
                     action={decideRefund}
                     style={{ display: 'grid', gap: 'var(--sp-2)', minWidth: 260 }}

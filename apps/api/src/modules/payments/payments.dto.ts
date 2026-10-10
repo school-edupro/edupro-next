@@ -130,12 +130,34 @@ export const MockPaySchema = z.object({
 export class MockPayDto extends createZodDto(MockPaySchema) {}
 
 // ---- Sprint 13: refunds ----------------------------------------------------------------------------
+/** One line of a head-wise refund: a fee line of the receipt, the receipt's advance or its late fee. */
+export const RefundLineSchema = z
+  .object({
+    part: z.enum(['fee', 'advance', 'late_fee']).default('fee'),
+    demandId: IdSchema.optional(),
+    amount: Amount,
+  })
+  .refine((l) => l.part !== 'fee' || l.demandId !== undefined, {
+    message: 'a fee line needs the fee row',
+  });
 export const RequestRefundSchema = z.object({
-  amount: Amount,
+  /** Without lines: the amount, taken back from the newest instalments. With lines: their total. */
+  amount: Amount.optional(),
+  lines: z.array(RefundLineSchema).min(1).max(200).optional(),
+  /** What becomes of a refunded fee: due again (wrong payment) or cancelled (not asked again). */
+  feeAction: z.enum(['due', 'cancel']).default('due'),
   reason: z.string().trim().min(3).max(300),
   mode: z.enum(['cash', 'bank', 'cheque', 'gateway']),
   reference: z.string().trim().max(80).optional(),
 });
+export const RequestAdvanceRefundSchema = z.object({
+  studentId: IdSchema,
+  amount: Amount,
+  reason: z.string().trim().min(3).max(300),
+  mode: z.enum(['cash', 'bank', 'cheque']),
+  reference: z.string().trim().max(80).optional(),
+});
+export class RequestAdvanceRefundDto extends createZodDto(RequestAdvanceRefundSchema) {}
 export class RequestRefundDto extends createZodDto(RequestRefundSchema) {}
 
 export const DecideRefundSchema = z.object({

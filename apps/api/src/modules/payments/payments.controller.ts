@@ -18,6 +18,7 @@ import {
   RazorpayReturnDto,
   RazorpayWebhookDto,
   RecordOfflinePaymentDto,
+  RequestAdvanceRefundDto,
   RequestRefundDto,
   UploadSettlementDto,
 } from './payments.dto';
@@ -167,6 +168,46 @@ export class PaymentsController {
   async refundList(@ReqCtx() ctx: RequestContext, @Query() q: ListRefundsQueryDto) {
     const { rows, total } = await this.refunds.list(ctx, q);
     return { data: rows, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('receipts/:paymentId/refundable')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'What a receipt can still give back, head by head' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  refundable(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
+    return this.refunds.refundable(ctx, paymentId);
+  }
+
+  @Get('refunds/opening-advance/:studentId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "What is left of a pupil's advance from last year" })
+  @RequirePermission(PAYMENTS.refundRequest)
+  openingAdvance(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.refunds.openingAdvance(ctx, studentId);
+  }
+
+  @Post('refunds/opening-advance')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Ask to refund a pupil's advance from last year" })
+  @RequirePermission(PAYMENTS.refundRequest)
+  requestAdvanceRefund(@ReqCtx() ctx: RequestContext, @Body() body: RequestAdvanceRefundDto) {
+    return this.refunds.requestAdvance(ctx, body);
+  }
+
+  @Get('refunds/:id/voucher')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The refund voucher as it prints' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  refundVoucher(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.refunds.voucher(ctx, id);
+  }
+
+  @Get('refunds/:id/voucher-file')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The refund voucher as a PDF made at once' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  refundVoucherFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.refunds.voucherFile(ctx, id);
   }
 
   @Get('refunds/:id')
