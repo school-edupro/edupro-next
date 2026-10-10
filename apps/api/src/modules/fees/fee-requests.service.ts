@@ -1,4 +1,5 @@
 /* eslint-disable no-restricted-syntax -- SQL fragments here are constants assembled in code (column lists, fixed WHERE parts); every value is a bound parameter */
+import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
@@ -42,6 +43,10 @@ export interface ChangeRequestRow {
   decidedAt: string | null;
   decisionNote: string | null;
   result: Record<string, unknown> | null;
+  /** Set when the request goes through the approval levels (late fee waiver, sibling transfer). */
+  workflowInstanceId: string | null;
+  /** The level it waits at and who can approve it; null once decided or when approved on the page. */
+  waitingWith: string | null;
 }
 export interface CollectionRow {
   row: number;
@@ -61,12 +66,18 @@ export interface CollectionRow {
   error: string | null;
 }
 
+/** The approval these requests ride; its levels mirror the fee change approval. */
+export const FEE_REQUEST_FLOW = 'fee_change_request';
+
 const SELECT = `
   SELECT r.id::text, r.kind, r.status::text, s.display_name AS student, s.admission_no AS "admissionNo", p.receipt_no AS "receiptNo", p.amount::text AS "receiptAmount",
          p.received_on::text AS "receivedOn", p.cleared_on::text AS "clearedOn", fp.name AS period, r.ledger::text AS ledger, r.amount::text AS amount,
          t.display_name AS "toStudent", t.admission_no AS "toAdmissionNo", r.new_received_on::text AS "newReceivedOn", r.new_cleared_on::text AS "newClearedOn",
          r.batch_id::text AS "batchId", r.reason, ru.display_name AS "requestedBy", r.requested_at::text AS "requestedAt", du.display_name AS "decidedBy",
-         r.decided_at::text AS "decidedAt", r.decision_note AS "decisionNote", r.result
+         r.decided_at::text AS "decidedAt", r.decision_note AS "decisionNote", r.result, r.workflow_instance_id::text AS "workflowInstanceId",
+         (SELECT st.name || ' (' || COALESCE((SELECT string_agg(au.display_name, ', ' ORDER BY au.display_name) FROM users au WHERE au.id = ANY(st.assignee_user_ids)), 'nobody holds this role yet') || ')'
+            FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level AND st.status = 'pending'
+           WHERE i.id = r.workflow_instance_id AND i.status = 'pending') AS "waitingWith"
     FROM fee_change_requests r JOIN students s ON s.id = r.student_id
     LEFT JOIN fee_payments p ON p.id = r.payment_id LEFT JOIN fee_periods fp ON fp.id = r.period_id LEFT JOIN students t ON t.id = r.to_student_id
     LEFT JOIN users ru ON ru.id = r.requested_by LEFT JOIN users du ON du.id = r.decided_by`;
@@ -107,7 +118,62 @@ export class FeeRequestsService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly setup: FeeSetupService,
+    private readonly workflow: WorkflowService,
   ) {}
+
+  /**
+   * A late-fee waiver or a sibling transfer goes through the levels of "Fee change of a pupil" (Fee
+   * setup -> Approval levels). The engine keeps one open request per definition and record, so these
+   * requests ride their own definition, kept equal to the fee change one each time a request starts.
+   * No active fee change approval = the request is decided on the requests page, as before.
+   */
+  private async startApproval(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string,
+    subject: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const src = await c.query<{ levels: unknown; creator_roles: string[] }>(
+      `SELECT levels, creator_roles FROM workflow_definitions
+        WHERE entity_type = 'fee_profile_change' AND status = 'active' AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+    );
+    if (!src.rows[0]) return;
+    const levels = JSON.stringify(src.rows[0].levels);
+    const upd = await c.query(
+      `UPDATE workflow_definitions SET levels = $1::jsonb, creator_roles = $2::text[], status = 'active', updated_at = now(), updated_by = app.current_user_id()
+        WHERE code = $3 AND deleted_at IS NULL`,
+      [levels, src.rows[0].creator_roles, FEE_REQUEST_FLOW],
+    );
+    if (upd.rowCount === 0)
+      await c.query(
+        `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, creator_roles, created_by, updated_by)
+         VALUES (app.current_school_id(), $3, 'Late fee waiver and sibling transfer', $3, $1::jsonb, $2::text[], app.current_user_id(), app.current_user_id())`,
+        [levels, src.rows[0].creator_roles, FEE_REQUEST_FLOW],
+      );
+    const instance = await this.workflow.start(c, ctx, {
+      definitionCode: FEE_REQUEST_FLOW,
+      entityType: FEE_REQUEST_FLOW,
+      entityId: id,
+      subject: subject.slice(0, 240),
+      payload,
+    });
+    await c.query(`UPDATE fee_change_requests SET workflow_instance_id = $2 WHERE id = $1`, [
+      id,
+      instance.id,
+    ]);
+  }
+
+  /** The last level approved (or any level rejected): the request is applied or closed. */
+  async onWorkflowComplete(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
+  ): Promise<void> {
+    const note = instance.steps.find((s) => s.status === outcome)?.note ?? undefined;
+    await this.decideWith(ctx, c, instance.entityId, { outcome, note });
+  }
 
   private year(ctx: RequestContext): string {
     const y = requireTenant(ctx).academicYearId;
@@ -282,6 +348,18 @@ export class FeeRequestsService {
         entityId: r.rows[0]!.id,
         after: dto,
       });
+      if (dto.kind === 'late_fee' || dto.kind === 'transfer') {
+        const row = await this.find(c, r.rows[0]!.id);
+        await this.startApproval(
+          c,
+          ctx,
+          row.id,
+          dto.kind === 'late_fee'
+            ? `Late fee: ${row.student}: ${row.period ?? ''} to Rs. ${row.amount ?? '0'}${Number(row.amount) === 0 ? ' (waived)' : ''}`
+            : `Receipt ${row.receiptNo ?? ''} of ${row.student} to ${row.toStudent ?? ''}`,
+          { kind: dto.kind, reason: dto.reason },
+        );
+      }
       return this.find(c, r.rows[0]!.id);
     });
   }
@@ -436,6 +514,13 @@ export class FeeRequestsService {
 
   async decide(ctx: RequestContext, id: string, dto: DecideChangeDto): Promise<ChangeRequestRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const row = await this.find(c, id);
+      if (row.status === 'pending' && row.workflowInstanceId)
+        throw new DomainError(
+          'fees.change_in_workflow',
+          'This request goes through the approval levels: approve it from My approvals',
+          { status: 409 },
+        );
       await this.decideWith(ctx, c, id, dto);
       return this.find(c, id);
     });

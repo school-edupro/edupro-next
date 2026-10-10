@@ -218,6 +218,74 @@ describe('fee changes through two approval levels (e2e)', () => {
     });
     expect(harmless.statusCode).toBe(200);
   });
+  it('a late-fee waiver rides the same levels; the approver opens it from the inbox', async () => {
+    const periods = (await inject({ method: 'GET', url: '/fees/periods', headers: h() })).json()
+      .data as Array<{ id: string; sequence: number }>;
+    const req = await inject({
+      method: 'POST',
+      url: '/fees/requests',
+      headers: h(accountant),
+      json: {
+        kind: 'late_fee',
+        studentId,
+        periodId: periods.find((p) => p.sequence === 1)!.id,
+        amount: 0,
+        reason: 'Fee was delayed by the bank',
+      },
+    });
+    expect(req.statusCode).toBe(201);
+    const instanceId = req.json().workflowInstanceId as string;
+    expect(instanceId).toBeTruthy();
+    expect(req.json().status).toBe('pending');
+    expect(req.json().waitingWith).toContain('Principal');
+    // it is no longer decided on the requests page
+    const direct = await inject({
+      method: 'POST',
+      url: `/fees/requests/${req.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(direct.statusCode).toBe(409);
+    expect(direct.json().type).toBe('fees.change_in_workflow');
+    // its own definition mirrors the fee change one and is not listed on its own
+    const defs = (
+      await inject({ method: 'GET', url: '/workflow/definitions', headers: h() })
+    ).json().data as Array<{ code: string }>;
+    expect(defs.some((d) => d.code === 'fee_change_request')).toBe(false);
+    // the accountant raised it, so may open it without the right to see every request
+    const mine = await inject({
+      method: 'GET',
+      url: `/workflow/inbox/instances/${instanceId}`,
+      headers: h(accountant),
+    });
+    expect(mine.statusCode).toBe(200);
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/workflow/instances/${instanceId}`,
+          headers: h(accountant),
+        })
+      ).statusCode,
+    ).toBe(403);
+    const step = await pendingStep(instanceId);
+    expect(step).toMatchObject({ level: 2, auto: true });
+    const ok = await inject({
+      method: 'POST',
+      url: `/workflow/steps/${step.id}/approve`,
+      headers: h(),
+      json: { note: 'waived' },
+    });
+    expect([200, 201]).toContain(ok.statusCode);
+    const after = (
+      await inject({ method: 'GET', url: '/fees/requests?kind=late_fee', headers: h() })
+    ).json().data as Array<{ id: string; status: string; waitingWith: string | null }>;
+    expect(after.find((r) => r.id === req.json().id)).toMatchObject({
+      status: 'approved',
+      waitingWith: null,
+    });
+  });
+
   it('the workflow names who may create the request, and a level can have several roles', async () => {
     const opts = await inject({ method: 'GET', url: '/workflow/options', headers: h() });
     expect(opts.statusCode).toBe(200);

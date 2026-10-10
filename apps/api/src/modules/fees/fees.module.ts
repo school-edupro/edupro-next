@@ -55,11 +55,16 @@ export class FeesModule implements OnModuleInit {
   constructor(
     private readonly workflow: WorkflowService,
     private readonly adjustments: FeeAdjustmentsService,
+    private readonly requests: FeeRequestsService,
   ) {}
 
   onModuleInit(): void {
     this.workflow.onComplete('fee_profile_change', (c, ctx, instance, outcome) =>
       this.adjustments.onWorkflowComplete(c, ctx, instance, outcome),
+    );
+    // late-fee waivers and sibling transfers ride the same levels (FeeRequestsService.startApproval)
+    this.workflow.onComplete('fee_change_request', (c, ctx, instance, outcome) =>
+      this.requests.onWorkflowComplete(c, ctx, instance, outcome),
     );
   }
 }

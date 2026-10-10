@@ -285,6 +285,13 @@ export class FeesController {
     return this.papers.receiptView(ctx, id);
   }
 
+  @Get('payments/:id/receipt-file')
+  @ApiOperation({ summary: 'One receipt as a PDF made at once (school copy and parent copy)' })
+  @RequirePermission(FEES.ledgerView)
+  receiptFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.papers.receiptFile(ctx, id, ['School copy', 'Parent copy']);
+  }
+
   @Get('pay-plan')
   @ApiOperation({ summary: "The school's pay plan" })
   @RequirePermission(FEES.masterView)
@@ -547,6 +554,14 @@ export class FeesController {
   async myReceiptView(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
     await this.ledger.assertMyReceipt(ctx, paymentId);
     return this.papers.receiptView(ctx, paymentId);
+  }
+
+  @Get('mine/receipts/:paymentId/file')
+  @ApiOperation({ summary: "One of the family's own receipts as a PDF, made at once" })
+  @RequirePermission(FEES.familyView)
+  async myReceiptFile(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
+    await this.ledger.assertMyReceipt(ctx, paymentId);
+    return this.papers.receiptFile(ctx, paymentId, ['Parent copy']);
   }
 
   @Get('mine/exports/:id')

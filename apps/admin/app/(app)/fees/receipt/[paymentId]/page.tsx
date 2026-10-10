@@ -170,6 +170,9 @@ export default async function ReceiptPage({
           </span>
         ) : null}
         <PrintButton label="Print receipt" />
+        <a className="ep-btn ep-btn--secondary" href={`/api/fees/receipt-file?id=${paymentId}`}>
+          Download PDF
+        </a>
         <a className="ep-btn ep-btn--ghost" href={`/fees/ledger/${r.student.id}?tab=receipts`}>
           Back to the pupil
         </a>

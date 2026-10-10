@@ -1,3 +1,4 @@
+import { receiptPdf } from './receipt-pdf';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { amountInWords } from '@edupro/db';
@@ -133,6 +134,17 @@ export class FeeDocumentsService {
   }
 
   // ---- receipt as it prints -----------------------------------------------------------------------
+  /** The receipt as a PDF made at once: one page per copy. Sent as base64 for the web apps to stream. */
+  async receiptFile(ctx: RequestContext, paymentId: string, copies: string[]) {
+    const r = await this.receiptView(ctx, paymentId);
+    const bytes = await receiptPdf(r, copies);
+    return {
+      filename: `receipt-${(r.receiptNo ?? paymentId).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
+  }
+
   async receiptView(ctx: RequestContext, paymentId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const p = await c.query<{

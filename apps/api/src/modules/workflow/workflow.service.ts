@@ -143,6 +143,8 @@ export class WorkflowService {
    * that the front desk decides (appointments 0059). Their old definitions are not listed or seeded.
    */
   static readonly MODULE_OWNED = ['gate_pass', 'appointment_request', 'transport_request'] as const;
+  /** Definitions kept equal to another one by their module; never listed or edited on their own. */
+  static readonly MIRRORS = ['fee_change_request'] as const;
 
   private readonly logger = new Logger(WorkflowService.name);
   private readonly handlers = new Map<string, CompletionHandler>();
@@ -190,7 +192,7 @@ export class WorkflowService {
     }>(
       `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.creator_roles, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
          FROM workflow_definitions d WHERE d.deleted_at IS NULL AND d.code <> ALL($1::text[]) ORDER BY d.entity_type, d.code`,
-      [[...WorkflowService.MODULE_OWNED]],
+      [[...WorkflowService.MODULE_OWNED, ...WorkflowService.MIRRORS]],
     );
     return r.rows.map((x) => ({
       id: x.id,
@@ -717,6 +719,24 @@ export class WorkflowService {
       for (const x of r.rows) rows.push(toInstance(x, await this.stepsOf(c, x.id)));
       return { rows, total: Number(total.rows[0]?.n ?? 0) };
     });
+  }
+
+  /**
+   * An approver without the right to see every request may still open one they take part in: the one
+   * they raised, or one whose step is (or was) theirs.
+   */
+  async assertParticipant(ctx: RequestContext, id: string): Promise<void> {
+    const mine = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM workflow_instances i
+          WHERE i.id = $1 AND (i.requested_by = app.current_user_id()
+             OR EXISTS (SELECT 1 FROM workflow_steps s WHERE s.instance_id = i.id
+                         AND (app.current_user_id() = ANY(s.assignee_user_ids) OR s.acted_by = app.current_user_id())))`,
+        [id],
+      );
+      return (r.rowCount ?? 0) > 0;
+    });
+    if (!mine) throw new DomainError('not-found', 'Workflow instance not found');
   }
 
   async get(ctx: RequestContext, id: string): Promise<InstanceRow> {

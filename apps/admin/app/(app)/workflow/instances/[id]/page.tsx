@@ -22,13 +22,17 @@ export default async function InstancePage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, w, e, me, inst, history] = await Promise.all([
+  const me = await getMe();
+  // an approver without the right to see every request opens the ones they raised or approve
+  const base = me.permissions.includes('workflow.instance.view')
+    ? '/workflow/instances'
+    : '/workflow/inbox/instances';
+  const [t, w, e, inst, history] = await Promise.all([
     getTranslations('pages.workflow_instance'),
     getTranslations('workflow'),
     getTranslations('workflowEditor'),
-    getMe(),
-    apiFetch<WorkflowInstance>(`/workflow/instances/${id}`),
-    apiFetch<{ data: WorkflowEvent[] }>(`/workflow/instances/${id}/history`).then((r) => r.data),
+    apiFetch<WorkflowInstance>(`${base}/${id}`),
+    apiFetch<{ data: WorkflowEvent[] }>(`${base}/${id}/history`).then((r) => r.data),
   ]);
   const canManage = me.permissions.includes('workflow.definition.manage');
   const canCancel =
@@ -202,17 +206,19 @@ export default async function InstancePage({
               </li>
             ))}
           </ol>
-          <form action={commentWorkflowInstance} style={{ marginTop: 'var(--sp-3)' }}>
-            <input type="hidden" name="id" value={inst.id} />
-            <FormRow columns={2}>
-              <InputField id="cnote" name="note" label={e('comment')} required maxLength={1000} />
-              <div style={{ alignSelf: 'end' }}>
-                <Button type="submit" variant="secondary">
-                  {e('comment')}
-                </Button>
-              </div>
-            </FormRow>
-          </form>
+          {me.permissions.includes('workflow.instance.view') ? (
+            <form action={commentWorkflowInstance} style={{ marginTop: 'var(--sp-3)' }}>
+              <input type="hidden" name="id" value={inst.id} />
+              <FormRow columns={2}>
+                <InputField id="cnote" name="note" label={e('comment')} required maxLength={1000} />
+                <div style={{ alignSelf: 'end' }}>
+                  <Button type="submit" variant="secondary">
+                    {e('comment')}
+                  </Button>
+                </div>
+              </FormRow>
+            </form>
+          ) : null}
         </Card>
       </div>
     </>

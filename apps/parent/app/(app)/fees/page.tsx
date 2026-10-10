@@ -6,7 +6,6 @@ import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { queueMyReceiptPdf } from './actions';
 
 interface Instalment {
   dueOn: string;
@@ -426,15 +425,12 @@ export default async function FeesPage({
                       >
                         {t(lang, 'View')}
                       </a>{' '}
-                      {p.status === 'posted' || p.status === 'partly_refunded' ? (
-                        <form action={queueMyReceiptPdf} style={{ display: 'inline' }}>
-                          <input type="hidden" name="paymentId" value={p.id} />
-                          <input type="hidden" name="student" value={c.student.id} />
-                          <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                            {t(lang, 'PDF')}
-                          </button>
-                        </form>
-                      ) : null}
+                      <a
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        href={`/fees/receipt/${p.id}/pdf`}
+                      >
+                        {t(lang, 'Download PDF')}
+                      </a>
                     </td>
                   </tr>
                 ))}

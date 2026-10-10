@@ -314,3 +314,15 @@ The ledger header and the Fees tab of the profile show: status (active / withdra
 new, pay plan, hosteller, transport, discounts and optional heads. The parent portal shows the pay
 plan, fee group, transport, discounts and optional heads above the instalments. The single "Discount"
 box on the profile is gone: discounts are given only in the _Discounts by month_ panel of the Fees tab.
+
+## Receipts for parents, and approvals of late fee and transfer
+
+- **Parent portal receipt**: each receipt has **View** (the same receipt design as the school prints,
+  marked Parent copy, with Print) and **Download PDF**. Both are made at once; they do not need the
+  background workers. The school's receipt page has **Download PDF** too (school copy and parent copy).
+- **Late-fee waiver and sibling transfer** (Fees → Approvals and uploads) now go through the levels set
+  under Fee setup → Approval levels, the same as a fee change of a pupil: who may raise it, level 1,
+  level 2. The request shows who it waits with; approvers act from **My approvals**. Receipt / settlement
+  date changes and Excel uploads are still approved on the Approvals and uploads page.
+- **My inbox**: the request number (#) opens the request for anyone who raised it or approves it.
+- **Late fee maximum**: empty or 0 means no limit.

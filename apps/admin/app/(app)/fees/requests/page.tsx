@@ -50,6 +50,8 @@ interface Req {
   decidedBy: string | null;
   decisionNote: string | null;
   result: { newReceiptNo?: string } | null;
+  workflowInstanceId?: string | null;
+  waitingWith?: string | null;
 }
 interface UploadRow {
   row: number;
@@ -286,9 +288,16 @@ export default async function FeeRequestsPage({
                         {r.decidedBy ? (
                           <div className="ep-field__help">by {r.decidedBy}</div>
                         ) : null}
+                        {r.status === 'pending' && r.waitingWith ? (
+                          <div className="ep-field__help">with {r.waitingWith}</div>
+                        ) : null}
                       </td>
                       <td>
-                        {canApprove && r.status === 'pending' ? (
+                        {r.status === 'pending' && r.workflowInstanceId ? (
+                          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/workflow/inbox">
+                            Approve in My approvals
+                          </a>
+                        ) : canApprove && r.status === 'pending' ? (
                           <form style={{ display: 'flex', gap: 'var(--sp-2)' }}>
                             <input type="hidden" name="id" value={r.id} />
                             <Button type="submit" size="sm" formAction={approveFeeChange}>

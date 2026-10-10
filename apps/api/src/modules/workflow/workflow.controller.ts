@@ -86,6 +86,22 @@ export class WorkflowController {
     return { data: rows, page: { number: q.page, size: q.size, total } };
   }
 
+  @Get('inbox/instances/:id')
+  @ApiOperation({ summary: 'A request I raised or approve, for those who cannot see all requests' })
+  @RequirePermission(WORKFLOW.inboxAct)
+  async mine(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    await this.workflow.assertParticipant(ctx, id);
+    return this.workflow.get(ctx, id);
+  }
+
+  @Get('inbox/instances/:id/history')
+  @ApiOperation({ summary: 'The history of a request I raised or approve' })
+  @RequirePermission(WORKFLOW.inboxAct)
+  async mineHistory(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    await this.workflow.assertParticipant(ctx, id);
+    return { data: await this.workflow.history(ctx, id) };
+  }
+
   @Get('instances/:id')
   @RequirePermission(WORKFLOW.instanceView)
   get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {

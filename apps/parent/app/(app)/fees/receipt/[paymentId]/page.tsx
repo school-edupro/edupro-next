@@ -182,7 +182,10 @@ export default async function MyReceiptPage({
           flexWrap: 'wrap',
         }}
       >
-        <PrintButton label="Print or save as PDF" />
+        <PrintButton label="Print receipt" />
+        <a className="ep-btn ep-btn--secondary" href={`/fees/receipt/${paymentId}/pdf`}>
+          Download PDF
+        </a>
         <a className="ep-btn ep-btn--ghost" href={`/fees?student=${r.student.id}`}>
           Back to fees
         </a>
