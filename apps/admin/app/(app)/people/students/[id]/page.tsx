@@ -39,7 +39,6 @@ import type {
   DocumentTemplate,
   Enrolment,
   FeeDemandSummary,
-  FeeDiscount,
   FeeProfile,
   TransportSlab,
   GuardianLink,
@@ -49,6 +48,13 @@ import type {
   Withdrawal,
 } from '@/lib/types';
 import { sectionOptions } from '@/lib/sections';
+
+const PAY_PLAN = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  half_yearly: 'Half-yearly',
+  yearly: 'Yearly',
+} as const;
 
 export default async function StudentPage({
   params,
@@ -109,7 +115,7 @@ export default async function StudentPage({
   const openWithdrawal = withdrawals.find(
     (w) => w.status === 'requested' || w.status === 'cleared',
   );
-  const [feeProfile, feeDemands, slabs, feeDiscounts, f, a] = await Promise.all([
+  const [feeProfile, feeDemands, slabs, f, a] = await Promise.all([
     can('fees.demand.view')
       ? apiFetch<FeeProfile>(`/fees/students/${id}/profile`).catch(() => null)
       : Promise.resolve<FeeProfile | null>(null),
@@ -121,11 +127,6 @@ export default async function StudentPage({
           .then((r) => r.data)
           .catch(() => [] as TransportSlab[])
       : Promise.resolve<TransportSlab[]>([]),
-    can('fees.profile.manage')
-      ? apiFetch<{ data: FeeDiscount[] }>('/fees/discounts')
-          .then((r) => r.data)
-          .catch(() => [] as FeeDiscount[])
-      : Promise.resolve<FeeDiscount[]>([]),
     getTranslations('fees'),
     getTranslations('adjustments'),
   ]);
@@ -709,19 +710,40 @@ export default async function StudentPage({
               ) : undefined
             }
           >
-            <p className="ep-field__help">
-              {f('profile')}:{' '}
-              {feeProfile.isDefault
-                ? f('defaultProfile')
-                : `${feeProfile.feeGroup} · ${feeProfile.studentType}`}
-              {feeProfile.transportSlab
-                ? ` · ${f('transportSlab')} ${feeProfile.transportSlab}`
-                : ''}
-              {feeProfile.discount ? ` · ${f('discount')} ${feeProfile.discount}` : ''}
-              {Number(feeProfile.openingBalance) !== 0
-                ? ` · ${f('openingBalance')} ${feeProfile.openingBalance}`
-                : ''}
-            </p>
+            <dl
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))',
+                gap: 'var(--sp-3)',
+                margin: 0,
+              }}
+            >
+              {(
+                [
+                  ['Fee group', feeProfile.feeGroup.replace(/_/g, ' ')],
+                  [
+                    'Student type',
+                    `${feeProfile.studentType === 'new' ? 'New' : 'Old'} (by admission date)`,
+                  ],
+                  [
+                    'Pay plan',
+                    `${PAY_PLAN[feeProfile.payPlanInForce]}${feeProfile.payPlan ? ' (own)' : ''}`,
+                  ],
+                  ['Hosteller', feeProfile.hosteller ? 'Yes' : 'No'],
+                  ['Transport', feeProfile.transportSlab ?? 'None'],
+                  ...(Number(feeProfile.openingBalance) !== 0
+                    ? [[f('openingBalance'), feeProfile.openingBalance]]
+                    : []),
+                ] as Array<[string, string]>
+              ).map(([k, v]) => (
+                <div key={k}>
+                  <dt className="ep-kicker">{k}</dt>
+                  <dd style={{ margin: 0 }}>
+                    <strong>{v}</strong>
+                  </dd>
+                </div>
+              ))}
+            </dl>
             {can('fees.profile.manage') && can('fees.adjustment.approve') ? (
               <form action={setFeeProfile} style={{ marginTop: 'var(--sp-3)' }}>
                 <input type="hidden" name="studentId" value={student.id} />
@@ -737,16 +759,6 @@ export default async function StudentPage({
                     }))}
                   />
                   <SelectField
-                    id="feeStudentType"
-                    name="studentType"
-                    label={f('studentType')}
-                    defaultValue={feeProfile.studentType}
-                    options={[
-                      { value: 'new', label: f('studentTypes.new') },
-                      { value: 'old', label: f('studentTypes.old') },
-                    ]}
-                  />
-                  <SelectField
                     id="feeSlab"
                     name="transportSlabId"
                     label={f('transportSlab')}
@@ -756,26 +768,18 @@ export default async function StudentPage({
                       ...slabs.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` })),
                     ]}
                   />
+                  <input type="hidden" name="discountId" value={feeProfile.discountId ?? ''} />
                   <SelectField
-                    id="feeDiscount"
-                    name="discountId"
-                    label={f('discount')}
-                    defaultValue={feeProfile.discountId ?? ''}
+                    id="feePayPlan"
+                    name="payPlan"
+                    label="Pay plan"
+                    defaultValue={feeProfile.payPlan ?? ''}
                     options={[
-                      { value: '', label: f('none') },
-                      ...feeDiscounts.map((x) => ({ value: x.id, label: `${x.code} · ${x.name}` })),
-                    ]}
-                  />
-                  <SelectField
-                    id="feeInstalments"
-                    name="instalmentsOverride"
-                    label={f('instalments')}
-                    defaultValue={
-                      feeProfile.instalmentsOverride ? String(feeProfile.instalmentsOverride) : ''
-                    }
-                    options={[
-                      { value: '', label: f('instalmentsDefault') },
-                      ...[1, 2, 3, 4, 6, 12].map((n) => ({ value: String(n), label: String(n) })),
+                      { value: '', label: 'As the class' },
+                      { value: 'monthly', label: 'Monthly' },
+                      { value: 'quarterly', label: 'Quarterly' },
+                      { value: 'half_yearly', label: 'Half-yearly' },
+                      { value: 'yearly', label: 'Yearly' },
                     ]}
                   />
                   <InputField
@@ -817,23 +821,16 @@ export default async function StudentPage({
                     ]}
                   />
                   <SelectField
-                    id="chgType"
-                    name="studentType"
-                    label={f('studentType')}
+                    id="chgPlan"
+                    name="payPlan"
+                    label="Pay plan"
                     options={[
                       { value: '', label: a('keep') },
-                      { value: 'new', label: f('studentTypes.new') },
-                      { value: 'old', label: f('studentTypes.old') },
-                    ]}
-                  />
-                  <SelectField
-                    id="chgDiscount"
-                    name="discountId"
-                    label={f('discount')}
-                    options={[
-                      { value: '', label: a('keep') },
-                      { value: 'none', label: f('none') },
-                      ...feeDiscounts.map((d) => ({ value: d.id, label: d.name })),
+                      { value: 'class', label: 'As the class' },
+                      { value: 'monthly', label: 'Monthly' },
+                      { value: 'quarterly', label: 'Quarterly' },
+                      { value: 'half_yearly', label: 'Half-yearly' },
+                      { value: 'yearly', label: 'Yearly' },
                     ]}
                   />
                   <SelectField

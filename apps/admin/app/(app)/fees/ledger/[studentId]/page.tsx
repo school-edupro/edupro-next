@@ -47,6 +47,13 @@ const dmy = (iso: string | null | undefined) => {
   const [y, m, d] = iso.slice(0, 10).split('-');
   return `${d}-${m}-${y}`;
 };
+const PAY_PLAN = {
+  monthly: 'monthly',
+  quarterly: 'quarterly',
+  half_yearly: 'half-yearly',
+  yearly: 'yearly',
+} as const;
+
 const toneFor = (s: FeeLedgerInstalment['status']) =>
   s === 'paid' ? 'success' : s === 'overdue' ? 'danger' : s === 'due' ? 'warning' : 'neutral';
 const STATUS: Record<FeeLedgerInstalment['status'], string> = {
@@ -138,6 +145,25 @@ export default async function FeeLedgerPage({
               Admission no. <strong>{ledger.student.admissionNo}</strong> · Class{' '}
               <strong>{ledger.student.section ?? '—'}</strong> · Father / guardian{' '}
               <strong>{ledger.student.father ?? '—'}</strong>
+            </p>
+            <p style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+              <Badge tone={ledger.student.status === 'active' ? 'success' : 'danger'}>
+                {ledger.student.status === 'active' ? 'Active' : ledger.student.status}
+              </Badge>
+              <Badge tone="neutral">Fee group: {ledger.fee.feeGroup.replace(/_/g, ' ')}</Badge>
+              <Badge tone="neutral">
+                {ledger.fee.studentType === 'new' ? 'New student' : 'Old student'}
+              </Badge>
+              <Badge tone="info">Pays {PAY_PLAN[ledger.fee.payPlan]}</Badge>
+              <Badge tone="neutral">{ledger.fee.hosteller ? 'Hosteller' : 'Day scholar'}</Badge>
+              <Badge tone="neutral">Transport: {ledger.fee.transport ?? 'none'}</Badge>
+              <Badge tone="neutral">
+                Discount: {ledger.fee.discounts.length ? ledger.fee.discounts.join(', ') : 'none'}
+              </Badge>
+              <Badge tone="neutral">
+                Optional heads:{' '}
+                {ledger.fee.optionalHeads.length ? ledger.fee.optionalHeads.join(', ') : 'none'}
+              </Badge>
             </p>
             {!yearOpen ? <Badge tone="warning">This session is {ledger.year.status}</Badge> : null}
           </div>

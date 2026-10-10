@@ -5,6 +5,8 @@ import { ClassCalendarGrid, type CalendarPeriod } from './ClassCalendarGrid';
 export interface ClassRulesView {
   bounceCharge: string | null;
   schoolBounceCharge: string;
+  classPayPlan: string | null;
+  schoolPayPlan: string;
   classLateMode: 'slab' | 'daywise' | null;
   schoolLateMode: 'slab' | 'daywise';
   classLatePerDay: string | null;
@@ -29,6 +31,13 @@ const SLAB_COLUMNS = [
  * and the class's bounce charge, and a grid of dates only. Slabs: the grid with the slab dates and
  * amounts and the month's bounce charge. What is not shown is kept as saved.
  */
+const PLAN: Record<string, string> = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  half_yearly: 'Half-yearly',
+  yearly: 'Yearly',
+};
+
 export function ClassCalendarEditor({
   rules,
   canManage,
@@ -48,6 +57,26 @@ export function ClassCalendarEditor({
           alignItems: 'start',
         }}
       >
+        <label className="ep-field">
+          <span className="ep-field__label">Pay plan of this class</span>
+          <select
+            className="ep-select"
+            name="payPlan"
+            id="payPlan"
+            defaultValue={rules.classPayPlan ?? ''}
+            disabled={!canManage}
+          >
+            <option value="">As the school ({PLAN[rules.schoolPayPlan] ?? 'Monthly'})</option>
+            <option value="monthly">Monthly (12 instalments)</option>
+            <option value="quarterly">Quarterly (4 instalments)</option>
+            <option value="half_yearly">Half-yearly (2 instalments)</option>
+            <option value="yearly">Yearly (1 instalment)</option>
+          </select>
+          <span className="ep-field__help">
+            The months of one instalment are due on the last date of its first month, and late fee
+            is counted once, by that month’s row below.
+          </span>
+        </label>
         <label className="ep-field">
           <span className="ep-field__label">Late fee of this class</span>
           <select

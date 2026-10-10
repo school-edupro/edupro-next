@@ -444,7 +444,7 @@ export class FeeAdjustmentsService {
       if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
       await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
       const before = await c.query<Record<string, unknown>>(
-        `SELECT fee_group AS "feeGroup", student_type AS "studentType", discount_id::text AS "discountId", hosteller, transport_slab_id::text AS "transportSlabId", transport_disabled AS "transportDisabled"
+        `SELECT fee_group AS "feeGroup", pay_plan AS "payPlan", discount_id::text AS "discountId", hosteller, transport_slab_id::text AS "transportSlabId", transport_disabled AS "transportDisabled"
            FROM student_fee_profiles WHERE student_id = $1 AND academic_year_id = $2`,
         [studentId, yearId],
       );
@@ -574,7 +574,10 @@ export class FeeAdjustmentsService {
     const parts: string[] = [];
     if (ch.feeGroup !== undefined)
       parts.push(`fee group ${String(ch.feeGroup).replace(/_/g, ' ')}`);
-    if (ch.studentType !== undefined) parts.push(`${String(ch.studentType)} student`);
+    if (ch.payPlan !== undefined)
+      parts.push(
+        ch.payPlan ? `pay plan ${String(ch.payPlan).replace(/_/g, '-')}` : 'pay plan as the class',
+      );
     if (ch.hosteller !== undefined) parts.push(ch.hosteller ? 'hosteller' : 'not a hosteller');
     if (ch.discountId !== undefined) {
       const d = ch.discountId
@@ -631,10 +634,12 @@ export class FeeAdjustmentsService {
     if (outcome === 'approved') {
       const ch = r.changes;
       await c.query(
-        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, discount_id, hosteller, transport_slab_id, transport_disabled, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, COALESCE($3, 'general'), COALESCE($4, 'old'), $5, COALESCE($6, false), $7, COALESCE($8, false), app.current_user_id(), app.current_user_id())
+        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, pay_plan, discount_id, hosteller, transport_slab_id, transport_disabled, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, COALESCE($3, 'general'), 'old', $4, $5, COALESCE($6, false), $7, COALESCE($8, false), app.current_user_id(), app.current_user_id())
          ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
-           fee_group = COALESCE($3, student_fee_profiles.fee_group), student_type = COALESCE($4, student_fee_profiles.student_type),
+           fee_group = COALESCE($3, student_fee_profiles.fee_group),
+           pay_plan = CASE WHEN $11::boolean THEN $4 ELSE student_fee_profiles.pay_plan END,
+           instalments_override = CASE WHEN $11::boolean THEN NULL ELSE student_fee_profiles.instalments_override END,
            discount_id = CASE WHEN $9::boolean THEN $5 ELSE student_fee_profiles.discount_id END,
            hosteller = COALESCE($6, student_fee_profiles.hosteller),
            transport_slab_id = CASE WHEN $10::boolean THEN $7 ELSE student_fee_profiles.transport_slab_id END,
@@ -644,13 +649,14 @@ export class FeeAdjustmentsService {
           r.student_id,
           r.academic_year_id,
           (ch.feeGroup as string | undefined) ?? null,
-          (ch.studentType as string | undefined) ?? null,
+          ch.payPlan === undefined ? null : ((ch.payPlan as string | null) ?? null),
           ch.discountId === undefined ? null : ((ch.discountId as string | null) ?? null),
           (ch.hosteller as boolean | undefined) ?? null,
           ch.transportSlabId === undefined ? null : ((ch.transportSlabId as string | null) ?? null),
           (ch.transportDisabled as boolean | undefined) ?? null,
           ch.discountId !== undefined,
           ch.transportSlabId !== undefined,
+          ch.payPlan !== undefined,
         ],
       );
       if (Array.isArray(ch.optionalHeads))

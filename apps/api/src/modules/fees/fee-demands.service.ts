@@ -7,11 +7,18 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { ListDemandsQueryDto, SetProfileDto } from './fees.dto';
 
+export type PayPlan = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+
 export interface ProfileRow {
   studentId: string;
   academicYearId: string;
   feeGroup: string;
+  /** Decided by the system: admitted in this session = new, before it = old. */
   studentType: 'new' | 'old';
+  /** The pupil's own pay plan (through approval); null = as the class or the school. */
+  payPlan: PayPlan | null;
+  /** The plan in force for the pupil: own, else the class's, else the school's. */
+  payPlanInForce: PayPlan;
   transportSlabId: string | null;
   transportSlab: string | null;
   transportDisabled: boolean;
@@ -58,7 +65,9 @@ export interface DemandSummary {
   lastRun: { id: string; ranAt: string; ranBy: string | null; rows: number; total: string } | null;
 }
 
-const PROFILE_SELECT = `SELECT p.student_id::text AS "studentId", p.academic_year_id::text AS "academicYearId", p.fee_group AS "feeGroup", p.student_type AS "studentType",
+const PROFILE_SELECT = `SELECT p.student_id::text AS "studentId", p.academic_year_id::text AS "academicYearId", p.fee_group AS "feeGroup",
+        (SELECT CASE WHEN s.admitted_on IS NOT NULL AND s.admitted_on >= y.start_date THEN 'new' ELSE 'old' END FROM students s, academic_years y WHERE s.id = p.student_id AND y.id = p.academic_year_id) AS "studentType",
+        p.pay_plan AS "payPlan", app.fee_pay_plan(p.student_id, p.academic_year_id, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id WHERE e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1)) AS "payPlanInForce",
         p.transport_slab_id::text AS "transportSlabId", ts.name AS "transportSlab", p.transport_disabled AS "transportDisabled",
         p.discount_id::text AS "discountId", d.name AS discount, p.opening_balance::text AS "openingBalance", p.notes, p.instalments_override AS "instalmentsOverride", p.hosteller, false AS "isDefault"
    FROM student_fee_profiles p LEFT JOIN transport_slabs ts ON ts.id = p.transport_slab_id LEFT JOIN fee_discounts d ON d.id = p.discount_id`;
@@ -87,8 +96,10 @@ export class FeeDemandsService {
       [studentId, yearId],
     );
     if (r.rows[0]) return r.rows[0];
-    const s = await c.query<{ is_new: boolean }>(
-      `SELECT (s.admitted_on IS NOT NULL AND s.admitted_on >= y.start_date) AS is_new FROM students s CROSS JOIN academic_years y WHERE s.id = $1 AND y.id = $2 AND s.deleted_at IS NULL`,
+    const s = await c.query<{ is_new: boolean; plan: PayPlan }>(
+      `SELECT (s.admitted_on IS NOT NULL AND s.admitted_on >= y.start_date) AS is_new,
+              app.fee_pay_plan(s.id, y.id, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id WHERE e.student_id = s.id AND e.academic_year_id = y.id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1)) AS plan
+         FROM students s CROSS JOIN academic_years y WHERE s.id = $1 AND y.id = $2 AND s.deleted_at IS NULL`,
       [studentId, yearId],
     );
     if (!s.rows[0]) throw new DomainError('not-found', 'Student not found');
@@ -97,6 +108,8 @@ export class FeeDemandsService {
       academicYearId: yearId,
       feeGroup: 'general',
       studentType: s.rows[0].is_new ? 'new' : 'old',
+      payPlan: null,
+      payPlanInForce: s.rows[0].plan,
       transportSlabId: null,
       transportSlab: null,
       transportDisabled: false,
@@ -128,7 +141,7 @@ export class FeeDemandsService {
       // what decides the fee goes through the approval; only an approver sets it here
       const feeChanged =
         dto.feeGroup !== before.feeGroup ||
-        dto.studentType !== before.studentType ||
+        (dto.payPlan ?? null) !== before.payPlan ||
         (dto.discountId ?? null) !== before.discountId ||
         dto.hosteller !== before.hosteller ||
         (dto.transportSlabId ?? null) !== before.transportSlabId ||
@@ -136,20 +149,20 @@ export class FeeDemandsService {
       if (feeChanged && !ctx.permissions?.has('fees.adjustment.approve'))
         throw new DomainError(
           'fees.approval_required',
-          'Fee group, student type, discount, transport and hostel changes need approval: use “Request change”',
+          'Fee group, pay plan, discount, transport and hostel changes need approval: use “Request change”',
           { status: 403 },
         );
       await c.query(
-        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, transport_slab_id, transport_disabled, discount_id, opening_balance, notes, instalments_override, hosteller, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, app.current_user_id(), app.current_user_id())
-         ON CONFLICT (student_id, academic_year_id) DO UPDATE SET fee_group = EXCLUDED.fee_group, student_type = EXCLUDED.student_type, transport_slab_id = EXCLUDED.transport_slab_id,
+        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, transport_slab_id, transport_disabled, discount_id, opening_balance, notes, instalments_override, hosteller, pay_plan, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, app.current_user_id(), app.current_user_id())
+         ON CONFLICT (student_id, academic_year_id) DO UPDATE SET fee_group = EXCLUDED.fee_group, student_type = EXCLUDED.student_type, pay_plan = EXCLUDED.pay_plan, transport_slab_id = EXCLUDED.transport_slab_id,
            transport_disabled = EXCLUDED.transport_disabled, discount_id = EXCLUDED.discount_id, opening_balance = EXCLUDED.opening_balance, notes = EXCLUDED.notes,
            instalments_override = EXCLUDED.instalments_override, hosteller = EXCLUDED.hosteller, updated_at = now(), updated_by = app.current_user_id()`,
         [
           studentId,
           yearId,
           dto.feeGroup,
-          dto.studentType,
+          before.studentType, // old / new is the system's, never typed
           dto.transportSlabId ?? null,
           dto.transportDisabled,
           dto.discountId ?? null,
@@ -157,6 +170,7 @@ export class FeeDemandsService {
           dto.notes ?? null,
           dto.instalmentsOverride ?? null,
           dto.hosteller,
+          dto.payPlan ?? null,
         ],
       );
       if (dto.discounts !== undefined)

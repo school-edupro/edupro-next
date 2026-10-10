@@ -186,6 +186,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'on: a late-fee waiver by the accounts desk waits for the approver; off: anyone with fees.late_fee.manage sets it directly',
     module: 'fees',
   },
+  'fees.pay_plan': {
+    schema: z.enum(['monthly', 'quarterly', 'half_yearly', 'yearly']),
+    default: 'monthly',
+    description:
+      'How often pupils pay: the school default; a class or a pupil (through approval) can differ',
+    module: 'fees',
+  },
   'fees.late_fee_mode': {
     schema: z.enum(['daywise', 'slab']),
     default: 'daywise',

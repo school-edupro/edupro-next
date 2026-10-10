@@ -285,3 +285,32 @@ left to right: **Created by → Level 1 → Level 2 → Applied**. Press **Edit*
 3. Tick "If the person who creates the request is an approver of this level, approve this level by
    itself" where you want that (never offered on the last level).
 4. **＋ Add approval level** adds one (up to six); **Remove this level** takes one out. **Save**.
+
+## Pay plan (monthly, quarterly, half-yearly, yearly)
+
+How often a pupil pays is set at three levels; the lowest one that is set wins.
+
+1. **School**: Fee setup → _Class calendar, late fee, payment modes_ → **Pay plan of the school**.
+2. **Class**: same tab, choose the class → **Pay plan of this class** → Save. "As the school" removes
+   the class's own plan.
+3. **Pupil**: student profile → Fees tab → _Request change_ → **Pay plan** → reason → send. It goes
+   through Fee setup → Approval levels and applies when approved. "As the class" takes it back.
+
+What a plan does: the months of one instalment (3 for quarterly, 6 for half-yearly, 12 for yearly)
+become one bill, due on the last date of the **first month** in the class calendar. Late fee is counted
+once per instalment, by that first month's row in the class calendar. Bills not yet paid follow a
+change at once; a month already paid keeps the date it was paid against. The ledger, the fee bill and
+the parent portal show the instalments of the pupil's plan (for example Apr – Jun), and the parent
+pays whole instalments online, the oldest first.
+
+## Old / new student
+
+Not typed any more. A pupil admitted on or after the first day of the session is **new**; any other
+pupil is **old**. The profile, the ledger and the bill use this, and every bill run sets it again.
+
+## Where the fee facts show
+
+The ledger header and the Fees tab of the profile show: status (active / withdrawn), fee group, old /
+new, pay plan, hosteller, transport, discounts and optional heads. The parent portal shows the pay
+plan, fee group, transport, discounts and optional heads above the instalments. The single "Discount"
+box on the profile is gone: discounts are given only in the _Discounts by month_ panel of the Fees tab.

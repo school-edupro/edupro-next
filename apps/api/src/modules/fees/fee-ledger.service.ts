@@ -115,6 +115,18 @@ export interface Ledger {
     section: string | null;
     /** The father, else the first guardian on record. */
     father: string | null;
+    /** active, withdrawn … */
+    status: string;
+  };
+  /** What decides the pupil's fee this session. */
+  fee: {
+    feeGroup: string;
+    studentType: 'new' | 'old';
+    payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+    hosteller: boolean;
+    transport: string | null;
+    discounts: string[];
+    optionalHeads: string[];
   };
   year: { id: string; code: string; status: string };
   asOf: string;
@@ -228,13 +240,33 @@ export class FeeLedgerService {
         admission_no: string;
         section: string | null;
         father: string | null;
+        status: string;
+        fee_group: string;
+        student_type: 'new' | 'old';
+        pay_plan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+        hosteller: boolean;
+        transport: string | null;
+        discounts: string[];
+        optional_heads: string[];
       }>(
-        `SELECT s.id::text, s.display_name AS name, s.admission_no,
+        `SELECT s.id::text, s.display_name AS name, s.admission_no, s.status::text AS status,
+                COALESCE(fp.fee_group, 'general') AS fee_group, COALESCE(fp.hosteller, false) AS hosteller,
+                CASE WHEN s.admitted_on IS NOT NULL AND s.admitted_on >= y.start_date THEN 'new' ELSE 'old' END AS student_type,
+                app.fee_pay_plan(s.id, $2, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                                             WHERE e.student_id = s.id AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1)) AS pay_plan,
+                (SELECT ts.name FROM transport_slabs ts WHERE ts.id = fp.transport_slab_id AND NOT COALESCE(fp.transport_disabled, false)) AS transport,
+                ARRAY(SELECT d.name FROM fee_discounts d WHERE d.id = fp.discount_id
+                      UNION SELECT d.name FROM student_fee_discounts sd JOIN fee_discounts d ON d.id = sd.discount_id
+                             WHERE sd.student_id = s.id AND sd.academic_year_id = $2 AND sd.status = 'active' ORDER BY 1) AS discounts,
+                ARRAY(SELECT h.name FROM student_fee_optional_heads o JOIN fee_heads h ON h.id = o.head_id
+                       WHERE o.student_id = s.id AND o.academic_year_id = $2 AND o.status = 'active' ORDER BY h.name) AS optional_heads,
                 (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
                   WHERE sg.student_id = s.id AND g.deleted_at IS NULL ORDER BY (sg.relation = 'father') DESC, sg.is_primary DESC, sg.id LIMIT 1) AS father,
                 (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
                   WHERE e.student_id = s.id AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS section
-           FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL`,
+           FROM students s JOIN academic_years y ON y.id = $2
+           LEFT JOIN student_fee_profiles fp ON fp.student_id = s.id AND fp.academic_year_id = $2
+          WHERE s.id = $1 AND s.deleted_at IS NULL`,
         [studentId, yearId],
       );
       if (!st.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
@@ -402,6 +434,16 @@ export class FeeLedgerService {
           admissionNo: st.rows[0].admission_no,
           section: st.rows[0].section,
           father: st.rows[0].father,
+          status: st.rows[0].status,
+        },
+        fee: {
+          feeGroup: st.rows[0].fee_group,
+          studentType: st.rows[0].student_type,
+          payPlan: st.rows[0].pay_plan,
+          hosteller: st.rows[0].hosteller,
+          transport: st.rows[0].transport,
+          discounts: st.rows[0].discounts,
+          optionalHeads: st.rows[0].optional_heads,
         },
         year: y.rows[0]!,
         asOf: asOfDate,

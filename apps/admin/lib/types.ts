@@ -873,6 +873,8 @@ export interface FeeProfile {
   notes: string | null;
   isDefault: boolean;
   instalmentsOverride: number | null;
+  payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | null;
+  payPlanInForce: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
   hosteller: boolean;
 }
 export interface FeeDemandRow {
@@ -1485,6 +1487,16 @@ export interface FeeLedger {
     admissionNo: string;
     section: string | null;
     father: string | null;
+    status: string;
+  };
+  fee: {
+    feeGroup: string;
+    studentType: 'new' | 'old';
+    payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+    hosteller: boolean;
+    transport: string | null;
+    discounts: string[];
+    optionalHeads: string[];
   };
   year: { id: string; code: string; status: string };
   asOf: string;

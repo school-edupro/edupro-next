@@ -19,6 +19,7 @@ import {
   addPaymentMode,
   cloneClassRules,
   removePaymentMode,
+  saveSchoolPayPlan,
   saveTransportMonths,
   saveClassRules,
   savePaymentMode,
@@ -30,6 +31,8 @@ interface ClassRules {
   bounceCharge: string | null;
   schoolBounceCharge: string;
   lateFeeMode: 'slab' | 'daywise';
+  classPayPlan: string | null;
+  schoolPayPlan: string;
   classLateMode: 'slab' | 'daywise' | null;
   schoolLateMode: 'slab' | 'daywise';
   classLatePerDay: string | null;
@@ -66,7 +69,10 @@ export default async function FeeRulesPage({
   const sp = await searchParams;
   const me = await getMe();
   const canManage = me.permissions.includes('fees.master.manage');
-  const [transportMonths, modes, classes, rules] = await Promise.all([
+  const [schoolPlan, transportMonths, modes, classes, rules] = await Promise.all([
+    apiFetch<{ payPlan: string }>('/fees/pay-plan')
+      .then((r) => r.payPlan)
+      .catch(() => 'monthly'),
     apiFetch<{ data: Array<{ sequence: number; name: string; charged: boolean }> }>(
       '/fees/transport-months',
     ).then((r) => r.data),
@@ -168,6 +174,35 @@ export default async function FeeRulesPage({
               ) : null}
             </>
           ) : null}
+        </Card>
+
+        <Card title="Pay plan of the school">
+          <p className="ep-field__help">
+            How often pupils pay. This is the school’s plan; a class can have its own (choose the
+            class above), and one pupil can be given another plan from the pupil’s profile, through
+            approval. Bills not yet paid follow a change at once.
+          </p>
+          <form
+            action={saveSchoolPayPlan}
+            style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'end', flexWrap: 'wrap' }}
+          >
+            <label className="ep-field" htmlFor="schoolPayPlan">
+              <span className="ep-field__label">Pay plan</span>
+              <select
+                className="ep-select"
+                id="schoolPayPlan"
+                name="payPlan"
+                defaultValue={schoolPlan}
+                disabled={!canManage}
+              >
+                <option value="monthly">Monthly (12 instalments)</option>
+                <option value="quarterly">Quarterly (4 instalments)</option>
+                <option value="half_yearly">Half-yearly (2 instalments)</option>
+                <option value="yearly">Yearly (1 instalment)</option>
+              </select>
+            </label>
+            {canManage ? <Button type="submit">Save pay plan</Button> : null}
+          </form>
         </Card>
 
         <Card title="Transport fee months">

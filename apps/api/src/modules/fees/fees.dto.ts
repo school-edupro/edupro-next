@@ -162,6 +162,11 @@ export const StudentOptionalHeadSchema = z
   });
 export type StudentOptionalHeadInput = z.infer<typeof StudentOptionalHeadSchema>;
 
+/** How often a pupil pays: the months of one instalment share the last date of its first month. */
+export const PayPlan = z.enum(['monthly', 'quarterly', 'half_yearly', 'yearly']);
+export const SetSchoolPayPlanSchema = z.object({ payPlan: PayPlan });
+export class SetSchoolPayPlanDto extends createZodDto(SetSchoolPayPlanSchema) {}
+
 export const SetProfileSchema = z.object({
   /** The pupil's additional discounts; the whole list replaces what is there. */
   discounts: z.array(StudentDiscountSchema).max(10).optional(),
@@ -170,7 +175,10 @@ export const SetProfileSchema = z.object({
     .trim()
     .regex(/^[a-z_]{1,30}$/)
     .default('general'),
-  studentType: z.enum(['new', 'old']),
+  /** Ignored: old / new is decided by the system from the admission date. */
+  studentType: z.enum(['new', 'old']).optional(),
+  /** The pupil's own pay plan; null = as the class (or the school). */
+  payPlan: PayPlan.nullable().optional(),
   transportSlabId: IdSchema.nullable().optional(),
   transportDisabled: z.boolean().default(false),
   discountId: IdSchema.nullable().optional(),
@@ -280,7 +288,8 @@ export const RequestProfileChangeSchema = z
       .trim()
       .regex(/^[a-z_]{1,30}$/)
       .optional(),
-    studentType: z.enum(['new', 'old']).optional(),
+    /** The pupil's own pay plan after approval; null = back to the class's (or the school's). */
+    payPlan: PayPlan.nullable().optional(),
     discountId: IdSchema.nullable().optional(),
     hosteller: z.boolean().optional(),
     transportSlabId: IdSchema.nullable().optional(),
@@ -294,7 +303,7 @@ export const RequestProfileChangeSchema = z
   .refine(
     (v) =>
       v.feeGroup !== undefined ||
-      v.studentType !== undefined ||
+      v.payPlan !== undefined ||
       v.discountId !== undefined ||
       v.hosteller !== undefined ||
       v.transportSlabId !== undefined ||
@@ -370,6 +379,8 @@ export const SetClassRulesSchema = z.object({
   bounceCharge: Money.nullable().optional(),
   /** How this class is charged late fee; null = as the school */
   lateMode: z.enum(['daywise', 'slab']).nullable().optional(),
+  /** How often this class pays; null = as the school */
+  payPlan: PayPlan.nullable().optional(),
   latePerDay: Money.nullable().optional(),
   /** day-wise: the most one instalment can be charged; null = no limit */
   lateMax: Money.nullable().optional(),

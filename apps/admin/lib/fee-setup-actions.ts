@@ -61,6 +61,7 @@ export async function saveClassRules(fd: FormData) {
       body: JSON.stringify({
         bounceCharge: num(fd, 'bounceCharge'),
         lateMode: mode === 'daywise' || mode === 'slab' ? mode : null,
+        payPlan: str(fd, 'payPlan') || null,
         latePerDay: num(fd, 'latePerDay'),
         lateMax: num(fd, 'lateMax'),
         periods,
@@ -253,6 +254,20 @@ export async function removePaymentMode(code: string) {
 }
 
 /** The months of the year in which transport is charged (many schools charge eleven). */
+/** The school's pay plan: classes and pupils without their own follow it at once. */
+export async function saveSchoolPayPlan(fd: FormData) {
+  const path = '/fees/rules';
+  try {
+    await apiFetch('/fees/pay-plan', {
+      method: 'PUT',
+      body: JSON.stringify({ payPlan: str(fd, 'payPlan') }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}?ok=1`);
+}
+
 export async function saveTransportMonths(fd: FormData) {
   const path = '/fees/rules';
   let removed = 0;

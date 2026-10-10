@@ -13,6 +13,7 @@ import { FeeDepositService } from './fee-deposit.service';
 import { FeeDocumentsService } from './fee-documents.service';
 import {
   ClassSummaryQueryDto,
+  SetSchoolPayPlanDto,
   SetTransportMonthsDto,
   AddPaymentModeDto,
   CloneClassRulesDto,
@@ -282,6 +283,20 @@ export class FeesController {
   @RequirePermission(FEES.ledgerView)
   receiptView(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.papers.receiptView(ctx, id);
+  }
+
+  @Get('pay-plan')
+  @ApiOperation({ summary: "The school's pay plan" })
+  @RequirePermission(FEES.masterView)
+  schoolPayPlan(@ReqCtx() ctx: RequestContext) {
+    return this.setup.schoolPayPlan(ctx);
+  }
+
+  @Put('pay-plan')
+  @ApiOperation({ summary: "Set the school's pay plan (monthly, quarterly, half-yearly, yearly)" })
+  @RequirePermission(FEES.masterManage)
+  setSchoolPayPlan(@ReqCtx() ctx: RequestContext, @Body() body: SetSchoolPayPlanDto) {
+    return this.setup.setSchoolPayPlan(ctx, body.payPlan);
   }
 
   @Get('transport-months')

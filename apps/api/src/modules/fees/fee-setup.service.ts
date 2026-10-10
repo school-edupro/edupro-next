@@ -43,8 +43,12 @@ export interface ClassRules {
   classLatePerDay: string | null;
   lateMax: string | null;
   schoolLatePerDay: string;
+  /** How often the class pays: its own choice (null = the school's) and the school's. */
+  classPayPlan: PayPlanCode | null;
+  schoolPayPlan: PayPlanCode;
   periods: ClassRulePeriod[];
 }
+export type PayPlanCode = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
 export interface PaymentModeRow {
   code: string;
   /** The built-in kind it works like; a built-in mode is its own kind. */
@@ -122,8 +126,10 @@ export class FeeSetupService {
         class_per_day: string | null;
         late_max: string | null;
         school_per_day: string | null;
+        class_plan: PayPlanCode | null;
+        school_plan: PayPlanCode | null;
       }>(
-        `SELECT cc.bounce_charge::text AS bounce, cc.late_mode AS class_mode, cc.late_per_day::text AS class_per_day, cc.late_max::text AS late_max,
+        `SELECT cc.pay_plan AS class_plan, NULLIF(app.setting('fees.pay_plan') #>> '{}', '') AS school_plan, cc.bounce_charge::text AS bounce, cc.late_mode AS class_mode, cc.late_per_day::text AS class_per_day, cc.late_max::text AS late_max,
                 app.setting('fees.bounce_charge') #>> '{}' AS school, app.setting('fees.late_fee_mode') #>> '{}' AS mode,
                 app.setting('fees.late_fee_per_day') #>> '{}' AS school_per_day
            FROM (SELECT 1) one LEFT JOIN fee_class_charges cc ON cc.academic_year_id = $1 AND cc.class_id = $2`,
@@ -140,6 +146,8 @@ export class FeeSetupService {
         classLatePerDay: x?.class_per_day ?? null,
         lateMax: x?.late_max ?? null,
         schoolLatePerDay: x?.school_per_day ?? '0',
+        classPayPlan: x?.class_plan ?? null,
+        schoolPayPlan: x?.school_plan ?? 'monthly',
         periods: p.rows.map((r) => ({ ...r, slabs: r.slabs ?? [] })),
       };
     });
@@ -218,32 +226,24 @@ export class FeeSetupService {
             ],
           );
         }
-        // bills not yet settled follow the last date now in force for the class
-        await c.query(
-          `UPDATE fee_demands d SET due_on = app.fee_due_on(fp.id, $2, fp.due_on), updated_at = now()
-             FROM fee_periods fp
-            WHERE fp.id = $1 AND d.period_id = fp.id AND d.status IN ('pending', 'partial')
-              AND d.due_on IS DISTINCT FROM app.fee_due_on(fp.id, $2, fp.due_on)
-              AND d.student_id IN (SELECT e.student_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
-                                    WHERE cs.class_id = $2 AND e.academic_year_id = $3 AND e.status = 'active')`,
-          [p.periodId, classId, yearId],
-        );
       }
       // the class's own bounce charge and way of charging late fee; a row with nothing of its own goes
       if (
         dto.bounceCharge !== undefined ||
         dto.lateMode !== undefined ||
+        dto.payPlan !== undefined ||
         dto.latePerDay !== undefined ||
         dto.lateMax !== undefined
       ) {
         await c.query(
-          `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, late_mode, late_per_day, late_max, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
+          `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, late_mode, late_per_day, late_max, pay_plan, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $11, app.current_user_id())
            ON CONFLICT (academic_year_id, class_id) DO UPDATE SET
              bounce_charge = CASE WHEN $7 THEN EXCLUDED.bounce_charge ELSE fee_class_charges.bounce_charge END,
              late_mode = CASE WHEN $8 THEN EXCLUDED.late_mode ELSE fee_class_charges.late_mode END,
              late_per_day = CASE WHEN $9 THEN EXCLUDED.late_per_day ELSE fee_class_charges.late_per_day END,
              late_max = CASE WHEN $10 THEN EXCLUDED.late_max ELSE fee_class_charges.late_max END,
+             pay_plan = CASE WHEN $12 THEN EXCLUDED.pay_plan ELSE fee_class_charges.pay_plan END,
              updated_at = now(), updated_by = app.current_user_id()`,
           [
             yearId,
@@ -256,14 +256,17 @@ export class FeeSetupService {
             dto.lateMode !== undefined,
             dto.latePerDay !== undefined,
             dto.lateMax !== undefined,
+            dto.payPlan ?? null,
+            dto.payPlan !== undefined,
           ],
         );
         await c.query(
           `DELETE FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2
-              AND bounce_charge IS NULL AND late_mode IS NULL AND late_per_day IS NULL AND late_max IS NULL`,
+              AND bounce_charge IS NULL AND late_mode IS NULL AND late_per_day IS NULL AND late_max IS NULL AND pay_plan IS NULL`,
           [yearId, classId],
         );
       }
+      await this.redate(c, yearId, classId);
       await this.audit.stage(ctx, c, {
         action: 'fees.class_rules.set',
         entityType: 'classes',
@@ -272,6 +275,71 @@ export class FeeSetupService {
       });
     });
     return this.classRules(ctx, classId);
+  }
+
+  /**
+   * Bills not yet settled take the last date now in force: the class calendar's date of the first
+   * month of the pupil's instalment (the pay plan of the pupil, else the class, else the school).
+   * A paid line keeps the date it was paid against. `classId` null = every class.
+   */
+  private async redate(c: PoolClient, yearId: string, classId: string | null): Promise<void> {
+    await c.query(
+      `UPDATE fee_demands d SET due_on = x.due, updated_at = now()
+         FROM (SELECT d2.id, app.fee_due_on_plan(fp.id, k.class_id, fp.due_on, app.fee_pay_plan(d2.student_id, $1, k.class_id)) AS due
+                 FROM fee_demands d2
+                 JOIN fee_periods fp ON fp.id = d2.period_id
+                 JOIN LATERAL (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                                WHERE e.student_id = d2.student_id AND e.academic_year_id = $1 AND e.status = 'active'
+                                ORDER BY e.id DESC LIMIT 1) k ON true
+                WHERE d2.academic_year_id = $1 AND d2.status IN ('pending', 'partial') AND d2.paid = 0
+                  AND ($2::bigint IS NULL OR k.class_id = $2)) x
+        WHERE d.id = x.id AND d.due_on IS DISTINCT FROM x.due`,
+      [yearId, classId],
+    );
+  }
+
+  async schoolPayPlan(ctx: RequestContext): Promise<{ payPlan: PayPlanCode }> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ v: PayPlanCode | null }>(
+        `SELECT NULLIF(app.setting('fees.pay_plan') #>> '{}', '') AS v`,
+      );
+      return { payPlan: r.rows[0]?.v ?? 'monthly' };
+    });
+  }
+
+  /** The school's pay plan; classes and pupils without their own follow it at once. */
+  async setSchoolPayPlan(
+    ctx: RequestContext,
+    payPlan: PayPlanCode,
+  ): Promise<{ payPlan: PayPlanCode }> {
+    const yearId = this.year(ctx);
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await c.query<{ v: string | null }>(
+        `SELECT app.setting('fees.pay_plan') #>> '{}' AS v`,
+      );
+      // as SettingsService.set: close the open row, replace today's, insert the new value
+      await c.query(
+        `UPDATE school_settings SET valid_to = CURRENT_DATE - 1, updated_by = app.current_user_id()
+          WHERE key = 'fees.pay_plan' AND valid_to IS NULL AND valid_from < CURRENT_DATE`,
+      );
+      await c.query(
+        `DELETE FROM school_settings WHERE key = 'fees.pay_plan' AND valid_from = CURRENT_DATE`,
+      );
+      await c.query(
+        `INSERT INTO school_settings (school_id, key, value, valid_from, created_by, updated_by)
+         VALUES (app.current_school_id(), 'fees.pay_plan', $1::jsonb, CURRENT_DATE, app.current_user_id(), app.current_user_id())`,
+        [JSON.stringify(payPlan)],
+      );
+      await this.redate(c, yearId, null);
+      await this.audit.stage(ctx, c, {
+        action: 'fees.pay_plan.set',
+        entityType: 'school_settings',
+        entityId: 'fees.pay_plan',
+        before: { payPlan: before.rows[0]?.v ?? 'monthly' },
+        after: { payPlan },
+      });
+    });
+    return { payPlan };
   }
 
   /** The bounce charge for a pupil: this month's own for the class, then the class's, else null (the school's). */
@@ -318,21 +386,12 @@ export class FeeSetupService {
           [yearId, to],
         );
         await c.query(
-          `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, late_mode, late_per_day, late_max, updated_by)
-           SELECT school_id, academic_year_id, $3, bounce_charge, late_mode, late_per_day, late_max, app.current_user_id()
+          `INSERT INTO fee_class_charges (school_id, academic_year_id, class_id, bounce_charge, late_mode, late_per_day, late_max, pay_plan, updated_by)
+           SELECT school_id, academic_year_id, $3, bounce_charge, late_mode, late_per_day, late_max, pay_plan, app.current_user_id()
              FROM fee_class_charges WHERE academic_year_id = $1 AND class_id = $2`,
           [yearId, classId, to],
         );
-        // bills not yet settled follow the last dates now in force for the class
-        await c.query(
-          `UPDATE fee_demands d SET due_on = app.fee_due_on(fp.id, $2, fp.due_on), updated_at = now()
-             FROM fee_periods fp
-            WHERE fp.academic_year_id = $1 AND d.period_id = fp.id AND d.status IN ('pending', 'partial')
-              AND d.due_on IS DISTINCT FROM app.fee_due_on(fp.id, $2, fp.due_on)
-              AND d.student_id IN (SELECT e.student_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
-                                    WHERE cs.class_id = $2 AND e.academic_year_id = $1 AND e.status = 'active')`,
-          [yearId, to],
-        );
+        await this.redate(c, yearId, to);
       }
       await this.audit.stage(ctx, c, {
         action: 'fees.class_rules.clone',

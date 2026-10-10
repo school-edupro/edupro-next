@@ -16,6 +16,8 @@ interface Instalment {
   balance: string;
   status: 'paid' | 'overdue' | 'due' | 'upcoming';
   lateFee: { amount: string; posted: string; outstanding: string };
+  /** false: the class keeps this instalment off online payment */
+  feePay?: boolean;
 }
 interface Payment {
   id: string;
@@ -32,6 +34,15 @@ interface Payment {
 interface Child {
   student: { id: string; name: string; admissionNo: string; section: string | null };
   year: { code: string; status: string };
+  fee?: {
+    feeGroup: string;
+    studentType: 'new' | 'old';
+    payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+    hosteller: boolean;
+    transport: string | null;
+    discounts: string[];
+    optionalHeads: string[];
+  };
   instalments: Instalment[];
   totals: { balance: string; lateFeeOutstanding: string; payable: string };
   payments: Payment[];
@@ -47,6 +58,33 @@ interface Intent {
   provider: string;
   entityId: string | null;
   createdAt: string;
+}
+
+const PAY_PLAN = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  half_yearly: 'Half-yearly',
+  yearly: 'Yearly',
+} as const;
+
+/**
+ * What the parent may pay online: whole instalments of the child's pay plan, the oldest first. Each
+ * choice is everything due up to and including that instalment (fee left + late fee).
+ */
+function payChoices(c: Child): Array<{ label: string; amount: string }> {
+  const out: Array<{ label: string; amount: string }> = [];
+  let sum = 0;
+  for (const i of c.instalments) {
+    if (i.feePay === false) continue;
+    const due = Number(i.balance) + Number(i.lateFee.outstanding);
+    if (due <= 0) continue;
+    sum += due;
+    out.push({ label: i.label, amount: sum.toFixed(2) });
+  }
+  // the ledger's own figure is always offered, so nothing payable is left out by rounding
+  if (!out.some((o) => o.amount === Number(c.payableNow).toFixed(2)))
+    out.push({ label: 'All', amount: Number(c.payableNow).toFixed(2) });
+  return out;
 }
 
 const tone = (s: Instalment['status']) =>
@@ -198,6 +236,32 @@ export default async function FeesPage({
           title={`${c.student.name}${c.student.section ? ` · ${c.student.section}` : ''} · ${c.year.code}`}
           style={{ marginBottom: 'var(--sp-4)' }}
         >
+          {c.fee ? (
+            <p style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+              <Badge tone="info">
+                {t(lang, 'Pay plan')}: {t(lang, PAY_PLAN[c.fee.payPlan])}
+              </Badge>
+              <Badge tone="neutral">
+                {t(lang, 'Fee group')}: {c.fee.feeGroup.replace(/_/g, ' ')}
+              </Badge>
+              {c.fee.hosteller ? <Badge tone="neutral">{t(lang, 'Hosteller')}</Badge> : null}
+              {c.fee.transport ? (
+                <Badge tone="neutral">
+                  {t(lang, 'Transport')}: {c.fee.transport}
+                </Badge>
+              ) : null}
+              {c.fee.discounts.length > 0 ? (
+                <Badge tone="success">
+                  {t(lang, 'Discount')}: {c.fee.discounts.join(', ')}
+                </Badge>
+              ) : null}
+              {c.fee.optionalHeads.length > 0 ? (
+                <Badge tone="neutral">
+                  {t(lang, 'Optional')}: {c.fee.optionalHeads.join(', ')}
+                </Badge>
+              ) : null}
+            </p>
+          ) : null}
           <div
             style={{
               display: 'grid',
@@ -289,17 +353,17 @@ export default async function FeesPage({
             >
               <input type="hidden" name="studentId" value={c.student.id} />
               <label className="ep-field" style={{ margin: 0 }}>
-                <span className="ep-field__label">{t(lang, 'Amount to pay')}</span>
-                <input
-                  className="ep-input"
-                  type="number"
-                  name="amount"
-                  min={1}
-                  max={Number(c.totals.payable)}
-                  step="0.01"
-                  defaultValue={c.payableNow}
-                  required
-                />
+                <span className="ep-field__label">{t(lang, 'Pay up to')}</span>
+                <select className="ep-select" name="amount" defaultValue={c.payableNow} required>
+                  {payChoices(c).map((o) => (
+                    <option key={o.amount} value={o.amount}>
+                      {o.label} · ₹{o.amount}
+                    </option>
+                  ))}
+                </select>
+                <span className="ep-field__help">
+                  {t(lang, 'Whole instalments, the oldest first.')}
+                </span>
               </label>
               <Button type="submit">{t(lang, 'Pay online')}</Button>
             </form>

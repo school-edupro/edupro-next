@@ -1850,15 +1850,12 @@ export async function setFeeProfile(fd: FormData) {
       method: 'PUT',
       body: JSON.stringify({
         feeGroup: str(fd, 'feeGroup') || 'general',
-        studentType: str(fd, 'studentType') || 'old',
+        payPlan: opt(fd, 'payPlan') ?? null,
         transportSlabId: opt(fd, 'transportSlabId') ?? null,
         transportDisabled: fd.get('transportDisabled') !== null,
         discountId: opt(fd, 'discountId') ?? null,
         openingBalance: Number(str(fd, 'openingBalance') || '0'),
         notes: opt(fd, 'notes'),
-        instalmentsOverride: opt(fd, 'instalmentsOverride')
-          ? Number(str(fd, 'instalmentsOverride'))
-          : null,
         hosteller: fd.get('hosteller') !== null,
       }),
     }),
@@ -2677,10 +2674,9 @@ export async function requestProfileChange(fd: FormData) {
   const studentId = str(fd, 'studentId');
   const body: Record<string, unknown> = { reason: str(fd, 'reason') };
   if (opt(fd, 'feeGroup')) body.feeGroup = str(fd, 'feeGroup');
-  if (opt(fd, 'studentType')) body.studentType = str(fd, 'studentType');
-  const discount = str(fd, 'discountId');
-  if (discount === 'none') body.discountId = null;
-  else if (discount) body.discountId = discount;
+  const plan = str(fd, 'payPlan');
+  if (plan === 'class') body.payPlan = null;
+  else if (plan) body.payPlan = plan;
   const hosteller = str(fd, 'hosteller');
   if (hosteller === 'yes') body.hosteller = true;
   if (hosteller === 'no') body.hosteller = false;
