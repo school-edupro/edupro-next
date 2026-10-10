@@ -347,3 +347,24 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   levels and are approved from My approvals; the receipt is cancelled, or bounced with its charge, on
   the last approval. The bounce charge box is filled from Fee setup. A request raised before this
   change is still approved on Fees → Adjustments and shows under "Fee requests" in My approvals.
+
+## Refunds (2026-10-10)
+
+- **Refund by fee head**: pupil's ledger → Receipts → **Refund (by fee head)** on the receipt. The page
+  shows every fee head and month that receipt paid, with the amount; type what to give back (or "Full"
+  for a head, a month or the whole receipt). The receipt's advance and late fee can be given back too.
+  Choose what becomes of the refunded fee: **cancelled** (not asked again: transport stopped, pupil
+  leaving) or **stays due** (a wrong or double payment). Choose the mode (bank, cheque, cash, or the
+  gateway for an online receipt), give the reason and send.
+- **Advance from last year**: ledger → Receipts → "Advance from last year … refund it". It needs no
+  receipt of this year; on approval the opening advance reduces by the amount.
+- **Approval**: every refund goes through Fee setup → Approval levels and is approved from My
+  approvals. Nothing changes on the receipt until the last approval.
+- **Refund voucher**: on approval the refund gets a voucher number (RF/<financial year>/000001).
+  Fees → Refunds → Voucher opens it with Print and Download PDF.
+- **Withdrawal**: when a withdrawal is completed (after every department has cleared), the fee of the
+  months after the leaving month is taken off the bill, and what the family had paid beyond the leaving
+  month (later months, refundable heads such as a security deposit, advance) is raised by the system as
+  a refund for approval, with the fee cancelled. It shows under Fees → Refunds with the reason
+  "Withdrawal: leaving on …". Dues up to the leaving month are collected before, by the fee department's
+  clearance.

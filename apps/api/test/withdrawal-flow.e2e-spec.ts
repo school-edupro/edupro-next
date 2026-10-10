@@ -404,7 +404,103 @@ describe('withdrawal through configured departments (e2e)', () => {
       ).rows[0]!.status;
     await finish(ids.wb!);
     expect(await membership()).toBe('active');
+    // Aditi has paid nine months; she leaves before that: the rest is not asked and the excess comes back
+    // she leaves in August (the withdrawal was started with a later date)
+    await withMigrator((c) =>
+      c.query(`UPDATE student_withdrawals SET leaving_on = '2026-08-15' WHERE id = $1`, [ids.wa]),
+    );
+    const facts = await withMigrator(async (c) => {
+      const r = await c.query<{ class_id: string; leaving_on: string }>(
+        `SELECT cs.class_id::text, w.leaving_on::text FROM student_withdrawals w, class_sections cs WHERE w.id = $1 AND cs.id = $2`,
+        [ids.wa, sectionId],
+      );
+      return r.rows[0]!;
+    });
+    const head = await inject({
+      method: 'POST',
+      url: '/fees/heads',
+      headers: h(),
+      json: { code: 'TUI', name: 'Tuition fee', sortOrder: 1 },
+    });
+    await inject({
+      method: 'POST',
+      url: '/fees/periods/generate',
+      headers: h(),
+      json: { dueDay: 10, monthsPerInstalment: 1 },
+    });
+    await inject({
+      method: 'PUT',
+      url: `/fees/structures/${facts.class_id}`,
+      headers: h(),
+      json: {
+        feeGroup: 'general',
+        entries: [{ headId: head.json().id, amount: 1000, frequency: 'monthly' }],
+      },
+    });
+    const gen = await inject({
+      method: 'POST',
+      url: `/fees/students/${ids.a}/demands/generate`,
+      headers: h(),
+    });
+    expect(gen.statusCode).toBe(201);
+    const pay = await inject({
+      method: 'POST',
+      url: '/payments/receipts',
+      headers: h(accountant),
+      json: { studentId: ids.a, amount: 9000, mode: 'cash', collectLateFee: false },
+    });
+    expect(pay.statusCode).toBe(201);
+    const later = async () =>
+      (
+        await withMigrator((c) =>
+          c.query<{ months: string; unpaid: string; paid: string }>(
+            `SELECT count(*)::text AS months, COALESCE(sum(d.net - d.paid), 0)::text AS unpaid, COALESCE(sum(d.paid), 0)::text AS paid
+               FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
+              WHERE d.student_id = $1 AND make_date(fp.year, fp.month, 1) > date_trunc('month', $2::date)
+                AND d.status IN ('pending', 'partial', 'paid')`,
+            [ids.a, facts.leaving_on],
+          ),
+        )
+      ).rows[0]!;
+    const before = await later();
+    // September to December were paid (4,000); January to March were not (3,000)
+    expect(before).toMatchObject({ unpaid: '3000.00', paid: '4000.00' });
     await finish(ids.wa!);
+    // the months after the leaving month: nothing is asked any more
+    const after = await later();
+    expect(Number(after.unpaid)).toBe(0);
+    // what was paid for those months is raised as one refund, with the fee cancelled
+    const refunds = (
+      await inject({
+        method: 'GET',
+        url: `/payments/refunds?studentId=${ids.a}`,
+        headers: h(),
+      })
+    ).json().data as Array<{
+      id: string;
+      status: string;
+      amount: string;
+      feeAction: string;
+      reason: string;
+    }>;
+    if (Number(before.paid) > 0) {
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0]).toMatchObject({ status: 'requested', feeAction: 'cancel' });
+      expect(Number(refunds[0]!.amount)).toBe(Number(before.paid));
+      expect(refunds[0]!.reason).toContain('Withdrawal');
+      const ok = await inject({
+        method: 'POST',
+        url: `/payments/refunds/${refunds[0]!.id}/decide`,
+        headers: h(),
+        json: { outcome: 'approved' },
+      });
+      expect(ok.statusCode).toBe(201);
+      expect(ok.json()).toMatchObject({ status: 'paid' });
+      expect(ok.json().voucherNo).toMatch(/^RF\//);
+      expect(Number((await later()).paid)).toBe(0);
+    } else {
+      expect(refunds).toHaveLength(0);
+    }
     expect(await membership()).toBe('inactive');
     const student = await inject({ method: 'GET', url: `/people/students/${ids.a}`, headers: h() });
     expect(student.json().status).toBe('inactive');

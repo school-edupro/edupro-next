@@ -6,6 +6,8 @@ import { DbService } from '../../../common/db/db.service';
 import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { FeeLedgerService } from '../../fees/fee-ledger.service';
+import { settleWithdrawalFees } from '../../fees/withdrawal-fees';
+import { WorkflowService } from '../../workflow/workflow.service';
 import {
   LIFECYCLE,
   type BulkClearanceDto,
@@ -217,6 +219,7 @@ export class WithdrawalsService {
     private readonly audit: AuditService,
     private readonly ledger: FeeLedgerService,
     private readonly tcs: TcService,
+    private readonly workflow: WorkflowService,
   ) {}
 
   // ---- settings ------------------------------------------------------------------------------------
@@ -994,6 +997,19 @@ export class WithdrawalsService {
       const before = await this.findDb(c, id);
       if (!before) throw new DomainError('not-found', 'Withdrawal not found');
       await c.query(`SELECT app.complete_withdrawal($1)`, [id]);
+      // fee: later months are not charged; what was paid beyond the leaving month is raised as refund
+      const year = await c.query<{ id: string | null }>(
+        `SELECT academic_year_id::text AS id FROM student_withdrawals WHERE id = $1`,
+        [id],
+      );
+      const fee = year.rows[0]?.id
+        ? await settleWithdrawalFees(this.workflow, c, ctx, {
+            id,
+            studentId: before.student_id,
+            leavingOn: before.leaving_on,
+            yearId: year.rows[0].id,
+          })
+        : null;
       // a parent keeps the login while another child of theirs still studies here
       const parents = await c.query<{ user_id: string }>(
         `SELECT DISTINCT g.user_id::text FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
@@ -1018,6 +1034,7 @@ export class WithdrawalsService {
           studentId: before.student_id,
           leavingOn: before.leaving_on,
           parentLoginsRevoked: parents.rows.length,
+          fee,
         },
       });
     });

@@ -4,6 +4,7 @@ import { FeesModule } from '../../fees/fees.module';
 import { FilesModule } from '../../files/files.module';
 import { TemplatesModule } from '../../platform/templates/templates.module';
 import { ReportsModule } from '../../reports/reports.module';
+import { WorkflowModule } from '../../workflow/workflow.module';
 import { LifecycleController } from './lifecycle.controller';
 import { PromotionsService } from './promotions.service';
 import { TcService } from './tc.service';
@@ -12,7 +13,7 @@ import { WithdrawalsService } from './withdrawals.service';
 
 /** Transfers between schools of the group, transfer certificates, withdrawal clearance by configured departments, promotion decisions. */
 @Module({
-  imports: [ReportsModule, TemplatesModule, FeesModule, FilesModule],
+  imports: [ReportsModule, TemplatesModule, FeesModule, FilesModule, WorkflowModule],
   controllers: [LifecycleController],
   providers: [TcService, WithdrawalsService, PromotionsService, TransfersService, AuditService],
   exports: [TcService, WithdrawalsService, PromotionsService],
