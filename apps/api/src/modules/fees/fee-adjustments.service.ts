@@ -1,3 +1,4 @@
+import { WAITING_WITH, startFeeApproval } from './fee-approval';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -18,6 +19,7 @@ import type {
   PostMiscReceiptDto,
   RequestAdjustmentDto,
   RequestProfileChangeDto,
+  RequestWaiversDto,
 } from './fees.dto';
 
 export interface AdjustmentRow {
@@ -40,6 +42,10 @@ export interface AdjustmentRow {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
+  /** Waiver lines sent together share a batch and one approval. */
+  batchId: string | null;
+  workflowInstanceId: string | null;
+  waitingWith: string | null;
 }
 
 export interface ProfileChangeRow {
@@ -103,11 +109,16 @@ export interface ReconciliationRow {
   ranAt: string;
 }
 
+/** The approval a fee waiver rides; its levels mirror the fee change approval. */
+export const FEE_WAIVER_FLOW = 'fee_waiver';
+
+// eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
 const ADJ_SELECT = `SELECT a.id::text, a.student_id::text AS "studentId", s.display_name AS "studentName", s.admission_no AS "admissionNo", a.kind::text,
         a.demand_id::text AS "demandId", CASE WHEN d.id IS NOT NULL THEN h.name || ' · ' || fp.name END AS "demandLabel",
         a.payment_id::text AS "paymentId", p.receipt_no AS "receiptNo", p.amount::text AS "receiptAmount",
         a.amount::text, a.charge::text, a.reason, a.status::text, ru.display_name AS "requestedBy", a.requested_at AS "requestedAt",
-        du.display_name AS "decidedBy", a.decided_at AS "decidedAt", a.decision_note AS "decisionNote"
+        du.display_name AS "decidedBy", a.decided_at AS "decidedAt", a.decision_note AS "decisionNote",
+        a.batch_id::text AS "batchId", a.workflow_instance_id::text AS "workflowInstanceId", ${WAITING_WITH('a.workflow_instance_id')} AS "waitingWith"
    FROM fee_adjustments a JOIN students s ON s.id = a.student_id
    LEFT JOIN fee_demands d ON d.id = a.demand_id LEFT JOIN fee_heads h ON h.id = d.head_id LEFT JOIN fee_periods fp ON fp.id = d.period_id
    LEFT JOIN fee_payments p ON p.id = a.payment_id
@@ -205,7 +216,139 @@ export class FeeAdjustmentsService {
     return stamp(r.rows[0]);
   }
 
+  /**
+   * Several fee lines of one pupil waived in one request (the head-by-month grid). The lines share a
+   * batch and one approval through the fee approval levels; they are approved or rejected together.
+   */
+  async requestWaivers(ctx: RequestContext, dto: RequestWaiversDto): Promise<AdjustmentRow[]> {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      const st = await c.query<{ name: string }>(
+        `SELECT display_name AS name FROM students WHERE id = $1 AND deleted_at IS NULL`,
+        [dto.studentId],
+      );
+      if (!st.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      const ids = dto.lines.map((l) => l.demandId);
+      if (new Set(ids).size !== ids.length)
+        throw new DomainError('validation-failed', 'A fee line is given twice', { status: 422 });
+      const rows = await c.query<{ id: string; label: string; balance: string }>(
+        `SELECT d.id::text, h.name || ' · ' || fp.name AS label, (d.net - d.paid)::text AS balance
+           FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
+          WHERE d.id = ANY($1::bigint[]) AND d.student_id = $2 AND d.academic_year_id = $3`,
+        [ids, dto.studentId, yearId],
+      );
+      const byId = new Map(rows.rows.map((r) => [r.id, r]));
+      let total = 0;
+      for (const l of dto.lines) {
+        const d = byId.get(l.demandId);
+        if (!d)
+          throw new DomainError('not-found', 'A fee line is not of this pupil and year', {
+            status: 404,
+          });
+        if (l.amount > Number(d.balance) + 0.005)
+          throw new DomainError(
+            'fees.waiver_exceeds_balance',
+            `Only ₹${Number(d.balance).toFixed(2)} is outstanding on ${d.label}`,
+            { status: 409 },
+          );
+        total += l.amount;
+      }
+      const batch = await c.query<{ id: string }>(`SELECT gen_random_uuid()::text AS id`);
+      const made: string[] = [];
+      try {
+        for (const l of dto.lines) {
+          const r = await c.query<{ id: string }>(
+            `INSERT INTO fee_adjustments (school_id, student_id, academic_year_id, kind, demand_id, amount, charge, reason, requested_by, request_id, batch_id)
+             VALUES (app.current_school_id(), $1, $2, 'waiver', $3, $4, 0, $5, app.current_user_id(), app.current_request_id(), $6::uuid) RETURNING id::text`,
+            [dto.studentId, yearId, l.demandId, l.amount.toFixed(2), dto.reason, batch.rows[0]!.id],
+          );
+          made.push(r.rows[0]!.id);
+        }
+      } catch (error) {
+        if ((error as { code?: string }).code === '23505')
+          throw new DomainError(
+            'fees.adjustment_open',
+            'A waiver is already waiting on one of these fee lines',
+            { status: 409 },
+          );
+        throw error;
+      }
+      const instanceId = await startFeeApproval(
+        this.workflow,
+        c,
+        ctx,
+        { code: FEE_WAIVER_FLOW, name: 'Fee waiver' },
+        made[0]!,
+        `Fee waiver: ${st.rows[0].name}: ${made.length} fee line${made.length === 1 ? '' : 's'}, Rs. ${total.toFixed(2)}`,
+        {
+          batchId: batch.rows[0]!.id,
+          lines: made.length,
+          total: total.toFixed(2),
+          reason: dto.reason,
+        },
+      );
+      if (instanceId)
+        await c.query(
+          `UPDATE fee_adjustments SET workflow_instance_id = $2 WHERE batch_id = $1::uuid`,
+          [batch.rows[0]!.id, instanceId],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'fees.adjustment.request',
+        entityType: 'fee_adjustments',
+        entityId: made[0]!,
+        after: { kind: 'waiver', studentId: dto.studentId, lines: dto.lines, reason: dto.reason },
+      });
+      const out: AdjustmentRow[] = [];
+      for (const id of made) out.push(await this.findAdjustment(c, id));
+      return out;
+    });
+  }
+
+  /** The last level approved (or a level rejected): every line of the waiver is applied or closed. */
+  async onWaiverComplete(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
+  ): Promise<void> {
+    const note = instance.steps.find((s) => s.status === outcome)?.note ?? undefined;
+    const lines = await c.query<{ id: string }>(
+      `SELECT id::text FROM fee_adjustments WHERE workflow_instance_id = $1 AND status = 'pending' ORDER BY id`,
+      [instance.id],
+    );
+    // the instance id is written after start(): a request approved at once (level 1 by itself) is found by its first line
+    const ids = lines.rows.length
+      ? lines.rows.map((r) => r.id)
+      : (
+          await c.query<{ id: string }>(
+            `SELECT a.id::text FROM fee_adjustments a
+              WHERE a.status = 'pending' AND a.batch_id = (SELECT batch_id FROM fee_adjustments WHERE id = $1) ORDER BY a.id`,
+            [instance.entityId],
+          )
+        ).rows.map((r) => r.id);
+    for (const id of ids) await this.decideWith(c, ctx, id, { outcome, note });
+  }
+
   async requestAdjustment(ctx: RequestContext, dto: RequestAdjustmentDto): Promise<AdjustmentRow> {
+    // one fee line is a waiver request of one line: it rides the approval levels like the grid
+    if (dto.kind === 'waiver') {
+      const d = await this.db.tenant(requireTenant(ctx), (c) =>
+        c.query<{ student_id: string }>(`SELECT student_id::text FROM fee_demands WHERE id = $1`, [
+          dto.demandId,
+        ]),
+      );
+      if (!d.rows[0])
+        throw new DomainError('not-found', 'Demand row not found in the working year', {
+          status: 404,
+        });
+      const rows = await this.requestWaivers(ctx, {
+        studentId: d.rows[0].student_id,
+        reason: dto.reason,
+        lines: [{ demandId: dto.demandId!, amount: dto.amount! }],
+      });
+      return rows[0]!;
+    }
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       let studentId: string;
@@ -329,6 +472,24 @@ export class FeeAdjustmentsService {
     dto: DecideAdjustmentDto,
   ): Promise<AdjustmentRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const row = await this.findAdjustment(c, id);
+      if (row.status === 'pending' && row.workflowInstanceId)
+        throw new DomainError(
+          'fees.adjustment_in_workflow',
+          'This waiver goes through the approval levels: approve it from My approvals',
+          { status: 409 },
+        );
+      return this.decideWith(c, ctx, id, dto);
+    });
+  }
+
+  private async decideWith(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string,
+    dto: { outcome: 'approved' | 'rejected'; note?: string },
+  ): Promise<AdjustmentRow> {
+    {
       const before = await this.findAdjustment(c, id);
       if (before.status !== 'pending')
         throw new DomainError(
@@ -383,7 +544,7 @@ export class FeeAdjustmentsService {
         after: { status: after.status, note: dto.note, ...applied },
       });
       return after;
-    });
+    }
   }
 
   /** The misc head that carries bounce charges (setting fees.bounce_charge_head), created when missing. */

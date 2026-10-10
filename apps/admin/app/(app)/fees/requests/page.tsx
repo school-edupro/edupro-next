@@ -28,7 +28,7 @@ import type { FeePeriod } from '@/lib/types';
 
 interface Req {
   id: string;
-  kind: 'late_fee' | 'transfer' | 'date_change';
+  kind: 'late_fee' | 'transfer' | 'date_change' | 'late_fee_to_fee' | 'bounce_to_fee';
   status: string;
   student: string;
   admissionNo: string;
@@ -116,11 +116,16 @@ const KIND: Record<Req['kind'], string> = {
   late_fee: 'Late-fee waiver',
   transfer: 'Move receipt to another pupil',
   date_change: 'Date correction',
+  late_fee_to_fee: 'Paid late fee adjusted in fee',
+  bounce_to_fee: 'Paid bounce charge adjusted in fee',
 };
 
 function what(r: Req) {
   if (r.kind === 'late_fee')
     return `${r.period ?? ''}${r.ledger === 'hostel' ? ' (hostel)' : ''}: charge ${money(r.amount)} as late fee${Number(r.amount) === 0 ? ' (waived)' : ''}`;
+  if (r.kind === 'late_fee_to_fee')
+    return `Receipt ${r.receiptNo ?? ''}: ${money(r.amount)} of the late fee paid goes to fee`;
+  if (r.kind === 'bounce_to_fee') return `${money(r.amount)} of the bounce charge paid goes to fee`;
   if (r.kind === 'transfer')
     return `Receipt ${r.receiptNo ?? ''} (${money(r.receiptAmount)}) → ${r.toStudent ?? ''} (${r.toAdmissionNo ?? ''})${r.result?.newReceiptNo ? `; new receipt ${r.result.newReceiptNo}` : ''}`;
   return `Receipt ${r.receiptNo ?? ''}: ${r.newReceivedOn ? `receipt date → ${dmy(r.newReceivedOn)}` : ''}${r.newReceivedOn && r.newClearedOn ? ', ' : ''}${r.newClearedOn ? `settlement date → ${dmy(r.newClearedOn)}` : ''}`;

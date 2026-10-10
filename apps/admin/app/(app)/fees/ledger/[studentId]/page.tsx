@@ -1,3 +1,5 @@
+import { WaiverGrid } from '@/components/fees/WaiverGrid';
+import { requestFeeWaivers, requestPaidChargeToFee } from '@/lib/fee-request-actions';
 import {
   Badge,
   Button,
@@ -34,6 +36,7 @@ const TABS = [
   ['pay', 'Take payment'],
   ['dues', 'Dues'],
   ['matrix', 'Head and month'],
+  ['waive', 'Waive fee'],
   ['receipts', 'Receipts'],
   ['latefee', 'Late fee'],
   ['more', 'Bill tools'],
@@ -106,9 +109,9 @@ export default async function FeeLedgerPage({
           () => ({ banks: [], accounts: [] }),
         )
       : Promise.resolve({ banks: [] as string[], accounts: [] as SchoolAccount[] }),
-    tab === 'dues' && can('fees.adjustment.request')
+    tab === 'waive' && can('fees.adjustment.request')
       ? apiFetch<FeeDemandSummary>(`/fees/students/${studentId}/demands`)
-          .then((d) => d.rows.filter((r) => Number(r.net) - Number(r.paid) > 0))
+          .then((d) => d.rows.filter((r) => ['pending', 'partial'].includes(r.status)))
           .catch(() => [])
       : Promise.resolve([]),
   ]);
@@ -116,6 +119,19 @@ export default async function FeeLedgerPage({
     tab === 'matrix'
       ? await apiFetch<FeeDemandSummary>(`/fees/students/${studentId}/demands`)
           .then((d) => d.rows)
+          .catch(() => [])
+      : [];
+  // charges already paid, which can be adjusted in fee through approval
+  const paidLate =
+    tab === 'latefee'
+      ? ledger.payments.filter((p) => p.status === 'posted' && Number(p.lateFee) > 0)
+      : [];
+  const paidCharges =
+    tab === 'latefee' && can('fees.adjustment.request')
+      ? await apiFetch<{ data: Array<{ demandId: string; label: string; paid: string }> }>(
+          `/fees/requests/paid-charges/${studentId}`,
+        )
+          .then((r) => r.data)
           .catch(() => [])
       : [];
   const link = (k: Tab) => `/fees/ledger/${studentId}?tab=${k}${sp.asOf ? `&asOf=${sp.asOf}` : ''}`;
@@ -174,10 +190,7 @@ export default async function FeeLedgerPage({
             >
               Fee bill
             </a>
-            <a
-              className="ep-btn ep-btn--ghost ep-btn--sm"
-              href={`/fees/bills?studentId=${studentId}&view=parent`}
-            >
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/fees/parent-view/${studentId}`}>
               Parent’s view
             </a>
             <a
@@ -276,50 +289,23 @@ export default async function FeeLedgerPage({
             </Button>
           </form>
           <Dues instalments={ledger.instalments} />
-          {canAsk && demandRows.length > 0 ? (
-            <form action={requestAdjustment} style={{ marginTop: 'var(--sp-5)' }}>
-              <input type="hidden" name="studentId" value={studentId} />
-              <input type="hidden" name="kind" value="waiver" />
-              <h3 className="ep-h4">Ask to waive a fee</h3>
-              <FormRow columns={3}>
-                <SelectField
-                  id="waiverDemand"
-                  name="demandId"
-                  label="Fee line"
-                  options={demandRows.map((r) => ({
-                    value: r.id,
-                    label: `${r.periodName} · ${r.headName} · ₹${(Number(r.net) - Number(r.paid)).toFixed(2)}`,
-                  }))}
-                />
-                <InputField
-                  id="waiverAmount"
-                  name="amount"
-                  label="Amount to waive (₹)"
-                  type="number"
-                  min={1}
-                  step="0.01"
-                  required
-                />
-                <InputField
-                  id="waiverReason"
-                  name="reason"
-                  label="Reason"
-                  required
-                  minLength={3}
-                  maxLength={300}
-                />
-              </FormRow>
-              <p className="ep-field__help">
-                Goes to the school admin under Fees → Adjustments. A bounce charge is waived the
-                same way: choose its line.
-              </p>
-              <FormActions>
-                <Button type="submit" variant="secondary">
-                  Send waiver for approval
-                </Button>
-              </FormActions>
-            </form>
+          {canAsk ? (
+            <p style={{ marginTop: 'var(--sp-4)' }}>
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={link('waive')}>
+                Waive fee (by head and month)
+              </a>
+            </p>
           ) : null}
+        </Card>
+      ) : null}
+
+      {tab === 'waive' ? (
+        <Card title="Waive fee, by head and month">
+          {canAsk ? (
+            <WaiverGrid studentId={studentId} lines={demandRows} action={requestFeeWaivers} />
+          ) : (
+            <p>You do not have the right to ask for a waiver, or the session is closed.</p>
+          )}
         </Card>
       ) : null}
 
@@ -452,6 +438,102 @@ export default async function FeeLedgerPage({
               </a>
             </p>
           )}
+          {canAsk ? (
+            <section aria-labelledby="paid-charge-title" style={{ marginTop: 'var(--sp-5)' }}>
+              <h3 className="ep-h4" id="paid-charge-title">
+                Adjust a paid late fee or bounce charge in fee
+              </h3>
+              <p className="ep-field__help">
+                For a charge the parent has already paid. After approval (Fee setup → Approval
+                levels) the amount is taken off the charge and set against the pupil’s oldest unpaid
+                fee; what finds no due stays as advance. The receipt keeps its number.
+              </p>
+              {paidLate.length === 0 && paidCharges.length === 0 ? (
+                <p>No late fee or bounce charge has been paid by this pupil.</p>
+              ) : (
+                <div className="ep-table-wrap">
+                  <table className="ep-table ep-table--dense">
+                    <caption className="ep-sr-only">Paid late fee and bounce charges</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Paid charge</th>
+                        <th scope="col" style={{ textAlign: 'right' }}>
+                          Paid (₹)
+                        </th>
+                        <th scope="col">Adjust in fee</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ...paidLate.map((p) => ({
+                          key: `l${p.id}`,
+                          label: `Late fee on receipt ${p.receiptNo ?? p.id} (${dmy(p.receivedOn)})`,
+                          paid: p.lateFee,
+                          kind: 'late_fee_to_fee',
+                          field: 'receiptNo',
+                          value: p.receiptNo ?? '',
+                        })),
+                        ...paidCharges.map((c) => ({
+                          key: `b${c.demandId}`,
+                          label: `Bounce charge: ${c.label}`,
+                          paid: c.paid,
+                          kind: 'bounce_to_fee',
+                          field: 'demandId',
+                          value: c.demandId,
+                        })),
+                      ].map((x) => (
+                        <tr key={x.key}>
+                          <td>{x.label}</td>
+                          <td style={{ textAlign: 'right' }}>{money(x.paid)}</td>
+                          <td>
+                            <form
+                              action={requestPaidChargeToFee}
+                              style={{
+                                display: 'flex',
+                                gap: 'var(--sp-2)',
+                                flexWrap: 'wrap',
+                                alignItems: 'end',
+                              }}
+                            >
+                              <input type="hidden" name="studentId" value={studentId} />
+                              <input type="hidden" name="kind" value={x.kind} />
+                              <input type="hidden" name={x.field} value={x.value} />
+                              <label className="ep-field" style={{ margin: 0 }}>
+                                <span className="ep-field__label">Amount (₹)</span>
+                                <input
+                                  className="ep-input"
+                                  name="amount"
+                                  type="number"
+                                  min={0.01}
+                                  max={Number(x.paid)}
+                                  step="0.01"
+                                  defaultValue={Number(x.paid)}
+                                  required
+                                />
+                              </label>
+                              <label className="ep-field" style={{ margin: 0 }}>
+                                <span className="ep-field__label">Reason</span>
+                                <input
+                                  className="ep-input"
+                                  name="reason"
+                                  required
+                                  minLength={3}
+                                  maxLength={300}
+                                />
+                              </label>
+                              <Button type="submit" variant="secondary" size="sm">
+                                Send for approval
+                              </Button>
+                            </form>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ) : null}
         </Card>
       ) : null}
 

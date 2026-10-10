@@ -144,7 +144,7 @@ export class WorkflowService {
    */
   static readonly MODULE_OWNED = ['gate_pass', 'appointment_request', 'transport_request'] as const;
   /** Definitions kept equal to another one by their module; never listed or edited on their own. */
-  static readonly MIRRORS = ['fee_change_request'] as const;
+  static readonly MIRRORS = ['fee_change_request', 'fee_waiver'] as const;
 
   private readonly logger = new Logger(WorkflowService.name);
   private readonly handlers = new Map<string, CompletionHandler>();

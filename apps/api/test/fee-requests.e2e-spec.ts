@@ -406,4 +406,68 @@ describe('fee changes that wait for approval (e2e)', () => {
     });
     expect(twice.statusCode).toBe(409);
   });
+
+  it('a late fee already paid is adjusted in fee after approval; the receipt keeps its number', async () => {
+    const mk = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: {
+        admissionNo: 'FRQ-late',
+        firstName: 'late',
+        lastName: 'Request',
+        dob: '2015-01-01',
+        admittedOn: '2025-04-05',
+        enrolment: {
+          classSectionId: await withMigrator(async (c) => {
+            const r = await c.query<{ id: string }>(
+              `SELECT class_section_id::text AS id FROM enrolments WHERE student_id = $1 LIMIT 1`,
+              [students.a],
+            );
+            return r.rows[0]!.id;
+          }),
+          rollNo: 44,
+        },
+      },
+    });
+    expect(mk.statusCode).toBe(201);
+    const sid = mk.json().id as string;
+    await inject({ method: 'POST', url: `/fees/students/${sid}/demands/generate`, headers: h() });
+    // April: fee 1000 and late fee 200; the parent pays both
+    const paid = await receipt({ studentId: sid, amount: 1200, mode: 'cash' });
+    expect(paid.statusCode).toBe(201);
+    expect(paid.json()).toMatchObject({ lateFee: '200.00' });
+    const tooMuch = await ask({
+      kind: 'late_fee_to_fee',
+      receiptNo: paid.json().receiptNo,
+      amount: 500,
+      reason: 'too much',
+    });
+    expect(tooMuch.statusCode).toBe(409);
+    const req = await ask({
+      kind: 'late_fee_to_fee',
+      receiptNo: paid.json().receiptNo,
+      amount: 200,
+      reason: 'Principal agreed to take the late fee as fee',
+    });
+    expect(req.statusCode).toBe(201);
+    const ok = await decide(req.json().id, 'approved');
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json().result).toMatchObject({ movedToFee: '200.00', keptAsAdvance: '0.00' });
+    const view = await inject({
+      method: 'GET',
+      url: `/fees/payments/${paid.json().paymentId}/receipt-view`,
+      headers: h(),
+    });
+    expect(view.json()).toMatchObject({
+      receiptNo: paid.json().receiptNo,
+      amount: '1200.00',
+      lateFee: '0.00',
+    });
+    const l = await ledgerOf(sid);
+    // April is settled with no late fee asked again; 200 went to May
+    expect(l.instalments[0]).toMatchObject({ balance: '0.00' });
+    expect(l.instalments[0]!.lateFee).toMatchObject({ amount: '0.00', overridden: true });
+    expect(l.instalments[1]!.balance).toBe('800.00');
+  });
 });

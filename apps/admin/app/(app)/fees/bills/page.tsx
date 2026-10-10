@@ -32,10 +32,19 @@ const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice
 export default async function FeeBillsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string; studentId?: string; upTo?: string; view?: string }>;
+  searchParams: Promise<{
+    classId?: string;
+    studentId?: string;
+    upTo?: string;
+    scope?: string;
+    view?: string;
+  }>;
 }) {
   const sp = await searchParams;
-  const upTo = sp.upTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.upTo) ? sp.upTo : today();
+  // the whole year's bill by default; the user may narrow it to what is due today or up to a date
+  const scope = sp.scope === 'today' || sp.scope === 'date' ? sp.scope : 'year';
+  const picked = sp.upTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.upTo) ? sp.upTo : today();
+  const upTo = scope === 'year' ? '9999-12-31' : scope === 'today' ? today() : picked;
   const parentView = sp.view === 'parent' && Boolean(sp.studentId);
   let bills: Bill[] = [];
   let problem: string | null = null;
@@ -83,12 +92,20 @@ export default async function FeeBillsPage({
           {sp.studentId ? <input type="hidden" name="studentId" value={sp.studentId} /> : null}
           {!parentView ? (
             <>
+              <label className="ep-field" htmlFor="scope">
+                <span className="ep-field__label">Bill for</span>
+                <select className="ep-select" id="scope" name="scope" defaultValue={scope}>
+                  <option value="year">The full year</option>
+                  <option value="today">What is due up to today</option>
+                  <option value="date">What is due up to the date →</option>
+                </select>
+              </label>
               <InputField
                 id="upTo"
                 name="upTo"
-                label="Dues up to"
+                label="Date (for the last choice)"
                 type="date"
-                defaultValue={upTo}
+                defaultValue={picked}
               />
               <Button type="submit" variant="secondary">
                 Show
@@ -121,7 +138,9 @@ export default async function FeeBillsPage({
           <p className="ep-field__help">
             {parentView
               ? 'Nothing is payable for the parent today.'
-              : `Nothing is payable up to ${dmy(upTo)}.`}
+              : scope === 'year'
+                ? 'Nothing is payable for the year.'
+                : `Nothing is payable up to ${dmy(upTo)}.`}
           </p>
         ) : null}
       </div>

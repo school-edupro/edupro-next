@@ -151,7 +151,12 @@ export default async function AdjustmentsPage({
               key: 'decide',
               header: canApprove ? a('decide') : '',
               render: (x) =>
-                canApprove && x.status === 'pending' ? (
+                x.status === 'pending' && x.workflowInstanceId ? (
+                  <span>
+                    {x.waitingWith ? `With ${x.waitingWith}. ` : ''}
+                    <a href="/workflow/inbox">Approve in My approvals</a>
+                  </span>
+                ) : canApprove && x.status === 'pending' ? (
                   <form
                     action={decideAdjustment}
                     style={{ display: 'grid', gap: 'var(--sp-2)', minWidth: 220 }}

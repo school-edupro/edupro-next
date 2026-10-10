@@ -39,6 +39,7 @@ import {
   PostMiscReceiptDto,
   RequestAdjustmentDto,
   RequestProfileChangeDto,
+  RequestWaiversDto,
   CreateHeadDto,
   CreateSlabDto,
   FEES,
@@ -587,6 +588,13 @@ export class FeesController {
   @RequirePermission(FEES.adjustmentRequest)
   requestAdjustment(@ReqCtx() ctx: RequestContext, @Body() body: RequestAdjustmentDto) {
     return this.adj.requestAdjustment(ctx, body);
+  }
+
+  @Post('adjustments/waivers')
+  @ApiOperation({ summary: 'Ask to waive several fee lines of a pupil in one request' })
+  @RequirePermission(FEES.adjustmentRequest)
+  async requestWaivers(@ReqCtx() ctx: RequestContext, @Body() body: RequestWaiversDto) {
+    return { data: await this.adj.requestWaivers(ctx, body) };
   }
 
   @Post('adjustments/:id/decide')

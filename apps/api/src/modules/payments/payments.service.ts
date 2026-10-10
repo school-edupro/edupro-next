@@ -831,7 +831,8 @@ export class PaymentsService {
         entityId: dto.studentId,
         amount: dto.amount,
         payer: { name: dto.payerName, email: dto.payerEmail, mobile: dto.payerMobile },
-        returnUrl: `${this.env.ADMIN_APP_URL}/fees/payments`,
+        // back to the staff's parent view of the pupil (the counter pays on the parent's behalf)
+        returnUrl: `${this.env.ADMIN_APP_URL}/fees/parent-view/${dto.studentId}`,
         createdByUser: ctx.user.id,
         requestId: ctx.requestId,
       });

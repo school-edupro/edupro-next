@@ -326,3 +326,19 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   date changes and Excel uploads are still approved on the Approvals and uploads page.
 - **My inbox**: the request number (#) opens the request for anyone who raised it or approves it.
 - **Late fee maximum**: empty or 0 means no limit.
+
+## Waivers, paid charges, parent's view and bills (2026-10-10)
+
+- **Waive fee (several heads)**: pupil's ledger → **Waive fee** tab. The grid shows every unpaid fee
+  line by head and month with what is left. Type the amount to waive in the boxes (or "Full" for a
+  whole head or month), give one reason, **Send waiver for approval**. All the boxes go as one request
+  through Fee setup → Approval levels and are approved or rejected together from My approvals. The bill
+  reduces after the last approval. An unpaid bounce charge is one of the rows.
+- **A late fee or bounce charge already paid, adjusted in fee**: pupil's ledger → **Late fee** tab →
+  _Adjust a paid late fee or bounce charge in fee_. Give the amount and the reason; after approval the
+  amount is taken off the charge and set against the oldest unpaid fee (what finds no due stays as
+  advance). The receipt keeps its number and shows the new split; the late fee is not asked again.
+- **Parent's view** (button on the ledger): what the family sees on the parent portal for the pupil,
+  with **Pay online** for a parent who cannot pay from home: choose the instalments, enter the payer's
+  name, mobile and email, and the gateway opens on the school's screen. The receipt posts by itself.
+- **Fee bill**: opens for the full year; "Bill for" narrows it to what is due up to today or a date.

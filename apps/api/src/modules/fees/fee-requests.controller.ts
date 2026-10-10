@@ -31,6 +31,13 @@ export class FeeRequestsController {
     return { data: await this.requests.list(ctx, q) };
   }
 
+  @Get('paid-charges/:studentId')
+  @ApiOperation({ summary: 'Paid bounce charges of a pupil that can be adjusted in fee' })
+  @RequirePermission(FEES.adjustmentRequest)
+  async paidCharges(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return { data: await this.requests.paidCharges(ctx, studentId) };
+  }
+
   @Post()
   @ApiOperation({ summary: 'Ask for a late-fee waiver, a receipt transfer or a date correction' })
   @RequirePermission(FEES.adjustmentRequest)

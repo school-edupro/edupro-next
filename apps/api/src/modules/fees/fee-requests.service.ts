@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax -- SQL fragments here are constants assembled in code (column lists, fixed WHERE parts); every value is a bound parameter */
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
+import { startFeeApproval } from './fee-approval';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
@@ -20,7 +21,7 @@ import type {
 
 export interface ChangeRequestRow {
   id: string;
-  kind: 'late_fee' | 'transfer' | 'date_change';
+  kind: 'late_fee' | 'transfer' | 'date_change' | 'late_fee_to_fee' | 'bounce_to_fee';
   status: string;
   student: string;
   admissionNo: string;
@@ -121,12 +122,7 @@ export class FeeRequestsService {
     private readonly workflow: WorkflowService,
   ) {}
 
-  /**
-   * A late-fee waiver or a sibling transfer goes through the levels of "Fee change of a pupil" (Fee
-   * setup -> Approval levels). The engine keeps one open request per definition and record, so these
-   * requests ride their own definition, kept equal to the fee change one each time a request starts.
-   * No active fee change approval = the request is decided on the requests page, as before.
-   */
+  /** Late-fee waivers, transfers and paid-charge adjustments ride the fee approval levels. */
   private async startApproval(
     c: PoolClient,
     ctx: RequestContext,
@@ -134,34 +130,20 @@ export class FeeRequestsService {
     subject: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    const src = await c.query<{ levels: unknown; creator_roles: string[] }>(
-      `SELECT levels, creator_roles FROM workflow_definitions
-        WHERE entity_type = 'fee_profile_change' AND status = 'active' AND deleted_at IS NULL ORDER BY id LIMIT 1`,
-    );
-    if (!src.rows[0]) return;
-    const levels = JSON.stringify(src.rows[0].levels);
-    const upd = await c.query(
-      `UPDATE workflow_definitions SET levels = $1::jsonb, creator_roles = $2::text[], status = 'active', updated_at = now(), updated_by = app.current_user_id()
-        WHERE code = $3 AND deleted_at IS NULL`,
-      [levels, src.rows[0].creator_roles, FEE_REQUEST_FLOW],
-    );
-    if (upd.rowCount === 0)
-      await c.query(
-        `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, creator_roles, created_by, updated_by)
-         VALUES (app.current_school_id(), $3, 'Late fee waiver and sibling transfer', $3, $1::jsonb, $2::text[], app.current_user_id(), app.current_user_id())`,
-        [levels, src.rows[0].creator_roles, FEE_REQUEST_FLOW],
-      );
-    const instance = await this.workflow.start(c, ctx, {
-      definitionCode: FEE_REQUEST_FLOW,
-      entityType: FEE_REQUEST_FLOW,
-      entityId: id,
-      subject: subject.slice(0, 240),
-      payload,
-    });
-    await c.query(`UPDATE fee_change_requests SET workflow_instance_id = $2 WHERE id = $1`, [
+    const instanceId = await startFeeApproval(
+      this.workflow,
+      c,
+      ctx,
+      { code: FEE_REQUEST_FLOW, name: 'Late fee, transfer and paid charge adjustment' },
       id,
-      instance.id,
-    ]);
+      subject,
+      payload,
+    );
+    if (instanceId)
+      await c.query(`UPDATE fee_change_requests SET workflow_instance_id = $2 WHERE id = $1`, [
+        id,
+        instanceId,
+      ]);
   }
 
   /** The last level approved (or any level rejected): the request is applied or closed. */
@@ -190,6 +172,22 @@ export class FeeRequestsService {
     return r.rows[0];
   }
 
+  /** Bounce charges of a pupil that were paid (in part or in full): what can be adjusted in fee. */
+  async paidCharges(ctx: RequestContext, studentId: string) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ demandId: string; label: string; paid: string }>(
+        `SELECT d.id::text AS "demandId", h.name || ' · ' || fp.name AS label, d.paid::text
+           FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
+          WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.paid > 0
+            AND EXISTS (SELECT 1 FROM fee_adjustments a WHERE a.charge_demand_id = d.id)
+          ORDER BY d.id`,
+        [studentId, yearId],
+      );
+      return r.rows;
+    });
+  }
+
   async list(ctx: RequestContext, q: ListChangeRequestsQueryDto): Promise<ChangeRequestRow[]> {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -212,8 +210,9 @@ export class FeeRequestsService {
       received_on: string;
       financial_year_id: string | null;
       academic_year_id: string;
+      late_fee: string;
     }>(
-      `SELECT id::text, student_id::text, status, refunded::text, ledger::text, received_on::text, financial_year_id::text, academic_year_id::text
+      `SELECT id::text, student_id::text, status, refunded::text, ledger::text, received_on::text, financial_year_id::text, academic_year_id::text, late_fee::text
          FROM fee_payments WHERE receipt_no = $1`,
       [receiptNo.trim()],
     );
@@ -290,11 +289,44 @@ export class FeeRequestsService {
         );
         if (p.rowCount === 0)
           throw new DomainError('not-found', 'Fee month not found in this year', { status: 404 });
+      } else if (dto.kind === 'bounce_to_fee') {
+        // only a bounce charge line, and only what was paid on it
+        const d = await c.query<{ student_id: string; paid: string }>(
+          `SELECT d.student_id::text, d.paid::text FROM fee_demands d
+            WHERE d.id = $1 AND d.academic_year_id = $2 AND EXISTS (SELECT 1 FROM fee_adjustments a WHERE a.charge_demand_id = d.id)`,
+          [dto.demandId, yearId],
+        );
+        if (!d.rows[0])
+          throw new DomainError('not-found', 'Bounce charge not found in this year', {
+            status: 404,
+          });
+        if (dto.amount! <= 0 || dto.amount! > Number(d.rows[0].paid) + 0.005)
+          throw new DomainError(
+            'fees.exceeds_paid',
+            `Only ₹${d.rows[0].paid} was paid on this bounce charge`,
+            { status: 409 },
+          );
+        studentId = d.rows[0].student_id;
       } else {
         const pay = await this.receipt(c, dto.receiptNo!);
         paymentId = pay.id;
         studentId = pay.student_id;
-        if (dto.kind === 'transfer') {
+        if (dto.kind === 'late_fee_to_fee') {
+          if (pay.status !== 'posted')
+            throw new DomainError(
+              'fees.receipt_not_open',
+              'Only a receipt that is not cancelled, bounced or refunded can be adjusted',
+              { status: 409 },
+            );
+          if (dto.amount! <= 0 || dto.amount! > Number(pay.late_fee) + 0.005)
+            throw new DomainError(
+              'fees.exceeds_late_fee',
+              `This receipt holds ₹${pay.late_fee} of late fee`,
+              { status: 409 },
+            );
+          // a closed month takes no change
+          await assertPeriodOpen(c, pay.ledger, pay.received_on);
+        } else if (dto.kind === 'transfer') {
           toStudentId = await this.studentByAdmission(c, dto.toAdmissionNo!);
           if (toStudentId === studentId)
             throw new DomainError(
@@ -316,8 +348,15 @@ export class FeeRequestsService {
       }
       const open = await c.query(
         `SELECT 1 FROM fee_change_requests WHERE status = 'pending' AND kind = $1 AND student_id = $2
-            AND payment_id IS NOT DISTINCT FROM $3::bigint AND period_id IS NOT DISTINCT FROM $4::bigint`,
-        [dto.kind, studentId, paymentId, dto.kind === 'late_fee' ? dto.periodId : null],
+            AND payment_id IS NOT DISTINCT FROM $3::bigint AND period_id IS NOT DISTINCT FROM $4::bigint
+            AND demand_id IS NOT DISTINCT FROM $5::bigint`,
+        [
+          dto.kind,
+          studentId,
+          paymentId,
+          dto.kind === 'late_fee' ? dto.periodId : null,
+          dto.kind === 'bounce_to_fee' ? dto.demandId : null,
+        ],
       );
       if (open.rowCount)
         throw new DomainError(
@@ -326,8 +365,8 @@ export class FeeRequestsService {
           { status: 409 },
         );
       const r = await c.query<{ id: string }>(
-        `INSERT INTO fee_change_requests (school_id, academic_year_id, kind, student_id, payment_id, period_id, ledger, amount, to_student_id, new_received_on, new_cleared_on, reason, requested_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6::ledger_type, $7, $8, $9::date, $10::date, $11, app.current_user_id()) RETURNING id::text`,
+        `INSERT INTO fee_change_requests (school_id, academic_year_id, kind, student_id, payment_id, period_id, ledger, amount, to_student_id, new_received_on, new_cleared_on, reason, demand_id, requested_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6::ledger_type, $7, $8, $9::date, $10::date, $11, $12, app.current_user_id()) RETURNING id::text`,
         [
           yearId,
           dto.kind,
@@ -335,11 +374,14 @@ export class FeeRequestsService {
           paymentId,
           dto.kind === 'late_fee' ? dto.periodId : null,
           dto.kind === 'late_fee' ? (dto.ledger ?? 'school') : null,
-          dto.kind === 'late_fee' ? dto.amount!.toFixed(2) : null,
+          ['late_fee', 'late_fee_to_fee', 'bounce_to_fee'].includes(dto.kind)
+            ? dto.amount!.toFixed(2)
+            : null,
           toStudentId,
           dto.kind === 'date_change' ? (dto.newReceivedOn ?? null) : null,
           dto.kind === 'date_change' ? (dto.newClearedOn ?? null) : null,
           dto.reason,
+          dto.kind === 'bounce_to_fee' ? dto.demandId : null,
         ],
       );
       await this.audit.stage(ctx, c, {
@@ -348,7 +390,7 @@ export class FeeRequestsService {
         entityId: r.rows[0]!.id,
         after: dto,
       });
-      if (dto.kind === 'late_fee' || dto.kind === 'transfer') {
+      if (dto.kind !== 'date_change') {
         const row = await this.find(c, r.rows[0]!.id);
         await this.startApproval(
           c,
@@ -356,7 +398,11 @@ export class FeeRequestsService {
           row.id,
           dto.kind === 'late_fee'
             ? `Late fee: ${row.student}: ${row.period ?? ''} to Rs. ${row.amount ?? '0'}${Number(row.amount) === 0 ? ' (waived)' : ''}`
-            : `Receipt ${row.receiptNo ?? ''} of ${row.student} to ${row.toStudent ?? ''}`,
+            : dto.kind === 'late_fee_to_fee'
+              ? `Paid late fee to fee: ${row.student}: Rs. ${row.amount ?? ''} of receipt ${row.receiptNo ?? ''}`
+              : dto.kind === 'bounce_to_fee'
+                ? `Paid bounce charge to fee: ${row.student}: Rs. ${row.amount ?? ''}`
+                : `Receipt ${row.receiptNo ?? ''} of ${row.student} to ${row.toStudent ?? ''}`,
           { kind: dto.kind, reason: dto.reason },
         );
       }
@@ -377,12 +423,39 @@ export class FeeRequestsService {
       new_received_on: string | null;
       new_cleared_on: string | null;
       reason: string;
+      demand_id: string | null;
     }>(
       `SELECT kind, student_id::text, academic_year_id::text, payment_id::text, period_id::text, ledger::text, amount::text, to_student_id::text,
-              new_received_on::text, new_cleared_on::text, reason FROM fee_change_requests WHERE id = $1 FOR UPDATE`,
+              new_received_on::text, new_cleared_on::text, reason, demand_id::text FROM fee_change_requests WHERE id = $1 FOR UPDATE`,
       [id],
     );
     const r = q.rows[0]!;
+    if (r.kind === 'late_fee_to_fee' || r.kind === 'bounce_to_fee') {
+      try {
+        const m = await c.query<{ v: string }>(
+          r.kind === 'late_fee_to_fee'
+            ? `SELECT app.paid_late_fee_to_fee($1, $2)::text AS v`
+            : `SELECT app.paid_charge_to_fee($1, $2)::text AS v`,
+          [r.kind === 'late_fee_to_fee' ? r.payment_id : r.demand_id, r.amount],
+        );
+        // what found no unpaid fee stays on the receipt as advance for the next dues
+        return {
+          movedToFee: m.rows[0]!.v,
+          keptAsAdvance: (Number(r.amount) - Number(m.rows[0]!.v)).toFixed(2),
+        };
+      } catch (error) {
+        const e = error as { message?: string };
+        if (
+          ['fees.exceeds_late_fee', 'fees.exceeds_paid', 'fees.receipt_not_open'].includes(
+            e.message ?? '',
+          )
+        )
+          throw new DomainError(e.message!, 'The amount is no longer available to adjust', {
+            status: 409,
+          });
+        throw error;
+      }
+    }
     if (r.kind === 'late_fee') {
       await c.query(
         `UPDATE fee_late_fee_overrides SET revoked_at = now(), revoked_by = app.current_user_id()

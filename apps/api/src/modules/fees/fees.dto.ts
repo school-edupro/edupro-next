@@ -268,6 +268,17 @@ export const RequestAdjustmentSchema = z
   );
 export class RequestAdjustmentDto extends createZodDto(RequestAdjustmentSchema) {}
 
+/** Several fee lines of one pupil waived in one request (the head-by-month grid of the ledger). */
+export const RequestWaiversSchema = z.object({
+  studentId: IdSchema,
+  reason: z.string().trim().min(3).max(300),
+  lines: z
+    .array(z.object({ demandId: IdSchema, amount: z.number().positive().max(100_000_000) }))
+    .min(1)
+    .max(300),
+});
+export class RequestWaiversDto extends createZodDto(RequestWaiversSchema) {}
+
 export const DecideAdjustmentSchema = z.object({
   outcome: z.enum(['approved', 'rejected']),
   note: z.string().trim().max(300).optional(),
@@ -499,7 +510,9 @@ export class FnfQueryDto extends createZodDto(FnfQuerySchema) {}
 // ---- Fee changes that wait for approval (0101) -----------------------------------------------------------
 export const RequestChangeSchema = z
   .object({
-    kind: z.enum(['late_fee', 'transfer', 'date_change']),
+    kind: z.enum(['late_fee', 'transfer', 'date_change', 'late_fee_to_fee', 'bounce_to_fee']),
+    /** bounce_to_fee: the paid bounce charge line; `amount` is what to adjust in fee */
+    demandId: IdSchema.optional(),
     /** late_fee: the pupil, by id or by admission number */
     studentId: IdSchema.optional(),
     admissionNo: z.string().trim().min(1).max(40).optional(),
@@ -524,8 +537,12 @@ export const RequestChangeSchema = z
           v.amount !== undefined
         : v.kind === 'transfer'
           ? v.receiptNo !== undefined && v.toAdmissionNo !== undefined
-          : v.receiptNo !== undefined &&
-            (v.newReceivedOn !== undefined || v.newClearedOn !== undefined),
+          : v.kind === 'late_fee_to_fee'
+            ? v.receiptNo !== undefined && v.amount !== undefined
+            : v.kind === 'bounce_to_fee'
+              ? v.demandId !== undefined && v.amount !== undefined
+              : v.receiptNo !== undefined &&
+                (v.newReceivedOn !== undefined || v.newClearedOn !== undefined),
     { message: 'the request is incomplete for its kind' },
   );
 export class RequestChangeDto extends createZodDto(RequestChangeSchema) {}
@@ -538,7 +555,9 @@ export class DecideChangeDto extends createZodDto(DecideChangeSchema) {}
 
 export const ListChangeRequestsQuerySchema = z.object({
   status: z.enum(['pending', 'approved', 'rejected']).optional(),
-  kind: z.enum(['late_fee', 'transfer', 'date_change']).optional(),
+  kind: z
+    .enum(['late_fee', 'transfer', 'date_change', 'late_fee_to_fee', 'bounce_to_fee'])
+    .optional(),
 });
 export class ListChangeRequestsQueryDto extends createZodDto(ListChangeRequestsQuerySchema) {}
 

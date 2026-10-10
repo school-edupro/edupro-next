@@ -1815,6 +1815,9 @@ export interface FeeAdjustment {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
+  batchId?: string | null;
+  workflowInstanceId?: string | null;
+  waitingWith?: string | null;
 }
 export interface FeeProfileChange {
   id: string;

@@ -183,3 +183,46 @@ export async function rejectCollection(fd: FormData) {
     `/fees/requests?tab=collection&upload=${id}`,
   );
 }
+
+/** The waiver grid of the ledger: the ticked fee lines go as one request for approval. */
+export async function requestFeeWaivers(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const path = `/fees/ledger/${studentId}?tab=waive`;
+  let lines: unknown = [];
+  try {
+    lines = JSON.parse(str(fd, 'lines') || '[]');
+  } catch {
+    lines = [];
+  }
+  try {
+    await apiFetch('/fees/adjustments/waivers', {
+      method: 'POST',
+      body: JSON.stringify({ studentId, reason: str(fd, 'reason'), lines }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}&ok=1`);
+}
+
+/** A late fee or a bounce charge that was already paid, adjusted in fee after approval. */
+export async function requestPaidChargeToFee(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const path = `/fees/ledger/${studentId}?tab=latefee`;
+  const kind = str(fd, 'kind') === 'bounce_to_fee' ? 'bounce_to_fee' : 'late_fee_to_fee';
+  try {
+    await apiFetch('/fees/requests', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind,
+        receiptNo: kind === 'late_fee_to_fee' ? str(fd, 'receiptNo') : undefined,
+        demandId: kind === 'bounce_to_fee' ? str(fd, 'demandId') : undefined,
+        amount: Number(str(fd, 'amount')),
+        reason: str(fd, 'reason'),
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}&ok=1`);
+}

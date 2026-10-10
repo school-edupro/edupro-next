@@ -286,6 +286,66 @@ describe('fee changes through two approval levels (e2e)', () => {
     });
   });
 
+  it('several fee lines are waived in one request, approved together through the levels', async () => {
+    const rows = (
+      (
+        await inject({ method: 'GET', url: `/fees/students/${studentId}/demands`, headers: h() })
+      ).json() as { rows: Array<{ id: string; net: string; paid: string; status: string }> }
+    ).rows.filter((r) => r.status === 'pending' && Number(r.net) > 0);
+    const before = await yearTotal();
+    const [one, two] = [rows[0]!, rows[1]!];
+    const req = await inject({
+      method: 'POST',
+      url: '/fees/adjustments/waivers',
+      headers: h(accountant),
+      json: {
+        studentId,
+        reason: 'Scholarship for the first two months',
+        lines: [
+          { demandId: one.id, amount: 100 },
+          { demandId: two.id, amount: Number(two.net) },
+        ],
+      },
+    });
+    expect(req.statusCode).toBe(201);
+    const lines = req.json().data as Array<{
+      id: string;
+      batchId: string;
+      workflowInstanceId: string;
+      status: string;
+    }>;
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.batchId).toBe(lines[1]!.batchId);
+    expect(lines.every((l) => l.status === 'pending' && l.workflowInstanceId)).toBe(true);
+    expect(await yearTotal()).toBe(before); // nothing until the last approval
+    // a line cannot be decided on its own page any more
+    const direct = await inject({
+      method: 'POST',
+      url: `/fees/adjustments/${lines[0]!.id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect([403, 409]).toContain(direct.statusCode);
+    // more than what is left on a line is refused
+    const tooMuch = await inject({
+      method: 'POST',
+      url: '/fees/adjustments/waivers',
+      headers: h(accountant),
+      json: { studentId, reason: 'too much', lines: [{ demandId: rows[2]!.id, amount: 999999 }] },
+    });
+    expect(tooMuch.statusCode).toBe(409);
+    const step = await pendingStep(lines[0]!.workflowInstanceId);
+    expect(step).toMatchObject({ level: 2, auto: true });
+    const ok = await inject({
+      method: 'POST',
+      url: `/workflow/steps/${step.id}/approve`,
+      headers: h(),
+      json: { note: 'ok' },
+    });
+    expect([200, 201]).toContain(ok.statusCode);
+    expect(await yearTotal()).toBe(before - 100 - Number(two.net));
+  });
+
   it('the workflow names who may create the request, and a level can have several roles', async () => {
     const opts = await inject({ method: 'GET', url: '/workflow/options', headers: h() });
     expect(opts.statusCode).toBe(200);
