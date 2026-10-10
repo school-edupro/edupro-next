@@ -1,3 +1,4 @@
+import { SETTINGS_CATALOGUE } from '../platform/settings.catalogue';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -7,6 +8,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ViewerService } from '../academics/daily/viewer.service';
 import { ReportsService } from '../reports/reports.service';
 import { TemplatesService } from '../platform/templates/templates.service';
+import { FeeSetupService } from './fee-setup.service';
 import type { SetLateFeeOverrideDto, SetPeriodLateFeeDto, SetReceiptSequenceDto } from './fees.dto';
 
 export interface LateFee {
@@ -131,6 +133,8 @@ export interface Ledger {
   year: { id: string; code: string; status: string };
   asOf: string;
   lateFeeMode: string;
+  /** What a bounced cheque of this pupil is charged: the class's own (Fee setup), else the school's. */
+  bounceCharge: string;
   instalments: LedgerInstalment[];
   totals: {
     net: string;
@@ -180,6 +184,7 @@ export class FeeLedgerService {
     private readonly reports: ReportsService,
     private readonly templates: TemplatesService,
     private readonly viewer: ViewerService,
+    private readonly setup: FeeSetupService,
   ) {}
 
   /**
@@ -427,6 +432,14 @@ export class FeeLedgerService {
           WHERE r.student_id = $1 AND r.academic_year_id = $2 ORDER BY r.id DESC LIMIT 1`,
         [studentId, yearId],
       );
+      const schoolBounce = await c.query<{ v: string | null }>(
+        `SELECT app.setting('fees.bounce_charge') #>> '{}' AS v`,
+      );
+      const bounceCharge = Number(
+        (await this.setup.bounceChargeFor(c, studentId, yearId)) ??
+          schoolBounce.rows[0]?.v ??
+          SETTINGS_CATALOGUE['fees.bounce_charge']!.default,
+      ).toFixed(2);
       return {
         student: {
           id: st.rows[0].id,
@@ -448,6 +461,7 @@ export class FeeLedgerService {
         year: y.rows[0]!,
         asOf: asOfDate,
         lateFeeMode: mode,
+        bounceCharge,
         instalments,
         totals: {
           net: fmt(totNet),

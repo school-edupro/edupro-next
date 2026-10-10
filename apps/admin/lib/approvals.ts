@@ -15,6 +15,7 @@ export interface ApprovalGroup {
     | 'lesson'
     | 'transport'
     | 'leave'
+    | 'fee'
     | 'file';
   title: string;
   help: string;
@@ -86,6 +87,76 @@ export async function myApprovals(
             })),
           }))
           .catch(() => null)
+      : null,
+    // fee requests one approver decides on their own pages: receipt cancel, cheque bounce, date
+    // corrections (the ones that ride the approval levels come through "Approval steps")
+    has.has('fees.adjustment.approve')
+      ? Promise.all([
+          apiFetch<{
+            data: Array<{
+              id: string;
+              kind: string;
+              studentName: string;
+              receiptNo: string | null;
+              amount: string;
+              reason: string;
+              requestedAt: string;
+              workflowInstanceId: string | null;
+            }>;
+          }>('/fees/adjustments?status=pending')
+            .then((r) => r.data.filter((x) => !x.workflowInstanceId))
+            .catch(() => []),
+          apiFetch<{
+            data: Array<{
+              id: string;
+              kind: string;
+              student: string;
+              receiptNo: string | null;
+              reason: string;
+              requestedAt: string;
+              workflowInstanceId: string | null;
+            }>;
+          }>('/fees/requests?status=pending')
+            .then((r) => r.data.filter((x) => !x.workflowInstanceId))
+            .catch(() => []),
+        ]).then(([adj, req]): ApprovalGroup | null => {
+          const KIND: Record<string, string> = {
+            reversal: 'Cancel receipt',
+            bounce: 'Cheque bounced',
+            waiver: 'Fee waiver',
+            late_fee: 'Late-fee waiver',
+            transfer: 'Move receipt',
+            date_change: 'Date correction',
+            late_fee_to_fee: 'Paid late fee to fee',
+            bounce_to_fee: 'Paid bounce charge to fee',
+          };
+          const items = [
+            ...adj.map((x) => ({
+              id: `a${x.id}`,
+              title: `${KIND[x.kind] ?? x.kind}: ${x.receiptNo ?? ''} · ${x.studentName}`,
+              detail: `₹${x.amount} · ${x.reason}`,
+              href: '/fees/adjustments',
+              since: x.requestedAt,
+            })),
+            ...req.map((x) => ({
+              id: `r${x.id}`,
+              title: `${KIND[x.kind] ?? x.kind}: ${x.receiptNo ?? ''} · ${x.student}`,
+              detail: x.reason,
+              href: '/fees/requests?tab=list',
+              since: x.requestedAt,
+            })),
+          ];
+          return items.length
+            ? {
+                key: 'fee',
+                title: 'Fee requests',
+                help: 'Receipt cancellations, cheque bounces and date corrections waiting for your decision',
+                href: adj.length ? '/fees/adjustments' : '/fees/requests?tab=list',
+                count: items.length,
+                items: items.slice(0, size),
+              }
+            : null;
+        })
       : null,
     has.has('people.withdrawal.clear')
       ? apiFetch<{

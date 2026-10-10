@@ -323,6 +323,7 @@ export default async function FeeLedgerPage({
             <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
               {ledger.payments.map((p) => (
                 <ReceiptRow
+                  bounceCharge={ledger.bounceCharge}
                   key={p.id}
                   p={p}
                   studentId={studentId}
@@ -745,11 +746,13 @@ function ReceiptRow({
   studentId,
   canAsk,
   canRefund,
+  bounceCharge,
 }: {
   p: FeeLedgerPayment;
   studentId: string;
   canAsk: boolean;
   canRefund: boolean;
+  bounceCharge: string;
 }) {
   const [label, tone] = RECEIPT[p.status] ?? [p.status, 'neutral'];
   const good = p.status === 'posted';
@@ -839,8 +842,19 @@ function ReceiptRow({
                 </label>
                 <label className="ep-field">
                   <span className="ep-field__label">Bounce charge (₹)</span>
-                  <input className="ep-input" name="charge" type="number" min={0} step="0.01" />
-                  <span className="ep-field__help">Empty = the charge of the class calendar.</span>
+                  <input
+                    className="ep-input"
+                    name="charge"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={Number(bounceCharge)}
+                    required
+                  />
+                  <span className="ep-field__help">
+                    From Fee setup (the class’s bounce charge, else the school’s). Change it only if
+                    the bank charged differently; 0 = no charge.
+                  </span>
                 </label>
                 <Button type="submit" variant="secondary" size="sm">
                   Send bounce for approval

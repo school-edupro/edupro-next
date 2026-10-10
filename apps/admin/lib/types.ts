@@ -1501,6 +1501,7 @@ export interface FeeLedger {
   year: { id: string; code: string; status: string };
   asOf: string;
   lateFeeMode: string;
+  bounceCharge: string;
   instalments: FeeLedgerInstalment[];
   totals: {
     net: string;
