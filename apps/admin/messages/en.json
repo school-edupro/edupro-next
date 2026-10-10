@@ -679,7 +679,7 @@
     "fees_adjustments": {
       "kicker": "Fees",
       "title": "Adjustments",
-      "description": "Waivers, receipt reversals and cheque bounces requested by the desk; an administrator approves with a fresh sign-in."
+      "description": "Requests raised by the accounts desk. A fee waiver goes through Fee setup → Approval levels and is approved from My approvals. A receipt cancellation or a cheque bounce is approved here by a user with the fee approve right (School Admin), after the second sign-in step; it shows under Fee requests in My approvals."
     },
     "fees_misc": {
       "kicker": "Fees",

@@ -679,65 +679,105 @@ function Matrix({ rows }: { rows: FeeDemandSummary['rows'] }) {
 
 function Dues({ instalments }: { instalments: FeeLedgerInstalment[] }) {
   if (instalments.length === 0) return <p>Nothing is due.</p>;
+  const sum = (list: FeeLedgerInstalment[], f: (i: FeeLedgerInstalment) => number) =>
+    list.reduce((a, i) => a + f(i), 0);
+  const total = (list: FeeLedgerInstalment[]) => ({
+    net: sum(list, (i) => Number(i.net)),
+    paid: sum(list, (i) => Number(i.paid)),
+    balance: sum(list, (i) => Number(i.balance)),
+    late: sum(list, (i) => Number(i.lateFee.outstanding)),
+  });
+  // what should be paid by now: instalments whose last date has come (due or overdue)
+  const now = total(instalments.filter((i) => i.status === 'overdue' || i.status === 'due'));
+  const all = total(instalments);
   return (
-    <div className="ep-table-wrap">
-      <table className="ep-table ep-table--dense">
-        <caption className="ep-sr-only">Instalments</caption>
-        <thead>
-          <tr>
-            <th scope="col">Instalment</th>
-            <th scope="col">Last date</th>
-            <th scope="col" style={{ textAlign: 'right' }}>
-              Fee
-            </th>
-            <th scope="col" style={{ textAlign: 'right' }}>
-              Paid
-            </th>
-            <th scope="col" style={{ textAlign: 'right' }}>
-              Balance
-            </th>
-            <th scope="col" style={{ textAlign: 'right' }}>
-              Late fee to collect
-            </th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {instalments.map((i) => (
-            <tr key={`${i.dueOn}-${i.ledger}`}>
-              <th scope="row">
-                {i.label}
-                {i.ledger === 'hostel' ? ' (hostel)' : ''}
+    <>
+      <p style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap', alignItems: 'baseline' }}>
+        <span>
+          Due now, with late fee: <strong>{money(now.balance + now.late)}</strong>
+        </span>
+        <span className="ep-field__help">
+          fee {money(now.balance)} + late fee {money(now.late)}
+        </span>
+      </p>
+      <div className="ep-table-wrap">
+        <table className="ep-table ep-table--dense">
+          <caption className="ep-sr-only">Instalments</caption>
+          <thead>
+            <tr>
+              <th scope="col">Instalment</th>
+              <th scope="col">Last date</th>
+              <th scope="col" style={{ textAlign: 'right' }}>
+                Fee
               </th>
-              <td>{dmy(i.dueOn)}</td>
-              <td style={{ textAlign: 'right' }}>{money(i.net)}</td>
-              <td style={{ textAlign: 'right' }}>{money(i.paid)}</td>
-              <td style={{ textAlign: 'right' }}>
-                <strong>{money(i.balance)}</strong>
-              </td>
-              <td style={{ textAlign: 'right' }}>
-                {Number(i.lateFee.outstanding) > 0 ? money(i.lateFee.outstanding) : '—'}
-                {Number(i.lateFee.amount) > 0 ? (
-                  <div className="ep-field__help">
-                    {i.lateFee.mode === 'daywise'
-                      ? `per day · ${i.lateFee.days} days`
-                      : i.lateFee.mode === 'override'
-                        ? 'fixed for this pupil'
-                        : 'slab'}
-                  </div>
-                ) : null}
-              </td>
-              <td>
-                <Badge tone={toneFor(i.status)}>{STATUS[i.status]}</Badge>
-                {!i.visible && i.status !== 'paid' ? (
-                  <div className="ep-field__help">not shown to parents</div>
-                ) : null}
-              </td>
+              <th scope="col" style={{ textAlign: 'right' }}>
+                Paid
+              </th>
+              <th scope="col" style={{ textAlign: 'right' }}>
+                Balance
+              </th>
+              <th scope="col" style={{ textAlign: 'right' }}>
+                Late fee to collect
+              </th>
+              <th scope="col" style={{ textAlign: 'right' }}>
+                Total to pay
+              </th>
+              <th scope="col">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {instalments.map((i) => (
+              <tr key={`${i.dueOn}-${i.ledger}`}>
+                <th scope="row">
+                  {i.label}
+                  {i.ledger === 'hostel' ? ' (hostel)' : ''}
+                </th>
+                <td>{dmy(i.dueOn)}</td>
+                <td style={{ textAlign: 'right' }}>{money(i.net)}</td>
+                <td style={{ textAlign: 'right' }}>{money(i.paid)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <strong>{money(i.balance)}</strong>
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  {Number(i.lateFee.outstanding) > 0 ? money(i.lateFee.outstanding) : '—'}
+                  {Number(i.lateFee.amount) > 0 ? (
+                    <div className="ep-field__help">
+                      {i.lateFee.mode === 'daywise'
+                        ? `per day · ${i.lateFee.days} days`
+                        : i.lateFee.mode === 'override'
+                          ? 'fixed for this pupil'
+                          : 'slab'}
+                    </div>
+                  ) : null}
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <strong>{money(Number(i.balance) + Number(i.lateFee.outstanding))}</strong>
+                </td>
+                <td>
+                  <Badge tone={toneFor(i.status)}>{STATUS[i.status]}</Badge>
+                  {!i.visible && i.status !== 'paid' ? (
+                    <div className="ep-field__help">not shown to parents</div>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row" colSpan={2}>
+                Total of the rows above
+              </th>
+              <th style={{ textAlign: 'right' }}>{money(all.net)}</th>
+              <th style={{ textAlign: 'right' }}>{money(all.paid)}</th>
+              <th style={{ textAlign: 'right' }}>{money(all.balance)}</th>
+              <th style={{ textAlign: 'right' }}>{money(all.late)}</th>
+              <th style={{ textAlign: 'right' }}>{money(all.balance + all.late)}</th>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </>
   );
 }
 
