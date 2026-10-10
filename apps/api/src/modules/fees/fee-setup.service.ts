@@ -251,7 +251,7 @@ export class FeeSetupService {
             dto.bounceCharge ?? null,
             dto.lateMode ?? null,
             dto.latePerDay ?? null,
-            dto.lateMax ?? null,
+            Number(dto.lateMax ?? 0) > 0 ? dto.lateMax : null, // 0 = no limit, kept empty
             dto.bounceCharge !== undefined,
             dto.lateMode !== undefined,
             dto.latePerDay !== undefined,

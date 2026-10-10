@@ -420,8 +420,14 @@ export default async function FeesPage({
                       ) : null}
                     </td>
                     <td>
+                      <a
+                        className="ep-btn ep-btn--secondary ep-btn--sm"
+                        href={`/fees/receipt/${p.id}`}
+                      >
+                        {t(lang, 'View')}
+                      </a>{' '}
                       {p.status === 'posted' || p.status === 'partly_refunded' ? (
-                        <form action={queueMyReceiptPdf}>
+                        <form action={queueMyReceiptPdf} style={{ display: 'inline' }}>
                           <input type="hidden" name="paymentId" value={p.id} />
                           <input type="hidden" name="student" value={c.student.id} />
                           <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">

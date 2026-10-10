@@ -249,6 +249,24 @@ describe('fee pay plan and student type (e2e)', () => {
     void otherClassId;
   });
 
+  it('a per-day late fee with maximum 0 has no limit, and a family opens only its own receipt', async () => {
+    const r = await inject({
+      method: 'PUT',
+      url: `/fees/class-rules/${classId}`,
+      headers: h(),
+      json: { lateMode: 'daywise', latePerDay: 10, lateMax: 0, periods: [] },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().data).toMatchObject({ classLateMode: 'daywise', lateMax: null });
+    // staff are not a family: the family receipt view refuses them
+    const view = await inject({
+      method: 'GET',
+      url: '/fees/mine/receipts/1/view',
+      headers: h(accountant),
+    });
+    expect([403, 404]).toContain(view.statusCode);
+  });
+
   it('old or new comes from the admission date and cannot be typed', async () => {
     expect((await profileOf(students.fresh!)).studentType).toBe('new');
     expect((await profileOf(students.other!)).studentType).toBe('old');

@@ -541,6 +541,14 @@ export class FeesController {
     return this.ledger.myReceiptPdf(ctx, paymentId);
   }
 
+  @Get('mine/receipts/:paymentId/view')
+  @ApiOperation({ summary: "One of the family's own receipts, as it prints (no file is made)" })
+  @RequirePermission(FEES.familyView)
+  async myReceiptView(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
+    await this.ledger.assertMyReceipt(ctx, paymentId);
+    return this.papers.receiptView(ctx, paymentId);
+  }
+
   @Get('mine/exports/:id')
   @ApiOperation({ summary: 'Status and download link of one of my own exports' })
   @RequirePermission(FEES.familyView)

@@ -117,10 +117,10 @@ export function ClassCalendarEditor({
             type="number"
             min={0}
             step="0.01"
-            defaultValue={rules.lateMax ?? ''}
+            defaultValue={Number(rules.lateMax ?? 0) > 0 ? (rules.lateMax ?? '') : ''}
             disabled={!canManage}
           />
-          <span className="ep-field__help">Empty = no limit.</span>
+          <span className="ep-field__help">Empty or 0 = no limit.</span>
         </label>
         <label className="ep-field" hidden={!perDay}>
           <span className="ep-field__label">Bounce charge of the class (₹)</span>

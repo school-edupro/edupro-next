@@ -479,6 +479,21 @@ export class FeeLedgerService {
   }
 
   /** Sprint 14: a family queues the PDF of one of its own receipts (own export, no template permission needed). */
+  /** A guardian may open only a receipt of one of their own children. */
+  async assertMyReceipt(ctx: RequestContext, paymentId: string): Promise<void> {
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family')
+      throw new DomainError('permission-denied', 'Families only', { status: 403 });
+    const mine = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const p = await c.query<{ student_id: string }>(
+        `SELECT student_id::text FROM fee_payments WHERE id = $1`,
+        [paymentId],
+      );
+      return p.rows[0] ? v.students.some((s) => s.id === p.rows[0]!.student_id) : false;
+    });
+    if (!mine) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+  }
+
   async myReceiptPdf(ctx: RequestContext, paymentId: string) {
     const tenant = requireTenant(ctx);
     const v = await this.viewer.resolve(ctx, 'fees.family.view');
