@@ -150,6 +150,7 @@ export class WorkflowService {
     'fee_refund',
     'fee_opening',
     'withdrawal_revoke',
+    'fee_waiver_undo',
   ] as const;
 
   private readonly logger = new Logger(WorkflowService.name);

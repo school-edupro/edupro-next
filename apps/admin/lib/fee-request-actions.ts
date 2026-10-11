@@ -374,3 +374,17 @@ export async function resettleWithdrawalFees(fd: FormData) {
   }
   redirect(`/fees/fnf/${str(fd, 'studentId')}?ok=1`);
 }
+
+/** An approved waiver is asked to be taken back; it goes for approval and the fee is due again after. */
+export async function requestWaiverUndo(fd: FormData) {
+  const path = `/fees/ledger/${str(fd, 'studentId')}?tab=waive`;
+  try {
+    await apiFetch(`/fees/adjustments/${str(fd, 'id')}/undo-waiver`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}&ok=1`);
+}

@@ -46,6 +46,11 @@ export interface AdjustmentRow {
   batchId: string | null;
   workflowInstanceId: string | null;
   waitingWith: string | null;
+  /** An approved waiver being taken back: pending, approved (taken back) or rejected. */
+  undoStatus: 'pending' | 'approved' | 'rejected' | null;
+  undoReason: string | null;
+  undoneAt: string | null;
+  undoWaitingWith: string | null;
 }
 
 export interface ProfileChangeRow {
@@ -111,6 +116,7 @@ export interface ReconciliationRow {
 
 /** The approval a fee waiver rides; its levels mirror the fee change approval. */
 export const FEE_WAIVER_FLOW = 'fee_waiver';
+export const FEE_WAIVER_UNDO_FLOW = 'fee_waiver_undo';
 const FEE_WAIVER_NAME = 'Fee waiver, receipt cancellation and cheque bounce';
 
 // eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
@@ -119,7 +125,8 @@ const ADJ_SELECT = `SELECT a.id::text, a.student_id::text AS "studentId", s.disp
         a.payment_id::text AS "paymentId", p.receipt_no AS "receiptNo", p.amount::text AS "receiptAmount",
         a.amount::text, a.charge::text, a.reason, a.status::text, ru.display_name AS "requestedBy", a.requested_at AS "requestedAt",
         du.display_name AS "decidedBy", a.decided_at AS "decidedAt", a.decision_note AS "decisionNote",
-        a.batch_id::text AS "batchId", a.workflow_instance_id::text AS "workflowInstanceId", ${WAITING_WITH('a.workflow_instance_id')} AS "waitingWith"
+        a.batch_id::text AS "batchId", a.workflow_instance_id::text AS "workflowInstanceId", ${WAITING_WITH('a.workflow_instance_id')} AS "waitingWith",
+        a.undo_status AS "undoStatus", a.undo_reason AS "undoReason", a.undone_at::text AS "undoneAt", ${WAITING_WITH('a.undo_workflow_instance_id')} AS "undoWaitingWith"
    FROM fee_adjustments a JOIN students s ON s.id = a.student_id
    LEFT JOIN fee_demands d ON d.id = a.demand_id LEFT JOIN fee_heads h ON h.id = d.head_id LEFT JOIN fee_periods fp ON fp.id = d.period_id
    LEFT JOIN fee_payments p ON p.id = a.payment_id
@@ -303,6 +310,137 @@ export class FeeAdjustmentsService {
       const out: AdjustmentRow[] = [];
       for (const id of made) out.push(await this.findAdjustment(c, id));
       return out;
+    });
+  }
+
+  /**
+   * An approved waiver is taken back: its lines (all the lines sent together) go for approval through
+   * the fee levels, and on approval the waived amounts are due again. Where the school has no levels in
+   * force it needs the fee approve right and is applied at once.
+   */
+  async requestWaiverUndo(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+  ): Promise<AdjustmentRow[]> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const one = await this.findAdjustment(c, id);
+      if (one.kind !== 'waiver' || one.status !== 'approved')
+        throw new DomainError(
+          'fees.not_an_approved_waiver',
+          'Only an approved fee waiver can be taken back',
+          {
+            status: 409,
+          },
+        );
+      const rows = await c.query<{
+        id: string;
+        amount: string;
+        undo_status: string | null;
+        undone: boolean;
+      }>(
+        `SELECT a.id::text, a.amount::text, a.undo_status, a.undone_at IS NOT NULL AS undone FROM fee_adjustments a
+          WHERE a.kind = 'waiver' AND a.status = 'approved' AND (a.id = $1 OR (a.batch_id IS NOT NULL AND a.batch_id = $2::uuid))
+          ORDER BY a.id FOR UPDATE`,
+        [id, one.batchId],
+      );
+      const open = rows.rows.filter((r) => !r.undone);
+      if (open.length === 0)
+        throw new DomainError(
+          'fees.waiver_already_undone',
+          'This waiver has already been taken back',
+          {
+            status: 409,
+          },
+        );
+      if (open.some((r) => r.undo_status === 'pending'))
+        throw new DomainError(
+          'fees.waiver_undo_open',
+          'Taking this waiver back is already waiting for approval',
+          {
+            status: 409,
+          },
+        );
+      const ids = open.map((r) => r.id);
+      const total = open.reduce((a, r) => a + Number(r.amount), 0);
+      await c.query(
+        `UPDATE fee_adjustments SET undo_status = 'pending', undo_reason = $2, undo_requested_by = app.current_user_id(),
+                undo_requested_at = now(), undo_workflow_instance_id = NULL WHERE id = ANY($1::bigint[])`,
+        [ids, reason],
+      );
+      const instanceId = await startFeeApproval(
+        this.workflow,
+        c,
+        ctx,
+        { code: FEE_WAIVER_UNDO_FLOW, name: 'Fee waiver taken back' },
+        ids[0]!,
+        `Take back fee waiver: ${one.studentName}: ${ids.length} fee line${ids.length === 1 ? '' : 's'}, Rs. ${total.toFixed(2)} due again`,
+        { reason, lines: ids.length, total: total.toFixed(2) },
+      );
+      if (instanceId)
+        await c.query(
+          `UPDATE fee_adjustments SET undo_workflow_instance_id = $2 WHERE id = ANY($1::bigint[]) AND undo_status = 'pending'`,
+          [ids, instanceId],
+        );
+      else {
+        if (!ctx.permissions?.has('fees.adjustment.approve'))
+          throw new DomainError(
+            'fees.approval_required',
+            'Taking a waiver back needs approval: set the levels under Fee setup → Approval levels',
+            { status: 403 },
+          );
+        await this.applyWaiverUndo(c, ids[0]!, 'approved');
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'fees.waiver.undo_request',
+        entityType: 'fee_adjustments',
+        entityId: ids[0]!,
+        after: { reason, lines: ids.length, total: total.toFixed(2), appliedAtOnce: !instanceId },
+      });
+      const out: AdjustmentRow[] = [];
+      for (const x of ids) out.push(await this.findAdjustment(c, x));
+      return out;
+    });
+  }
+
+  /** Every line of the waiver that waits to be taken back: put back on the bill, or left as it is. */
+  private async applyWaiverUndo(
+    c: PoolClient,
+    firstId: string,
+    outcome: 'approved' | 'rejected',
+  ): Promise<void> {
+    const rows = await c.query<{ id: string; demand_id: string | null; amount: string }>(
+      `SELECT a.id::text, a.demand_id::text, a.amount::text FROM fee_adjustments a
+        WHERE a.undo_status = 'pending' AND a.kind = 'waiver'
+          AND (a.id = $1 OR (a.batch_id IS NOT NULL AND a.batch_id = (SELECT batch_id FROM fee_adjustments WHERE id = $1)))
+        ORDER BY a.id FOR UPDATE`,
+      [firstId],
+    );
+    for (const r of rows.rows) {
+      if (outcome === 'approved') {
+        if (r.demand_id)
+          await c.query(`SELECT app.unwaive_demand($1, $2)`, [r.demand_id, r.amount]);
+        await c.query(
+          `UPDATE fee_adjustments SET undo_status = 'approved', undone_at = now(), undone_by = app.current_user_id() WHERE id = $1`,
+          [r.id],
+        );
+      } else
+        await c.query(`UPDATE fee_adjustments SET undo_status = 'rejected' WHERE id = $1`, [r.id]);
+    }
+  }
+
+  async onWaiverUndoComplete(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
+  ): Promise<void> {
+    await this.applyWaiverUndo(c, instance.entityId, outcome);
+    await this.audit.stage(ctx, c, {
+      action: `fees.waiver.undo_${outcome}`,
+      entityType: 'fee_adjustments',
+      entityId: instance.entityId,
+      after: { workflowInstanceId: instance.id },
     });
   }
 

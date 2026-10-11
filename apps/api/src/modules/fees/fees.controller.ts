@@ -40,6 +40,7 @@ import {
   RequestAdjustmentDto,
   RequestProfileChangeDto,
   RequestWaiversDto,
+  UndoWaiverDto,
   CreateHeadDto,
   CreateSlabDto,
   FEES,
@@ -595,6 +596,17 @@ export class FeesController {
   @RequirePermission(FEES.adjustmentRequest)
   async requestWaivers(@ReqCtx() ctx: RequestContext, @Body() body: RequestWaiversDto) {
     return { data: await this.adj.requestWaivers(ctx, body) };
+  }
+
+  @Post('adjustments/:id/undo-waiver')
+  @ApiOperation({ summary: 'Ask to take an approved fee waiver back (its lines are due again)' })
+  @RequirePermission(FEES.adjustmentRequest)
+  async undoWaiver(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: UndoWaiverDto,
+  ) {
+    return { data: await this.adj.requestWaiverUndo(ctx, id, body.reason) };
   }
 
   @Post('adjustments/:id/decide')

@@ -344,6 +344,41 @@ describe('fee changes through two approval levels (e2e)', () => {
     });
     expect([200, 201]).toContain(ok.statusCode);
     expect(await yearTotal()).toBe(before - 100 - Number(two.net));
+    // approved by mistake: the waiver is taken back through the same levels and the fee is due again
+    const undo = await inject({
+      method: 'POST',
+      url: `/fees/adjustments/${lines[0]!.id}/undo-waiver`,
+      headers: h(accountant),
+      json: { reason: 'Approved by mistake' },
+    });
+    expect(undo.statusCode).toBe(201);
+    const back = undo.json().data as Array<{ undoStatus: string; undoWaitingWith: string | null }>;
+    expect(back).toHaveLength(2);
+    expect(back.every((x) => x.undoStatus === 'pending')).toBe(true);
+    expect(await yearTotal()).toBe(before - 100 - Number(two.net)); // nothing until approved
+    const twice = await inject({
+      method: 'POST',
+      url: `/fees/adjustments/${lines[1]!.id}/undo-waiver`,
+      headers: h(accountant),
+      json: { reason: 'again' },
+    });
+    expect(twice.statusCode).toBe(409);
+    const undoStep = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT s.id::text FROM workflow_steps s JOIN fee_adjustments a ON a.undo_workflow_instance_id = s.instance_id
+          WHERE a.id = $1 AND s.status = 'pending' ORDER BY s.level LIMIT 1`,
+        [lines[0]!.id],
+      );
+      return r.rows[0]!;
+    });
+    const undone = await inject({
+      method: 'POST',
+      url: `/workflow/steps/${undoStep.id}/approve`,
+      headers: h(),
+      json: { note: 'take it back' },
+    });
+    expect([200, 201]).toContain(undone.statusCode);
+    expect(await yearTotal()).toBe(before);
   });
 
   it('a receipt cancellation rides the same levels and is applied on the last approval', async () => {

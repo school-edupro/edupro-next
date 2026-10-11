@@ -3,6 +3,7 @@ import {
   requestAdvanceRefund,
   requestFeeWaivers,
   requestPaidChargeToFee,
+  requestWaiverUndo,
 } from '@/lib/fee-request-actions';
 import {
   Badge,
@@ -44,6 +45,17 @@ interface PendingAdj {
   amount: string;
   reason: string;
   waitingWith?: string | null;
+}
+interface GivenWaiver {
+  id: string;
+  batchId: string | null;
+  demandLabel: string | null;
+  amount: string;
+  reason: string;
+  decidedBy: string | null;
+  undoStatus: 'pending' | 'approved' | 'rejected' | null;
+  undoneAt: string | null;
+  undoWaitingWith: string | null;
 }
 interface PendingReq {
   id: string;
@@ -198,6 +210,24 @@ export default async function FeeLedgerPage({
       ),
   ];
   const waitingWaivers = pendingAdj.filter((a) => a.kind === 'waiver');
+  // waivers already approved for this pupil: they can be taken back through approval
+  const givenWaivers =
+    tab === 'waive' && can('fees.adjustment.request')
+      ? await apiFetch<{ data: GivenWaiver[] }>(
+          `/fees/adjustments?studentId=${studentId}&kind=waiver&status=approved`,
+        )
+          .then((r) => r.data.filter((w) => !w.undoneAt))
+          .catch(() => [] as GivenWaiver[])
+      : [];
+  const waiverGroups = [
+    ...givenWaivers
+      .reduce((m, w) => {
+        const k = w.batchId ?? `one-${w.id}`;
+        m.set(k, [...(m.get(k) ?? []), w]);
+        return m;
+      }, new Map<string, GivenWaiver[]>())
+      .values(),
+  ];
   // credit carried from last year that is not used yet: it can be refunded without a receipt
   const openingAdvance =
     tab === 'receipts' && can('fees.refund.request')
@@ -411,6 +441,78 @@ export default async function FeeLedgerPage({
                 action={requestFeeWaivers}
                 waiting={waitingWaivers.map((w) => w.demandId ?? '')}
               />
+              {waiverGroups.length > 0 ? (
+                <section aria-labelledby="given-waivers" style={{ marginTop: 'var(--sp-5)' }}>
+                  <h3 className="ep-h4" id="given-waivers">
+                    Waivers already given
+                  </h3>
+                  <p className="ep-field__help">
+                    These show on the bill as an amount taken off the fee. A waiver approved by
+                    mistake can be taken back: it goes through Fee setup → Approval levels, and on
+                    approval the fee is due again.
+                  </p>
+                  <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+                    {waiverGroups.map((g) => {
+                      const first = g[0]!;
+                      const total = g.reduce((a, w) => a + Number(w.amount), 0);
+                      return (
+                        <div key={first.id} className="ep-card" style={{ padding: 'var(--sp-3)' }}>
+                          <strong>
+                            {money(total)} on {g.length} fee line{g.length === 1 ? '' : 's'}
+                          </strong>{' '}
+                          · {first.reason}
+                          {first.decidedBy ? ` · approved by ${first.decidedBy}` : ''}
+                          <div className="ep-field__help">
+                            {g
+                              .slice(0, 6)
+                              .map((w) => `${w.demandLabel ?? 'Fee line'} ${money(w.amount)}`)
+                              .join(' · ')}
+                            {g.length > 6 ? ` · +${g.length - 6} more` : ''}
+                          </div>
+                          {first.undoStatus === 'pending' ? (
+                            <p>
+                              <Badge tone="warning">Taking back: waiting for approval</Badge>
+                              {withWho(first.undoWaitingWith)}
+                            </p>
+                          ) : (
+                            <form
+                              action={requestWaiverUndo}
+                              style={{
+                                display: 'flex',
+                                gap: 'var(--sp-2)',
+                                alignItems: 'end',
+                                flexWrap: 'wrap',
+                                marginTop: 'var(--sp-2)',
+                              }}
+                            >
+                              <input type="hidden" name="id" value={first.id} />
+                              <input type="hidden" name="studentId" value={studentId} />
+                              <label className="ep-field" style={{ margin: 0, flex: '1 1 16rem' }}>
+                                <span className="ep-field__label">
+                                  Why is it taken back? *
+                                  {first.undoStatus === 'rejected'
+                                    ? ' (the last request was rejected)'
+                                    : ''}
+                                </span>
+                                <input
+                                  className="ep-input"
+                                  name="reason"
+                                  required
+                                  minLength={3}
+                                  maxLength={300}
+                                />
+                              </label>
+                              <Button type="submit" variant="secondary" size="sm">
+                                Take this waiver back
+                              </Button>
+                            </form>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
             </>
           ) : (
             <p>You do not have the right to ask for a waiver, or the session is closed.</p>
@@ -797,8 +899,9 @@ function Matrix({ rows }: { rows: FeeDemandSummary['rows'] }) {
   return (
     <>
       <p className="ep-field__help">
-        Each box shows the fee of the month after discount. Under it: the discount taken off, and
-        what is paid. A green box is fully paid; an amber one is part paid.
+        Each box shows the fee of the month after discount. Under it: what was taken off (“disc.” is
+        a discount or an approved waiver), and what is paid. A green box is fully paid; an amber one
+        is part paid.
       </p>
       <div className="ep-table-wrap">
         <table className="ep-table ep-table--dense">

@@ -67,6 +67,9 @@ export class FeesModule implements OnModuleInit {
       this.adjustments.onWorkflowComplete(c, ctx, instance, outcome),
     );
     // late-fee waivers and sibling transfers ride the same levels (FeeRequestsService.startApproval)
+    this.workflow.onComplete('fee_waiver_undo', (c, ctx, instance, outcome) =>
+      this.adjustments.onWaiverUndoComplete(c, ctx, instance, outcome),
+    );
     this.workflow.onComplete('fee_waiver', (c, ctx, instance, outcome) =>
       this.adjustments.onWaiverComplete(c, ctx, instance, outcome),
     );

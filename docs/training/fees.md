@@ -444,3 +444,8 @@ People → Withdrawals → open the completed withdrawal → **Revoke (the pupil
   parent pays it by a normal receipt.
 - The withdrawal then shows as "revoked (pupil rejoined)". A rejected revoke changes nothing and can
   be asked again.
+
+- **Taking an approved waiver back**: pupil's ledger → Waive fee → **Waivers already given** → reason
+  → **Take this waiver back**. It goes through Fee setup → Approval levels; on approval the waived
+  amounts are put back on the fee lines and are due again. All the lines of one waiver request are
+  taken back together. On the bill a waiver shows as an amount taken off ("disc.").

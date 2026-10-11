@@ -279,6 +279,9 @@ export const RequestWaiversSchema = z.object({
 });
 export class RequestWaiversDto extends createZodDto(RequestWaiversSchema) {}
 
+export const UndoWaiverSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class UndoWaiverDto extends createZodDto(UndoWaiverSchema) {}
+
 export const DecideAdjustmentSchema = z.object({
   outcome: z.enum(['approved', 'rejected']),
   note: z.string().trim().max(300).optional(),
