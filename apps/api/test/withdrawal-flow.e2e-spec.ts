@@ -542,9 +542,50 @@ describe('withdrawal through configured departments (e2e)', () => {
     } else {
       expect(refunds).toHaveLength(0);
     }
-    expect(await membership()).toBe('inactive');
+    // portal after leaving (90 days unless the school says otherwise): the login stays, but the full
+    // parent role is set aside for the school's "Former parent" role
+    expect(await membership()).toBe('active');
+    const roles = await withMigrator((c) =>
+      c.query<{ code: string; live: boolean; days: number | null }>(
+        `SELECT r.code, ur.revoked_at IS NULL AS live, (ur.valid_to - CURRENT_DATE)::int AS days
+           FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = $1 AND ur.school_id = $2 ORDER BY r.code`,
+        [parent.id, school.id],
+      ),
+    );
+    expect(roles.rows).toEqual([
+      { code: 'former_parent', live: true, days: 90 },
+      { code: 'parent', live: false, days: null },
+    ]);
+    // fees still open to the parent, attendance not
+    const fees = await inject({ method: 'GET', url: '/fees/mine', headers: h(parent) });
+    expect(fees.statusCode).toBe(200);
+    const att = await inject({ method: 'GET', url: '/attendance/leaves/mine', headers: h(parent) });
+    expect(att.statusCode).toBe(403);
     const student = await inject({ method: 'GET', url: `/people/students/${ids.a}`, headers: h() });
     expect(student.json().status).toBe('inactive');
+    // the days are the school's to set; the two roles are ordinary school roles it can edit
+    const bad = await inject({
+      method: 'PUT',
+      url: '/people/withdrawal-portal-access',
+      headers: h(),
+      json: { days: -1 },
+    });
+    expect(bad.statusCode).toBe(400);
+    const set = await inject({
+      method: 'PUT',
+      url: '/people/withdrawal-portal-access',
+      headers: h(),
+      json: { days: 30 },
+    });
+    expect(set.statusCode).toBe(200);
+    const got = await inject({
+      method: 'GET',
+      url: '/people/withdrawal-portal-access',
+      headers: h(),
+    });
+    expect(got.json()).toMatchObject({ days: 30 });
+    expect(got.json().parentRoleId).toBeTruthy();
   });
 
   it('a completed withdrawal is revoked: the pupil is back, logins return, every month is due again', async () => {
@@ -614,6 +655,15 @@ describe('withdrawal through configured departments (e2e)', () => {
     });
     expect(facts.enrolment).toMatchObject({ status: 'active', ended_on: null });
     expect(facts.parent).toBe('active');
+    // the full parent role is back and the former one has ended
+    const back = await withMigrator((c) =>
+      c.query<{ code: string }>(
+        `SELECT r.code FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = $1 AND ur.school_id = $2 AND ur.revoked_at IS NULL`,
+        [parent.id, school.id],
+      ),
+    );
+    expect(back.rows.map((r) => r.code)).toEqual(['parent']);
     // twelve months at 1,000 again; 9,000 was paid and 4,000 of it refunded, so 5,000 stays paid
     expect(facts.fee).toMatchObject({ months: '12', net: '12000.00', paid: '5000.00' });
     const again = await inject({

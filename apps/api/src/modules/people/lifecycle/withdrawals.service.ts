@@ -7,6 +7,7 @@ import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { FeeLedgerService } from '../../fees/fee-ledger.service';
 import { settleWithdrawalFees } from '../../fees/withdrawal-fees';
+import { AccessService } from '../../access/access.service';
 import { WorkflowService, type InstanceRow } from '../../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from '../../fees/fee-approval';
 import {
@@ -232,6 +233,7 @@ export class WithdrawalsService {
     private readonly ledger: FeeLedgerService,
     private readonly tcs: TcService,
     private readonly workflow: WorkflowService,
+    private readonly access: AccessService,
   ) {}
 
   // ---- settings ------------------------------------------------------------------------------------
@@ -1041,7 +1043,18 @@ export class WithdrawalsService {
                              WHERE sg2.guardian_id = g.id AND s2.id <> $1 AND s2.status = 'active' AND s2.deleted_at IS NULL)`,
         [before.student_id],
       );
-      if (parents.rows.length)
+      // after leaving: either the logins close, or (people.former_portal_days) they stay open for a
+      // while with the rights of the "Former student / parent" roles only
+      const days = await this.formerPortalDays(c);
+      if (days > 0) {
+        const su = await c.query<{ user_id: string | null }>(
+          `SELECT user_id::text FROM students WHERE id = $1`,
+          [before.student_id],
+        );
+        if (su.rows[0]?.user_id)
+          await this.switchToFormer(c, su.rows[0].user_id, 'student', id, days);
+        for (const p of parents.rows) await this.switchToFormer(c, p.user_id, 'parent', id, days);
+      } else if (parents.rows.length)
         await c.query(
           `UPDATE user_school_memberships SET status = 'inactive', updated_at = now(), updated_by = app.current_user_id()
             WHERE school_id = app.current_school_id() AND person_type = 'guardian' AND user_id = ANY($1::bigint[])`,
@@ -1061,6 +1074,8 @@ export class WithdrawalsService {
         },
       });
     });
+    // the pupil's and the parents' rights changed: drop the cached sets so it shows at once
+    await this.access.invalidateSchool(requireTenant(ctx).schoolId);
     return this.get(ctx, id);
   }
 
@@ -1207,9 +1222,142 @@ export class WithdrawalsService {
     return this.get(ctx, id);
   }
 
+  // ---- portal after leaving ------------------------------------------------------------------------
+  private async formerPortalDays(c: PoolClient): Promise<number> {
+    const r = await c.query<{ v: string | null }>(
+      `SELECT app.setting('people.former_portal_days') #>> '{}' AS v`,
+    );
+    const n = Number(r.rows[0]?.v ?? 90);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 730) : 0;
+  }
+
+  /**
+   * The school's own "Former student" / "Former parent" role: what a withdrawn pupil or the parent may
+   * still see. Made on first use with a small default set; the school changes its rights under Access
+   * -> Roles and permissions like any other school role.
+   */
+  private async formerRole(c: PoolClient, kind: 'student' | 'parent'): Promise<string> {
+    const code = kind === 'student' ? 'former_student' : 'former_parent';
+    const has = await c.query<{ id: string }>(
+      `SELECT id::text FROM roles WHERE school_id = app.current_school_id() AND code = $1 AND deleted_at IS NULL`,
+      [code],
+    );
+    if (has.rows[0]) return has.rows[0].id;
+    const r = await c.query<{ id: string }>(
+      `INSERT INTO roles (school_id, code, name, kind, is_system, description, created_by, updated_by)
+       VALUES (app.current_school_id(), $1, $2, 'module'::role_kind, false, $3, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+      [
+        code,
+        kind === 'student' ? 'Former student' : 'Former parent',
+        'What a withdrawn pupil or the parent may still see on the portal for the days set under Withdrawal settings',
+      ],
+    );
+    await c.query(
+      `INSERT INTO role_permissions (role_id, permission_code)
+       SELECT $1, p.code FROM permissions p WHERE p.code = ANY($2::text[]) ON CONFLICT DO NOTHING`,
+      [
+        r.rows[0]!.id,
+        [
+          'engagement.family.view',
+          'fees.family.view',
+          ...(kind === 'parent' ? ['payments.family.pay'] : []),
+          'exams.family.view',
+          'platform.files.view',
+          'reports.export.view',
+          'platform.privacy.request',
+        ],
+      ],
+    );
+    return r.rows[0]!.id;
+  }
+
+  /** The login stays open, but the full parent / student role is set aside for the former role, for `days`. */
+  private async switchToFormer(
+    c: PoolClient,
+    userId: string,
+    kind: 'student' | 'parent',
+    withdrawalId: string,
+    days: number,
+  ): Promise<void> {
+    await c.query(
+      `UPDATE user_school_memberships SET status = 'active', updated_at = now(), updated_by = app.current_user_id()
+        WHERE school_id = app.current_school_id() AND user_id = $1 AND person_type = $2`,
+      [userId, kind === 'parent' ? 'guardian' : 'student'],
+    );
+    await c.query(
+      `UPDATE user_roles ur SET revoked_at = now(), revoked_by = app.current_user_id(), reason = $3, updated_at = now(), updated_by = app.current_user_id()
+         FROM roles r
+        WHERE r.id = ur.role_id AND r.code = $2 AND ur.user_id = $1 AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL`,
+      [userId, kind, `withdrawal:${withdrawalId}:suspended`],
+    );
+    await c.query(
+      `INSERT INTO user_roles (school_id, user_id, role_id, valid_from, valid_to, granted_by, reason, created_by, updated_by)
+       VALUES (app.current_school_id(), $1, $2, CURRENT_DATE, CURRENT_DATE + $3::int, app.current_user_id(), $4, app.current_user_id(), app.current_user_id())`,
+      [userId, await this.formerRole(c, kind), days, `withdrawal:${withdrawalId}:former`],
+    );
+  }
+
+  /** The days and the two roles, for the Withdrawal settings page. */
+  async portalAccess(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => ({
+      days: await this.formerPortalDays(c),
+      studentRoleId: await this.formerRole(c, 'student'),
+      parentRoleId: await this.formerRole(c, 'parent'),
+    }));
+  }
+
+  async setPortalAccess(ctx: RequestContext, days: number) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.formerPortalDays(c);
+      // as SettingsService.set: close the open row, replace today's, insert the new value
+      await c.query(
+        `UPDATE school_settings SET valid_to = CURRENT_DATE - 1, updated_by = app.current_user_id()
+          WHERE key = 'people.former_portal_days' AND valid_to IS NULL AND valid_from < CURRENT_DATE`,
+      );
+      await c.query(
+        `DELETE FROM school_settings WHERE key = 'people.former_portal_days' AND valid_from = CURRENT_DATE`,
+      );
+      await c.query(
+        `INSERT INTO school_settings (school_id, key, value, valid_from, created_by, updated_by)
+         VALUES (app.current_school_id(), 'people.former_portal_days', $1::jsonb, CURRENT_DATE, app.current_user_id(), app.current_user_id())`,
+        [JSON.stringify(days)],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.withdrawal.portal_access',
+        entityType: 'school_settings',
+        entityId: 'people.former_portal_days',
+        before: { days: before },
+        after: { days },
+      });
+      return {
+        days,
+        studentRoleId: await this.formerRole(c, 'student'),
+        parentRoleId: await this.formerRole(c, 'parent'),
+      };
+    });
+  }
+
   private async applyRevoke(c: PoolClient, id: string): Promise<void> {
     try {
       await c.query(`SELECT app.revoke_withdrawal($1)`, [id]);
+      // the pupil is back: the full roles return and the "former" ones end
+      await c.query(
+        `UPDATE user_roles SET revoked_at = NULL, revoked_by = NULL, reason = 'restored: withdrawal revoked', updated_at = now(), updated_by = app.current_user_id()
+          WHERE school_id = app.current_school_id() AND reason = $1`,
+        [`withdrawal:${id}:suspended`],
+      );
+      await c.query(
+        `UPDATE user_roles SET revoked_at = now(), revoked_by = app.current_user_id(), updated_at = now(), updated_by = app.current_user_id()
+          WHERE school_id = app.current_school_id() AND reason = $1 AND revoked_at IS NULL`,
+        [`withdrawal:${id}:former`],
+      );
+      // cached rights are dropped once this has been saved (the caller's transaction ends first)
+      const sc = await c.query<{ id: string }>(`SELECT app.current_school_id()::text AS id`);
+      const schoolId = sc.rows[0]!.id;
+      setTimeout(
+        () => void this.access.invalidateSchool(schoolId).catch(() => undefined),
+        1500,
+      ).unref();
     } catch (error) {
       const e = error as { message?: string; detail?: string };
       if (e.message?.startsWith('withdrawal.') || e.message?.startsWith('fees.'))

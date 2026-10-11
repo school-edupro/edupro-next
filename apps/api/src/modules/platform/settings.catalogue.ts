@@ -186,6 +186,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'on: a late-fee waiver by the accounts desk waits for the approver; off: anyone with fees.late_fee.manage sets it directly',
     module: 'fees',
   },
+  'people.former_portal_days': {
+    schema: z.number().int().min(0).max(730),
+    default: 90,
+    description:
+      'Days a withdrawn pupil and the parent may still sign in to the portal with the "Former student / parent" rights; 0 closes the login at once',
+    module: 'people',
+  },
   'fees.pay_plan': {
     schema: z.enum(['monthly', 'quarterly', 'half_yearly', 'yearly']),
     default: 'monthly',

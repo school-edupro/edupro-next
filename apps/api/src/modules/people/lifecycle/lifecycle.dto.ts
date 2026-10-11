@@ -207,3 +207,7 @@ export class ListTransfersQueryDto extends createZodDto(ListTransfersQuerySchema
 /** Revoke of a completed withdrawal: the pupil rejoins in the same session. */
 export const RevokeSchema = z.object({ reason: z.string().trim().min(3).max(300) });
 export class RevokeDto extends createZodDto(RevokeSchema) {}
+
+/** Portal after leaving: 0 closes the login at completion. */
+export const PortalAccessSchema = z.object({ days: z.number().int().min(0).max(730) });
+export class PortalAccessDto extends createZodDto(PortalAccessSchema) {}

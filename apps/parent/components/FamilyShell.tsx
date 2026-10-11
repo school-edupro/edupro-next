@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Me } from '@edupro/bff';
 import { t, type Lang } from '@/lib/i18n';
+import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from './nav-icons';
 import { SidebarToggle } from './SidebarToggle';
 
@@ -120,7 +121,7 @@ export function FamilyShell({
     href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
   const groups = NAV.map((g) => ({
     ...g,
-    items: g.items.filter((i) => audience === 'parent' || !i.parentOnly),
+    items: g.items.filter((i) => (audience === 'parent' || !i.parentOnly) && canOpen(me, i.href)),
   })).filter((g) => g.items.length > 0);
   const school =
     me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0] ?? null;
@@ -289,12 +290,18 @@ export function FamilyShell({
         {children}
       </div>
       <nav className="fp-tabbar" aria-label={t(lang, 'Quick menu')}>
-        {TABS[audience].map((tab) => (
-          <a key={tab.href} href={tab.href} aria-current={isCurrent(tab.href) ? 'page' : undefined}>
-            <Icon name={tab.icon} size={22} />
-            <span>{t(lang, tab.label)}</span>
-          </a>
-        ))}
+        {TABS[audience]
+          .filter((tab) => canOpen(me, tab.href))
+          .map((tab) => (
+            <a
+              key={tab.href}
+              href={tab.href}
+              aria-current={isCurrent(tab.href) ? 'page' : undefined}
+            >
+              <Icon name={tab.icon} size={22} />
+              <span>{t(lang, tab.label)}</span>
+            </a>
+          ))}
       </nav>
     </div>
   );

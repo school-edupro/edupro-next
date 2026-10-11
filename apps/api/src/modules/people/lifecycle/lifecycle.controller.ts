@@ -23,6 +23,7 @@ import {
   SetPromotionsDto,
   WithdrawalTcDto,
   YearSectionsQueryDto,
+  PortalAccessDto,
   RevokeDto,
 } from './lifecycle.dto';
 import { PromotionsService } from './promotions.service';
@@ -93,6 +94,20 @@ export class LifecycleController {
   async listWithdrawals(@ReqCtx() ctx: RequestContext, @Query() q: ListWithdrawalsQueryDto) {
     const { rows, total } = await this.withdrawals.list(ctx, q);
     return { data: rows, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('withdrawal-portal-access')
+  @ApiOperation({ summary: 'Portal after leaving: the days and the two "former" roles' })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  portalAccess(@ReqCtx() ctx: RequestContext) {
+    return this.withdrawals.portalAccess(ctx);
+  }
+
+  @Put('withdrawal-portal-access')
+  @ApiOperation({ summary: 'Set for how many days a withdrawn pupil and parent may still sign in' })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  setPortalAccess(@ReqCtx() ctx: RequestContext, @Body() body: PortalAccessDto) {
+    return this.withdrawals.setPortalAccess(ctx, body.days);
   }
 
   @Get('withdrawal-departments')

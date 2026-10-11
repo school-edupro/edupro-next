@@ -8,6 +8,7 @@ import { currentLang, t } from '@/lib/i18n';
 import { ChildProfileCard, type FamilyChild } from '@/components/ChildProfileCard';
 import { audienceOf } from '@/components/FamilyShell';
 import { HomeDashboard } from '@/components/HomeDashboard';
+import { canOpen } from '@/lib/portal-menu';
 import { Icon, type IconName } from '@/components/nav-icons';
 
 const SERVICES: Array<{
@@ -222,7 +223,9 @@ export default async function HomePage({
           {t(lang, 'All services')}
         </h2>
         <div className="fp-services">
-          {SERVICES.filter((s) => audience === 'parent' || !s.parentOnly).map((s) => (
+          {SERVICES.filter(
+            (s) => (audience === 'parent' || !s.parentOnly) && canOpen(me, s.href),
+          ).map((s) => (
             <a key={s.href} className="fp-service" href={s.href}>
               <span className="fp-service__icon" aria-hidden="true">
                 <Icon name={s.icon} size={22} />

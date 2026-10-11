@@ -268,6 +268,20 @@ export async function saveSchoolPayPlan(fd: FormData) {
   redirect(`${path}?ok=1`);
 }
 
+/** Portal after leaving: for how many days a withdrawn pupil and the parent may still sign in. */
+export async function savePortalAfterLeaving(fd: FormData) {
+  const path = '/people/withdrawals/settings';
+  try {
+    await apiFetch('/people/withdrawal-portal-access', {
+      method: 'PUT',
+      body: JSON.stringify({ days: num(fd, 'days') ?? 0 }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}?ok=1`);
+}
+
 export async function saveTransportMonths(fd: FormData) {
   const path = '/fees/rules';
   let removed = 0;
