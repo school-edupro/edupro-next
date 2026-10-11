@@ -29,6 +29,20 @@ function back(path: string, status: 'ok' | string, detail?: string): never {
   redirect(`${url.pathname}${url.search}`);
 }
 
+/**
+ * What went wrong, in words: the API's own sentence, or for a form that failed its checks the message
+ * of each field ("leavingOn: must be YYYY-MM-DD"), so the screen never says only "not accepted".
+ */
+function problemDetail(error: ApiError): string | undefined {
+  if (typeof error.problem.detail === 'string' && error.problem.detail) return error.problem.detail;
+  const errs = error.problem.errors as Array<{ path?: string; message?: string }> | undefined;
+  if (!Array.isArray(errs) || errs.length === 0) return undefined;
+  return errs
+    .map((e) => [e.path, e.message].filter(Boolean).join(': '))
+    .filter(Boolean)
+    .join('; ');
+}
+
 async function run(path: string, fn: () => Promise<unknown>): Promise<never> {
   try {
     await fn();
@@ -36,7 +50,7 @@ async function run(path: string, fn: () => Promise<unknown>): Promise<never> {
     if (error instanceof ApiError && error.problem.type === 'mfa-required') {
       redirect(`/step-up?returnTo=${encodeURIComponent(path)}`); // S5-01: re-authenticate, then retry
     }
-    if (error instanceof ApiError) back(path, error.problem.type, error.problem.detail);
+    if (error instanceof ApiError) back(path, error.problem.type, problemDetail(error));
     throw error;
   }
   back(path, 'ok');

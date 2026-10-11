@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { IdSchema } from '../../academics/classes/classes.dto';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+/*
+ * Withdrawal dates: the leaving date may be earlier than the day the withdrawal is started (a pupil who
+ * stopped coming in August is withdrawn in October, and the fee after August is then not charged).
+ */
 
 export const LIFECYCLE = {
   tcView: 'people.tc.view',
@@ -41,32 +45,22 @@ export class ListTcQueryDto extends createZodDto(ListTcQuerySchema) {}
 // ---- withdrawals --------------------------------------------------------------------------------
 const FileRef = z.object({ fileId: IdSchema });
 
-export const RequestWithdrawalSchema = z
-  .object({
-    initiatedOn: DateSchema.optional(),
-    leavingOn: DateSchema,
-    reason: z.string().trim().min(1).max(300),
-    remarks: z.string().trim().max(1000).optional(),
-    documents: z.array(FileRef).max(5).default([]),
-  })
-  .refine((d) => !d.initiatedOn || d.initiatedOn <= d.leavingOn, {
-    message: 'the leaving date cannot be before the date the withdrawal was started',
-    path: ['leavingOn'],
-  });
+export const RequestWithdrawalSchema = z.object({
+  initiatedOn: DateSchema.optional(),
+  leavingOn: DateSchema,
+  reason: z.string().trim().min(1).max(300),
+  remarks: z.string().trim().max(1000).optional(),
+  documents: z.array(FileRef).max(5).default([]),
+});
 export class RequestWithdrawalDto extends createZodDto(RequestWithdrawalSchema) {}
 
-export const BulkWithdrawalSchema = z
-  .object({
-    studentIds: z.array(IdSchema).min(1).max(500),
-    initiatedOn: DateSchema.optional(),
-    leavingOn: DateSchema,
-    reason: z.string().trim().min(1).max(300),
-    remarks: z.string().trim().max(1000).optional(),
-  })
-  .refine((d) => !d.initiatedOn || d.initiatedOn <= d.leavingOn, {
-    message: 'the leaving date cannot be before the date the withdrawal was started',
-    path: ['leavingOn'],
-  });
+export const BulkWithdrawalSchema = z.object({
+  studentIds: z.array(IdSchema).min(1).max(500),
+  initiatedOn: DateSchema.optional(),
+  leavingOn: DateSchema,
+  reason: z.string().trim().min(1).max(300),
+  remarks: z.string().trim().max(1000).optional(),
+});
 export class BulkWithdrawalDto extends createZodDto(BulkWithdrawalSchema) {}
 
 export const ClearanceSchema = z.object({

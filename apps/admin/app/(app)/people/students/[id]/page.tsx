@@ -610,13 +610,20 @@ export default async function StudentPage({
                   themselves); the TC follows once fees have cleared.
                 </p>
                 <FormRow columns={2}>
-                  <InputField id="wInitiatedOn" name="initiatedOn" label="Started on" type="date" />
+                  <InputField
+                    id="wInitiatedOn"
+                    name="initiatedOn"
+                    label="Started on"
+                    type="date"
+                    help="Empty = today."
+                  />
                   <InputField
                     id="wLeavingOn"
                     name="leavingOn"
                     label={l('leavingOn')}
                     type="date"
                     required
+                    help="The last day in school; it may be earlier than today. Fee after this month is not charged."
                   />
                   <InputField
                     id="wReason"
