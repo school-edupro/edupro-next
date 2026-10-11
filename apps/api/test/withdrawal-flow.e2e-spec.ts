@@ -674,4 +674,82 @@ describe('withdrawal through configured departments (e2e)', () => {
     });
     expect(again.statusCode).toBe(409);
   });
+
+  it('the register filters by leaving date, TC and refund, counts pages and comes as Excel and PDF', async () => {
+    const all = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&size=1',
+      headers: h(),
+    });
+    expect(all.statusCode).toBe(200);
+    const total = all.json().page.total as number;
+    expect(total).toBeGreaterThan(1);
+    expect(all.json().data).toHaveLength(1);
+    expect(all.json().data[0]).toHaveProperty('refundState');
+    const second = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&size=1&page=2',
+      headers: h(),
+    });
+    expect(second.json().data[0].id).not.toBe(all.json().data[0].id);
+    // Aditi left on 15 August
+    const aug = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&leavingFrom=2026-08-15&leavingTo=2026-08-15',
+      headers: h(),
+    });
+    expect(aug.json().data.map((w: { id: string }) => w.id)).toEqual([ids.wa]);
+    const none = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&leavingFrom=2031-01-01',
+      headers: h(),
+    });
+    expect(none.json().page.total).toBe(0);
+    const withTc = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&tc=issued',
+      headers: h(),
+    });
+    const noTc = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&tc=not_issued',
+      headers: h(),
+    });
+    expect(withTc.json().page.total + noTc.json().page.total).toBe(total);
+    // her TC was cancelled for the revoke
+    expect(noTc.json().data.map((w: { id: string }) => w.id)).toContain(ids.wa);
+    let byRefund = 0;
+    for (const r of ['none', 'not_sent', 'waiting', 'paid']) {
+      const x = await inject({
+        method: 'GET',
+        url: `/people/withdrawals?status=all&refund=${r}`,
+        headers: h(),
+      });
+      expect(x.statusCode).toBe(200);
+      byRefund += x.json().page.total as number;
+    }
+    expect(byRefund).toBe(total);
+    const bad = await inject({
+      method: 'GET',
+      url: '/people/withdrawals?status=all&refund=maybe',
+      headers: h(),
+    });
+    expect(bad.statusCode).toBe(400);
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await inject({
+        method: 'GET',
+        url: `/people/withdrawals/file?status=all&format=${format}`,
+        headers: h(),
+      });
+      expect(f.statusCode).toBe(200);
+      expect(f.json().filename).toBe(`withdrawal-register.${format}`);
+      expect(Buffer.from(f.json().base64, 'base64').length).toBeGreaterThan(800);
+    }
+    const denied = await inject({
+      method: 'GET',
+      url: '/people/withdrawals/file?status=all',
+      headers: h(parent),
+    });
+    expect(denied.statusCode).toBe(403);
+  });
 });

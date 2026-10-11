@@ -34,8 +34,11 @@ const initials = (name: string) =>
 const LEFT = ['Withdrawn', 'Left', 'Transferred'];
 /** The list view as a report definition (same rules the export uses). */
 function viewToSpec(v: StudentListView): ReportSpec {
-  const status: ReportSpec['filters'] =
-    v.status === 'active'
+  // a search looks in every student, whatever the status
+  const searching = Boolean(v.search?.trim());
+  const status: ReportSpec['filters'] = searching
+    ? []
+    : v.status === 'active'
       ? [
           { key: 'student_status', op: 'eq', values: ['Active'] },
           { key: 'enrolment_status', op: 'not_in', values: LEFT },
@@ -65,7 +68,7 @@ function viewToSpec(v: StudentListView): ReportSpec {
     options: {
       paper: columns.length > 15 ? 'A3' : 'A4',
       orientation: 'auto',
-      includeInactive: v.status !== 'active',
+      includeInactive: searching || v.status !== 'active',
       search: v.search || null,
     },
   };
@@ -249,6 +252,20 @@ export function StudentList({
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
+          <label className="ep-field" htmlFor="sl-status">
+            <span className="ep-field__label">Status</span>
+            <select
+              id="sl-status"
+              className="ep-select"
+              value={view.status}
+              onChange={(e) => apply({ ...view, status: e.target.value as ListStatus })}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="withdrawn">Withdrawn / left</option>
+              <option value="all">All</option>
+            </select>
+          </label>
           {QUICK_FILTERS.map((key) => {
             const f = byKey.get(key);
             if (!f) return null;
@@ -321,6 +338,9 @@ export function StudentList({
           {pending
             ? 'Loading…'
             : `Showing ${String(from)}–${String(to)} of ${data.total.toLocaleString('en-IN')}`}
+          {!pending && data.searchedAll
+            ? ' · search looks in all students, active or not; the date of withdrawal (DOW) shows for those who have left'
+            : ''}
         </span>
         <div className="ep-sl__tools">
           <button
@@ -458,6 +478,14 @@ export function StudentList({
                           {r.dob ? ` · ${ddmmyyyy(r.dob)}` : ''}
                           {r.gender ? ` · ${String(r.gender).charAt(0)}` : ''}
                         </span>
+                        {left || r.student_status !== 'Active' ? (
+                          <span className="ep-sl__sub">
+                            <span className={`ep-badge ep-badge--${left ? 'danger' : 'warning'}`}>
+                              {left ? String(r.enrolment_status) : String(r.student_status ?? '')}
+                            </span>
+                            {r.__left_on ? ` DOW ${ddmmyyyy(r.__left_on)}` : ''}
+                          </span>
+                        ) : null}
                       </span>
                     </a>
                   </td>
@@ -476,6 +504,9 @@ export function StudentList({
                     >
                       {left ? String(r.enrolment_status) : String(r.student_status ?? '')}
                     </span>
+                    {r.__left_on ? (
+                      <span className="ep-sl__sub">DOW {ddmmyyyy(r.__left_on)}</span>
+                    ) : null}
                   </td>
                   <td>
                     <details className="ep-sl__menu">

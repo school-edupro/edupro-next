@@ -132,6 +132,7 @@ export class StudentGridService {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const all = await this.load(ctx, c, this.year(ctx, dto));
+      const searching = Boolean(dto.search?.trim());
       const stats = {
         total: all.length,
         active: all.filter(this.statusFilter('active')).length,
@@ -140,7 +141,11 @@ export class StudentGridService {
       };
       const filtered = sortReportRows(
         applyReportFilters(
-          applyReportSearch(all.filter(this.statusFilter(dto.status)), dto.search),
+          // a search looks in every student, whatever the status: a pupil who has left is still found
+          applyReportSearch(
+            searching ? all : all.filter(this.statusFilter(dto.status)),
+            dto.search,
+          ),
           dto.filters as ReportFilter[],
         ),
         dto.sort.length
@@ -158,7 +163,22 @@ export class StudentGridService {
         for (const k of keys) o[k] = r[k] ?? null;
         return o;
       });
+      // date of leaving for the pupils on this page who are no longer active
+      const gone = rows
+        .filter((r) => r.student_status !== 'Active' || LEFT.has(String(r.enrolment_status)))
+        .map((r) => String(r.__id));
+      if (gone.length) {
+        const d = await c.query<{ id: string; left_on: string | null }>(
+          `SELECT s.id::text, COALESCE(s.left_on, (SELECT max(w.leaving_on) FROM student_withdrawals w
+                                                    WHERE w.student_id = s.id AND w.status = 'completed'))::text AS left_on
+             FROM students s WHERE s.id = ANY($1::bigint[])`,
+          [gone],
+        );
+        const on = new Map(d.rows.map((x) => [x.id, x.left_on]));
+        for (const r of rows) r.__left_on = on.get(String(r.__id)) ?? null;
+      }
       return {
+        searchedAll: searching,
         columns: dto.columns.map((col) => {
           const f = STUDENT_REPORT_FIELD_BY_KEY.get(col.key)!;
           return { key: col.key, header: col.label?.trim() || f.label, type: f.type };
@@ -176,8 +196,10 @@ export class StudentGridService {
   async export(ctx: RequestContext, dto: StudentGridExportDto) {
     this.check(dto);
     const tenant = requireTenant(ctx);
-    const statusFilters: ReportFilter[] =
-      dto.status === 'active'
+    const searching = Boolean(dto.search?.trim());
+    const statusFilters: ReportFilter[] = searching
+      ? []
+      : dto.status === 'active'
         ? [
             { key: 'student_status', op: 'eq', values: ['Active'] },
             { key: 'enrolment_status', op: 'not_in', values: [...LEFT] },
@@ -207,7 +229,7 @@ export class StudentGridService {
       options: {
         paper: columns.length > PDF_COLUMN_LIMIT.A4 ? 'A3' : 'A4',
         orientation: 'auto',
-        includeInactive: dto.status !== 'active',
+        includeInactive: searching || dto.status !== 'active',
         search: dto.search ?? null,
       },
     };

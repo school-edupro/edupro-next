@@ -8,6 +8,7 @@ import { requireTenant, type RequestContext } from '../../../common/http/request
 import { FeeLedgerService } from '../../fees/fee-ledger.service';
 import { settleWithdrawalFees } from '../../fees/withdrawal-fees';
 import { AccessService } from '../../access/access.service';
+import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
 import { WorkflowService, type InstanceRow } from '../../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from '../../fees/fee-approval';
 import {
@@ -79,6 +80,9 @@ export interface WithdrawalRow {
   revokeStatus: 'pending' | 'approved' | 'rejected' | null;
   revokeReason: string | null;
   revokeWaitingWith: string | null;
+  /** Refund of this leaving: none, not_sent (a draft), waiting (for approval) or paid; with its amount. */
+  refundState: 'none' | 'not_sent' | 'waiting' | 'paid';
+  refundAmount: string;
   revokedAt: string | null;
   currentStep: number | null;
   requestedBy: string | null;
@@ -111,6 +115,9 @@ interface Db {
   revoke_status: WithdrawalRow['revokeStatus'];
   revoke_reason: string | null;
   revoke_waiting_with: string | null;
+  refund_state: WithdrawalRow['refundState'];
+  refund_amount: string;
+  class_id: string | null;
   revoked_at: Date | null;
   tc: WithdrawalRow['tc'];
   clearances: Array<Omit<ClearanceRow, 'approvers'> & { approverList: Approver[] }>;
@@ -126,7 +133,7 @@ interface Actor {
 
 // eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
 const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student_name, s.admission_no,
-        sec.label AS section, sec.class_section_id,
+        sec.label AS section, sec.class_section_id, sec.class_id, rf.state AS refund_state, rf.amount::text AS refund_amount,
         COALESCE(w.initiated_on, w.requested_on)::text AS initiated_on, w.requested_on::text, w.leaving_on::text, w.reason, w.remarks, w.documents,
         w.status, w.current_step, u.display_name AS requested_by, w.completed_at, w.cancel_reason,
         w.revoke_status, w.revoke_reason, w.revoked_at, ${WAITING_WITH('w.revoke_workflow_instance_id')} AS revoke_waiting_with,
@@ -142,9 +149,17 @@ const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student
                    WHERE x.withdrawal_id = w.id), '[]'::jsonb) AS clearances
    FROM student_withdrawals w JOIN students s ON s.id = w.student_id LEFT JOIN users u ON u.id = w.requested_by
    LEFT JOIN transfer_certificates t ON t.id = w.tc_id AND t.status = 'issued'
-   LEFT JOIN LATERAL (SELECT c.code || '-' || cs.name AS label, e.class_section_id::text
+   LEFT JOIN LATERAL (SELECT c.code || '-' || cs.name AS label, e.class_section_id::text, cs.class_id::text
                         FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c ON c.id = cs.class_id
-                       WHERE e.student_id = s.id ORDER BY e.academic_year_id DESC, e.id DESC LIMIT 1) sec ON true`;
+                       WHERE e.student_id = s.id ORDER BY e.academic_year_id DESC, e.id DESC LIMIT 1) sec ON true
+   CROSS JOIN LATERAL (SELECT CASE WHEN count(*) FILTER (WHERE r.status = 'requested') > 0 THEN 'waiting'
+                                   WHEN count(*) FILTER (WHERE r.status = 'draft') > 0 THEN 'not_sent'
+                                   WHEN count(*) FILTER (WHERE r.status IN ('approved', 'paid')) > 0 THEN 'paid'
+                                   ELSE 'none' END AS state,
+                              COALESCE(sum(r.amount) FILTER (WHERE r.status IN ('draft', 'requested', 'approved', 'paid')), 0) AS amount
+                         FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id
+                        WHERE r.withdrawal_id = w.id
+                           OR (COALESCE(r.student_id, p.student_id) = w.student_id AND r.created_at >= w.created_at)) rf`;
 
 /** The departments a school starts with; it may rename, re-order, add or switch them off. */
 const DEFAULTS: Array<
@@ -468,6 +483,8 @@ export class WithdrawalsService {
       revokeStatus: r.revoke_status,
       revokeReason: r.revoke_reason,
       revokeWaitingWith: r.revoke_waiting_with,
+      refundState: r.refund_state,
+      refundAmount: r.refund_amount,
       revokedAt: r.revoked_at ? r.revoked_at.toISOString() : null,
       tc: r.tc,
       clearances,
@@ -493,6 +510,7 @@ export class WithdrawalsService {
       const params: unknown[] = [];
       const where: string[] = [];
       if (q.status === 'open' || q.mine) where.push(`w.status IN ('requested', 'cleared')`);
+      else if (q.status === 'all') where.push('true');
       else {
         params.push(q.status);
         where.push(`w.status = $${params.length}::withdrawal_status`);
@@ -500,6 +518,23 @@ export class WithdrawalsService {
       if (q.classSectionId) {
         params.push(q.classSectionId);
         where.push(`sec.class_section_id = $${params.length}::text`);
+      }
+      if (q.classId) {
+        params.push(q.classId);
+        where.push(`sec.class_id = $${params.length}::text`);
+      }
+      if (q.leavingFrom) {
+        params.push(q.leavingFrom);
+        where.push(`w.leaving_on >= $${params.length}::date`);
+      }
+      if (q.leavingTo) {
+        params.push(q.leavingTo);
+        where.push(`w.leaving_on <= $${params.length}::date`);
+      }
+      if (q.tc) where.push(q.tc === 'issued' ? 't.id IS NOT NULL' : 't.id IS NULL');
+      if (q.refund) {
+        params.push(q.refund);
+        where.push(`rf.state = $${params.length}`);
       }
       if (q.q) {
         params.push(`%${q.q.toLowerCase()}%`);
@@ -530,6 +565,86 @@ export class WithdrawalsService {
       const total = rows.length;
       return { rows: rows.slice((q.page - 1) * q.size, q.page * q.size), total };
     });
+  }
+
+  /** The register as filtered on the screen (every page of it) as Excel or PDF, made at once. */
+  async listFile(ctx: RequestContext, q: ListWithdrawalsQueryDto, format: 'xlsx' | 'pdf') {
+    const { rows } = await this.list(ctx, { ...q, page: 1, size: 2000 });
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const d = (v: string | null) => (v ? v.slice(0, 10).split('-').reverse().join('/') : '');
+    const STATUS: Record<string, string> = {
+      requested: 'In clearance',
+      cleared: 'Cleared',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      revoked: 'Revoked',
+    };
+    const REFUND: Record<string, string> = {
+      none: '',
+      not_sent: 'Not sent',
+      waiting: 'Waiting for approval',
+      paid: 'Paid',
+    };
+    const filters = [
+      q.mine
+        ? 'Waiting for me'
+        : q.status === 'open'
+          ? 'Open'
+          : q.status === 'all'
+            ? 'All'
+            : STATUS[q.status],
+      q.leavingFrom || q.leavingTo
+        ? `Leaving ${d(q.leavingFrom ?? null) || '…'} to ${d(q.leavingTo ?? null) || '…'}`
+        : '',
+      q.tc ? (q.tc === 'issued' ? 'TC issued' : 'TC not issued') : '',
+      q.refund ? `Refund: ${REFUND[q.refund] || 'none'}` : '',
+      q.q ? `Search: ${q.q}` : '',
+      `${String(rows.length)} record(s)`,
+    ].filter(Boolean) as string[];
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Withdrawal register',
+        details: [filters.join(' · '), generatedOn()],
+        legend: '',
+        columns: [
+          { label: 'Sr', width: 3, right: true },
+          { label: 'Admission no.', width: 8 },
+          { label: 'Student', width: 14 },
+          { label: 'Class', width: 6 },
+          { label: 'Started', width: 7 },
+          { label: 'Leaving on', width: 7 },
+          { label: 'Reason', width: 16 },
+          { label: 'Waiting with', width: 12 },
+          { label: 'TC no.', width: 8 },
+          { label: 'Refund', width: 9 },
+          { label: 'Refund amount', width: 8, right: true },
+          { label: 'Status', width: 8 },
+        ],
+        rows: rows.map((w, i) => [
+          i + 1,
+          w.admissionNo,
+          w.studentName,
+          w.section ?? '',
+          d(w.initiatedOn),
+          d(w.leavingOn),
+          w.reason,
+          w.status === 'requested'
+            ? w.clearances
+                .filter((x) => x.step === w.currentStep && x.status !== 'cleared')
+                .map((x) => x.departmentName)
+                .join(', ')
+            : '',
+          w.tc?.tcNo ?? '',
+          REFUND[w.refundState] ?? '',
+          w.refundState === 'none' ? '' : Number(w.refundAmount),
+          STATUS[w.status] ?? w.status,
+        ]),
+        filename: 'withdrawal-register',
+      },
+      format,
+    );
   }
 
   async get(ctx: RequestContext, id: string): Promise<WithdrawalRow> {

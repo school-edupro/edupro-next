@@ -127,15 +127,32 @@ export type DepartmentInput = z.infer<typeof DepartmentSchema>;
 
 export const ListWithdrawalsQuerySchema = z.object({
   status: z
-    .enum(['requested', 'cleared', 'completed', 'cancelled', 'revoked', 'open'])
+    .enum(['requested', 'cleared', 'completed', 'cancelled', 'revoked', 'open', 'all'])
     .default('open'),
   /** Only the withdrawals whose current step waits for me. */
   mine: z.coerce.boolean().optional(),
+  classId: IdSchema.optional(),
   classSectionId: IdSchema.optional(),
+  /** Date of leaving, from and to (both days counted). */
+  leavingFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  leavingTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  tc: z.enum(['issued', 'not_issued']).optional(),
+  /** Refund: none raised, kept as a draft (not sent), waiting for approval, or paid. */
+  refund: z.enum(['none', 'not_sent', 'waiting', 'paid']).optional(),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
+export const WithdrawalsFileQuerySchema = ListWithdrawalsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class WithdrawalsFileQueryDto extends createZodDto(WithdrawalsFileQuerySchema) {}
 export class ListWithdrawalsQueryDto extends createZodDto(ListWithdrawalsQuerySchema) {}
 
 // ---- promotions ---------------------------------------------------------------------------------

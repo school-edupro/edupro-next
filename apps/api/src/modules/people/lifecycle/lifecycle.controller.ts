@@ -24,6 +24,7 @@ import {
   WithdrawalTcDto,
   YearSectionsQueryDto,
   PortalAccessDto,
+  WithdrawalsFileQueryDto,
   RevokeDto,
 } from './lifecycle.dto';
 import { PromotionsService } from './promotions.service';
@@ -86,6 +87,15 @@ export class LifecycleController {
   }
 
   // ---- withdrawals ------------------------------------------------------------------------------
+  @Get('withdrawals/file')
+  @ApiOperation({ summary: 'The withdrawal register as filtered, as Excel or PDF' })
+  @RequirePermission(LIFECYCLE.withdrawalView)
+  async withdrawalsFile(@ReqCtx() ctx: RequestContext, @Query() q: WithdrawalsFileQueryDto) {
+    const { format, ...filters } = q;
+    const f = await this.withdrawals.listFile(ctx, filters, format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
+  }
+
   @Get('withdrawals')
   @ApiOperation({ summary: 'Withdrawal requests with their department clearances' })
   @RequirePermission(LIFECYCLE.withdrawalView, {

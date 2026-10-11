@@ -24,6 +24,8 @@ export interface StudentListResult {
   page: number;
   pages: number;
   stats: { total: number; active: number; inactive: number; withdrawn: number };
+  /** a search was typed: every status was looked in */
+  searchedAll?: boolean;
 }
 
 export interface StudentListFields {
@@ -65,7 +67,6 @@ export const QUICK_FILTERS: string[] = [
 export function sanitizeView(raw: unknown, known: ReadonlySet<string>): StudentListView {
   if (!raw || typeof raw !== 'object') return DEFAULT_VIEW;
   const v = raw as Partial<StudentListView>;
-  const statuses: ListStatus[] = ['active', 'inactive', 'withdrawn', 'all'];
   const filters = (Array.isArray(v.filters) ? v.filters : []).filter((f) => {
     if (!f || !known.has(f.key)) return false;
     const n = (f.values ?? []).filter((x) => String(x).trim() !== '').length;
@@ -78,8 +79,9 @@ export function sanitizeView(raw: unknown, known: ReadonlySet<string>): StudentL
       .slice(0, 60),
     filters: filters.slice(0, 30),
     sort: (Array.isArray(v.sort) ? v.sort : []).filter((x) => x && known.has(x.key)).slice(0, 3),
-    search: typeof v.search === 'string' ? v.search.slice(0, 80) : '',
-    status: statuses.includes(v.status as ListStatus) ? (v.status as ListStatus) : 'active',
+    // the list always opens on active students with an empty search, whatever was saved
+    search: '',
+    status: 'active',
     size: [25, 50, 100, 200].includes(Number(v.size)) ? Number(v.size) : 50,
   };
 }

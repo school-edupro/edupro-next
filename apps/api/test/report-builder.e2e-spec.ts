@@ -494,12 +494,45 @@ describe('report builder (e2e)', () => {
         },
       });
       expect(r.statusCode).toBe(201);
+      // a search looks in every student, whatever the status tab says
       expect(r.json().spec.options.search).toBe('meher');
-      expect(r.json().spec.filters[0]).toEqual({
+      expect(r.json().spec.filters).toEqual([]);
+      expect(r.json().spec.options.includeInactive).toBe(true);
+      const plain = await inject({
+        method: 'POST',
+        url: '/people/students/grid/export',
+        headers: h(admin),
+        json: {
+          columns: [{ key: 'religion' }],
+          filters: [],
+          sort: [],
+          status: 'active',
+          page: 1,
+          size: 50,
+          format: 'xlsx',
+        },
+      });
+      expect(plain.json().spec.filters[0]).toEqual({
         key: 'student_status',
         op: 'eq',
         values: ['Active'],
       });
+      const found = await inject({
+        method: 'POST',
+        url: '/people/students/grid',
+        headers: h(admin),
+        json: {
+          columns: [{ key: 'religion' }],
+          filters: [],
+          sort: [],
+          search: 'meher',
+          status: 'inactive',
+          page: 1,
+          size: 50,
+        },
+      });
+      expect(found.json().searchedAll).toBe(true);
+      expect(found.json().total).toBeGreaterThan(0);
       expect(r.json().spec.columns.slice(0, 2)).toEqual([
         { key: 'admission_no' },
         { key: 'full_name', label: 'Student' },

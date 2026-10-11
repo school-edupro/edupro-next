@@ -647,6 +647,8 @@ export interface Withdrawal {
   revokeStatus?: 'pending' | 'approved' | 'rejected' | null;
   revokeReason?: string | null;
   revokeWaitingWith?: string | null;
+  refundState: 'none' | 'not_sent' | 'waiting' | 'paid';
+  refundAmount: string;
   revokedAt?: string | null;
   currentStep: number | null;
   requestedBy: string | null;
