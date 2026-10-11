@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { makeRefundFeeDue } from '@/lib/fee-request-actions';
 import {
   Badge,
@@ -180,6 +181,7 @@ export default async function RefundsPage({
                     action={decideRefund}
                     style={{ display: 'grid', gap: 'var(--sp-2)', minWidth: 260 }}
                   >
+                    <NoEnterSubmit />
                     <input type="hidden" name="id" value={x.id} />
                     <input
                       type="hidden"

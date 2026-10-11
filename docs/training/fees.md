@@ -420,3 +420,12 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
   saved amounts; **Discard the draft** drops it. Drafts show under Fees → Refunds as "Draft (not
   sent)" and on the withdrawal's provisional bill; parents do not see them. "Send for approval now"
   on the refund page skips the draft.
+
+- **What is already waiting (from 2026-10-11)**: the ledger shows open requests on the tab where they
+  were raised, and the same thing cannot be asked twice. Waive fee: a line with a waiver waiting is
+  closed ("waiver waiting") and listed above the grid. Receipts: a receipt with a cancellation, bounce,
+  refund (or refund draft), transfer or date correction waiting shows it and hides its buttons. Late
+  fee: waiting late-fee requests are listed, and a paid charge with a request waiting shows "Waiting
+  for approval" in place of its form.
+- **Approve / Reject**: pressing Enter in the Note box no longer decides anything; a decision is made
+  only by pressing Approve or Reject.

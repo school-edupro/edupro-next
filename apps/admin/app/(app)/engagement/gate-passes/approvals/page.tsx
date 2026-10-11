@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { GatePassNav } from '@/components/gate-passes/GatePassNav';
 import { Notice } from '@/components/Notice';
@@ -71,6 +72,7 @@ export default async function GatePassApprovalsPage({
               .join(' · ')}
           </p>
           <form action={decidePass} className="ep-gate__act">
+            <NoEnterSubmit />
             <input type="hidden" name="id" value={p.id} />
             <input type="hidden" name="returnTo" value="/engagement/gate-passes/approvals" />
             <input

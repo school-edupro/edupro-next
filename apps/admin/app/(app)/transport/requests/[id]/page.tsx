@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { RecordSheet } from '@/components/RecordSheet';
@@ -57,6 +58,7 @@ export default async function TransportRequestPage({
       {r.canDecide ? (
         <Card title="Your approval" style={{ marginBottom: 'var(--sp-4)' }}>
           <form action={decideTransport} className="ep-hd__form">
+            <NoEnterSubmit />
             <input type="hidden" name="id" value={r.id} />
             <input type="hidden" name="returnTo" value={here} />
             <label className="ep-field" htmlFor="tr-note">

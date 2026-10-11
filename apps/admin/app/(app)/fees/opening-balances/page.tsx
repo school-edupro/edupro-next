@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
@@ -270,6 +271,7 @@ export default async function OpeningBalancesPage({
                     marginTop: 'var(--sp-3)',
                   }}
                 >
+                  <NoEnterSubmit />
                   <input type="hidden" name="id" value={open.id} />
                   <label className="ep-field" htmlFor="obNote">
                     <span className="ep-field__label">Note</span>

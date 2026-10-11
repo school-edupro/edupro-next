@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, FormRow, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -93,6 +94,7 @@ export default async function InboxPage({
               </p>
             ) : null}
             <form action={actOnStep} style={{ marginTop: 'var(--sp-3)' }}>
+              <NoEnterSubmit />
               <input type="hidden" name="id" value={s.id} />
               <FormRow columns={2}>
                 <InputField id={`note-${s.id}`} name="note" label={w('note')} maxLength={500} />

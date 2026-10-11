@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -161,6 +162,7 @@ export default async function AdjustmentsPage({
                     action={decideAdjustment}
                     style={{ display: 'grid', gap: 'var(--sp-2)', minWidth: 220 }}
                   >
+                    <NoEnterSubmit />
                     <input type="hidden" name="id" value={x.id} />
                     <InputField id={`note-${x.id}`} name="note" label={a('note')} maxLength={300} />
                     <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
@@ -231,6 +233,7 @@ export default async function AdjustmentsPage({
                     action={decideProfileChange}
                     style={{ display: 'flex', gap: 'var(--sp-2)' }}
                   >
+                    <NoEnterSubmit />
                     <input type="hidden" name="id" value={x.id} />
                     <Button type="submit" name="outcome" value="approved" size="sm">
                       {a('statuses.approved')}

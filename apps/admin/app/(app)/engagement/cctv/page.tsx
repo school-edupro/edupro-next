@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, DataTable, FormRow, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -133,6 +134,7 @@ export default async function CctvPage({
                     action={decideCctv}
                     style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'flex-end' }}
                   >
+                    <NoEnterSubmit />
                     <input type="hidden" name="id" value={r.id} />
                     <InputField id={`n-${r.id}`} name="note" label={e('note')} maxLength={500} />
                     <Button type="submit" name="outcome" value="approved" size="sm">

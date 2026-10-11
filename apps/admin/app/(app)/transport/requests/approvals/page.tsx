@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { TransportNav } from '@/components/transport/TransportNav';
@@ -54,6 +55,7 @@ export default async function TransportApprovalsPage({
       {inbox.data.length > 1 ? (
         <Card title="Decide several in one go" style={{ marginBottom: 'var(--sp-4)' }}>
           <form action={decideManyTransport} className="ep-hd__form">
+            <NoEnterSubmit />
             <fieldset className="ep-slots">
               <legend className="ep-field__label">
                 Tick the requests (all are ticked to start with)
@@ -114,6 +116,7 @@ export default async function TransportApprovalsPage({
               .join(' · ')}
           </p>
           <form action={decideTransport} className="ep-gate__act">
+            <NoEnterSubmit />
             <input type="hidden" name="id" value={r.id} />
             <input type="hidden" name="returnTo" value="/transport/requests/approvals" />
             <input

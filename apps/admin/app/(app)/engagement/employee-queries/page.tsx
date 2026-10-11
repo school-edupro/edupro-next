@@ -1,3 +1,4 @@
+import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import {
   Badge,
   Button,
@@ -149,6 +150,7 @@ export default async function EmployeeQueriesPage({
                     action={answerEmployeeQuery}
                     style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'flex-end' }}
                   >
+                    <NoEnterSubmit />
                     <input type="hidden" name="id" value={q.id} />
                     <InputField id={`n-${q.id}`} name="note" label={e('answer')} maxLength={500} />
                     <Button type="submit" name="outcome" value="approved" size="sm">

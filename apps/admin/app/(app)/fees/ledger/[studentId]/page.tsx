@@ -35,6 +35,35 @@ import type {
   FeeLedgerPayment,
 } from '@/lib/types';
 
+interface PendingAdj {
+  id: string;
+  kind: 'waiver' | 'reversal' | 'bounce';
+  demandId: string | null;
+  demandLabel: string | null;
+  paymentId: string | null;
+  amount: string;
+  reason: string;
+  waitingWith?: string | null;
+}
+interface PendingReq {
+  id: string;
+  kind: 'late_fee' | 'transfer' | 'date_change' | 'late_fee_to_fee' | 'bounce_to_fee';
+  paymentId: string | null;
+  periodId: string | null;
+  demandId: string | null;
+  period: string | null;
+  amount: string | null;
+  reason: string;
+  waitingWith?: string | null;
+}
+interface PendingRefund {
+  id: string;
+  paymentId: string | null;
+  status: string;
+  amount: string;
+  waitingWith?: string | null;
+}
+
 const TABS = [
   ['pay', 'Take payment'],
   ['dues', 'Dues'],
@@ -124,6 +153,51 @@ export default async function FeeLedgerPage({
           .then((d) => d.rows)
           .catch(() => [])
       : [];
+  // what is already waiting for this pupil: shown on the tab, and the same thing cannot be asked twice
+  const wantsPending = tab === 'waive' || tab === 'receipts' || tab === 'latefee';
+  const [pendingAdj, pendingReq, openRefunds] = wantsPending
+    ? await Promise.all([
+        apiFetch<{ data: PendingAdj[] }>(`/fees/adjustments?studentId=${studentId}&status=pending`)
+          .then((r) => r.data)
+          .catch(() => [] as PendingAdj[]),
+        apiFetch<{ data: PendingReq[] }>(`/fees/requests?studentId=${studentId}&status=pending`)
+          .then((r) => r.data)
+          .catch(() => [] as PendingReq[]),
+        apiFetch<{ data: PendingRefund[] }>(`/payments/refunds?studentId=${studentId}&size=200`)
+          .then((r) => r.data.filter((x) => ['draft', 'requested', 'approved'].includes(x.status)))
+          .catch(() => [] as PendingRefund[]),
+      ])
+    : [[] as PendingAdj[], [] as PendingReq[], [] as PendingRefund[]];
+  const withWho = (w: string | null | undefined) => (w ? ` · with ${w}` : '');
+  /** What waits on one receipt, in words. */
+  const waitingOn = (paymentId: string): string[] => [
+    ...pendingAdj
+      .filter((a) => a.paymentId === paymentId)
+      .map(
+        (a) =>
+          `${a.kind === 'bounce' ? 'Cheque bounce' : 'Cancellation'} waiting for approval${withWho(a.waitingWith)}`,
+      ),
+    ...pendingReq
+      .filter((r) => r.paymentId === paymentId)
+      .map(
+        (r) =>
+          `${
+            r.kind === 'transfer'
+              ? 'Transfer to another pupil'
+              : r.kind === 'date_change'
+                ? 'Date correction'
+                : 'Paid late fee adjusted in fee'
+          } waiting for approval${withWho(r.waitingWith)}`,
+      ),
+    ...openRefunds
+      .filter((r) => r.paymentId === paymentId)
+      .map((r) =>
+        r.status === 'draft'
+          ? `Refund draft of ${money(r.amount)} saved, not sent yet`
+          : `Refund of ${money(r.amount)} waiting for approval${withWho(r.waitingWith)}`,
+      ),
+  ];
+  const waitingWaivers = pendingAdj.filter((a) => a.kind === 'waiver');
   // credit carried from last year that is not used yet: it can be refunded without a receipt
   const openingAdvance =
     tab === 'receipts' && can('fees.refund.request')
@@ -312,7 +386,32 @@ export default async function FeeLedgerPage({
       {tab === 'waive' ? (
         <Card title="Waive fee, by head and month">
           {canAsk ? (
-            <WaiverGrid studentId={studentId} lines={demandRows} action={requestFeeWaivers} />
+            <>
+              {waitingWaivers.length > 0 ? (
+                <div className="ep-alert ep-alert--info" role="status">
+                  <strong>
+                    {waitingWaivers.length} fee line{waitingWaivers.length === 1 ? '' : 's'} (
+                    {money(waitingWaivers.reduce((a, w) => a + Number(w.amount), 0))}) already wait
+                    for approval
+                  </strong>
+                  {withWho(waitingWaivers[0]!.waitingWith)}. Their boxes are closed until that
+                  request is approved or rejected.
+                  <ul>
+                    {waitingWaivers.map((w) => (
+                      <li key={w.id}>
+                        {w.demandLabel ?? 'Fee line'}: {money(w.amount)} · {w.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <WaiverGrid
+                studentId={studentId}
+                lines={demandRows}
+                action={requestFeeWaivers}
+                waiting={waitingWaivers.map((w) => w.demandId ?? '')}
+              />
+            </>
           ) : (
             <p>You do not have the right to ask for a waiver, or the session is closed.</p>
           )}
@@ -398,6 +497,7 @@ export default async function FeeLedgerPage({
             <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
               {ledger.payments.map((p) => (
                 <ReceiptRow
+                  waiting={waitingOn(p.id)}
                   bounceCharge={ledger.bounceCharge}
                   key={p.id}
                   p={p}
@@ -423,6 +523,23 @@ export default async function FeeLedgerPage({
             {ledger.lateFeeMode === 'slab' ? 'by slabs' : 'per day'}). A fixed amount for one
             instalment of this pupil replaces it (0 waives it).
           </p>
+          {pendingReq.filter((r) => r.kind === 'late_fee').length > 0 ? (
+            <div className="ep-alert ep-alert--info" role="status">
+              <strong>Late-fee requests waiting for approval</strong>
+              <ul>
+                {pendingReq
+                  .filter((r) => r.kind === 'late_fee')
+                  .map((r) => (
+                    <li key={r.id}>
+                      {r.period ?? 'Instalment'}: charge {money(r.amount ?? 0)}
+                      {Number(r.amount ?? 0) === 0 ? ' (waive)' : ''} · {r.reason}
+                      {withWho(r.waitingWith)}
+                    </li>
+                  ))}
+              </ul>
+              A second request for the same instalment is not taken until this is decided.
+            </div>
+          ) : null}
           {ledger.overrides.length === 0 ? (
             <p>No late fee has been fixed for this pupil.</p>
           ) : (
@@ -548,6 +665,9 @@ export default async function FeeLedgerPage({
                           kind: 'late_fee_to_fee',
                           field: 'receiptNo',
                           value: p.receiptNo ?? '',
+                          waiting: pendingReq.find(
+                            (r) => r.kind === 'late_fee_to_fee' && r.paymentId === p.id,
+                          ),
                         })),
                         ...paidCharges.map((c) => ({
                           key: `b${c.demandId}`,
@@ -556,51 +676,62 @@ export default async function FeeLedgerPage({
                           kind: 'bounce_to_fee',
                           field: 'demandId',
                           value: c.demandId,
+                          waiting: pendingReq.find(
+                            (r) => r.kind === 'bounce_to_fee' && r.demandId === c.demandId,
+                          ),
                         })),
                       ].map((x) => (
                         <tr key={x.key}>
                           <td>{x.label}</td>
                           <td style={{ textAlign: 'right' }}>{money(x.paid)}</td>
                           <td>
-                            <form
-                              action={requestPaidChargeToFee}
-                              style={{
-                                display: 'flex',
-                                gap: 'var(--sp-2)',
-                                flexWrap: 'wrap',
-                                alignItems: 'end',
-                              }}
-                            >
-                              <input type="hidden" name="studentId" value={studentId} />
-                              <input type="hidden" name="kind" value={x.kind} />
-                              <input type="hidden" name={x.field} value={x.value} />
-                              <label className="ep-field" style={{ margin: 0 }}>
-                                <span className="ep-field__label">Amount (₹)</span>
-                                <input
-                                  className="ep-input"
-                                  name="amount"
-                                  type="number"
-                                  min={0.01}
-                                  max={Number(x.paid)}
-                                  step="0.01"
-                                  defaultValue={Number(x.paid)}
-                                  required
-                                />
-                              </label>
-                              <label className="ep-field" style={{ margin: 0 }}>
-                                <span className="ep-field__label">Reason</span>
-                                <input
-                                  className="ep-input"
-                                  name="reason"
-                                  required
-                                  minLength={3}
-                                  maxLength={300}
-                                />
-                              </label>
-                              <Button type="submit" variant="secondary" size="sm">
-                                Send for approval
-                              </Button>
-                            </form>
+                            {x.waiting ? (
+                              <span>
+                                <Badge tone="warning">Waiting for approval</Badge>{' '}
+                                {money(x.waiting.amount ?? 0)} · {x.waiting.reason}
+                                {withWho(x.waiting.waitingWith)}
+                              </span>
+                            ) : (
+                              <form
+                                action={requestPaidChargeToFee}
+                                style={{
+                                  display: 'flex',
+                                  gap: 'var(--sp-2)',
+                                  flexWrap: 'wrap',
+                                  alignItems: 'end',
+                                }}
+                              >
+                                <input type="hidden" name="studentId" value={studentId} />
+                                <input type="hidden" name="kind" value={x.kind} />
+                                <input type="hidden" name={x.field} value={x.value} />
+                                <label className="ep-field" style={{ margin: 0 }}>
+                                  <span className="ep-field__label">Amount (₹)</span>
+                                  <input
+                                    className="ep-input"
+                                    name="amount"
+                                    type="number"
+                                    min={0.01}
+                                    max={Number(x.paid)}
+                                    step="0.01"
+                                    defaultValue={Number(x.paid)}
+                                    required
+                                  />
+                                </label>
+                                <label className="ep-field" style={{ margin: 0 }}>
+                                  <span className="ep-field__label">Reason</span>
+                                  <input
+                                    className="ep-input"
+                                    name="reason"
+                                    required
+                                    minLength={3}
+                                    maxLength={300}
+                                  />
+                                </label>
+                                <Button type="submit" variant="secondary" size="sm">
+                                  Send for approval
+                                </Button>
+                              </form>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -862,12 +993,15 @@ function ReceiptRow({
   canAsk,
   canRefund,
   bounceCharge,
+  waiting,
 }: {
   p: FeeLedgerPayment;
   studentId: string;
   canAsk: boolean;
   canRefund: boolean;
   bounceCharge: string;
+  /** Requests already open on this receipt: no new one is taken until they are decided. */
+  waiting: string[];
 }) {
   const [label, tone] = RECEIPT[p.status] ?? [p.status, 'neutral'];
   const good = p.status === 'posted';
@@ -905,7 +1039,18 @@ function ReceiptRow({
           Print receipt
         </a>
       </div>
-      {good && (canAsk || canRefund) ? (
+      {waiting.length > 0 ? (
+        <div className="ep-alert ep-alert--info" role="status" style={{ marginTop: 'var(--sp-3)' }}>
+          <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
+            {waiting.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+          Nothing else can be asked on this receipt until this is decided (Fees → Refunds,
+          Adjustments, or My approvals).
+        </div>
+      ) : null}
+      {waiting.length === 0 && good && (canAsk || canRefund) ? (
         <div
           style={{
             display: 'flex',

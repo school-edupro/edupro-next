@@ -23,6 +23,10 @@ export interface ChangeRequestRow {
   id: string;
   kind: 'late_fee' | 'transfer' | 'date_change' | 'late_fee_to_fee' | 'bounce_to_fee';
   status: string;
+  studentId: string;
+  paymentId: string | null;
+  periodId: string | null;
+  demandId: string | null;
   student: string;
   admissionNo: string;
   receiptNo: string | null;
@@ -71,7 +75,8 @@ export interface CollectionRow {
 export const FEE_REQUEST_FLOW = 'fee_change_request';
 
 const SELECT = `
-  SELECT r.id::text, r.kind, r.status::text, s.display_name AS student, s.admission_no AS "admissionNo", p.receipt_no AS "receiptNo", p.amount::text AS "receiptAmount",
+  SELECT r.id::text, r.kind, r.status::text, r.student_id::text AS "studentId", r.payment_id::text AS "paymentId", r.period_id::text AS "periodId",
+         r.demand_id::text AS "demandId", s.display_name AS student, s.admission_no AS "admissionNo", p.receipt_no AS "receiptNo", p.amount::text AS "receiptAmount",
          p.received_on::text AS "receivedOn", p.cleared_on::text AS "clearedOn", fp.name AS period, r.ledger::text AS ledger, r.amount::text AS amount,
          t.display_name AS "toStudent", t.admission_no AS "toAdmissionNo", r.new_received_on::text AS "newReceivedOn", r.new_cleared_on::text AS "newClearedOn",
          r.batch_id::text AS "batchId", r.reason, ru.display_name AS "requestedBy", r.requested_at::text AS "requestedAt", du.display_name AS "decidedBy",
@@ -193,8 +198,9 @@ export class FeeRequestsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<ChangeRequestRow>(
         `${SELECT} WHERE r.academic_year_id = $1 AND ($2::text IS NULL OR r.status::text = $2) AND ($3::text IS NULL OR r.kind = $3)
+            AND ($4::bigint IS NULL OR r.student_id = $4)
           ORDER BY (r.status = 'pending') DESC, r.requested_at DESC LIMIT 500`,
-        [yearId, q.status ?? null, q.kind ?? null],
+        [yearId, q.status ?? null, q.kind ?? null, q.studentId ?? null],
       );
       return r.rows;
     });

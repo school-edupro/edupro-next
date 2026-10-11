@@ -21,11 +21,15 @@ export function WaiverGrid({
   studentId,
   lines,
   action,
+  waiting = [],
 }: {
   studentId: string;
   lines: WaiverLine[];
   action: (fd: FormData) => Promise<void>;
+  /** Fee lines that already have a waiver waiting for approval: their boxes are closed. */
+  waiting?: string[];
 }) {
+  const locked = new Set(waiting);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const left = (l: WaiverLine) => Math.max(Number(l.net) - Number(l.paid), 0);
   const open = useMemo(() => lines.filter((l) => left(l) > 0), [lines]);
@@ -38,7 +42,7 @@ export function WaiverGrid({
   const fill = (list: WaiverLine[], full: boolean) =>
     setAmounts((prev) => {
       const next = { ...prev };
-      for (const l of list) {
+      for (const l of list.filter((x) => !locked.has(x.id))) {
         if (full) next[l.id] = String(left(l));
         else delete next[l.id];
       }
@@ -109,6 +113,13 @@ export function WaiverGrid({
                         </td>
                       );
                     const bad = Number(amounts[l.id] ?? 0) > left(l) + 0.005;
+                    if (locked.has(l.id))
+                      return (
+                        <td key={seq} style={{ textAlign: 'right' }}>
+                          <div className="ep-field__help">left {num(left(l))}</div>
+                          <span className="ep-badge ep-badge--warning">waiver waiting</span>
+                        </td>
+                      );
                     return (
                       <td key={seq} style={{ textAlign: 'right' }}>
                         <div className="ep-field__help">left {num(left(l))}</div>

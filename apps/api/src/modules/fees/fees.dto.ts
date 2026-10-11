@@ -561,6 +561,7 @@ export const ListChangeRequestsQuerySchema = z.object({
   kind: z
     .enum(['late_fee', 'transfer', 'date_change', 'late_fee_to_fee', 'bounce_to_fee'])
     .optional(),
+  studentId: IdSchema.optional(),
 });
 export class ListChangeRequestsQueryDto extends createZodDto(ListChangeRequestsQuerySchema) {}
 
