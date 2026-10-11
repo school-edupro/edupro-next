@@ -997,18 +997,25 @@ export class WithdrawalsService {
       const before = await this.findDb(c, id);
       if (!before) throw new DomainError('not-found', 'Withdrawal not found');
       await c.query(`SELECT app.complete_withdrawal($1)`, [id]);
-      // fee: later months are not charged; what was paid beyond the leaving month is raised as refund
+      // fee: later months are not charged. The refund is not raised here: the accounts office prints
+      // the provisional bill, meets the parent, and then sends the refund for approval (resettleFees)
       const year = await c.query<{ id: string | null }>(
         `SELECT academic_year_id::text AS id FROM student_withdrawals WHERE id = $1`,
         [id],
       );
       const fee = year.rows[0]?.id
-        ? await settleWithdrawalFees(this.workflow, c, ctx, {
-            id,
-            studentId: before.student_id,
-            leavingOn: before.leaving_on,
-            yearId: year.rows[0].id,
-          })
+        ? await settleWithdrawalFees(
+            this.workflow,
+            c,
+            ctx,
+            {
+              id,
+              studentId: before.student_id,
+              leavingOn: before.leaving_on,
+              yearId: year.rows[0].id,
+            },
+            false,
+          )
         : null;
       // a parent keeps the login while another child of theirs still studies here
       const parents = await c.query<{ user_id: string }>(
@@ -1042,9 +1049,10 @@ export class WithdrawalsService {
   }
 
   /**
-   * Works the fee side of a completed withdrawal out again: the refunds the system raised that still
-   * wait are closed (with their approval) and raised afresh by today's rule. For a refund raised with
-   * a wrong figure; a refund already paid is not touched.
+   * The accounts office sends the refund of a completed withdrawal for approval, after the provisional
+   * bill has been printed and discussed with the parent: fee paid for the months after the leaving
+   * month, and any advance. Pressed again, it closes the refund that still waits (with its approval)
+   * and raises it afresh. A refund already paid is not touched.
    */
   async resettleFees(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {

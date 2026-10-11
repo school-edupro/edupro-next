@@ -469,20 +469,34 @@ describe('withdrawal through configured departments (e2e)', () => {
     // the months after the leaving month: nothing is asked any more
     const after = await later();
     expect(Number(after.unpaid)).toBe(0);
-    // what was paid for those months is raised as one refund, with the fee cancelled
-    const refunds = (
-      await inject({
-        method: 'GET',
-        url: `/payments/refunds?studentId=${ids.a}`,
-        headers: h(),
-      })
-    ).json().data as Array<{
-      id: string;
-      status: string;
-      amount: string;
-      feeAction: string;
-      reason: string;
-    }>;
+    // nothing is refunded yet: the accounts office prints the provisional bill and meets the parent first
+    const listRefunds = async () =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/payments/refunds?studentId=${ids.a}`,
+          headers: h(),
+        })
+      ).json().data as Array<{
+        id: string;
+        status: string;
+        amount: string;
+        feeAction: string;
+        reason: string;
+      }>;
+    expect(await listRefunds()).toHaveLength(0);
+    const draft = await inject({ method: 'GET', url: `/fees/students/${ids.a}/fnf`, headers: h() });
+    expect(draft.json().totals).toMatchObject({ refundable: '4000.00', direction: 'refund' });
+    expect(draft.json()).toMatchObject({ refundsWaiting: '0.00' });
+    // then the accountant sends it for approval
+    const sent = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${ids.wa}/fee-settlement`,
+      headers: h(accountant),
+    });
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json()).toMatchObject({ replaced: 0, refunds: 1, refundTotal: '4000.00' });
+    const refunds = await listRefunds();
     if (Number(before.paid) > 0) {
       expect(refunds).toHaveLength(1);
       expect(refunds[0]).toMatchObject({ status: 'requested', feeAction: 'cancel' });

@@ -17,7 +17,8 @@ export interface WithdrawalFeeResult {
  * The fee side of a completed withdrawal (called inside its transaction).
  *  1. The months after the leaving month are not charged: their unpaid fee is cancelled, so the bill
  *     of the pupil is zero from the next month on.
- *  2. What the family paid beyond that is raised as refunds, for approval through Fee setup ->
+ *  2. (when the accounts office sends it, after the provisional bill has been printed and discussed
+ *     with the parent) What the family paid beyond that is raised as refunds, for approval through Fee setup ->
  *     Approval levels: fee paid for the later months, advance lying on receipts, and what is left of
  *     last year's advance. The fee of the months up to the leaving month stays charged whatever the
  *     head; a deposit or a refund the school grants on top is raised by fee head from the
@@ -30,6 +31,11 @@ export async function settleWithdrawalFees(
   c: PoolClient,
   ctx: RequestContext,
   w: { id: string; studentId: string; leavingOn: string; yearId: string },
+  /**
+   * false at completion: the bill is only cut to the leaving month. The refund is raised later, when
+   * the accounts office has printed the provisional bill, met the parent and presses "send for approval".
+   */
+  raiseRefund = true,
 ): Promise<WithdrawalFeeResult> {
   const AFTER = `make_date(fp.year, fp.month, 1) > date_trunc('month', $3::date)`;
   // 1. later months are not charged
@@ -47,6 +53,13 @@ export async function settleWithdrawalFees(
                          AND d2.status IN ('pending', 'partial') AND d2.net > d2.paid), 0)::numeric(14,2)::text AS v, (SELECT count(*) FROM gone) AS n`,
     [w.studentId, w.yearId, w.leavingOn],
   );
+  if (!raiseRefund)
+    return {
+      cancelled: cancel.rows[0]?.v ?? '0.00',
+      refunds: 0,
+      refundTotal: '0.00',
+      inApproval: false,
+    };
   // 2. what was paid beyond the leaving month, receipt by receipt
   const paidAhead = await c.query<{
     payment_id: string;

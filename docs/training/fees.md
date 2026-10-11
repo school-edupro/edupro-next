@@ -404,3 +404,11 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
     "the fee is cancelled", send; it goes through Fee setup → Approval levels.
   - **Work the withdrawal refund out again**: closes the waiting refund the withdrawal raised and
     raises it afresh (for a refund raised with a wrong figure).
+
+- **Order of work at a withdrawal (from 2026-10-11)**: completing the withdrawal only cuts the bill to
+  the leaving month; it does not send any refund. The accounts office then (1) opens the provisional
+  bill and **prints** it for the parent, and (2) after the parent has agreed, presses **Send the
+  refund of ₹… for approval** on the same page. Only then does the refund go through Fee setup →
+  Approval levels. The printed bill says "Refund not yet sent for approval", "Refund sent for
+  approval" or "Refund settled". "Withdraw it and send it again" replaces a waiting refund when the
+  figures changed.

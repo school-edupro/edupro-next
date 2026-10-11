@@ -73,10 +73,10 @@ export default async function FnfPage({
   ]);
   const canRefund = me.permissions.includes('fees.refund.request');
   const completed = withdrawals.find((w) => w.status === 'completed');
-  const canResettle =
-    Boolean(completed) &&
-    me.permissions.includes('people.withdrawal.manage') &&
-    bill.refunds.some((r) => r.byWithdrawal && r.status === 'requested');
+  const open = withdrawals.find((w) => w.status === 'requested' || w.status === 'cleared');
+  // the refund of the withdrawal: not sent yet, waiting for approval, or done
+  const waiting = bill.refunds.some((r) => r.byWithdrawal && r.status === 'requested');
+  const sentBefore = bill.refunds.some((r) => r.byWithdrawal);
   const REFUND_STATE: Record<string, string> = {
     requested: 'waiting for approval',
     approved: 'approved, payment in progress',
@@ -114,6 +114,65 @@ export default async function FnfPage({
       </form>
       <div className="ep-noprint">
         <Notice params={sp} />
+        <section className="ep-card" style={{ marginBottom: 'var(--sp-4)' }}>
+          <h2 className="ep-card__title">Steps</h2>
+          <ol
+            style={{ margin: 0, paddingLeft: 'var(--sp-5)', display: 'grid', gap: 'var(--sp-2)' }}
+          >
+            <li>
+              <strong>Print this provisional bill</strong> and give it to the parent. Nothing is
+              sent for approval by printing.
+            </li>
+            <li>
+              <strong>After the parent has agreed</strong>, send the refund for approval. It goes
+              through Fee setup → Approval levels; on the last approval the refund voucher is made.
+            </li>
+          </ol>
+          <div style={{ marginTop: 'var(--sp-3)' }}>
+            {!completed ? (
+              <p className="ep-field__help">
+                {open
+                  ? 'The withdrawal is not completed yet (departments are still clearing). The bill can be printed now; the refund can be sent once the withdrawal is completed.'
+                  : 'The pupil has no completed withdrawal, so there is no withdrawal refund to send. A refund by fee head can still be raised below.'}
+              </p>
+            ) : !canRefund ? (
+              <p className="ep-field__help">You do not have the right to raise a refund.</p>
+            ) : waiting ? (
+              <form action={resettleWithdrawalFees}>
+                <input type="hidden" name="id" value={completed.id} />
+                <input type="hidden" name="studentId" value={studentId} />
+                <p>
+                  <strong>Sent: ₹{rupees(bill.refundsWaiting)} is waiting for approval.</strong>
+                </p>
+                <Button type="submit" variant="secondary" size="sm">
+                  Withdraw it and send it again
+                </Button>
+                <span className="ep-field__help">
+                  {' '}
+                  Use this if the figures changed after it was sent.
+                </span>
+              </form>
+            ) : t.direction === 'refund' ? (
+              <form action={resettleWithdrawalFees}>
+                <input type="hidden" name="id" value={completed.id} />
+                <input type="hidden" name="studentId" value={studentId} />
+                <Button type="submit">Send the refund of ₹{rupees(t.net)} for approval</Button>
+                <span className="ep-field__help">
+                  {' '}
+                  Fee paid for the months after {bill.lastMonth.name}, and any advance.
+                </span>
+              </form>
+            ) : (
+              <p className="ep-field__help">
+                {sentBefore
+                  ? 'The refund of this withdrawal has been dealt with; nothing more is refundable by the rule.'
+                  : t.direction === 'pay'
+                    ? 'The parent has to pay; there is nothing to refund.'
+                    : 'Nothing is refundable by the rule. A refund the school grants on top can be raised by fee head below.'}
+              </p>
+            )}
+          </div>
+        </section>
       </div>
       <section className="ep-print-sheet" aria-label="Provisional bill for withdrawal">
         <SheetHead school={bill.school} title="Provisional bill for withdrawal (full and final)" />
@@ -226,6 +285,17 @@ export default async function FnfPage({
             . The refundable amount above is what is still to come back after the refunds paid.
           </p>
         ) : null}
+        <p>
+          <strong>
+            {waiting
+              ? 'Refund sent for approval.'
+              : Number(bill.refundsPaid) > 0 && t.direction !== 'refund'
+                ? 'Refund settled.'
+                : t.direction === 'refund'
+                  ? 'Refund not yet sent for approval.'
+                  : ''}
+          </strong>
+        </p>
         <p className="ep-field__help">
           Provisional: fee of the months after {bill.lastMonth.name} (₹{rupees(bill.notCharged)}) is
           not charged. The final amount is settled by a receipt or a refund in the accounts office
@@ -275,20 +345,6 @@ export default async function FnfPage({
             </table>
           </div>
         )}
-        {canResettle && completed ? (
-          <form action={resettleWithdrawalFees} style={{ marginTop: 'var(--sp-3)' }}>
-            <input type="hidden" name="id" value={completed.id} />
-            <input type="hidden" name="studentId" value={studentId} />
-            <Button type="submit" variant="secondary" size="sm">
-              Work the withdrawal refund out again
-            </Button>
-            <span className="ep-field__help">
-              {' '}
-              Closes the waiting refund the withdrawal raised and raises it afresh: fee paid for the
-              months after the leaving month, and any advance.
-            </span>
-          </form>
-        ) : null}
         <h3 className="ep-h4" style={{ marginTop: 'var(--sp-4)' }}>
           Refund more, by fee head
         </h3>

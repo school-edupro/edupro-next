@@ -334,7 +334,7 @@ export async function makeRefundFeeDue(fd: FormData) {
   redirect('/fees/refunds?ok=1');
 }
 
-/** The refund a completed withdrawal raised is closed and worked out again. */
+/** The accounts office sends the refund of a completed withdrawal for approval (a waiting one is replaced). */
 export async function resettleWithdrawalFees(fd: FormData) {
   const path = `/fees/fnf/${str(fd, 'studentId')}?x=1`;
   try {

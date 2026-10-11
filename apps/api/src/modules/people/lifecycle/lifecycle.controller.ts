@@ -196,9 +196,9 @@ export class LifecycleController {
   @Post('withdrawals/:id/fee-settlement')
   @ApiOperation({
     summary:
-      'Work the fee refund of a completed withdrawal out again (waiting refunds are replaced)',
+      'Send the fee refund of a completed withdrawal for approval (a waiting one is replaced)',
   })
-  @RequirePermission(LIFECYCLE.withdrawalManage)
+  @RequirePermission('fees.refund.request')
   resettleFees(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.withdrawals.resettleFees(ctx, id);
   }
