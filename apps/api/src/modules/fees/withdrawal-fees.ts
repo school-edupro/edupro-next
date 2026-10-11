@@ -38,6 +38,20 @@ export async function settleWithdrawalFees(
   raiseRefund = true,
 ): Promise<WithdrawalFeeResult> {
   const AFTER = `make_date(fp.year, fp.month, 1) > date_trunc('month', $3::date)`;
+  // part-paid lines of the later months are cut to what was paid: remembered, so a revoke can put the fee back
+  const cut = await c.query<{ demandId: string; amount: string }>(
+    // eslint-disable-next-line no-restricted-syntax -- AFTER is a fixed fragment; values are bound parameters
+    `SELECT d.id::text AS "demandId", (d.net - d.paid)::numeric(14,2)::text AS amount
+       FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
+      WHERE d.student_id = $1 AND d.academic_year_id = $2 AND ${AFTER}
+        AND d.status IN ('pending', 'partial') AND d.net > d.paid AND d.paid > 0`,
+    [w.studentId, w.yearId, w.leavingOn],
+  );
+  if (cut.rows.length)
+    await c.query(
+      `UPDATE student_withdrawals SET fee_cut = COALESCE(fee_cut, '[]'::jsonb) || $2::jsonb WHERE id = $1`,
+      [w.id, JSON.stringify(cut.rows)],
+    );
   // 1. later months are not charged
   const cancel = await c.query<{ v: string }>(
     // eslint-disable-next-line no-restricted-syntax -- AFTER is a fixed fragment; values are bound parameters

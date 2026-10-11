@@ -1184,7 +1184,8 @@
       "requested": "requested",
       "cleared": "cleared",
       "completed": "completed",
-      "cancelled": "cancelled"
+      "cancelled": "cancelled",
+      "revoked": "revoked (pupil rejoined)"
     },
     "fromYear": "From year",
     "toYear": "To year",

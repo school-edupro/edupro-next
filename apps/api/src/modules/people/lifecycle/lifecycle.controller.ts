@@ -23,6 +23,7 @@ import {
   SetPromotionsDto,
   WithdrawalTcDto,
   YearSectionsQueryDto,
+  RevokeDto,
 } from './lifecycle.dto';
 import { PromotionsService } from './promotions.service';
 import { TcService } from './tc.service';
@@ -201,6 +202,16 @@ export class LifecycleController {
   @RequirePermission('fees.refund.request')
   resettleFees(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.withdrawals.resettleFees(ctx, id);
+  }
+
+  @Post('withdrawals/:id/revoke')
+  @ApiOperation({
+    summary:
+      'Ask to revoke a completed withdrawal (the pupil rejoins); goes through the fee approval levels',
+  })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  revoke(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: RevokeDto) {
+    return this.withdrawals.requestRevoke(ctx, id, body.reason);
   }
 
   @Post('withdrawals/:id/complete')

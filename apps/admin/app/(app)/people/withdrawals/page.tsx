@@ -78,6 +78,7 @@ export default async function WithdrawalsPage({
               { value: 'open', label: l('open') },
               { value: 'mine', label: 'Waiting for me' },
               { value: 'completed', label: l('withdrawalStatuses.completed') },
+              { value: 'revoked', label: l('withdrawalStatuses.revoked') },
               { value: 'cancelled', label: l('withdrawalStatuses.cancelled') },
             ]}
           />

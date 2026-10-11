@@ -7,6 +7,7 @@ import {
   cancelWithdrawal,
   closeSchoolTransfer,
   completeWithdrawal,
+  revokeWithdrawal,
   issueWithdrawalTc,
   recordClearance,
   requestSchoolTransfer,
@@ -205,11 +206,13 @@ export default async function WithdrawalPage({
               tone={
                 w.status === 'completed'
                   ? 'success'
-                  : w.status === 'cancelled'
-                    ? 'danger'
-                    : w.status === 'cleared'
-                      ? 'info'
-                      : 'warning'
+                  : w.status === 'revoked'
+                    ? 'neutral'
+                    : w.status === 'cancelled'
+                      ? 'danger'
+                      : w.status === 'cleared'
+                        ? 'info'
+                        : 'warning'
               }
             >
               {l(`withdrawalStatuses.${w.status}`)}
@@ -419,6 +422,55 @@ export default async function WithdrawalPage({
                 Cancel withdrawal
               </Button>
             </form>
+          </Card>
+        ) : null}
+        {(w.status === 'completed' || w.status === 'revoked') && canManage ? (
+          <Card title="Revoke (the pupil rejoins)">
+            {w.status === 'revoked' ? (
+              <p>
+                This withdrawal was revoked{w.revokedAt ? ` on ${w.revokedAt.slice(0, 10)}` : ''}
+                {w.revokeReason ? `: ${w.revokeReason}` : ''}. The pupil is active again and every
+                month of the session is charged.
+              </p>
+            ) : w.revokeStatus === 'pending' ? (
+              <p>
+                <Badge tone="warning">Revoke waiting for approval</Badge>
+                {w.revokeWaitingWith ? ` with ${w.revokeWaitingWith}` : ''}
+                {w.revokeReason ? ` · ${w.revokeReason}` : ''}.{' '}
+                <a href="/workflow/inbox">My approvals</a>
+              </p>
+            ) : (
+              <form action={revokeWithdrawal} className="ep-wd__form">
+                <input type="hidden" name="id" value={w.id} />
+                {w.revokeStatus === 'rejected' ? (
+                  <p className="ep-field__help ep-wd__wide">
+                    The last revoke request was rejected. It can be asked again.
+                  </p>
+                ) : null}
+                <label className="ep-field ep-wd__wide" htmlFor="revoke-reason">
+                  <span className="ep-field__label">Why does the pupil rejoin? *</span>
+                  <input
+                    id="revoke-reason"
+                    name="reason"
+                    className="ep-input"
+                    required
+                    minLength={3}
+                    maxLength={300}
+                  />
+                </label>
+                <Button type="submit" size="sm" variant="secondary">
+                  Send revoke for approval
+                </Button>
+                <p className="ep-field__help ep-wd__wide">
+                  Only in the same session, and after a transfer certificate (if issued) is
+                  cancelled. It goes through Fee setup → Approval levels. On approval the pupil is
+                  active again in the same class, the logins come back, and every month is charged
+                  again by the class fee structure and calendar, with late fee by the calendar. A
+                  refund of this withdrawal that still waits is closed; one already paid stays paid
+                  and its fee becomes due again.
+                </p>
+              </form>
+            )}
           </Card>
         ) : null}
       </div>

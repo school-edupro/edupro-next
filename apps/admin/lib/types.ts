@@ -643,7 +643,11 @@ export interface Withdrawal {
   reason: string;
   remarks: string | null;
   documents: Array<{ fileId: string; name: string | null }>;
-  status: 'requested' | 'cleared' | 'completed' | 'cancelled';
+  status: 'requested' | 'cleared' | 'completed' | 'cancelled' | 'revoked';
+  revokeStatus?: 'pending' | 'approved' | 'rejected' | null;
+  revokeReason?: string | null;
+  revokeWaitingWith?: string | null;
+  revokedAt?: string | null;
   currentStep: number | null;
   requestedBy: string | null;
   completedAt: string | null;

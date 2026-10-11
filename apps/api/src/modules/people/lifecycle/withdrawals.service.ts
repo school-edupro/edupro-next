@@ -7,7 +7,8 @@ import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { FeeLedgerService } from '../../fees/fee-ledger.service';
 import { settleWithdrawalFees } from '../../fees/withdrawal-fees';
-import { WorkflowService } from '../../workflow/workflow.service';
+import { WorkflowService, type InstanceRow } from '../../workflow/workflow.service';
+import { WAITING_WITH, startFeeApproval } from '../../fees/fee-approval';
 import {
   LIFECYCLE,
   type BulkClearanceDto,
@@ -72,7 +73,12 @@ export interface WithdrawalRow {
   reason: string;
   remarks: string | null;
   documents: Array<{ fileId: string; name: string | null }>;
-  status: 'requested' | 'cleared' | 'completed' | 'cancelled';
+  status: 'requested' | 'cleared' | 'completed' | 'cancelled' | 'revoked';
+  /** A revoke (the pupil rejoins) asked on a completed withdrawal: pending, approved or rejected. */
+  revokeStatus: 'pending' | 'approved' | 'rejected' | null;
+  revokeReason: string | null;
+  revokeWaitingWith: string | null;
+  revokedAt: string | null;
   currentStep: number | null;
   requestedBy: string | null;
   completedAt: string | null;
@@ -101,6 +107,10 @@ interface Db {
   requested_by: string | null;
   completed_at: Date | null;
   cancel_reason: string | null;
+  revoke_status: WithdrawalRow['revokeStatus'];
+  revoke_reason: string | null;
+  revoke_waiting_with: string | null;
+  revoked_at: Date | null;
   tc: WithdrawalRow['tc'];
   clearances: Array<Omit<ClearanceRow, 'approvers'> & { approverList: Approver[] }>;
 }
@@ -113,10 +123,12 @@ interface Actor {
   manage: boolean;
 }
 
+// eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
 const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student_name, s.admission_no,
         sec.label AS section, sec.class_section_id,
         COALESCE(w.initiated_on, w.requested_on)::text AS initiated_on, w.requested_on::text, w.leaving_on::text, w.reason, w.remarks, w.documents,
         w.status, w.current_step, u.display_name AS requested_by, w.completed_at, w.cancel_reason,
+        w.revoke_status, w.revoke_reason, w.revoked_at, ${WAITING_WITH('w.revoke_workflow_instance_id')} AS revoke_waiting_with,
         CASE WHEN t.id IS NULL THEN NULL ELSE jsonb_build_object('id', t.id::text, 'tcNo', t.tc_no, 'exportId', t.export_id::text) END AS tc,
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
                     'id', x.id::text, 'department', x.department, 'departmentName', COALESCE(d.name, initcap(x.department)), 'step', x.step,
@@ -451,9 +463,13 @@ export class WithdrawalsService {
       requestedBy: r.requested_by,
       completedAt: r.completed_at ? r.completed_at.toISOString() : null,
       cancelReason: r.cancel_reason,
+      revokeStatus: r.revoke_status,
+      revokeReason: r.revoke_reason,
+      revokeWaitingWith: r.revoke_waiting_with,
+      revokedAt: r.revoked_at ? r.revoked_at.toISOString() : null,
       tc: r.tc,
       clearances,
-      canIssueTc: r.status !== 'cancelled' && !r.tc && gateCleared,
+      canIssueTc: r.status !== 'cancelled' && r.status !== 'revoked' && !r.tc && gateCleared,
     };
   }
 
@@ -1107,6 +1123,121 @@ export class WithdrawalsService {
         after: { replaced: old.rows.length, fee },
       });
       return { replaced: old.rows.length, ...fee };
+    });
+  }
+
+  /**
+   * Revoke of a completed withdrawal (the pupil rejoins in the same session). It is asked with a
+   * reason and goes through Fee setup -> Approval levels; where the school has no levels in force it
+   * is applied at once. Applying is app.revoke_withdrawal: the pupil is active again in the same class,
+   * the logins come back, every month is charged again, a waiting refund of the withdrawal is closed
+   * and the fee a paid refund cancelled becomes due again.
+   */
+  async requestRevoke(ctx: RequestContext, id: string, reason: string): Promise<WithdrawalRow> {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const w = await c.query<{
+        status: string;
+        revoke_status: string | null;
+        year_status: string | null;
+        tc: boolean;
+        name: string;
+        leaving_on: string;
+      }>(
+        `SELECT w.status::text, w.revoke_status, y.status::text AS year_status, w.leaving_on::text,
+                EXISTS (SELECT 1 FROM transfer_certificates t WHERE t.id = w.tc_id AND t.status = 'issued') AS tc,
+                (SELECT display_name FROM students WHERE id = w.student_id) AS name
+           FROM student_withdrawals w LEFT JOIN academic_years y ON y.id = w.academic_year_id WHERE w.id = $1 FOR UPDATE OF w`,
+        [id],
+      );
+      const row = w.rows[0];
+      if (!row) throw new DomainError('not-found', 'Withdrawal not found');
+      if (row.status !== 'completed')
+        throw new DomainError(
+          'withdrawal.not_completed',
+          'Only a completed withdrawal can be revoked; one that is still open is cancelled instead',
+          { status: 409 },
+        );
+      if (row.revoke_status === 'pending')
+        throw new DomainError(
+          'withdrawal.revoke_open',
+          'A revoke of this withdrawal is already waiting for approval',
+          { status: 409 },
+        );
+      if (row.year_status !== 'active')
+        throw new DomainError(
+          'withdrawal.revoke_other_session',
+          'A withdrawal is revoked only in its own, current session',
+          { status: 409 },
+        );
+      if (row.tc)
+        throw new DomainError(
+          'withdrawal.tc_issued',
+          'A transfer certificate is issued: cancel it first, then revoke the withdrawal',
+          { status: 409 },
+        );
+      await c.query(
+        `UPDATE student_withdrawals SET revoke_status = 'pending', revoke_reason = $2, revoke_requested_by = app.current_user_id(),
+                revoke_requested_at = now(), revoke_workflow_instance_id = NULL, updated_at = now(), updated_by = app.current_user_id()
+          WHERE id = $1`,
+        [id, reason],
+      );
+      const instanceId = await startFeeApproval(
+        this.workflow,
+        c,
+        ctx,
+        { code: 'withdrawal_revoke', name: 'Revoke of a withdrawal (pupil rejoins)' },
+        id,
+        `Revoke withdrawal: ${row.name} (left ${row.leaving_on.split('-').reverse().join('-')}) rejoins; all months charged again`,
+        { reason },
+      );
+      if (instanceId)
+        await c.query(
+          `UPDATE student_withdrawals SET revoke_workflow_instance_id = $2 WHERE id = $1 AND revoke_status = 'pending'`,
+          [id, instanceId],
+        );
+      // no approval levels in force: it is applied now
+      else await this.applyRevoke(c, id);
+      await this.audit.stage(ctx, c, {
+        action: 'people.withdrawal.revoke_request',
+        entityType: 'student_withdrawals',
+        entityId: id,
+        after: { reason, appliedAtOnce: !instanceId },
+      });
+    });
+    return this.get(ctx, id);
+  }
+
+  private async applyRevoke(c: PoolClient, id: string): Promise<void> {
+    try {
+      await c.query(`SELECT app.revoke_withdrawal($1)`, [id]);
+    } catch (error) {
+      const e = error as { message?: string; detail?: string };
+      if (e.message?.startsWith('withdrawal.') || e.message?.startsWith('fees.'))
+        throw new DomainError(e.message, e.detail ?? 'The withdrawal could not be revoked', {
+          status: 409,
+        });
+      throw error;
+    }
+  }
+
+  /** The last level approved: the withdrawal is revoked. A level rejected: nothing changes. */
+  async onRevokeComplete(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
+  ): Promise<void> {
+    if (outcome === 'approved') await this.applyRevoke(c, instance.entityId);
+    else
+      await c.query(
+        `UPDATE student_withdrawals SET revoke_status = 'rejected', updated_at = now() WHERE id = $1 AND revoke_status = 'pending'`,
+        [instance.entityId],
+      );
+    await this.audit.stage(ctx, c, {
+      action: `people.withdrawal.revoke_${outcome}`,
+      entityType: 'student_withdrawals',
+      entityId: instance.entityId,
+      after: { workflowInstanceId: instance.id },
     });
   }
 

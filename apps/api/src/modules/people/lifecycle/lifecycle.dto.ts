@@ -126,7 +126,9 @@ export class SaveDepartmentsDto extends createZodDto(SaveDepartmentsSchema) {}
 export type DepartmentInput = z.infer<typeof DepartmentSchema>;
 
 export const ListWithdrawalsQuerySchema = z.object({
-  status: z.enum(['requested', 'cleared', 'completed', 'cancelled', 'open']).default('open'),
+  status: z
+    .enum(['requested', 'cleared', 'completed', 'cancelled', 'revoked', 'open'])
+    .default('open'),
   /** Only the withdrawals whose current step waits for me. */
   mine: z.coerce.boolean().optional(),
   classSectionId: IdSchema.optional(),
@@ -201,3 +203,7 @@ export const ListTransfersQuerySchema = z.object({
   box: z.enum(['incoming', 'outgoing', 'all']).default('all'),
 });
 export class ListTransfersQueryDto extends createZodDto(ListTransfersQuerySchema) {}
+
+/** Revoke of a completed withdrawal: the pupil rejoins in the same session. */
+export const RevokeSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class RevokeDto extends createZodDto(RevokeSchema) {}

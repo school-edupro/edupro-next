@@ -429,3 +429,18 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
   for approval" in place of its form.
 - **Approve / Reject**: pressing Enter in the Note box no longer decides anything; a decision is made
   only by pressing Approve or Reject.
+
+## Revoking a completed withdrawal (the pupil rejoins)
+
+People → Withdrawals → open the completed withdrawal → **Revoke (the pupil rejoins)** → reason →
+**Send revoke for approval**. It goes through Fee setup → Approval levels (My approvals).
+
+- Only in the same, current session. A transfer certificate, if issued, must be cancelled first.
+- On approval: the pupil is active again in the same class and section (the roll number too, unless
+  another pupil has taken it); the student and parent logins come back; **every month of the session
+  is charged again** by the class fee structure and calendar, with late fee by the calendar.
+- A refund of that withdrawal that still waits is closed. A refund **already paid** stays paid (its
+  voucher is the record of the money going out) and the fee it cancelled becomes **due again**; the
+  parent pays it by a normal receipt.
+- The withdrawal then shows as "revoked (pupil rejoined)". A rejected revoke changes nothing and can
+  be asked again.

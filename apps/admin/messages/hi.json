@@ -1184,7 +1184,8 @@
       "requested": "अनुरोधित",
       "cleared": "क्लियर",
       "completed": "पूर्ण",
-      "cancelled": "रद्द"
+      "cancelled": "रद्द",
+      "revoked": "वापस लिया गया (छात्र लौटा)"
     },
     "fromYear": "किस सत्र से",
     "toYear": "किस सत्र में",

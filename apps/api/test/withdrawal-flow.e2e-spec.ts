@@ -546,4 +546,82 @@ describe('withdrawal through configured departments (e2e)', () => {
     const student = await inject({ method: 'GET', url: `/people/students/${ids.a}`, headers: h() });
     expect(student.json().status).toBe('inactive');
   });
+
+  it('a completed withdrawal is revoked: the pupil is back, logins return, every month is due again', async () => {
+    const short = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${ids.wa}/revoke`,
+      headers: h(),
+      json: { reason: 'x' },
+    });
+    expect(short.statusCode).toBe(400);
+    const denied = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${ids.wa}/revoke`,
+      headers: h(teacher),
+      json: { reason: 'Family decided to stay' },
+    });
+    expect(denied.statusCode).toBe(403);
+    // a transfer certificate was issued: it has to be cancelled first
+    const blocked = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${ids.wa}/revoke`,
+      headers: h(),
+      json: { reason: 'Family decided to stay' },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().type).toBe('withdrawal.tc_issued');
+    const tcId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT tc_id::text AS id FROM student_withdrawals WHERE id = $1`,
+        [ids.wa],
+      );
+      return r.rows[0]!.id;
+    });
+    const tcGone = await inject({
+      method: 'POST',
+      url: `/people/tc/${tcId}/cancel`,
+      headers: h(),
+      json: { reason: 'Pupil is staying' },
+    });
+    expect([200, 201]).toContain(tcGone.statusCode);
+    // no approval levels in this school: the revoke is applied at once
+    const ok = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${ids.wa}/revoke`,
+      headers: h(),
+      json: { reason: 'Family decided to stay' },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ status: 'revoked', revokeStatus: 'approved' });
+    const student = await inject({ method: 'GET', url: `/people/students/${ids.a}`, headers: h() });
+    expect(student.json().status).toBe('active');
+    const facts = await withMigrator(async (c) => {
+      const e = await c.query<{ status: string; ended_on: string | null }>(
+        `SELECT status::text, ended_on::text FROM enrolments WHERE student_id = $1`,
+        [ids.a],
+      );
+      const m = await c.query<{ status: string }>(
+        `SELECT status::text FROM user_school_memberships WHERE user_id = $1 AND school_id = $2 AND person_type = 'guardian'`,
+        [parent.id, school.id],
+      );
+      const d = await c.query<{ months: string; net: string; paid: string }>(
+        `SELECT count(DISTINCT period_id)::text AS months, sum(net)::text AS net, sum(paid)::text AS paid
+           FROM fee_demands WHERE student_id = $1 AND status IN ('pending', 'partial', 'paid')`,
+        [ids.a],
+      );
+      return { enrolment: e.rows[0]!, parent: m.rows[0]!.status, fee: d.rows[0]! };
+    });
+    expect(facts.enrolment).toMatchObject({ status: 'active', ended_on: null });
+    expect(facts.parent).toBe('active');
+    // twelve months at 1,000 again; 9,000 was paid and 4,000 of it refunded, so 5,000 stays paid
+    expect(facts.fee).toMatchObject({ months: '12', net: '12000.00', paid: '5000.00' });
+    const again = await inject({
+      method: 'POST',
+      url: `/people/withdrawals/${ids.wa}/revoke`,
+      headers: h(),
+      json: { reason: 'again' },
+    });
+    expect(again.statusCode).toBe(409);
+  });
 });

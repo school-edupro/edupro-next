@@ -1512,6 +1512,17 @@ export async function completeWithdrawal(fd: FormData) {
   );
 }
 
+/** A completed withdrawal is asked to be revoked (the pupil rejoins); it goes for approval. */
+export async function revokeWithdrawal(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    }),
+  );
+}
+
 export async function cancelWithdrawal(fd: FormData) {
   const id = str(fd, 'id');
   return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, () =>
