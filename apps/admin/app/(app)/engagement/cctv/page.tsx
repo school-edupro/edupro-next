@@ -1,3 +1,4 @@
+import { decideCctv__outcome } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, DataTable, FormRow, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
@@ -137,10 +138,19 @@ export default async function CctvPage({
                     <NoEnterSubmit />
                     <input type="hidden" name="id" value={r.id} />
                     <InputField id={`n-${r.id}`} name="note" label={e('note')} maxLength={500} />
-                    <Button type="submit" name="outcome" value="approved" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={decideCctv__outcome.bind(null, 'approved')}
+                      size="sm"
+                    >
                       {e('approve')}
                     </Button>
-                    <Button type="submit" name="outcome" value="rejected" size="sm" variant="ghost">
+                    <Button
+                      type="submit"
+                      formAction={decideCctv__outcome.bind(null, 'rejected')}
+                      size="sm"
+                      variant="ghost"
+                    >
                       {e('reject')}
                     </Button>
                   </form>

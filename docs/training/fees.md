@@ -449,3 +449,9 @@ People → Withdrawals → open the completed withdrawal → **Revoke (the pupil
   → **Take this waiver back**. It goes through Fee setup → Approval levels; on approval the waived
   amounts are put back on the fee lines and are due again. All the lines of one waiver request are
   taken back together. On the bill a waiver shows as an amount taken off ("disc.").
+
+- **Reject was recorded as Approve (fixed 2026-10-11)**: on My inbox (and other pages with two
+  decision buttons) the pressed button's choice did not reach the server, and a missing choice was
+  taken as "approve". Every decision button now sends its own choice, and a form that arrives without a
+  clear choice changes nothing and says so. Requests decided from My inbox before this fix should be
+  reviewed: a rejection made there was saved as an approval.

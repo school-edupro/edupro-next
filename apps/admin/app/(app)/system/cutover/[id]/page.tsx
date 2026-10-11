@@ -1,3 +1,4 @@
+import { cutoverRunStatus__status, cutoverStep__status } from '@/lib/choice-actions';
 import { Badge, Button, Card, DataTable, FormRow, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -118,11 +119,21 @@ export default async function CutoverRunPage({
               >
                 <input type="hidden" name="runId" value={run.id} />
                 {run.status === 'planned' ? (
-                  <Button type="submit" name="status" value="running" size="sm" variant="secondary">
+                  <Button
+                    type="submit"
+                    formAction={cutoverRunStatus__status.bind(null, 'running')}
+                    size="sm"
+                    variant="secondary"
+                  >
                     {o('start')}
                   </Button>
                 ) : null}
-                <Button type="submit" name="status" value="aborted" size="sm" variant="ghost">
+                <Button
+                  type="submit"
+                  formAction={cutoverRunStatus__status.bind(null, 'aborted')}
+                  size="sm"
+                  variant="ghost"
+                >
                   {o('abort')}
                 </Button>
               </form>
@@ -187,13 +198,16 @@ export default async function CutoverRunPage({
                       <InputField id={`n-${s.id}`} name="note" label={o('note')} maxLength={1000} />
                       {s.status === 'pending' ? (
                         <>
-                          <Button type="submit" name="status" value="done" size="sm">
+                          <Button
+                            type="submit"
+                            formAction={cutoverStep__status.bind(null, 'done')}
+                            size="sm"
+                          >
                             {o('done')}
                           </Button>
                           <Button
                             type="submit"
-                            name="status"
-                            value="skipped"
+                            formAction={cutoverStep__status.bind(null, 'skipped')}
                             size="sm"
                             variant="ghost"
                           >
@@ -201,8 +215,7 @@ export default async function CutoverRunPage({
                           </Button>
                           <Button
                             type="submit"
-                            name="status"
-                            value="failed"
+                            formAction={cutoverStep__status.bind(null, 'failed')}
                             size="sm"
                             variant="ghost"
                           >
@@ -212,8 +225,7 @@ export default async function CutoverRunPage({
                       ) : (
                         <Button
                           type="submit"
-                          name="status"
-                          value="pending"
+                          formAction={cutoverStep__status.bind(null, 'pending')}
                           size="sm"
                           variant="ghost"
                         >

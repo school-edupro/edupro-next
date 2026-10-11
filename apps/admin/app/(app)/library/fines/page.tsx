@@ -1,3 +1,4 @@
+import { libraryFine__action } from '@/lib/choice-actions';
 import { Button, Card, DataTable, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -71,10 +72,19 @@ export default async function FinesPage({
                     maxLength={60}
                   />
                   <InputField id={`note-${x.id}`} name="note" label={l('note')} maxLength={300} />
-                  <Button type="submit" name="action" value="collect" size="sm">
+                  <Button
+                    type="submit"
+                    formAction={libraryFine__action.bind(null, 'collect')}
+                    size="sm"
+                  >
                     {l('collect')}
                   </Button>
-                  <Button type="submit" name="action" value="waive" size="sm" variant="ghost">
+                  <Button
+                    type="submit"
+                    formAction={libraryFine__action.bind(null, 'waive')}
+                    size="sm"
+                    variant="ghost"
+                  >
                     {l('waive')}
                   </Button>
                 </form>

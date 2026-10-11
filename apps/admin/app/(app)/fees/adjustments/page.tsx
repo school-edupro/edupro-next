@@ -1,3 +1,4 @@
+import { decideAdjustment__outcome, decideProfileChange__outcome } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
@@ -166,13 +167,16 @@ export default async function AdjustmentsPage({
                     <input type="hidden" name="id" value={x.id} />
                     <InputField id={`note-${x.id}`} name="note" label={a('note')} maxLength={300} />
                     <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                      <Button type="submit" name="outcome" value="approved" size="sm">
+                      <Button
+                        type="submit"
+                        formAction={decideAdjustment__outcome.bind(null, 'approved')}
+                        size="sm"
+                      >
                         {a('approve')}
                       </Button>
                       <Button
                         type="submit"
-                        name="outcome"
-                        value="rejected"
+                        formAction={decideAdjustment__outcome.bind(null, 'rejected')}
                         variant="secondary"
                         size="sm"
                       >
@@ -235,13 +239,16 @@ export default async function AdjustmentsPage({
                   >
                     <NoEnterSubmit />
                     <input type="hidden" name="id" value={x.id} />
-                    <Button type="submit" name="outcome" value="approved" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={decideProfileChange__outcome.bind(null, 'approved')}
+                      size="sm"
+                    >
                       {a('statuses.approved')}
                     </Button>
                     <Button
                       type="submit"
-                      name="outcome"
-                      value="rejected"
+                      formAction={decideProfileChange__outcome.bind(null, 'rejected')}
                       variant="secondary"
                       size="sm"
                     >

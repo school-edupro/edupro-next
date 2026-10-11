@@ -1,3 +1,4 @@
+import { dsrSetStatus__status } from '@/lib/choice-actions';
 import { FileLinks } from '@/components/FileLinks';
 import {
   Badge,
@@ -219,18 +220,26 @@ export default async function PrivacyPage({
                     {r.status === 'received' ? (
                       <Button
                         type="submit"
-                        name="status"
-                        value="in_progress"
+                        formAction={dsrSetStatus__status.bind(null, 'in_progress')}
                         size="sm"
                         variant="ghost"
                       >
                         {d('start')}
                       </Button>
                     ) : null}
-                    <Button type="submit" name="status" value="completed" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={dsrSetStatus__status.bind(null, 'completed')}
+                      size="sm"
+                    >
                       {r.kind === 'access' ? d('completeAccess') : d('complete')}
                     </Button>
-                    <Button type="submit" name="status" value="refused" size="sm" variant="ghost">
+                    <Button
+                      type="submit"
+                      formAction={dsrSetStatus__status.bind(null, 'refused')}
+                      size="sm"
+                      variant="ghost"
+                    >
                       {d('refuse')}
                     </Button>
                   </form>

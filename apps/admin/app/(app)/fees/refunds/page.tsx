@@ -1,3 +1,4 @@
+import { decideRefund__outcome } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { makeRefundFeeDue } from '@/lib/fee-request-actions';
 import {
@@ -203,13 +204,16 @@ export default async function RefundsPage({
                       />
                     </FormRow>
                     <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                      <Button type="submit" name="outcome" value="approved" size="sm">
+                      <Button
+                        type="submit"
+                        formAction={decideRefund__outcome.bind(null, 'approved')}
+                        size="sm"
+                      >
                         {r('approve')}
                       </Button>
                       <Button
                         type="submit"
-                        name="outcome"
-                        value="rejected"
+                        formAction={decideRefund__outcome.bind(null, 'rejected')}
                         variant="secondary"
                         size="sm"
                       >

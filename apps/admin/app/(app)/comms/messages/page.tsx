@@ -1,3 +1,4 @@
+import { commsExport__format } from '@/lib/choice-actions';
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
@@ -224,8 +225,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
               ))}
               <button
                 type="submit"
-                name="format"
-                value="pdf"
+                formAction={commsExport__format.bind(null, 'pdf')}
                 className="ep-btn ep-btn--secondary ep-btn--sm"
               >
                 PDF

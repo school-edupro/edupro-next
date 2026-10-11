@@ -1,3 +1,4 @@
+import { requestDepartmentExport__format } from '@/lib/choice-actions';
 import {
   Badge,
   Breadcrumbs,
@@ -655,10 +656,20 @@ export default async function DepartmentPage({
                     <input type="hidden" name="academicYearId" value={dash.year.id} />
                     <InputField id={`from-${r.id}`} name="from" label={i('from')} type="date" />
                     <InputField id={`to-${r.id}`} name="to" label={i('to')} type="date" />
-                    <Button type="submit" name="format" value="csv" variant="secondary" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={requestDepartmentExport__format.bind(null, 'csv')}
+                      variant="secondary"
+                      size="sm"
+                    >
                       {i('exportCsv')}
                     </Button>
-                    <Button type="submit" name="format" value="xlsx" variant="secondary" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={requestDepartmentExport__format.bind(null, 'xlsx')}
+                      variant="secondary"
+                      size="sm"
+                    >
                       {i('exportXlsx')}
                     </Button>
                   </form>

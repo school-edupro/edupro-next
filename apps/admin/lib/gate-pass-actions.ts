@@ -1,5 +1,6 @@
 'use server';
 /** Gate pass v2 server actions (0069): approve, make at the desk, hand over, gate out and in, staff passes, set-up. */
+import { decisionOf } from './decision';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
@@ -36,7 +37,7 @@ const withOk = (path: string, ok: string) => `${path}${path.includes('?') ? '&' 
 /** An approver decides at their level. */
 export async function decidePass(fd: FormData) {
   const here = returnTo(fd, `${BASE}/approvals`);
-  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  const outcome = decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, here);
   try {
     await apiFetch(`/gate-passes/${str(fd, 'id')}/decide`, {
       method: 'POST',

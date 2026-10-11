@@ -1,3 +1,4 @@
+import { decideVariance__status } from '@/lib/choice-actions';
 import {
   Badge,
   Button,
@@ -390,14 +391,17 @@ export default async function ShadowPage({
                     />
                     <Button
                       type="submit"
-                      name="status"
-                      value="explained"
+                      formAction={decideVariance__status.bind(null, 'explained')}
                       size="sm"
                       variant="secondary"
                     >
                       {s('explain')}
                     </Button>
-                    <Button type="submit" name="status" value="resolved" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={decideVariance__status.bind(null, 'resolved')}
+                      size="sm"
+                    >
                       {s('resolve')}
                     </Button>
                   </form>

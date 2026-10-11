@@ -1,3 +1,4 @@
+import { actOnStep__decision } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, FormRow, InputField, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
@@ -100,10 +101,14 @@ export default async function InboxPage({
                 <InputField id={`note-${s.id}`} name="note" label={w('note')} maxLength={500} />
               </FormRow>
               <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}>
-                <Button type="submit" name="decision" value="approve">
+                <Button type="submit" formAction={actOnStep__decision.bind(null, 'approve')}>
                   {w('approve')}
                 </Button>
-                <Button type="submit" name="decision" value="reject" variant="danger">
+                <Button
+                  type="submit"
+                  formAction={actOnStep__decision.bind(null, 'reject')}
+                  variant="danger"
+                >
                   {w('reject')}
                 </Button>
               </div>

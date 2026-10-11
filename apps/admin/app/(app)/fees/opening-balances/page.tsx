@@ -1,3 +1,7 @@
+import {
+  decideOpeningBalances__outcome,
+  submitOpeningBalances__action,
+} from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
@@ -252,10 +256,18 @@ export default async function OpeningBalancesPage({
                       placeholder="Opening balances from the old software"
                     />
                   </label>
-                  <Button type="submit" name="action" value="submit" disabled={open.goodRows === 0}>
+                  <Button
+                    type="submit"
+                    formAction={submitOpeningBalances__action.bind(null, 'submit')}
+                    disabled={open.goodRows === 0}
+                  >
                     Send {open.goodRows} row(s) for approval
                   </Button>
-                  <Button type="submit" name="action" value="cancel" variant="ghost">
+                  <Button
+                    type="submit"
+                    formAction={submitOpeningBalances__action.bind(null, 'cancel')}
+                    variant="ghost"
+                  >
                     Drop this file
                   </Button>
                 </form>
@@ -277,10 +289,17 @@ export default async function OpeningBalancesPage({
                     <span className="ep-field__label">Note</span>
                     <input className="ep-input" id="obNote" name="note" maxLength={300} />
                   </label>
-                  <Button type="submit" name="outcome" value="approved">
+                  <Button
+                    type="submit"
+                    formAction={decideOpeningBalances__outcome.bind(null, 'approved')}
+                  >
                     Approve and apply
                   </Button>
-                  <Button type="submit" name="outcome" value="rejected" variant="secondary">
+                  <Button
+                    type="submit"
+                    formAction={decideOpeningBalances__outcome.bind(null, 'rejected')}
+                    variant="secondary"
+                  >
                     Reject
                   </Button>
                 </form>

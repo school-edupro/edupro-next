@@ -1,3 +1,4 @@
+import { requestFeeReportExport__format } from '@/lib/choice-actions';
 import {
   Badge,
   Button,
@@ -113,17 +114,36 @@ export default async function FeeReportsPage({
     >
       {hidden}
       {report === 'tally' ? (
-        <Button type="submit" name="format" value="xml" size="sm">
+        <Button
+          type="submit"
+          formAction={requestFeeReportExport__format.bind(null, 'xml')}
+          size="sm"
+        >
           {r('exportTally')}
         </Button>
       ) : null}
-      <Button type="submit" name="format" value="csv" variant="secondary" size="sm">
+      <Button
+        type="submit"
+        formAction={requestFeeReportExport__format.bind(null, 'csv')}
+        variant="secondary"
+        size="sm"
+      >
         {r('exportCsv')}
       </Button>
-      <Button type="submit" name="format" value="xlsx" variant="secondary" size="sm">
+      <Button
+        type="submit"
+        formAction={requestFeeReportExport__format.bind(null, 'xlsx')}
+        variant="secondary"
+        size="sm"
+      >
         {r('exportXlsx')}
       </Button>
-      <Button type="submit" name="format" value="pdf" variant="secondary" size="sm">
+      <Button
+        type="submit"
+        formAction={requestFeeReportExport__format.bind(null, 'pdf')}
+        variant="secondary"
+        size="sm"
+      >
         {r('exportPdf')}
       </Button>
     </form>

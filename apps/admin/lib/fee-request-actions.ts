@@ -1,5 +1,6 @@
 'use server';
 /** Fee changes that wait for approval and the Excel uploads behind them (0101). */
+import { decisionOf } from './decision';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 
@@ -329,7 +330,7 @@ export async function submitOpeningBalances(fd: FormData) {
     await apiFetch(`/fees/opening/uploads/${id}/submit`, {
       method: 'POST',
       body: JSON.stringify({
-        action: str(fd, 'action') === 'cancel' ? 'cancel' : 'submit',
+        action: decisionOf(fd, 'action', ['submit', 'cancel'] as const, path),
         reason: str(fd, 'reason') || undefined,
       }),
     });
@@ -343,7 +344,12 @@ export async function decideOpeningBalances(fd: FormData) {
   const id = str(fd, 'id');
   return decide(
     `/fees/opening/uploads/${id}/decide`,
-    str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+    decisionOf(
+      fd,
+      'outcome',
+      ['approved', 'rejected'] as const,
+      `/fees/opening-balances?upload=${id}`,
+    ),
     str(fd, 'note'),
     `/fees/opening-balances?upload=${id}`,
   );

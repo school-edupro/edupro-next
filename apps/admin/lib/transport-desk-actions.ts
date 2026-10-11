@@ -1,5 +1,6 @@
 'use server';
 /** Transport v2 server actions (0077): ask for a pupil, decide at my level, save the set-up. */
+import { decisionOf } from './decision';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
@@ -67,7 +68,7 @@ export async function applyTransport(fd: FormData) {
 /** An approver decides at their level. */
 export async function decideTransport(fd: FormData) {
   const here = returnTo(fd, `${BASE}/requests/approvals`);
-  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  const outcome = decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, here);
   try {
     await apiFetch(`/transport/requests/${str(fd, 'id')}/decide`, {
       method: 'POST',
@@ -112,7 +113,7 @@ export async function decideManyTransport(fd: FormData) {
     redirect(
       `${here}?error=validation-failed&detail=${encodeURIComponent('Tick at least one request')}`,
     );
-  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  const outcome = decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, here);
   let out: { done: number; failed: Array<{ id: string; message: string }> } = {
     done: 0,
     failed: [],

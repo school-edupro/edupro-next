@@ -3,6 +3,7 @@
  * Server actions: the only place the admin app writes to the API. Each action calls the API with the
  * session token (ADR-007), then redirects back with a status so pages stay server-rendered forms.
  */
+import { decisionOf } from './decision';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
@@ -1930,7 +1931,7 @@ export async function installWorkflowDefaults(fd: FormData) {
 
 export async function actOnStep(fd: FormData) {
   const id = str(fd, 'id');
-  const decision = str(fd, 'decision') === 'reject' ? 'reject' : 'approve';
+  const decision = decisionOf(fd, 'decision', ['approve', 'reject'] as const, '/workflow/inbox');
   return run('/workflow/inbox', () =>
     apiFetch(`/workflow/steps/${id}/${decision}`, {
       method: 'POST',
@@ -2591,7 +2592,7 @@ export async function decideRefund(fd: FormData) {
     apiFetch(`/payments/refunds/${id}/decide`, {
       method: 'POST',
       body: JSON.stringify({
-        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        outcome: decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, back),
         note: opt(fd, 'note'),
         reference: opt(fd, 'reference'),
       }),
@@ -2688,7 +2689,7 @@ export async function decideAdjustment(fd: FormData) {
     apiFetch(`/fees/adjustments/${id}/decide`, {
       method: 'POST',
       body: JSON.stringify({
-        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        outcome: decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, '/fees/adjustments'),
         note: opt(fd, 'note'),
       }),
     }),
@@ -2720,7 +2721,7 @@ export async function decideProfileChange(fd: FormData) {
     apiFetch(`/fees/profile-changes/${id}/decide`, {
       method: 'POST',
       body: JSON.stringify({
-        outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+        outcome: decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, '/fees/adjustments'),
         note: opt(fd, 'note'),
       }),
     }),
@@ -3565,8 +3566,8 @@ export async function librarySell(fd: FormData) {
 }
 
 // ---- Sprint 19 ----------------------------------------------------------------------------------
-const decideBody = (fd: FormData) => ({
-  outcome: str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+const decideBody = (fd: FormData, back: string) => ({
+  outcome: decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, back),
   note: opt(fd, 'note'),
 });
 
@@ -3643,7 +3644,7 @@ export async function decideCctv(fd: FormData) {
   return run('/engagement/cctv', () =>
     apiFetch(`/engagement/cctv/${str(fd, 'id')}/decide`, {
       method: 'POST',
-      body: JSON.stringify(decideBody(fd)),
+      body: JSON.stringify(decideBody(fd, '/engagement/cctv')),
     }),
   );
 }
@@ -3665,7 +3666,7 @@ export async function answerEmployeeQuery(fd: FormData) {
   return run('/engagement/employee-queries', () =>
     apiFetch(`/engagement/employee-queries/${str(fd, 'id')}/answer`, {
       method: 'POST',
-      body: JSON.stringify(decideBody(fd)),
+      body: JSON.stringify(decideBody(fd, '/engagement/employee-queries')),
     }),
   );
 }

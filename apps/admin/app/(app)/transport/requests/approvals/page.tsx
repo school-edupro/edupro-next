@@ -1,3 +1,4 @@
+import { decideManyTransport__outcome, decideTransport__outcome } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
@@ -83,10 +84,19 @@ export default async function TransportApprovalsPage({
                 placeholder="Note (needed to reject)"
                 aria-label="Note for the requests ticked"
               />
-              <Button type="submit" name="outcome" value="approved" size="sm">
+              <Button
+                type="submit"
+                formAction={decideManyTransport__outcome.bind(null, 'approved')}
+                size="sm"
+              >
                 Approve the ticked
               </Button>
-              <Button type="submit" name="outcome" value="rejected" size="sm" variant="secondary">
+              <Button
+                type="submit"
+                formAction={decideManyTransport__outcome.bind(null, 'rejected')}
+                size="sm"
+                variant="secondary"
+              >
                 Reject the ticked
               </Button>
             </div>
@@ -126,10 +136,19 @@ export default async function TransportApprovalsPage({
               placeholder="Note (needed to reject)"
               aria-label={`Note for ${r.number}`}
             />
-            <Button type="submit" name="outcome" value="approved" size="sm">
+            <Button
+              type="submit"
+              formAction={decideTransport__outcome.bind(null, 'approved')}
+              size="sm"
+            >
               Approve
             </Button>
-            <Button type="submit" name="outcome" value="rejected" size="sm" variant="secondary">
+            <Button
+              type="submit"
+              formAction={decideTransport__outcome.bind(null, 'rejected')}
+              size="sm"
+              variant="secondary"
+            >
               Reject
             </Button>
             <a

@@ -1,3 +1,4 @@
+import { decidePass__outcome } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import { Alert, Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { ApprovalTrail } from '@/components/gate-passes/ApprovalTrail';
@@ -110,10 +111,14 @@ export default async function GatePassPage({
               <input id="gp-note" name="note" className="ep-input" maxLength={300} />
             </label>
             <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-              <Button type="submit" name="outcome" value="approved">
+              <Button type="submit" formAction={decidePass__outcome.bind(null, 'approved')}>
                 Approve
               </Button>
-              <Button type="submit" name="outcome" value="rejected" variant="secondary">
+              <Button
+                type="submit"
+                formAction={decidePass__outcome.bind(null, 'rejected')}
+                variant="secondary"
+              >
                 Reject
               </Button>
             </div>

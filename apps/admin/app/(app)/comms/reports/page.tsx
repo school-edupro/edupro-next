@@ -1,3 +1,4 @@
+import { commsExport__format } from '@/lib/choice-actions';
 import { Card, PageHeader } from '@edupro/ui';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
@@ -41,8 +42,7 @@ function ExportButtons({
         ))}
         <button
           type="submit"
-          name="format"
-          value="pdf"
+          formAction={commsExport__format.bind(null, 'pdf')}
           className="ep-btn ep-btn--secondary ep-btn--sm"
         >
           PDF

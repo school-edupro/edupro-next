@@ -1,3 +1,4 @@
+import { answerEmployeeQuery__outcome } from '@/lib/choice-actions';
 import { NoEnterSubmit } from '@/components/NoEnterSubmit';
 import {
   Badge,
@@ -153,10 +154,19 @@ export default async function EmployeeQueriesPage({
                     <NoEnterSubmit />
                     <input type="hidden" name="id" value={q.id} />
                     <InputField id={`n-${q.id}`} name="note" label={e('answer')} maxLength={500} />
-                    <Button type="submit" name="outcome" value="approved" size="sm">
+                    <Button
+                      type="submit"
+                      formAction={answerEmployeeQuery__outcome.bind(null, 'approved')}
+                      size="sm"
+                    >
                       {e('answer')}
                     </Button>
-                    <Button type="submit" name="outcome" value="rejected" size="sm" variant="ghost">
+                    <Button
+                      type="submit"
+                      formAction={answerEmployeeQuery__outcome.bind(null, 'rejected')}
+                      size="sm"
+                      variant="ghost"
+                    >
                       {e('reject')}
                     </Button>
                   </form>
