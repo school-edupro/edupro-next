@@ -1,7 +1,7 @@
 'use client';
 import { Dialog, Drawer } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { ExportWatcher } from './ExportWatcher';
 import { FilterRow } from './ReportBuilder';
 import type { ReportSpec, Result, SavedReport } from '@/lib/report-builder';
@@ -124,7 +124,6 @@ export function StudentList({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [exporting, setExporting] = useState<{ id: string; format: string } | null>(null);
   const [pending, start] = useTransition();
-  const ready = useRef(true);
   const fieldListId = 'sl-fields';
 
   const load = useCallback(
@@ -156,26 +155,34 @@ export function StudentList({
     void actions.saveView(next).catch(() => undefined);
   };
 
-  // search as you type (after a short pause)
-  useEffect(() => {
-    if (!ready.current || search === (view.search ?? '')) return;
-    const t = setTimeout(() => apply({ ...view, search }), 350);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const quickValue = (key: string) =>
-    view.filters.find((f) => f.key === key && (f.op === 'eq' || f.op === 'in'))?.values?.[0] ?? '';
-  const setQuick = (key: string, value: string) => {
-    const others = view.filters.filter((f) => !(f.key === key && (f.op === 'eq' || f.op === 'in')));
-    apply({
-      ...view,
-      filters: value ? [...others, { key, op: 'eq', values: [value] }] : others,
-    });
-  };
   const isQuick = (f: StudentListView['filters'][number]) =>
     QUICK_FILTERS.includes(f.key) && (f.op === 'eq' || f.op === 'in');
+  const quickOf = (v: StudentListView): Record<string, string> =>
+    Object.fromEntries(v.filters.filter(isQuick).map((f) => [f.key, f.values?.[0] ?? '']));
+  // the filter row is filled first and used on Apply (as on the withdrawal register)
+  const [status, setStatus] = useState<ListStatus>(initialView.status);
+  const [quick, setQuickDraft] = useState<Record<string, string>>(() => quickOf(initialView));
+  const quickValue = (key: string) => quick[key] ?? '';
+  const setQuick = (key: string, value: string) => setQuickDraft((q) => ({ ...q, [key]: value }));
+  const applyRow = () =>
+    apply({
+      ...view,
+      status,
+      search: search.trim(),
+      filters: [
+        ...view.filters.filter((f) => !isQuick(f)),
+        ...Object.entries(quick)
+          .filter(([, v]) => v)
+          .map(([key, v]) => ({ key, op: 'eq' as const, values: [v] })),
+      ],
+    });
+  const clearRow = () => {
+    setSearch('');
+    setStatus('active');
+    setQuickDraft({});
+    apply({ ...view, status: 'active', search: '', filters: [] });
+  };
   const moreFilters = view.filters.filter((f) => !isQuick(f));
-  const activeFilterCount = view.filters.length + (view.search ? 1 : 0);
 
   const sortBy = (key: string) => {
     const cur = view.sort[0];
@@ -224,41 +231,21 @@ export function StudentList({
 
   return (
     <div className="ep-sl" aria-busy={pending}>
-      <div className="ep-sl__stats" role="group" aria-label="Students by status">
-        {cards.map(([st, label, n, tone]) => (
-          <button
-            key={st}
-            type="button"
-            className={`ep-sl__stat ep-sl__stat--${tone}`}
-            aria-pressed={view.status === st}
-            onClick={() => apply({ ...view, status: st })}
-          >
-            <span className="ep-sl__stat-n">{n.toLocaleString('en-IN')}</span>
-            <span className="ep-sl__stat-l">{label}</span>
-          </button>
-        ))}
-      </div>
-
       <section className="ep-card ep-sl__filters" aria-label="Search and filters">
-        <div className="ep-sl__filter-grid">
-          <label className="ep-field ep-sl__search" htmlFor="sl-search">
-            <span className="ep-field__label">Search</span>
-            <input
-              id="sl-search"
-              className="ep-input"
-              type="search"
-              value={search}
-              placeholder="Admission no, name or parent's mobile"
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          <label className="ep-field" htmlFor="sl-status">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            applyRow();
+          }}
+          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
+        >
+          <label className="ep-field" htmlFor="sl-status" style={{ margin: 0 }}>
             <span className="ep-field__label">Status</span>
             <select
               id="sl-status"
               className="ep-select"
-              value={view.status}
-              onChange={(e) => apply({ ...view, status: e.target.value as ListStatus })}
+              value={status}
+              onChange={(e) => setStatus(e.target.value as ListStatus)}
             >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
@@ -270,11 +257,11 @@ export function StudentList({
             const f = byKey.get(key);
             if (!f) return null;
             return (
-              <label key={key} className="ep-field" htmlFor={`sl-q-${key}`}>
+              <label key={key} className="ep-field" htmlFor={`sl-q-${key}`} style={{ margin: 0 }}>
                 <span className="ep-field__label">{f.label}</span>
                 <select
                   id={`sl-q-${key}`}
-                  className="ep-input"
+                  className="ep-select"
                   value={quickValue(key)}
                   onChange={(e) => setQuick(key, e.target.value)}
                 >
@@ -292,7 +279,24 @@ export function StudentList({
               </label>
             );
           })}
-        </div>
+          <label className="ep-field" htmlFor="sl-search" style={{ margin: 0 }}>
+            <span className="ep-field__label">Student, admission no or mobile</span>
+            <input
+              id="sl-search"
+              className="ep-input"
+              type="search"
+              value={search}
+              maxLength={80}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="ep-btn ep-btn--secondary" disabled={pending}>
+            Apply
+          </button>
+          <button type="button" className="ep-btn ep-btn--ghost" onClick={clearRow}>
+            Clear
+          </button>
+        </form>
         <div className="ep-sl__filter-actions">
           <button
             type="button"
@@ -308,28 +312,21 @@ export function StudentList({
           >
             Columns ({view.columns.length})
           </button>
-          {activeFilterCount ? (
-            <button
-              type="button"
-              className="ep-btn ep-btn--ghost ep-btn--sm"
-              onClick={() => {
-                setSearch('');
-                apply({ ...view, filters: [], search: '' });
-              }}
-            >
-              Clear filters
-            </button>
-          ) : null}
           <button
             type="button"
             className="ep-btn ep-btn--ghost ep-btn--sm"
             onClick={() => {
               setSearch('');
+              setStatus('active');
+              setQuickDraft({});
               apply(DEFAULT_VIEW);
             }}
           >
             Reset view
           </button>
+          <span className="ep-sl__count">
+            {cards.map(([, label, n]) => `${label} ${n.toLocaleString('en-IN')}`).join(' · ')}
+          </span>
         </div>
       </section>
 
