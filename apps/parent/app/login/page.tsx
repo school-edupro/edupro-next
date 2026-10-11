@@ -58,6 +58,10 @@ export default async function LoginPage({
               <select id="sub" name="sub" className="ep-select" required>
                 {[
                   { sub: 'dev-parent', label: 'Parent: Suresh Sharma (two children)' },
+                  {
+                    sub: 'dev-former-parent',
+                    label: 'Former parent: Yash Joshi (Navya A2410, withdrawn)',
+                  },
                   { sub: 'dev-student', label: 'Student: Aarav Sharma (VI-A)' },
                   { sub: 'dev-beta-parent', label: 'Beta parent: Rohan Verma (two children)' },
                   { sub: 'dev-beta-student', label: 'Beta student: Sai Verma (III-A)' },
