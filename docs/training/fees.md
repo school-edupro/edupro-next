@@ -389,3 +389,18 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
 - **Refund default**: the refund form now starts on "the fee stays due" (it shows as outstanding
   again). "Cancelled" must be chosen on purpose. A paid refund that cancelled its fee by mistake:
   Fees → Refunds → "Fee was cancelled by mistake?" → **Make the fee due again** (refund approve right).
+
+## Withdrawal and fee (rule from 2026-10-11)
+
+- When a withdrawal is **completed**, the fee is charged up to the month of the leaving date. Later
+  months are taken off the bill, and fee already paid for those later months (and any advance) is
+  raised by the system as a refund for approval. The fee of the months up to the leaving month stays
+  charged, whatever the head. The "Refundable" tick on a fee head no longer refunds anything by itself.
+- The leaving date may be earlier than the day the withdrawal is started, and cannot be edited later.
+- **Provisional bill** (ledger → Provisional bill): opens on the leaving month by itself; shows what is
+  payable, what comes back, the refunds raised (waiting / paid) with their vouchers, and:
+  - **Refund more, by fee head**: for a refund the school grants beyond the rule (for example April
+    and May tuition on the principal's word) or a deposit. Open the receipt, type the amounts, choose
+    "the fee is cancelled", send; it goes through Fee setup → Approval levels.
+  - **Work the withdrawal refund out again**: closes the waiting refund the withdrawal raised and
+    raises it afresh (for a refund raised with a wrong figure).

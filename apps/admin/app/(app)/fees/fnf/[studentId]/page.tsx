@@ -1,7 +1,9 @@
 import { Button, SelectField } from '@edupro/ui';
 import { PrintButton } from '@/components/PrintButton';
 import { PupilMeta, SheetHead, dmy, rupees } from '@/components/fees/sheets';
-import { apiFetch } from '@/lib/api';
+import { Notice } from '@/components/Notice';
+import { apiFetch, getMe } from '@/lib/api';
+import { resettleWithdrawalFees } from '@/lib/fee-request-actions';
 import type { FeePeriod } from '@/lib/types';
 
 interface Fnf {
@@ -22,6 +24,24 @@ interface Fnf {
   refundable: Array<{ head: string; paid: string }>;
   advance: string;
   notCharged: string;
+  leftOn: string | null;
+  receipts: Array<{
+    id: string;
+    receiptNo: string | null;
+    receivedOn: string;
+    amount: string;
+    refunded: string;
+  }>;
+  refunds: Array<{
+    id: string;
+    voucherNo: string | null;
+    status: string;
+    amount: string;
+    reason: string;
+    byWithdrawal: boolean;
+  }>;
+  refundsWaiting: string;
+  refundsPaid: string;
   totals: {
     payable: string;
     refundable: string;
@@ -37,14 +57,32 @@ export default async function FnfPage({
   searchParams,
 }: {
   params: Promise<{ studentId: string }>;
-  searchParams: Promise<{ lastSeq?: string }>;
+  searchParams: Promise<{ lastSeq?: string; ok?: string; error?: string; detail?: string }>;
 }) {
   const { studentId } = await params;
   const sp = await searchParams;
-  const [bill, periods] = await Promise.all([
+  const [me, bill, periods, withdrawals] = await Promise.all([
+    getMe(),
     apiFetch<Fnf>(`/fees/students/${studentId}/fnf${sp.lastSeq ? `?lastSeq=${sp.lastSeq}` : ''}`),
     apiFetch<{ data: FeePeriod[] }>('/fees/periods').then((r) => r.data),
+    apiFetch<
+      { data: Array<{ id: string; status: string }> } | Array<{ id: string; status: string }>
+    >(`/people/students/${studentId}/withdrawals`)
+      .then((r) => (Array.isArray(r) ? r : r.data))
+      .catch(() => [] as Array<{ id: string; status: string }>),
   ]);
+  const canRefund = me.permissions.includes('fees.refund.request');
+  const completed = withdrawals.find((w) => w.status === 'completed');
+  const canResettle =
+    Boolean(completed) &&
+    me.permissions.includes('people.withdrawal.manage') &&
+    bill.refunds.some((r) => r.byWithdrawal && r.status === 'requested');
+  const REFUND_STATE: Record<string, string> = {
+    requested: 'waiting for approval',
+    approved: 'approved, payment in progress',
+    paid: 'refunded',
+    failed: 'gateway refund failed',
+  };
   const t = bill.totals;
   return (
     <>
@@ -74,6 +112,9 @@ export default async function FnfPage({
         </Button>
         <PrintButton label="Print provisional bill" />
       </form>
+      <div className="ep-noprint">
+        <Notice params={sp} />
+      </div>
       <section className="ep-print-sheet" aria-label="Provisional bill for withdrawal">
         <SheetHead school={bill.school} title="Provisional bill for withdrawal (full and final)" />
         <PupilMeta
@@ -144,13 +185,6 @@ export default async function FnfPage({
                 <td style={{ textAlign: 'right' }}>{rupees(d.paid)}</td>
               </tr>
             ))}
-            {bill.refundable.map((d, i) => (
-              <tr key={`r${i}`}>
-                <td>{d.head} (refundable)</td>
-                <td />
-                <td style={{ textAlign: 'right' }}>{rupees(d.paid)}</td>
-              </tr>
-            ))}
             {Number(bill.advance) > 0 ? (
               <tr>
                 <td>Excess paid (advance)</td>
@@ -183,6 +217,15 @@ export default async function FnfPage({
           </strong>
           {t.direction !== 'nil' ? ` (${t.netWords})` : ''}
         </p>
+        {Number(bill.refundsPaid) > 0 || Number(bill.refundsWaiting) > 0 ? (
+          <p>
+            Refunds of this session: paid ₹{rupees(bill.refundsPaid)}
+            {Number(bill.refundsWaiting) > 0
+              ? ` · waiting for approval ₹${rupees(bill.refundsWaiting)}`
+              : ''}
+            . The refundable amount above is what is still to come back after the refunds paid.
+          </p>
+        ) : null}
         <p className="ep-field__help">
           Provisional: fee of the months after {bill.lastMonth.name} (₹{rupees(bill.notCharged)}) is
           not charged. The final amount is settled by a receipt or a refund in the accounts office
@@ -193,6 +236,92 @@ export default async function FnfPage({
           <span>Accounts officer</span>
           <span>Principal</span>
         </div>
+      </section>
+      <section className="ep-noprint ep-card" style={{ marginTop: 'var(--sp-4)' }}>
+        <h2 className="ep-card__title">Refunds for this pupil</h2>
+        {bill.refunds.length === 0 ? (
+          <p>No refund has been raised.</p>
+        ) : (
+          <div className="ep-table-wrap">
+            <table className="ep-table ep-table--dense">
+              <caption className="ep-sr-only">Refunds raised for this pupil</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Voucher</th>
+                  <th scope="col">Reason</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Amount (₹)
+                  </th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bill.refunds.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <a href={`/fees/refund-voucher/${r.id}`}>{r.voucherNo ?? 'Open'}</a>
+                    </td>
+                    <td>
+                      {r.reason}
+                      {r.byWithdrawal ? (
+                        <div className="ep-field__help">raised by the withdrawal</div>
+                      ) : null}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{rupees(r.amount)}</td>
+                    <td>{REFUND_STATE[r.status] ?? r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {canResettle && completed ? (
+          <form action={resettleWithdrawalFees} style={{ marginTop: 'var(--sp-3)' }}>
+            <input type="hidden" name="id" value={completed.id} />
+            <input type="hidden" name="studentId" value={studentId} />
+            <Button type="submit" variant="secondary" size="sm">
+              Work the withdrawal refund out again
+            </Button>
+            <span className="ep-field__help">
+              {' '}
+              Closes the waiting refund the withdrawal raised and raises it afresh: fee paid for the
+              months after the leaving month, and any advance.
+            </span>
+          </form>
+        ) : null}
+        <h3 className="ep-h4" style={{ marginTop: 'var(--sp-4)' }}>
+          Refund more, by fee head
+        </h3>
+        <p className="ep-field__help">
+          For a refund the school grants beyond the rule (for example April and May tuition on the
+          principal’s word), or a deposit. Open the receipt, type the amounts head by head, choose
+          “the fee is cancelled”, and send; it goes through Fee setup → Approval levels.
+        </p>
+        {!canRefund ? (
+          <p>You do not have the right to raise a refund.</p>
+        ) : bill.receipts.length === 0 ? (
+          <p>The pupil has no receipt to refund from.</p>
+        ) : (
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'grid',
+              gap: 'var(--sp-2)',
+            }}
+          >
+            {bill.receipts.map((p) => (
+              <li key={p.id}>
+                <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/fees/refund/${p.id}`}>
+                  Refund from {p.receiptNo ?? `receipt ${p.id}`}
+                </a>{' '}
+                {dmy(p.receivedOn)} · ₹{rupees(p.amount)}
+                {Number(p.refunded) > 0 ? ` · already refunded ₹${rupees(p.refunded)}` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </>
   );

@@ -488,9 +488,36 @@ describe('withdrawal through configured departments (e2e)', () => {
       expect(refunds[0]).toMatchObject({ status: 'requested', feeAction: 'cancel' });
       expect(Number(refunds[0]!.amount)).toBe(Number(before.paid));
       expect(refunds[0]!.reason).toContain('Withdrawal');
+      // a waiting refund of the withdrawal can be worked out again: the old one is closed, a new one raised
+      const again = await inject({
+        method: 'POST',
+        url: `/people/withdrawals/${ids.wa}/fee-settlement`,
+        headers: h(),
+      });
+      expect(again.statusCode).toBe(201);
+      expect(again.json()).toMatchObject({ replaced: 1, refunds: 1, refundTotal: '4000.00' });
+      const fresh = (
+        (
+          await inject({
+            method: 'GET',
+            url: `/payments/refunds?studentId=${ids.a}&status=requested`,
+            headers: h(),
+          })
+        ).json().data as Array<{ id: string }>
+      )[0]!;
+      expect(fresh.id).not.toBe(refunds[0]!.id);
+      const bill = await inject({
+        method: 'GET',
+        url: `/fees/students/${ids.a}/fnf`,
+        headers: h(),
+      });
+      // the bill is worked out up to the leaving month by itself and lists the refund and the receipt
+      expect(bill.json().lastMonth.name).toContain('August');
+      expect(bill.json()).toMatchObject({ refundsWaiting: '4000.00', refundable: [] });
+      expect(bill.json().receipts).toHaveLength(1);
       const ok = await inject({
         method: 'POST',
-        url: `/payments/refunds/${refunds[0]!.id}/decide`,
+        url: `/payments/refunds/${fresh.id}/decide`,
         headers: h(),
         json: { outcome: 'approved' },
       });

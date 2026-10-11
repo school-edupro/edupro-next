@@ -81,6 +81,7 @@ const PAGES = [
   '/fees/approval',
   '/fees/parent-view/89816',
   '/fees/opening-balances',
+  '/fees/fnf/12312',
   '/fees/refund/13740',
   '/fees/refund-voucher/76',
   '/fees/ledger/89816?tab=waive',

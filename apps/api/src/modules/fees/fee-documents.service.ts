@@ -75,6 +75,27 @@ export interface FnfBill {
   advance: string;
   /** Months after the last month that will not be charged. */
   notCharged: string;
+  /** The leaving date, when the pupil has left or a withdrawal is open. */
+  leftOn: string | null;
+  /** Receipts a refund by fee head can be raised from. */
+  receipts: Array<{
+    id: string;
+    receiptNo: string | null;
+    receivedOn: string;
+    amount: string;
+    refunded: string;
+  }>;
+  /** Refunds of the pupil this session (raised by the withdrawal or by hand), except rejected ones. */
+  refunds: Array<{
+    id: string;
+    voucherNo: string | null;
+    status: string;
+    amount: string;
+    reason: string;
+    byWithdrawal: boolean;
+  }>;
+  refundsWaiting: string;
+  refundsPaid: string;
   totals: {
     payable: string;
     refundable: string;
@@ -400,7 +421,20 @@ export class FeeDocumentsService {
       const current =
         periods.rows.find((p) => p.month === now.rows[0]!.m && p.year === now.rows[0]!.y) ??
         periods.rows[periods.rows.length - 1]!;
-      const last = periods.rows.find((p) => p.sequence === lastSeq) ?? current;
+      // a pupil who has left (or is leaving) is charged up to the month of the leaving date
+      const left = await c.query<{ d: string | null }>(
+        `SELECT COALESCE((SELECT s.left_on FROM students s WHERE s.id = $1 AND s.status <> 'active'),
+                         (SELECT w.leaving_on FROM student_withdrawals w WHERE w.student_id = $1 AND w.status IN ('requested', 'cleared') ORDER BY w.id DESC LIMIT 1))::text AS d`,
+        [studentId],
+      );
+      const leaving = left.rows[0]?.d
+        ? periods.rows.find(
+            (p) =>
+              p.year === Number(left.rows[0]!.d!.slice(0, 4)) &&
+              p.month === Number(left.rows[0]!.d!.slice(5, 7)),
+          )
+        : undefined;
+      const last = periods.rows.find((p) => p.sequence === lastSeq) ?? leaving ?? current;
       const rows = await c.query<{
         head: string;
         period: string;
@@ -423,12 +457,36 @@ export class FeeDocumentsService {
           balance: fmt(Number(r.net) - Number(r.paid)),
         }));
       const paidAhead = rows.rows
-        .filter((r) => r.sequence > last.sequence && Number(r.paid) > 0 && !r.refundable)
+        .filter((r) => r.sequence > last.sequence && Number(r.paid) > 0)
         .map((r) => ({ head: r.head, period: r.period, paid: r.paid }));
-      const refundableMap = new Map<string, number>();
-      for (const r of rows.rows.filter((x) => x.refundable && Number(x.paid) > 0))
-        refundableMap.set(r.head, (refundableMap.get(r.head) ?? 0) + Number(r.paid));
-      const refundable = [...refundableMap].map(([h, paid]) => ({ head: h, paid: fmt(paid) }));
+      // nothing is refunded by a head's "refundable" tick alone: a deposit is raised by fee head below
+      const refundable: Array<{ head: string; paid: string }> = [];
+      const receipts = await c.query<{
+        id: string;
+        receiptNo: string | null;
+        receivedOn: string;
+        amount: string;
+        refunded: string;
+      }>(
+        `SELECT p.id::text, p.receipt_no AS "receiptNo", p.received_on::text AS "receivedOn", p.amount::text, p.refunded::text
+           FROM fee_payments p WHERE p.student_id = $1 AND p.academic_year_id = $2 AND p.status IN ('posted', 'partly_refunded')
+          ORDER BY p.received_on, p.id`,
+        [studentId, yearId],
+      );
+      const refunds = await c.query<{
+        id: string;
+        voucherNo: string | null;
+        status: string;
+        amount: string;
+        reason: string;
+        byWithdrawal: boolean;
+      }>(
+        `SELECT r.id::text, r.voucher_no AS "voucherNo", r.status::text, r.amount::text, r.reason, r.withdrawal_id IS NOT NULL AS "byWithdrawal"
+           FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id
+          WHERE COALESCE(r.student_id, p.student_id) = $1 AND COALESCE(r.academic_year_id, p.academic_year_id) = $2 AND r.status <> 'rejected'
+          ORDER BY r.id`,
+        [studentId, yearId],
+      );
       const notCharged = rows.rows
         .filter((r) => r.sequence > last.sequence)
         .reduce((a, r) => a + Math.max(Number(r.net) - Number(r.paid), 0), 0);
@@ -456,6 +514,17 @@ export class FeeDocumentsService {
         refundable,
         advance: fmt(advance),
         notCharged: fmt(notCharged),
+        leftOn: left.rows[0]?.d ?? null,
+        receipts: receipts.rows,
+        refunds: refunds.rows,
+        refundsWaiting: fmt(
+          refunds.rows
+            .filter((r) => ['requested', 'approved'].includes(r.status))
+            .reduce((a, r) => a + Number(r.amount), 0),
+        ),
+        refundsPaid: fmt(
+          refunds.rows.filter((r) => r.status === 'paid').reduce((a, r) => a + Number(r.amount), 0),
+        ),
         totals: {
           payable: fmt(payable),
           refundable: fmt(back),

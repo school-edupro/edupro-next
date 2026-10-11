@@ -193,6 +193,16 @@ export class LifecycleController {
     return this.withdrawals.issueTc(ctx, id, body);
   }
 
+  @Post('withdrawals/:id/fee-settlement')
+  @ApiOperation({
+    summary:
+      'Work the fee refund of a completed withdrawal out again (waiting refunds are replaced)',
+  })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  resettleFees(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.withdrawals.resettleFees(ctx, id);
+  }
+
   @Post('withdrawals/:id/complete')
   @ApiOperation({
     summary: 'Complete: ends the enrolment, revokes the student (and lone parent) login',

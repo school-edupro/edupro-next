@@ -333,3 +333,14 @@ export async function makeRefundFeeDue(fd: FormData) {
   }
   redirect('/fees/refunds?ok=1');
 }
+
+/** The refund a completed withdrawal raised is closed and worked out again. */
+export async function resettleWithdrawalFees(fd: FormData) {
+  const path = `/fees/fnf/${str(fd, 'studentId')}?x=1`;
+  try {
+    await apiFetch(`/people/withdrawals/${str(fd, 'id')}/fee-settlement`, { method: 'POST' });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`/fees/fnf/${str(fd, 'studentId')}?ok=1`);
+}

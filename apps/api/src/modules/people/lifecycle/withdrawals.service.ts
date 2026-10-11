@@ -1041,6 +1041,67 @@ export class WithdrawalsService {
     return this.get(ctx, id);
   }
 
+  /**
+   * Works the fee side of a completed withdrawal out again: the refunds the system raised that still
+   * wait are closed (with their approval) and raised afresh by today's rule. For a refund raised with
+   * a wrong figure; a refund already paid is not touched.
+   */
+  async resettleFees(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const w = await c.query<{
+        status: string;
+        student_id: string;
+        leaving_on: string;
+        year: string | null;
+      }>(
+        `SELECT status::text, student_id::text, leaving_on::text, academic_year_id::text AS year FROM student_withdrawals WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      const row = w.rows[0];
+      if (!row) throw new DomainError('not-found', 'Withdrawal not found');
+      if (row.status !== 'completed' || !row.year)
+        throw new DomainError(
+          'withdrawal.not_completed',
+          'The fee is settled only for a completed withdrawal',
+          { status: 409 },
+        );
+      const old = await c.query<{ id: string; workflow_instance_id: string | null }>(
+        `UPDATE fee_refunds SET status = 'rejected', decided_by = app.current_user_id(), decided_at = now(),
+                decision_note = 'Replaced: the withdrawal refund was worked out again'
+          WHERE withdrawal_id = $1 AND status = 'requested'
+        RETURNING id::text, workflow_instance_id::text`,
+        [id],
+      );
+      const instances = [
+        ...new Set(old.rows.map((r) => r.workflow_instance_id).filter((x): x is string => !!x)),
+      ];
+      if (instances.length) {
+        await c.query(
+          `UPDATE workflow_steps SET status = 'skipped' WHERE instance_id = ANY($1::bigint[]) AND status = 'pending'`,
+          [instances],
+        );
+        await c.query(
+          `UPDATE workflow_instances SET status = 'cancelled', completed_at = now(), updated_at = now()
+            WHERE id = ANY($1::bigint[]) AND status = 'pending'`,
+          [instances],
+        );
+      }
+      const fee = await settleWithdrawalFees(this.workflow, c, ctx, {
+        id,
+        studentId: row.student_id,
+        leavingOn: row.leaving_on,
+        yearId: row.year,
+      });
+      await this.audit.stage(ctx, c, {
+        action: 'people.withdrawal.fee_resettle',
+        entityType: 'student_withdrawals',
+        entityId: id,
+        after: { replaced: old.rows.length, fee },
+      });
+      return { replaced: old.rows.length, ...fee };
+    });
+  }
+
   async cancel(ctx: RequestContext, id: string, dto: CancelDto): Promise<WithdrawalRow> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.findDb(c, id, true);

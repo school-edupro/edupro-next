@@ -18,8 +18,10 @@ export interface WithdrawalFeeResult {
  *  1. The months after the leaving month are not charged: their unpaid fee is cancelled, so the bill
  *     of the pupil is zero from the next month on.
  *  2. What the family paid beyond that is raised as refunds, for approval through Fee setup ->
- *     Approval levels: fee paid for the later months, refundable heads (security deposit) of any month,
- *     advance lying on receipts, and what is left of last year's advance. One refund per receipt, all
+ *     Approval levels: fee paid for the later months, advance lying on receipts, and what is left of
+ *     last year's advance. The fee of the months up to the leaving month stays charged whatever the
+ *     head; a deposit or a refund the school grants on top is raised by fee head from the
+ *     provisional bill. One refund per receipt, all
  *     of one withdrawal sharing a batch, one approval and one voucher number. The refunded fee is
  *     cancelled, not asked again. The mode (bank transfer) can be changed by raising it afresh.
  */
@@ -58,7 +60,7 @@ export async function settleWithdrawalFees(
        FROM (SELECT payment_id, demand_id, sum(amount) AS amount FROM fee_payment_allocations GROUP BY payment_id, demand_id) a
        JOIN fee_payments p ON p.id = a.payment_id AND p.status IN ('posted', 'partly_refunded')
        JOIN fee_demands d ON d.id = a.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
-      WHERE d.student_id = $1 AND d.academic_year_id = $2 AND (${AFTER} OR h.refundable)
+      WHERE d.student_id = $1 AND d.academic_year_id = $2 AND ${AFTER}
         AND NOT EXISTS (SELECT 1 FROM fee_refunds r WHERE r.payment_id = a.payment_id AND r.status IN ('requested', 'approved'))
       GROUP BY a.payment_id ORDER BY a.payment_id`,
     [w.studentId, w.yearId, w.leavingOn],
