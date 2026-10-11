@@ -369,6 +369,21 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   "Withdrawal: leaving on …". Dues up to the leaving month are collected before, by the fee department's
   clearance.
 
+### One refund for a pupil over many receipts (2026-10-11)
+
+Fees → the pupil → Receipts → **Refund for the pupil (many receipts, one voucher)**.
+
+- The page lists the receipts of the session and one grid, fee heads down and months across. Each box
+  shows what was paid on that fee over all the receipts. Type the amount to give back or press Full.
+- Late fee and advance held on the receipts can be given back too.
+- The system takes the amount from the newest receipt first. In the books every receipt keeps its own
+  refund entry; on paper it is one request, one approval (Fee setup → Approval levels) and one refund
+  voucher number, which lists each head and month with the receipt it came from.
+- Save as draft and print gives the provisional refund bill; send it from that page after the parent agrees.
+- A receipt that already has a refund waiting is left out until that refund is decided. While a pupil
+  draft is saved, the receipts in it cannot get a separate refund.
+- The refund from a single receipt (Refund by fee head on the receipt) stays for the simple case.
+
 ## Opening balance of a pupil (Dr / Cr)
 
 A plus figure is dues (Dr: the pupil owes it from before); a minus figure is advance (Cr).

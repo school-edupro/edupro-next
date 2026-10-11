@@ -160,6 +160,22 @@ export const RequestAdvanceRefundSchema = z.object({
   reference: z.string().trim().max(80).optional(),
 });
 export class RequestAdvanceRefundDto extends createZodDto(RequestAdvanceRefundSchema) {}
+/** One refund for a pupil over every receipt of the year: the system splits it over the receipts. */
+export const RequestStudentRefundSchema = z.object({
+  lines: z
+    .array(z.object({ demandId: IdSchema, amount: Amount }))
+    .max(400)
+    .default([]),
+  /** Late fee and advance held on the receipts, taken from the newest receipt first. */
+  lateFee: z.number().min(0).max(99_999_999).default(0),
+  advance: z.number().min(0).max(99_999_999).default(0),
+  feeAction: z.enum(['due', 'cancel']).default('due'),
+  draft: z.boolean().default(false),
+  reason: z.string().trim().min(3).max(300),
+  mode: z.enum(['cash', 'bank', 'cheque']),
+  reference: z.string().trim().max(80).optional(),
+});
+export class RequestStudentRefundDto extends createZodDto(RequestStudentRefundSchema) {}
 export const RefundFeeDueSchema = z.object({ reason: z.string().trim().min(3).max(300) });
 export class RefundFeeDueDto extends createZodDto(RefundFeeDueSchema) {}
 export class RequestRefundDto extends createZodDto(RequestRefundSchema) {}

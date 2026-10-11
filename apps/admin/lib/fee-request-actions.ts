@@ -258,6 +258,48 @@ async function headRefund(fd: FormData, draft: boolean) {
   // a draft opens as the provisional refund bill, ready to print
   redirect(draft ? `/fees/refund-voucher/${id}?ok=1` : '/fees/refunds?ok=1');
 }
+/** One refund for a pupil over many receipts: fee lines by head and month, late fee and advance. */
+async function pupilRefund(fd: FormData, draft: boolean) {
+  const studentId = str(fd, 'studentId');
+  const path = `/fees/refund-pupil/${studentId}?x=1`;
+  let raw: Array<{ part?: string; demandId?: string; amount?: number }> = [];
+  try {
+    raw = JSON.parse(str(fd, 'lines') || '[]') as typeof raw;
+  } catch {
+    raw = [];
+  }
+  const sum = (part: string) =>
+    raw.filter((l) => l.part === part).reduce((a, l) => a + Number(l.amount ?? 0), 0);
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>(`/payments/refunds/student/${studentId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        lines: raw
+          .filter((l) => l.part === 'fee' && l.demandId)
+          .map((l) => ({ demandId: l.demandId, amount: Number(l.amount ?? 0) })),
+        lateFee: sum('late_fee'),
+        advance: sum('advance'),
+        draft,
+        feeAction: str(fd, 'feeAction') === 'cancel' ? 'cancel' : 'due',
+        mode: str(fd, 'mode') || 'bank',
+        reference: str(fd, 'reference') || undefined,
+        reason: str(fd, 'reason'),
+      }),
+    });
+    id = r.id;
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(draft ? `/fees/refund-voucher/${id}?ok=1` : '/fees/refunds?ok=1');
+}
+export async function requestPupilRefund(fd: FormData) {
+  return pupilRefund(fd, false);
+}
+export async function savePupilRefundDraft(fd: FormData) {
+  return pupilRefund(fd, true);
+}
+
 export async function requestHeadRefund(fd: FormData) {
   return headRefund(fd, false);
 }

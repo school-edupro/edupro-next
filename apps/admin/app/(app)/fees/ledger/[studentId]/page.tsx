@@ -528,6 +528,16 @@ export default async function FeeLedgerPage({
 
       {tab === 'receipts' ? (
         <Card title="Receipts of the year">
+          {can('fees.refund.request') && yearOpen ? (
+            <p>
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/fees/refund-pupil/${studentId}`}
+              >
+                Refund for the pupil (many receipts, one voucher)
+              </a>
+            </p>
+          ) : null}
           {Number(openingAdvance.available) > 0 && can('fees.refund.request') && yearOpen ? (
             <details style={{ marginBottom: 'var(--sp-4)' }}>
               <summary>

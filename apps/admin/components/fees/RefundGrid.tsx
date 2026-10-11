@@ -26,7 +26,10 @@ export function RefundGrid({
   action,
   draftAction,
   draft,
+  pupil = false,
 }: {
+  /** One refund over all the pupil's receipts: the boxes show what was paid over every receipt. */
+  pupil?: boolean;
   paymentId: string;
   studentId: string;
   lines: RefundableLine[];
@@ -99,8 +102,10 @@ export function RefundGrid({
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="lines" value={JSON.stringify(payload)} />
       <p className="ep-field__help">
-        Each box shows what this receipt paid on that fee. Type the amount to give back, or press
-        “Full”. Leave a box empty to keep that fee paid.
+        {pupil
+          ? 'Each box shows what was paid on that fee over all the receipts.'
+          : 'Each box shows what this receipt paid on that fee.'}{' '}
+        Type the amount to give back, or press “Full”. Leave a box empty to keep that fee paid.
       </p>
       <p>
         <button
@@ -112,7 +117,7 @@ export function RefundGrid({
             setLate(!allFull && Number(lateFee) > 0 ? lateFee : '');
           }}
         >
-          {allFull ? 'Clear all' : 'Refund the whole receipt'}
+          {allFull ? 'Clear all' : pupil ? 'Refund everything paid' : 'Refund the whole receipt'}
         </button>
       </p>
       {lines.length > 0 ? (
@@ -204,7 +209,10 @@ export function RefundGrid({
           </table>
         </div>
       ) : (
-        <p>This receipt paid no fee line (it is all advance or late fee).</p>
+        <p>
+          {pupil ? 'No fee line is paid' : 'This receipt paid no fee line'} (it is all advance or
+          late fee).
+        </p>
       )}
       <div
         style={{
@@ -217,7 +225,9 @@ export function RefundGrid({
       >
         {Number(advance) > 0 ? (
           <label className="ep-field" htmlFor="rfAdvance">
-            <span className="ep-field__label">Advance on the receipt (₹)</span>
+            <span className="ep-field__label">
+              Advance on the {pupil ? 'receipts' : 'receipt'} (₹)
+            </span>
             <input
               className="ep-input"
               id="rfAdvance"
@@ -233,7 +243,9 @@ export function RefundGrid({
         ) : null}
         {Number(lateFee) > 0 ? (
           <label className="ep-field" htmlFor="rfLate">
-            <span className="ep-field__label">Late fee on the receipt (₹)</span>
+            <span className="ep-field__label">
+              Late fee on the {pupil ? 'receipts' : 'receipt'} (₹)
+            </span>
             <input
               className="ep-input"
               id="rfLate"
@@ -329,7 +341,7 @@ export function RefundGrid({
       </p>
       {over ? (
         <p className="ep-alert ep-alert--danger" role="alert">
-          An amount is more than what the receipt paid there.
+          An amount is more than what was paid there.
         </p>
       ) : null}
     </form>

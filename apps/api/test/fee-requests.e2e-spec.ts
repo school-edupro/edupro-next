@@ -908,4 +908,160 @@ describe('fee changes that wait for approval (e2e)', () => {
       ).json().draft,
     ).toBeNull();
   });
+
+  it('one refund for a pupil over three receipts: one draft, one approval, one voucher number', async () => {
+    const sectionId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT class_section_id::text AS id FROM enrolments WHERE student_id = $1 LIMIT 1`,
+        [students.a],
+      );
+      return r.rows[0]!.id;
+    });
+    const mk = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: {
+        admissionNo: 'FRQ-pupil',
+        firstName: 'pupil',
+        lastName: 'Request',
+        dob: '2015-01-01',
+        admittedOn: '2025-04-05',
+        enrolment: { classSectionId: sectionId, rollNo: 48 },
+      },
+    });
+    const sid = mk.json().id as string;
+    await inject({ method: 'POST', url: `/fees/students/${sid}/demands/generate`, headers: h() });
+    const pids: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const paid = await receipt({ studentId: sid, amount: 1100, mode: 'cash' });
+      expect(paid.statusCode).toBe(201);
+      pids.push(paid.json().paymentId as string);
+    }
+    interface Can {
+      receipts: Array<{ paymentId: string; waiting: boolean }>;
+      lines: Array<{ demandId: string; paid: string; receipts: string[] }>;
+      advance: string;
+      lateFee: string;
+      draft: { id: string; amount: string; receipts: number } | null;
+    }
+    const canNow = async () =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/payments/refunds/student/${sid}/refundable`,
+          headers: h(accountant),
+        })
+      ).json() as Can;
+    const can = await canNow();
+    expect(can.receipts).toHaveLength(3);
+    expect(can.draft).toBeNull();
+    const feePaid = can.lines.reduce((a, l) => a + Number(l.paid), 0);
+    expect(feePaid + Number(can.advance) + Number(can.lateFee)).toBeCloseTo(3300, 2);
+    const save = (lines: Array<{ demandId: string; amount: number }>, all: boolean, draft = true) =>
+      inject({
+        method: 'POST',
+        url: `/payments/refunds/student/${sid}`,
+        headers: h(accountant),
+        json: {
+          draft,
+          lines,
+          lateFee: all ? Number(can.lateFee) : 0,
+          advance: all ? Number(can.advance) : 0,
+          mode: 'bank',
+          reason: 'Family is moving; fee paid ahead goes back',
+        },
+      });
+    // more than was paid on a line is refused
+    const over = await save([{ demandId: can.lines[0]!.demandId, amount: 99999 }], false);
+    expect(over.statusCode).toBe(409);
+    expect(over.json().type).toBe('fees.refund_line_exceeds');
+    // a small draft sits on one receipt only
+    const small = await save([{ demandId: can.lines[0]!.demandId, amount: 100 }], false);
+    expect(small.statusCode).toBe(201);
+    expect(small.json()).toMatchObject({ status: 'draft', amount: '100.00' });
+    expect((await canNow()).draft).toMatchObject({ amount: '100.00', receipts: 1 });
+    // saved again with everything: the draft is replaced and spreads over the three receipts
+    const full = await save(
+      can.lines.map((l) => ({ demandId: l.demandId, amount: Number(l.paid) })),
+      true,
+    );
+    expect(full.statusCode).toBe(201);
+    const draft = (await canNow()).draft!;
+    expect(draft).toMatchObject({ amount: '3300.00', receipts: 3 });
+    const voucher = await inject({
+      method: 'GET',
+      url: `/payments/refunds/${draft.id}/voucher`,
+      headers: h(),
+    });
+    expect(voucher.json()).toMatchObject({
+      status: 'draft',
+      amount: '3300.00',
+      voucherNo: null,
+      pupil: true,
+    });
+    // while the pupil draft is open, a receipt in it cannot get its own refund
+    const single = await inject({
+      method: 'POST',
+      url: `/payments/receipts/${pids[0]}/refunds`,
+      headers: h(accountant),
+      json: { amount: 50, mode: 'cash', reason: 'single receipt refund' },
+    });
+    expect(single.statusCode).toBe(409);
+    expect(single.json().type).toBe('fees.refund_in_pupil_draft');
+    // nothing has changed in the books yet
+    let l = await ledgerOf(sid);
+    expect((l as unknown as { refunds: unknown[] }).refunds).toHaveLength(0);
+    const sent = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${draft.id}/send`,
+      headers: h(accountant),
+    });
+    expect(sent.statusCode).toBe(201);
+    const rows = async () =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/payments/refunds?studentId=${sid}`,
+          headers: h(),
+        })
+      ).json().data as Array<{
+        id: string;
+        status: string;
+        voucherNo: string | null;
+        batchId: string;
+        amount: string;
+      }>;
+    let all = await rows();
+    expect(all).toHaveLength(3);
+    expect(new Set(all.map((r) => r.status))).toEqual(new Set(['requested']));
+    expect(new Set(all.map((r) => r.batchId)).size).toBe(1);
+    // the receipts wait: a second pupil refund finds nothing to use
+    expect((await canNow()).receipts.every((r) => r.waiting)).toBe(true);
+    // one approval decides the three together and they carry one voucher number
+    const ok = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${all[0]!.id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(ok.json()).toMatchObject({ status: 'paid' });
+    all = await rows();
+    expect(new Set(all.map((r) => r.status))).toEqual(new Set(['paid']));
+    const numbers = new Set(all.map((r) => r.voucherNo));
+    expect(numbers.size).toBe(1);
+    expect([...numbers][0]).toMatch(/^RF\//);
+    expect(all.reduce((a, r) => a + Number(r.amount), 0)).toBeCloseTo(3300, 2);
+    const paper = await inject({
+      method: 'GET',
+      url: `/payments/refunds/${all[0]!.id}/voucher`,
+      headers: h(),
+    });
+    expect(paper.json()).toMatchObject({ amount: '3300.00', voucherNo: [...numbers][0] });
+    // the fee stays due by default: what was paid is owed again
+    l = await ledgerOf(sid);
+    expect(Number(l.instalments[0]!.balance)).toBeGreaterThan(0);
+    const after = await canNow();
+    expect(after.lines).toHaveLength(0);
+  });
 });

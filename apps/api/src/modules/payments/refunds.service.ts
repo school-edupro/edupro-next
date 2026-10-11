@@ -16,6 +16,7 @@ import type {
   ListRefundsQueryDto,
   RequestAdvanceRefundDto,
   RequestRefundDto,
+  RequestStudentRefundDto,
 } from './payments.dto';
 
 /** The approval a refund rides; its levels mirror the fee change approval. */
@@ -236,6 +237,268 @@ export class RefundsService {
   }
 
   /**
+   * What a pupil can still be given back over every receipt of the working year: each fee line with
+   * what was paid on it (and from which receipts), the late fee and the advance held on the receipts.
+   * A receipt with a refund already waiting is left out until that refund is decided.
+   */
+  async studentRefundable(ctx: RequestContext, studentId: string) {
+    const yearId = this.yearOf(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const s = await c.query<{ name: string; admission_no: string }>(
+        `SELECT display_name AS name, admission_no FROM students WHERE id = $1 AND deleted_at IS NULL`,
+        [studentId],
+      );
+      if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      const pool = await this.studentPool(c, studentId, yearId);
+      const byDemand = new Map<
+        string,
+        {
+          demandId: string;
+          headId: string;
+          head: string;
+          sequence: number;
+          period: string;
+          paid: number;
+          receipts: string[];
+        }
+      >();
+      for (const r of pool.usable)
+        for (const l of r.lines) {
+          const d = byDemand.get(l.demandId) ?? { ...l, paid: 0, receipts: [] };
+          d.paid += Number(l.paid);
+          d.receipts.push(r.receiptNo ?? r.paymentId);
+          byDemand.set(l.demandId, d);
+        }
+      const draft = await this.studentDraft(c, studentId, yearId);
+      return {
+        studentId,
+        studentName: s.rows[0].name,
+        admissionNo: s.rows[0].admission_no,
+        receipts: pool.all.map((r) => ({
+          paymentId: r.paymentId,
+          receiptNo: r.receiptNo,
+          receivedOn: r.receivedOn,
+          mode: r.mode,
+          amount: r.amount,
+          refunded: r.refunded,
+          waiting: r.waiting,
+        })),
+        lines: [...byDemand.values()].map((d) => ({ ...d, paid: d.paid.toFixed(2) })),
+        advance: pool.usable.reduce((a, r) => a + Number(r.advance), 0).toFixed(2),
+        lateFee: pool.usable.reduce((a, r) => a + Number(r.lateFee), 0).toFixed(2),
+        draft,
+      };
+    });
+  }
+
+  private yearOf(ctx: RequestContext): string {
+    const y = requireTenant(ctx).academicYearId;
+    if (!y)
+      throw new DomainError('year.not_selected', 'No academic year is active or selected', {
+        status: 409,
+      });
+    return y;
+  }
+
+  /** The pupil's live receipts of the year, newest first, each with what it can still give back. */
+  private async studentPool(c: PoolClient, studentId: string, yearId: string) {
+    const p = await c.query<{ id: string; waiting: boolean }>(
+      `SELECT p.id::text,
+              EXISTS (SELECT 1 FROM fee_refunds r WHERE r.payment_id = p.id AND r.status IN ('requested', 'approved')) AS waiting
+         FROM fee_payments p
+        WHERE p.student_id = $1 AND p.academic_year_id = $2 AND p.status IN ('posted', 'partly_refunded')
+        ORDER BY p.received_on DESC, p.id DESC`,
+      [studentId, yearId],
+    );
+    const all = [];
+    for (const r of p.rows) all.push({ ...(await this.refundableIn(c, r.id)), waiting: r.waiting });
+    return { all, usable: all.filter((r) => !r.waiting) };
+  }
+
+  /** The pupil refund kept as a draft (its rows share a batch), added up line by line. */
+  private async studentDraft(c: PoolClient, studentId: string, yearId: string) {
+    const r = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values are bound parameters
+      `${SELECT} WHERE r.status = 'draft' AND r.batch_id IS NOT NULL AND r.withdrawal_id IS NULL
+          AND p.student_id = $1 AND p.academic_year_id = $2 ORDER BY r.id`,
+      [studentId, yearId],
+    );
+    const rows = r.rows.map(toRow);
+    if (rows.length === 0) return null;
+    const lines = new Map<string, { part: string; demandId?: string; amount: number }>();
+    for (const row of rows)
+      for (const l of row.lines ?? []) {
+        const k = l.part === 'fee' ? `fee:${l.demandId ?? ''}` : l.part;
+        const cur = lines.get(k) ?? { part: l.part, demandId: l.demandId, amount: 0 };
+        cur.amount += Number(l.amount);
+        lines.set(k, cur);
+      }
+    return {
+      id: rows[0]!.id,
+      amount: rows.reduce((a, x) => a + Number(x.amount), 0).toFixed(2),
+      receipts: rows.length,
+      lines: [...lines.values()].map((l) => ({ ...l, amount: l.amount.toFixed(2) })),
+      feeAction: rows[0]!.feeAction,
+      mode: rows[0]!.mode,
+      reference: rows[0]!.reference,
+      reason: rows[0]!.reason,
+    };
+  }
+
+  /**
+   * One refund for a pupil over many receipts: the amounts are chosen by fee head and month, and taken
+   * from the receipts newest first. In the books each receipt gets its own refund row; the rows share
+   * one batch, so they ride one approval and carry one voucher number.
+   */
+  async requestForStudent(
+    ctx: RequestContext,
+    studentId: string,
+    dto: RequestStudentRefundDto,
+  ): Promise<RefundRow> {
+    const yearId = this.yearOf(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      await c.query(
+        `SELECT 1 FROM fee_payments WHERE student_id = $1 AND academic_year_id = $2 ORDER BY id FOR UPDATE`,
+        [studentId, yearId],
+      );
+      const pool = await this.studentPool(c, studentId, yearId);
+      const name = await c.query<{ name: string }>(
+        `SELECT display_name AS name FROM students WHERE id = $1 AND deleted_at IS NULL`,
+        [studentId],
+      );
+      if (!name.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      const per = new Map<string, RefundLine[]>();
+      const add = (paymentId: string, l: RefundLine) =>
+        per.set(paymentId, [...(per.get(paymentId) ?? []), l]);
+      const short = (what: string, max: number) =>
+        new DomainError(
+          'fees.refund_line_exceeds',
+          `Only ₹${max.toFixed(2)} can be given back on ${what}`,
+          { status: 409 },
+        );
+      // fee lines: the newest receipt that paid the line gives first
+      const want = new Map<string, number>();
+      for (const l of dto.lines)
+        if (l.amount > 0) want.set(l.demandId, (want.get(l.demandId) ?? 0) + l.amount);
+      for (const [demandId, amount] of want) {
+        let left = amount;
+        let label = 'this fee';
+        let max = 0;
+        for (const r of pool.usable) {
+          const d = r.lines.find((x) => x.demandId === demandId);
+          if (!d) continue;
+          label = `${d.head} · ${d.period}`;
+          max += Number(d.paid);
+          const take = Math.min(left, Number(d.paid));
+          if (take <= 0) continue;
+          add(r.paymentId, {
+            part: 'fee',
+            demandId,
+            head: d.head,
+            period: d.period,
+            amount: take.toFixed(2),
+          });
+          left = Number((left - take).toFixed(2));
+        }
+        if (left > 0.005) throw short(label, max);
+      }
+      // late fee and advance the same way
+      for (const [part, amount, head] of [
+        ['late_fee', dto.lateFee, 'Late fee'],
+        ['advance', dto.advance, 'Advance on the receipt'],
+      ] as const) {
+        let left = amount;
+        let max = 0;
+        for (const r of pool.usable) {
+          const has = Number(part === 'late_fee' ? r.lateFee : r.advance);
+          max += has;
+          const take = Math.min(left, has);
+          if (take <= 0) continue;
+          add(r.paymentId, { part, head, period: null, amount: take.toFixed(2) });
+          left = Number((left - take).toFixed(2));
+        }
+        if (left > 0.005) throw short(part === 'late_fee' ? 'late fee' : 'advance', max);
+      }
+      if (per.size === 0)
+        throw new DomainError('validation-failed', 'Give an amount on at least one line', {
+          status: 422,
+        });
+      // a draft is rewritten each time it is saved (the pupil's own, and any on the receipts used)
+      await c.query(
+        `DELETE FROM fee_refunds r USING fee_payments p
+          WHERE p.id = r.payment_id AND r.status = 'draft' AND r.withdrawal_id IS NULL AND p.student_id = $1 AND p.academic_year_id = $2
+            AND (r.batch_id IS NOT NULL OR r.payment_id = ANY($3::bigint[]))`,
+        [studentId, yearId, [...per.keys()]],
+      );
+      const batch = await c.query<{ id: string }>(`SELECT gen_random_uuid()::text AS id`);
+      const ids: string[] = [];
+      let total = 0;
+      // oldest receipt first, so the voucher reads in the order of the receipts
+      for (const r of [...pool.usable].reverse()) {
+        const lines = per.get(r.paymentId);
+        if (!lines) continue;
+        const amount = lines.reduce((a, l) => a + Number(l.amount), 0);
+        const ins = await c.query<{ id: string }>(
+          `INSERT INTO fee_refunds (school_id, payment_id, amount, reason, mode, reference, requested_by, request_id, lines, fee_action, status, batch_id)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id(), app.current_request_id(), $6::jsonb, $7, $8::refund_status, $9::uuid) RETURNING id::text`,
+          [
+            r.paymentId,
+            amount.toFixed(2),
+            dto.reason,
+            dto.mode,
+            dto.reference ?? null,
+            JSON.stringify(lines),
+            dto.feeAction,
+            dto.draft ? 'draft' : 'requested',
+            batch.rows[0]!.id,
+          ],
+        );
+        ids.push(ins.rows[0]!.id);
+        total += amount;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'fees.refund.request',
+        entityType: 'fee_refunds',
+        entityId: ids[0]!,
+        after: {
+          kind: 'pupil',
+          studentId,
+          receipts: ids.length,
+          amount: total.toFixed(2),
+          feeAction: dto.feeAction,
+          draft: dto.draft,
+          reason: dto.reason,
+        },
+      });
+      if (!dto.draft)
+        await this.startApproval(
+          c,
+          ctx,
+          ids,
+          this.pupilSubject(name.rows[0].name, total, ids.length, dto.feeAction),
+          { kind: 'pupil', reason: dto.reason, feeAction: dto.feeAction },
+        );
+      return this.find(c, ids[0]!);
+    });
+  }
+
+  private pupilSubject(name: string, total: number, receipts: number, feeAction: string): string {
+    return `Refund: ${name}: Rs. ${total.toFixed(2)} from ${String(receipts)} receipt${receipts === 1 ? '' : 's'} (fee ${feeAction === 'cancel' ? 'cancelled' : 'due again'})`;
+  }
+
+  /** The drafts sent or dropped together: a pupil refund is every draft of its batch. */
+  private async draftsWith(c: PoolClient, d: RefundRow): Promise<RefundRow[]> {
+    if (!d.batchId) return [d];
+    const r = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; the batch is a bound parameter
+      `${SELECT} WHERE r.batch_id = $1::uuid AND r.status = 'draft' ORDER BY r.id`,
+      [d.batchId],
+    );
+    return r.rows.map(toRow);
+  }
+
+  /**
    * The refund voucher: the refund (or every refund raised with it) as one paper, head by head, with
    * the mode it was paid by and who approved it.
    */
@@ -288,6 +551,7 @@ export class RefundsService {
         voucherNo: one.voucherNo,
         refundId: one.id,
         paymentId: one.paymentId,
+        pupil: Boolean(one.batchId && !one.withdrawalId),
         status: one.status,
         paidOn: one.paidOn,
         requestedAt: one.requestedAt,
@@ -565,6 +829,16 @@ export class RefundsService {
             { status: 409 },
           );
       }
+      const inPupilDraft = await c.query(
+        `SELECT 1 FROM fee_refunds WHERE payment_id = $1 AND status = 'draft' AND batch_id IS NOT NULL`,
+        [paymentId],
+      );
+      if (inPupilDraft.rowCount)
+        throw new DomainError(
+          'fees.refund_in_pupil_draft',
+          'This receipt is part of a refund draft for the pupil: open "Refund for the pupil" to change, send or discard it',
+          { status: 409 },
+        );
       // a draft is rewritten each time it is saved; sending it uses the same row
       await c.query(`DELETE FROM fee_refunds WHERE payment_id = $1 AND status = 'draft'`, [
         paymentId,
@@ -631,55 +905,65 @@ export class RefundsService {
         throw new DomainError('fees.refund_not_draft', 'This refund is not a draft any more', {
           status: 409,
         });
+      const all = await this.draftsWith(c, d);
+      const ids = all.map((x) => x.id);
+      const total = all.reduce((a, x) => a + Number(x.amount), 0);
       if (action === 'discard') {
-        await c.query(`DELETE FROM fee_refunds WHERE id = $1 AND status = 'draft'`, [id]);
+        await c.query(`DELETE FROM fee_refunds WHERE id = ANY($1::bigint[]) AND status = 'draft'`, [
+          ids,
+        ]);
         await this.audit.stage(ctx, c, {
           action: 'fees.refund.draft_discard',
           entityType: 'fee_refunds',
           entityId: id,
-          before: { amount: d.amount },
+          before: { amount: total.toFixed(2), receipts: ids.length },
         });
         return { discarded: true as const };
       }
-      if (d.paymentId) {
-        const can = await this.refundableIn(c, d.paymentId);
+      for (const x of all) {
+        if (!x.paymentId) continue;
+        const can = await this.refundableIn(c, x.paymentId);
         const left = Number(can.amount) - Number(can.refunded);
         const byDemand = new Map(can.lines.map((l) => [l.demandId, Number(l.paid)]));
         const short =
-          Number(d.amount) > left + 0.005 ||
-          (d.lines ?? []).some(
+          Number(x.amount) > left + 0.005 ||
+          (x.lines ?? []).some(
             (l) =>
               l.part === 'fee' && Number(l.amount) > (byDemand.get(l.demandId ?? '') ?? 0) + 0.005,
           );
         if (short)
           throw new DomainError(
             'fees.refund_exceeds_receipt',
-            'The receipt changed since the draft was saved: open the draft, correct the amounts and save it again',
+            'A receipt changed since the draft was saved: open the draft, correct the amounts and save it again',
             { status: 409 },
           );
       }
       try {
         await c.query(
-          `UPDATE fee_refunds SET status = 'requested', requested_by = app.current_user_id(), requested_at = now() WHERE id = $1`,
-          [id],
+          `UPDATE fee_refunds SET status = 'requested', requested_by = app.current_user_id(), requested_at = now() WHERE id = ANY($1::bigint[])`,
+          [ids],
         );
       } catch (error) {
         if ((error as { code?: string }).code === '23505')
-          throw new DomainError('fees.refund_open', 'A refund is already open for this receipt', {
+          throw new DomainError('fees.refund_open', 'A refund is already open for a receipt', {
             status: 409,
           });
         throw error;
       }
-      await this.startApproval(c, ctx, [id], this.subjectOf(d), {
-        kind: 'receipt',
-        reason: d.reason,
-        feeAction: d.feeAction,
-      });
+      await this.startApproval(
+        c,
+        ctx,
+        ids,
+        d.batchId
+          ? this.pupilSubject(d.studentName, total, ids.length, d.feeAction)
+          : this.subjectOf(d),
+        { kind: d.batchId ? 'pupil' : 'receipt', reason: d.reason, feeAction: d.feeAction },
+      );
       await this.audit.stage(ctx, c, {
         action: 'fees.refund.draft_send',
         entityType: 'fee_refunds',
         entityId: id,
-        after: { amount: d.amount },
+        after: { amount: total.toFixed(2), receipts: ids.length },
       });
       return this.find(c, id);
     });
@@ -689,7 +973,7 @@ export class RefundsService {
   async draftOf(ctx: RequestContext, paymentId: string): Promise<RefundRow | null> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{ id: string }>(
-        `SELECT id::text FROM fee_refunds WHERE payment_id = $1 AND status = 'draft'`,
+        `SELECT id::text FROM fee_refunds WHERE payment_id = $1 AND status = 'draft' AND batch_id IS NULL`,
         [paymentId],
       );
       return r.rows[0] ? this.find(c, r.rows[0].id) : null;
@@ -705,6 +989,14 @@ export class RefundsService {
           'This refund goes through the approval levels: approve it from My approvals',
           { status: 409 },
         );
+      // refunds raised together are decided together
+      if (row.batchId) {
+        const rest = await c.query<{ id: string }>(
+          `SELECT id::text FROM fee_refunds WHERE batch_id = $1::uuid AND status = 'requested' AND id <> $2 ORDER BY id`,
+          [row.batchId, id],
+        );
+        for (const r of rest.rows) await this.decideWith(c, ctx, r.id, dto);
+      }
       return this.decideWith(c, ctx, id, dto);
     });
   }

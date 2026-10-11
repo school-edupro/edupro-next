@@ -21,6 +21,7 @@ import {
   RefundFeeDueDto,
   RequestAdvanceRefundDto,
   RequestRefundDto,
+  RequestStudentRefundDto,
   UploadSettlementDto,
 } from './payments.dto';
 import { PaymentsService } from './payments.service';
@@ -193,6 +194,28 @@ export class PaymentsController {
   @RequirePermission(PAYMENTS.refundRequest)
   requestAdvanceRefund(@ReqCtx() ctx: RequestContext, @Body() body: RequestAdvanceRefundDto) {
     return this.refunds.requestAdvance(ctx, body);
+  }
+
+  @Get('refunds/student/:studentId/refundable')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'What a pupil can still be given back over every receipt of the year' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  studentRefundable(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.refunds.studentRefundable(ctx, studentId);
+  }
+
+  @Post('refunds/student/:studentId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'One refund for a pupil over many receipts (one approval, one voucher)',
+  })
+  @RequirePermission(PAYMENTS.refundRequest)
+  requestStudentRefund(
+    @ReqCtx() ctx: RequestContext,
+    @Param('studentId') studentId: string,
+    @Body() body: RequestStudentRefundDto,
+  ) {
+    return this.refunds.requestForStudent(ctx, studentId, body);
   }
 
   @Get('refunds/:id/voucher')
