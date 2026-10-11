@@ -368,3 +368,19 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   a refund for approval, with the fee cancelled. It shows under Fees → Refunds with the reason
   "Withdrawal: leaving on …". Dues up to the leaving month are collected before, by the fee department's
   clearance.
+
+## Opening balance of a pupil (Dr / Cr)
+
+A plus figure is dues (Dr: the pupil owes it from before); a minus figure is advance (Cr).
+
+- **One pupil**: student profile → Fees tab → request form → **Opening balance** (for example 15000 or
+  -15000) → reason → send. It goes through Fee setup → Approval levels; on approval the figure is saved
+  and the bill is made again. A user with the fee approve right can also save it directly in the top form.
+- **Many pupils (Excel)**: Fees → **Opening balances (Excel)**.
+  1. Download the format: blank, or with a class's pupils and their present figure filled in.
+  2. Fill **Dues (Dr)** or **Advance (Cr)** for each pupil (never both; no minus sign) and upload.
+  3. Read the check: rows with a problem (unknown admission number, pupil twice, both columns filled,
+     pupil not active) are listed with the reason and left out.
+  4. Give the reason and **Send for approval**. After the last approval the figures are written and
+     each pupil's bill is made again. The page shows how many were applied.
+- **From the second year**: Fees → Carry forward to new year does it for every pupil.

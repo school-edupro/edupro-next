@@ -301,6 +301,8 @@ export const RequestProfileChangeSchema = z
       .optional(),
     /** The pupil's own pay plan after approval; null = back to the class's (or the school's). */
     payPlan: PayPlan.nullable().optional(),
+    /** The opening balance after approval: plus = dues (Dr), minus = advance (Cr). */
+    openingBalance: z.number().min(-100_000_000).max(100_000_000).optional(),
     discountId: IdSchema.nullable().optional(),
     hosteller: z.boolean().optional(),
     transportSlabId: IdSchema.nullable().optional(),
@@ -315,6 +317,7 @@ export const RequestProfileChangeSchema = z
     (v) =>
       v.feeGroup !== undefined ||
       v.payPlan !== undefined ||
+      v.openingBalance !== undefined ||
       v.discountId !== undefined ||
       v.hosteller !== undefined ||
       v.transportSlabId !== undefined ||

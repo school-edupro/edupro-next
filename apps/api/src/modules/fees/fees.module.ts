@@ -17,6 +17,8 @@ import { FeeDepositService } from './fee-deposit.service';
 import { FeeDocumentsService } from './fee-documents.service';
 import { FeeGridsController } from './fee-grids.controller';
 import { FeeGridsService } from './fee-grids.service';
+import { FeeOpeningController } from './fee-opening.controller';
+import { FeeOpeningService } from './fee-opening.service';
 import { FeeRequestsController } from './fee-requests.controller';
 import { FeeRequestsService } from './fee-requests.service';
 import { FeesController } from './fees.controller';
@@ -28,7 +30,7 @@ import { FeesController } from './fees.controller';
  */
 @Module({
   imports: [ReportsModule, TemplatesModule, DailyAcademicsModule, WorkflowModule, CommsModule],
-  controllers: [FeesController, FeeRequestsController, FeeGridsController],
+  controllers: [FeesController, FeeRequestsController, FeeGridsController, FeeOpeningController],
   providers: [
     FeeMastersService,
     FeeDemandsService,
@@ -40,6 +42,7 @@ import { FeesController } from './fees.controller';
     FeeDepositService,
     FeeDocumentsService,
     FeeRequestsService,
+    FeeOpeningService,
     FeeGridsService,
     AuditService,
   ],
@@ -56,6 +59,7 @@ export class FeesModule implements OnModuleInit {
     private readonly workflow: WorkflowService,
     private readonly adjustments: FeeAdjustmentsService,
     private readonly requests: FeeRequestsService,
+    private readonly opening: FeeOpeningService,
   ) {}
 
   onModuleInit(): void {
@@ -65,6 +69,9 @@ export class FeesModule implements OnModuleInit {
     // late-fee waivers and sibling transfers ride the same levels (FeeRequestsService.startApproval)
     this.workflow.onComplete('fee_waiver', (c, ctx, instance, outcome) =>
       this.adjustments.onWaiverComplete(c, ctx, instance, outcome),
+    );
+    this.workflow.onComplete('fee_opening', (c, ctx, instance, outcome) =>
+      this.opening.onWorkflowComplete(c, ctx, instance, outcome),
     );
     this.workflow.onComplete('fee_change_request', (c, ctx, instance, outcome) =>
       this.requests.onWorkflowComplete(c, ctx, instance, outcome),

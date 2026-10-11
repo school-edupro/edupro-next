@@ -93,6 +93,11 @@ const NAV: Array<{
         label: 'feeCarryForward',
         permission: 'fees.carry_forward.run',
       },
+      {
+        href: '/fees/opening-balances',
+        label: 'feeOpeningBalances',
+        permission: 'fees.bulk.upload',
+      },
     ],
   },
   {

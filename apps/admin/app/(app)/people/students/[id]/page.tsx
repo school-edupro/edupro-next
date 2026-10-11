@@ -844,6 +844,14 @@ export default async function StudentPage({
                     ]}
                   />
                   <InputField
+                    id="chgOpening"
+                    name="openingBalance"
+                    label="Opening balance (+ dues, − advance)"
+                    type="number"
+                    step="0.01"
+                    help="Empty = no change"
+                  />
+                  <InputField
                     id="chgReason"
                     name="reason"
                     label={a('reason')}

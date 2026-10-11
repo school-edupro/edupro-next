@@ -44,6 +44,7 @@
     "feeMasters": "Heads, periods, slabs",
     "feeRules": "Class rules, payment modes",
     "feeCarryForward": "Carry forward to new year",
+    "feeOpeningBalances": "Opening balances (Excel)",
     "feeDepositSlips": "Bank deposit slips",
     "feeRequests": "Approvals and uploads",
     "feeStructures": "Class fee structure",

@@ -662,4 +662,123 @@ describe('fee changes that wait for approval (e2e)', () => {
     });
     expect(Number(after.json().openingBalance)).toBe(-1000);
   });
+
+  it('opening balances from Excel are checked, approved, then written to the pupils and their bills', async () => {
+    const classId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT cs.class_id::text AS id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id WHERE e.student_id = $1 LIMIT 1`,
+        [students.a],
+      );
+      return r.rows[0]!.id;
+    });
+    const format = await inject({
+      method: 'GET',
+      url: `/fees/opening/format.xlsx?classId=${classId}`,
+      headers: h(accountant),
+    });
+    expect(format.statusCode).toBe(200);
+    expect(format.headers['content-type']).toContain('spreadsheetml');
+    const file = await sheet(
+      ['Admission no.', 'Student name', 'Class', 'Dues (Dr)', 'Advance (Cr)'],
+      [
+        ['FRQ-a', 'a', '', 500, ''],
+        ['FRQ-b', 'b', '', '', 300],
+        ['NOBODY', 'x', '', 100, ''],
+        ['FRQ-c', 'c', '', 100, 50],
+        ['FRQ-a', 'a again', '', 10, ''],
+      ],
+    );
+    const up = await inject({
+      method: 'POST',
+      url: '/fees/opening/uploads',
+      headers: h(accountant),
+      json: { fileBase64: file, fileName: 'opening.xlsx' },
+    });
+    expect(up.statusCode).toBe(201);
+    expect(up.json()).toMatchObject({
+      status: 'draft',
+      totalRows: 5,
+      goodRows: 2,
+      totalDr: '500.00',
+      totalCr: '300.00',
+    });
+    const errors = (up.json().rows as Array<{ admissionNo: string; error: string | null }>)
+      .filter((r) => r.error)
+      .map((r) => r.error);
+    expect(errors).toEqual([
+      'No pupil with this admission number',
+      'Fill dues or advance, not both',
+      'The pupil is in the file twice',
+    ]);
+    const openingOf = async (id: string) =>
+      Number(
+        (await inject({ method: 'GET', url: `/fees/students/${id}/profile`, headers: h() })).json()
+          .openingBalance,
+      );
+    const beforeB = await openingOf(students.b);
+    const noReason = await inject({
+      method: 'POST',
+      url: `/fees/opening/uploads/${up.json().id}/submit`,
+      headers: h(accountant),
+      json: { action: 'submit' },
+    });
+    expect(noReason.statusCode).toBe(422);
+    const sent = await inject({
+      method: 'POST',
+      url: `/fees/opening/uploads/${up.json().id}/submit`,
+      headers: h(accountant),
+      json: { action: 'submit', reason: 'Figures from the old software' },
+    });
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json().status).toBe('pending');
+    expect(await openingOf(students.b)).toBe(beforeB); // nothing until approved
+    const denied = await inject({
+      method: 'POST',
+      url: `/fees/opening/uploads/${up.json().id}/decide`,
+      headers: h(accountant),
+      json: { outcome: 'approved' },
+    });
+    expect(denied.statusCode).toBe(403);
+    const ok = await inject({
+      method: 'POST',
+      url: `/fees/opening/uploads/${up.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ status: 'applied' });
+    expect(ok.json().result).toMatchObject({ applied: 2 });
+    expect(await openingOf(students.a)).toBe(500);
+    expect(await openingOf(students.b)).toBe(-300);
+  });
+
+  it('the opening balance of one pupil changes through the fee change request, not directly', async () => {
+    const direct = await inject({
+      method: 'PUT',
+      url: `/fees/students/${students.c}/profile`,
+      headers: h(accountant),
+      json: { feeGroup: 'general', openingBalance: 250 },
+    });
+    expect(direct.statusCode).toBe(403);
+    const req = await inject({
+      method: 'POST',
+      url: `/fees/students/${students.c}/profile-changes`,
+      headers: h(accountant),
+      json: { openingBalance: 250, reason: 'Dues of last year found in the old register' },
+    });
+    expect(req.statusCode).toBe(201);
+    const ok = await inject({
+      method: 'POST',
+      url: `/fees/profile-changes/${req.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(ok.statusCode).toBe(201);
+    const profile = await inject({
+      method: 'GET',
+      url: `/fees/students/${students.c}/profile`,
+      headers: h(),
+    });
+    expect(Number(profile.json().openingBalance)).toBe(250);
+  });
 });

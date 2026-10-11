@@ -2677,6 +2677,7 @@ export async function requestProfileChange(fd: FormData) {
   const plan = str(fd, 'payPlan');
   if (plan === 'class') body.payPlan = null;
   else if (plan) body.payPlan = plan;
+  if (str(fd, 'openingBalance') !== '') body.openingBalance = Number(str(fd, 'openingBalance'));
   const hosteller = str(fd, 'hosteller');
   if (hosteller === 'yes') body.hosteller = true;
   if (hosteller === 'no') body.hosteller = false;

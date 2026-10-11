@@ -274,3 +274,47 @@ export async function requestAdvanceRefund(fd: FormData) {
   }
   redirect('/fees/refunds?ok=1');
 }
+
+// ---- opening balances from Excel (0121) -----------------------------------------------------------
+export async function uploadOpeningBalances(fd: FormData) {
+  const path = '/fees/opening-balances?tab=upload';
+  const { base64, name } = await fileBase64(fd, path);
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>('/fees/opening/uploads', {
+      method: 'POST',
+      body: JSON.stringify({ fileBase64: base64, fileName: name }),
+    });
+    id = r.id;
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`/fees/opening-balances?upload=${id}`);
+}
+
+export async function submitOpeningBalances(fd: FormData) {
+  const id = str(fd, 'id');
+  const path = `/fees/opening-balances?upload=${id}`;
+  try {
+    await apiFetch(`/fees/opening/uploads/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: str(fd, 'action') === 'cancel' ? 'cancel' : 'submit',
+        reason: str(fd, 'reason') || undefined,
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}&ok=1`);
+}
+
+export async function decideOpeningBalances(fd: FormData) {
+  const id = str(fd, 'id');
+  return decide(
+    `/fees/opening/uploads/${id}/decide`,
+    str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved',
+    str(fd, 'note'),
+    `/fees/opening-balances?upload=${id}`,
+  );
+}

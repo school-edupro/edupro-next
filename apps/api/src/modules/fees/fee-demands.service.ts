@@ -142,6 +142,7 @@ export class FeeDemandsService {
       const feeChanged =
         dto.feeGroup !== before.feeGroup ||
         (dto.payPlan ?? null) !== before.payPlan ||
+        Number(dto.openingBalance) !== Number(before.openingBalance) ||
         (dto.discountId ?? null) !== before.discountId ||
         dto.hosteller !== before.hosteller ||
         (dto.transportSlabId ?? null) !== before.transportSlabId ||
@@ -149,7 +150,7 @@ export class FeeDemandsService {
       if (feeChanged && !ctx.permissions?.has('fees.adjustment.approve'))
         throw new DomainError(
           'fees.approval_required',
-          'Fee group, pay plan, discount, transport and hostel changes need approval: use “Request change”',
+          'Fee group, pay plan, opening balance, discount, transport and hostel changes need approval: use “Request change”',
           { status: 403 },
         );
       await c.query(
