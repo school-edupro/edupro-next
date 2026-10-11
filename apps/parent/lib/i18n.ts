@@ -13,6 +13,61 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  Welcome: 'स्वागत',
+  'Your choices': 'आपकी पसंद',
+  'Step {n} of 3': 'चरण {n} / 3',
+  'Welcome to your school portal. Two short steps before you start.':
+    'अपने स्कूल पोर्टल में आपका स्वागत है। शुरू करने से पहले दो छोटे चरण।',
+  'Welcome to the parent portal of your child’s school. Two short steps before you start.':
+    'आपके बच्चे के स्कूल के अभिभावक पोर्टल में आपका स्वागत है। शुरू करने से पहले दो छोटे चरण।',
+  'You are signed in as': 'आप इस रूप में लॉग इन हैं',
+  'You are signed in for': 'आप इनके लिए लॉग इन हैं',
+  'What happens next': 'आगे क्या होगा',
+  'Read how the school uses your information (about one minute).':
+    'पढ़ें कि स्कूल आपकी जानकारी का उपयोग कैसे करता है (लगभग एक मिनट)।',
+  'Choose which optional messages and services you want.':
+    'चुनें कि आपको कौन-से वैकल्पिक संदेश और सेवाएँ चाहिए।',
+  'Then your timetable, homework, attendance and results open.':
+    'फिर आपकी समय-सारणी, गृहकार्य, उपस्थिति और परिणाम खुलेंगे।',
+  'Then attendance, homework, fees and messages open.':
+    'फिर उपस्थिति, गृहकार्य, शुल्क और संदेश खुलेंगे।',
+  Start: 'शुरू करें',
+  'Please read this notice from the school. You can ask the school office about any part of it.':
+    'कृपया स्कूल की यह सूचना पढ़ें। इसके किसी भी भाग के बारे में आप स्कूल कार्यालय से पूछ सकते हैं।',
+  Version: 'संस्करण',
+  'Nothing optional is switched on for you. Switch on what you agree to; you can leave the rest off.':
+    'कोई भी वैकल्पिक चीज़ आपके लिए पहले से चालू नहीं है। जिससे आप सहमत हैं उसे चालू करें; बाकी बंद रहने दें।',
+  'Always on': 'हमेशा चालू',
+  'Fee, attendance and safety messages': 'शुल्क, उपस्थिति और सुरक्षा संदेश',
+  'These are needed to run the school and keep children safe, so they are sent regardless.':
+    'ये स्कूल चलाने और बच्चों की सुरक्षा के लिए ज़रूरी हैं, इसलिए हमेशा भेजे जाते हैं।',
+  'Allow all': 'सभी की अनुमति दें',
+  'Switch all off': 'सभी बंद करें',
+  On: 'चालू',
+  Off: 'बंद',
+  'I have read and understood the privacy notice.': 'मैंने गोपनीयता सूचना पढ़ और समझ ली है।',
+  Finish: 'पूरा करें',
+  'You can change these choices at any time under Profile.':
+    'आप ये विकल्प कभी भी प्रोफ़ाइल में बदल सकते हैं।',
+  '{n} of {m} switched on': '{m} में से {n} चालू',
+  'Please tick the box to say you have read the notice.':
+    'कृपया बॉक्स पर निशान लगाकर बताएँ कि आपने सूचना पढ़ ली है।',
+  'The privacy notice has changed. Please read it again.':
+    'गोपनीयता सूचना बदल गई है। कृपया इसे फिर से पढ़ें।',
+  'That could not be saved. Please try again.': 'यह सहेजा नहीं जा सका। कृपया फिर से प्रयास करें।',
+  'SMS updates': 'एसएमएस सूचनाएँ',
+  'WhatsApp updates': 'व्हाट्सऐप सूचनाएँ',
+  'Email newsletters': 'ईमेल समाचार-पत्र',
+  'Photographs in the school gallery': 'स्कूल गैलरी में तस्वीरें',
+  'Bus boarding alerts and location sharing': 'बस में चढ़ने की सूचना और स्थान साझा करना',
+  'AI assistant in the parent app': 'अभिभावक ऐप में एआई सहायक',
+  'You are all set': 'सब तैयार है',
+  'Three places to begin with:': 'शुरू करने के लिए तीन जगहें:',
+  'Dues, online payment and receipts.': 'बकाया, ऑनलाइन भुगतान और रसीदें।',
+  'Daily attendance and leave requests.': 'दैनिक उपस्थिति और अवकाश आवेदन।',
+  'What the school has written to you.': 'स्कूल ने आपको क्या लिखा है।',
+  'Marks and report cards.': 'अंक और रिपोर्ट कार्ड।',
+  'Work given by the teachers.': 'शिक्षकों द्वारा दिया गया कार्य।',
   'On leave': 'अवकाश पर',
   'on leave': 'अवकाश पर',
   'School bus today': 'आज स्कूल बस',

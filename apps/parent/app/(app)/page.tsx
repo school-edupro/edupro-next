@@ -185,6 +185,35 @@ export default async function HomePage({
             : 'Here is your child’s day at school.',
         )}
       />
+      {sp.welcome ? (
+        <section aria-labelledby="tour-h">
+          <h2 id="tour-h" className="fp-section-title">
+            {t(lang, 'You are all set')}
+          </h2>
+          <p className="ep-field__help">{t(lang, 'Three places to begin with:')}</p>
+          <div className="fp-tour">
+            {(audience === 'student'
+              ? ([
+                  ['/attendance', 'Attendance', 'Daily attendance and leave requests.'],
+                  ['/homework', 'Homework', 'Work given by the teachers.'],
+                  ['/results', 'Results', 'Marks and report cards.'],
+                ] as const)
+              : ([
+                  ['/fees', 'Fees', 'Dues, online payment and receipts.'],
+                  ['/attendance', 'Attendance', 'Daily attendance and leave requests.'],
+                  ['/messages', 'Messages', 'What the school has written to you.'],
+                ] as const)
+            )
+              .filter(([href]) => canOpen(me, href))
+              .map(([href, title, text]) => (
+                <a key={href} href={href}>
+                  <strong>{t(lang, title)}</strong>
+                  <span>{t(lang, text)}</span>
+                </a>
+              ))}
+          </div>
+        </section>
+      ) : null}
       {me.memberships.length > 1 ? (
         <form method="post" action="/api/context" className="fp-school-switch">
           <select

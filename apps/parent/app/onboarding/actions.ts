@@ -3,17 +3,21 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 
-/** S11 DPDP onboarding: acknowledge the current notice and record the consent choices in one step. */
+/**
+ * First sign-in (DPDP): the notice is acknowledged and the consent choices are recorded together.
+ * Every optional purpose shown on the page is sent: switched on is granted, left off is not given.
+ */
 export async function acknowledge(fd: FormData) {
   const version = Number(fd.get('version'));
-  const consents: Array<{ purposeCode: string; status: 'granted' | 'withdrawn' }> = [];
-  for (const [key, value] of fd.entries()) {
-    if (!key.startsWith('consent.') || typeof value !== 'string') continue;
-    consents.push({
-      purposeCode: key.slice(8),
-      status: value === 'granted' ? 'granted' : 'withdrawn',
-    });
-  }
+  if (fd.get('accept') !== 'yes') redirect('/onboarding?error=accept');
+  const consents = fd
+    .getAll('purpose')
+    .filter((x): x is string => typeof x === 'string' && /^[a-z0-9_.]{1,60}$/.test(x))
+    .map((code) => ({
+      purposeCode: code,
+      status:
+        fd.get(`consent.${code}`) === 'granted' ? ('granted' as const) : ('withdrawn' as const),
+    }));
   try {
     await bff.api.fetch('/engagement/onboarding/acknowledge', {
       method: 'POST',
