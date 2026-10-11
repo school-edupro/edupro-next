@@ -18,6 +18,7 @@ import {
   RazorpayReturnDto,
   RazorpayWebhookDto,
   RecordOfflinePaymentDto,
+  RefundFeeDueDto,
   RequestAdvanceRefundDto,
   RequestRefundDto,
   UploadSettlementDto,
@@ -227,6 +228,20 @@ export class PaymentsController {
     @Body() body: RequestRefundDto,
   ) {
     return this.refunds.request(ctx, paymentId, body);
+  }
+
+  @Post('refunds/:id/fee-due')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Turn a paid refund that cancelled its fee into one whose fee stays due',
+  })
+  @RequirePermission(PAYMENTS.refundApprove)
+  refundFeeDue(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: RefundFeeDueDto,
+  ) {
+    return this.refunds.feeDueAgain(ctx, id, body.reason);
   }
 
   @Post('refunds/:id/decide')

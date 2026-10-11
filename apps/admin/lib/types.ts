@@ -1699,6 +1699,7 @@ export interface FeeRefund {
   voucherNo?: string | null;
   workflowInstanceId?: string | null;
   waitingWith?: string | null;
+  withdrawalId?: string | null;
   lines?: Array<{ head: string; period: string | null; amount: string }> | null;
 }
 export interface SettlementLine {

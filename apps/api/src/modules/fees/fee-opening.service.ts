@@ -8,7 +8,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from './fee-approval';
 
-const HEADERS = ['Admission no.', 'Student name', 'Class', 'Dues (Dr)', 'Advance (Cr)'];
+const HEADERS = ['Admission no.', 'Amount', 'Dr / Cr', 'Student name', 'Class'];
 /** The approval an opening balance file rides; its levels mirror the fee change approval. */
 export const FEE_OPENING_FLOW = 'fee_opening';
 
@@ -104,7 +104,13 @@ export class FeeOpeningService {
           );
           return r.rows.map((x) => {
             const v = Number(x.opening ?? 0);
-            return [x.admission_no, x.name, x.section, v > 0 ? v : null, v < 0 ? -v : null];
+            return [
+              x.admission_no,
+              v !== 0 ? Math.abs(v) : null,
+              v > 0 ? 'Dr' : v < 0 ? 'Cr' : null,
+              x.name,
+              x.section,
+            ];
           });
         })
       : [];
@@ -114,15 +120,15 @@ export class FeeOpeningService {
         sheet: 'Opening balance',
         columns: [
           { header: HEADERS[0]!, width: 18, required: true },
-          { header: HEADERS[1]!, width: 28 },
-          { header: HEADERS[2]!, width: 12 },
-          { header: HEADERS[3]!, width: 16 },
-          { header: HEADERS[4]!, width: 16 },
+          { header: HEADERS[1]!, width: 16 },
+          { header: HEADERS[2]!, width: 10, options: ['Dr', 'Cr'] },
+          { header: HEADERS[3]!, width: 28 },
+          { header: HEADERS[4]!, width: 12 },
         ],
         guide: [
-          'One pupil in each row. Only the admission number is compulsory; name and class are for your reading.',
-          'Dues (Dr): what the pupil owes from before this session. Advance (Cr): what the pupil paid in advance.',
-          'Fill one of the two for a pupil, never both. Both empty (or 0) means no opening balance.',
+          'One pupil in each row: the admission number, the amount, and Dr or Cr. Name and class are only for your reading and may be left out.',
+          'Dr (debit): dues, what the pupil owes from before this session. Cr (credit): advance, what the pupil paid before.',
+          'Write the amount without a minus sign and choose Dr or Cr. Amount empty or 0 means no opening balance.',
           'The file is checked and shown first. Nothing changes until it is approved (Fee setup → Approval levels).',
           'After approval the opening balance is written to each pupil and the bill of the pupil is made again.',
         ],
@@ -151,7 +157,7 @@ export class FeeOpeningService {
   /** Reads and checks the file; it is kept as a draft with the reason beside every row that fails. */
   async upload(ctx: RequestContext, fileBase64: string, fileName?: string): Promise<OpeningUpload> {
     const yearId = this.year(ctx);
-    const sheet = await readSheet(fileBase64, [HEADERS[0]!, HEADERS[3]!, HEADERS[4]!]);
+    const sheet = await readSheet(fileBase64, [HEADERS[0]!, HEADERS[1]!, HEADERS[2]!]);
     if (sheet.length === 0)
       throw new DomainError('validation-failed', 'The file has no rows', { status: 400 });
     if (sheet.length > 5000)
@@ -185,9 +191,14 @@ export class FeeOpeningService {
       const rows: OpeningRow[] = [];
       for (const r of sheet) {
         const admissionNo = (r.cells[HEADERS[0]!] ?? '').trim();
-        const dr = num(r.cells[HEADERS[3]!]);
-        const cr = num(r.cells[HEADERS[4]!]);
-        if (!admissionNo && dr === 0 && cr === 0) continue;
+        const amount = num(r.cells[HEADERS[1]!]);
+        const side = (r.cells[HEADERS[2]!] ?? '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z]/g, '');
+        if (!admissionNo && amount === 0 && side === '') continue;
+        const isDr = ['dr', 'debit', 'due', 'dues'].includes(side);
+        const isCr = ['cr', 'credit', 'advance'].includes(side);
         const s = byNo.get(admissionNo.toLowerCase());
         const error = !admissionNo
           ? 'Admission number is missing'
@@ -197,12 +208,12 @@ export class FeeOpeningService {
               ? 'The pupil is in the file twice'
               : s.status !== 'active' || !s.section
                 ? 'The pupil is not active in a class this session'
-                : Number.isNaN(dr) || Number.isNaN(cr)
+                : Number.isNaN(amount)
                   ? 'The amount is not a number'
-                  : dr < 0 || cr < 0
-                    ? 'Amounts are written without a minus sign'
-                    : dr > 0 && cr > 0
-                      ? 'Fill dues or advance, not both'
+                  : amount < 0
+                    ? 'Write the amount without a minus sign and choose Dr or Cr'
+                    : amount > 0 && !isDr && !isCr
+                      ? 'Choose Dr (dues) or Cr (advance)'
                       : null;
         seen.add(admissionNo.toLowerCase());
         rows.push({
@@ -212,7 +223,7 @@ export class FeeOpeningService {
           name: s?.name ?? null,
           section: s?.section ?? null,
           before: s ? Number(s.opening ?? 0).toFixed(2) : null,
-          opening: error ? null : (dr - cr).toFixed(2),
+          opening: error ? null : (isCr ? -amount : amount).toFixed(2),
           error,
         });
       }

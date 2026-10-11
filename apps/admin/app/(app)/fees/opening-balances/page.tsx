@@ -96,7 +96,8 @@ export default async function OpeningBalancesPage({
           <Card title="1. Download the format">
             <p className="ep-field__help">
               Blank, or with the pupils of one class already written and their present opening
-              balance filled in. Fill “Dues (Dr)” or “Advance (Cr)” for a pupil, never both.
+              balance filled in. Three columns matter: the admission number, the amount, and Dr
+              (dues) or Cr (advance). Name and class are only for reading.
             </p>
             <form
               method="get"

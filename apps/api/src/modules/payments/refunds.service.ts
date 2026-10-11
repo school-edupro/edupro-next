@@ -51,6 +51,8 @@ export interface RefundRow {
   batchId: string | null;
   workflowInstanceId: string | null;
   waitingWith: string | null;
+  /** Set when the system raised the refund on a withdrawal. */
+  withdrawalId: string | null;
 }
 export interface RefundLine {
   part: 'fee' | 'advance' | 'late_fee';
@@ -64,7 +66,7 @@ export interface RefundLine {
 const SELECT = `SELECT r.id::text, r.payment_id::text AS "paymentId", p.receipt_no AS "receiptNo", s.id::text AS "studentId", s.display_name AS "studentName", s.admission_no AS "admissionNo",
         COALESCE(p.amount, 0)::text AS "receiptAmount", r.amount::text, r.reason, r.mode, r.reference, r.status::text, ru.display_name AS "requestedBy", r.requested_at AS "requestedAt",
         du.display_name AS "decidedBy", r.decided_at AS "decidedAt", r.decision_note AS "decisionNote", r.provider, r.provider_ref AS "providerRef", r.paid_on::text AS "paidOn",
-        r.kind, r.lines, r.fee_action AS "feeAction", r.voucher_no AS "voucherNo", r.batch_id::text AS "batchId", r.workflow_instance_id::text AS "workflowInstanceId",
+        r.kind, r.lines, r.fee_action AS "feeAction", r.voucher_no AS "voucherNo", r.batch_id::text AS "batchId", r.workflow_instance_id::text AS "workflowInstanceId", r.withdrawal_id::text AS "withdrawalId",
         ${WAITING_WITH('r.workflow_instance_id')} AS "waitingWith"
    FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id JOIN students s ON s.id = COALESCE(r.student_id, p.student_id)
    LEFT JOIN users ru ON ru.id = r.requested_by LEFT JOIN users du ON du.id = r.decided_by`;
@@ -116,6 +118,38 @@ export class RefundsService {
         `UPDATE fee_refunds SET workflow_instance_id = $2 WHERE id = ANY($1::bigint[])`,
         [ids, instanceId],
       );
+  }
+
+  /**
+   * A refund approved with "the fee is cancelled" is turned into "the fee stays due": the fee lines it
+   * cancelled are asked again. For a refund sent with the wrong choice; the money side stays as it is.
+   */
+  async feeDueAgain(ctx: RequestContext, id: string, reason: string): Promise<RefundRow> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.find(c, id);
+      if (
+        before.status !== 'paid' ||
+        before.feeAction !== 'cancel' ||
+        !before.lines ||
+        before.withdrawalId
+      )
+        throw new DomainError(
+          'fees.refund_not_cancelling',
+          'Only a paid refund that cancelled its fee (and was not raised by a withdrawal) can be changed',
+          { status: 409 },
+        );
+      const r = await c.query<{ v: string }>(`SELECT app.refund_fee_due_again($1)::text AS v`, [
+        id,
+      ]);
+      await this.audit.stage(ctx, c, {
+        action: 'fees.refund.fee_due_again',
+        entityType: 'fee_refunds',
+        entityId: id,
+        before: { feeAction: 'cancel' },
+        after: { feeAction: 'due', askedAgain: r.rows[0]!.v, reason },
+      });
+      return this.find(c, id);
+    });
   }
 
   /** The last level approved (or a level rejected): the refund (or every refund of its batch) is decided. */

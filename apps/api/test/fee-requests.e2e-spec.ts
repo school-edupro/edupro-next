@@ -563,12 +563,29 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect((await decideRefund(req2.json().id)).json().voucherNo).toMatch(/000002$/);
     l = await ledgerOf(sid);
     expect(l.instalments[1]).toMatchObject({ balance: '1000.00' });
+    // June was cancelled by mistake: the school makes it due again; the refund itself stays
+    const dueAgain = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${req.json().id}/fee-due`,
+      headers: h(),
+      json: { reason: 'Sent with the wrong choice' },
+    });
+    expect(dueAgain.statusCode).toBe(201);
+    expect(dueAgain.json()).toMatchObject({ status: 'paid', feeAction: 'due' });
+    expect((await ledgerOf(sid)).instalments[2]).toMatchObject({ balance: '1000.00' });
+    const twice = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${req.json().id}/fee-due`,
+      headers: h(),
+      json: { reason: 'again' },
+    });
+    expect(twice.statusCode).toBe(409);
     const voucher = await inject({
       method: 'GET',
       url: `/payments/refunds/${req.json().id}/voucher`,
       headers: h(),
     });
-    expect(voucher.json()).toMatchObject({ amount: '1000.00', feeAction: 'cancel', mode: 'bank' });
+    expect(voucher.json()).toMatchObject({ amount: '1000.00', feeAction: 'due', mode: 'bank' });
     expect(voucher.json().lines).toHaveLength(1);
     const file = await inject({
       method: 'GET',
@@ -679,13 +696,13 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(format.statusCode).toBe(200);
     expect(format.headers['content-type']).toContain('spreadsheetml');
     const file = await sheet(
-      ['Admission no.', 'Student name', 'Class', 'Dues (Dr)', 'Advance (Cr)'],
+      ['Admission no.', 'Amount', 'Dr / Cr'],
       [
-        ['FRQ-a', 'a', '', 500, ''],
-        ['FRQ-b', 'b', '', '', 300],
-        ['NOBODY', 'x', '', 100, ''],
-        ['FRQ-c', 'c', '', 100, 50],
-        ['FRQ-a', 'a again', '', 10, ''],
+        ['FRQ-a', 500, 'Dr'],
+        ['FRQ-b', 300, 'Cr'],
+        ['NOBODY', 100, 'Dr'],
+        ['FRQ-c', 100, ''],
+        ['FRQ-a', 10, 'Dr'],
       ],
     );
     const up = await inject({
@@ -707,7 +724,7 @@ describe('fee changes that wait for approval (e2e)', () => {
       .map((r) => r.error);
     expect(errors).toEqual([
       'No pupil with this admission number',
-      'Fill dues or advance, not both',
+      'Choose Dr (dues) or Cr (advance)',
       'The pupil is in the file twice',
     ]);
     const openingOf = async (id: string) =>

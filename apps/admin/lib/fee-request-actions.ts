@@ -242,7 +242,7 @@ export async function requestHeadRefund(fd: FormData) {
       method: 'POST',
       body: JSON.stringify({
         lines,
-        feeAction: str(fd, 'feeAction') === 'due' ? 'due' : 'cancel',
+        feeAction: str(fd, 'feeAction') === 'cancel' ? 'cancel' : 'due',
         mode: str(fd, 'mode') || 'bank',
         reference: str(fd, 'reference') || undefined,
         reason: str(fd, 'reason'),
@@ -317,4 +317,19 @@ export async function decideOpeningBalances(fd: FormData) {
     str(fd, 'note'),
     `/fees/opening-balances?upload=${id}`,
   );
+}
+
+/** A paid refund that cancelled its fee by mistake: the fee is asked again. */
+export async function makeRefundFeeDue(fd: FormData) {
+  const id = str(fd, 'id');
+  const path = '/fees/refunds?x=1';
+  try {
+    await apiFetch(`/payments/refunds/${id}/fee-due`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect('/fees/refunds?ok=1');
 }

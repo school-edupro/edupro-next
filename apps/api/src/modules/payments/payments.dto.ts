@@ -158,6 +158,8 @@ export const RequestAdvanceRefundSchema = z.object({
   reference: z.string().trim().max(80).optional(),
 });
 export class RequestAdvanceRefundDto extends createZodDto(RequestAdvanceRefundSchema) {}
+export const RefundFeeDueSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class RefundFeeDueDto extends createZodDto(RefundFeeDueSchema) {}
 export class RequestRefundDto extends createZodDto(RequestRefundSchema) {}
 
 export const DecideRefundSchema = z.object({

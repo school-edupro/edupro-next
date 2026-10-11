@@ -378,9 +378,14 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
   and the bill is made again. A user with the fee approve right can also save it directly in the top form.
 - **Many pupils (Excel)**: Fees → **Opening balances (Excel)**.
   1. Download the format: blank, or with a class's pupils and their present figure filled in.
-  2. Fill **Dues (Dr)** or **Advance (Cr)** for each pupil (never both; no minus sign) and upload.
-  3. Read the check: rows with a problem (unknown admission number, pupil twice, both columns filled,
+  2. Fill three columns: **Admission no.**, **Amount** (no minus sign) and **Dr / Cr** (Dr = dues,
+     Cr = advance), and upload. Name and class are optional.
+  3. Read the check: rows with a problem (unknown admission number, pupil twice, Dr / Cr not chosen,
      pupil not active) are listed with the reason and left out.
   4. Give the reason and **Send for approval**. After the last approval the figures are written and
      each pupil's bill is made again. The page shows how many were applied.
 - **From the second year**: Fees → Carry forward to new year does it for every pupil.
+
+- **Refund default**: the refund form now starts on "the fee stays due" (it shows as outstanding
+  again). "Cancelled" must be chosen on purpose. A paid refund that cancelled its fee by mistake:
+  Fees → Refunds → "Fee was cancelled by mistake?" → **Make the fee due again** (refund approve right).

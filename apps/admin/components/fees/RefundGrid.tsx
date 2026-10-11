@@ -229,12 +229,13 @@ export function RefundGrid({
         ) : null}
         <label className="ep-field" htmlFor="rfAction">
           <span className="ep-field__label">The refunded fee *</span>
-          <select className="ep-select" id="rfAction" name="feeAction" defaultValue="cancel">
-            <option value="cancel">is cancelled (not asked again)</option>
-            <option value="due">stays due (asked again)</option>
+          <select className="ep-select" id="rfAction" name="feeAction" defaultValue="due">
+            <option value="due">stays due (shows as outstanding again)</option>
+            <option value="cancel">is cancelled (removed from the bill, not asked again)</option>
           </select>
           <span className="ep-field__help">
-            Cancelled: transport stopped, pupil leaving. Stays due: a wrong or double payment.
+            Stays due: the money goes back and the fee is owed again (the usual case). Cancelled:
+            only when the fee itself should go, such as transport stopped.
           </span>
         </label>
         <label className="ep-field" htmlFor="rfMode">

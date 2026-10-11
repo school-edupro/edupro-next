@@ -1,3 +1,4 @@
+import { makeRefundFeeDue } from '@/lib/fee-request-actions';
 import {
   Badge,
   Button,
@@ -139,6 +140,32 @@ export default async function RefundsPage({
               render: (x) =>
                 x.status === 'requested' && x.workflowInstanceId ? (
                   <a href="/workflow/inbox">Approve in My approvals</a>
+                ) : canDecide &&
+                  x.status === 'paid' &&
+                  x.feeAction === 'cancel' &&
+                  x.lines &&
+                  x.kind !== 'opening_advance' &&
+                  !x.withdrawalId ? (
+                  <details>
+                    <summary>Fee was cancelled by mistake?</summary>
+                    <form
+                      action={makeRefundFeeDue}
+                      style={{ display: 'grid', gap: 'var(--sp-2)', minWidth: 240 }}
+                    >
+                      <input type="hidden" name="id" value={x.id} />
+                      <InputField
+                        id={`due-${x.id}`}
+                        name="reason"
+                        label="Reason"
+                        required
+                        minLength={3}
+                        maxLength={300}
+                      />
+                      <Button type="submit" variant="secondary" size="sm">
+                        Make the fee due again
+                      </Button>
+                    </form>
+                  </details>
                 ) : canDecide && x.status === 'requested' ? (
                   <form
                     action={decideRefund}
