@@ -2291,6 +2291,7 @@
     "reference": "भुगतान संदर्भ",
     "status": "स्थिति",
     "statuses": {
+      "draft": "मसौदा (भेजा नहीं गया)",
       "requested": "अनुरोधित",
       "approved": "स्वीकृत",
       "rejected": "अस्वीकृत",

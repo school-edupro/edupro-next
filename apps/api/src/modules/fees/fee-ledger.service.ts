@@ -411,7 +411,7 @@ export class FeeLedgerService {
       const refunds = await c.query<Record<string, unknown>>(
         `SELECT r.id::text, r.payment_id::text AS "paymentId", p.receipt_no AS "receiptNo", r.amount::text, r.reason, r.mode, r.status::text, r.requested_at AS "requestedAt", r.paid_on::text AS "paidOn"
            FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id
-          WHERE p.student_id = $1 AND p.academic_year_id = $2 ORDER BY r.requested_at DESC`,
+          WHERE p.student_id = $1 AND p.academic_year_id = $2 AND r.status <> 'draft' ORDER BY r.requested_at DESC`,
         [studentId, yearId],
       );
       const overrides = await c.query<LedgerOverride>(

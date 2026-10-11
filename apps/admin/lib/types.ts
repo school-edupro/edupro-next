@@ -1685,7 +1685,7 @@ export interface FeeRefund {
   reason: string;
   mode: 'cash' | 'bank' | 'cheque' | 'gateway';
   reference: string | null;
-  status: 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
+  status: 'draft' | 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
   requestedBy: string | null;
   requestedAt: string;
   decidedBy: string | null;

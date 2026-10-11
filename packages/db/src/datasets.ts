@@ -247,7 +247,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
     query: (p) => ({
       text: `SELECT r.requested_at, p.receipt_no, s.display_name AS student, r.amount, r.mode, r.status::text, r.reason, r.reference, r.paid_on
                FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id JOIN students s ON s.id = p.student_id
-              WHERE ($1::bigint IS NULL OR p.academic_year_id = $1::bigint)
+              WHERE ($1::bigint IS NULL OR p.academic_year_id = $1::bigint) AND r.status <> 'draft'
               ORDER BY r.requested_at DESC`,
       values: [str(p.academicYearId)],
     }),

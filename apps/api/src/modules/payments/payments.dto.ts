@@ -146,6 +146,8 @@ export const RequestRefundSchema = z.object({
   lines: z.array(RefundLineSchema).min(1).max(200).optional(),
   /** What becomes of a refunded fee: due again (wrong payment) or cancelled (not asked again). */
   feeAction: z.enum(['due', 'cancel']).default('due'),
+  /** true: kept as a draft (printed for the parent first); sent for approval later. */
+  draft: z.boolean().default(false),
   reason: z.string().trim().min(3).max(300),
   mode: z.enum(['cash', 'bank', 'cheque', 'gateway']),
   reference: z.string().trim().max(80).optional(),
@@ -171,7 +173,7 @@ export const DecideRefundSchema = z.object({
 export class DecideRefundDto extends createZodDto(DecideRefundSchema) {}
 
 export const ListRefundsQuerySchema = z.object({
-  status: z.enum(['requested', 'approved', 'rejected', 'paid', 'failed']).optional(),
+  status: z.enum(['draft', 'requested', 'approved', 'rejected', 'paid', 'failed']).optional(),
   studentId: IdSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),

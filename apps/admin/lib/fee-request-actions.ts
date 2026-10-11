@@ -227,29 +227,59 @@ export async function requestPaidChargeToFee(fd: FormData) {
   redirect(`${path}&ok=1`);
 }
 
-/** A refund of one receipt, head by head, sent for approval. */
-export async function requestHeadRefund(fd: FormData) {
+/** A refund of one receipt, head by head: sent for approval, or kept as a draft to print first. */
+async function headRefund(fd: FormData, draft: boolean) {
   const paymentId = str(fd, 'paymentId');
-  const path = `/fees/refund/${paymentId}`;
+  const path = `/fees/refund/${paymentId}?x=1`;
   let lines: unknown = [];
   try {
     lines = JSON.parse(str(fd, 'lines') || '[]');
   } catch {
     lines = [];
   }
+  let id = '';
   try {
-    await apiFetch(`/payments/receipts/${paymentId}/refunds`, {
+    const r = await apiFetch<{ id: string }>(`/payments/receipts/${paymentId}/refunds`, {
       method: 'POST',
       body: JSON.stringify({
         lines,
+        draft,
         feeAction: str(fd, 'feeAction') === 'cancel' ? 'cancel' : 'due',
         mode: str(fd, 'mode') || 'bank',
         reference: str(fd, 'reference') || undefined,
         reason: str(fd, 'reason'),
       }),
     });
+    id = r.id;
   } catch (error) {
     fail(path, error);
+  }
+  // a draft opens as the provisional refund bill, ready to print
+  redirect(draft ? `/fees/refund-voucher/${id}?ok=1` : '/fees/refunds?ok=1');
+}
+export async function requestHeadRefund(fd: FormData) {
+  return headRefund(fd, false);
+}
+export async function saveHeadRefundDraft(fd: FormData) {
+  return headRefund(fd, true);
+}
+
+/** A draft refund is sent for approval, or dropped. */
+export async function sendRefundDraft(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`/payments/refunds/${id}/send`, { method: 'POST' });
+  } catch (error) {
+    fail(`/fees/refund-voucher/${id}?x=1`, error);
+  }
+  redirect(`/fees/refund-voucher/${id}?ok=1`);
+}
+export async function discardRefundDraft(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`/payments/refunds/${id}/discard`, { method: 'POST' });
+  } catch (error) {
+    fail(`/fees/refund-voucher/${id}?x=1`, error);
   }
   redirect('/fees/refunds?ok=1');
 }

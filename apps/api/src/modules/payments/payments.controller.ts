@@ -230,6 +230,30 @@ export class PaymentsController {
     return this.refunds.request(ctx, paymentId, body);
   }
 
+  @Get('receipts/:paymentId/refund-draft')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The draft refund saved for a receipt, if any' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  async refundDraft(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
+    return { draft: await this.refunds.draftOf(ctx, paymentId) };
+  }
+
+  @Post('refunds/:id/send')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Send a draft refund for approval' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  sendRefundDraft(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.refunds.sendDraft(ctx, id, 'send');
+  }
+
+  @Post('refunds/:id/discard')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Drop a draft refund' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  discardRefundDraft(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.refunds.sendDraft(ctx, id, 'discard');
+  }
+
   @Post('refunds/:id/fee-due')
   @ApiBearerAuth()
   @ApiOperation({

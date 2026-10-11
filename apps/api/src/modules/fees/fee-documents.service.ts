@@ -95,6 +95,8 @@ export interface FnfBill {
     byWithdrawal: boolean;
   }>;
   refundsWaiting: string;
+  /** Saved but not sent for approval yet. */
+  refundsDraft: string;
   refundsPaid: string;
   totals: {
     payable: string;
@@ -520,6 +522,11 @@ export class FeeDocumentsService {
         refundsWaiting: fmt(
           refunds.rows
             .filter((r) => ['requested', 'approved'].includes(r.status))
+            .reduce((a, r) => a + Number(r.amount), 0),
+        ),
+        refundsDraft: fmt(
+          refunds.rows
+            .filter((r) => r.status === 'draft')
             .reduce((a, r) => a + Number(r.amount), 0),
         ),
         refundsPaid: fmt(

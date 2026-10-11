@@ -78,6 +78,7 @@ export default async function FnfPage({
   const waiting = bill.refunds.some((r) => r.byWithdrawal && r.status === 'requested');
   const sentBefore = bill.refunds.some((r) => r.byWithdrawal);
   const REFUND_STATE: Record<string, string> = {
+    draft: 'draft, not sent yet',
     requested: 'waiting for approval',
     approved: 'approved, payment in progress',
     paid: 'refunded',

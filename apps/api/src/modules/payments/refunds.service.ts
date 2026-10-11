@@ -34,7 +34,7 @@ export interface RefundRow {
   reason: string;
   mode: string;
   reference: string | null;
-  status: 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
+  status: 'draft' | 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
   requestedBy: string | null;
   requestedAt: string;
   decidedBy: string | null;
@@ -286,6 +286,8 @@ export class RefundsService {
         },
         year: st.rows[0]?.year ?? '',
         voucherNo: one.voucherNo,
+        refundId: one.id,
+        paymentId: one.paymentId,
         status: one.status,
         paidOn: one.paidOn,
         requestedAt: one.requestedAt,
@@ -311,7 +313,7 @@ export class RefundsService {
         school: v.school,
         student: v.student,
         year: v.year,
-        receiptNo: v.voucherNo ?? 'not paid yet',
+        receiptNo: v.voucherNo ?? 'given on approval',
         receivedOn: v.paidOn ?? v.requestedAt,
         amount: v.amount,
         amountWords: v.amountWords,
@@ -333,7 +335,10 @@ export class RefundsService {
       },
       [''],
       {
-        title: 'Refund voucher',
+        title:
+          v.status === 'draft'
+            ? 'Provisional refund bill (draft, not sent for approval)'
+            : 'Refund voucher',
         numberLabel: 'Voucher no.',
         totalLabel: 'Total refunded',
         paidLine: 'Refunded by',
@@ -560,11 +565,15 @@ export class RefundsService {
             { status: 409 },
           );
       }
+      // a draft is rewritten each time it is saved; sending it uses the same row
+      await c.query(`DELETE FROM fee_refunds WHERE payment_id = $1 AND status = 'draft'`, [
+        paymentId,
+      ]);
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO fee_refunds (school_id, payment_id, amount, reason, mode, reference, requested_by, provider, request_id, lines, fee_action)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id(), $6, app.current_request_id(), $7::jsonb, $8) RETURNING id::text`,
+          `INSERT INTO fee_refunds (school_id, payment_id, amount, reason, mode, reference, requested_by, provider, request_id, lines, fee_action, status)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id(), $6, app.current_request_id(), $7::jsonb, $8, $9::refund_status) RETURNING id::text`,
           [
             paymentId,
             amount.toFixed(2),
@@ -574,6 +583,7 @@ export class RefundsService {
             dto.mode === 'gateway' ? pay.provider : null,
             lines ? JSON.stringify(lines) : null,
             dto.feeAction,
+            dto.draft ? 'draft' : 'requested',
           ],
         );
         id = r.rows[0]!.id;
@@ -591,14 +601,98 @@ export class RefundsService {
         after: { paymentId, ...dto },
       });
       const made = await this.find(c, id);
-      await this.startApproval(
-        c,
-        ctx,
-        [id],
-        `Refund: ${made.studentName}: Rs. ${amount.toFixed(2)} of receipt ${made.receiptNo ?? ''}${lines ? ` (${lines.length} line${lines.length === 1 ? '' : 's'}, fee ${dto.feeAction === 'cancel' ? 'cancelled' : 'due again'})` : ''}`,
-        { kind: 'receipt', reason: dto.reason, feeAction: dto.feeAction },
-      );
+      if (!dto.draft)
+        await this.startApproval(c, ctx, [id], this.subjectOf(made), {
+          kind: 'receipt',
+          reason: dto.reason,
+          feeAction: dto.feeAction,
+        });
       return this.find(c, id);
+    });
+  }
+
+  private subjectOf(r: RefundRow): string {
+    const n = r.lines?.length ?? 0;
+    return `Refund: ${r.studentName}: Rs. ${r.amount} of receipt ${r.receiptNo ?? ''}${n ? ` (${String(n)} line${n === 1 ? '' : 's'}, fee ${r.feeAction === 'cancel' ? 'cancelled' : 'due again'})` : ''}`;
+  }
+
+  /**
+   * A draft refund is sent for approval (after the provisional refund bill has been printed and the
+   * parent has agreed), or dropped. Sending checks the draft again against what the receipt still holds.
+   */
+  async sendDraft(
+    ctx: RequestContext,
+    id: string,
+    action: 'send' | 'discard',
+  ): Promise<RefundRow | { discarded: true }> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const d = await this.find(c, id);
+      if (d.status !== 'draft')
+        throw new DomainError('fees.refund_not_draft', 'This refund is not a draft any more', {
+          status: 409,
+        });
+      if (action === 'discard') {
+        await c.query(`DELETE FROM fee_refunds WHERE id = $1 AND status = 'draft'`, [id]);
+        await this.audit.stage(ctx, c, {
+          action: 'fees.refund.draft_discard',
+          entityType: 'fee_refunds',
+          entityId: id,
+          before: { amount: d.amount },
+        });
+        return { discarded: true as const };
+      }
+      if (d.paymentId) {
+        const can = await this.refundableIn(c, d.paymentId);
+        const left = Number(can.amount) - Number(can.refunded);
+        const byDemand = new Map(can.lines.map((l) => [l.demandId, Number(l.paid)]));
+        const short =
+          Number(d.amount) > left + 0.005 ||
+          (d.lines ?? []).some(
+            (l) =>
+              l.part === 'fee' && Number(l.amount) > (byDemand.get(l.demandId ?? '') ?? 0) + 0.005,
+          );
+        if (short)
+          throw new DomainError(
+            'fees.refund_exceeds_receipt',
+            'The receipt changed since the draft was saved: open the draft, correct the amounts and save it again',
+            { status: 409 },
+          );
+      }
+      try {
+        await c.query(
+          `UPDATE fee_refunds SET status = 'requested', requested_by = app.current_user_id(), requested_at = now() WHERE id = $1`,
+          [id],
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code === '23505')
+          throw new DomainError('fees.refund_open', 'A refund is already open for this receipt', {
+            status: 409,
+          });
+        throw error;
+      }
+      await this.startApproval(c, ctx, [id], this.subjectOf(d), {
+        kind: 'receipt',
+        reason: d.reason,
+        feeAction: d.feeAction,
+      });
+      await this.audit.stage(ctx, c, {
+        action: 'fees.refund.draft_send',
+        entityType: 'fee_refunds',
+        entityId: id,
+        after: { amount: d.amount },
+      });
+      return this.find(c, id);
+    });
+  }
+
+  /** The draft of a receipt, if one is saved: the refund page opens with its amounts. */
+  async draftOf(ctx: RequestContext, paymentId: string): Promise<RefundRow | null> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT id::text FROM fee_refunds WHERE payment_id = $1 AND status = 'draft'`,
+        [paymentId],
+      );
+      return r.rows[0] ? this.find(c, r.rows[0].id) : null;
     });
   }
 
@@ -623,6 +717,14 @@ export class RefundsService {
   ): Promise<RefundRow> {
     {
       const before = await this.find(c, id);
+      if (before.status === 'draft')
+        throw new DomainError(
+          'fees.refund_is_draft',
+          'This refund is a draft: send it for approval first',
+          {
+            status: 409,
+          },
+        );
       if (before.status !== 'requested')
         throw new DomainError('fees.refund_decided', 'This refund has already been decided', {
           status: 409,

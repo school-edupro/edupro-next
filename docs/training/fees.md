@@ -412,3 +412,11 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
   Approval levels. The printed bill says "Refund not yet sent for approval", "Refund sent for
   approval" or "Refund settled". "Withdraw it and send it again" replaces a waiting refund when the
   figures changed.
+
+- **Refund draft (from 2026-10-11)**: on the refund page of a receipt, fill the amounts and press
+  **Save as draft and print**. Nothing is sent and nothing changes on the receipt. The draft opens as a
+  **Provisional refund bill** to print for the parent (Download PDF also works). After the parent has
+  agreed: **Send for approval** on that page. **Change the draft** reopens the refund page with the
+  saved amounts; **Discard the draft** drops it. Drafts show under Fees → Refunds as "Draft (not
+  sent)" and on the withdrawal's provisional bill; parents do not see them. "Send for approval now"
+  on the refund page skips the draft.

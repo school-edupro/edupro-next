@@ -24,6 +24,8 @@ export function RefundGrid({
   lateFee,
   gateway,
   action,
+  draftAction,
+  draft,
 }: {
   paymentId: string;
   studentId: string;
@@ -31,11 +33,29 @@ export function RefundGrid({
   advance: string;
   lateFee: string;
   gateway: boolean;
+  /** Sends the refund for approval at once. */
   action: (fd: FormData) => Promise<void>;
+  /** Keeps it as a draft, to print the provisional refund bill first. */
+  draftAction: (fd: FormData) => Promise<void>;
+  /** The draft saved for this receipt: the form opens with it. */
+  draft?: {
+    lines: Array<{ part: string; demandId?: string; amount: string }>;
+    feeAction: string;
+    mode: string;
+    reference: string | null;
+    reason: string;
+  } | null;
 }) {
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const [adv, setAdv] = useState('');
-  const [late, setLate] = useState('');
+  const part = (k: string) => draft?.lines.find((l) => l.part === k)?.amount ?? '';
+  const [amounts, setAmounts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (draft?.lines ?? [])
+        .filter((l) => l.part === 'fee' && l.demandId)
+        .map((l) => [l.demandId!, l.amount]),
+    ),
+  );
+  const [adv, setAdv] = useState(part('advance'));
+  const [late, setLate] = useState(part('late_fee'));
   const months = [...new Map(lines.map((l) => [l.sequence, l.period])).entries()].sort(
     (a, b) => a[0] - b[0],
   );
@@ -229,7 +249,12 @@ export function RefundGrid({
         ) : null}
         <label className="ep-field" htmlFor="rfAction">
           <span className="ep-field__label">The refunded fee *</span>
-          <select className="ep-select" id="rfAction" name="feeAction" defaultValue="due">
+          <select
+            className="ep-select"
+            id="rfAction"
+            name="feeAction"
+            defaultValue={draft?.feeAction === 'cancel' ? 'cancel' : 'due'}
+          >
             <option value="due">stays due (shows as outstanding again)</option>
             <option value="cancel">is cancelled (removed from the bill, not asked again)</option>
           </select>
@@ -240,7 +265,12 @@ export function RefundGrid({
         </label>
         <label className="ep-field" htmlFor="rfMode">
           <span className="ep-field__label">Pay back by *</span>
-          <select className="ep-select" id="rfMode" name="mode" defaultValue="bank">
+          <select
+            className="ep-select"
+            id="rfMode"
+            name="mode"
+            defaultValue={draft?.mode ?? 'bank'}
+          >
             <option value="bank">Bank transfer</option>
             <option value="cheque">Cheque</option>
             <option value="cash">Cash</option>
@@ -249,7 +279,13 @@ export function RefundGrid({
         </label>
         <label className="ep-field" htmlFor="rfRef">
           <span className="ep-field__label">Cheque no. / UTR</span>
-          <input className="ep-input" id="rfRef" name="reference" maxLength={80} />
+          <input
+            className="ep-input"
+            id="rfRef"
+            name="reference"
+            maxLength={80}
+            defaultValue={draft?.reference ?? ''}
+          />
           <span className="ep-field__help">If already known; it prints on the voucher.</span>
         </label>
         <label className="ep-field" htmlFor="rfReason">
@@ -261,6 +297,7 @@ export function RefundGrid({
             required
             minLength={3}
             maxLength={300}
+            defaultValue={draft?.reason ?? ''}
           />
         </label>
       </div>
@@ -274,10 +311,22 @@ export function RefundGrid({
         }}
       >
         <strong role="status">₹{num(total)} to refund</strong>
-        <button type="submit" className="ep-btn" disabled={total <= 0 || over}>
-          Send refund for approval
+        <button
+          type="submit"
+          className="ep-btn"
+          formAction={draftAction}
+          disabled={total <= 0 || over}
+        >
+          Save as draft and print
+        </button>
+        <button type="submit" className="ep-btn ep-btn--secondary" disabled={total <= 0 || over}>
+          Send for approval now
         </button>
       </div>
+      <p className="ep-field__help">
+        Save as draft: nothing is sent. You get the provisional refund bill to print for the parent;
+        after that you send the draft for approval from that page, or change it here.
+      </p>
       {over ? (
         <p className="ep-alert ep-alert--danger" role="alert">
           An amount is more than what the receipt paid there.

@@ -798,4 +798,114 @@ describe('fee changes that wait for approval (e2e)', () => {
     });
     expect(Number(profile.json().openingBalance)).toBe(250);
   });
+
+  it('a refund is kept as a draft, printed, changed, and only then sent for approval', async () => {
+    const sectionId = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT class_section_id::text AS id FROM enrolments WHERE student_id = $1 LIMIT 1`,
+        [students.a],
+      );
+      return r.rows[0]!.id;
+    });
+    const mk = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: {
+        admissionNo: 'FRQ-draft',
+        firstName: 'draft',
+        lastName: 'Request',
+        dob: '2015-01-01',
+        admittedOn: '2025-04-05',
+        enrolment: { classSectionId: sectionId, rollNo: 47 },
+      },
+    });
+    const sid = mk.json().id as string;
+    await inject({ method: 'POST', url: `/fees/students/${sid}/demands/generate`, headers: h() });
+    const paid = await receipt({ studentId: sid, amount: 2200, mode: 'cash' });
+    const pid = paid.json().paymentId as string;
+    const can = (
+      await inject({ method: 'GET', url: `/payments/receipts/${pid}/refundable`, headers: h() })
+    ).json() as { lines: Array<{ demandId: string; sequence: number }> };
+    const may = can.lines.find((l) => l.sequence === 2)!;
+    const save = (amount: number) =>
+      inject({
+        method: 'POST',
+        url: `/payments/receipts/${pid}/refunds`,
+        headers: h(accountant),
+        json: {
+          draft: true,
+          lines: [{ part: 'fee', demandId: may.demandId, amount }],
+          mode: 'bank',
+          reason: 'Parent asked for May back',
+        },
+      });
+    const first = await save(400);
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({
+      status: 'draft',
+      amount: '400.00',
+      workflowInstanceId: null,
+    });
+    // nothing on the receipt or the ledger changes for a draft, and the family does not see it
+    let l = await ledgerOf(sid);
+    expect(l.instalments[1]).toMatchObject({ balance: '0.00' });
+    expect((l as unknown as { refunds: unknown[] }).refunds).toHaveLength(0);
+    // saved again: the draft is replaced, not doubled
+    const second = await save(600);
+    expect(second.json()).toMatchObject({ status: 'draft', amount: '600.00' });
+    const draft = await inject({
+      method: 'GET',
+      url: `/payments/receipts/${pid}/refund-draft`,
+      headers: h(accountant),
+    });
+    expect(draft.json().draft).toMatchObject({ id: second.json().id, amount: '600.00' });
+    const voucher = await inject({
+      method: 'GET',
+      url: `/payments/refunds/${second.json().id}/voucher`,
+      headers: h(),
+    });
+    expect(voucher.json()).toMatchObject({ status: 'draft', amount: '600.00', voucherNo: null });
+    // a draft cannot be approved
+    const early = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${second.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(early.statusCode).toBe(409);
+    const sent = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${second.json().id}/send`,
+      headers: h(accountant),
+    });
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json()).toMatchObject({ status: 'requested', amount: '600.00' });
+    const ok = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${second.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(ok.json()).toMatchObject({ status: 'paid' });
+    l = await ledgerOf(sid);
+    expect(l.instalments[1]).toMatchObject({ balance: '600.00' }); // stays due by default
+    // another draft can be dropped
+    const third = await save(100);
+    const gone = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${third.json().id}/discard`,
+      headers: h(accountant),
+    });
+    expect(gone.statusCode).toBe(201);
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/payments/receipts/${pid}/refund-draft`,
+          headers: h(accountant),
+        })
+      ).json().draft,
+    ).toBeNull();
+  });
 });

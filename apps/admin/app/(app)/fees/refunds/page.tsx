@@ -59,10 +59,12 @@ export default async function RefundsPage({
             defaultValue={sp.status ?? ''}
             options={[
               { value: '', label: r('all') },
-              ...(['requested', 'approved', 'paid', 'rejected', 'failed'] as const).map((s) => ({
-                value: s,
-                label: r(`statuses.${s}`),
-              })),
+              ...(['draft', 'requested', 'approved', 'paid', 'rejected', 'failed'] as const).map(
+                (s) => ({
+                  value: s,
+                  label: r(`statuses.${s}`),
+                }),
+              ),
             ]}
           />
           <Button type="submit" variant="secondary">
@@ -138,7 +140,14 @@ export default async function RefundsPage({
               key: 'decide',
               header: canDecide ? r('decide') : '',
               render: (x) =>
-                x.status === 'requested' && x.workflowInstanceId ? (
+                x.status === 'draft' ? (
+                  <a
+                    className="ep-btn ep-btn--secondary ep-btn--sm"
+                    href={`/fees/refund-voucher/${x.id}`}
+                  >
+                    Print, send or discard
+                  </a>
+                ) : x.status === 'requested' && x.workflowInstanceId ? (
                   <a href="/workflow/inbox">Approve in My approvals</a>
                 ) : canDecide &&
                   x.status === 'paid' &&

@@ -359,7 +359,7 @@ export class DepartmentsService {
     );
     const refunds = await c.query<{ status: string; n: number; amount: string }>(
       `SELECT r.status::text, count(*)::int AS n, sum(r.amount)::text AS amount FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id
-        WHERE p.academic_year_id = $1 GROUP BY r.status ORDER BY r.status`,
+        WHERE p.academic_year_id = $1 AND r.status <> 'draft' GROUP BY r.status ORDER BY r.status`,
       [yearId],
     );
     const settlements = await c.query<{

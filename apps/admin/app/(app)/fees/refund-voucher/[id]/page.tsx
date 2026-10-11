@@ -1,4 +1,6 @@
-import { Badge } from '@edupro/ui';
+import { Badge, Button } from '@edupro/ui';
+import { Notice } from '@/components/Notice';
+import { discardRefundDraft, sendRefundDraft } from '@/lib/fee-request-actions';
 import { PrintButton } from '@/components/PrintButton';
 import { dmy, rupees } from '@/components/fees/sheets';
 import { apiFetch } from '@/lib/api';
@@ -14,7 +16,9 @@ interface Voucher {
   };
   year: string;
   voucherNo: string | null;
-  status: 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
+  refundId: string;
+  paymentId: string | null;
+  status: 'draft' | 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
   paidOn: string | null;
   requestedAt: string;
   amount: string;
@@ -35,6 +39,7 @@ const MODE: Record<string, string> = {
   gateway: 'Payment gateway',
 };
 const STATE: Record<Voucher['status'], [string, 'success' | 'warning' | 'danger' | 'neutral']> = {
+  draft: ['Draft: not sent for approval', 'neutral'],
   requested: ['Waiting for approval', 'warning'],
   approved: ['Approved, payment in progress', 'warning'],
   paid: ['Refunded', 'success'],
@@ -43,8 +48,16 @@ const STATE: Record<Voucher['status'], [string, 'success' | 'warning' | 'danger'
 };
 
 /** The refund voucher as it prints: what was given back head by head, how, and who approved it. */
-export default async function RefundVoucherPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RefundVoucherPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
+  const isDraft = (v: Voucher) => v.status === 'draft';
   const v = await apiFetch<Voucher>(`/payments/refunds/${id}/voucher`);
   const [label, tone] = STATE[v.status];
   return (
@@ -58,7 +71,26 @@ export default async function RefundVoucherPage({ params }: { params: Promise<{ 
           flexWrap: 'wrap',
         }}
       >
-        <PrintButton label="Print voucher" />
+        <PrintButton label={isDraft(v) ? 'Print provisional refund bill' : 'Print voucher'} />
+        {isDraft(v) ? (
+          <>
+            <form action={sendRefundDraft}>
+              <input type="hidden" name="id" value={id} />
+              <Button type="submit">Send for approval</Button>
+            </form>
+            {v.paymentId ? (
+              <a className="ep-btn ep-btn--secondary" href={`/fees/refund/${v.paymentId}`}>
+                Change the draft
+              </a>
+            ) : null}
+            <form action={discardRefundDraft}>
+              <input type="hidden" name="id" value={id} />
+              <Button type="submit" variant="ghost">
+                Discard the draft
+              </Button>
+            </form>
+          </>
+        ) : null}
         <a className="ep-btn ep-btn--secondary" href={`/api/fees/refund-file?id=${id}`}>
           Download PDF
         </a>
@@ -69,18 +101,31 @@ export default async function RefundVoucherPage({ params }: { params: Promise<{ 
           The pupil
         </a>
       </div>
+      <div className="ep-noprint">
+        <Notice params={sp} />
+        {isDraft(v) ? (
+          <p className="ep-alert ep-alert--info" role="status">
+            This is a draft. Print it for the parent; nothing has been sent or changed on the
+            receipt. After the parent has agreed, press “Send for approval”.
+          </p>
+        ) : null}
+      </div>
       <section className="ep-print-sheet ep-receipt" aria-label="Refund voucher">
         <div className="ep-print-sheet__head">
           <h2 className="ep-h3">{v.school.name}</h2>
           {v.school.address ? <p className="ep-field__help">{v.school.address}</p> : null}
           <p>
-            <strong>Refund voucher</strong> <Badge tone={tone}>{label}</Badge>
+            <strong>{isDraft(v) ? 'Provisional refund bill' : 'Refund voucher'}</strong>{' '}
+            <Badge tone={tone}>{label}</Badge>
           </p>
         </div>
         <div className="ep-print-sheet__meta">
           <div>
             Voucher no.:{' '}
-            <strong>{v.voucherNo ?? (v.status === 'requested' ? 'given on approval' : '—')}</strong>
+            <strong>
+              {v.voucherNo ??
+                (v.status === 'requested' || v.status === 'draft' ? 'given on approval' : '—')}
+            </strong>
           </div>
           <div>
             Date: <strong>{dmy(v.paidOn ?? v.requestedAt)}</strong>

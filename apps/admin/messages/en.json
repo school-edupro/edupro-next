@@ -2291,6 +2291,7 @@
     "reference": "Payout reference",
     "status": "Status",
     "statuses": {
+      "draft": "Draft (not sent)",
       "requested": "Requested",
       "approved": "Approved",
       "rejected": "Rejected",
