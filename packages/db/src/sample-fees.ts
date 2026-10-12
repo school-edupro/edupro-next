@@ -166,6 +166,8 @@ async function add(db: Client) {
         AND EXISTS (SELECT 1 FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $2 AND d.status IN ('pending', 'partial'))
         AND NOT EXISTS (SELECT 1 FROM fee_payments p WHERE p.student_id = s.id AND p.academic_year_id = $2)
         AND NOT EXISTS (SELECT 1 FROM student_withdrawals w WHERE w.student_id = s.id)
+        -- an advance from last year is used up by the first receipt; such pupils are left alone
+        AND NOT EXISTS (SELECT 1 FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $2 AND d.net < 0)
       ORDER BY s.id`,
     [schoolId, yearId],
   );
@@ -397,6 +399,10 @@ async function remove(db: Client) {
     );
     const ids = pay.rows.map((r) => r.id);
     const out: Record<string, number> = { receipts: ids.length };
+    const who = await db.query<{ student_id: string; year: string }>(
+      `SELECT DISTINCT student_id::text, academic_year_id::text AS year FROM fee_payments WHERE id = ANY($1::bigint[])`,
+      [ids],
+    );
     const run = async (label: string, sql: string, params: unknown[]) => {
       const r = await db.query(sql, params);
       out[label] = (out[label] ?? 0) + (r.rowCount ?? 0);
@@ -416,6 +422,22 @@ async function remove(db: Client) {
       `DELETE FROM fee_payment_allocations WHERE payment_id = ANY($1::bigint[])`,
       [ids],
     );
+    // a credit line (an advance from last year) that a sample receipt used up is given back: for a pupil
+    // left with no receipt, a fee line can only be paid by what its receipts hold
+    for (const w of who.rows) {
+      const left = await db.query(
+        `SELECT 1 FROM fee_payments WHERE student_id = $1 AND academic_year_id = $2 AND NOT (id = ANY($3::bigint[])) LIMIT 1`,
+        [w.student_id, w.year, ids],
+      );
+      if (left.rowCount) continue;
+      await run(
+        'credit given back to its line',
+        `UPDATE fee_demands SET paid = 0, status = 'pending', updated_at = now()
+          WHERE student_id = $1 AND academic_year_id = $2 AND paid <> 0 AND status IN ('paid', 'partial')
+            AND NOT EXISTS (SELECT 1 FROM fee_payment_allocations a WHERE a.demand_id = fee_demands.id)`,
+        [w.student_id, w.year],
+      );
+    }
     await run(
       'late fee postings',
       `DELETE FROM fee_late_fee_postings WHERE payment_id = ANY($1::bigint[])`,
