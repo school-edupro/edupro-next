@@ -101,7 +101,10 @@ export default async function PupilRefundPage({
       ) : null}
       {after !== null ? (
         <p>
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/fees/fnf/${r.studentId}?lastSeq=${String(after)}`}>
+          <a
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            href={`/fees/fnf/${r.studentId}?lastSeq=${String(after)}`}
+          >
             Back to the provisional bill
           </a>
         </p>
