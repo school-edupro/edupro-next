@@ -423,6 +423,22 @@ export async function resettleWithdrawalFees(fd: FormData) {
   redirect(`/fees/fnf/${str(fd, 'studentId')}?ok=1`);
 }
 
+/** The refund of a withdrawal kept as a draft: the provisional refund bill opens, ready to print. */
+export async function draftWithdrawalRefund(fd: FormData) {
+  const path = `/fees/fnf/${str(fd, 'studentId')}?x=1`;
+  let id = '';
+  try {
+    const r = await apiFetch<{ draftId: string }>(
+      `/people/withdrawals/${str(fd, 'id')}/fee-settlement?draft=true`,
+      { method: 'POST' },
+    );
+    id = r.draftId;
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`/fees/refund-voucher/${id}?ok=1`);
+}
+
 /** An approved waiver is asked to be taken back; it goes for approval and the fee is due again after. */
 export async function requestWaiverUndo(fd: FormData) {
   const path = `/fees/ledger/${str(fd, 'studentId')}?tab=waive`;

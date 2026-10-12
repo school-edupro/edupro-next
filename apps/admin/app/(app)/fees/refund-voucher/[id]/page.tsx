@@ -20,6 +20,8 @@ interface Voucher {
   paymentId: string | null;
   /** One refund over many receipts of the pupil. */
   pupil?: boolean;
+  /** Raised from the provisional bill of a withdrawal. */
+  withdrawal?: boolean;
   status: 'draft' | 'requested' | 'approved' | 'rejected' | 'paid' | 'failed';
   paidOn: string | null;
   requestedAt: string;
@@ -84,7 +86,11 @@ export default async function RefundVoucherPage({
               <a
                 className="ep-btn ep-btn--secondary"
                 href={
-                  v.pupil ? `/fees/refund-pupil/${v.student.id}` : `/fees/refund/${v.paymentId}`
+                  v.withdrawal
+                    ? `/fees/fnf/${v.student.id}`
+                    : v.pupil
+                      ? `/fees/refund-pupil/${v.student.id}`
+                      : `/fees/refund/${v.paymentId}`
                 }
               >
                 Change the draft

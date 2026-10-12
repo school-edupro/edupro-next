@@ -3,7 +3,7 @@ import { PrintButton } from '@/components/PrintButton';
 import { PupilMeta, SheetHead, dmy, rupees } from '@/components/fees/sheets';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { resettleWithdrawalFees } from '@/lib/fee-request-actions';
+import { draftWithdrawalRefund, resettleWithdrawalFees } from '@/lib/fee-request-actions';
 import type { FeePeriod } from '@/lib/types';
 
 interface Fnf {
@@ -76,7 +76,10 @@ export default async function FnfPage({
   const open = withdrawals.find((w) => w.status === 'requested' || w.status === 'cleared');
   // the refund of the withdrawal: not sent yet, waiting for approval, or done
   const waiting = bill.refunds.some((r) => r.byWithdrawal && r.status === 'requested');
-  const sentBefore = bill.refunds.some((r) => r.byWithdrawal);
+  const sentBefore = bill.refunds.some((r) => r.byWithdrawal && r.status !== 'draft');
+  const draft = bill.refunds.find((r) => r.byWithdrawal && r.status === 'draft');
+  // the pupil refund opens with the months after the chosen month filled in
+  const pupilRefund = `/fees/refund-pupil/${studentId}?after=${String(bill.lastMonth.sequence)}`;
   const REFUND_STATE: Record<string, string> = {
     draft: 'draft, not sent yet',
     requested: 'waiting for approval',
@@ -112,6 +115,11 @@ export default async function FnfPage({
           Work out
         </Button>
         <PrintButton label="Print provisional bill" />
+        {canRefund && bill.receipts.length > 0 ? (
+          <a className="ep-btn ep-btn--secondary" href={pupilRefund}>
+            Refund for the pupil (many receipts, one voucher)
+          </a>
+        ) : null}
       </form>
       <div className="ep-noprint">
         <Notice params={sp} />
@@ -125,7 +133,11 @@ export default async function FnfPage({
               sent for approval by printing.
             </li>
             <li>
-              <strong>After the parent has agreed</strong>, send the refund for approval. It goes
+              <strong>Save the refund as a draft and print</strong> the provisional refund bill
+              (head by head, one voucher). Nothing is sent yet.
+            </li>
+            <li>
+              <strong>After the parent has agreed</strong>, send the draft for approval. It goes
               through Fee setup → Approval levels; on the last approval the refund voucher is made.
             </li>
           </ol>
@@ -153,16 +165,45 @@ export default async function FnfPage({
                   Use this if the figures changed after it was sent.
                 </span>
               </form>
+            ) : draft ? (
+              <div style={{ display: 'grid', gap: 'var(--sp-2)' }}>
+                <p style={{ margin: 0 }}>
+                  <strong>A refund draft is saved and not sent yet.</strong>
+                </p>
+                <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                  <a className="ep-btn ep-btn--primary" href={`/fees/refund-voucher/${draft.id}`}>
+                    Open the provisional refund bill (print, send or discard)
+                  </a>
+                  <form action={draftWithdrawalRefund}>
+                    <input type="hidden" name="id" value={completed.id} />
+                    <input type="hidden" name="studentId" value={studentId} />
+                    <Button type="submit" variant="secondary">
+                      Work the draft out again
+                    </Button>
+                  </form>
+                </div>
+              </div>
             ) : t.direction === 'refund' ? (
-              <form action={resettleWithdrawalFees}>
-                <input type="hidden" name="id" value={completed.id} />
-                <input type="hidden" name="studentId" value={studentId} />
-                <Button type="submit">Send the refund of ₹{rupees(t.net)} for approval</Button>
+              <div style={{ display: 'grid', gap: 'var(--sp-2)' }}>
+                <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                  <form action={draftWithdrawalRefund}>
+                    <input type="hidden" name="id" value={completed.id} />
+                    <input type="hidden" name="studentId" value={studentId} />
+                    <Button type="submit">Save as draft and print (₹{rupees(t.net)})</Button>
+                  </form>
+                  <form action={resettleWithdrawalFees}>
+                    <input type="hidden" name="id" value={completed.id} />
+                    <input type="hidden" name="studentId" value={studentId} />
+                    <Button type="submit" variant="secondary">
+                      Send for approval now
+                    </Button>
+                  </form>
+                </div>
                 <span className="ep-field__help">
-                  {' '}
-                  Fee paid for the months after {bill.lastMonth.name}, and any advance.
+                  Fee paid for the months after {bill.lastMonth.name}, and any advance. The draft is
+                  one refund with one voucher; print it for the parent, then send it from that page.
                 </span>
-              </form>
+              </div>
             ) : (
               <p className="ep-field__help">
                 {sentBefore
@@ -351,8 +392,9 @@ export default async function FnfPage({
         </h3>
         <p className="ep-field__help">
           For a refund the school grants beyond the rule (for example April and May tuition on the
-          principal’s word), or a deposit. Open the receipt, type the amounts head by head, choose
-          “the fee is cancelled”, and send; it goes through Fee setup → Approval levels.
+          principal’s word), or a deposit. Type the amounts head by head, choose “the fee is
+          cancelled”, save as a draft to print, and send; it goes through Fee setup → Approval
+          levels.
         </p>
         {!canRefund ? (
           <p>You do not have the right to raise a refund.</p>
@@ -368,6 +410,13 @@ export default async function FnfPage({
               gap: 'var(--sp-2)',
             }}
           >
+            <li>
+              <a className="ep-btn ep-btn--primary ep-btn--sm" href={pupilRefund}>
+                Refund for the pupil (many receipts, one voucher)
+              </a>{' '}
+              all the receipts in one grid; save as draft and print, then send
+            </li>
+            <li className="ep-field__help">or from one receipt:</li>
             {bill.receipts.map((p) => (
               <li key={p.id}>
                 <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/fees/refund/${p.id}`}>

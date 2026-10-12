@@ -431,6 +431,16 @@ export class RefundsService {
             AND (r.batch_id IS NOT NULL OR r.payment_id = ANY($3::bigint[]))`,
         [studentId, yearId, [...per.keys()]],
       );
+      const wd = await c.query(
+        `SELECT 1 FROM fee_refunds WHERE payment_id = ANY($1::bigint[]) AND status = 'draft' AND withdrawal_id IS NOT NULL`,
+        [[...per.keys()]],
+      );
+      if (wd.rowCount)
+        throw new DomainError(
+          'fees.refund_open',
+          'A refund draft of the withdrawal is saved on these receipts: send or discard it from the provisional bill first',
+          { status: 409 },
+        );
       const batch = await c.query<{ id: string }>(`SELECT gen_random_uuid()::text AS id`);
       const ids: string[] = [];
       let total = 0;
@@ -552,6 +562,7 @@ export class RefundsService {
         refundId: one.id,
         paymentId: one.paymentId,
         pupil: Boolean(one.batchId && !one.withdrawalId),
+        withdrawal: Boolean(one.withdrawalId),
         status: one.status,
         paidOn: one.paidOn,
         requestedAt: one.requestedAt,
@@ -954,10 +965,14 @@ export class RefundsService {
         c,
         ctx,
         ids,
-        d.batchId
-          ? this.pupilSubject(d.studentName, total, ids.length, d.feeAction)
-          : this.subjectOf(d),
-        { kind: d.batchId ? 'pupil' : 'receipt', reason: d.reason, feeAction: d.feeAction },
+        d.withdrawalId
+          ? `Refund on withdrawal: ${d.studentName}: Rs. ${total.toFixed(2)} (${String(ids.length)} line${ids.length === 1 ? '' : 's'})`
+          : d.batchId
+            ? this.pupilSubject(d.studentName, total, ids.length, d.feeAction)
+            : this.subjectOf(d),
+        d.withdrawalId
+          ? { kind: 'withdrawal', withdrawalId: d.withdrawalId, reason: d.reason }
+          : { kind: d.batchId ? 'pupil' : 'receipt', reason: d.reason, feeAction: d.feeAction },
       );
       await this.audit.stage(ctx, c, {
         action: 'fees.refund.draft_send',

@@ -488,15 +488,58 @@ describe('withdrawal through configured departments (e2e)', () => {
     const draft = await inject({ method: 'GET', url: `/fees/students/${ids.a}/fnf`, headers: h() });
     expect(draft.json().totals).toMatchObject({ refundable: '4000.00', direction: 'refund' });
     expect(draft.json()).toMatchObject({ refundsWaiting: '0.00' });
-    // then the accountant sends it for approval
+    // first a draft: the provisional refund bill is printed for the parent, nothing is sent
+    const saveDraft = () =>
+      inject({
+        method: 'POST',
+        url: `/people/withdrawals/${ids.wa}/fee-settlement?draft=true`,
+        headers: h(accountant),
+      });
+    const d1 = await saveDraft();
+    expect(d1.statusCode).toBe(201);
+    expect(d1.json()).toMatchObject({ refunds: 1, refundTotal: '4000.00', inApproval: false });
+    // saved again: the draft is replaced, not doubled
+    const d2 = await saveDraft();
+    expect(d2.json().draftId).not.toBe(d1.json().draftId);
+    const drafts = await listRefunds();
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ status: 'draft', feeAction: 'cancel' });
+    const paper = await inject({
+      method: 'GET',
+      url: `/payments/refunds/${d2.json().draftId}/voucher`,
+      headers: h(accountant),
+    });
+    expect(paper.json()).toMatchObject({
+      status: 'draft',
+      amount: '4000.00',
+      voucherNo: null,
+      withdrawal: true,
+    });
+    // the bill has not moved: the draft is not a refund yet
+    const still = await inject({ method: 'GET', url: `/fees/students/${ids.a}/fnf`, headers: h() });
+    expect(still.json().totals).toMatchObject({ refundable: '4000.00', direction: 'refund' });
+    expect(still.json()).toMatchObject({ refundsWaiting: '0.00' });
+    // the parent agreed: the draft is sent for approval
+    const sentDraft = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${d2.json().draftId}/send`,
+      headers: h(accountant),
+    });
+    expect(sentDraft.statusCode).toBe(201);
+    expect(sentDraft.json()).toMatchObject({ status: 'requested', amount: '4000.00' });
+    // a draft never takes the place of a refund already sent
+    const late = await saveDraft();
+    expect(late.statusCode).toBe(409);
+    expect(late.json().type).toBe('fees.refund_open');
+    // the figures changed: the accountant works it out and sends it again
     const sent = await inject({
       method: 'POST',
       url: `/people/withdrawals/${ids.wa}/fee-settlement`,
       headers: h(accountant),
     });
     expect(sent.statusCode).toBe(201);
-    expect(sent.json()).toMatchObject({ replaced: 0, refunds: 1, refundTotal: '4000.00' });
-    const refunds = await listRefunds();
+    expect(sent.json()).toMatchObject({ replaced: 1, refunds: 1, refundTotal: '4000.00' });
+    const refunds = (await listRefunds()).filter((r) => r.status === 'requested');
     if (Number(before.paid) > 0) {
       expect(refunds).toHaveLength(1);
       expect(refunds[0]).toMatchObject({ status: 'requested', feeAction: 'cancel' });

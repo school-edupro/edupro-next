@@ -1200,7 +1200,7 @@ export class WithdrawalsService {
    * month, and any advance. Pressed again, it closes the refund that still waits (with its approval)
    * and raises it afresh. A refund already paid is not touched.
    */
-  async resettleFees(ctx: RequestContext, id: string) {
+  async resettleFees(ctx: RequestContext, id: string, draft = false) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const w = await c.query<{
         status: string;
@@ -1219,6 +1219,39 @@ export class WithdrawalsService {
           'The fee is settled only for a completed withdrawal',
           { status: 409 },
         );
+      if (draft) {
+        // a draft is only a paper to print: it never takes the place of a refund already sent
+        const sent = await c.query(
+          `SELECT 1 FROM fee_refunds WHERE withdrawal_id = $1 AND status IN ('requested', 'approved')`,
+          [id],
+        );
+        if (sent.rowCount)
+          throw new DomainError(
+            'fees.refund_open',
+            'The refund of this withdrawal is already sent for approval',
+            { status: 409 },
+          );
+        const fee = await settleWithdrawalFees(
+          this.workflow,
+          c,
+          ctx,
+          { id, studentId: row.student_id, leavingOn: row.leaving_on, yearId: row.year },
+          'draft',
+        );
+        if (!fee.draftId)
+          throw new DomainError(
+            'fees.nothing_to_refund',
+            'Nothing is refundable by the rule for this withdrawal',
+            { status: 409 },
+          );
+        await this.audit.stage(ctx, c, {
+          action: 'people.withdrawal.fee_refund_draft',
+          entityType: 'student_withdrawals',
+          entityId: id,
+          after: { fee },
+        });
+        return { replaced: 0, ...fee };
+      }
       const old = await c.query<{ id: string; workflow_instance_id: string | null }>(
         `UPDATE fee_refunds SET status = 'rejected', decided_by = app.current_user_id(), decided_at = now(),
                 decision_note = 'Replaced: the withdrawal refund was worked out again'
@@ -1455,6 +1488,8 @@ export class WithdrawalsService {
   private async applyRevoke(c: PoolClient, id: string): Promise<void> {
     try {
       await c.query(`SELECT app.revoke_withdrawal($1)`, [id]);
+      // a refund draft of the withdrawal that was never sent has no meaning any more
+      await c.query(`DELETE FROM fee_refunds WHERE withdrawal_id = $1 AND status = 'draft'`, [id]);
       // the pupil is back: the full roles return and the "former" ones end
       await c.query(
         `UPDATE user_roles SET revoked_at = NULL, revoked_by = NULL, reason = 'restored: withdrawal revoked', updated_at = now(), updated_by = app.current_user_id()

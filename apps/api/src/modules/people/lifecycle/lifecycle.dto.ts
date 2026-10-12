@@ -228,3 +228,7 @@ export class RevokeDto extends createZodDto(RevokeSchema) {}
 /** Portal after leaving: 0 closes the login at completion. */
 export const PortalAccessSchema = z.object({ days: z.number().int().min(0).max(730) });
 export class PortalAccessDto extends createZodDto(PortalAccessSchema) {}
+
+/** draft=true keeps the withdrawal refund unsent, to print the provisional refund bill first. */
+export const FeeSettlementQuerySchema = z.object({ draft: z.enum(['true', 'false']).optional() });
+export class FeeSettlementQueryDto extends createZodDto(FeeSettlementQuerySchema) {}

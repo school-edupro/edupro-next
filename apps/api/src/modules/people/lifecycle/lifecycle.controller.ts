@@ -23,6 +23,7 @@ import {
   SetPromotionsDto,
   WithdrawalTcDto,
   YearSectionsQueryDto,
+  FeeSettlementQueryDto,
   PortalAccessDto,
   WithdrawalsFileQueryDto,
   RevokeDto,
@@ -225,8 +226,12 @@ export class LifecycleController {
       'Send the fee refund of a completed withdrawal for approval (a waiting one is replaced)',
   })
   @RequirePermission('fees.refund.request')
-  resettleFees(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.withdrawals.resettleFees(ctx, id);
+  resettleFees(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: FeeSettlementQueryDto,
+  ) {
+    return this.withdrawals.resettleFees(ctx, id, q.draft === 'true');
   }
 
   @Post('withdrawals/:id/revoke')

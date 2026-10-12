@@ -384,6 +384,16 @@ Fees → the pupil → Receipts → **Refund for the pupil (many receipts, one v
   draft is saved, the receipts in it cannot get a separate refund.
 - The refund from a single receipt (Refund by fee head on the receipt) stays for the simple case.
 
+### From the provisional bill of a withdrawal (2026-10-12)
+
+- **Refund for the pupil (many receipts, one voucher)** is on the bill, next to Print and in "Refund more".
+  It opens the pupil refund with the fee paid for the months after the chosen month (and any advance)
+  filled in and "the fee is cancelled" chosen; change any box, then Save as draft and print.
+- For a completed withdrawal the Steps box has **Save as draft and print**: the rule refund is kept as one
+  draft, the provisional refund bill opens to print, and it is sent from that page after the parent agrees.
+  "Send for approval now" stays beside it. A draft is replaced when saved again, never replaces a refund
+  already sent, and is dropped if the withdrawal is revoked.
+
 ## Opening balance of a pupil (Dr / Cr)
 
 A plus figure is dues (Dr: the pupil owes it from before); a minus figure is advance (Cr).

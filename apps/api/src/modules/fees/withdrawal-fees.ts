@@ -11,6 +11,8 @@ export interface WithdrawalFeeResult {
   refunds: number;
   refundTotal: string;
   inApproval: boolean;
+  /** Draft mode: the first refund of the draft (its voucher page prints the provisional refund bill). */
+  draftId?: string;
 }
 
 /**
@@ -35,8 +37,9 @@ export async function settleWithdrawalFees(
    * false at completion: the bill is only cut to the leaving month. The refund is raised later, when
    * the accounts office has printed the provisional bill, met the parent and presses "send for approval".
    */
-  raiseRefund = true,
+  raiseRefund: boolean | 'draft' = true,
 ): Promise<WithdrawalFeeResult> {
+  const asDraft = raiseRefund === 'draft';
   const AFTER = `make_date(fp.year, fp.month, 1) > date_trunc('month', $3::date)`;
   // part-paid lines of the later months are cut to what was paid: remembered, so a revoke can put the fee back
   const cut = await c.query<{ demandId: string; amount: string }>(
@@ -74,6 +77,15 @@ export async function settleWithdrawalFees(
       refundTotal: '0.00',
       inApproval: false,
     };
+  // a draft saved earlier for this withdrawal is replaced; a new draft also takes the place of any other
+  // draft lying on the pupil's receipts (a receipt holds one draft)
+  await c.query(`DELETE FROM fee_refunds WHERE withdrawal_id = $1 AND status = 'draft'`, [w.id]);
+  if (asDraft)
+    await c.query(
+      `DELETE FROM fee_refunds r USING fee_payments p
+        WHERE p.id = r.payment_id AND r.status = 'draft' AND p.student_id = $1 AND p.academic_year_id = $2`,
+      [w.studentId, w.yearId],
+    );
   // 2. what was paid beyond the leaving month, receipt by receipt
   const paidAhead = await c.query<{
     payment_id: string;
@@ -125,9 +137,17 @@ export async function settleWithdrawalFees(
     const amount = lines.reduce((s, l) => s + Number(l.amount), 0);
     if (amount <= 0) continue;
     const r = await c.query<{ id: string }>(
-      `INSERT INTO fee_refunds (school_id, payment_id, amount, reason, mode, requested_by, request_id, lines, fee_action, batch_id, withdrawal_id)
-       VALUES (app.current_school_id(), $1, $2, $3, 'bank', app.current_user_id(), app.current_request_id(), $4::jsonb, 'cancel', $5::uuid, $6) RETURNING id::text`,
-      [paymentId, amount.toFixed(2), reason, JSON.stringify(lines), batch.rows[0]!.id, w.id],
+      `INSERT INTO fee_refunds (school_id, payment_id, amount, reason, mode, requested_by, request_id, lines, fee_action, batch_id, withdrawal_id, status)
+       VALUES (app.current_school_id(), $1, $2, $3, 'bank', app.current_user_id(), app.current_request_id(), $4::jsonb, 'cancel', $5::uuid, $6, $7::refund_status) RETURNING id::text`,
+      [
+        paymentId,
+        amount.toFixed(2),
+        reason,
+        JSON.stringify(lines),
+        batch.rows[0]!.id,
+        w.id,
+        asDraft ? 'draft' : 'requested',
+      ],
     );
     ids.push(r.rows[0]!.id);
     total += amount;
@@ -135,8 +155,8 @@ export async function settleWithdrawalFees(
   if (Number(opening.rows[0]?.v ?? 0) > 0 && !opening.rows[0]!.open) {
     const amount = Number(opening.rows[0]!.v);
     const r = await c.query<{ id: string }>(
-      `INSERT INTO fee_refunds (school_id, kind, student_id, academic_year_id, amount, reason, mode, requested_by, request_id, lines, batch_id, withdrawal_id)
-       VALUES (app.current_school_id(), 'opening_advance', $1, $2, $3, $4, 'bank', app.current_user_id(), app.current_request_id(), $5::jsonb, $6::uuid, $7) RETURNING id::text`,
+      `INSERT INTO fee_refunds (school_id, kind, student_id, academic_year_id, amount, reason, mode, requested_by, request_id, lines, batch_id, withdrawal_id, status)
+       VALUES (app.current_school_id(), 'opening_advance', $1, $2, $3, $4, 'bank', app.current_user_id(), app.current_request_id(), $5::jsonb, $6::uuid, $7, $8::refund_status) RETURNING id::text`,
       [
         w.studentId,
         w.yearId,
@@ -152,11 +172,21 @@ export async function settleWithdrawalFees(
         ]),
         batch.rows[0]!.id,
         w.id,
+        asDraft ? 'draft' : 'requested',
       ],
     );
     ids.push(r.rows[0]!.id);
     total += amount;
   }
+  // a draft waits: the provisional refund bill is printed first, the accounts office sends it after
+  if (asDraft)
+    return {
+      cancelled: cancel.rows[0]?.v ?? '0.00',
+      refunds: ids.length,
+      refundTotal: total.toFixed(2),
+      inApproval: false,
+      draftId: ids[0],
+    };
   let inApproval = false;
   if (ids.length > 0) {
     try {

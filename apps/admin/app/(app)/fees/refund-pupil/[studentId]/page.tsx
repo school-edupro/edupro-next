@@ -44,13 +44,29 @@ export default async function PupilRefundPage({
   searchParams,
 }: {
   params: Promise<{ studentId: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string; after?: string }>;
 }) {
   const { studentId } = await params;
   const sp = await searchParams;
   const r = await apiFetch<PupilRefundable>(`/payments/refunds/student/${studentId}/refundable`);
   const usable = r.receipts.filter((x) => !x.waiting);
   const waiting = r.receipts.filter((x) => x.waiting);
+  // opened from the provisional bill: the fee paid for the months after the chosen month is filled in
+  const after = /^\d{1,2}$/.test(sp.after ?? '') ? Number(sp.after) : null;
+  const ahead = after === null ? [] : r.lines.filter((l) => l.sequence > after);
+  const prefill =
+    !r.draft && after !== null && (ahead.length > 0 || Number(r.advance) > 0)
+      ? {
+          lines: [
+            ...ahead.map((l) => ({ part: 'fee', demandId: l.demandId, amount: l.paid })),
+            ...(Number(r.advance) > 0 ? [{ part: 'advance', amount: r.advance }] : []),
+          ],
+          feeAction: 'cancel',
+          mode: 'bank',
+          reference: null,
+          reason: '',
+        }
+      : null;
   return (
     <>
       <PageHeader
@@ -73,6 +89,20 @@ export default async function PupilRefundPage({
           {r.draft.receipts === 1 ? '' : 's'} is saved and is not sent yet. The boxes below show it.{' '}
           <a href={`/fees/refund-voucher/${r.draft.id}`}>
             Open the provisional refund bill (print, send or discard)
+          </a>
+        </p>
+      ) : null}
+      {prefill ? (
+        <p className="ep-alert ep-alert--info" role="status">
+          Opened from the provisional bill: the fee paid for the months after the chosen month
+          {Number(r.advance) > 0 ? ' and the advance' : ''} is filled in, with “the fee is
+          cancelled”. Change any box before you save. Nothing is saved yet.
+        </p>
+      ) : null}
+      {after !== null ? (
+        <p>
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/fees/fnf/${r.studentId}?lastSeq=${String(after)}`}>
+            Back to the provisional bill
           </a>
         </p>
       ) : null}
@@ -131,7 +161,7 @@ export default async function PupilRefundPage({
             gateway={false}
             action={requestPupilRefund}
             draftAction={savePupilRefundDraft}
-            draft={r.draft}
+            draft={r.draft ?? prefill}
           />
         </Card>
       ) : null}
