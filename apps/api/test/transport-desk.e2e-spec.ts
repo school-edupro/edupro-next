@@ -336,9 +336,9 @@ describe('transport desk (e2e)', () => {
     const fees = await transportFees();
     expect(fees[months[2]!]).toBe(1000);
     expect(fees[months[3]!]).toBe(900);
-    // the paid month keeps what was paid, and the request says so
-    expect(fees[months[4]!]).toBe(1000);
-    expect(ok.json().feeNote).toMatch(/except .* already paid/);
+    // the month paid at the old amount is brought to the new one: the 100 paid in excess is carried forward
+    expect(fees[months[4]!]).toBe(900);
+    expect(ok.json().feeNote).toMatch(/Rs\. 100 paid in excess for .* is carried forward/);
     expect(Object.keys(fees)).toHaveLength(11);
   });
 
@@ -850,9 +850,9 @@ describe('transport desk (e2e)', () => {
       (leave.json().periods as Array<{ status: string }>).every((p) => p.status === 'cancelled'),
     ).toBe(true);
     let fees = await transportFees();
-    // the month paid earlier keeps what was paid, and the request says so
-    expect(Object.keys(fees)).toEqual([months[4]]);
-    expect(leave.json().feeNote).toMatch(/already paid/);
+    // the month paid earlier is no longer charged either: what was paid on it is carried forward
+    expect(Object.keys(fees)).toEqual([]);
+    expect(leave.json().feeNote).toMatch(/paid in excess for .* is carried forward/);
     const riders = (await get(`/transport/routes/${route.R1}/students`)).json().data as Array<{
       studentId: string;
     }>;
@@ -874,7 +874,64 @@ describe('transport desk (e2e)', () => {
     ).filter((p) => p.status !== 'cancelled');
     expect(live.map((p) => [p.fromMonth, p.toMonth])).toEqual([[months[1], months[2]]]);
     fees = await transportFees();
-    expect(Object.keys(fees).sort()).toEqual([months[1], months[2], months[4]].sort());
+    expect(Object.keys(fees).sort()).toEqual([months[1], months[2]].sort());
+    // the first of the two months is paid in full by a real receipt (with the tuition before it);
+    // then the charge is lowered from that month
+    const full = back.json().monthlyAmount as number;
+    const state = () =>
+      withMigrator(async (c) => {
+        const r = await c.query<{ m: string; kind: string; net: number; paid: number }>(
+          `SELECT to_char(make_date(fp.year, fp.month, 1), 'YYYY-MM') AS m, fh.kind::text, sum(d.net)::float AS net, sum(d.paid)::float AS paid
+             FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id JOIN fee_heads fh ON fh.id = d.head_id
+            WHERE d.student_id = $1 AND d.status <> 'cancelled' GROUP BY 1, 2, fp.sequence ORDER BY fp.sequence, 2`,
+          [studentId],
+        );
+        return r.rows;
+      });
+    const before = await state();
+    const upTo = before.filter((x) => x.m <= months[1]!).reduce((a, x) => a + x.net - x.paid, 0);
+    const paid = await post('/payments/receipts', accountant, {
+      studentId,
+      amount: upTo,
+      mode: 'cash',
+    });
+    expect(paid.statusCode).toBe(201);
+    expect((await state()).find((x) => x.m === months[1] && x.kind === 'transport')).toMatchObject({
+      net: full,
+      paid: full,
+    });
+    const lower = await post('/transport/requests', incharge, {
+      studentId,
+      kind: 'join',
+      service: 'pick',
+      pickRouteId: route.R1,
+      pickStopId: stop.Warje,
+      fromMonth: months[1],
+      toMonth: months[2],
+    });
+    expect(lower.json().status).toBe('approved');
+    const less = lower.json().monthlyAmount as number;
+    expect(less).toBeLessThan(full);
+    const after = await state();
+    // the paid month is charged and paid at the new amount
+    expect(after.find((x) => x.m === months[1] && x.kind === 'transport')).toMatchObject({
+      net: less,
+      paid: less,
+    });
+    // what was paid in excess sits on the next month's fee, and the whole receipt is still set against fee
+    const next = after.filter((x) => x.m === months[2]).reduce((a, x) => a + x.paid, 0);
+    expect(next).toBe(full - less);
+    const allocated = await withMigrator(async (c) => {
+      const a = await c.query<{ v: number }>(
+        `SELECT COALESCE(sum(a.amount), 0)::float AS v FROM fee_payment_allocations a WHERE a.payment_id = $1`,
+        [paid.json().paymentId],
+      );
+      return a.rows[0]!.v;
+    });
+    expect(allocated).toBe(upTo);
+    expect(lower.json().feeNote).toMatch(
+      /is carried forward: Rs\. [\d,]+ set against the next unpaid fee$/,
+    );
     await put('/transport/desk/setup', admin, body(setup.levels));
   });
 });

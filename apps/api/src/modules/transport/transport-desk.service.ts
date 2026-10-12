@@ -1146,23 +1146,71 @@ export class TransportDeskService {
         [student, yearId],
       );
       await c.query(`SELECT * FROM app.generate_fee_demand($1, $2)`, [student, yearId]);
-      await c.query('RELEASE SAVEPOINT transport_fee');
-      // a month already paid keeps what was paid: say so, the fee desk adjusts or refunds it
-      const paid = await c.query<{ m: string }>(
-        `SELECT to_char(make_date(fp.year, fp.month, 1), 'Mon YYYY') AS m
+      // A month already paid keeps its receipt. Where the new charge is lower, what was paid in excess is
+      // carried forward: it comes off that month's line and is set against the pupil's next unpaid fee
+      // (what finds no due stays on the receipt as advance). Where the new charge is higher, the fee desk
+      // decides, because an old month would otherwise turn overdue by itself.
+      const EXPECTED = `COALESCE((SELECT t.monthly_amount FROM student_transport t
+                  WHERE t.student_id = d.student_id AND t.academic_year_id = d.academic_year_id AND t.status <> 'cancelled'
+                    AND make_date(fp.year, fp.month, 1) BETWEEN t.from_month AND t.to_month ORDER BY t.id DESC LIMIT 1), 0)`;
+      const paid = await c.query<{
+        id: string;
+        m: string;
+        gross: string;
+        paid: string;
+        net: string;
+        want: string;
+      }>(
+        `SELECT d.id::text, to_char(make_date(fp.year, fp.month, 1), 'Mon YYYY') AS m, d.gross::text, d.paid::text, d.net::text, ${EXPECTED}::text AS want
            FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id JOIN fee_heads fh ON fh.id = d.head_id AND fh.kind = 'transport'
           WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.paid > 0 AND make_date(fp.year, fp.month, 1) >= $3::date
-            AND d.gross IS DISTINCT FROM COALESCE((SELECT t.monthly_amount FROM student_transport t
-                  WHERE t.student_id = d.student_id AND t.academic_year_id = d.academic_year_id AND t.status <> 'cancelled'
-                    AND make_date(fp.year, fp.month, 1) BETWEEN t.from_month AND t.to_month ORDER BY t.id DESC LIMIT 1), 0)
+            AND d.gross IS DISTINCT FROM ${EXPECTED}
           ORDER BY fp.sequence`,
         [student, yearId, q.from_month],
       );
+      const carried: string[] = [];
+      const higher: string[] = [];
+      let total = 0;
+      let moved = 0;
+      for (const d of paid.rows) {
+        const excess = Math.min(Number(d.gross) - Number(d.want), Number(d.paid), Number(d.net));
+        if (excess <= 0) {
+          higher.push(d.m);
+          continue;
+        }
+        const r = await c.query<{ v: string }>(`SELECT app.paid_charge_to_fee($1, $2)::text AS v`, [
+          d.id,
+          excess.toFixed(2),
+        ]);
+        // the function writes the cut as a discount; here the charge itself is lower, so it comes off the gross
+        await c.query(
+          `UPDATE fee_demands SET gross = gross - $2, discount = discount - $2,
+                  status = CASE WHEN net <= 0 AND paid <= 0 THEN 'cancelled'::fee_demand_status ELSE status END, updated_at = now()
+            WHERE id = $1`,
+          [d.id, excess.toFixed(2)],
+        );
+        carried.push(d.m);
+        total += excess;
+        moved += Number(r.rows[0]!.v);
+      }
+      const rupees = (n: number) =>
+        `Rs. ${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      const notes = ['Fees updated for the months of this request'];
+      if (carried.length)
+        notes.push(
+          `${rupees(total)} paid in excess for ${carried.join(', ')} is carried forward: ${rupees(moved)} set against the next unpaid fee` +
+            (total - moved > 0.005
+              ? `, ${rupees(total - moved)} kept as advance on the receipt (no fee is due now)`
+              : ''),
+        );
+      if (higher.length)
+        notes.push(
+          `${higher.join(', ')} already paid at a lower amount: the fee desk must collect or adjust the difference`,
+        );
+      await c.query('RELEASE SAVEPOINT transport_fee');
       await c.query(`UPDATE transport_requests SET fee_note = $2 WHERE id = $1`, [
         id,
-        paid.rows.length
-          ? `Fees updated for the months of this request, except ${paid.rows.map((x) => x.m).join(', ')}: already paid at the earlier amount, so the fee desk must adjust or refund the difference`
-          : 'Fees updated for the months of this request',
+        notes.join('. '),
       ]);
     } catch (e) {
       await c.query('ROLLBACK TO SAVEPOINT transport_fee');
