@@ -337,6 +337,27 @@ export const ListProfileChangesQuerySchema = z.object({
 });
 export class ListProfileChangesQueryDto extends createZodDto(ListProfileChangesQuerySchema) {}
 
+const RegisterDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** The adjustments register (waivers, cancelled receipts, bounced cheques) and the fee profile changes. */
+export const AdjustmentRegisterQuerySchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
+  kind: z.enum(['waiver', 'reversal', 'bounce']).optional(),
+  classId: IdSchema.optional(),
+  from: RegisterDay.optional(),
+  to: RegisterDay.optional(),
+  /** Student, admission no. or receipt no. */
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class AdjustmentRegisterQueryDto extends createZodDto(AdjustmentRegisterQuerySchema) {}
+export const AdjustmentRegisterFileQuerySchema = AdjustmentRegisterQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class AdjustmentRegisterFileQueryDto extends createZodDto(
+  AdjustmentRegisterFileQuerySchema,
+) {}
+
 export const PostMiscReceiptSchema = z
   .object({
     payerKind: z.enum(['student', 'employee', 'vendor', 'other']),

@@ -19,6 +19,8 @@ import {
   RazorpayWebhookDto,
   RecordOfflinePaymentDto,
   RefundFeeDueDto,
+  RefundRegisterFileQueryDto,
+  RefundRegisterQueryDto,
   RequestAdvanceRefundDto,
   RequestRefundDto,
   RequestStudentRefundDto,
@@ -170,6 +172,25 @@ export class PaymentsController {
   async refundList(@ReqCtx() ctx: RequestContext, @Query() q: ListRefundsQueryDto) {
     const { rows, total } = await this.refunds.list(ctx, q);
     return { data: rows, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('refunds/register')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The refund register: filters, totals and pages' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  async refundRegister(@ReqCtx() ctx: RequestContext, @Query() q: RefundRegisterQueryDto) {
+    const { rows, total, totals } = await this.refunds.register(ctx, q);
+    return { data: rows, totals, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('refunds/register/file')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'The refund register as filtered, as Excel or PDF' })
+  @RequirePermission(PAYMENTS.refundRequest)
+  async refundRegisterFile(@ReqCtx() ctx: RequestContext, @Query() q: RefundRegisterFileQueryDto) {
+    const { format, ...filters } = q;
+    const f = await this.refunds.registerFile(ctx, filters, format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get('receipts/:paymentId/refundable')

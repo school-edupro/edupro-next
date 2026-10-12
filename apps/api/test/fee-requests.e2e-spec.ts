@@ -1063,5 +1063,53 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(Number(l.instalments[0]!.balance)).toBeGreaterThan(0);
     const after = await canNow();
     expect(after.lines).toHaveLength(0);
+    // the register shows it as one refund over three receipts, and filters and files follow
+    const reg = await inject({
+      method: 'GET',
+      url: '/payments/refunds/register?q=FRQ-pupil&kind=pupil&status=paid',
+      headers: h(),
+    });
+    expect(reg.statusCode).toBe(200);
+    expect(reg.json().page.total).toBe(1);
+    expect(reg.json().data[0]).toMatchObject({
+      origin: 'pupil',
+      parts: 3,
+      amount: '3300.00',
+      voucherNo: [...numbers][0],
+    });
+    expect(reg.json().data[0].receipts).toHaveLength(3);
+    expect(reg.json().totals.paid).toBe('3300.00');
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: '/payments/refunds/register?q=FRQ-pupil&kind=receipt',
+          headers: h(),
+        })
+      ).json().page.total,
+    ).toBe(0);
+    for (const url of [
+      '/payments/refunds/register/file?format=pdf&q=FRQ-pupil',
+      '/fees/adjustments/register/file?format=xlsx',
+      '/fees/profile-changes/register/file?format=pdf',
+    ]) {
+      const f = await inject({ method: 'GET', url, headers: h() });
+      expect(f.statusCode).toBe(200);
+      expect(Buffer.from(f.json().base64, 'base64').length).toBeGreaterThan(800);
+    }
+    const adj = await inject({
+      method: 'GET',
+      url: '/fees/adjustments/register?size=1&status=approved',
+      headers: h(),
+    });
+    expect(adj.statusCode).toBe(200);
+    expect(adj.json().data.length).toBeLessThanOrEqual(1);
+    expect(adj.json().totals).toHaveProperty('waived');
+    const bad = await inject({
+      method: 'GET',
+      url: '/fees/adjustments/register?from=12-10-2026',
+      headers: h(),
+    });
+    expect(bad.statusCode).toBe(400);
   });
 });

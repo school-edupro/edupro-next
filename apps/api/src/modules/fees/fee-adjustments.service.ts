@@ -7,9 +7,11 @@ import { assertPeriodOpen } from '../ops/ops.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { SETTINGS_CATALOGUE } from '../platform/settings.catalogue';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { FeeSetupService } from './fee-setup.service';
 import type {
+  AdjustmentRegisterQueryDto,
   StudentDiscountInput,
   StudentOptionalHeadInput,
   DecideAdjustmentDto,
@@ -212,6 +214,210 @@ export class FeeAdjustmentsService {
       );
       return r.rows.map(stamp);
     });
+  }
+
+  /** Filters shared by the two registers of this page (a = the row, s = the student). */
+  private registerWhere(yearId: string, q: AdjustmentRegisterQueryDto, t: 'a' | 'c') {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    const add = (sql: string, v: unknown) => {
+      params.push(v);
+      where.push(sql.replaceAll('?', `$${String(params.length)}`));
+    };
+    add(`${t}.academic_year_id = ?`, yearId);
+    if (q.status) add(`${t}.status = ?::workflow_status`, q.status);
+    if (q.from) add(`(${t}.requested_at AT TIME ZONE 'Asia/Kolkata')::date >= ?::date`, q.from);
+    if (q.to) add(`(${t}.requested_at AT TIME ZONE 'Asia/Kolkata')::date <= ?::date`, q.to);
+    if (q.classId)
+      add(
+        // eslint-disable-next-line no-restricted-syntax -- t is the table alias 'a' or 'c' written here; the value is a bound parameter
+        `EXISTS (SELECT 1 FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                  WHERE e.student_id = s.id AND e.academic_year_id = ${t}.academic_year_id AND cs.class_id = ?)`,
+        q.classId,
+      );
+    return { where, params, add };
+  }
+
+  /** Waivers, cancelled receipts and bounced cheques: filters, totals of what is filtered, pages. */
+  async adjustmentRegister(ctx: RequestContext, q: AdjustmentRegisterQueryDto) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const w = this.registerWhere(yearId, q, 'a');
+      if (q.kind) w.add(`a.kind = ?::fee_adjustment_kind`, q.kind);
+      if (q.q)
+        w.add(
+          `(lower(s.display_name) LIKE ? OR lower(s.admission_no) LIKE ? OR lower(COALESCE(p.receipt_no, '')) LIKE ?)`,
+          `%${q.q.toLowerCase()}%`,
+        );
+      const r = await c.query<AdjustmentRow>(
+        // eslint-disable-next-line no-restricted-syntax -- ADJ_SELECT is a constant; where holds fixed fragments; values are bound parameters
+        `${ADJ_SELECT} WHERE ${w.where.join(' AND ')} ORDER BY (a.status = 'pending') DESC, a.requested_at DESC, a.id DESC LIMIT 5000`,
+        w.params,
+      );
+      const all = r.rows.map(stamp);
+      const sum = (kind: string) =>
+        all
+          .filter((x) => x.kind === kind && x.status === 'approved')
+          .reduce((a, x) => a + Number(x.amount), 0)
+          .toFixed(2);
+      return {
+        rows: all.slice((q.page - 1) * q.size, q.page * q.size),
+        all,
+        total: all.length,
+        totals: {
+          waived: sum('waiver'),
+          cancelled: sum('reversal'),
+          bounced: sum('bounce'),
+          pending: all.filter((x) => x.status === 'pending').length,
+        },
+      };
+    });
+  }
+
+  /** Fee profile changes (discount, fee group, hostel, pay plan, opening balance): filters and pages. */
+  async profileChangeRegister(ctx: RequestContext, q: AdjustmentRegisterQueryDto) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const w = this.registerWhere(yearId, q, 'c');
+      if (q.q)
+        w.add(
+          `(lower(s.display_name) LIKE ? OR lower(s.admission_no) LIKE ?)`,
+          `%${q.q.toLowerCase()}%`,
+        );
+      const r = await c.query<ProfileChangeRow>(
+        // eslint-disable-next-line no-restricted-syntax -- CHANGE_SELECT is a constant; where holds fixed fragments; values are bound parameters
+        `${CHANGE_SELECT} WHERE ${w.where.join(' AND ')} ORDER BY (c.status = 'pending') DESC, c.requested_at DESC, c.id DESC LIMIT 5000`,
+        w.params,
+      );
+      const all = r.rows.map(stamp);
+      return {
+        rows: all.slice((q.page - 1) * q.size, q.page * q.size),
+        all,
+        total: all.length,
+        totals: { pending: all.filter((x) => x.status === 'pending').length },
+      };
+    });
+  }
+
+  /** Either register as filtered (every page) as Excel or PDF, made at once. */
+  async registerFile(
+    ctx: RequestContext,
+    which: 'adjustments' | 'changes',
+    q: AdjustmentRegisterQueryDto,
+    format: 'xlsx' | 'pdf',
+  ) {
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const ist = (v: unknown) =>
+      v ? new Date(String(v)).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '';
+    const d = (v?: string) => (v ? v.split('-').reverse().join('/') : '…');
+    const STATUS: Record<string, string> = {
+      pending: 'Waiting',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+    };
+    const said = [
+      q.status ? `Status: ${STATUS[q.status]}` : 'All statuses',
+      q.from || q.to ? `Asked ${d(q.from)} to ${d(q.to)}` : '',
+      q.q ? `Search: ${q.q}` : '',
+    ].filter(Boolean);
+    if (which === 'changes') {
+      const { all } = await this.profileChangeRegister(ctx, { ...q, page: 1, size: 200 });
+      return registerFile(
+        {
+          school: head.name,
+          address: head.address,
+          report: 'Fee profile changes',
+          details: [[...said, `${String(all.length)} request(s)`].join(' · '), generatedOn()],
+          legend: '',
+          columns: [
+            { label: 'Sr', width: 3, right: true },
+            { label: 'Asked on', width: 7 },
+            { label: 'Admission no.', width: 8 },
+            { label: 'Student', width: 14 },
+            { label: 'Change', width: 26 },
+            { label: 'Reason', width: 18 },
+            { label: 'Asked by', width: 10 },
+            { label: 'Status', width: 7 },
+            { label: 'Decided by', width: 10 },
+            { label: 'Decided on', width: 7 },
+          ],
+          rows: all.map((x, i) => [
+            i + 1,
+            ist(x.requestedAt),
+            x.admissionNo,
+            x.studentName,
+            x.summary ?? Object.keys(x.changes ?? {}).join(', '),
+            x.reason,
+            x.requestedBy ?? '',
+            STATUS[x.status] ?? x.status,
+            x.decidedBy ?? '',
+            ist(x.decidedAt),
+          ]),
+          filename: 'fee-profile-changes',
+        },
+        format,
+      );
+    }
+    const KIND: Record<string, string> = {
+      waiver: 'Fee waiver',
+      reversal: 'Receipt cancelled',
+      bounce: 'Cheque bounced',
+    };
+    const { all, totals } = await this.adjustmentRegister(ctx, { ...q, page: 1, size: 200 });
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Fee adjustments register',
+        details: [
+          [
+            ...said,
+            q.kind ? `Type: ${KIND[q.kind]}` : '',
+            `${String(all.length)} request(s)`,
+            `Waived Rs. ${totals.waived}`,
+            `Cancelled Rs. ${totals.cancelled}`,
+            `Bounced Rs. ${totals.bounced}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          generatedOn(),
+        ],
+        legend: 'The amounts in the heading count approved requests only.',
+        columns: [
+          { label: 'Sr', width: 3, right: true },
+          { label: 'Asked on', width: 6 },
+          { label: 'Admission no.', width: 7 },
+          { label: 'Student', width: 12 },
+          { label: 'Type', width: 9 },
+          { label: 'Fee line / receipt', width: 16 },
+          { label: 'Amount', width: 7, right: true },
+          { label: 'Charge', width: 5, right: true },
+          { label: 'Reason', width: 15 },
+          { label: 'Asked by', width: 8 },
+          { label: 'Status', width: 6 },
+          { label: 'Decided by', width: 8 },
+          { label: 'Decided on', width: 6 },
+        ],
+        rows: all.map((x, i) => [
+          i + 1,
+          ist(x.requestedAt),
+          x.admissionNo,
+          x.studentName,
+          KIND[x.kind] ?? x.kind,
+          x.receiptNo ?? x.demandLabel ?? '',
+          Number(x.amount),
+          Number(x.charge) > 0 ? Number(x.charge) : '',
+          x.reason,
+          x.requestedBy ?? '',
+          STATUS[x.status] ?? x.status,
+          x.decidedBy ?? '',
+          ist(x.decidedAt),
+        ]),
+        filename: 'fee-adjustments',
+      },
+      format,
+    );
   }
 
   private async findAdjustment(c: PoolClient, id: string): Promise<AdjustmentRow> {

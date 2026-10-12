@@ -31,6 +31,8 @@ import {
   SetPaymentModeDto,
   CreateDiscountDto,
   DecideAdjustmentDto,
+  AdjustmentRegisterFileQueryDto,
+  AdjustmentRegisterQueryDto,
   ListAdjustmentsQueryDto,
   ListMiscReceiptsQueryDto,
   MiscEmployeeLookupQueryDto,
@@ -574,6 +576,28 @@ export class FeesController {
   }
 
   // ---- Sprint 14: adjustments (waiver, reversal, bounce) ------------------------------------------
+  @Get('adjustments/register')
+  @ApiOperation({
+    summary: 'Waivers, cancelled receipts and bounced cheques: filters, totals, pages',
+  })
+  @RequirePermission(FEES.adjustmentRequest)
+  async adjustmentRegister(@ReqCtx() ctx: RequestContext, @Query() q: AdjustmentRegisterQueryDto) {
+    const { rows, total, totals } = await this.adj.adjustmentRegister(ctx, q);
+    return { data: rows, totals, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('adjustments/register/file')
+  @ApiOperation({ summary: 'The adjustments register as filtered, as Excel or PDF' })
+  @RequirePermission(FEES.adjustmentRequest)
+  async adjustmentRegisterFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: AdjustmentRegisterFileQueryDto,
+  ) {
+    const { format, ...filters } = q;
+    const f = await this.adj.registerFile(ctx, 'adjustments', filters, format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
+  }
+
   @Get('adjustments')
   @RequirePermission(FEES.adjustmentRequest, {
     description: 'Request a waiver, a receipt reversal or a cheque bounce',
@@ -626,6 +650,29 @@ export class FeesController {
   }
 
   // ---- Sprint 14: category, discount and hostel changes through the workflow -----------------------
+  @Get('profile-changes/register')
+  @ApiOperation({ summary: 'Fee profile changes: filters and pages' })
+  @RequirePermission(FEES.profileChangeRequest)
+  async profileChangeRegister(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: AdjustmentRegisterQueryDto,
+  ) {
+    const { rows, total, totals } = await this.adj.profileChangeRegister(ctx, q);
+    return { data: rows, totals, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('profile-changes/register/file')
+  @ApiOperation({ summary: 'Fee profile changes as filtered, as Excel or PDF' })
+  @RequirePermission(FEES.profileChangeRequest)
+  async profileChangeRegisterFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: AdjustmentRegisterFileQueryDto,
+  ) {
+    const { format, ...filters } = q;
+    const f = await this.adj.registerFile(ctx, 'changes', filters, format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
+  }
+
   @Get('profile-changes')
   @RequirePermission(FEES.profileChangeRequest, {
     description: 'Request a category, discount or hostel change for a student',

@@ -14,8 +14,30 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { decideRefund } from '@/lib/actions';
+import {
+  FilterInput,
+  FilterRow,
+  Pager,
+  RegisterBar,
+  registerQuery,
+  rupees,
+} from '@/components/RegisterTools';
 import { apiFetch, getMe } from '@/lib/api';
 import type { FeeRefund, Page } from '@/lib/types';
+
+/** A refund as it was raised: one row even when it draws on several receipts. */
+type RefundRow = FeeRefund & {
+  receipts: string[];
+  parts: number;
+  origin: 'receipt' | 'pupil' | 'withdrawal' | 'advance';
+};
+const ORIGIN: Record<RefundRow['origin'], string> = {
+  receipt: 'One receipt',
+  pupil: 'Pupil (many receipts)',
+  withdrawal: 'Withdrawal',
+  advance: 'Advance from last year',
+};
+const STATUSES = ['draft', 'requested', 'approved', 'paid', 'rejected', 'failed'];
 
 const tone = (s: FeeRefund['status']) =>
   s === 'paid' || s === 'approved'
@@ -24,64 +46,118 @@ const tone = (s: FeeRefund['status']) =>
       ? 'danger'
       : 'warning';
 
-/** Sprint 13: refund requests and their decisions. */
+/** The refund register: filters, totals, pages, Excel and PDF; decisions where no approval level is set. */
 export default async function RefundsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; status?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const q = new URLSearchParams({ size: '100' });
-  if (sp.status) q.set('status', sp.status);
-  const [t, r, me, refunds] = await Promise.all([
+  const rq = registerQuery(sp, {
+    status: STATUSES,
+    kind: ['receipt', 'pupil', 'withdrawal', 'advance'],
+    mode: ['cash', 'bank', 'cheque', 'gateway'],
+  });
+  const [t, r, me, refunds, classes] = await Promise.all([
     getTranslations('pages.fees_refunds'),
     getTranslations('refunds'),
     getMe(),
-    apiFetch<Page<FeeRefund>>(`/payments/refunds?${q.toString()}`),
+    apiFetch<
+      Page<RefundRow> & {
+        totals: { paid: string; waiting: string; draft: string; rejected: string };
+      }
+    >(`/payments/refunds/register?${rq.list.toString()}`),
+    apiFetch<Page<{ id: string; code: string; name: string }>>('/academics/classes?size=200')
+      .then((x) => x.data)
+      .catch(() => []),
   ]);
   const canDecide = me.permissions.includes('fees.refund.approve');
+  const size = Number(rq.size);
+  const pages = Math.max(1, Math.ceil(refunds.page.total / size));
+  const page = Math.min(refunds.page.number, pages);
+  const back = `/fees/refunds?${rq.here({})}`;
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
-      <Card title={r('refunds')}>
-        <form
-          method="get"
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-3)',
-            alignItems: 'flex-end',
-            marginBottom: 'var(--sp-3)',
-          }}
-        >
+      <Card>
+        <FilterRow clearHref="/fees/refunds">
           <SelectField
             id="status"
             name="status"
             label={r('status')}
-            defaultValue={sp.status ?? ''}
+            defaultValue={rq.values.status}
             options={[
               { value: '', label: r('all') },
-              ...(['draft', 'requested', 'approved', 'paid', 'rejected', 'failed'] as const).map(
-                (s) => ({
-                  value: s,
-                  label: r(`statuses.${s}`),
-                }),
-              ),
+              ...STATUSES.map((s) => ({ value: s, label: r(`statuses.${s}`) })),
             ]}
           />
-          <Button type="submit" variant="secondary">
-            {r('filter')}
-          </Button>
-        </form>
+          <SelectField
+            id="kind"
+            name="kind"
+            label="Type"
+            defaultValue={rq.values.kind}
+            options={[
+              { value: '', label: 'All types' },
+              ...Object.entries(ORIGIN).map(([value, label]) => ({ value, label })),
+            ]}
+          />
+          <SelectField
+            id="mode"
+            name="mode"
+            label="Paid back by"
+            defaultValue={rq.values.mode}
+            options={[
+              { value: '', label: 'Any mode' },
+              ...(['bank', 'cheque', 'cash', 'gateway'] as const).map((m) => ({
+                value: m,
+                label: r(`modes.${m}`),
+              })),
+            ]}
+          />
+          <SelectField
+            id="classId"
+            name="classId"
+            label="Class"
+            defaultValue={rq.values.classId}
+            options={[
+              { value: '', label: 'All classes' },
+              ...classes.map((k) => ({ value: k.id, label: k.name || k.code })),
+            ]}
+          />
+          <FilterInput id="from" label="Asked from" type="date" value={rq.values.from} />
+          <FilterInput id="to" label="Asked to" type="date" value={rq.values.to} />
+          <FilterInput id="q" label="Student, receipt or voucher no." value={rq.values.q} />
+          <SelectField
+            id="size"
+            name="size"
+            label="Per page"
+            defaultValue={rq.size}
+            options={['25', '50', '100', '200'].map((n) => ({ value: n, label: n }))}
+          />
+        </FilterRow>
+        <RegisterBar
+          page={page}
+          size={size}
+          total={refunds.page.total}
+          summary={`Paid ${rupees(refunds.totals.paid)} · Waiting ${rupees(refunds.totals.waiting)} · Draft ${rupees(refunds.totals.draft)} · Rejected ${rupees(refunds.totals.rejected)}`}
+          fileHref={`/api/fees/register-file?register=refunds&${rq.filters.toString()}`}
+        />
         <p className="ep-field__help">{r('requestHelp')}</p>
-        <DataTable<FeeRefund>
+        <DataTable<RefundRow>
           caption={`${r('refunds')} · ${refunds.page.total}`}
           density="dense"
           columns={[
             {
               key: 'when',
               header: r('requestedAt'),
-              render: (x) => new Date(x.requestedAt).toLocaleString('en-IN'),
+              render: (x) =>
+                new Date(x.requestedAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }),
+            },
+            {
+              key: 'voucher',
+              header: 'Voucher',
+              render: (x) => <a href={`/fees/refund-voucher/${x.id}`}>{x.voucherNo ?? 'Open'}</a>,
             },
             {
               key: 'student',
@@ -97,9 +173,13 @@ export default async function RefundsPage({
               header: r('receipt'),
               render: (x) => (
                 <>
-                  {x.kind === 'opening_advance'
-                    ? 'Advance from last year'
-                    : `${x.receiptNo ?? '—'} (₹${x.receiptAmount})`}
+                  <strong>{ORIGIN[x.origin]}</strong>
+                  {x.receipts.length > 0 ? (
+                    <div>
+                      {x.receipts.slice(0, 3).join(', ')}
+                      {x.receipts.length > 3 ? ` +${String(x.receipts.length - 3)} more` : ''}
+                    </div>
+                  ) : null}
                   {x.lines && x.kind !== 'opening_advance' ? (
                     <div className="ep-field__help">
                       {x.lines
@@ -113,7 +193,7 @@ export default async function RefundsPage({
                 </>
               ),
             },
-            { key: 'amount', header: r('amount'), numeric: true, render: (x) => `₹${x.amount}` },
+            { key: 'amount', header: r('amount'), numeric: true, render: (x) => rupees(x.amount) },
             {
               key: 'mode',
               header: r('mode'),
@@ -130,11 +210,6 @@ export default async function RefundsPage({
                   {x.status === 'requested' && x.waitingWith ? (
                     <div className="ep-field__help">with {x.waitingWith}</div>
                   ) : null}
-                  <div>
-                    <a href={`/fees/refund-voucher/${x.id}`}>
-                      {x.voucherNo ? `Voucher ${x.voucherNo}` : 'Voucher'}
-                    </a>
-                  </div>
                 </span>
               ),
             },
@@ -184,11 +259,7 @@ export default async function RefundsPage({
                   >
                     <NoEnterSubmit />
                     <input type="hidden" name="id" value={x.id} />
-                    <input
-                      type="hidden"
-                      name="back"
-                      value={`/fees/refunds${sp.status ? `?status=${sp.status}` : ''}`}
-                    />
+                    <input type="hidden" name="back" value={back} />
                     <FormRow columns={2}>
                       <InputField
                         id={`ref-${x.id}`}
@@ -228,6 +299,7 @@ export default async function RefundsPage({
           rowKey={(x) => x.id}
           emptyTitle={r('noRefunds')}
         />
+        <Pager page={page} pages={pages} hrefFor={(n) => `?${rq.here({ page: String(n) })}`} />
       </Card>
     </>
   );

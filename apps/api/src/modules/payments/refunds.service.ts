@@ -1,5 +1,5 @@
 import { amountInWords } from '@edupro/db';
-import { schoolHead } from '../attendance/register-file';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { receiptPdf } from '../fees/receipt-pdf';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
@@ -14,6 +14,7 @@ import { WorkflowService, type InstanceRow } from '../workflow/workflow.service'
 import type {
   DecideRefundDto,
   ListRefundsQueryDto,
+  RefundRegisterQueryDto,
   RequestAdvanceRefundDto,
   RequestRefundDto,
   RequestStudentRefundDto,
@@ -54,6 +55,13 @@ export interface RefundRow {
   waitingWith: string | null;
   /** Set when the system raised the refund on a withdrawal. */
   withdrawalId: string | null;
+}
+/** One row of the register: a refund as it was raised, over one receipt or several. */
+export interface RefundGroup extends RefundRow {
+  receipts: string[];
+  /** How many receipts it draws on. */
+  parts: number;
+  origin: 'receipt' | 'pupil' | 'withdrawal' | 'advance';
 }
 export interface RefundLine {
   part: 'fee' | 'advance' | 'late_fee';
@@ -743,6 +751,171 @@ export class RefundsService {
       );
       return { rows: r.rows.map(toRow), total: Number(total.rows[0]?.n ?? 0) };
     });
+  }
+
+  /**
+   * The refund register. Refunds raised together (a pupil refund over many receipts, a withdrawal) are
+   * one row with their total; the filters, the totals and the pages work on those rows.
+   */
+  async register(ctx: RequestContext, q: RefundRegisterQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const where: string[] = ['TRUE'];
+      const params: unknown[] = [];
+      const add = (sql: string, v: unknown) => {
+        params.push(v);
+        where.push(sql.replaceAll('?', `$${String(params.length)}`));
+      };
+      const yearId = requireTenant(ctx).academicYearId;
+      if (yearId) add(`COALESCE(r.academic_year_id, p.academic_year_id) = ?`, yearId);
+      if (q.status) add(`r.status = ?::refund_status`, q.status);
+      if (q.mode) add(`r.mode = ?`, q.mode);
+      if (q.kind === 'advance')
+        where.push(`r.kind = 'opening_advance' AND r.withdrawal_id IS NULL`);
+      if (q.kind === 'withdrawal') where.push(`r.withdrawal_id IS NOT NULL`);
+      if (q.kind === 'pupil') where.push(`r.batch_id IS NOT NULL AND r.withdrawal_id IS NULL`);
+      if (q.kind === 'receipt') where.push(`r.kind = 'receipt' AND r.batch_id IS NULL`);
+      if (q.from) add(`(r.requested_at AT TIME ZONE 'Asia/Kolkata')::date >= ?::date`, q.from);
+      if (q.to) add(`(r.requested_at AT TIME ZONE 'Asia/Kolkata')::date <= ?::date`, q.to);
+      if (q.classId)
+        add(
+          `EXISTS (SELECT 1 FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                    WHERE e.student_id = s.id AND e.academic_year_id = COALESCE(r.academic_year_id, p.academic_year_id) AND cs.class_id = ?)`,
+          q.classId,
+        );
+      if (q.q)
+        add(
+          `(lower(s.display_name) LIKE ? OR lower(s.admission_no) LIKE ? OR lower(COALESCE(p.receipt_no, '')) LIKE ? OR lower(COALESCE(r.voucher_no, '')) LIKE ?)`,
+          `%${q.q.toLowerCase()}%`,
+        );
+      const r = await c.query<Record<string, unknown>>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; where holds fixed fragments; values are bound parameters
+        `${SELECT} WHERE ${where.join(' AND ')} ORDER BY r.requested_at DESC, r.id DESC LIMIT 5000`,
+        params,
+      );
+      const groups = new Map<string, RefundGroup>();
+      for (const row of r.rows.map(toRow)) {
+        const key = row.batchId ?? `one:${row.id}`;
+        const g = groups.get(key);
+        if (!g) {
+          groups.set(key, {
+            ...row,
+            receipts: row.receiptNo ? [row.receiptNo] : [],
+            parts: 1,
+            lines: row.lines ? [...row.lines] : null,
+            origin: row.withdrawalId
+              ? 'withdrawal'
+              : row.batchId
+                ? 'pupil'
+                : row.kind === 'opening_advance'
+                  ? 'advance'
+                  : 'receipt',
+          });
+          continue;
+        }
+        g.amount = (Number(g.amount) + Number(row.amount)).toFixed(2);
+        g.parts += 1;
+        if (row.receiptNo) g.receipts.push(row.receiptNo);
+        if (row.lines) g.lines = [...(g.lines ?? []), ...row.lines];
+        // the row opens the refund with the smallest id (the one the approval and the voucher hang on)
+        if (Number(row.id) < Number(g.id)) g.id = row.id;
+        g.voucherNo = g.voucherNo ?? row.voucherNo;
+      }
+      const all = [...groups.values()];
+      const sum = (s: RefundRow['status'][]) =>
+        all
+          .filter((x) => s.includes(x.status))
+          .reduce((a, x) => a + Number(x.amount), 0)
+          .toFixed(2);
+      return {
+        rows: all.slice((q.page - 1) * q.size, q.page * q.size),
+        all,
+        total: all.length,
+        totals: {
+          paid: sum(['paid', 'approved']),
+          waiting: sum(['requested']),
+          draft: sum(['draft']),
+          rejected: sum(['rejected', 'failed']),
+        },
+      };
+    });
+  }
+
+  /** The register as filtered (every page) as Excel or PDF, made at once. */
+  async registerFile(ctx: RequestContext, q: RefundRegisterQueryDto, format: 'xlsx' | 'pdf') {
+    const { all, totals } = await this.register(ctx, { ...q, page: 1, size: 200 });
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const d = (v: string | null) => (v ? v.slice(0, 10).split('-').reverse().join('/') : '');
+    const ist = (v: string) =>
+      new Date(v).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
+    const STATUS: Record<string, string> = {
+      draft: 'Draft',
+      requested: 'Waiting',
+      approved: 'Approved',
+      paid: 'Paid',
+      rejected: 'Rejected',
+      failed: 'Failed',
+    };
+    const ORIGIN: Record<string, string> = {
+      receipt: 'One receipt',
+      pupil: 'Pupil (many receipts)',
+      withdrawal: 'Withdrawal',
+      advance: "Last year's advance",
+    };
+    const said = [
+      q.status ? `Status: ${STATUS[q.status]}` : 'All statuses',
+      q.kind ? `Type: ${ORIGIN[q.kind]}` : '',
+      q.mode ? `Mode: ${q.mode}` : '',
+      q.from || q.to ? `Asked ${d(q.from ?? null) || '…'} to ${d(q.to ?? null) || '…'}` : '',
+      q.q ? `Search: ${q.q}` : '',
+      `${String(all.length)} refund(s)`,
+      `Paid Rs. ${totals.paid}`,
+      `Waiting Rs. ${totals.waiting}`,
+    ].filter(Boolean);
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Refund register',
+        details: [said.join(' · '), generatedOn()],
+        legend: '',
+        columns: [
+          { label: 'Sr', width: 3, right: true },
+          { label: 'Asked on', width: 6 },
+          { label: 'Voucher no.', width: 10 },
+          { label: 'Admission no.', width: 7 },
+          { label: 'Student', width: 12 },
+          { label: 'Type', width: 8 },
+          { label: 'Receipt(s)', width: 14 },
+          { label: 'Amount', width: 7, right: true },
+          { label: 'Fee', width: 6 },
+          { label: 'Mode', width: 5 },
+          { label: 'Reference', width: 7 },
+          { label: 'Reason', width: 14 },
+          { label: 'Status', width: 6 },
+          { label: 'Paid on', width: 6 },
+          { label: 'Decided by', width: 8 },
+        ],
+        rows: all.map((x, i) => [
+          i + 1,
+          ist(x.requestedAt),
+          x.voucherNo ?? '',
+          x.admissionNo,
+          x.studentName,
+          ORIGIN[x.origin] ?? '',
+          x.receipts.join(', '),
+          Number(x.amount),
+          x.kind === 'opening_advance' ? '' : x.feeAction === 'cancel' ? 'Cancelled' : 'Stays due',
+          x.mode,
+          x.reference ?? '',
+          x.reason,
+          STATUS[x.status] ?? x.status,
+          d(x.paidOn),
+          x.decidedBy ?? '',
+        ]),
+        filename: 'refund-register',
+      },
+      format,
+    );
   }
 
   private async find(c: PoolClient, id: string): Promise<RefundRow> {

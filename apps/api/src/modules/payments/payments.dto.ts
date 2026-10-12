@@ -196,6 +196,28 @@ export const ListRefundsQuerySchema = z.object({
 });
 export class ListRefundsQueryDto extends createZodDto(ListRefundsQuerySchema) {}
 
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** The refund register: one row per refund as it was raised (a pupil refund over many receipts is one row). */
+export const RefundRegisterQuerySchema = z.object({
+  status: z.enum(['draft', 'requested', 'approved', 'rejected', 'paid', 'failed']).optional(),
+  /** receipt = from one receipt; pupil = over many receipts; withdrawal; advance = last year's advance. */
+  kind: z.enum(['receipt', 'pupil', 'withdrawal', 'advance']).optional(),
+  mode: z.enum(['cash', 'bank', 'cheque', 'gateway']).optional(),
+  classId: IdSchema.optional(),
+  /** Asked on, from and to (both days counted). */
+  from: Day.optional(),
+  to: Day.optional(),
+  /** Student, admission no., receipt no. or voucher no. */
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class RefundRegisterQueryDto extends createZodDto(RefundRegisterQuerySchema) {}
+export const RefundRegisterFileQuerySchema = RefundRegisterQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class RefundRegisterFileQueryDto extends createZodDto(RefundRegisterFileQuerySchema) {}
+
 // ---- Sprint 13: settlements ----------------------------------------------------------------------
 export const UploadSettlementSchema = z.object({
   provider: z.enum(['payu', 'razorpay', 'ccavenue', 'mock']),
