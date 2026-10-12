@@ -480,3 +480,22 @@ People → Withdrawals → open the completed withdrawal → **Revoke (the pupil
   taken as "approve". Every decision button now sends its own choice, and a form that arrives without a
   clear choice changes nothing and says so. Requests decided from My inbox before this fix should be
   reviewed: a rejection made there was saved as an approval.
+
+## Sample fee data for trying reports (2026-10-12)
+
+For a local (never a production) school:
+
+    pnpm --filter @edupro/db sample:fees add
+    pnpm --filter @edupro/db sample:fees remove --dry-run
+    pnpm --filter @edupro/db sample:fees remove
+
+- Needs the API running with the development sign-in and the database address in the environment.
+- Uses only pupils who have a bill and no receipt this session; entries made by hand are not touched.
+- Posts receipts from 1 August to two days before today, in every counter mode (cash, UPI, cheque,
+  bank transfer, NEFT / RTGS, card, demand draft), with cheque and draft numbers, dates and banks.
+- Makes two deposit slips (August, September) and leaves the other cheques and drafts in hand; raises
+  three cheque bounces, two receipt cancellations (one more left waiting), two refunds paid, one waiting
+  and one draft, all through Fee setup → Approval levels.
+- Every receipt carries the remark SAMPLE-FEE and every request ends with [sample]; "remove" finds them
+  by that. Messages the entries would queue are stopped before they leave.
+- Receipt, voucher and slip numbers used by the sample are not given again after removal.

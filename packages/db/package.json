@@ -27,7 +27,8 @@
     "prisma:validate": "prisma validate",
     "anonymise": "tsx src/anonymise.ts",
     "seed:demo": "tsx src/seed-demo.ts",
-    "seed:beta": "tsx src/seed-beta.ts"
+    "seed:beta": "tsx src/seed-beta.ts",
+    "sample:fees": "tsx src/sample-fees.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
