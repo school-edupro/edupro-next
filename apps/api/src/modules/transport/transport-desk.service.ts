@@ -1093,14 +1093,17 @@ export class TransportDeskService {
         [student, yearId, q.from_month],
       );
     }
-    // what was to run from this month on gives way
+    // what was to run from this month on gives way. That includes a period an earlier request already
+    // shortened ("ended") but which still covers these months: a request dated back to an earlier month
+    // must take them too, or the old period keeps charging and keeps the pupil on the bus
     await c.query(
-      `UPDATE student_transport SET status = 'cancelled', ended_by_request = $4 WHERE student_id = $1 AND academic_year_id = $2 AND status = 'active' AND from_month >= $3::date`,
+      `UPDATE student_transport SET status = 'cancelled', ended_by_request = $4
+        WHERE student_id = $1 AND academic_year_id = $2 AND status IN ('active', 'ended') AND from_month >= $3::date`,
       [student, yearId, q.from_month, id],
     );
     await c.query(
       `UPDATE student_transport SET to_month = ($3::date - interval '1 month')::date, status = 'ended', ended_by_request = $4
-        WHERE student_id = $1 AND academic_year_id = $2 AND status = 'active' AND to_month >= $3::date`,
+        WHERE student_id = $1 AND academic_year_id = $2 AND status IN ('active', 'ended') AND to_month >= $3::date`,
       [student, yearId, q.from_month, id],
     );
     if (q.kind !== 'leave')
@@ -1133,6 +1136,14 @@ export class TransportDeskService {
          ON CONFLICT (student_id, academic_year_id) DO UPDATE SET transport_slab_id = COALESCE(EXCLUDED.transport_slab_id, student_fee_profiles.transport_slab_id),
               transport_disabled = false, updated_at = now(), updated_by = app.current_user_id()`,
         [student, yearId, q.slab_id],
+      );
+      // no period is left at all (the bus was stopped from the first month it ran): the slab comes off the
+      // fee profile too, or the bill would fall back to charging that slab for the whole session
+      await c.query(
+        `UPDATE student_fee_profiles SET transport_slab_id = NULL, updated_at = now(), updated_by = app.current_user_id()
+          WHERE student_id = $1 AND academic_year_id = $2
+            AND NOT EXISTS (SELECT 1 FROM student_transport t WHERE t.student_id = $1 AND t.academic_year_id = $2 AND t.status <> 'cancelled')`,
+        [student, yearId],
       );
       await c.query(`SELECT * FROM app.generate_fee_demand($1, $2)`, [student, yearId]);
       await c.query('RELEASE SAVEPOINT transport_fee');

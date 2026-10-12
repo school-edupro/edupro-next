@@ -815,4 +815,66 @@ describe('transport desk (e2e)', () => {
       expect(f.rawPayload.length).toBeGreaterThan(1000);
     }
   });
+
+  it('a request dated back to an earlier month takes the months of every period after it', async () => {
+    const setup = (await get('/transport/desk/setup')).json();
+    const body = (levels: unknown[]) => ({
+      ...setup.settings,
+      levels,
+      incharges: setup.incharges.map((i: { routeId: string | null; employeeId: string }) => ({
+        routeId: i.routeId,
+        employeeId: i.employeeId,
+      })),
+    });
+    await put(
+      '/transport/desk/setup',
+      admin,
+      body(
+        setup.levels.map((l: { source: string }) =>
+          l.source === 'office'
+            ? { ...l, kind: 'route_incharge', roleCode: null, designation: null, employeeId: null }
+            : l,
+        ),
+      ),
+    );
+    // the pupil has periods that earlier requests shortened ("ended"). The bus is now stopped from the
+    // first month: every period gives way, no unpaid transport fee is left, the pupil is off the route
+    const leave = await post('/transport/requests', incharge, {
+      studentId,
+      kind: 'leave',
+      fromMonth: months[1],
+    });
+    expect(leave.statusCode).toBe(201);
+    expect(leave.json().status).toBe('approved');
+    expect(
+      (leave.json().periods as Array<{ status: string }>).every((p) => p.status === 'cancelled'),
+    ).toBe(true);
+    let fees = await transportFees();
+    // the month paid earlier keeps what was paid, and the request says so
+    expect(Object.keys(fees)).toEqual([months[4]]);
+    expect(leave.json().feeNote).toMatch(/already paid/);
+    const riders = (await get(`/transport/routes/${route.R1}/students`)).json().data as Array<{
+      studentId: string;
+    }>;
+    expect(riders.some((r) => r.studentId === studentId)).toBe(false);
+    // a request dated back for two months only: just those months are charged
+    const back = await post('/transport/requests', incharge, {
+      studentId,
+      kind: 'join',
+      service: 'both',
+      pickRouteId: route.R1,
+      pickStopId: stop.Warje,
+      fromMonth: months[1],
+      toMonth: months[2],
+    });
+    expect(back.statusCode).toBe(201);
+    expect(back.json().status).toBe('approved');
+    const live = (
+      back.json().periods as Array<{ fromMonth: string; toMonth: string; status: string }>
+    ).filter((p) => p.status !== 'cancelled');
+    expect(live.map((p) => [p.fromMonth, p.toMonth])).toEqual([[months[1], months[2]]]);
+    fees = await transportFees();
+    expect(Object.keys(fees).sort()).toEqual([months[1], months[2], months[4]].sort());
+    await put('/transport/desk/setup', admin, body(setup.levels));
+  });
 });
