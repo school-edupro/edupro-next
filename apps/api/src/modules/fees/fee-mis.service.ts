@@ -324,6 +324,9 @@ export class FeeMisService {
       discount: string | null;
       oldest_due: string;
       days_overdue: number;
+      /** Fee that has fallen due by the date, what is paid of it, and what is left. */
+      due: number;
+      paid: number;
       balance: number;
       months: string | null;
       last_reminded_on: string | null;
@@ -338,14 +341,18 @@ export class FeeMisService {
       last_paid_amount: number | null;
     }>(
       `WITH due AS (
-         SELECT d.student_id, sum(d.net - d.paid)::float AS balance, min(d.due_on) AS oldest,
+         SELECT d.student_id, sum(d.net)::float AS due, sum(d.paid)::float AS paid, sum(d.net - d.paid)::float AS balance,
+                min(d.due_on) FILTER (WHERE d.net > d.paid) AS oldest,
                 (SELECT string_agg(DISTINCT h.name, ', ') FROM fee_demands d2 JOIN fee_heads h ON h.id = d2.head_id
                   WHERE d2.student_id = d.student_id AND d2.academic_year_id = $1 AND d2.status IN ('pending', 'partial') AND d2.net > d2.paid AND d2.due_on < $2::date) AS heads,
-                string_agg(DISTINCT lpad(fp.sequence::text, 2, '0') || ':' || to_char(make_date(fp.year, fp.month, 1), 'Mon'), ',') AS months
+                string_agg(DISTINCT lpad(fp.sequence::text, 2, '0') || ':' || to_char(make_date(fp.year, fp.month, 1), 'Mon'), ',')
+                  FILTER (WHERE d.net > d.paid) AS months
            FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
-          WHERE d.academic_year_id = $1 AND d.status IN ('pending', 'partial') AND d.net > d.paid AND d.due_on < $2::date
+          -- every fee line that has fallen due, paid or not: so Due, Paid and Balance can be shown
+          WHERE d.academic_year_id = $1 AND d.status IN ('pending', 'partial', 'paid') AND d.net > 0 AND d.due_on < $2::date
             AND ($7::text IS NULL OR d.ledger::text = $7)
-          GROUP BY d.student_id)
+          GROUP BY d.student_id
+         HAVING sum(d.net - d.paid) > 0)
        SELECT s.id::text AS student_id, s.admission_no, s.display_name AS student, k.code || '-' || cs.name AS class, cs.name AS section,
               s.gender::text, s.status::text,
               f.name AS father, f.mobile AS father_mobile, f.email AS father_email,
@@ -357,7 +364,7 @@ export class FeeMisService {
               COALESCE((SELECT fd.name FROM fee_discounts fd WHERE fd.id = fp.discount_id),
                        (SELECT string_agg(DISTINCT fd.name, ', ') FROM student_fee_discounts sd JOIN fee_discounts fd ON fd.id = sd.discount_id
                          WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active')) AS discount,
-              due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.balance, due.months, due.heads,
+              due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.due, due.paid, due.balance, due.months, due.heads,
               cs.name AS section_name, k.name AS class_name,
               (SELECT e.roll_no::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS roll_no,
               lp.received_on::text AS last_paid_on, lp.amount::float AS last_paid_amount,
@@ -431,6 +438,8 @@ export class FeeMisService {
         months: x.months ?? '',
         oldest_due: dmy(x.oldest_due),
         days_overdue: String(x.days_overdue),
+        due: x.due,
+        paid: x.paid,
         balance: x.balance,
         last_reminded: x.last_reminded_on ? dmy(x.last_reminded_on) : 'Never',
       },
@@ -438,7 +447,11 @@ export class FeeMisService {
     rows.push({
       kind: 'total',
       label: `Total · ${String(list.length)} pupil(s)`,
-      cells: { balance: total },
+      cells: {
+        due: list.reduce((a, x) => a + x.due, 0),
+        paid: list.reduce((a, x) => a + x.paid, 0),
+        balance: total,
+      },
     });
     return {
       report: 'defaulters',
@@ -454,7 +467,7 @@ export class FeeMisService {
         ...(q.minBalance ? [`Balance of Rs. ${String(q.minBalance)} or more`] : []),
         ...(q.ledger ? [`Ledger: ${q.ledger}`] : []),
       ],
-      note: 'A pupil is listed when fee past its due date is unpaid on the date chosen; fee not yet due is not counted, nor is late fee. Worked out from the bills at the moment the report is opened.',
+      note: 'A pupil is listed when fee past its due date is unpaid on the date chosen. Due is the fee that has fallen due by that date, Paid is what has been received against it, Balance is the rest; fee not yet due and late fee are not counted. Worked out from the bills at the moment the report is opened.',
       columns: [
         num('sr', 'Sr No', undefined, 5),
         text('admission_no', 'Admission no.', 10),
@@ -472,6 +485,8 @@ export class FeeMisService {
         text('months', 'Months due', 14),
         text('oldest_due', 'Oldest due', 9),
         text('days_overdue', 'Days overdue', 7),
+        num('due', 'Due', undefined, 12),
+        num('paid', 'Paid', undefined, 12),
         num('balance', 'Balance', undefined, 12),
         text('last_reminded', 'Last reminded', 9),
       ],

@@ -4,6 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import {
   TEMPLATE_VARIABLES,
@@ -137,32 +138,168 @@ export class RequestsService {
     return y;
   }
 
+  /** The filters of the register, as fixed fragments with bound values. */
+  private listWhere(q: ListRequestsQueryDto) {
+    const where: string[] = ['true'];
+    const params: unknown[] = [];
+    const add = (sql: string, v: unknown) => {
+      params.push(v);
+      where.push(sql.replaceAll('?', `$${String(params.length)}`));
+    };
+    if (q.status) add(`r.status = ?::message_request_status`, q.status);
+    if (q.channel)
+      add(
+        `(r.channel::text = ? OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(r.channels, '[]'::jsonb)) x WHERE x ->> 'channel' = ?))`,
+        q.channel,
+      );
+    if (q.audience) add(`r.audience::text = ?`, q.audience);
+    if (q.from) add(`(r.requested_at AT TIME ZONE 'Asia/Kolkata')::date >= ?::date`, q.from);
+    if (q.to) add(`(r.requested_at AT TIME ZONE 'Asia/Kolkata')::date <= ?::date`, q.to);
+    if (q.q)
+      add(
+        `(lower(r.title) LIKE ? OR EXISTS (SELECT 1 FROM users u2 WHERE u2.id = r.requested_by AND lower(u2.display_name) LIKE ?))`,
+        `%${q.q.toLowerCase()}%`,
+      );
+    return { where: where.join(' AND '), params };
+  }
+
   async list(ctx: RequestContext, q: ListRequestsQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const params: unknown[] = [];
-      let where = 'true';
-      if (q.status) {
-        params.push(q.status);
-        where = `r.status = $1::message_request_status`;
-      }
-      const total = await c.query<{ n: string }>(
-        // eslint-disable-next-line no-restricted-syntax -- where is one of two fixed fragments; values are bound parameters
-        `SELECT count(*)::text AS n FROM message_requests r WHERE ${where}`,
+      const { where, params } = this.listWhere(q);
+      // what is filtered, added up: how many requests, how many messages, and how they fared
+      const sum = await c.query<{
+        n: string;
+        recipients: string;
+        waiting: string;
+        delivered: string;
+        failed: string;
+        queued: string;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- where holds fixed fragments; values are bound parameters
+        `SELECT count(*)::text AS n, COALESCE(sum(r.recipients_total), 0)::text AS recipients,
+                count(*) FILTER (WHERE r.status = 'pending_approval')::text AS waiting,
+                COALESCE(sum((SELECT count(*) FROM comms_messages m WHERE m.message_request_id = r.id AND m.status IN ('delivered', 'sent'))), 0)::text AS delivered,
+                COALESCE(sum((SELECT count(*) FROM comms_messages m WHERE m.message_request_id = r.id AND m.status = 'failed')), 0)::text AS failed,
+                COALESCE(sum((SELECT count(*) FROM comms_messages m WHERE m.message_request_id = r.id AND m.status IN ('queued', 'sending'))), 0)::text AS queued
+           FROM message_requests r WHERE ${where}`,
         params,
       );
-      params.push(q.size, (q.page - 1) * q.size);
       const r = await c.query<Record<string, unknown>>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; where is a fixed fragment; values are bound parameters
-        `${SELECT} WHERE ${where} ORDER BY r.requested_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-        params,
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; where holds fixed fragments; values are bound parameters
+        `${SELECT} WHERE ${where} ORDER BY r.requested_at DESC, r.id DESC LIMIT $${String(params.length + 1)} OFFSET $${String(params.length + 2)}`,
+        [...params, q.size, (q.page - 1) * q.size],
       );
       const rows = [];
       for (const x of r.rows) rows.push(await this.toRow(c, x));
+      const t = sum.rows[0]!;
       return {
         data: rows,
-        page: { number: q.page, size: q.size, total: Number(total.rows[0]!.n) },
+        totals: {
+          recipients: Number(t.recipients),
+          waiting: Number(t.waiting),
+          delivered: Number(t.delivered),
+          failed: Number(t.failed),
+          queued: Number(t.queued),
+        },
+        page: { number: q.page, size: q.size, total: Number(t.n) },
       };
     });
+  }
+
+  /** The register as filtered (up to 5,000 requests) as Excel or PDF, made at once. */
+  async listFile(ctx: RequestContext, q: ListRequestsQueryDto, format: 'xlsx' | 'pdf') {
+    const all: RequestRow[] = [];
+    let totals = { recipients: 0, waiting: 0, delivered: 0, failed: 0, queued: 0 };
+    for (let page = 1; page <= 25; page += 1) {
+      const part = await this.list(ctx, { ...q, page, size: 200 });
+      all.push(...part.data);
+      totals = part.totals;
+      if (all.length >= part.page.total) break;
+    }
+    const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
+    const d = (v?: string) => (v ? v.split('-').reverse().join('-') : '…');
+    const ist = (v: string | null) =>
+      v
+        ? new Date(v).toLocaleString('en-GB', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })
+        : '';
+    const STATUS: Record<string, string> = {
+      draft: 'Draft',
+      pending_approval: 'Waiting for approval',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      sending: 'Sending',
+      sent: 'Sent',
+      cancelled: 'Cancelled',
+    };
+    const of = (r: RequestRow, state: string[]) =>
+      Object.entries(r.delivery ?? {})
+        .filter(([k]) => state.includes(k.split(':').pop() ?? k))
+        .reduce((a, [, v]) => a + Number(v), 0);
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Message requests',
+        details: [
+          [
+            q.status ? `Status: ${STATUS[q.status]}` : 'All statuses',
+            q.channel ? `Channel: ${q.channel}` : '',
+            q.audience ? `Audience: ${q.audience}` : '',
+            q.from || q.to ? `Asked ${d(q.from)} to ${d(q.to)}` : '',
+            q.q ? `Search: ${q.q}` : '',
+            `${String(all.length)} request(s)`,
+            `${String(totals.recipients)} message(s)`,
+            `delivered ${String(totals.delivered)}, failed ${String(totals.failed)}, waiting ${String(totals.queued)}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          generatedOn(),
+        ],
+        legend: 'Delivered counts messages the gateway or mail server accepted or confirmed.',
+        columns: [
+          { label: 'Sr', width: 4, right: true },
+          { label: 'Asked on', width: 11 },
+          { label: 'Title', width: 26 },
+          { label: 'Type', width: 7 },
+          { label: 'Channels', width: 12 },
+          { label: 'Audience', width: 18 },
+          { label: 'Status', width: 12 },
+          { label: 'Recipients', width: 7, right: true },
+          { label: 'Left out', width: 6, right: true },
+          { label: 'Delivered', width: 7, right: true },
+          { label: 'Failed', width: 6, right: true },
+          { label: 'Waiting', width: 6, right: true },
+          { label: 'Asked by', width: 13 },
+          { label: 'Decided by', width: 13 },
+        ],
+        rows: all.map((r, i) => [
+          i + 1,
+          ist(r.requestedAt),
+          r.title,
+          r.category,
+          (r.channels?.length ? r.channels.map((x) => x.channel) : [r.channel]).join(' + '),
+          `${r.audience}${r.targetLabels.length ? `: ${r.targetLabels.join(', ')}` : ''}`,
+          STATUS[r.status] ?? r.status,
+          r.recipientsTotal,
+          r.recipientsSkipped,
+          of(r, ['delivered', 'sent']),
+          of(r, ['failed']),
+          of(r, ['queued', 'sending']),
+          r.requestedBy ?? '',
+          r.decidedBy ?? '',
+        ]),
+        filename: 'message-requests',
+      },
+      format,
+    );
   }
 
   async get(ctx: RequestContext, id: string) {

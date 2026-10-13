@@ -5,7 +5,12 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { CreateDepositSlipDto, PendingInstrumentsQueryDto } from './fees.dto';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
+import type {
+  CreateDepositSlipDto,
+  ListDepositSlipsQueryDto,
+  PendingInstrumentsQueryDto,
+} from './fees.dto';
 
 export interface Instrument {
   /** `p:<id>` for a fee receipt, `m:<id>` for a misc receipt. */
@@ -195,7 +200,92 @@ export class FeeDepositService {
     return toSlip(x);
   }
 
-  async list(ctx: RequestContext): Promise<DepositSlip[]> {
+  /** The cheques and drafts in hand as filtered, as Excel or PDF: checked before any slip is made. */
+  async pendingFile(ctx: RequestContext, q: PendingInstrumentsQueryDto, format: 'xlsx' | 'pdf') {
+    const rows = await this.pending(ctx, q);
+    const { head, bank } = await this.db.tenant(requireTenant(ctx), async (c) => ({
+      head: await schoolHead(c),
+      bank: q.bankAccountId ? await this.bankOf(c, q.bankAccountId) : null,
+    }));
+    const d = (v: string | null) => (v ? v.slice(0, 10).split('-').reverse().join('-') : '');
+    const total = rows.reduce((a, x) => a + Number(x.amount), 0);
+    const marked = rows.some((x) => x.sameBank !== undefined && x.sameBank !== null);
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: 'Cheques and drafts in hand (not yet on a deposit slip)',
+        details: [
+          [
+            q.from || q.to
+              ? `Received ${d(q.from ?? null) || '…'} to ${d(q.to ?? null) || '…'}`
+              : 'All dates',
+            q.ledger ? `Fee type: ${q.ledger}` : 'All fee types',
+            bank ? `For deposit into ${bank}` : '',
+            q.drawee ? (q.drawee === 'same' ? 'Same bank only' : 'Other banks only') : '',
+            `${String(rows.length)} in hand`,
+            `Rs. ${total.toFixed(2)}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          generatedOn(),
+        ],
+        legend: '',
+        columns: [
+          { label: 'Sr', width: 4, right: true },
+          { label: 'Received on', width: 9 },
+          { label: 'Receipt no.', width: 16 },
+          { label: 'From', width: 20 },
+          { label: 'Admission no.', width: 10 },
+          { label: 'Class', width: 8 },
+          { label: 'Fee type', width: 8 },
+          { label: 'Mode', width: 7 },
+          { label: 'Cheque / DD no.', width: 11 },
+          { label: 'Cheque date', width: 9 },
+          { label: 'Drawn on', width: 18 },
+          ...(marked ? [{ label: 'Same bank / other', width: 12 }] : []),
+          { label: 'Amount', width: 11, right: true },
+        ],
+        rows: [
+          ...rows.map((x, i) => [
+            i + 1,
+            d(x.receivedOn),
+            x.receiptNo ?? '',
+            x.payer,
+            x.admissionNo ?? '',
+            x.section ?? '',
+            x.ledger,
+            x.mode.toUpperCase(),
+            x.instrumentNo ?? '',
+            d(x.instrumentDate),
+            x.bankName ?? '',
+            ...(marked ? [x.sameBank ? 'Same bank (transfer)' : 'Other bank (clearing)'] : []),
+            Number(x.amount),
+          ]),
+          [
+            '',
+            'Total',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            ...(marked ? [''] : []),
+            Number(total.toFixed(2)),
+          ],
+        ],
+        strong: [rows.length],
+        filename: 'cheques-in-hand',
+      },
+      format,
+    );
+  }
+
+  async list(ctx: RequestContext, q: ListDepositSlipsQueryDto = {}): Promise<DepositSlip[]> {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Record<string, unknown>>(
@@ -204,8 +294,22 @@ export class FeeDepositService {
                 u.display_name AS "createdBy", d.created_at::text AS "createdAt", ${ACCOUNT}
            FROM fee_deposit_slips d JOIN school_bank_accounts a ON a.id = d.bank_account_id JOIN banks b ON b.id = a.bank_id
            LEFT JOIN users u ON u.id = d.created_by
-          WHERE d.academic_year_id = $1 ORDER BY d.slip_no DESC LIMIT 300`,
-        [yearId],
+          WHERE d.academic_year_id = $1
+            AND ($2::date IS NULL OR d.deposit_on >= $2::date) AND ($3::date IS NULL OR d.deposit_on <= $3::date)
+            AND ($4::bigint IS NULL OR d.bank_account_id = $4)
+            AND ($5::text IS NULL OR ($5 = 'none' AND d.kind IS NULL) OR d.kind = $5)
+            AND ($6::text IS NULL OR d.status = $6)
+            AND ($7::int IS NULL OR d.slip_no = $7)
+          ORDER BY d.slip_no DESC LIMIT 1000`,
+        [
+          yearId,
+          q.from ?? null,
+          q.to ?? null,
+          q.bankAccountId ?? null,
+          q.kind ?? null,
+          q.status ?? null,
+          q.slipNo ?? null,
+        ],
       );
       return r.rows.map(toSlip);
     });

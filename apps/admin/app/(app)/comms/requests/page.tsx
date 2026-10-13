@@ -1,6 +1,13 @@
-import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
+import { Badge, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
+import {
+  FilterInput,
+  FilterRow,
+  Pager,
+  RegisterBar,
+  registerQuery,
+} from '@/components/RegisterTools';
 import { apiFetch } from '@/lib/api';
 import type { MessageRequest, Page } from '@/lib/types';
 
@@ -13,10 +20,33 @@ const requestTone = (s: MessageRequest['status']) =>
         ? 'warning'
         : 'info';
 
+const STATUSES = ['pending_approval', 'approved', 'sending', 'sent', 'rejected', 'cancelled'];
+const LABEL: Record<string, string> = {
+  pending_approval: 'Waiting for approval',
+  approved: 'Approved',
+  sending: 'Sending',
+  sent: 'Sent',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+};
+const AUDIENCES = [
+  'everyone',
+  'students',
+  'employees',
+  'class',
+  'class_section',
+  'route',
+  'group',
+  'individuals',
+  'filter',
+  'upload',
+];
+
+/** Message requests: filters, totals of what is filtered, pages, Excel and PDF. */
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; status?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
   const [t, m, nav] = await Promise.all([
@@ -24,9 +54,29 @@ export default async function RequestsPage({
     getTranslations('comms'),
     getTranslations('nav'),
   ]);
-  const q = new URLSearchParams({ size: '100' });
-  if (sp.status) q.set('status', sp.status);
-  const page = await apiFetch<Page<MessageRequest>>(`/comms/requests?${q.toString()}`);
+  const rq = registerQuery(sp, { status: STATUSES, kind: [], mode: [] });
+  // two filters this register has of its own
+  const channel = ['sms', 'whatsapp', 'email'].includes(sp.channel ?? '') ? sp.channel! : '';
+  const audience = AUDIENCES.includes(sp.audience ?? '') ? sp.audience! : '';
+  for (const u of [rq.filters, rq.list]) {
+    u.delete('classId');
+    if (channel) u.set('channel', channel);
+    if (audience) u.set('audience', audience);
+  }
+  const page = await apiFetch<
+    Page<MessageRequest> & {
+      totals: {
+        recipients: number;
+        waiting: number;
+        delivered: number;
+        failed: number;
+        queued: number;
+      };
+    }
+  >(`/comms/requests?${rq.list.toString()}`);
+  const size = Number(rq.size);
+  const pages = Math.max(1, Math.ceil(page.page.total / size));
+  const at = Math.min(page.page.number, pages);
   return (
     <>
       <PageHeader
@@ -41,32 +91,62 @@ export default async function RequestsPage({
       />
       <Notice params={sp} />
       <Card>
-        <form
-          method="get"
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-3)',
-            alignItems: 'flex-end',
-            marginBottom: 'var(--sp-3)',
-          }}
-        >
+        <FilterRow clearHref="/comms/requests">
           <SelectField
             id="status"
             name="status"
             label={m('status')}
-            defaultValue={sp.status ?? ''}
+            defaultValue={rq.values.status}
             options={[
-              { value: '', label: '—' },
-              ...(['pending_approval', 'sent', 'rejected', 'cancelled'] as const).map((s) => ({
-                value: s,
-                label: m(`statuses.${s}`),
-              })),
+              { value: '', label: 'All' },
+              ...STATUSES.map((s) => ({ value: s, label: LABEL[s] ?? s })),
             ]}
           />
-          <Button type="submit" variant="secondary">
-            {m('status')}
-          </Button>
-        </form>
+          <SelectField
+            id="channel"
+            name="channel"
+            label={m('channel')}
+            defaultValue={channel}
+            options={[
+              { value: '', label: 'Any channel' },
+              { value: 'sms', label: 'SMS' },
+              { value: 'whatsapp', label: 'WhatsApp' },
+              { value: 'email', label: 'Email' },
+            ]}
+          />
+          <SelectField
+            id="audience"
+            name="audience"
+            label={m('audience')}
+            defaultValue={audience}
+            options={[
+              { value: '', label: 'Any audience' },
+              ...AUDIENCES.map((a) => ({ value: a, label: m(`audiences.${a}`) })),
+            ]}
+          />
+          <FilterInput id="from" label="Asked from" type="date" value={rq.values.from} />
+          <FilterInput id="to" label="Asked to" type="date" value={rq.values.to} />
+          <FilterInput id="q" label="Title or asked by" value={rq.values.q} />
+          <SelectField
+            id="size"
+            name="size"
+            label="Per page"
+            defaultValue={rq.size}
+            options={['25', '50', '100', '200'].map((n) => ({ value: n, label: n }))}
+          />
+        </FilterRow>
+        <RegisterBar
+          page={at}
+          size={size}
+          total={page.page.total}
+          summary={`${String(page.totals.recipients)} messages · delivered ${String(page.totals.delivered)} · failed ${String(page.totals.failed)} · still waiting to go ${String(page.totals.queued)} · ${String(page.totals.waiting)} request${page.totals.waiting === 1 ? '' : 's'} waiting for approval`}
+          fileHref={`/api/comms/requests-file?${rq.filters.toString()}`}
+        />
+        <p className="ep-field__help">
+          “Sent” in the Status column means the request was handed over for delivery. The Delivery
+          column shows what happened to its messages: queued (still waiting to go), delivered or
+          failed.
+        </p>
         <DataTable<MessageRequest>
           caption={t('title')}
           density="dense"
@@ -120,13 +200,14 @@ export default async function RequestsPage({
               key: 'by',
               header: m('requestedBy'),
               render: (r) =>
-                `${r.requestedBy ?? ''} · ${new Date(r.requestedAt).toLocaleDateString('en-IN')}`,
+                `${r.requestedBy ?? ''} · ${new Date(r.requestedAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' })}`,
             },
           ]}
           rows={page.data}
           rowKey={(r) => r.id}
           emptyTitle={m('noRequests')}
         />
+        <Pager page={at} pages={pages} hrefFor={(n) => `?${rq.here({ page: String(n) })}`} />
       </Card>
     </>
   );

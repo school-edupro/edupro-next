@@ -212,10 +212,27 @@ export const ListRequestsQuerySchema = z.object({
   status: z
     .enum(['draft', 'pending_approval', 'approved', 'rejected', 'sending', 'sent', 'cancelled'])
     .optional(),
+  channel: z.enum(['sms', 'whatsapp', 'email']).optional(),
+  audience: AudienceKindSchema.optional(),
+  /** Asked on, from and to (both days counted). */
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  /** The title, or the name of who asked. */
+  q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListRequestsQueryDto extends createZodDto(ListRequestsQuerySchema) {}
+export const RequestsFileQuerySchema = ListRequestsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class RequestsFileQueryDto extends createZodDto(RequestsFileQuerySchema) {}
 
 export const GroupKindSchema = z.enum([
   'student',

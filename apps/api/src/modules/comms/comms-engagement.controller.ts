@@ -28,6 +28,7 @@ import {
   PeopleSearchDto,
   UpdateGroupDto,
   ListRequestsQueryDto,
+  RequestsFileQueryDto,
   RecipientSheetDto,
   RecordConsentDto,
   SelfConsentDto,
@@ -49,6 +50,15 @@ export class CommsRequestsController {
   @RequirePermission(COMMS_S10.requestView)
   list(@ReqCtx() ctx: RequestContext, @Query() q: ListRequestsQueryDto) {
     return this.requests.list(ctx, q);
+  }
+
+  @Get('file')
+  @ApiOperation({ summary: 'The message requests as filtered, as Excel or PDF' })
+  @RequirePermission(COMMS_S10.requestView)
+  async file(@ReqCtx() ctx: RequestContext, @Query() q: RequestsFileQueryDto) {
+    const { format, ...filters } = q;
+    const f = await this.requests.listFile(ctx, filters, format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get(':id/preview')

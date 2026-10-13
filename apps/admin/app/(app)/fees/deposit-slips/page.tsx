@@ -48,6 +48,19 @@ const dmy = (iso: string | null) => {
 };
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 
+/** The filters of "Slips made this year", as the API takes them. */
+function slipQuery(sp: Record<string, string | undefined>) {
+  const q = new URLSearchParams();
+  const day = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '');
+  if (day(sp.sFrom)) q.set('from', day(sp.sFrom));
+  if (day(sp.sTo)) q.set('to', day(sp.sTo));
+  if (/^\d{1,18}$/.test(sp.sAccount ?? '')) q.set('bankAccountId', sp.sAccount!);
+  if (['transfer', 'clearing', 'none'].includes(sp.sKind ?? '')) q.set('kind', sp.sKind!);
+  if (['open', 'cancelled'].includes(sp.sStatus ?? '')) q.set('status', sp.sStatus!);
+  if (/^\d{1,8}$/.test(sp.sNo ?? '')) q.set('slipNo', sp.sNo!);
+  return q;
+}
+
 /** Bank deposit slips: cheques and drafts in hand, the slip that takes them to the bank, and the slips made. */
 export default async function DepositSlipsPage({
   searchParams,
@@ -62,6 +75,12 @@ export default async function DepositSlipsPage({
     account?: string;
     drawee?: string;
     made?: string;
+    sFrom?: string;
+    sTo?: string;
+    sAccount?: string;
+    sKind?: string;
+    sStatus?: string;
+    sNo?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -75,7 +94,9 @@ export default async function DepositSlipsPage({
     apiFetch<{ data: Instrument[]; accounts: Account[] }>(
       `/fees/deposit-slips/pending?${q.toString()}`,
     ),
-    apiFetch<{ data: Slip[] }>('/fees/deposit-slips').then((r) => r.data),
+    apiFetch<{ data: Slip[] }>(`/fees/deposit-slips?${slipQuery(sp).toString()}`).then(
+      (r) => r.data,
+    ),
     apiFetch<{ limit: number }>('/fees/deposit-slips/limit')
       .then((r) => r.limit)
       .catch(() => 0),
@@ -174,6 +195,34 @@ export default async function DepositSlipsPage({
         ) : (
           <form action={createDepositSlip}>
             <input type="hidden" name="bankAccountId" value={account?.id ?? ''} />
+            <p
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-2)',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span className="ep-field__help">
+                Check the list (or take it to the bank counter) before making the slips: the file
+                has the cheques shown here, marked same bank or other bank.
+              </span>
+              <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/fees/deposit-file?format=xlsx&${q.toString()}`}
+                >
+                  Excel
+                </a>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/fees/deposit-file?format=pdf&${q.toString()}`}
+                >
+                  PDF
+                </a>
+              </span>
+            </p>
             <div className="ep-table-wrap">
               <table className="ep-table ep-table--dense">
                 <caption className="ep-sr-only">Cheques and drafts not yet on a slip</caption>
@@ -329,8 +378,80 @@ export default async function DepositSlipsPage({
         </Card>
       ) : null}
       <Card title="Slips made this year">
+        <form method="get" style={{ marginBottom: 'var(--sp-3)' }}>
+          {/* the filters of the list above stay as they are */}
+          {(['from', 'to', 'ledger', 'account', 'drawee'] as const).map((k) =>
+            sp[k] ? <input key={k} type="hidden" name={k} value={sp[k]} /> : null,
+          )}
+          <FormRow columns={4}>
+            <InputField
+              id="sFrom"
+              name="sFrom"
+              label="Deposited from"
+              type="date"
+              defaultValue={sp.sFrom ?? ''}
+            />
+            <InputField
+              id="sTo"
+              name="sTo"
+              label="Deposited to"
+              type="date"
+              defaultValue={sp.sTo ?? ''}
+            />
+            <SelectField
+              id="sAccount"
+              name="sAccount"
+              label="Bank account"
+              defaultValue={sp.sAccount ?? ''}
+              options={[
+                { value: '', label: 'All accounts' },
+                ...first.accounts.map((a) => ({
+                  value: a.id,
+                  label: `${a.bank} · …${a.accountNo.slice(-4)}`,
+                })),
+              ]}
+            />
+            <SelectField
+              id="sKind"
+              name="sKind"
+              label="Kind"
+              defaultValue={sp.sKind ?? ''}
+              options={[
+                { value: '', label: 'All' },
+                { value: 'transfer', label: 'Transfer (same bank)' },
+                { value: 'clearing', label: 'Clearing (other banks)' },
+                { value: 'none', label: 'Not separated' },
+              ]}
+            />
+            <SelectField
+              id="sStatus"
+              name="sStatus"
+              label="Status"
+              defaultValue={sp.sStatus ?? ''}
+              options={[
+                { value: '', label: 'All' },
+                { value: 'open', label: 'Made' },
+                { value: 'cancelled', label: 'Cancelled' },
+              ]}
+            />
+            <InputField id="sNo" name="sNo" label="Slip no." defaultValue={sp.sNo ?? ''} />
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--sp-2)' }}>
+              <Button type="submit" variant="secondary">
+                Apply
+              </Button>
+              <a className="ep-btn ep-btn--ghost" href="/fees/deposit-slips">
+                Clear
+              </a>
+            </div>
+          </FormRow>
+        </form>
+        <p className="ep-field__help">
+          {slips.length} slip{slips.length === 1 ? '' : 's'} ·{' '}
+          {money(slips.filter((x) => x.status === 'open').reduce((a, x) => a + Number(x.total), 0))}{' '}
+          deposited
+        </p>
         {slips.length === 0 ? (
-          <p className="ep-field__help">No slip yet.</p>
+          <p className="ep-field__help">No slip for these filters.</p>
         ) : (
           <div className="ep-table-wrap">
             <table className="ep-table ep-table--dense">

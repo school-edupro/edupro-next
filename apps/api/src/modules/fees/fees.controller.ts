@@ -24,6 +24,8 @@ import {
   FnfQueryDto,
   CreateDepositSlipDto,
   DepositSlipLimitDto,
+  ListDepositSlipsQueryDto,
+  PendingInstrumentsFileQueryDto,
   PendingInstrumentsQueryDto,
   CarryPreviewQueryDto,
   RunCarryForwardDto,
@@ -385,8 +387,20 @@ export class FeesController {
   @Get('deposit-slips')
   @ApiOperation({ summary: 'Deposit slips of the working year' })
   @RequirePermission(FEES.ledgerView)
-  async depositSlips(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.deposits.list(ctx) };
+  async depositSlips(@ReqCtx() ctx: RequestContext, @Query() q: ListDepositSlipsQueryDto) {
+    return { data: await this.deposits.list(ctx, q) };
+  }
+
+  @Get('deposit-slips/pending/file')
+  @ApiOperation({ summary: 'The cheques and drafts in hand as filtered, as Excel or PDF' })
+  @RequirePermission(FEES.ledgerView)
+  async pendingInstrumentsFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: PendingInstrumentsFileQueryDto,
+  ) {
+    const { format, ...filters } = q;
+    const f = await this.deposits.pendingFile(ctx, filters, format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get('deposit-slips/pending')

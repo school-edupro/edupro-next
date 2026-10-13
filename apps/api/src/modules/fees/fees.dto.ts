@@ -576,6 +576,22 @@ export const PendingInstrumentsQuerySchema = z.object({
   drawee: z.enum(['same', 'other']).optional(),
 });
 export class PendingInstrumentsQueryDto extends createZodDto(PendingInstrumentsQuerySchema) {}
+export const PendingInstrumentsFileQuerySchema = PendingInstrumentsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class PendingInstrumentsFileQueryDto extends createZodDto(
+  PendingInstrumentsFileQuerySchema,
+) {}
+/** The slips made in the year, narrowed by deposit date, account, kind, status or number. */
+export const ListDepositSlipsQuerySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  bankAccountId: IdSchema.optional(),
+  kind: z.enum(['transfer', 'clearing', 'none']).optional(),
+  status: z.enum(['open', 'cancelled']).optional(),
+  slipNo: z.coerce.number().int().min(1).max(10_000_000).optional(),
+});
+export class ListDepositSlipsQueryDto extends createZodDto(ListDepositSlipsQuerySchema) {}
 
 export const CreateDepositSlipSchema = z.object({
   bankAccountId: IdSchema,
