@@ -369,6 +369,12 @@ export const FeeMisFileQuerySchema = FeeMisQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']).default('xlsx'),
 });
 export class FeeMisFileQueryDto extends createZodDto(FeeMisFileQuerySchema) {}
+/** The columns left out of a report: for the user, or (with the right) as the school's default. */
+export const FeeMisColumnsSchema = z.object({
+  hidden: z.array(z.string().regex(/^[A-Za-z0-9_]{1,60}$/)).max(300),
+  scope: z.enum(['user', 'school']).default('user'),
+});
+export class FeeMisColumnsDto extends createZodDto(FeeMisColumnsSchema) {}
 
 /** The adjustments register (waivers, cancelled receipts, bounced cheques) and the fee profile changes. */
 export const AdjustmentRegisterQuerySchema = z.object({

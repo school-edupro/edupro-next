@@ -452,3 +452,43 @@ export async function requestWaiverUndo(fd: FormData) {
   }
   redirect(`${path}&ok=1`);
 }
+
+// ---- Reports centre: which columns a report shows ---------------------------------------------------
+/** The address of the report to go back to: only a path inside the Reports centre is accepted. */
+const reportBackTo = (fd: FormData) => {
+  const b = str(fd, 'back');
+  return b.startsWith('/fees/reports?') ? b : '/fees/reports';
+};
+async function saveColumns(fd: FormData, scope: 'user' | 'school') {
+  const back = reportBackTo(fd);
+  let hidden: unknown = [];
+  try {
+    hidden = JSON.parse(str(fd, 'hidden') || '[]');
+  } catch {
+    hidden = [];
+  }
+  try {
+    await apiFetch(`/fees/mis/${str(fd, 'report')}/columns`, {
+      method: 'PUT',
+      body: JSON.stringify({ hidden, scope }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=1`);
+}
+export async function saveReportColumnsMine(fd: FormData) {
+  return saveColumns(fd, 'user');
+}
+export async function saveReportColumnsSchool(fd: FormData) {
+  return saveColumns(fd, 'school');
+}
+export async function resetReportColumns(fd: FormData) {
+  const back = reportBackTo(fd);
+  try {
+    await apiFetch(`/fees/mis/${str(fd, 'report')}/columns`, { method: 'DELETE' });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=1`);
+}

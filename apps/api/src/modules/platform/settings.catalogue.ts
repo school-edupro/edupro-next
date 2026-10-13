@@ -193,6 +193,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Days a withdrawn pupil and the parent may still sign in to the portal with the "Former student / parent" rights; 0 closes the login at once',
     module: 'people',
   },
+  'fees.report_columns': {
+    schema: z.record(z.string(), z.array(z.string().max(60)).max(300)),
+    default: {},
+    description:
+      'Reports centre: the columns the school leaves out of each fee report by default (a user may choose their own)',
+    module: 'fees',
+  },
   'fees.pay_plan': {
     schema: z.enum(['monthly', 'quarterly', 'half_yearly', 'yearly']),
     default: 'monthly',

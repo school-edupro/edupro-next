@@ -1169,6 +1169,86 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(
       (await inject({ method: 'GET', url: '/fees/mis/nothing', headers: h() })).statusCode,
     ).toBe(404);
+    // columns: a user leaves some out; the screen table and the files follow; the totals do not change
+    const headsOf = async (who = h()) =>
+      (
+        await inject({
+          method: 'GET',
+          url: '/fees/mis/head_receipts?from=2020-01-01&to=2035-12-31',
+          headers: who,
+        })
+      ).json() as {
+        columns: Array<{ key: string }>;
+        hidden: string[];
+        choice: {
+          source: string;
+          columns: Array<{ key: string; fixed: boolean; hidden: boolean }>;
+        };
+        rows: Array<{ kind: string; cells: Record<string, number> }>;
+      };
+    const everyCol = await headsOf();
+    expect(everyCol.choice.source).toBe('all');
+    expect(everyCol.hidden).toEqual([]);
+    const aHead = everyCol.choice.columns.find((x) => x.key.startsWith('h') && !x.fixed)!.key;
+    const totalBefore = everyCol.rows.find((r) => r.kind === 'total')!.cells.total;
+    const savedCols = await inject({
+      method: 'PUT',
+      url: '/fees/mis/head_receipts/columns',
+      headers: h(),
+      json: { hidden: [aHead, 'route', 'total'] },
+    });
+    expect(savedCols.statusCode).toBe(200);
+    // a column that names the row or is a total cannot be left out
+    expect(savedCols.json().hidden).toEqual([aHead, 'route']);
+    const less = await headsOf();
+    expect(less.choice.source).toBe('user');
+    expect(less.columns.map((x) => x.key)).not.toContain(aHead);
+    expect(less.columns.map((x) => x.key)).not.toContain('route');
+    expect(less.columns.map((x) => x.key)).toContain('total');
+    expect(less.hidden).toHaveLength(2);
+    expect(less.rows.find((r) => r.kind === 'total')!.cells.total).toBe(totalBefore);
+    // it is this user's own: the accountant still sees every column
+    expect((await headsOf(h(accountant))).choice.source).toBe('all');
+    // the school default needs the fee master right; with it, everyone without a choice follows it
+    const notMine = await inject({
+      method: 'PUT',
+      url: '/fees/mis/head_receipts/columns',
+      headers: h(accountant),
+      json: { hidden: ['slab'], scope: 'school' },
+    });
+    expect([200, 403]).toContain(notMine.statusCode);
+    const school = await inject({
+      method: 'PUT',
+      url: '/fees/mis/head_receipts/columns',
+      headers: h(),
+      json: { hidden: ['slab'], scope: 'school' },
+    });
+    expect(school.statusCode).toBe(200);
+    const forAll = await headsOf(h(accountant));
+    expect(forAll.choice.source).toBe('school');
+    expect(forAll.columns.map((x) => x.key)).not.toContain('slab');
+    // back to every column, so the checks below read the full reports
+    await inject({
+      method: 'PUT',
+      url: '/fees/mis/head_receipts/columns',
+      headers: h(),
+      json: { hidden: [], scope: 'school' },
+    });
+    expect(
+      (await inject({ method: 'DELETE', url: '/fees/mis/head_receipts/columns', headers: h() }))
+        .statusCode,
+    ).toBe(200);
+    expect((await headsOf()).choice.source).toBe('all');
+    expect(
+      (
+        await inject({
+          method: 'PUT',
+          url: '/fees/mis/check/columns',
+          headers: h(),
+          json: { hidden: ['a'] },
+        })
+      ).statusCode,
+    ).toBe(400);
     // the day book ends with its total and carries the summary tables
     const book = (
       await inject({

@@ -31,6 +31,12 @@ function dress(r: MisRow): 'heading' | 'subheading' | 'subtotal' | 'total' | 'gr
   return null;
 }
 
+/** The closing line: the rule of the figures, and which columns were left out of this copy. */
+const closing = (r: MisReport): string =>
+  r.hidden && r.hidden.length > 0
+    ? `${r.note} Columns left out of this copy: ${r.hidden.join(', ')}. The totals still include them.`
+    : r.note;
+
 const value = (r: MisRow, c: MisColumn): string | number => {
   const v = r.cells[c.key];
   if (v === null || v === undefined) return '';
@@ -158,7 +164,7 @@ export async function misXlsx(
 
   ws.addRow([]);
   const noteAt = ws.rowCount + 1;
-  ws.getCell(noteAt, 1).value = r.note;
+  ws.getCell(noteAt, 1).value = closing(r);
   ws.mergeCells(noteAt, 1, noteAt, Math.min(last, 12));
   ws.getCell(noteAt, 1).font = { italic: true, size: 9 };
   ws.getCell(noteAt, 1).alignment = { wrapText: true, vertical: 'top' };
@@ -218,7 +224,7 @@ export async function misPdf(
     strong,
     shade,
     after: (r.blocks ?? []).map(block),
-    footnote: r.note,
+    footnote: closing(r),
     fontSize: cols.length > 40 ? 4.5 : cols.length > 28 ? 5.5 : cols.length > 18 ? 6.5 : 8,
     wrap: true,
   });

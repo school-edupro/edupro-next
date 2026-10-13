@@ -53,7 +53,45 @@ export interface MisReport {
   blocks?: MisBlock[];
   /** The name of the Excel sheet. */
   sheet?: string;
+  /** Every column the report has, for the column chooser: which are left out, which cannot be. */
+  choice?: {
+    columns: Array<{ key: string; label: string; group?: string; fixed: boolean; hidden: boolean }>;
+    /** Whose choice is in force: the user's own, the school's default, or none (all columns). */
+    source: 'user' | 'school' | 'all';
+    schoolHidden: string[];
+  };
+  /** The columns left out, by name, for the line under the table and in the file. */
+  hidden?: string[];
 }
+
+/** Columns that always stay: they name the row, or they are the totals the other reports agree with. */
+const FIXED = new Set([
+  'sr',
+  'date',
+  'receipt_no',
+  'admission_no',
+  'student',
+  'payer',
+  'name',
+  'total',
+  'due',
+  'paid',
+  'balance',
+  'amount',
+  'final',
+  'final2',
+  'e_all',
+  'c_all',
+  'b_all',
+]);
+/** The check is not laid out by choice: every line of it matters. */
+const NO_CHOICE: MisReportId[] = ['check'];
+const prefKey = (id: MisReportId) => `fees.report.${id}`;
+const slug = (v: string) =>
+  v
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
 
 /** A receipt that counts as money received: a cancelled or bounced one does not. */
 const COUNTED = `p.status IN ('posted', 'partly_refunded', 'refunded')`;
@@ -137,17 +175,124 @@ export class FeeMisService {
 
   async report(ctx: RequestContext, id: MisReportId, q: FeeMisQueryDto): Promise<MisReport> {
     const yearId = this.year(ctx);
-    return this.db.tenant(requireTenant(ctx), (c) => {
-      if (id === 'day_book') return this.dayBook(c, q);
-      if (id === 'forecast') return this.forecast(c, yearId, q);
-      if (id === 'check') return this.check(c, yearId, q);
-      if (id === 'mode_daywise') return this.modeDaywise(c, q);
-      if (id === 'head_receipts') return this.headReceipts(c, q, false);
-      if (id === 'daybook_grouped') return this.headReceipts(c, q, true);
-      if (id === 'cheque_bounce') return this.chequeBounce(c, q);
-      if (id === 'period_headwise') return this.pupilWise(c, yearId, q, 'head');
-      return this.pupilWise(c, yearId, q, 'month');
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.build(c, yearId, id, q);
+      return NO_CHOICE.includes(id) ? r : this.laidOut(r, await this.layout(c, ctx, id));
     });
+  }
+
+  private build(c: PoolClient, yearId: string, id: MisReportId, q: FeeMisQueryDto) {
+    if (id === 'day_book') return this.dayBook(c, q);
+    if (id === 'forecast') return this.forecast(c, yearId, q);
+    if (id === 'check') return this.check(c, yearId, q);
+    if (id === 'mode_daywise') return this.modeDaywise(c, q);
+    if (id === 'head_receipts') return this.headReceipts(c, q, false);
+    if (id === 'daybook_grouped') return this.headReceipts(c, q, true);
+    if (id === 'cheque_bounce') return this.chequeBounce(c, q);
+    if (id === 'period_headwise') return this.pupilWise(c, yearId, q, 'head');
+    return this.pupilWise(c, yearId, q, 'month');
+  }
+
+  // ---- which columns a report shows: the user's own choice, else the school's default ---------------
+  private async layout(c: PoolClient, ctx: RequestContext, id: MisReportId) {
+    const mine = await c.query<{ value: { hidden?: unknown } | null }>(
+      `SELECT value FROM user_preferences WHERE user_id = $1 AND pref_key = $2`,
+      [ctx.user.id, prefKey(id)],
+    );
+    const school = await c.query<{ v: Record<string, unknown> | null }>(
+      `SELECT app.setting('fees.report_columns') AS v`,
+    );
+    const list = (v: unknown) =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
+    return {
+      user: mine.rows[0] ? list(mine.rows[0].value?.hidden) : null,
+      school: list(school.rows[0]?.v?.[id]) ?? [],
+    };
+  }
+
+  /** The report with the chosen columns left out. The figures are not touched: totals stay full. */
+  private laidOut(r: MisReport, lay: { user: string[] | null; school: string[] }): MisReport {
+    const chosen = new Set(lay.user ?? lay.school);
+    const isHidden = (c: MisColumn) => !FIXED.has(c.key) && chosen.has(c.key);
+    const gone = r.columns.filter(isHidden);
+    return {
+      ...r,
+      columns: r.columns.filter((c) => !isHidden(c)),
+      choice: {
+        columns: r.columns.map((c) => ({
+          key: c.key,
+          label: c.label,
+          group: c.group,
+          fixed: FIXED.has(c.key),
+          hidden: isHidden(c),
+        })),
+        source: lay.user ? 'user' : lay.school.length ? 'school' : 'all',
+        schoolHidden: lay.school,
+      },
+      hidden: gone.map((c) => (c.group ? `${c.group}: ${c.label}` : c.label)),
+    };
+  }
+
+  /** The user's own columns for a report, or (with the right) the school's default for everyone. */
+  async saveColumns(
+    ctx: RequestContext,
+    id: MisReportId,
+    dto: { hidden: string[]; scope: 'user' | 'school' },
+  ) {
+    if (NO_CHOICE.includes(id))
+      throw new DomainError('validation-failed', 'This report has a fixed layout', { status: 400 });
+    const hidden = [...new Set(dto.hidden)].filter((k) => !FIXED.has(k));
+    if (dto.scope === 'school' && !ctx.permissions?.has('fees.master.manage'))
+      throw new DomainError(
+        'permission-denied',
+        'Setting the school default needs the right to manage fee masters',
+        { status: 403, extra: { permission: 'fees.master.manage' } },
+      );
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (dto.scope === 'user') {
+        await c.query(
+          `INSERT INTO user_preferences (school_id, user_id, pref_key, value)
+           VALUES (app.current_school_id(), $1, $2, $3::jsonb)
+           ON CONFLICT (school_id, user_id, pref_key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+          [ctx.user.id, prefKey(id), JSON.stringify({ hidden })],
+        );
+        return { scope: 'user', hidden };
+      }
+      const cur = await c.query<{ v: Record<string, string[]> | null }>(
+        `SELECT app.setting('fees.report_columns') AS v`,
+      );
+      const next = { ...(cur.rows[0]?.v ?? {}), [id]: hidden };
+      // as SettingsService.set: close the open row, replace today's, insert the new value
+      await c.query(
+        `UPDATE school_settings SET valid_to = CURRENT_DATE - 1, updated_by = app.current_user_id()
+          WHERE key = 'fees.report_columns' AND valid_to IS NULL AND valid_from < CURRENT_DATE`,
+      );
+      await c.query(
+        `DELETE FROM school_settings WHERE key = 'fees.report_columns' AND valid_from = CURRENT_DATE`,
+      );
+      await c.query(
+        `INSERT INTO school_settings (school_id, key, value, valid_from, created_by, updated_by)
+         VALUES (app.current_school_id(), 'fees.report_columns', $1::jsonb, CURRENT_DATE, app.current_user_id(), app.current_user_id())`,
+        [JSON.stringify(next)],
+      );
+      // the one who sets the default sees it at once: their own choice for this report is dropped
+      await c.query(`DELETE FROM user_preferences WHERE user_id = $1 AND pref_key = $2`, [
+        ctx.user.id,
+        prefKey(id),
+      ]);
+      return { scope: 'school', hidden };
+    });
+  }
+
+  /** Back to the school's default: the user's own choice for the report is dropped. */
+  async resetColumns(ctx: RequestContext, id: MisReportId) {
+    await this.db.tenant(requireTenant(ctx), (c) =>
+      c.query(`DELETE FROM user_preferences WHERE user_id = $1 AND pref_key = $2`, [
+        ctx.user.id,
+        prefKey(id),
+      ]),
+    );
+    return { reset: true };
   }
 
   // ---- mode-wise collection, one row per day -----------------------------------------------------------
@@ -221,7 +366,7 @@ export class FeeMisService {
       num('late', 'Late Fee'),
       num('bounced', 'Cheque Bounce Amount'),
       num('final', 'Final Amount'),
-      ...order.map((m, i) => num(`m${String(i)}`, m)),
+      ...order.map((m) => num(`m_${slug(m)}`, m)),
       num('final2', 'Final Amount'),
     ];
     const total: Record<string, number> = {};
@@ -239,9 +384,9 @@ export class FeeMisService {
           final: x.paid + x.late - x.dr,
         };
         let byMode = 0;
-        order.forEach((m, k) => {
+        order.forEach((m) => {
           const v = x.modes.get(m) ?? 0;
-          cells[`m${String(k)}`] = v;
+          cells[`m_${slug(m)}`] = v;
           byMode += v;
         });
         cells.final2 = byMode;

@@ -1,7 +1,13 @@
 import { Card, SelectField } from '@edupro/ui';
 import { FilterInput, FilterRow } from '@/components/RegisterTools';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Page } from '@/lib/types';
+import {
+  resetReportColumns,
+  saveReportColumnsMine,
+  saveReportColumnsSchool,
+} from '@/lib/fee-request-actions';
+import { ReportColumns, type ChoiceColumn } from './ReportColumns';
 import type { ReportKey } from './ReportTabs';
 
 interface MisColumn {
@@ -28,6 +34,8 @@ interface MisReport {
   columns: MisColumn[];
   rows: MisRow[];
   blocks?: MisBlock[];
+  choice?: { columns: ChoiceColumn[]; source: 'user' | 'school' | 'all' };
+  hidden?: string[];
 }
 
 /** What each report is filtered by. */
@@ -251,6 +259,11 @@ export async function MisReportView({
       : Promise.resolve([]),
   ]);
   const file = `/api/fees/mis-file?report=${report}&${q.toString()}`;
+  // where the column chooser comes back to: this report with what is chosen
+  const here = new URLSearchParams(q);
+  here.set('report', report);
+  if (WAITS.includes(report)) here.set('show', '1');
+  const me = data?.choice ? await getMe() : null;
   const body = data?.rows ?? [];
   const lines = body.filter((r) => r.kind === 'row').length;
   // a long report shows its first rows and the grand total; the files carry all of it
@@ -398,7 +411,30 @@ export async function MisReportView({
               </a>
             </span>
           </div>
+          {data.choice ? (
+            <div style={{ marginBottom: 'var(--sp-3)' }}>
+              <ReportColumns
+                key={data.choice.columns.map((c) => `${c.key}${c.hidden ? '-' : '+'}`).join('')}
+                report={report}
+                back={`/fees/reports?${here.toString()}`}
+                columns={data.choice.columns}
+                source={data.choice.source}
+                canSetSchool={me?.permissions.includes('fees.master.manage') ?? false}
+                saveMine={saveReportColumnsMine}
+                saveSchool={saveReportColumnsSchool}
+                reset={resetReportColumns}
+              />
+            </div>
+          ) : null}
           <Table columns={data.columns} rows={shown} caption={data.title} />
+          {data.hidden && data.hidden.length > 0 ? (
+            <p className="ep-field__help" role="note">
+              {data.hidden.length} column{data.hidden.length === 1 ? '' : 's'} left out:{' '}
+              {data.hidden.slice(0, 12).join(', ')}
+              {data.hidden.length > 12 ? ` and ${String(data.hidden.length - 12)} more` : ''}. The
+              totals still include them.
+            </p>
+          ) : null}
           {lines === 0 ? <p>Nothing to show for what is chosen.</p> : null}
           {(data.blocks ?? []).length > 0 ? (
             <div

@@ -64,6 +64,7 @@ export default async function FeeReportsPage({
           title={head('title')}
           description={head('description')}
         />
+        <Notice params={{ ok: sp.ok, error: sp.error, detail: sp.detail }} />
         <ReportTabs current={key} />
         <MisReportView report={key} sp={sp} />
       </>

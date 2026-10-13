@@ -531,3 +531,20 @@ carry it, and the files are made at once (only the Tally file is prepared in the
 
 One rule for all: a bounced or cancelled receipt is not counted; a refund shows on the day it was paid and
 reduces that day. A fee head shows what the receipt is set against today.
+
+### Choosing the columns of a report
+
+Every report except Defaulters, Tally vouchers and Report check has a **Columns** button above its table.
+
+- Untick a column and press **Save for me**: it leaves the screen, the Excel and the PDF together, and
+  the report opens that way for you next time.
+- The fee admin (right to manage fee masters) can press **Save as the school default**: everyone who
+  has not chosen their own columns then sees that layout.
+- **Back to the school default** drops your own choice.
+- Columns that name the row (serial, date, receipt no., admission no., name) and the totals always stay.
+- Totals are never changed by hiding a column. The line under the table, and the note in the file, list
+  what is left out.
+- A fee head added later shows by itself until someone unticks it.
+
+Period fee head-wise, Yearly projection and Forecast are worked out only after the filters are chosen
+and Apply is pressed.
