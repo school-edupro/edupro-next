@@ -877,6 +877,16 @@ export class FeeAdjustmentsService {
             let headId: string | null = null;
             if (before.kind === 'bounce' && Number(before.charge) > 0)
               headId = await this.bounceHead(c);
+            // what the receipt had paid is kept with the request: the allocations go when it is taken back
+            await c.query(
+              `UPDATE fee_adjustments SET lines = (
+                 SELECT COALESCE(jsonb_agg(jsonb_build_object('demandId', d.id::text, 'head', h.name, 'period', fp.name, 'amount', x.amount::text)
+                                           ORDER BY fp.sequence, h.sort_order), '[]'::jsonb)
+                   FROM (SELECT demand_id, sum(amount) AS amount FROM fee_payment_allocations WHERE payment_id = $2 GROUP BY demand_id) x
+                   JOIN fee_demands d ON d.id = x.demand_id JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id)
+                WHERE id = $1`,
+              [id, before.paymentId],
+            );
             const r = await c.query<{ v: string | null }>(
               `SELECT app.reverse_fee_payment($1, $2, $3, $4, $5)::text AS v`,
               [

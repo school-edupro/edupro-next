@@ -30,6 +30,11 @@ export interface DatasetDefinition {
   columns: DatasetColumn[];
   maxRows: number;
   query: (params: Record<string, unknown>) => DatasetQuery;
+  /**
+   * Lines printed in bold under the table of a file made at once (totals by mode, grand total …):
+   * each is a row of this dataset's own columns, with its words in a text column.
+   */
+  summary?: (rows: Array<Record<string, unknown>>) => Array<Record<string, unknown>>;
 }
 
 const str = (v: unknown): string | null =>
@@ -576,6 +581,52 @@ export const DATASETS: Record<string, DatasetDefinition> = {
              ORDER BY x.received_on, x.kind, x.receipt_no`,
       values: [str(p.from) ?? str(p.to), str(p.to) ?? str(p.from), str(p.ledger), str(p.mode)],
     }),
+    // the summary the screen shows under the day book: a bounced cheque is listed but not counted
+    summary: (rows) => {
+      const counted = rows.filter((r) => r.status !== 'bounced');
+      const sum = (list: Array<Record<string, unknown>>, key: string) =>
+        list.reduce((a, r) => a + Number(r[key] ?? 0), 0);
+      const line = (payer: string, list: Array<Record<string, unknown>>, mode = '') => ({
+        payer,
+        mode,
+        principal: sum(list, 'principal'),
+        late_fee: sum(list, 'late_fee'),
+        amount: sum(list, 'amount'),
+      });
+      const modes = [...new Set(counted.map((r) => String(r.mode ?? '')))].sort();
+      const ledgers = [...new Set(counted.map((r) => String(r.ledger ?? '')))].sort();
+      return [
+        ...modes.map((m) =>
+          line(
+            'Total by mode',
+            counted.filter((r) => String(r.mode ?? '') === m),
+            m,
+          ),
+        ),
+        ...ledgers.map((l) => ({
+          ...line(
+            'Total by ledger',
+            counted.filter((r) => String(r.ledger ?? '') === l),
+          ),
+          ledger: l,
+        })),
+        line('Grand total (bounced cheques not counted)', counted),
+        {
+          payer: 'Refunds paid (already taken off above)',
+          amount: -sum(
+            rows.filter((r) => r.kind === 'refund'),
+            'amount',
+          ),
+        },
+        {
+          payer: 'Bounced cheques (listed, not counted)',
+          amount: sum(
+            rows.filter((r) => r.status === 'bounced'),
+            'amount',
+          ),
+        },
+      ];
+    },
   },
   // day-wise and mode-wise collection: one row per day, ledger and payment mode (refunds paid are minus)
   fee_mode_summary: {

@@ -1117,6 +1117,56 @@ describe('fee changes that wait for approval (e2e)', () => {
     });
     expect(xml.statusCode).toBe(409);
     expect(xml.json().type).toBe('reports.not_instant');
+    // the MIS reports: a table with totals, and the same as Excel and PDF
+    for (const report of [
+      'mode_daywise',
+      'head_receipts',
+      'cheque_bounce',
+      'daybook_grouped',
+      'period_headwise',
+      'yearly_projection',
+    ]) {
+      const t = await inject({
+        method: 'GET',
+        url: `/fees/mis/${report}?from=2020-01-01&to=2035-12-31`,
+        headers: h(),
+      });
+      expect(t.statusCode).toBe(200);
+      expect(t.json().columns.length).toBeGreaterThan(5);
+      expect(t.json().rows.some((r: { kind: string }) => r.kind === 'total')).toBe(true);
+      const f = await inject({
+        method: 'GET',
+        url: `/fees/mis/${report}/file?from=2020-01-01&to=2035-12-31&format=${report === 'mode_daywise' ? 'pdf' : 'xlsx'}`,
+        headers: h(),
+      });
+      expect(f.statusCode).toBe(200);
+      expect(Buffer.from(f.json().base64, 'base64').length).toBeGreaterThan(800);
+    }
+    // by day and mode: what the modes add up to is the day's final amount, and the pupil refund shows as Dr
+    const byMode = (
+      await inject({
+        method: 'GET',
+        url: '/fees/mis/mode_daywise?from=2020-01-01&to=2035-12-31',
+        headers: h(),
+      })
+    ).json() as { rows: Array<{ kind: string; cells: Record<string, number> }> };
+    const sumRow = byMode.rows.find((r) => r.kind === 'total')!.cells;
+    expect(sumRow.final).toBeCloseTo(sumRow.final2!, 2);
+    expect(sumRow.final).toBeCloseTo(sumRow.paid! + sumRow.late! - sumRow.dr!, 2);
+    expect(sumRow.dr).toBeGreaterThanOrEqual(3300);
+    // by head: every counted receipt is fee heads plus fine plus what is kept as advance or went back
+    const byHead = (
+      await inject({
+        method: 'GET',
+        url: '/fees/mis/head_receipts?from=2020-01-01&to=2035-12-31',
+        headers: h(),
+      })
+    ).json() as { rows: Array<{ kind: string; cells: Record<string, number | string> }> };
+    expect(byHead.rows.filter((r) => r.kind === 'row').length).toBeGreaterThan(3);
+    expect(Number(byHead.rows.find((r) => r.kind === 'total')!.cells.total)).toBeGreaterThan(0);
+    expect(
+      (await inject({ method: 'GET', url: '/fees/mis/nothing', headers: h() })).statusCode,
+    ).toBe(404);
     const adj = await inject({
       method: 'GET',
       url: '/fees/adjustments/register?size=1&status=approved',

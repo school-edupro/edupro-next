@@ -16,6 +16,8 @@ import { FeeCarryService } from './fee-carry.service';
 import { FeeDepositService } from './fee-deposit.service';
 import { FeeDocumentsService } from './fee-documents.service';
 import { FeeGridsController } from './fee-grids.controller';
+import { FeeMisController } from './fee-mis.controller';
+import { FeeMisService } from './fee-mis.service';
 import { FeeGridsService } from './fee-grids.service';
 import { FeeOpeningController } from './fee-opening.controller';
 import { FeeOpeningService } from './fee-opening.service';
@@ -30,7 +32,13 @@ import { FeesController } from './fees.controller';
  */
 @Module({
   imports: [ReportsModule, TemplatesModule, DailyAcademicsModule, WorkflowModule, CommsModule],
-  controllers: [FeesController, FeeRequestsController, FeeGridsController, FeeOpeningController],
+  controllers: [
+    FeesController,
+    FeeRequestsController,
+    FeeGridsController,
+    FeeOpeningController,
+    FeeMisController,
+  ],
   providers: [
     FeeMastersService,
     FeeDemandsService,
@@ -44,6 +52,7 @@ import { FeesController } from './fees.controller';
     FeeRequestsService,
     FeeOpeningService,
     FeeGridsService,
+    FeeMisService,
     AuditService,
   ],
   exports: [

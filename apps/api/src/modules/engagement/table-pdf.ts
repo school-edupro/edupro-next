@@ -22,6 +22,8 @@ export interface TablePdf {
   fontSize?: number;
   /** Long text runs onto more lines of its cell (up to three) instead of being cut. */
   wrap?: boolean;
+  /** Rows (by position) printed in bold: subtotals and totals. */
+  strong?: number[];
 }
 
 const W = 841.89; // A4 landscape
@@ -203,14 +205,16 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
     y -= ROW + extra;
   };
   head();
+  const strongRows = new Set(t.strong ?? []);
   t.rows.forEach((row, n) => {
     if (y < M + 20) {
       page = pdf.addPage([W, H]);
       head();
     }
+    const face = strongRows.has(n) ? bold : regular;
     const cells = t.columns.map((_, i) => {
       const v = row[i];
-      return cell(regular, v === null || v === undefined ? '' : String(v), i);
+      return cell(face, v === null || v === undefined ? '' : String(v), i);
     });
     const extra = (Math.max(...cells.map((l) => l.length), 1) - 1) * LEAD;
     if (y - extra < M + 20) {
@@ -225,7 +229,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
         height: ROW + extra,
         color: ZEBRA,
       });
-    draw(cells, regular);
+    draw(cells, face);
     y -= ROW + extra;
   });
   if (!t.rows.length)

@@ -45,6 +45,13 @@ const sum = (rows: Row[], key: string, pred: (r: Row) => boolean = () => true) =
  * Sprint 15: the fee reports centre. Every tab runs a dataset live (`/reports/datasets/:id/rows`) and
  * exports the same definition through the export service (CSV, Excel, PDF; Tally XML for the vouchers).
  */
+/** These three open in MIS reports, where they have a column per head or payment mode. */
+const MIS: Partial<Record<string, string>> = {
+  head_tally: 'head_receipts',
+  mode_summary: 'mode_daywise',
+  cheque_bounce: 'cheque_bounce',
+};
+
 export default async function FeeReportsPage({
   searchParams,
 }: {
@@ -196,7 +203,7 @@ export default async function FeeReportsPage({
           <a
             key={k}
             className={`ep-btn ep-btn--sm ${k === report ? '' : 'ep-btn--ghost'}`}
-            href={`/fees/reports?report=${k}`}
+            href={MIS[k] ? `/fees/mis?report=${MIS[k]}` : `/fees/reports?report=${k}`}
             aria-current={k === report ? 'page' : undefined}
           >
             {tabLabel[k]}

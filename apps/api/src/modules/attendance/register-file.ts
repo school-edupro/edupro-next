@@ -19,6 +19,10 @@ export interface RegisterSheet {
     group?: string;
   }>;
   rows: Array<Array<string | number>>;
+  /** Rows (by position) printed in bold: subtotals and totals. */
+  strong?: number[];
+  /** Smaller print for a sheet with very many columns. */
+  fontSize?: number;
   /** Without the extension. */
   filename: string;
 }
@@ -66,8 +70,9 @@ export async function registerFile(t: RegisterSheet, format: 'xlsx' | 'pdf') {
         subtitle: [t.details.join(' · '), t.legend],
         columns: t.columns,
         rows: t.rows,
-        fontSize: t.columns.length > 50 ? 5.5 : t.columns.length > 30 ? 6.5 : 8,
+        fontSize: t.fontSize ?? (t.columns.length > 50 ? 5.5 : t.columns.length > 30 ? 6.5 : 8),
         wrap: true,
+        strong: t.strong,
       }),
       filename: `${t.filename}.pdf`,
       contentType: 'application/pdf',
@@ -107,6 +112,7 @@ export async function registerFile(t: RegisterSheet, format: 'xlsx' | 'pdf') {
   ws.getRow(top).font = { bold: true };
   ws.getRow(top).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   for (const r of t.rows) ws.addRow(r);
+  for (const n of t.strong ?? []) ws.getRow(top + 1 + n).font = { bold: true };
   const thin = { style: 'thin' as const, color: { argb: 'FFB8C0CC' } };
   for (let r = heads.length + 1; r <= ws.rowCount; r += 1)
     for (let col = 1; col <= last; col += 1)

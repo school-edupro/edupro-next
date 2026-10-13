@@ -499,3 +499,26 @@ For a local (never a production) school:
 - Every receipt carries the remark SAMPLE-FEE and every request ends with [sample]; "remove" finds them
   by that. Messages the entries would queue are stopped before they leave.
 - Receipt, voucher and slip numbers used by the sample are not given again after removal.
+
+## MIS reports (2026-10-13)
+
+Fees → MIS reports. Each report shows on the screen as its Excel and PDF carry it; the files are made at once.
+
+- **Mode-wise collection**: one row per day: Amt. Paid, Dr Amount, Late Fee, Cheque Bounce Amount, Final
+  Amount, then a column for each payment mode, and Final Amount again (what the modes add up to).
+- **Head-wise tally**: one row per receipt with student, class, admission no., route, slab and payment
+  status, then every fee head as a column, fine, bounce charge and advance kept.
+- **Cheque bounce**: receipt date, cheque date, cheque status, bounce charge, and "Paid again": the fee the
+  cheque had paid, how much of it is paid now, what is still due, and the receipts that paid it.
+- **Day book (grouped)**: receipts grouped by date and payment mode with a subtotal per mode, a total per
+  date and a grand total, a column per fee head.
+- **Period fee, head-wise**: one row per pupil: payable by head, concession, total due, paid by head,
+  balance, late fee, bounce charge, waive-off; for the months chosen.
+- **Yearly projection**: one row per pupil: payable and paid by month, balance; the last row counts the
+  pupils who have paid each month in full.
+
+One rule for all: a bounced or cancelled receipt is not counted; a refund shows on the day it was paid and
+reduces that day. A fee head shows what the receipt is set against today.
+
+The day book's Excel and PDF end with the summary shown under it on the screen (totals by mode and by
+ledger, grand total, refunds paid, bounced cheques).

@@ -283,6 +283,8 @@ export class ReportsService {
         bytes: Buffer.from(`\uFEFF${lines.join('\r\n')}\r\n`, 'utf8'),
       };
     }
+    // the lines the screen shows under the table (totals by mode, grand total) close the file too
+    const summary = dataset.summary ? dataset.summary(rows) : [];
     const said = Object.entries(params)
       .filter(([k, v]) => typeof v === 'string' && v !== '' && k !== 'academicYearId')
       .map(
@@ -301,7 +303,8 @@ export class ReportsService {
           width: c.width ?? 16,
           right: c.type === 'number',
         })),
-        rows: rows.map((r) => dataset.columns.map((c) => cell(r[c.key], c.type))),
+        rows: [...rows, ...summary].map((r) => dataset.columns.map((c) => cell(r[c.key], c.type))),
+        strong: summary.map((_, i) => rows.length + i),
         filename: slug,
       },
       dto.format as 'xlsx' | 'pdf',
