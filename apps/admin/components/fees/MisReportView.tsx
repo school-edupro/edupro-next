@@ -3,6 +3,8 @@ import { FilterInput, FilterRow } from '@/components/RegisterTools';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Page } from '@/lib/types';
 import {
+  openReminderForAll,
+  openReminderForTicked,
   resetReportColumns,
   saveReportColumnsMine,
   saveReportColumnsSchool,
@@ -40,8 +42,12 @@ interface MisReport {
 
 /** What each report is filtered by. */
 const FILTERS: Partial<
-  Record<ReportKey, Array<'dates' | 'ledger' | 'mode' | 'class' | 'months' | 'view'>>
+  Record<
+    ReportKey,
+    Array<'dates' | 'ledger' | 'mode' | 'class' | 'months' | 'view' | 'asof' | 'discount' | 'least'>
+  >
 > = {
+  defaulters: ['asof', 'class', 'discount', 'least', 'ledger'],
   day_book: ['dates', 'ledger', 'mode'],
   daybook_grouped: ['dates', 'ledger', 'class'],
   mode_daywise: ['dates', 'ledger'],
@@ -72,10 +78,13 @@ function Table({
   columns,
   rows,
   caption,
+  tick,
 }: {
   columns: MisColumn[];
   rows: MisRow[];
   caption: string;
+  /** A tick box in front of each line: the name of the form field and the cell that holds its value. */
+  tick?: { name: string; cell: string; label: string };
 }) {
   const grouped = columns.some((c) => c.group);
   // the heading row over grouped columns (Payable, Paid, a month, a quarter)
@@ -107,6 +116,11 @@ function Table({
             </tr>
           ) : null}
           <tr>
+            {tick ? (
+              <th scope="col">
+                <span className="ep-sr-only">Tick</span>
+              </th>
+            ) : null}
             {columns.map((c) => (
               <th
                 key={c.key}
@@ -125,7 +139,7 @@ function Table({
                 <tr key={i}>
                   <th
                     scope="colgroup"
-                    colSpan={columns.length}
+                    colSpan={columns.length + (tick ? 1 : 0)}
                     style={{
                       textAlign: 'left',
                       background: BAND.heading,
@@ -146,6 +160,18 @@ function Table({
             const cells = strong && r.label ? columns.slice(labelSpan) : columns;
             return (
               <tr key={i}>
+                {tick ? (
+                  <td style={style}>
+                    {r.kind === 'row' ? (
+                      <input
+                        type="checkbox"
+                        name={tick.name}
+                        value={String(r.cells[tick.cell] ?? '')}
+                        aria-label={`${tick.label} ${String(r.cells.student ?? '')}`}
+                      />
+                    ) : null}
+                  </td>
+                ) : null}
                 {strong && r.label ? (
                   <td colSpan={labelSpan} style={style}>
                     {r.label}
@@ -229,6 +255,12 @@ export async function MisReportView({
     q.set('view', view);
     q.set('by', by);
   }
+  const asOf = day(sp.asOf) || today;
+  const discountId = sp.discountId === 'none' ? 'none' : id(sp.discountId);
+  const least = /^\d{1,9}$/.test(sp.minBalance ?? '') ? sp.minBalance! : '';
+  if (has('asof')) q.set('asOf', asOf);
+  if (has('discount') && discountId) q.set('discountId', discountId);
+  if (has('least') && least) q.set('minBalance', least);
   // the pupil-wise reports and the forecast read every bill of the session: they are worked out only
   // when the filters have been chosen and Apply is pressed, not on opening the tab
   const waits = WAITS.includes(report) && sp.show !== '1';
@@ -241,6 +273,11 @@ export async function MisReportView({
       if (!(error instanceof ApiError)) throw error;
       problem = error.problem.detail ?? error.problem.type;
     }
+  const discounts = has('discount')
+    ? await apiFetch<{ data: Array<{ id: string; name: string }> }>('/fees/discounts')
+        .then((x) => x.data)
+        .catch(() => [])
+    : [];
   const [classes, periods, modes] = await Promise.all([
     has('class')
       ? apiFetch<Page<{ id: string; code: string; name: string }>>('/academics/classes?size=200')
@@ -266,12 +303,29 @@ export async function MisReportView({
   const me = data?.choice ? await getMe() : null;
   const body = data?.rows ?? [];
   const lines = body.filter((r) => r.kind === 'row').length;
-  // a long report shows its first rows and the grand total; the files carry all of it
+  // a plain list is shown a page at a time with its total; a grouped one (headings and subtotals) shows
+  // its first rows. The files always carry all of it.
+  const plain = !body.some((r) => r.kind === 'group' || r.kind === 'subtotal');
+  const size = ['50', '100', '200', '500'].includes(sp.size ?? '') ? Number(sp.size) : 100;
+  const pages = plain ? Math.max(1, Math.ceil(lines / size)) : 1;
+  const page = Math.min(Math.max(1, Number(sp.page) || 1), pages);
   let seen = 0;
   const shown = body.filter((r) => {
-    if (r.kind === 'row') seen += 1;
+    if (r.kind === 'row') {
+      seen += 1;
+      return plain ? seen > (page - 1) * size && seen <= page * size : seen <= SHOWN;
+    }
+    // the grand total always shows; the headings and subtotals of a grouped list go with their rows
     return r.kind === 'total' || seen <= SHOWN;
   });
+  const pageHref = (n: number) => {
+    const u = new URLSearchParams(here);
+    u.set('page', String(n));
+    u.set('size', String(size));
+    return `/fees/reports?${u.toString()}`;
+  };
+  const canRemind =
+    report === 'defaulters' && (me?.permissions.includes('fees.defaulter.notify') ?? false);
   return (
     <Card title={data?.title ?? TITLE[report] ?? ''}>
       <FilterRow
@@ -361,6 +415,25 @@ export async function MisReportView({
             ]}
           />
         ) : null}
+        {has('asof') ? (
+          <FilterInput id="asOf" label="Overdue as on" type="date" value={asOf} />
+        ) : null}
+        {has('discount') ? (
+          <SelectField
+            id="discountId"
+            name="discountId"
+            label="Discount type"
+            defaultValue={discountId}
+            options={[
+              { value: '', label: 'All' },
+              { value: 'none', label: 'No discount' },
+              ...discounts.map((d) => ({ value: d.id, label: d.name })),
+            ]}
+          />
+        ) : null}
+        {has('least') ? (
+          <FilterInput id="minBalance" label="Balance of at least (₹)" value={least} />
+        ) : null}
         {has('class') ? (
           <SelectField
             id="classId"
@@ -373,6 +446,13 @@ export async function MisReportView({
             ]}
           />
         ) : null}
+        <SelectField
+          id="size"
+          name="size"
+          label="Rows on a page"
+          defaultValue={String(size)}
+          options={['50', '100', '200', '500'].map((n) => ({ value: n, label: n }))}
+        />
       </FilterRow>
       {problem ? (
         <p className="ep-alert ep-alert--danger" role="alert">
@@ -398,7 +478,7 @@ export async function MisReportView({
           >
             <span className="ep-field__help" aria-live="polite">
               {data.filters.join(' · ')} · {lines} row{lines === 1 ? '' : 's'}
-              {lines > SHOWN
+              {!plain && lines > SHOWN
                 ? ` · the first ${String(SHOWN)} are shown here; Excel and PDF carry all`
                 : ''}
             </span>
@@ -426,7 +506,70 @@ export async function MisReportView({
               />
             </div>
           ) : null}
-          <Table columns={data.columns} rows={shown} caption={data.title} />
+          {canRemind && lines > 0 ? (
+            <form action={openReminderForTicked}>
+              {[...q.entries()].map(([k, v]) => (
+                <input key={k} type="hidden" name={k} value={v} />
+              ))}
+              <Table
+                columns={data.columns}
+                rows={shown}
+                caption={data.title}
+                tick={{ name: 'studentId', cell: 'student_id', label: 'Remind the parents of' }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-2)',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  marginTop: 'var(--sp-3)',
+                }}
+              >
+                <button type="submit" className="ep-btn ep-btn--primary">
+                  Send a reminder to the ticked
+                </button>
+                <button
+                  type="submit"
+                  className="ep-btn ep-btn--secondary"
+                  formAction={openReminderForAll}
+                >
+                  Send a reminder to all {lines} in this list
+                </button>
+                <span className="ep-field__help">
+                  The next screen chooses the template, shows the message and the cost, and sends a
+                  test first. Nothing is sent from here.
+                </span>
+              </div>
+            </form>
+          ) : (
+            <Table columns={data.columns} rows={shown} caption={data.title} />
+          )}
+          {plain && pages > 1 ? (
+            <nav
+              aria-label="Pages"
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-3)',
+                alignItems: 'center',
+                marginTop: 'var(--sp-3)',
+              }}
+            >
+              {page > 1 ? (
+                <a className="ep-btn ep-btn--secondary ep-btn--sm" href={pageHref(page - 1)}>
+                  ← Previous
+                </a>
+              ) : null}
+              <span className="ep-field__help">
+                Page {page} of {pages} · {size} on a page
+              </span>
+              {page < pages ? (
+                <a className="ep-btn ep-btn--secondary ep-btn--sm" href={pageHref(page + 1)}>
+                  Next →
+                </a>
+              ) : null}
+            </nav>
+          ) : null}
           {data.hidden && data.hidden.length > 0 ? (
             <p className="ep-field__help" role="note">
               {data.hidden.length} column{data.hidden.length === 1 ? '' : 's'} left out:{' '}

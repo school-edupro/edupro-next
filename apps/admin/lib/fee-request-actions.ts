@@ -492,3 +492,32 @@ export async function resetReportColumns(fd: FormData) {
   }
   redirect(`${back}&ok=1`);
 }
+
+// ---- Reports centre: from the defaulters list to the reminder screen --------------------------------
+/** Opens the reminder screen for the ticked pupils, or for everyone the filters list. Nothing is sent. */
+async function openReminder(fd: FormData, all: boolean) {
+  const q = new URLSearchParams();
+  for (const k of ['asOf', 'classId', 'discountId', 'minBalance', 'ledger'])
+    if (str(fd, k)) q.set(k, str(fd, k));
+  if (!all) {
+    const ids = fd
+      .getAll('studentId')
+      .map(String)
+      .filter((x) => /^\d{1,18}$/.test(x));
+    if (ids.length === 0) {
+      const back = new URLSearchParams(q);
+      back.set('report', 'defaulters');
+      redirect(
+        `/fees/reports?${back.toString()}&error=1&detail=${encodeURIComponent('Tick at least one pupil, or use the button for the whole list')}`,
+      );
+    }
+    q.set('ids', ids.slice(0, 500).join(','));
+  }
+  redirect(`/fees/reminders/new?${q.toString()}`);
+}
+export async function openReminderForTicked(fd: FormData) {
+  return openReminder(fd, false);
+}
+export async function openReminderForAll(fd: FormData) {
+  return openReminder(fd, true);
+}

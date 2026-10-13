@@ -9,6 +9,7 @@ import { misPdf, misXlsx } from './mis-file';
 import type { FeeMisQueryDto } from './fees.dto';
 
 export type MisReportId =
+  | 'defaulters'
   | 'day_book'
   | 'forecast'
   | 'check'
@@ -182,6 +183,7 @@ export class FeeMisService {
   }
 
   private build(c: PoolClient, yearId: string, id: MisReportId, q: FeeMisQueryDto) {
+    if (id === 'defaulters') return this.defaulters(c, yearId, q);
     if (id === 'day_book') return this.dayBook(c, q);
     if (id === 'forecast') return this.forecast(c, yearId, q);
     if (id === 'check') return this.check(c, yearId, q);
@@ -293,6 +295,172 @@ export class FeeMisService {
       ]),
     );
     return { reset: true };
+  }
+
+  // ---- defaulters: who owes fee that is past its due date, with the parents to reach -------------------
+  /** One row per pupil with overdue fee; `ids` narrows it to chosen pupils (for a reminder). */
+  async defaulterRows(c: PoolClient, yearId: string, q: FeeMisQueryDto, ids?: string[]) {
+    const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const asOf = q.asOf ?? today;
+    const r = await c.query<{
+      student_id: string;
+      admission_no: string;
+      student: string;
+      class: string | null;
+      section: string | null;
+      gender: string | null;
+      status: string;
+      father: string | null;
+      father_mobile: string | null;
+      father_email: string | null;
+      mother: string | null;
+      mother_mobile: string | null;
+      mother_email: string | null;
+      contact: string | null;
+      contact_mobile: string | null;
+      contact_email: string | null;
+      route: string | null;
+      slab: string | null;
+      discount: string | null;
+      oldest_due: string;
+      days_overdue: number;
+      balance: number;
+      months: string | null;
+      last_reminded_on: string | null;
+      reminded_today: boolean;
+    }>(
+      `WITH due AS (
+         SELECT d.student_id, sum(d.net - d.paid)::float AS balance, min(d.due_on) AS oldest,
+                string_agg(DISTINCT lpad(fp.sequence::text, 2, '0') || ':' || to_char(make_date(fp.year, fp.month, 1), 'Mon'), ',') AS months
+           FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
+          WHERE d.academic_year_id = $1 AND d.status IN ('pending', 'partial') AND d.net > d.paid AND d.due_on < $2::date
+            AND ($7::text IS NULL OR d.ledger::text = $7)
+          GROUP BY d.student_id)
+       SELECT s.id::text AS student_id, s.admission_no, s.display_name AS student, k.code || '-' || cs.name AS class, cs.name AS section,
+              s.gender::text, s.status::text,
+              f.name AS father, f.mobile AS father_mobile, f.email AS father_email,
+              m.name AS mother, m.mobile AS mother_mobile, m.email AS mother_email,
+              n.name AS contact, n.mobile AS contact_mobile, n.email AS contact_email,
+              (SELECT rt.code || ' ' || rt.name FROM student_route_assignments ra JOIN transport_routes rt ON rt.id = ra.route_id
+                WHERE ra.student_id = s.id AND ra.academic_year_id = $1 LIMIT 1) AS route,
+              (SELECT sl.name FROM transport_slabs sl WHERE sl.id = fp.transport_slab_id) AS slab,
+              COALESCE((SELECT fd.name FROM fee_discounts fd WHERE fd.id = fp.discount_id),
+                       (SELECT string_agg(DISTINCT fd.name, ', ') FROM student_fee_discounts sd JOIN fee_discounts fd ON fd.id = sd.discount_id
+                         WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active')) AS discount,
+              due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.balance, due.months,
+              (SELECT max(fr.sent_on)::text FROM fee_reminders fr WHERE fr.student_id = s.id) AS last_reminded_on,
+              EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE) AS reminded_today
+         FROM due JOIN students s ON s.id = due.student_id AND s.deleted_at IS NULL
+         LEFT JOIN LATERAL (SELECT e.class_section_id FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1
+                             ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) en ON true
+         LEFT JOIN class_sections cs ON cs.id = en.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+         LEFT JOIN student_fee_profiles fp ON fp.student_id = s.id AND fp.academic_year_id = $1
+         LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                             WHERE sg.student_id = s.id AND sg.relation = 'father' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) f ON true
+         LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                             WHERE sg.student_id = s.id AND sg.relation = 'mother' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) m ON true
+         LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                             WHERE sg.student_id = s.id AND sg.receives_notifications AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) n ON true
+        WHERE due.balance >= $3::numeric
+          AND ($4::bigint IS NULL OR cs.class_id = $4)
+          AND ($5::text IS NULL
+               OR ($5 = 'none' AND fp.discount_id IS NULL AND NOT EXISTS (SELECT 1 FROM student_fee_discounts sd WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active'))
+               OR ($5 <> 'none' AND (fp.discount_id::text = $5 OR EXISTS (SELECT 1 FROM student_fee_discounts sd WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active' AND sd.discount_id::text = $5))))
+          AND ($6::bigint[] IS NULL OR s.id = ANY($6::bigint[]))
+        ORDER BY k.display_order NULLS LAST, cs.name, s.display_name
+        LIMIT 10000`,
+      [
+        yearId,
+        asOf,
+        Math.max(q.minBalance ?? 1, 0.01),
+        q.classId ?? null,
+        q.discountId ?? null,
+        ids ?? null,
+        q.ledger ?? null,
+      ],
+    );
+    // the months in the order of the session: "Jul, Aug" or, for a longer run, "Jul to Dec"
+    const inOrder = (raw: string | null) => {
+      const names = (raw ?? '')
+        .split(',')
+        .filter(Boolean)
+        .sort()
+        .map((x) => x.slice(3));
+      return names.length > 3 ? `${names[0]!} to ${names[names.length - 1]!}` : names.join(', ');
+    };
+    return { asOf, rows: r.rows.map((x) => ({ ...x, months: inOrder(x.months) })) };
+  }
+
+  private async defaulters(c: PoolClient, yearId: string, q: FeeMisQueryDto): Promise<MisReport> {
+    const { asOf, rows: list } = await this.defaulterRows(c, yearId, q);
+    const total = list.reduce((a, x) => a + x.balance, 0);
+    const rows: MisRow[] = list.map((x, i) => ({
+      kind: 'row',
+      cells: {
+        // not a column: the screen ticks pupils by it
+        student_id: x.student_id,
+        sr: i + 1,
+        admission_no: x.admission_no,
+        student: x.student,
+        class: x.class ?? '',
+        gender: x.gender ?? '',
+        status: x.status,
+        father: x.father ?? '',
+        father_mobile: x.father_mobile ?? '',
+        mother: x.mother ?? '',
+        mother_mobile: x.mother_mobile ?? '',
+        route: x.route ?? '',
+        slab: x.slab ?? '',
+        discount: x.discount ?? '',
+        months: x.months ?? '',
+        oldest_due: dmy(x.oldest_due),
+        days_overdue: String(x.days_overdue),
+        balance: x.balance,
+        last_reminded: x.last_reminded_on ? dmy(x.last_reminded_on) : 'Never',
+      },
+    }));
+    rows.push({
+      kind: 'total',
+      label: `Total · ${String(list.length)} pupil(s)`,
+      cells: { balance: total },
+    });
+    return {
+      report: 'defaulters',
+      title: 'Fee defaulters',
+      filters: [
+        `Overdue as on ${dmy(asOf)}`,
+        q.classId ? 'One class' : 'All classes',
+        q.discountId
+          ? q.discountId === 'none'
+            ? 'No discount'
+            : 'One discount type'
+          : 'All discount types',
+        ...(q.minBalance ? [`Balance of Rs. ${String(q.minBalance)} or more`] : []),
+        ...(q.ledger ? [`Ledger: ${q.ledger}`] : []),
+      ],
+      note: 'A pupil is listed when fee past its due date is unpaid on the date chosen; fee not yet due is not counted, nor is late fee. Worked out from the bills at the moment the report is opened.',
+      columns: [
+        num('sr', 'Sr No', undefined, 5),
+        text('admission_no', 'Admission no.', 10),
+        text('student', 'Student', 20),
+        text('class', 'Class', 8),
+        text('gender', 'Gender', 6),
+        text('status', 'Status', 7),
+        text('father', 'Father', 18),
+        text('father_mobile', 'Father mobile', 11),
+        text('mother', 'Mother', 18),
+        text('mother_mobile', 'Mother mobile', 11),
+        text('route', 'Route', 13),
+        text('slab', 'Slab', 10),
+        text('discount', 'Discount type', 13),
+        text('months', 'Months due', 14),
+        text('oldest_due', 'Oldest due', 9),
+        text('days_overdue', 'Days overdue', 7),
+        num('balance', 'Balance', undefined, 12),
+        text('last_reminded', 'Last reminded', 9),
+      ],
+      rows,
+    };
   }
 
   // ---- mode-wise collection, one row per day -----------------------------------------------------------

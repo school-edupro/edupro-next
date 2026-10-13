@@ -55,7 +55,7 @@ export default async function FeeReportsPage({
   const sp = await searchParams;
   // the reports with a column per head, mode, month or quarter have one view of their own
   const key = REPORT_ALIAS[sp.report ?? ''] ?? (isReportKey(sp.report) ? sp.report : 'day_book');
-  if (key !== 'defaulters' && key !== 'tally') {
+  if (key !== 'tally') {
     const head = await getTranslations('pages.fees_reports');
     return (
       <>

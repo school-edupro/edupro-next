@@ -548,3 +548,36 @@ Every report except Defaulters, Tally vouchers and Report check has a **Columns*
 
 Period fee head-wise, Yearly projection and Forecast are worked out only after the filters are chosen
 and Apply is pressed.
+
+## Bank deposit slips: limit and same bank / other banks (2026-10-13)
+
+- Choose the school account under **Deposit into**: each cheque is then marked *Same bank* or *Other bank*,
+  and **Drawn on** filters by it.
+- **Cheques on one slip** (bottom of the page) is the most a slip may hold: 10, 20, 25 … as the bank's slip
+  has lines. 0 means no limit.
+- **Make deposit slips** makes as many slips as are needed in one go: cheques of the same bank on
+  *Transfer* slips, cheques of other banks on *Clearing* slips, each holding no more than the limit, numbered
+  one after the other. The page says how many slips will be made before you confirm.
+- Untick "Separate slips for same bank and other banks" to keep all on one run of slips.
+
+## Defaulters and fee reminders (2026-10-13)
+
+**Reports centre → Defaulters** is worked out from the bills when it is opened: father and mother with their
+mobiles, route, slab, discount type, gender, status, the months due, oldest due date, days overdue and balance.
+Filters: overdue as on, class, discount type, least balance, ledger. Pages, the Columns button, Excel and PDF
+as on the other reports.
+
+To remind: tick pupils and press **Send a reminder to the ticked**, or **Send a reminder to all in this list**.
+The reminder screen is laid out like Communication → Compose:
+
+1. Tick the channels (SMS, WhatsApp, Email) and choose a template for each. The pupil's name, class, overdue
+   amount and months fill the template's blanks for each parent; a blank the dues cannot fill is asked for.
+2. Choose who gets it: father, mother, both, or the contact marked for notices.
+3. Put seniors on copy (up to 12); **Keep this as the usual list** remembers them for the school.
+4. The right side shows how many pupils and parents, who is left out and why, the cost, and the message
+   as the first parent reads it.
+5. **Send a test to me** (and those on copy) first; then **Send**.
+
+Each person on copy gets the first reminder once, and an email with the summary of the run. A pupil is
+reminded once a day unless "Also remind those already reminded today" is ticked. The run follows the
+school's message approval rule and shows under Communication → Requests.

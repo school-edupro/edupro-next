@@ -340,6 +340,7 @@ export class ListProfileChangesQueryDto extends createZodDto(ListProfileChangesQ
 const RegisterDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** The pivot fee reports (a column per head, mode or month). */
 export const FeeMisReportSchema = z.enum([
+  'defaulters',
   'day_book',
   'forecast',
   'check',
@@ -363,6 +364,13 @@ export const FeeMisQuerySchema = z.object({
   /** Forecast: a column block per month or per quarter; rows by class or by fee head. */
   view: z.enum(['month', 'quarter']).optional(),
   by: z.enum(['class', 'head']).optional(),
+  /** Defaulters: overdue as on this date, a discount type (an id, or "none"), the least balance. */
+  asOf: RegisterDay.optional(),
+  discountId: z
+    .string()
+    .regex(/^(none|\d{1,18})$/)
+    .optional(),
+  minBalance: z.coerce.number().min(0).max(100_000_000).optional(),
 });
 export class FeeMisQueryDto extends createZodDto(FeeMisQuerySchema) {}
 export const FeeMisFileQuerySchema = FeeMisQuerySchema.extend({
@@ -448,6 +456,39 @@ export const NotifyDefaultersSchema = z.object({
   asOf: DateSchema.optional(),
 });
 export class NotifyDefaultersDto extends createZodDto(NotifyDefaultersSchema) {}
+
+/** A fee reminder run: the pupils (ticked, or everyone the filters list), the templates, who is reached. */
+export const FeeReminderSchema = z.object({
+  /** Ticked pupils; without them, everyone the filters below list. */
+  studentIds: z.array(IdSchema).max(5000).optional(),
+  asOf: DateSchema.optional(),
+  classId: IdSchema.optional(),
+  discountId: z
+    .string()
+    .regex(/^(none|\d{1,18})$/)
+    .optional(),
+  minBalance: z.number().min(0).max(100_000_000).optional(),
+  ledger: z.enum(['school', 'hostel']).optional(),
+  /** One template for each channel chosen. */
+  channels: z
+    .array(z.object({ channel: z.enum(['sms', 'whatsapp', 'email']), templateId: IdSchema }))
+    .min(1)
+    .max(3)
+    .refine((v) => new Set(v.map((x) => x.channel)).size === v.length, {
+      message: 'a channel can be chosen once',
+    }),
+  /** Which parent: the father, the mother, both, or the contact marked for notices on the profile. */
+  to: z.enum(['father', 'mother', 'both', 'contact']).default('father'),
+  /** Values for blanks of a template that the pupil's dues do not fill. */
+  variables: z.record(z.string().max(60), z.string().max(500)).optional(),
+  /** Staff on copy (employee ids): each gets the first reminder once and the summary. */
+  cc: z.array(IdSchema).max(12).optional(),
+  /** Remind again those already reminded today. */
+  again: z.boolean().default(false),
+});
+export class FeeReminderDto extends createZodDto(FeeReminderSchema) {}
+export const FeeReminderCcSchema = z.object({ cc: z.array(IdSchema).max(12) });
+export class FeeReminderCcDto extends createZodDto(FeeReminderCcSchema) {}
 
 // ---- Fee set-up, second pass (0098): class rules and payment modes --------------------------------
 export const SetClassRulesSchema = z.object({

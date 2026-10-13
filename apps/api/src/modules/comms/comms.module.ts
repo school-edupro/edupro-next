@@ -54,7 +54,14 @@ import { TemplatesService } from './templates.service';
     PushService,
     AuditService,
   ],
-  exports: [MessagesService, TemplatesService, ConsentsService, CommsSettingsService, PushService],
+  exports: [
+    MessagesService,
+    TemplatesService,
+    ConsentsService,
+    CommsSettingsService,
+    PushService,
+    RequestsService,
+  ],
 })
 export class CommsModule implements OnModuleInit {
   constructor(

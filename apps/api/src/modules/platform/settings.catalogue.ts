@@ -193,6 +193,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Days a withdrawn pupil and the parent may still sign in to the portal with the "Former student / parent" rights; 0 closes the login at once',
     module: 'people',
   },
+  'fees.reminder_cc': {
+    schema: z.array(z.string().regex(/^\d{1,18}$/)).max(12),
+    default: [],
+    description:
+      'Fee reminders: the staff (employee ids) usually on copy; each gets the first reminder once and the summary of the run',
+    module: 'fees',
+  },
   'fees.deposit_slip_limit': {
     schema: z.number().int().min(0).max(500),
     default: 0,

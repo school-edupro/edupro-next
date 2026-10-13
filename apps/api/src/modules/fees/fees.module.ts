@@ -18,6 +18,8 @@ import { FeeDocumentsService } from './fee-documents.service';
 import { FeeGridsController } from './fee-grids.controller';
 import { FeeMisController } from './fee-mis.controller';
 import { FeeMisService } from './fee-mis.service';
+import { FeeRemindersController } from './fee-reminders.controller';
+import { FeeRemindersService } from './fee-reminders.service';
 import { FeeGridsService } from './fee-grids.service';
 import { FeeOpeningController } from './fee-opening.controller';
 import { FeeOpeningService } from './fee-opening.service';
@@ -38,6 +40,7 @@ import { FeesController } from './fees.controller';
     FeeGridsController,
     FeeOpeningController,
     FeeMisController,
+    FeeRemindersController,
   ],
   providers: [
     FeeMastersService,
@@ -53,6 +56,7 @@ import { FeesController } from './fees.controller';
     FeeOpeningService,
     FeeGridsService,
     FeeMisService,
+    FeeRemindersService,
     AuditService,
   ],
   exports: [

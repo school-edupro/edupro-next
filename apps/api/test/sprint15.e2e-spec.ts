@@ -801,6 +801,132 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       expect(teacherNotify.statusCode).toBe(403);
     });
 
+    it('defaulters, worked out live, with the parents; a reminder by template, previewed, then sent', async () => {
+      const list = await inject({
+        method: 'GET',
+        url: '/fees/mis/defaulters?asOf=2026-09-28',
+        headers: h(),
+      });
+      expect(list.statusCode).toBe(200);
+      const rep = list.json() as {
+        columns: Array<{ key: string }>;
+        rows: Array<{ kind: string; cells: Record<string, string | number> }>;
+      };
+      const lines = rep.rows.filter((r) => r.kind === 'row');
+      // the same four pupils the stored list shows, now straight from the bills
+      expect(lines).toHaveLength(4);
+      for (const k of ['father', 'father_mobile', 'mother', 'route', 'slab', 'discount', 'gender'])
+        expect(rep.columns.map((c) => c.key)).toContain(k);
+      const asha = lines.find((r) => r.cells.student === 'Asha Fifteen')!;
+      expect(asha.cells).toMatchObject({ balance: 6000, last_reminded: expect.any(String) });
+      expect(rep.rows.find((r) => r.kind === 'total')!.cells.balance).toBe(
+        lines.reduce((a, r) => a + Number(r.cells.balance), 0),
+      );
+      const big = await inject({
+        method: 'GET',
+        url: '/fees/mis/defaulters?asOf=2026-09-28&minBalance=10000',
+        headers: h(),
+      });
+      expect(big.json().rows.filter((r: { kind: string }) => r.kind === 'row')).toHaveLength(1);
+      const none = await inject({
+        method: 'GET',
+        url: '/fees/mis/defaulters?asOf=2026-09-28&discountId=none',
+        headers: h(),
+      });
+      expect(none.json().rows.filter((r: { kind: string }) => r.kind === 'row')).toHaveLength(4);
+      // the reminder: templates to choose from, and nobody without the right
+      const options = await inject({ method: 'GET', url: '/fees/reminders/options', headers: h() });
+      expect(options.statusCode).toBe(200);
+      const wa = (
+        options.json().templates as Array<{ id: string; code: string; channel: string }>
+      ).find((t) => t.code === 'fee_due' && t.channel === 'whatsapp')!;
+      expect(wa).toBeTruthy();
+      const body = {
+        asOf: '2026-09-28',
+        channels: [{ channel: 'whatsapp', templateId: wa.id }],
+        to: 'contact',
+      };
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: '/fees/reminders/preview',
+            headers: h(classTeacher),
+            json: body,
+          })
+        ).statusCode,
+      ).toBe(403);
+      // Asha was reminded a moment ago: once a day unless asked again; two others have no contact
+      const first = await inject({
+        method: 'POST',
+        url: '/fees/reminders/preview',
+        headers: h(),
+        json: body,
+      });
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ listed: 4, remindedToday: 1 });
+      const again = await inject({
+        method: 'POST',
+        url: '/fees/reminders/preview',
+        headers: h(),
+        json: { ...body, again: true },
+      });
+      const pv = again.json() as {
+        pupils: number;
+        noContact: number;
+        totalDue: string;
+        message: { total: number; rendered: Array<{ channel: string; text: string }> } | null;
+      };
+      expect(pv.pupils + pv.noContact).toBe(4);
+      expect(pv.pupils).toBeGreaterThanOrEqual(1);
+      expect(pv.message!.total).toBe(pv.pupils);
+      // each parent reads the dues of their own child
+      expect(pv.message!.rendered[0]!.text).toMatch(/6000|12000/);
+      const twoChannels = await inject({
+        method: 'POST',
+        url: '/fees/reminders/preview',
+        headers: h(),
+        json: { ...body, channels: [body.channels[0], body.channels[0]] },
+      });
+      expect(twoChannels.statusCode).toBe(400);
+      const sent = await inject({
+        method: 'POST',
+        url: '/fees/reminders/send',
+        headers: h(),
+        json: { ...body, again: true },
+      });
+      expect(sent.statusCode).toBe(201);
+      expect(sent.json()).toMatchObject({ pupils: pv.pupils, parents: pv.pupils, copies: 0 });
+      expect(sent.json().requestId).toBeTruthy();
+      // it is a message request like any other: listed under Communication with its recipients
+      const made = await withMigrator((c) =>
+        c.query<{ title: string; audience: string; n: string }>(
+          `SELECT r.title, r.audience::text, (SELECT count(*) FROM comms_messages m WHERE m.message_request_id = r.id)::text AS n
+             FROM message_requests r WHERE r.id = $1`,
+          [sent.json().requestId],
+        ),
+      );
+      expect(made.rows[0]).toMatchObject({ audience: 'upload' });
+      expect(made.rows[0]!.title).toMatch(/^Fee reminder · /);
+      // nobody is left to remind today without asking again
+      const none2 = await inject({
+        method: 'POST',
+        url: '/fees/reminders/send',
+        headers: h(),
+        json: body,
+      });
+      expect(none2.statusCode).toBe(409);
+      expect(none2.json().type).toBe('fees.reminder_nobody');
+      // the copy list is kept for the school
+      const cc = await inject({
+        method: 'PUT',
+        url: '/fees/reminders/cc',
+        headers: h(),
+        json: { cc: [] },
+      });
+      expect(cc.statusCode).toBe(200);
+    });
+
     it('the forecast mart holds expected, collected and balance per class and due month', async () => {
       const r = await rows('fee_forecast', '');
       expect(r.statusCode).toBe(200);
