@@ -328,6 +328,8 @@ export class FeeMisService {
       months: string | null;
       last_reminded_on: string | null;
       reminded_today: boolean;
+      /** The channels the pupil was already reminded on today. */
+      reminded_channels: string[];
     }>(
       `WITH due AS (
          SELECT d.student_id, sum(d.net - d.paid)::float AS balance, min(d.due_on) AS oldest,
@@ -349,7 +351,8 @@ export class FeeMisService {
                          WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active')) AS discount,
               due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.balance, due.months,
               (SELECT max(fr.sent_on)::text FROM fee_reminders fr WHERE fr.student_id = s.id) AS last_reminded_on,
-              EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE) AS reminded_today
+              EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE) AS reminded_today,
+              COALESCE((SELECT array_agg(DISTINCT fr.channel::text) FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE), '{}') AS reminded_channels
          FROM due JOIN students s ON s.id = due.student_id AND s.deleted_at IS NULL
          LEFT JOIN LATERAL (SELECT e.class_section_id FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1
                              ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) en ON true

@@ -246,7 +246,7 @@ export function ReminderCompose({
             }}
           >
             <input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />
-            <span>Also remind those already reminded today</span>
+            <span>Also remind those already reminded today on the same channel</span>
           </label>
         </section>
 
@@ -395,7 +395,8 @@ export function ReminderCompose({
               </p>
               {view.remindedToday > 0 ? (
                 <p className="ep-field__help">
-                  {view.remindedToday} left out: already reminded today.
+                  {view.remindedToday} left out: already reminded today on this channel. Tick “Also
+                  remind those already reminded today” under step 2 to include them.
                 </p>
               ) : null}
               {view.noContact > 0 ? (

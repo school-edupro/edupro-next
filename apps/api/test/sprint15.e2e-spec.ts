@@ -865,6 +865,19 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       });
       expect(first.statusCode).toBe(200);
       expect(first.json()).toMatchObject({ listed: 4, remindedToday: 1 });
+      // the rule is per channel: the WhatsApp reminder does not stop an SMS the same day
+      const sms = (
+        options.json().templates as Array<{ id: string; code: string; channel: string }>
+      ).find((t) => t.code === 'fee_due' && t.channel === 'sms');
+      if (sms) {
+        const other = await inject({
+          method: 'POST',
+          url: '/fees/reminders/preview',
+          headers: h(),
+          json: { ...body, channels: [{ channel: 'sms', templateId: sms.id }] },
+        });
+        expect(other.json()).toMatchObject({ listed: 4, remindedToday: 0 });
+      }
       const again = await inject({
         method: 'POST',
         url: '/fees/reminders/preview',

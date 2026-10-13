@@ -114,7 +114,7 @@ export class FeeReportsService {
           await c.query(
             `INSERT INTO fee_reminders (school_id, student_id, balance, channel, message_id, sent_by)
              VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())
-             ON CONFLICT (student_id, sent_on) DO NOTHING`,
+             ON CONFLICT (student_id, sent_on, channel) DO NOTHING`,
             [t.student_id, balance.toFixed(2), dto.channel, row.id],
           );
         });

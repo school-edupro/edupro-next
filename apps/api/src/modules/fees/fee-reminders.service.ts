@@ -23,7 +23,7 @@ interface Row {
  * same approval rule, the same delivery and the same record under Communication -> Requests. What this
  * adds is who is reached (father, mother, both or the contact marked for notices), each pupil's own
  * dues as the values of the template, a test to the sender and the seniors on copy, and one reminder a
- * day per pupil.
+ * day per pupil on each channel.
  */
 @Injectable()
 export class FeeRemindersService {
@@ -130,7 +130,8 @@ export class FeeRemindersService {
     let noContact = 0;
     let total = 0;
     for (const p of list) {
-      if (p.reminded_today && !dto.again) {
+      // once a day on each channel: an email this morning does not stop an SMS now
+      if (!dto.again && dto.channels.some((x) => p.reminded_channels.includes(x.channel))) {
         remindedToday += 1;
         continue;
       }
@@ -284,7 +285,7 @@ export class FeeRemindersService {
         throw new DomainError(
           'fees.reminder_nobody',
           plan.remindedToday > 0
-            ? 'Everyone in the list has already been reminded today'
+            ? 'Everyone in the list has already been reminded today on this channel; tick "remind again" to send it once more'
             : 'Nobody in the list can be reached on the channels chosen',
           { status: 409 },
         );
@@ -336,12 +337,13 @@ export class FeeRemindersService {
     }
     await this.db.tenant(tenant, async (c) => {
       for (const p of plan.pupils)
-        await c.query(
-          `INSERT INTO fee_reminders (school_id, student_id, balance, channel, sent_by)
-           VALUES (app.current_school_id(), $1, $2, $3::comms_channel, app.current_user_id())
-           ON CONFLICT (student_id, sent_on) DO NOTHING`,
-          [p.id, p.balance.toFixed(2), dto.channels[0]!.channel],
-        );
+        for (const ch of dto.channels)
+          await c.query(
+            `INSERT INTO fee_reminders (school_id, student_id, balance, channel, sent_by)
+             VALUES (app.current_school_id(), $1, $2, $3::comms_channel, app.current_user_id())
+             ON CONFLICT (student_id, sent_on, channel) DO NOTHING`,
+            [p.id, p.balance.toFixed(2), ch.channel],
+          );
       await this.audit.stage(ctx, c, {
         action: 'fees.defaulter.remind',
         entityType: 'message_requests',
