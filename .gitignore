@@ -45,3 +45,6 @@ docs/data/reports/
 apps/*/playwright-report/
 apps/*/test-results/
 packages/ui/storybook-static/
+
+# report templates shared for reference: they hold real pupil and parent details, never commit
+/new folder/
