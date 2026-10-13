@@ -581,3 +581,50 @@ The reminder screen is laid out like Communication → Compose:
 Each person on copy gets the first reminder once, and an email with the summary of the run. A pupil is
 reminded once a day unless "Also remind those already reminded today" is ticked. The run follows the
 school's message approval rule and shows under Communication → Requests.
+
+## Misc fees announced to pupils (Fees → Misc fees)
+
+A misc fee is a one-off charge outside the school fee: a trip, an activity, an exam form, an ID card.
+It has its own ledger and its own receipt series (MF/…); it never mixes with the school fee bill.
+
+**Announce a fee** (tab "Announce a fee")
+
+1. Choose the misc fee head (Fee setup → Fee heads, kind "misc"), give the fee a name, the amount,
+   the last date and a remark.
+2. Say what it is for parents: *Optional* (it closes on the last date, nobody can pay after it unless
+   the date is extended) or *Mandatory* (it stays due after the last date).
+3. For a trip with limited places tick *Limited seats* and give the number. A seat is taken by paying
+   in full, in the order of payment. When the seats are taken nobody else can pay. A cancelled,
+   bounced or refunded receipt gives the seat back.
+4. Choose who it is for. The four ways add up, and a pupil chosen twice is counted once:
+   whole classes, sections, pupils found by name, or an Excel sheet (download the format: admission
+   number, amount, last date). A row of the sheet with its own amount or date gives that pupil a
+   different amount or last date for the same fee.
+5. *Send for approval.* The fee waits under Fee setup → Approval levels (the same levels as a fee
+   change). Parents see it only after the last level approves.
+
+**After approval** (open the fee from the list)
+
+- *Send the announcement to parents* and *Remind those who have not paid* open the same screen as the
+  fee defaulter reminder: a template for SMS, WhatsApp and email, a preview with the cost, a test to
+  yourself and the seniors on copy, then the send. Template blanks: `{{fee_name}}`, `{{fee_amount}}`,
+  `{{fee_due}}`, `{{last_date}}`, `{{student_name}}`, `{{class}}`, `{{admission_no}}`.
+  A misc fee reminder and a fee due reminder on the same day do not block each other.
+- *Extend the last date*, *Add more pupils*, *Close the fee*, and on a pupil's row *Change amount or
+  date*: each is a request that goes for approval. A pupil's amount cannot go below what is paid.
+
+**Counter collection** (Fees → Misc fees → Counter collection)
+
+Find the pupil, press *Full* (or type a part amount; a fee with seats is always paid in full), choose
+the mode, *Take the payment*. One receipt is made for each fee and opens ready to print (school copy
+and parent copy).
+
+**Cancel, bounce, refund**: on the pupil's misc receipts, *Cancel, bounce or refund* raises a request
+that goes for approval. On approval a cancelled or bounced receipt makes the fee unpaid again; a
+refund (all or part) gets a refund voucher number and reduces what is paid.
+
+**Report**: Fees → Reports centre → *Misc fee dues*: filter by fee, payment and class; choose the
+columns; Excel and PDF; tick rows and send a reminder.
+
+**Parents** see the announced fees of their child under Fees → Other fees, with the last date, the
+amount, what is paid and the seats. Misc fees are paid at the school counter.

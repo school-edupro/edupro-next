@@ -5,6 +5,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { ViewerService } from '../academics/daily/viewer.service';
 import { assertPeriodOpen } from '../ops/ops.service';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from './fee-approval';
@@ -93,6 +94,7 @@ export class MiscFeesService {
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
     private readonly setup: FeeSetupService,
+    private readonly viewer: ViewerService,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -329,6 +331,26 @@ export class MiscFeesService {
         receipts: receipts.rows,
       };
     });
+  }
+
+  /** The misc fees announced for the family's children, as the parent app shows them. */
+  async mine(ctx: RequestContext) {
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family') return { children: [] };
+    const children = [];
+    for (const s of v.students) {
+      const one = await this.forStudent(ctx, s.id).catch((error: unknown) => {
+        if (error instanceof DomainError && error.status === 404) return null;
+        throw error;
+      });
+      if (one && (one.lines.length > 0 || one.receipts.some((r) => r.announced)))
+        children.push({
+          student: one.student,
+          lines: one.lines,
+          receipts: one.receipts.filter((r) => r.announced),
+        });
+    }
+    return { children };
   }
 
   // ---- requests -------------------------------------------------------------------------------------

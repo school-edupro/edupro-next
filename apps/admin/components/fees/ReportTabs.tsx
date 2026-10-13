@@ -17,6 +17,7 @@ export const REPORT_GROUPS = [
       ['period_headwise', 'Period fee, head-wise'],
       ['yearly_projection', 'Yearly projection'],
       ['forecast', 'Forecast'],
+      ['misc_dues', 'Misc fee dues'],
     ],
   },
   {

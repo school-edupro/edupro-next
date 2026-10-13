@@ -41,6 +41,8 @@ export function ReminderCompose({
   staff,
   ccDefault,
   back,
+  backLabel = 'Back to defaulters',
+  amountWord = 'overdue',
   preview,
   test,
   send,
@@ -49,8 +51,11 @@ export function ReminderCompose({
   /** The pupils: ticked ones, or everyone the defaulters filters list. */
   filter: Pick<
     ReminderPayload,
-    'studentIds' | 'asOf' | 'classId' | 'discountId' | 'minBalance' | 'ledger'
+    'studentIds' | 'asOf' | 'classId' | 'discountId' | 'minBalance' | 'ledger' | 'misc'
   >;
+  /** Where "Back" goes, in words, and what the amount is called (overdue, or to pay for a misc fee). */
+  backLabel?: string;
+  amountWord?: string;
   templates: ReminderTemplate[];
   staff: Array<{ id: string; name: string; designation: string | null }>;
   ccDefault: string[];
@@ -129,7 +134,7 @@ export function ReminderCompose({
         </h2>
         <p>
           {done.parents} parent{done.parents === 1 ? '' : 's'} of {done.pupils} pupil
-          {done.pupils === 1 ? '' : 's'}, total overdue {rupees(done.totalDue)}.
+          {done.pupils === 1 ? '' : 's'}, total {amountWord} {rupees(done.totalDue)}.
           {done.copies > 0 ? ` ${String(done.copies)} on copy.` : ''}
         </p>
         <p className="ep-field__help">
@@ -139,7 +144,7 @@ export function ReminderCompose({
         </p>
         <p style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
           <a className="ep-btn ep-btn--primary" href={back}>
-            Back to defaulters
+            {backLabel}
           </a>
           <a className="ep-btn ep-btn--secondary" href="/comms/requests">
             Open Communication → Requests
@@ -156,8 +161,8 @@ export function ReminderCompose({
             1. Channels and templates
           </h2>
           <p className="ep-field__help">
-            Tick a channel and choose its template. The pupil’s name, class, overdue amount and
-            months go into the template’s blanks for each parent.
+            Tick a channel and choose its template. The pupil’s name, class, the amount and what it
+            is for go into the template’s blanks for each parent.
           </p>
           <div className="ep-compose__channels">
             {CHANNELS.map(([c, label]) => {
@@ -391,7 +396,7 @@ export function ReminderCompose({
                 <strong>
                   {view.pupils} pupil{view.pupils === 1 ? '' : 's'}
                 </strong>{' '}
-                of {view.listed} listed · overdue {rupees(view.totalDue)}
+                of {view.listed} listed · {amountWord} {rupees(view.totalDue)}
               </p>
               {view.remindedToday > 0 ? (
                 <p className="ep-field__help">
@@ -519,7 +524,7 @@ export function ReminderCompose({
                   : `Send to ${String(view?.message?.total ?? 0)} parent${view?.message?.total === 1 ? '' : 's'}`}
             </button>
             <a className="ep-btn ep-btn--ghost" href={back}>
-              Back to defaulters
+              {backLabel}
             </a>
           </div>
         </section>

@@ -17,6 +17,12 @@ export interface ReminderPayload {
   variables?: Record<string, string>;
   cc?: string[];
   again?: boolean;
+  misc?: {
+    miscFeeId?: string;
+    headId?: string;
+    pay: 'all' | 'due' | 'unpaid' | 'part';
+    lineIds?: string[];
+  };
 }
 export interface ReminderPreview {
   pupils: number;

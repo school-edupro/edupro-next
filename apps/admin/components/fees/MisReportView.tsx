@@ -3,6 +3,8 @@ import { FilterInput, FilterRow } from '@/components/RegisterTools';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Page } from '@/lib/types';
 import {
+  openMiscReminderForAll,
+  openMiscReminderForTicked,
   openReminderForAll,
   openReminderForTicked,
   resetReportColumns,
@@ -44,7 +46,18 @@ interface MisReport {
 const FILTERS: Partial<
   Record<
     ReportKey,
-    Array<'dates' | 'ledger' | 'mode' | 'class' | 'months' | 'view' | 'asof' | 'discount' | 'least'>
+    Array<
+      | 'dates'
+      | 'ledger'
+      | 'mode'
+      | 'class'
+      | 'months'
+      | 'view'
+      | 'asof'
+      | 'discount'
+      | 'least'
+      | 'miscfee'
+    >
   >
 > = {
   defaulters: ['asof', 'class', 'discount', 'least', 'ledger'],
@@ -57,6 +70,7 @@ const FILTERS: Partial<
   yearly_projection: ['months', 'class'],
   forecast: ['view', 'ledger', 'class'],
   check: ['dates', 'ledger'],
+  misc_dues: ['miscfee', 'class'],
 };
 /** Heavy reports: shown after the filters are chosen. */
 const WAITS: ReportKey[] = ['period_headwise', 'yearly_projection', 'forecast'];
@@ -261,6 +275,11 @@ export async function MisReportView({
   if (has('asof')) q.set('asOf', asOf);
   if (has('discount') && discountId) q.set('discountId', discountId);
   if (has('least') && least) q.set('minBalance', least);
+  const pay = ['due', 'unpaid', 'part', 'paid'].includes(sp.pay ?? '') ? sp.pay! : '';
+  if (has('miscfee')) {
+    if (id(sp.miscFeeId)) q.set('miscFeeId', id(sp.miscFeeId));
+    if (pay) q.set('pay', pay);
+  }
   // the pupil-wise reports and the forecast read every bill of the session: they are worked out only
   // when the filters have been chosen and Apply is pressed, not on opening the tab
   const waits = WAITS.includes(report) && sp.show !== '1';
@@ -276,6 +295,13 @@ export async function MisReportView({
   const discounts = has('discount')
     ? await apiFetch<{ data: Array<{ id: string; name: string }> }>('/fees/discounts')
         .then((x) => x.data)
+        .catch(() => [])
+    : [];
+  const miscFees = has('miscfee')
+    ? await apiFetch<{ rows: Array<{ id: string; title: string; status: string }> }>(
+        '/fees/misc-fees?size=200',
+      )
+        .then((x) => x.rows.filter((f) => f.status === 'announced' || f.status === 'closed'))
         .catch(() => [])
     : [];
   const [classes, periods, modes] = await Promise.all([
@@ -324,8 +350,10 @@ export async function MisReportView({
     u.set('size', String(size));
     return `/fees/reports?${u.toString()}`;
   };
+  const misc = report === 'misc_dues';
   const canRemind =
-    report === 'defaulters' && (me?.permissions.includes('fees.defaulter.notify') ?? false);
+    (report === 'defaulters' || misc) &&
+    (me?.permissions.includes('fees.defaulter.notify') ?? false);
   return (
     <Card title={data?.title ?? TITLE[report] ?? ''}>
       <FilterRow
@@ -434,6 +462,33 @@ export async function MisReportView({
         {has('least') ? (
           <FilterInput id="minBalance" label="Balance of at least (₹)" value={least} />
         ) : null}
+        {has('miscfee') ? (
+          <>
+            <SelectField
+              id="miscFeeId"
+              name="miscFeeId"
+              label="Misc fee"
+              defaultValue={id(sp.miscFeeId)}
+              options={[
+                { value: '', label: 'All misc fees' },
+                ...miscFees.map((f) => ({ value: f.id, label: f.title })),
+              ]}
+            />
+            <SelectField
+              id="pay"
+              name="pay"
+              label="Payment"
+              defaultValue={pay}
+              options={[
+                { value: '', label: 'Paid and unpaid' },
+                { value: 'due', label: 'Not paid in full' },
+                { value: 'unpaid', label: 'Unpaid' },
+                { value: 'part', label: 'Part paid' },
+                { value: 'paid', label: 'Paid' },
+              ]}
+            />
+          </>
+        ) : null}
         {has('class') ? (
           <SelectField
             id="classId"
@@ -507,7 +562,7 @@ export async function MisReportView({
             </div>
           ) : null}
           {canRemind && lines > 0 ? (
-            <form action={openReminderForTicked}>
+            <form action={misc ? openMiscReminderForTicked : openReminderForTicked}>
               {[...q.entries()].map(([k, v]) => (
                 <input key={k} type="hidden" name={k} value={v} />
               ))}
@@ -515,7 +570,11 @@ export async function MisReportView({
                 columns={data.columns}
                 rows={shown}
                 caption={data.title}
-                tick={{ name: 'studentId', cell: 'student_id', label: 'Remind the parents of' }}
+                tick={
+                  misc
+                    ? { name: 'lineId', cell: 'line_id', label: 'Remind the parents of' }
+                    : { name: 'studentId', cell: 'student_id', label: 'Remind the parents of' }
+                }
               />
               <div
                 style={{
@@ -532,9 +591,11 @@ export async function MisReportView({
                 <button
                   type="submit"
                   className="ep-btn ep-btn--secondary"
-                  formAction={openReminderForAll}
+                  formAction={misc ? openMiscReminderForAll : openReminderForAll}
                 >
-                  Send a reminder to all {lines} in this list
+                  {misc
+                    ? 'Send a reminder to all unpaid in this list'
+                    : `Send a reminder to all ${String(lines)} in this list`}
                 </button>
                 <span className="ep-field__help">
                   The next screen chooses the template, shows the message and the cost, and sends a

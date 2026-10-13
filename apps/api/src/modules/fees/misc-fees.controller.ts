@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { FeeDocumentsService } from './fee-documents.service';
 import { FEES } from './fees.dto';
 import {
   AnnounceMiscFeeDto,
@@ -21,13 +22,23 @@ import { MiscFeesService } from './misc-fees.service';
 @ApiBearerAuth()
 @Controller('fees/misc-fees')
 export class MiscFeesController {
-  constructor(private readonly misc: MiscFeesService) {}
+  constructor(
+    private readonly misc: MiscFeesService,
+    private readonly papers: FeeDocumentsService,
+  ) {}
 
   @Get('heads')
   @ApiOperation({ summary: 'The heads a misc fee can be raised under' })
   @RequirePermission(FEES.miscView)
   heads(@ReqCtx() ctx: RequestContext) {
     return this.misc.heads(ctx);
+  }
+
+  @Get('mine')
+  @ApiOperation({ summary: "The misc fees announced for one's own children" })
+  @RequirePermission(FEES.familyView)
+  mine(@ReqCtx() ctx: RequestContext) {
+    return this.misc.mine(ctx);
   }
 
   @Get('sheet-format')
@@ -82,6 +93,13 @@ export class MiscFeesController {
   @RequirePermission(FEES.miscPost)
   collect(@ReqCtx() ctx: RequestContext, @Body() body: CollectMiscFeeDto) {
     return this.misc.collect(ctx, body);
+  }
+
+  @Get('receipts/:id/receipt-view')
+  @ApiOperation({ summary: 'A misc receipt as it prints' })
+  @RequirePermission(FEES.miscView)
+  receiptView(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.papers.miscReceiptView(ctx, id);
   }
 
   @Post('receipts/:id/request')

@@ -81,7 +81,7 @@ export function Notice({ params }: { params: { ok?: string; error?: string; deta
   if (params.ok) {
     return (
       <div style={{ marginBottom: 'var(--sp-4)' }}>
-        <Alert tone="success">Saved.</Alert>
+        <Alert tone="success">{params.detail ?? 'Saved.'}</Alert>
       </div>
     );
   }

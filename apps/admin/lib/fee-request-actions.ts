@@ -521,3 +521,32 @@ export async function openReminderForTicked(fd: FormData) {
 export async function openReminderForAll(fd: FormData) {
   return openReminder(fd, true);
 }
+
+/** The same from the misc fee dues report: the ticked rows are a pupil's fee lines. */
+async function openMiscReminder(fd: FormData, all: boolean) {
+  const q = new URLSearchParams({ misc: '1' });
+  for (const k of ['miscFeeId', 'classId']) if (str(fd, k)) q.set(k, str(fd, k));
+  // a reminder goes to those who still have to pay, whatever the list shows
+  q.set('pay', ['unpaid', 'part'].includes(str(fd, 'pay')) ? str(fd, 'pay') : 'due');
+  if (!all) {
+    const ids = fd
+      .getAll('lineId')
+      .map(String)
+      .filter((x) => /^\d{1,18}$/.test(x));
+    if (ids.length === 0) {
+      const back = new URLSearchParams({ report: 'misc_dues' });
+      for (const k of ['miscFeeId', 'classId', 'pay']) if (str(fd, k)) back.set(k, str(fd, k));
+      redirect(
+        `/fees/reports?${back.toString()}&error=1&detail=${encodeURIComponent('Tick at least one row, or use the button for the whole list')}`,
+      );
+    }
+    q.set('ids', ids.slice(0, 500).join(','));
+  }
+  redirect(`/fees/reminders/new?${q.toString()}`);
+}
+export async function openMiscReminderForTicked(fd: FormData) {
+  return openMiscReminder(fd, false);
+}
+export async function openMiscReminderForAll(fd: FormData) {
+  return openMiscReminder(fd, true);
+}

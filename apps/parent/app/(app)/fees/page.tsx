@@ -59,6 +59,24 @@ interface Intent {
   createdAt: string;
 }
 
+interface MiscChild {
+  student: { id: string; name: string };
+  lines: Array<{
+    id: string;
+    title: string;
+    mandatory: boolean;
+    seats: number | null;
+    seatsTaken: number;
+    remark: string | null;
+    amount: string;
+    paid: string;
+    balance: string;
+    lastDate: string;
+    status: string;
+    blocked: string | null;
+  }>;
+}
+
 const PAY_PLAN = {
   monthly: 'Monthly',
   quarterly: 'Quarterly',
@@ -136,6 +154,11 @@ export default async function FeesPage({
   }
   const kid = await chosenChild(sp.student);
   const shown = children.filter((c) => !kid || c.student.id === kid.id);
+  // misc fees the school has announced for the children (a trip, an activity): paid at the counter
+  const misc = await bff.api
+    .fetch<{ children: MiscChild[] }>('/fees/misc-fees/mine')
+    .then((r) => r.children.filter((c) => !kid || c.student.id === kid.id))
+    .catch(() => [] as MiscChild[]);
   // Sprint 16: the Pay button follows the permission, not whether the intents call answered
   const canPay = permissions.includes('payments.family.pay');
   // Sprint 14: a queued receipt PDF; the worker renders it and the link appears when ready
@@ -437,6 +460,61 @@ export default async function FeesPage({
               </tbody>
             </table>
           )}
+        </Card>
+      ))}
+      {misc.map((m) => (
+        <Card key={`misc-${m.student.id}`} title={`${t(lang, 'Other fees')} · ${m.student.name}`}>
+          <p className="ep-field__help">
+            {t(
+              lang,
+              'Fees announced by the school for a trip, an activity or a form. They are paid at the school fee counter.',
+            )}
+          </p>
+          <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th scope="col">{t(lang, 'Fee')}</th>
+                <th scope="col">{t(lang, 'Last date')}</th>
+                <th scope="col" style={{ textAlign: 'right' }}>
+                  {t(lang, 'Amount')}
+                </th>
+                <th scope="col" style={{ textAlign: 'right' }}>
+                  {t(lang, 'Paid')}
+                </th>
+                <th scope="col">{t(lang, 'Status')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {m.lines.map((l) => (
+                <tr key={l.id}>
+                  <td>
+                    {l.title}
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      {t(lang, l.mandatory ? 'Mandatory' : 'Optional')}
+                      {l.seats === null
+                        ? ''
+                        : ` · ${t(lang, 'Seats')} ${String(l.seatsTaken)}/${String(l.seats)}`}
+                      {l.remark ? ` · ${l.remark}` : ''}
+                    </span>
+                  </td>
+                  <td>{l.lastDate.split('-').reverse().join('-')}</td>
+                  <td style={{ textAlign: 'right' }}>₹{l.amount}</td>
+                  <td style={{ textAlign: 'right' }}>₹{l.paid}</td>
+                  <td>
+                    <Badge
+                      tone={l.status === 'paid' ? 'success' : l.blocked ? 'neutral' : 'warning'}
+                    >
+                      {l.status === 'paid'
+                        ? t(lang, 'Paid')
+                        : l.blocked
+                          ? t(lang, l.blocked)
+                          : `${t(lang, 'To pay')} ₹${l.balance}`}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Card>
       ))}
       {intents.length ? (

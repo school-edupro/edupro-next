@@ -250,6 +250,66 @@ export class FeeDocumentsService {
     });
   }
 
+  /** A misc receipt of a pupil in the same shape as a fee receipt, so it prints on the same sheet. */
+  async miscReceiptView(ctx: RequestContext, receiptId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const p = await c.query<{
+        id: string;
+        student_id: string | null;
+        academic_year_id: string;
+        year: string;
+        receipt_no: string;
+        received_on: string;
+        amount: string;
+        refunded: string;
+        status: string;
+        mode: string;
+        reference: string | null;
+        instrument_no: string | null;
+        bank_name: string | null;
+        remarks: string | null;
+        received_by: string | null;
+        head: string;
+        title: string | null;
+      }>(
+        `SELECT m.id::text, m.student_id::text, m.academic_year_id::text, y.code AS year, m.receipt_no, m.received_on::text, m.amount::text,
+                m.refunded::text, m.status, m.mode, m.reference, m.instrument_no, m.bank_name, m.remarks, u.display_name AS received_by,
+                h.name AS head, f.title
+           FROM misc_receipts m JOIN academic_years y ON y.id = m.academic_year_id JOIN fee_heads h ON h.id = m.head_id
+           LEFT JOIN misc_fee_students l ON l.id = m.misc_fee_student_id LEFT JOIN misc_fees f ON f.id = l.misc_fee_id
+           LEFT JOIN users u ON u.id = m.received_by WHERE m.id = $1`,
+        [receiptId],
+      );
+      const r = p.rows[0];
+      if (!r?.student_id) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+      const head = await this.head(c, r.student_id, r.academic_year_id);
+      return {
+        ...head,
+        year: r.year,
+        id: r.id,
+        receiptNo: r.receipt_no,
+        receivedOn: r.received_on,
+        amount: r.amount,
+        amountWords: amountInWords(r.amount),
+        lateFee: '0.00',
+        advance: '0.00',
+        refunded: r.refunded,
+        status: r.status,
+        mode: r.mode.toUpperCase(),
+        modeKind: r.mode,
+        feeType: 'misc',
+        reference: r.reference,
+        instrumentNo: r.instrument_no,
+        instrumentDate: null,
+        bankName: r.bank_name,
+        remarks: r.remarks && r.remarks !== r.title ? r.remarks : null,
+        receivedBy: r.received_by,
+        depositAccount: null,
+        lines: [{ head: r.title ?? r.head, period: r.title ? r.head : '', amount: r.amount }],
+      };
+    });
+  }
+
   // ---- fee bill ---------------------------------------------------------------------------------
   /** What is payable now: every instalment with a balance that is due up to the date (default: visible to the family). */
   async bill(ctx: RequestContext, studentId: string, upTo?: string): Promise<FeeBill> {
