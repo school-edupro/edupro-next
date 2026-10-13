@@ -68,7 +68,7 @@ export class FeeReportsService {
         `SELECT s.id::text AS student_id, s.display_name AS student, k.code || '-' || cs.name AS section,
                 COALESCE((SELECT sum(d.balance) FROM mart.fee_dues d WHERE d.student_id = s.id AND d.academic_year_id = $2 AND d.balance > 0 AND d.due_on < $3::date), 0)::text AS balance,
                 g.display_name AS guardian_name, g.mobile,
-                EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE) AS reminded_today,
+                EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.misc_fee_id IS NULL AND fr.sent_on = CURRENT_DATE) AS reminded_today,
                 (SELECT name FROM schools WHERE id = app.current_school_id()) AS school
            FROM students s
            LEFT JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active'
@@ -114,7 +114,7 @@ export class FeeReportsService {
           await c.query(
             `INSERT INTO fee_reminders (school_id, student_id, balance, channel, message_id, sent_by)
              VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())
-             ON CONFLICT (student_id, sent_on, channel) DO NOTHING`,
+             ON CONFLICT DO NOTHING`,
             [t.student_id, balance.toFixed(2), dto.channel, row.id],
           );
         });

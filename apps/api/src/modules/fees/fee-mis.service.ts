@@ -18,7 +18,8 @@ export type MisReportId =
   | 'cheque_bounce'
   | 'daybook_grouped'
   | 'period_headwise'
-  | 'yearly_projection';
+  | 'yearly_projection'
+  | 'misc_dues';
 
 export interface MisColumn {
   key: string;
@@ -192,6 +193,7 @@ export class FeeMisService {
     if (id === 'daybook_grouped') return this.headReceipts(c, q, true);
     if (id === 'cheque_bounce') return this.chequeBounce(c, q);
     if (id === 'period_headwise') return this.pupilWise(c, yearId, q, 'head');
+    if (id === 'misc_dues') return this.miscDues(c, yearId, q);
     return this.pupilWise(c, yearId, q, 'month');
   }
 
@@ -368,9 +370,9 @@ export class FeeMisService {
               cs.name AS section_name, k.name AS class_name,
               (SELECT e.roll_no::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS roll_no,
               lp.received_on::text AS last_paid_on, lp.amount::float AS last_paid_amount,
-              (SELECT max(fr.sent_on)::text FROM fee_reminders fr WHERE fr.student_id = s.id) AS last_reminded_on,
-              EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE) AS reminded_today,
-              COALESCE((SELECT array_agg(DISTINCT fr.channel::text) FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE), '{}') AS reminded_channels
+              (SELECT max(fr.sent_on)::text FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.misc_fee_id IS NULL) AS last_reminded_on,
+              EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.misc_fee_id IS NULL AND fr.sent_on = CURRENT_DATE) AS reminded_today,
+              COALESCE((SELECT array_agg(DISTINCT fr.channel::text) FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.misc_fee_id IS NULL AND fr.sent_on = CURRENT_DATE), '{}') AS reminded_channels
          FROM due JOIN students s ON s.id = due.student_id AND s.deleted_at IS NULL
          LEFT JOIN LATERAL (SELECT e.class_section_id FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1
                              ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) en ON true
@@ -488,6 +490,168 @@ export class FeeMisService {
         num('due', 'Due', undefined, 12),
         num('paid', 'Paid', undefined, 12),
         num('balance', 'Balance', undefined, 12),
+        text('last_reminded', 'Last reminded', 9),
+      ],
+      rows,
+    };
+  }
+
+  // ---- misc fees announced to pupils: who has paid and who has not --------------------------------------
+  /** A row for each pupil of each announced misc fee; the reminder screen reads the same rows. */
+  async miscDueRows(c: PoolClient, yearId: string, q: FeeMisQueryDto, lineIds?: string[]) {
+    const r = await c.query<{
+      line_id: string;
+      fee_id: string;
+      student_id: string;
+      admission_no: string;
+      student: string;
+      class: string | null;
+      class_name: string | null;
+      section_name: string | null;
+      roll_no: string | null;
+      father: string | null;
+      father_mobile: string | null;
+      father_email: string | null;
+      mother: string | null;
+      mother_mobile: string | null;
+      mother_email: string | null;
+      contact: string | null;
+      contact_mobile: string | null;
+      contact_email: string | null;
+      fee: string;
+      head: string;
+      mandatory: boolean;
+      seats: number | null;
+      last_date: string;
+      amount: number;
+      paid: number;
+      balance: number;
+      state: string;
+      receipts: string | null;
+      last_paid_on: string | null;
+      reminded_channels: string[];
+      last_reminded_on: string | null;
+    }>(
+      `SELECT l.id::text AS line_id, mf.id::text AS fee_id, s.id::text AS student_id, s.admission_no, s.display_name AS student, k.code || '-' || cs.name AS class,
+              k.name AS class_name, cs.name AS section_name, en.roll_no::text AS roll_no,
+              f.name AS father, f.mobile AS father_mobile, f.email AS father_email,
+              m.name AS mother, m.mobile AS mother_mobile, m.email AS mother_email,
+              n.name AS contact, n.mobile AS contact_mobile, n.email AS contact_email,
+              mf.title AS fee, h.name AS head, mf.mandatory, mf.seats, COALESCE(l.last_date, mf.last_date)::text AS last_date,
+              l.amount::float AS amount, l.paid::float AS paid, (l.amount - l.paid)::float AS balance,
+              CASE WHEN l.paid >= l.amount THEN 'Paid'
+                   WHEN mf.status = 'closed' OR (NOT mf.mandatory AND COALESCE(l.last_date, mf.last_date) < CURRENT_DATE) THEN 'Closed'
+                   WHEN mf.seats IS NOT NULL AND l.paid = 0 AND (SELECT count(*) FROM misc_fee_students x WHERE x.misc_fee_id = mf.id AND x.status = 'paid') >= mf.seats THEN 'Seats full'
+                   WHEN l.paid > 0 THEN 'Part paid'
+                   WHEN COALESCE(l.last_date, mf.last_date) < CURRENT_DATE THEN 'Overdue' ELSE 'Unpaid' END AS state,
+              (SELECT string_agg(r.receipt_no, ', ' ORDER BY r.id) FROM misc_receipts r WHERE r.misc_fee_student_id = l.id AND r.status = 'posted') AS receipts,
+              (SELECT max(r.received_on)::text FROM misc_receipts r WHERE r.misc_fee_student_id = l.id AND r.status = 'posted') AS last_paid_on,
+              COALESCE((SELECT array_agg(DISTINCT fr.channel::text) FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.misc_fee_id = mf.id AND fr.sent_on = CURRENT_DATE), '{}') AS reminded_channels,
+              (SELECT max(fr.sent_on)::text FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.misc_fee_id = mf.id) AS last_reminded_on
+         FROM misc_fee_students l JOIN misc_fees mf ON mf.id = l.misc_fee_id JOIN fee_heads h ON h.id = mf.head_id
+         JOIN students s ON s.id = l.student_id AND s.deleted_at IS NULL
+         LEFT JOIN LATERAL (SELECT e.class_section_id, e.roll_no FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1
+                             ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) en ON true
+         LEFT JOIN class_sections cs ON cs.id = en.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+         LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                             WHERE sg.student_id = s.id AND sg.relation = 'father' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) f ON true
+         LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                             WHERE sg.student_id = s.id AND sg.relation = 'mother' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) m ON true
+         LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                             WHERE sg.student_id = s.id AND sg.receives_notifications AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) n ON true
+        WHERE mf.academic_year_id = $1 AND mf.status IN ('announced', 'closed') AND l.status <> 'cancelled'
+          AND ($2::bigint IS NULL OR mf.id = $2) AND ($3::bigint IS NULL OR mf.head_id = $3) AND ($4::bigint IS NULL OR cs.class_id = $4)
+          AND ($5::text IS NULL OR ($5 = 'paid' AND l.paid >= l.amount) OR ($5 = 'due' AND l.paid < l.amount)
+               OR ($5 = 'unpaid' AND l.paid = 0 AND l.amount > 0) OR ($5 = 'part' AND l.paid > 0 AND l.paid < l.amount))
+          AND ($6::date IS NULL OR COALESCE(l.last_date, mf.last_date) >= $6::date) AND ($7::date IS NULL OR COALESCE(l.last_date, mf.last_date) <= $7::date)
+          AND ($8::bigint[] IS NULL OR l.id = ANY($8::bigint[]))
+        ORDER BY mf.id DESC, k.display_order NULLS LAST, cs.name, s.display_name
+        LIMIT 20000`,
+      [
+        yearId,
+        q.miscFeeId ?? null,
+        q.headId ?? null,
+        q.classId ?? null,
+        q.pay ?? null,
+        q.from ?? null,
+        q.to ?? null,
+        lineIds ?? null,
+      ],
+    );
+    return r.rows;
+  }
+
+  private async miscDues(c: PoolClient, yearId: string, q: FeeMisQueryDto): Promise<MisReport> {
+    const list = await this.miscDueRows(c, yearId, q);
+    const rows: MisRow[] = list.map((x, i) => ({
+      kind: 'row',
+      cells: {
+        // not columns: the screen ticks pupils by the line
+        line_id: x.line_id,
+        student_id: x.student_id,
+        sr: i + 1,
+        admission_no: x.admission_no,
+        student: x.student,
+        class: x.class ?? '',
+        father: x.father ?? '',
+        father_mobile: x.father_mobile ?? '',
+        mother: x.mother ?? '',
+        mother_mobile: x.mother_mobile ?? '',
+        fee: x.fee,
+        head: x.head,
+        mandatory: x.mandatory ? 'Mandatory' : 'Optional',
+        last_date: dmy(x.last_date),
+        due: x.amount,
+        paid: x.paid,
+        balance: x.balance,
+        pay_status: x.state,
+        receipts: x.receipts ?? '',
+        last_paid: x.last_paid_on ? dmy(x.last_paid_on) : '',
+        last_reminded: x.last_reminded_on ? dmy(x.last_reminded_on) : 'Never',
+      },
+    }));
+    rows.push({
+      kind: 'total',
+      label: `Total · ${String(list.length)} row(s)`,
+      cells: {
+        due: list.reduce((a, x) => a + x.amount, 0),
+        paid: list.reduce((a, x) => a + x.paid, 0),
+        balance: list.reduce((a, x) => a + x.balance, 0),
+      },
+    });
+    const pay = { due: 'Unpaid and part paid', unpaid: 'Unpaid', part: 'Part paid', paid: 'Paid' };
+    return {
+      report: 'misc_dues',
+      title: 'Misc fee dues',
+      sheet: 'Misc fee dues',
+      filters: [
+        q.miscFeeId ? `Fee: ${list[0]?.fee ?? 'one fee'}` : 'All misc fees',
+        q.classId ? 'One class' : 'All classes',
+        q.pay ? pay[q.pay] : 'Paid and unpaid',
+        ...(q.from || q.to
+          ? [`Last date ${q.from ? dmy(q.from) : 'start'} to ${q.to ? dmy(q.to) : 'end'}`]
+          : []),
+      ],
+      note: 'A row for each pupil of each announced misc fee. Due is the amount set for the pupil, Paid is what misc receipts hold against it after cancelled, bounced and refunded receipts are taken off. An optional fee past its last date shows Closed and is not asked for again.',
+      columns: [
+        num('sr', 'Sr No', undefined, 5),
+        text('admission_no', 'Admission no.', 10),
+        text('student', 'Student', 20),
+        text('class', 'Class', 8),
+        text('father', 'Father', 18),
+        text('father_mobile', 'Father mobile', 11),
+        text('mother', 'Mother', 18),
+        text('mother_mobile', 'Mother mobile', 11),
+        text('fee', 'Misc fee', 20),
+        text('head', 'Head', 13),
+        text('mandatory', 'Mandatory', 9),
+        text('last_date', 'Last date', 9),
+        num('due', 'Due', undefined, 11),
+        num('paid', 'Paid', undefined, 11),
+        num('balance', 'Balance', undefined, 11),
+        text('pay_status', 'Status', 9),
+        text('receipts', 'Receipt no.', 14),
+        text('last_paid', 'Paid on', 9),
         text('last_reminded', 'Last reminded', 9),
       ],
       rows,

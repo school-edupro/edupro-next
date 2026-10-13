@@ -350,6 +350,7 @@ export const FeeMisReportSchema = z.enum([
   'daybook_grouped',
   'period_headwise',
   'yearly_projection',
+  'misc_dues',
 ]);
 export const FeeMisQuerySchema = z.object({
   from: RegisterDay.optional(),
@@ -371,6 +372,10 @@ export const FeeMisQuerySchema = z.object({
     .regex(/^(none|\d{1,18})$/)
     .optional(),
   minBalance: z.coerce.number().min(0).max(100_000_000).optional(),
+  /** Misc fee dues: one announced fee, one head, and who to list (due = unpaid or part paid). */
+  miscFeeId: IdSchema.optional(),
+  headId: IdSchema.optional(),
+  pay: z.enum(['due', 'unpaid', 'part', 'paid']).optional(),
 });
 export class FeeMisQueryDto extends createZodDto(FeeMisQuerySchema) {}
 export const FeeMisFileQuerySchema = FeeMisQuerySchema.extend({
@@ -485,6 +490,18 @@ export const FeeReminderSchema = z.object({
   cc: z.array(IdSchema).max(12).optional(),
   /** Remind again those already reminded today. */
   again: z.boolean().default(false),
+  /**
+   * A message about announced misc fees instead of fee dues: the announcement to everyone on a fee
+   * (pay "all"), or a reminder to those who have not paid. Ticked rows are the pupil's fee lines.
+   */
+  misc: z
+    .object({
+      miscFeeId: IdSchema.optional(),
+      headId: IdSchema.optional(),
+      pay: z.enum(['all', 'due', 'unpaid', 'part']).default('due'),
+      lineIds: z.array(IdSchema).max(5000).optional(),
+    })
+    .optional(),
 });
 export class FeeReminderDto extends createZodDto(FeeReminderSchema) {}
 export const FeeReminderCcSchema = z.object({ cc: z.array(IdSchema).max(12) });

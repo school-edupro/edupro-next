@@ -301,6 +301,54 @@ describe('misc fees announced to pupils (e2e)', () => {
     expect((await linesOf(pupils[0]!)).lines.some((l) => l.title === 'Never')).toBe(false);
   });
 
+  it('the dues report lists every pupil of every fee; a reminder goes only to those who can still pay', async () => {
+    const rep = (await get('/fees/mis/misc_dues')) as {
+      rows: Array<{ kind: string; cells: Record<string, string | number> }>;
+    };
+    const lines = rep.rows.filter((r) => r.kind === 'row');
+    expect(lines).toHaveLength(6);
+    expect(lines.filter((r) => r.cells.pay_status === 'Closed')).toHaveLength(3);
+    expect(rep.rows.find((r) => r.kind === 'total')!.cells).toMatchObject({
+      due: 100 + 150 + 300 + 1500,
+      paid: 100 + 300,
+    });
+    const due = await get('/fees/mis/misc_dues?pay=due');
+    expect(due.rows.filter((r: { kind: string }) => r.kind === 'row')).toHaveLength(5);
+    const file = await inject({
+      method: 'GET',
+      url: '/fees/mis/misc_dues/file?format=xlsx&pay=due',
+      headers: h(),
+    });
+    expect(file.statusCode).toBe(200);
+    const made = await post(
+      '/comms/templates',
+      {
+        code: 'misc_fee',
+        channel: 'email',
+        name: 'Misc fee',
+        subject: '{{fee_name}}',
+        body: 'Dear {{recipient_name}}, {{fee_name}} of Rs. {{fee_due}} for {{student_name}} is to be paid by {{last_date}}.',
+      },
+      admin,
+    );
+    expect(made.statusCode).toBe(201);
+    const t = { id: made.json().id as string };
+    const preview = await post(
+      '/fees/reminders/preview',
+      { channels: [{ channel: 'email', templateId: t.id }], to: 'father', misc: { pay: 'due' } },
+      admin,
+    );
+    expect(preview.statusCode).toBe(200);
+    // the two still open on the science kit; the closed trip is not asked for (and nobody has a parent here)
+    expect(preview.json()).toMatchObject({ listed: 2, noContact: 2, pupils: 0 });
+    const everyone = await post(
+      '/fees/reminders/preview',
+      { channels: [{ channel: 'email', templateId: t.id }], to: 'father', misc: { pay: 'all' } },
+      admin,
+    );
+    expect(everyone.json().listed).toBe(6);
+  });
+
   it('with approval levels set, the request goes through My approvals', async () => {
     expect((await post('/workflow/definitions/defaults', {}, admin)).statusCode).toBe(201);
     const r = await post('/fees/misc-fees', {

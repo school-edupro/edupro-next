@@ -109,6 +109,7 @@ export class FeeRemindersService {
   /** Who gets the reminder and with which values: one row per parent reached. */
   private async plan(c: PoolClient, ctx: RequestContext, dto: FeeReminderDto) {
     const yearId = this.year(ctx);
+    if (dto.misc) return this.miscPlan(c, yearId, dto);
     const { asOf, rows: list } = await this.mis.defaulterRows(
       c,
       yearId,
@@ -125,7 +126,7 @@ export class FeeRemindersService {
     const needMobile = dto.channels.some((x) => x.channel !== 'email');
     const needEmail = dto.channels.some((x) => x.channel === 'email');
     const rows: Row[] = [];
-    const pupils: Array<{ id: string; balance: number }> = [];
+    const pupils: Array<{ id: string; balance: number; miscFeeId?: string }> = [];
     let remindedToday = 0;
     let noContact = 0;
     let total = 0;
@@ -196,6 +197,106 @@ export class FeeRemindersService {
     return { asOf, rows, pupils, total, remindedToday, noContact, listed: list.length };
   }
 
+  /**
+   * The same for announced misc fees: a message for each pupil's fee, to everyone on it (the
+   * announcement) or to those who still have to pay. A paid, closed or full fee is not asked for.
+   */
+  private async miscPlan(c: PoolClient, yearId: string, dto: FeeReminderDto) {
+    const m = dto.misc!;
+    const all = await this.mis.miscDueRows(
+      c,
+      yearId,
+      {
+        miscFeeId: m.miscFeeId,
+        headId: m.headId,
+        classId: dto.classId,
+        pay: m.pay === 'all' ? undefined : m.pay,
+      },
+      m.lineIds?.length ? m.lineIds : undefined,
+    );
+    const list = all.filter(
+      (p) => m.pay === 'all' || ['Unpaid', 'Overdue', 'Part paid'].includes(p.state),
+    );
+    const day = (v: string) => v.slice(0, 10).split('-').reverse().join('-');
+    const asOf = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const needMobile = dto.channels.some((x) => x.channel !== 'email');
+    const needEmail = dto.channels.some((x) => x.channel === 'email');
+    const rows: Row[] = [];
+    const pupils: Array<{ id: string; balance: number; miscFeeId?: string }> = [];
+    let remindedToday = 0;
+    let noContact = 0;
+    let total = 0;
+    for (const p of list) {
+      if (!dto.again && dto.channels.some((x) => p.reminded_channels.includes(x.channel))) {
+        remindedToday += 1;
+        continue;
+      }
+      const people = (
+        dto.to === 'father'
+          ? [[p.father, p.father_mobile, p.father_email]]
+          : dto.to === 'mother'
+            ? [[p.mother, p.mother_mobile, p.mother_email]]
+            : dto.to === 'both'
+              ? [
+                  [p.father, p.father_mobile, p.father_email],
+                  [p.mother, p.mother_mobile, p.mother_email],
+                ]
+              : [[p.contact, p.contact_mobile, p.contact_email]]
+      ).filter(([, mobile, email]) => (needMobile && mobile) || (needEmail && email));
+      if (people.length === 0) {
+        noContact += 1;
+        continue;
+      }
+      const amount = p.balance.toFixed(2);
+      const inr = p.balance.toLocaleString('en-IN');
+      for (const [name, mobile, email] of people)
+        rows.push({
+          name: name ?? 'Parent',
+          mobile: mobile ?? null,
+          email: email ?? null,
+          vars: {
+            recipient_name: name ?? 'Parent',
+            guardian_name: name ?? 'Parent',
+            parent_name: name ?? 'Parent',
+            name: name ?? 'Parent',
+            father_name: p.father ?? '',
+            mother_name: p.mother ?? '',
+            student_name: p.student,
+            admission_no: p.admission_no,
+            class: p.class ?? '',
+            class_name: p.class_name ?? '',
+            section: p.section_name ?? '',
+            roll_no: p.roll_no ?? '',
+            // the fee's own words, and the names a fee reminder template already uses
+            fee_name: p.fee,
+            misc_fee: p.fee,
+            fee_head: p.head,
+            fee_due_heads: p.fee,
+            fee_amount: p.amount.toLocaleString('en-IN'),
+            fee_due: inr,
+            amount,
+            balance: amount,
+            due_amount: amount,
+            last_date: day(p.last_date),
+            due_date: day(p.last_date),
+            mandatory: p.mandatory ? 'Mandatory' : 'Optional',
+            seats: p.seats === null ? '' : String(p.seats),
+            last_paid_amount: p.paid ? p.paid.toLocaleString('en-IN') : '',
+            last_paid_date: p.last_paid_on ? day(p.last_paid_on) : '',
+            date: day(asOf),
+            as_of: day(asOf),
+            due_since: day(p.last_date),
+            days_overdue: '',
+            months: p.fee,
+            fee_month: p.fee,
+          },
+        });
+      pupils.push({ id: p.student_id, balance: p.balance, miscFeeId: p.fee_id });
+      total += p.balance;
+    }
+    return { asOf, rows, pupils, total, remindedToday, noContact, listed: list.length };
+  }
+
   private request(dto: FeeReminderDto, title: string, upload: Row[]): CreateRequestDto {
     return CreateRequestSchema.parse({
       title,
@@ -224,7 +325,10 @@ export class FeeRemindersService {
     if (plan.rows.length === 0) return { ...base, message: null };
     return {
       ...base,
-      message: await this.requests.preview(ctx, this.request(dto, 'Fee reminder', plan.rows)),
+      message: await this.requests.preview(
+        ctx,
+        this.request(dto, dto.misc ? 'Misc fee message' : 'Fee reminder', plan.rows),
+      ),
     };
   }
 
@@ -284,7 +388,10 @@ export class FeeRemindersService {
         'Your login has no mobile number or email to send the test to',
         { status: 409 },
       );
-    const made = await this.requests.create(ctx, this.request(dto, '[Test] Fee reminder', rows));
+    const made = await this.requests.create(
+      ctx,
+      this.request(dto, dto.misc ? '[Test] Misc fee message' : '[Test] Fee reminder', rows),
+    );
     return { requestId: made.id, status: made.status, to: rows.map((r) => r.name) };
   }
 
@@ -312,7 +419,7 @@ export class FeeRemindersService {
       return { plan, copies, sender: who.rows[0]?.name ?? '' };
     });
     const { plan, copies, sender } = prepared;
-    const title = `Fee reminder · ${String(plan.pupils.length)} pupil${plan.pupils.length === 1 ? '' : 's'} · Rs. ${plan.total.toFixed(2)}`;
+    const title = `${dto.misc ? (dto.misc.pay === 'all' ? 'Misc fee announcement' : 'Misc fee reminder') : 'Fee reminder'} · ${String(plan.pupils.length)} pupil${plan.pupils.length === 1 ? '' : 's'} · Rs. ${plan.total.toFixed(2)}`;
     const made = await this.requests.create(
       ctx,
       this.request(dto, title, [...plan.rows, ...copies]),
@@ -354,13 +461,13 @@ export class FeeRemindersService {
       for (const p of plan.pupils)
         for (const ch of dto.channels)
           await c.query(
-            `INSERT INTO fee_reminders (school_id, student_id, balance, channel, sent_by)
-             VALUES (app.current_school_id(), $1, $2, $3::comms_channel, app.current_user_id())
-             ON CONFLICT (student_id, sent_on, channel) DO NOTHING`,
-            [p.id, p.balance.toFixed(2), ch.channel],
+            `INSERT INTO fee_reminders (school_id, student_id, balance, channel, sent_by, misc_fee_id)
+             VALUES (app.current_school_id(), $1, $2, $3::comms_channel, app.current_user_id(), $4)
+             ON CONFLICT DO NOTHING`,
+            [p.id, p.balance.toFixed(2), ch.channel, p.miscFeeId ?? null],
           );
       await this.audit.stage(ctx, c, {
-        action: 'fees.defaulter.remind',
+        action: dto.misc ? 'fees.misc.remind' : 'fees.defaulter.remind',
         entityType: 'message_requests',
         entityId: made.id,
         after: {
