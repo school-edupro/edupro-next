@@ -41,6 +41,7 @@ export default async function FeeReminderPage({
     templates: ReminderTemplate[];
     staff: Array<{ id: string; name: string; designation: string | null }>;
     cc: string[];
+    whatsappNotApproved?: number;
   }>('/fees/reminders/options');
   // back to the same list of defaulters (or of misc fee dues)
   const back = new URLSearchParams({ report: misc ? 'misc_dues' : 'defaulters' });
@@ -74,6 +75,7 @@ export default async function FeeReminderPage({
         templates={options.templates}
         staff={options.staff}
         ccDefault={options.cc}
+        whatsappNotApproved={options.whatsappNotApproved ?? 0}
         back={backHref}
         backLabel={misc ? 'Back to misc fees' : undefined}
         amountWord={misc ? 'to pay' : undefined}

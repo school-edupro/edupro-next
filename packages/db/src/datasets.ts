@@ -552,8 +552,10 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       { key: 'cleared_on', header: 'Bank cleared', type: 'date', width: 12 },
     ],
     query: (p) => ({
-      // reversed receipts never appear (legacy Cancel/reversed); bounced ones stay with their status; paid
-      // refunds are negative lines on the day they were paid out
+      // reversed fee receipts never appear (legacy Cancel/reversed); bounced ones stay with their status; paid
+      // refunds are negative lines on the day they were paid out. Misc receipts taken back by approval are
+      // listed with their status (cancelled, bounced) and not counted; a misc refund is a minus line on the
+      // day it was approved, under its voucher number
       text: `SELECT * FROM (
                SELECT 'receipt' AS kind, p.ledger::text AS ledger, p.receipt_no, p.received_on, s.admission_no, s.display_name AS payer,
                       k.code || '-' || cs.name AS section, COALESCE(p.mode_label, p.mode) AS mode, p.instrument_no, p.bank_name, p.reference,
@@ -568,7 +570,16 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                  FROM misc_receipts m LEFT JOIN students s ON s.id = m.student_id LEFT JOIN users u ON u.id = m.received_by
                  LEFT JOIN enrolments e ON e.student_id = m.student_id AND e.academic_year_id = m.academic_year_id AND e.status = 'active'
                  LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
-                WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status = 'posted'
+                WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status IN ('posted', 'bounced', 'reversed')
+               UNION ALL
+               SELECT 'misc_refund', 'misc', COALESCE(q.voucher_no, m.receipt_no), (q.decided_at AT TIME ZONE 'Asia/Kolkata')::date, s.admission_no, m.payer_name, k.code || '-' || cs.name,
+                      COALESCE(q.payload->>'mode', 'cash'), NULL, NULL, COALESCE(q.payload->>'reference', 'Refund of ' || m.receipt_no),
+                      -(q.result->>'back')::numeric, 0, -(q.result->>'back')::numeric, 'refund', u.display_name, NULL
+                 FROM misc_fee_requests q JOIN misc_receipts m ON m.id = q.receipt_id LEFT JOIN students s ON s.id = m.student_id LEFT JOIN users u ON u.id = q.decided_by
+                 LEFT JOIN enrolments e ON e.student_id = m.student_id AND e.academic_year_id = m.academic_year_id AND e.status = 'active'
+                 LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+                WHERE q.kind = 'receipt_refund' AND q.status = 'approved'
+                  AND (q.decided_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
                UNION ALL
                -- a refund of last year's advance has no receipt behind it: it is listed by its voucher
                SELECT 'refund', COALESCE(p.ledger::text, 'school'), COALESCE(p.receipt_no, r.voucher_no), r.paid_on, s.admission_no, s.display_name, k.code || '-' || cs.name, r.mode, NULL, NULL, r.reference,
@@ -584,7 +595,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
     }),
     // the summary the screen shows under the day book: a bounced cheque is listed but not counted
     summary: (rows) => {
-      const counted = rows.filter((r) => r.status !== 'bounced');
+      const counted = rows.filter((r) => r.status !== 'bounced' && r.status !== 'reversed');
       const sum = (list: Array<Record<string, unknown>>, key: string) =>
         list.reduce((a, r) => a + Number(r[key] ?? 0), 0);
       const line = (payer: string, list: Array<Record<string, unknown>>, mode = '') => ({
@@ -615,7 +626,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
         {
           payer: 'Refunds paid (already taken off above)',
           amount: -sum(
-            rows.filter((r) => r.kind === 'refund'),
+            rows.filter((r) => r.kind === 'refund' || r.kind === 'misc_refund'),
             'amount',
           ),
         },
@@ -623,6 +634,13 @@ export const DATASETS: Record<string, DatasetDefinition> = {
           payer: 'Bounced cheques (listed, not counted)',
           amount: sum(
             rows.filter((r) => r.status === 'bounced'),
+            'amount',
+          ),
+        },
+        {
+          payer: 'Cancelled misc receipts (listed, not counted)',
+          amount: sum(
+            rows.filter((r) => r.status === 'reversed'),
             'amount',
           ),
         },
@@ -660,6 +678,11 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                  SELECT r.paid_on, p.ledger::text, r.mode, 0, 0, 0, r.amount
                    FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id
                   WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
+                 UNION ALL
+                 SELECT (q.decided_at AT TIME ZONE 'Asia/Kolkata')::date, 'misc', COALESCE(q.payload->>'mode', 'cash'), 0, 0, 0, (q.result->>'back')::numeric
+                   FROM misc_fee_requests q
+                  WHERE q.kind = 'receipt_refund' AND q.status = 'approved'
+                    AND (q.decided_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
                ) x
               WHERE ($3::text IS NULL OR x.ledger = $3)
               GROUP BY x.on_date, x.ledger, x.mode

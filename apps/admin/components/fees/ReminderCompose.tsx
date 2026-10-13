@@ -43,6 +43,7 @@ export function ReminderCompose({
   back,
   backLabel = 'Back to defaulters',
   amountWord = 'overdue',
+  whatsappNotApproved = 0,
   preview,
   test,
   send,
@@ -55,6 +56,8 @@ export function ReminderCompose({
   >;
   /** Where "Back" goes, in words, and what the amount is called (overdue, or to pay for a misc fee). */
   backLabel?: string;
+  /** WhatsApp templates left out of the list: they have no approved template name yet. */
+  whatsappNotApproved?: number;
   amountWord?: string;
   templates: ReminderTemplate[];
   staff: Array<{ id: string; name: string; designation: string | null }>;
@@ -187,6 +190,13 @@ export function ReminderCompose({
                     />
                     <strong>{label}</strong>
                   </label>
+                  {c === 'whatsapp' && whatsappNotApproved > 0 ? (
+                    <p className="ep-field__help">
+                      Only templates approved by WhatsApp are listed. {whatsappNotApproved} more
+                      have no approved template name yet (Communication → Templates) and would not
+                      be delivered.
+                    </p>
+                  ) : null}
                   {list.length === 0 ? (
                     <p className="ep-field__help">
                       No active {label} template. Add one under Communication → Templates.

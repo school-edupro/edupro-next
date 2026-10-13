@@ -1412,9 +1412,11 @@ export class FeeMisService {
       receipt: 'Receipt',
       misc: 'Misc receipt',
       refund: 'Refund',
+      misc_refund: 'Misc refund',
     };
     const list = got.rows;
-    const counted = list.filter((r) => r.status !== 'bounced');
+    // a bounced cheque and a cancelled misc receipt are listed with their status and counted nowhere
+    const counted = list.filter((r) => r.status !== 'bounced' && r.status !== 'reversed');
     const sum = (rows: Array<Record<string, unknown>>, key: string) =>
       rows.reduce((a, r) => a + Number(r[key] ?? 0), 0);
     const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
@@ -1439,16 +1441,18 @@ export class FeeMisService {
         status:
           r.status === 'bounced'
             ? 'Bounced (not counted)'
-            : r.status === 'refund'
-              ? 'Refund paid'
-              : (STATUS[str(r.status)] ?? str(r.status)),
+            : r.status === 'reversed'
+              ? 'Cancelled (not counted)'
+              : r.status === 'refund'
+                ? 'Refund paid'
+                : (STATUS[str(r.status)] ?? str(r.status)),
         received_by: str(r.received_by),
         cleared_on: day(r.cleared_on),
       },
     }));
     rows.push({
       kind: 'total',
-      label: 'Total (bounced cheques not counted)',
+      label: 'Total (bounced and cancelled not counted)',
       cells: {
         principal: sum(counted, 'principal'),
         late_fee: sum(counted, 'late_fee'),
@@ -1493,9 +1497,12 @@ export class FeeMisService {
         ],
       };
     };
-    const refunds = list.filter((r) => r.kind === 'refund');
+    const isRefund = (r: Record<string, unknown>) =>
+      r.kind === 'refund' || r.kind === 'misc_refund';
+    const refunds = list.filter(isRefund);
     const bounced = list.filter((r) => r.status === 'bounced');
-    const receipts = list.filter((r) => r.kind !== 'refund');
+    const cancelled = list.filter((r) => r.status === 'reversed');
+    const receipts = list.filter((r) => !isRefund(r));
     const ledgers = [...new Set(receipts.map((r) => str(r.ledger)))].sort();
     return {
       report: 'day_book',
@@ -1506,7 +1513,7 @@ export class FeeMisService {
         q.ledger ? `Ledger: ${q.ledger}` : 'All ledgers',
         ...(q.mode ? [`Mode: ${q.mode}`] : []),
       ],
-      note: 'A cancelled receipt is not listed. A bounced cheque is listed with its status and is not counted in any total. A refund is a minus line on the day it was paid, so the totals are net of refunds.',
+      note: 'A cancelled fee receipt is not listed. A bounced cheque and a cancelled misc receipt are listed with their status and are not counted in any total. A refund (of a fee or a misc receipt) is a minus line on the day it was paid, so the totals are net of refunds.',
       columns: [
         num('sr', 'Sr No', undefined, 5),
         text('date', 'Date', 9),
@@ -1553,6 +1560,14 @@ export class FeeMisService {
                 name: 'Bounced cheques (listed, not counted)',
                 count: bounced.length,
                 amount: sum(bounced, 'amount'),
+              },
+            },
+            {
+              kind: 'row',
+              cells: {
+                name: 'Cancelled misc receipts (listed, not counted)',
+                count: cancelled.length,
+                amount: sum(cancelled, 'amount'),
               },
             },
             ...ledgers.map((l): MisRow => {
@@ -1798,7 +1813,12 @@ export class FeeMisService {
         .reduce((a, [, v]) => a + Number(v ?? 0), 0);
     // misc receipts are in the day book only: they are taken out to compare it with the fee reports
     const miscInBook = book.rows
-      .filter((x) => x.kind === 'row' && x.cells.kind === 'Misc receipt')
+      .filter(
+        (x) =>
+          x.kind === 'row' &&
+          (x.cells.kind === 'Misc receipt' || x.cells.kind === 'Misc refund') &&
+          !String(x.cells.status).includes('not counted'),
+      )
       .reduce((a, x) => a + Number(x.cells.amount ?? 0), 0);
     type Check = [
       group: string,

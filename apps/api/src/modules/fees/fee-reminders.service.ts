@@ -75,14 +75,25 @@ export class FeeRemindersService {
       }>(
         `SELECT id::text, code, channel::text AS channel, name, left(regexp_replace(body, '<[^>]+>', ' ', 'g'), 240) AS body
            FROM comms_templates WHERE deleted_at IS NULL AND status = 'active' AND channel IN ('sms', 'whatsapp', 'email')
+            -- WhatsApp delivers only a template approved by Meta: one without its approved name would fail for every parent
+            AND (channel <> 'whatsapp' OR NULLIF(btrim(wa_template_name), '') IS NOT NULL)
           ORDER BY (code LIKE 'fee%') DESC, name, code`,
+      );
+      const waiting = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM comms_templates WHERE deleted_at IS NULL AND status = 'active' AND channel = 'whatsapp'
+            AND NULLIF(btrim(wa_template_name), '') IS NULL`,
       );
       const staff = await c.query<{ id: string; name: string; designation: string | null }>(
         `SELECT e.id::text, e.display_name AS name, e.designation FROM employees e
           WHERE e.deleted_at IS NULL AND e.status = 'active' AND (e.mobile IS NOT NULL OR e.email IS NOT NULL)
           ORDER BY e.display_name LIMIT 2000`,
       );
-      return { templates: t.rows, staff: staff.rows, cc: await this.ccIds(c) };
+      return {
+        templates: t.rows,
+        staff: staff.rows,
+        cc: await this.ccIds(c),
+        whatsappNotApproved: waiting.rows[0]!.n,
+      };
     });
   }
 
@@ -297,6 +308,22 @@ export class FeeRemindersService {
     return { asOf, rows, pupils, total, remindedToday, noContact, listed: list.length };
   }
 
+  /** A WhatsApp template without its approved name cannot be delivered: say so before anything is queued. */
+  private async assertWhatsappReady(c: PoolClient, dto: FeeReminderDto) {
+    const wa = dto.channels.find((x) => x.channel === 'whatsapp');
+    if (!wa) return;
+    const t = await c.query<{ name: string | null; wa: string | null }>(
+      `SELECT COALESCE(name, code) AS name, NULLIF(btrim(wa_template_name), '') AS wa FROM comms_templates WHERE id = $1`,
+      [wa.templateId],
+    );
+    if (t.rows[0] && !t.rows[0].wa)
+      throw new DomainError(
+        'fees.reminder_whatsapp_not_approved',
+        `The WhatsApp template "${t.rows[0].name ?? ''}" has no approved template name, so WhatsApp would refuse it. Choose an approved template, or add the approved name under Communication → Templates.`,
+        { status: 409 },
+      );
+  }
+
   private request(dto: FeeReminderDto, title: string, upload: Row[]): CreateRequestDto {
     return CreateRequestSchema.parse({
       title,
@@ -372,6 +399,7 @@ export class FeeRemindersService {
   /** A test: the first reminder exactly as its parent would get it, sent to the sender and those on copy. */
   async test(ctx: RequestContext, dto: FeeReminderDto) {
     const { rows } = await this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.assertWhatsappReady(c, dto);
       const plan = await this.plan(c, ctx, { ...dto, again: true });
       const first = plan.rows[0];
       if (!first)
@@ -402,6 +430,7 @@ export class FeeRemindersService {
   async send(ctx: RequestContext, dto: FeeReminderDto) {
     const tenant = requireTenant(ctx);
     const prepared = await this.db.tenant(tenant, async (c) => {
+      await this.assertWhatsappReady(c, dto);
       const plan = await this.plan(c, ctx, dto);
       if (plan.rows.length === 0)
         throw new DomainError(

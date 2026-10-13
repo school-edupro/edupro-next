@@ -349,6 +349,27 @@ describe('misc fees announced to pupils (e2e)', () => {
     expect(everyone.json().listed).toBe(6);
   });
 
+  it('the day book lists the cancelled misc receipt (not counted) and the misc refund as a minus line', async () => {
+    const book = (await get('/fees/mis/day_book')) as {
+      rows: Array<{ kind: string; cells: Record<string, string | number> }>;
+    };
+    const lines = book.rows.filter((r) => r.kind === 'row');
+    const misc = lines.filter((r) => r.cells.kind === 'Misc receipt');
+    // 100 on the science kit, the cancelled 500 and the 500 that was part refunded
+    expect(misc.map((r) => [r.cells.amount, r.cells.status]).sort()).toEqual(
+      [
+        [100, 'Posted'],
+        [500, 'Cancelled (not counted)'],
+        [500, 'Posted'],
+      ].sort(),
+    );
+    const refund = lines.filter((r) => r.cells.kind === 'Misc refund');
+    expect(refund).toHaveLength(1);
+    expect(refund[0]!.cells).toMatchObject({ amount: -200, status: 'Refund paid', mode: 'cash' });
+    expect(String(refund[0]!.cells.receipt_no)).toMatch(/^RF/);
+    expect(book.rows.find((r) => r.kind === 'total')!.cells.amount).toBe(100 + 500 - 200);
+  });
+
   it('with approval levels set, the request goes through My approvals', async () => {
     expect((await post('/workflow/definitions/defaults', {}, admin)).statusCode).toBe(201);
     const r = await post('/fees/misc-fees', {

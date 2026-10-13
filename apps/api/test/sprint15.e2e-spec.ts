@@ -835,6 +835,20 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       });
       expect(none.json().rows.filter((r: { kind: string }) => r.kind === 'row')).toHaveLength(4);
       // the reminder: templates to choose from, and nobody without the right
+      // a WhatsApp template is offered only once it carries its approved name
+      const before = await inject({ method: 'GET', url: '/fees/reminders/options', headers: h() });
+      expect(before.json().whatsappNotApproved).toBeGreaterThan(0);
+      expect(
+        (before.json().templates as Array<{ code: string; channel: string }>).some(
+          (t) => t.code === 'fee_due' && t.channel === 'whatsapp',
+        ),
+      ).toBe(false);
+      await withMigrator(async (c) => {
+        await c.query(
+          `UPDATE comms_templates SET wa_template_name = 'fee_due_approved' WHERE school_id = $1 AND code = 'fee_due' AND channel = 'whatsapp'`,
+          [school.id],
+        );
+      });
       const options = await inject({ method: 'GET', url: '/fees/reminders/options', headers: h() });
       expect(options.statusCode).toBe(200);
       const wa = (
