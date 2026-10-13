@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
 
-const KEYS = ['from', 'to', 'ledger', 'classId', 'fromSeq', 'toSeq'];
+// every filter a report takes: one left out here would make the file ignore what the screen shows
+const KEYS = ['from', 'to', 'ledger', 'classId', 'fromSeq', 'toSeq', 'mode', 'view', 'by'];
 
 /** A fee MIS report as Excel or PDF, laid out as on the screen, made at once by the API. */
 export async function GET(req: Request) {

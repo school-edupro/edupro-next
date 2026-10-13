@@ -44,6 +44,13 @@ const FILTERS: Partial<
   forecast: ['view', 'ledger', 'class'],
   check: ['dates', 'ledger'],
 };
+/** Heavy reports: shown after the filters are chosen. */
+const WAITS: ReportKey[] = ['period_headwise', 'yearly_projection', 'forecast'];
+const TITLE: Partial<Record<ReportKey, string>> = {
+  period_headwise: 'Period fee, head-wise (pupil-wise)',
+  yearly_projection: 'Yearly fee projection (month-wise)',
+  forecast: 'Fee forecast',
+};
 const SHOWN = 300;
 const money = (v: number) =>
   v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -214,14 +221,18 @@ export async function MisReportView({
     q.set('view', view);
     q.set('by', by);
   }
+  // the pupil-wise reports and the forecast read every bill of the session: they are worked out only
+  // when the filters have been chosen and Apply is pressed, not on opening the tab
+  const waits = WAITS.includes(report) && sp.show !== '1';
   let data: MisReport | null = null;
   let problem = '';
-  try {
-    data = await apiFetch<MisReport>(`/fees/mis/${report}?${q.toString()}`);
-  } catch (error) {
-    if (!(error instanceof ApiError)) throw error;
-    problem = error.problem.detail ?? error.problem.type;
-  }
+  if (!waits)
+    try {
+      data = await apiFetch<MisReport>(`/fees/mis/${report}?${q.toString()}`);
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      problem = error.problem.detail ?? error.problem.type;
+    }
   const [classes, periods, modes] = await Promise.all([
     has('class')
       ? apiFetch<Page<{ id: string; code: string; name: string }>>('/academics/classes?size=200')
@@ -249,8 +260,11 @@ export async function MisReportView({
     return r.kind === 'total' || seen <= SHOWN;
   });
   return (
-    <Card title={data?.title ?? ''}>
-      <FilterRow clearHref={`/fees/reports?report=${report}`} hidden={{ report }}>
+    <Card title={data?.title ?? TITLE[report] ?? ''}>
+      <FilterRow
+        clearHref={`/fees/reports?report=${report}`}
+        hidden={WAITS.includes(report) ? { report, show: '1' } : { report }}
+      >
         {has('view') ? (
           <>
             <SelectField
@@ -350,6 +364,11 @@ export async function MisReportView({
       {problem ? (
         <p className="ep-alert ep-alert--danger" role="alert">
           {problem}
+        </p>
+      ) : null}
+      {waits ? (
+        <p className="ep-alert ep-alert--info" role="status">
+          Choose the filters above and press Apply to see the report.
         </p>
       ) : null}
       {data ? (
