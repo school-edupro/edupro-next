@@ -57,6 +57,14 @@ export class ReportsController {
     return this.reports.create(ctx, body);
   }
 
+  @Post('exports/instant')
+  @ApiOperation({ summary: 'A list report as Excel, CSV or PDF, made at once (no worker)' })
+  @RequirePermission(REPORTS.exportCreate)
+  async instant(@ReqCtx() ctx: RequestContext, @Body() body: CreateExportDto) {
+    const f = await this.reports.instant(ctx, body);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
+  }
+
   @Get('exports/:id')
   @ApiOperation({ summary: 'Export status and, when ready, a signed download URL' })
   @RequirePermission(REPORTS.exportView)

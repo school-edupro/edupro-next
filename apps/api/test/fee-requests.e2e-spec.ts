@@ -1097,6 +1097,26 @@ describe('fee changes that wait for approval (e2e)', () => {
       expect(f.statusCode).toBe(200);
       expect(Buffer.from(f.json().base64, 'base64').length).toBeGreaterThan(800);
     }
+    // a fee report comes back as a file at once, with no worker; the Tally file still goes to the queue
+    for (const format of ['xlsx', 'csv', 'pdf']) {
+      const f = await inject({
+        method: 'POST',
+        url: '/reports/exports/instant',
+        headers: h(),
+        json: { dataset: 'fee_day_book', format, params: { from: '2020-01-01', to: '2035-12-31' } },
+      });
+      expect(f.statusCode).toBe(201);
+      expect(f.json().filename).toBe(`fee-day-book.${format}`);
+      expect(Buffer.from(f.json().base64, 'base64').length).toBeGreaterThan(200);
+    }
+    const xml = await inject({
+      method: 'POST',
+      url: '/reports/exports/instant',
+      headers: h(),
+      json: { dataset: 'fee_tally_vouchers', format: 'xml', params: {} },
+    });
+    expect(xml.statusCode).toBe(409);
+    expect(xml.json().type).toBe('reports.not_instant');
     const adj = await inject({
       method: 'GET',
       url: '/fees/adjustments/register?size=1&status=approved',

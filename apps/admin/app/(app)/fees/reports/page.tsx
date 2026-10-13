@@ -107,6 +107,10 @@ export default async function FeeReportsPage({
       {report === 'head_tally' ? <input type="hidden" name="month" value={month} /> : null}
     </>
   );
+  // what the export takes: the same keys the queued export sent
+  const fileParams = new URLSearchParams();
+  for (const k of ['from', 'to', 'ledger', 'mode', 'classId', 'minBalance', 'asOf'])
+    if (params.get(k)) fileParams.set(k, params.get(k)!);
   const exportButtons = canExport ? (
     <form
       action={requestFeeReportExport}
@@ -122,30 +126,16 @@ export default async function FeeReportsPage({
           {r('exportTally')}
         </Button>
       ) : null}
-      <Button
-        type="submit"
-        formAction={requestFeeReportExport__format.bind(null, 'csv')}
-        variant="secondary"
-        size="sm"
-      >
-        {r('exportCsv')}
-      </Button>
-      <Button
-        type="submit"
-        formAction={requestFeeReportExport__format.bind(null, 'xlsx')}
-        variant="secondary"
-        size="sm"
-      >
-        {r('exportXlsx')}
-      </Button>
-      <Button
-        type="submit"
-        formAction={requestFeeReportExport__format.bind(null, 'pdf')}
-        variant="secondary"
-        size="sm"
-      >
-        {r('exportPdf')}
-      </Button>
+      {/* made at once and downloaded; only the Tally file is prepared in the background */}
+      {(['csv', 'xlsx', 'pdf'] as const).map((format) => (
+        <a
+          key={format}
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          href={`/api/reports/instant?dataset=${DATASET[report]}&format=${format}&${fileParams.toString()}`}
+        >
+          {r(format === 'csv' ? 'exportCsv' : format === 'xlsx' ? 'exportXlsx' : 'exportPdf')}
+        </a>
+      ))}
     </form>
   ) : null;
   const tabs: Report[] = [

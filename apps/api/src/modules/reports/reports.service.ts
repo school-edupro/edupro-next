@@ -12,6 +12,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { OutboxService } from '../../common/jobs/outbox.service';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { FilesService } from '../files/files.service';
 import type { CreateExportDto, ExportFormat, ListExportsQueryDto } from './reports.dto';
 
@@ -202,6 +203,109 @@ export class ReportsService {
       });
       return row;
     });
+  }
+
+  /**
+   * A list report made at once and handed back, with no background worker: the same dataset, the same
+   * rights and the same parameters as a queued export. Excel and PDF carry the school's head; CSV is
+   * the bare table. Rendered documents and the Tally XML still go through the queue.
+   */
+  async instant(ctx: RequestContext, dto: CreateExportDto) {
+    if (rendererOrNull(dto.dataset) || !['xlsx', 'csv', 'pdf'].includes(dto.format))
+      throw new DomainError(
+        'reports.not_instant',
+        'This export is prepared in the background: find it under Reports → Export centre',
+        { status: 409 },
+      );
+    const { tenant, dataset, params } = await this.prepare(ctx, dto.dataset, dto.params);
+    const year = typeof params.academicYearId === 'string' ? params.academicYearId : null;
+    const query = dataset.query(params);
+    const limit = Math.min(dataset.maxRows, 50_000);
+    const { rows, head } = await this.db.tenant(
+      { ...tenant, academicYearId: year ?? tenant.academicYearId },
+      async (c) => {
+        const r = await c.query<Record<string, unknown>>(
+          // eslint-disable-next-line no-restricted-syntax -- the text is the dataset's own fixed query; the limit is a number computed here
+          `${query.text} LIMIT ${String(limit)}`,
+          query.values,
+        );
+        await this.audit.stage(ctx, c, {
+          action: 'reports.export.instant',
+          entityType: 'exports',
+          entityId: dataset.id,
+          after: { dataset: dataset.id, format: dto.format, params, rows: r.rows.length },
+        });
+        return { rows: r.rows, head: await schoolHead(c) };
+      },
+    );
+    const title = dto.title ?? dataset.title;
+    const slug =
+      title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'report';
+    const ist = (v: unknown, time: boolean) => {
+      const d = v instanceof Date ? v : new Date(String(v));
+      if (Number.isNaN(d.getTime())) return String(v);
+      // a plain date is a calendar day already; a moment is shown in Indian time
+      if (!time && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v))
+        return v.split('-').reverse().join('/');
+      return d.toLocaleString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        ...(time ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
+      });
+    };
+    const cell = (v: unknown, type: string | undefined): string | number => {
+      if (v === null || v === undefined) return '';
+      if (type === 'number') return Number.isFinite(Number(v)) ? Number(v) : String(v);
+      if (type === 'date') return ist(v, false);
+      if (type === 'datetime') return ist(v, true);
+      if (type === 'json' || typeof v === 'object')
+        return v instanceof Date ? ist(v, true) : JSON.stringify(v);
+      return String(v);
+    };
+    if (dto.format === 'csv') {
+      const esc = (x: string | number) => {
+        const t = String(x);
+        return /[",\n\r]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t;
+      };
+      const lines = [
+        dataset.columns.map((c) => esc(c.header)).join(','),
+        ...rows.map((r) => dataset.columns.map((c) => esc(cell(r[c.key], c.type))).join(',')),
+      ];
+      // the mark at the start lets Excel on Windows open Devanagari correctly
+      return {
+        filename: `${slug}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+        bytes: Buffer.from(`\uFEFF${lines.join('\r\n')}\r\n`, 'utf8'),
+      };
+    }
+    const said = Object.entries(params)
+      .filter(([k, v]) => typeof v === 'string' && v !== '' && k !== 'academicYearId')
+      .map(
+        ([k, v]) =>
+          `${k}: ${/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v).split('-').reverse().join('/') : String(v)}`,
+      );
+    return registerFile(
+      {
+        school: head.name,
+        address: head.address,
+        report: title,
+        details: [[...said, `${String(rows.length)} row(s)`].join(' · '), generatedOn()],
+        legend: rows.length >= limit ? `Only the first ${String(limit)} rows are shown.` : '',
+        columns: dataset.columns.map((c) => ({
+          label: c.header,
+          width: c.width ?? 16,
+          right: c.type === 'number',
+        })),
+        rows: rows.map((r) => dataset.columns.map((c) => cell(r[c.key], c.type))),
+        filename: slug,
+      },
+      dto.format as 'xlsx' | 'pdf',
+    );
   }
 
   /** Document renderers (ID cards, later receipts and report cards): always PDF, parameters name the entity. */
