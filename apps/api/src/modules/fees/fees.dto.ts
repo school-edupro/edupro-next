@@ -530,6 +530,9 @@ export const PendingInstrumentsQuerySchema = z.object({
   from: DateSchema.optional(),
   to: DateSchema.optional(),
   ledger: z.enum(['school', 'hostel', 'misc', 'admission']).optional(),
+  /** The account the slip is for: each cheque is then marked same bank or other bank. */
+  bankAccountId: IdSchema.optional(),
+  drawee: z.enum(['same', 'other']).optional(),
 });
 export class PendingInstrumentsQueryDto extends createZodDto(PendingInstrumentsQuerySchema) {}
 
@@ -542,8 +545,12 @@ export const CreateDepositSlipSchema = z.object({
     .min(1)
     .max(500),
   remarks: z.string().trim().max(200).optional(),
+  /** Cheques of the account's own bank and of other banks go on separate slips (as banks ask). */
+  separate: z.boolean().default(true),
 });
 export class CreateDepositSlipDto extends createZodDto(CreateDepositSlipSchema) {}
+export const DepositSlipLimitSchema = z.object({ limit: z.number().int().min(0).max(500) });
+export class DepositSlipLimitDto extends createZodDto(DepositSlipLimitSchema) {}
 
 // ---- Printed fee papers: bill, tax certificate, provisional bill of a withdrawal ----------------------
 export const BillQuerySchema = z.object({ upTo: DateSchema.optional() });

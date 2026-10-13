@@ -7,6 +7,7 @@ import { cancelDepositSlip } from '@/lib/fee-setup-actions';
 interface Slip {
   id: string;
   slipNo: number;
+  kind?: 'transfer' | 'clearing' | null;
   depositOn: string;
   school: string;
   account: {
@@ -91,6 +92,9 @@ export default async function DepositSlipPage({
         <div className="ep-print-sheet__meta">
           <div>
             Slip no.: <strong>{slip.slipNo}</strong>
+            {slip.kind
+              ? ` · ${slip.kind === 'transfer' ? 'Transfer (cheques of the same bank)' : 'Clearing (cheques of other banks)'}`
+              : ''}
           </div>
           <div>
             Deposit date: <strong>{dmy(slip.depositOn)}</strong>

@@ -687,4 +687,104 @@ describe('fee set-up, second pass (e2e)', () => {
     expect(gone.statusCode).toBe(200);
     expect(gone.json().data).toHaveLength(7);
   });
+
+  it('slips hold no more than the limit, and cheques of the same bank go on their own slip', async () => {
+    const cheque = (no: string, bankName: string) =>
+      receipt({
+        studentId: students.other,
+        amount: 500,
+        mode: 'cheque',
+        instrumentNo: no,
+        instrumentDate: '2026-10-02',
+        bankName,
+      });
+    for (const [no, bank] of [
+      ['900001', 'HDFC Bank Ltd.'],
+      ['900002', 'hdfc'],
+      ['900003', 'State Bank of India'],
+      ['900004', 'Axis Bank'],
+      ['900005', 'ICICI Bank'],
+    ] as const)
+      expect((await cheque(no, bank)).statusCode).toBe(201);
+    const accounts = (
+      await inject({ method: 'GET', url: '/fees/deposit-slips/pending', headers: h(accountant) })
+    ).json().accounts as Array<{ id: string }>;
+    const accountId = accounts[0]!.id;
+    const seen = async (extra = '') =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/fees/deposit-slips/pending?bankAccountId=${accountId}${extra}`,
+          headers: h(accountant),
+        })
+      ).json().data as Array<{ key: string; instrumentNo: string; sameBank: boolean }>;
+    const all = (await seen()).filter((x) => x.instrumentNo.startsWith('9000'));
+    expect(all.filter((x) => x.sameBank).map((x) => x.instrumentNo)).toEqual(['900001', '900002']);
+    expect((await seen('&drawee=same')).every((x) => x.sameBank)).toBe(true);
+    expect((await seen('&drawee=other')).some((x) => x.sameBank)).toBe(false);
+    // the limit is the school's: only someone who may make slips sets it
+    expect(
+      (
+        await inject({
+          method: 'PUT',
+          url: '/fees/deposit-slips/limit',
+          headers: h(accountant),
+          json: { limit: 2 },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await inject({ method: 'GET', url: '/fees/deposit-slips/limit', headers: h(accountant) })
+      ).json(),
+    ).toEqual({ limit: 2 });
+    const made = await inject({
+      method: 'POST',
+      url: '/fees/deposit-slips',
+      headers: h(accountant),
+      json: { bankAccountId: accountId, depositOn: '2026-10-10', items: all.map((x) => x.key) },
+    });
+    expect(made.statusCode).toBe(201);
+    const slips = made.json().slips as Array<{
+      slipNo: number;
+      kind: string;
+      instruments: number;
+      total: string;
+    }>;
+    // two of the same bank on one transfer slip; three of other banks on two clearing slips (2 + 1)
+    expect(slips.map((x) => [x.kind, x.instruments, x.total])).toEqual([
+      ['transfer', 2, '1000.00'],
+      ['clearing', 2, '1000.00'],
+      ['clearing', 1, '500.00'],
+    ]);
+    expect(slips[1]!.slipNo).toBe(slips[0]!.slipNo + 1);
+    expect(slips[2]!.slipNo).toBe(slips[0]!.slipNo + 2);
+    expect(made.json().id).toBeTruthy();
+    // with no limit and "one slip for all", everything goes together and the slip names no kind
+    await inject({
+      method: 'PUT',
+      url: '/fees/deposit-slips/limit',
+      headers: h(accountant),
+      json: { limit: 0 },
+    });
+    for (const [no, bank] of [
+      ['900006', 'HDFC Bank'],
+      ['900007', 'Canara Bank'],
+    ] as const)
+      await cheque(no, bank);
+    const two = (await seen()).filter((x) => ['900006', '900007'].includes(x.instrumentNo));
+    const one = await inject({
+      method: 'POST',
+      url: '/fees/deposit-slips',
+      headers: h(accountant),
+      json: {
+        bankAccountId: accountId,
+        depositOn: '2026-10-10',
+        items: two.map((x) => x.key),
+        separate: false,
+      },
+    });
+    expect(one.json().slips).toHaveLength(1);
+    expect(one.json()).toMatchObject({ kind: null, instruments: 2, total: '1000.00' });
+  });
 });

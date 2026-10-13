@@ -23,6 +23,7 @@ import {
   MyTaxCertificateQueryDto,
   FnfQueryDto,
   CreateDepositSlipDto,
+  DepositSlipLimitDto,
   PendingInstrumentsQueryDto,
   CarryPreviewQueryDto,
   RunCarryForwardDto,
@@ -399,6 +400,20 @@ export class FeesController {
       this.deposits.accounts(ctx),
     ]);
     return { data, accounts };
+  }
+
+  @Get('deposit-slips/limit')
+  @ApiOperation({ summary: 'How many cheques and drafts one slip may hold (0 = no limit)' })
+  @RequirePermission(FEES.ledgerView)
+  depositSlipLimit(@ReqCtx() ctx: RequestContext) {
+    return this.deposits.limit(ctx);
+  }
+
+  @Put('deposit-slips/limit')
+  @ApiOperation({ summary: 'Set how many cheques and drafts one slip may hold' })
+  @RequirePermission(FEES.depositSlip)
+  setDepositSlipLimit(@ReqCtx() ctx: RequestContext, @Body() body: DepositSlipLimitDto) {
+    return this.deposits.setLimit(ctx, body.limit);
   }
 
   @Get('deposit-slips/:id')

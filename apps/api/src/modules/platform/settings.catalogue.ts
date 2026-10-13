@@ -193,6 +193,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Days a withdrawn pupil and the parent may still sign in to the portal with the "Former student / parent" rights; 0 closes the login at once',
     module: 'people',
   },
+  'fees.deposit_slip_limit': {
+    schema: z.number().int().min(0).max(500),
+    default: 0,
+    description:
+      'Bank deposit slips: how many cheques and drafts one slip may hold; more are split over several slips (0 = no limit)',
+    module: 'fees',
+  },
   'fees.report_columns': {
     schema: z.record(z.string(), z.array(z.string().max(60)).max(300)),
     default: {},

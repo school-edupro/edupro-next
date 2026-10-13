@@ -195,21 +195,44 @@ export async function createDepositSlip(fd: FormData) {
   if (items.length === 0)
     redirect(`${path}?error=1&detail=${encodeURIComponent('Tick at least one cheque or draft')}`);
   let id = '';
+  let made: number[] = [];
   try {
-    const r = await apiFetch<{ id: string }>('/fees/deposit-slips', {
-      method: 'POST',
-      body: JSON.stringify({
-        bankAccountId: str(fd, 'bankAccountId'),
-        depositOn: str(fd, 'depositOn'),
-        items,
-        remarks: str(fd, 'remarks') || undefined,
-      }),
-    });
+    const r = await apiFetch<{ id: string; slips?: Array<{ slipNo: number }> }>(
+      '/fees/deposit-slips',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          bankAccountId: str(fd, 'bankAccountId'),
+          depositOn: str(fd, 'depositOn'),
+          items,
+          remarks: str(fd, 'remarks') || undefined,
+          // unticked: every cheque on one run of slips, whatever bank it is drawn on
+          separate: fd.get('separate') === 'yes',
+        }),
+      },
+    );
     id = r.id;
+    made = (r.slips ?? []).map((x) => x.slipNo);
   } catch (error) {
     fail(path, error);
   }
+  // several slips were made (by bank, or by the limit of a slip): the list shows them all
+  if (made.length > 1) redirect(`${path}?made=${made.join(',')}`);
   redirect(`/fees/deposit-slips/${id}`);
+}
+
+/** How many cheques and drafts one deposit slip may hold (0 = no limit). */
+export async function saveDepositSlipLimit(fd: FormData) {
+  const path = '/fees/deposit-slips';
+  try {
+    await apiFetch('/fees/deposit-slips/limit', {
+      method: 'PUT',
+      body: JSON.stringify({ limit: num(fd, 'limit') ?? 0 }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  redirect(`${path}?ok=1`);
 }
 
 export async function cancelDepositSlip(fd: FormData) {
