@@ -20,6 +20,8 @@ import { FeeMisController } from './fee-mis.controller';
 import { FeeMisService } from './fee-mis.service';
 import { FeeRemindersController } from './fee-reminders.controller';
 import { FeeRemindersService } from './fee-reminders.service';
+import { MiscFeesController } from './misc-fees.controller';
+import { MiscFeesService } from './misc-fees.service';
 import { FeeGridsService } from './fee-grids.service';
 import { FeeOpeningController } from './fee-opening.controller';
 import { FeeOpeningService } from './fee-opening.service';
@@ -41,6 +43,7 @@ import { FeesController } from './fees.controller';
     FeeOpeningController,
     FeeMisController,
     FeeRemindersController,
+    MiscFeesController,
   ],
   providers: [
     FeeMastersService,
@@ -57,6 +60,7 @@ import { FeesController } from './fees.controller';
     FeeGridsService,
     FeeMisService,
     FeeRemindersService,
+    MiscFeesService,
     AuditService,
   ],
   exports: [
@@ -73,6 +77,7 @@ export class FeesModule implements OnModuleInit {
     private readonly adjustments: FeeAdjustmentsService,
     private readonly requests: FeeRequestsService,
     private readonly opening: FeeOpeningService,
+    private readonly misc: MiscFeesService,
   ) {}
 
   onModuleInit(): void {
@@ -91,6 +96,9 @@ export class FeesModule implements OnModuleInit {
     );
     this.workflow.onComplete('fee_change_request', (c, ctx, instance, outcome) =>
       this.requests.onWorkflowComplete(c, ctx, instance, outcome),
+    );
+    this.workflow.onComplete('misc_fee_request', (c, ctx, instance, outcome) =>
+      this.misc.onWorkflowComplete(c, ctx, instance, outcome),
     );
   }
 }
