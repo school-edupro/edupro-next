@@ -340,6 +340,9 @@ export class ListProfileChangesQueryDto extends createZodDto(ListProfileChangesQ
 const RegisterDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** The pivot fee reports (a column per head, mode or month). */
 export const FeeMisReportSchema = z.enum([
+  'day_book',
+  'forecast',
+  'check',
   'mode_daywise',
   'head_receipts',
   'cheque_bounce',
@@ -355,6 +358,11 @@ export const FeeMisQuerySchema = z.object({
   /** The first and last fee month (their sequence) of the pupil-wise reports. */
   fromSeq: z.coerce.number().int().min(1).max(24).optional(),
   toSeq: z.coerce.number().int().min(1).max(24).optional(),
+  /** Day book: one payment mode. */
+  mode: z.string().trim().max(60).optional(),
+  /** Forecast: a column block per month or per quarter; rows by class or by fee head. */
+  view: z.enum(['month', 'quarter']).optional(),
+  by: z.enum(['class', 'head']).optional(),
 });
 export class FeeMisQueryDto extends createZodDto(FeeMisQuerySchema) {}
 export const FeeMisFileQuerySchema = FeeMisQuerySchema.extend({

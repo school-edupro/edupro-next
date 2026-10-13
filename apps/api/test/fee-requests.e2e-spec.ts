@@ -1119,6 +1119,8 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(xml.json().type).toBe('reports.not_instant');
     // the MIS reports: a table with totals, and the same as Excel and PDF
     for (const report of [
+      'day_book',
+      'forecast',
       'mode_daywise',
       'head_receipts',
       'cheque_bounce',
@@ -1167,6 +1169,46 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(
       (await inject({ method: 'GET', url: '/fees/mis/nothing', headers: h() })).statusCode,
     ).toBe(404);
+    // the day book ends with its total and carries the summary tables
+    const book = (
+      await inject({
+        method: 'GET',
+        url: '/fees/mis/day_book?from=2020-01-01&to=2035-12-31',
+        headers: h(),
+      })
+    ).json() as { blocks: Array<{ title: string; rows: unknown[] }> };
+    expect(book.blocks.map((b) => b.title)).toEqual([
+      'Summary: totals by mode',
+      'Summary: totals by ledger',
+      'Summary: other figures',
+    ]);
+    // the forecast by quarter has four blocks of three columns and a session total
+    const fq = (
+      await inject({
+        method: 'GET',
+        url: '/fees/mis/forecast?view=quarter&by=head',
+        headers: h(),
+      })
+    ).json() as { columns: Array<{ group?: string }>; title: string };
+    expect(fq.title).toContain('quarter-wise, by fee head');
+    expect(new Set(fq.columns.map((x) => x.group).filter(Boolean)).size).toBe(5);
+    // the report check: every figure reached two ways agrees after all that this suite has posted,
+    // refunded, bounced, cancelled and waived
+    const check = (
+      await inject({ method: 'GET', url: '/fees/mis/check', headers: h() })
+    ).json() as {
+      rows: Array<{ kind: string; label?: string; cells: Record<string, string | number> }>;
+    };
+    const lines = check.rows.filter((r) => r.kind === 'row');
+    expect(lines.length).toBeGreaterThanOrEqual(20);
+    expect(lines.filter((r) => r.cells.result !== 'Agrees').map((r) => r.cells.what)).toEqual([]);
+    expect(check.rows[check.rows.length - 1]!.label).toMatch(/^All \d+ checks agree$/);
+    const checkFile = await inject({
+      method: 'GET',
+      url: '/fees/mis/check/file?format=pdf',
+      headers: h(),
+    });
+    expect(checkFile.statusCode).toBe(200);
     const adj = await inject({
       method: 'GET',
       url: '/fees/adjustments/register?size=1&status=approved',

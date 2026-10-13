@@ -13,6 +13,8 @@ import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { notifyDefaulters, requestFeeReportExport } from '@/lib/actions';
+import { MisReportView } from '@/components/fees/MisReportView';
+import { REPORT_ALIAS, ReportTabs, isReportKey } from '@/components/fees/ReportTabs';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ClassRow, DatasetRows } from '@/lib/types';
 
@@ -45,19 +47,28 @@ const sum = (rows: Row[], key: string, pred: (r: Row) => boolean = () => true) =
  * Sprint 15: the fee reports centre. Every tab runs a dataset live (`/reports/datasets/:id/rows`) and
  * exports the same definition through the export service (CSV, Excel, PDF; Tally XML for the vouchers).
  */
-/** These three open in MIS reports, where they have a column per head or payment mode. */
-const MIS: Partial<Record<string, string>> = {
-  head_tally: 'head_receipts',
-  mode_summary: 'mode_daywise',
-  cheque_bounce: 'cheque_bounce',
-};
-
 export default async function FeeReportsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
+  // the reports with a column per head, mode, month or quarter have one view of their own
+  const key = REPORT_ALIAS[sp.report ?? ''] ?? (isReportKey(sp.report) ? sp.report : 'day_book');
+  if (key !== 'defaulters' && key !== 'tally') {
+    const head = await getTranslations('pages.fees_reports');
+    return (
+      <>
+        <PageHeader
+          kicker={head('kicker')}
+          title={head('title')}
+          description={head('description')}
+        />
+        <ReportTabs current={key} />
+        <MisReportView report={key} sp={sp} />
+      </>
+    );
+  }
   const report: Report = (Object.keys(DATASET) as Report[]).includes(sp.report as Report)
     ? (sp.report as Report)
     : 'day_book';
@@ -145,15 +156,6 @@ export default async function FeeReportsPage({
       ))}
     </form>
   ) : null;
-  const tabs: Report[] = [
-    'day_book',
-    'head_tally',
-    'mode_summary',
-    'cheque_bounce',
-    'defaulters',
-    'forecast',
-    'tally',
-  ];
   const tabLabel: Record<Report, string> = {
     day_book: r('dayBook'),
     head_tally: r('headTally'),
@@ -190,26 +192,7 @@ export default async function FeeReportsPage({
         </div>
       ) : null}
       <Notice params={{ error: sp.error, detail: sp.detail }} />
-      <nav
-        aria-label={t('title')}
-        style={{
-          display: 'flex',
-          gap: 'var(--sp-2)',
-          flexWrap: 'wrap',
-          marginBottom: 'var(--sp-4)',
-        }}
-      >
-        {tabs.map((k) => (
-          <a
-            key={k}
-            className={`ep-btn ep-btn--sm ${k === report ? '' : 'ep-btn--ghost'}`}
-            href={MIS[k] ? `/fees/mis?report=${MIS[k]}` : `/fees/reports?report=${k}`}
-            aria-current={k === report ? 'page' : undefined}
-          >
-            {tabLabel[k]}
-          </a>
-        ))}
-      </nav>
+      <ReportTabs current={key} />
 
       <Card
         title={tabLabel[report]}

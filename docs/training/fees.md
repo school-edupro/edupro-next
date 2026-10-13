@@ -500,25 +500,34 @@ For a local (never a production) school:
   by that. Messages the entries would queue are stopped before they leave.
 - Receipt, voucher and slip numbers used by the sample are not given again after removal.
 
-## MIS reports (2026-10-13)
+## Reports centre (2026-10-13)
 
-Fees → MIS reports. Each report shows on the screen as its Excel and PDF carry it; the files are made at once.
+Fees → Reports centre holds every fee report in one bar. Each shows on the screen as its Excel and PDF
+carry it, and the files are made at once (only the Tally file is prepared in the background).
 
+**Collection**
+- **Day book**: every receipt, misc receipt and refund of the dates, a Total row, then three summary
+  tables: totals by mode, totals by ledger, and other figures (refunds paid, bounced cheques, receipt
+  number ranges).
+- **Day book (grouped)**: the school's own sheet: grouped by receipt date and payment mode with a subtotal
+  per mode, a total per date and a grand total; a column per fee head.
 - **Mode-wise collection**: one row per day: Amt. Paid, Dr Amount, Late Fee, Cheque Bounce Amount, Final
-  Amount, then a column for each payment mode, and Final Amount again (what the modes add up to).
+  Amount, a column per payment mode, and Final Amount again.
 - **Head-wise tally**: one row per receipt with student, class, admission no., route, slab and payment
-  status, then every fee head as a column, fine, bounce charge and advance kept.
-- **Cheque bounce**: receipt date, cheque date, cheque status, bounce charge, and "Paid again": the fee the
-  cheque had paid, how much of it is paid now, what is still due, and the receipts that paid it.
-- **Day book (grouped)**: receipts grouped by date and payment mode with a subtotal per mode, a total per
-  date and a grand total, a column per fee head.
-- **Period fee, head-wise**: one row per pupil: payable by head, concession, total due, paid by head,
-  balance, late fee, bounce charge, waive-off; for the months chosen.
-- **Yearly projection**: one row per pupil: payable and paid by month, balance; the last row counts the
-  pupils who have paid each month in full.
+  status, then every fee head as a column.
+- **Cheque bounce**: receipt date, cheque date, status, bounce charge, and what was paid again.
+
+**Dues and forecast**
+- **Defaulters**: who owes, with reminders.
+- **Period fee, head-wise** and **Yearly projection**: one row per pupil, payable and paid by head or by month.
+- **Forecast**: classes (or fee heads) down, months or quarters across, each with Expected, Collected and
+  Balance, and a session total with the collected percentage. Expected is the fee billed for the month.
+
+**Accounts**
+- **Tally vouchers**.
+- **Report check**: reaches each key figure two ways (from the books, and as a report prints it) and
+  shows Agrees or the difference: receipts against fee lines, late fee, refunds, the bills, and every
+  report's total. Run it at month-end; a difference means an entry needs looking at.
 
 One rule for all: a bounced or cancelled receipt is not counted; a refund shows on the day it was paid and
 reduces that day. A fee head shows what the receipt is set against today.
-
-The day book's Excel and PDF end with the summary shown under it on the screen (totals by mode and by
-ledger, grand total, refunds paid, bounced cheques).

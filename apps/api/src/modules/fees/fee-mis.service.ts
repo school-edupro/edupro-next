@@ -3,10 +3,15 @@ import type { PoolClient } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
+import { datasetOrNull } from '@edupro/db';
+import { schoolHead } from '../attendance/register-file';
+import { misPdf, misXlsx } from './mis-file';
 import type { FeeMisQueryDto } from './fees.dto';
 
 export type MisReportId =
+  | 'day_book'
+  | 'forecast'
+  | 'check'
   | 'mode_daywise'
   | 'head_receipts'
   | 'cheque_bounce'
@@ -25,8 +30,16 @@ export interface MisColumn {
 export interface MisRow {
   /** group: a heading across the table; subtotal and total print in bold. */
   kind: 'row' | 'group' | 'subtotal' | 'total';
+  /** 1 = the outer grouping (a date), 2 = the inner one (a payment mode). */
+  level?: 1 | 2;
   label?: string;
   cells: Record<string, string | number | null>;
+}
+/** A small table under the main one: totals by mode, by ledger. */
+export interface MisBlock {
+  title: string;
+  columns: MisColumn[];
+  rows: MisRow[];
 }
 export interface MisReport {
   report: MisReportId;
@@ -37,6 +50,9 @@ export interface MisReport {
   note: string;
   columns: MisColumn[];
   rows: MisRow[];
+  blocks?: MisBlock[];
+  /** The name of the Excel sheet. */
+  sheet?: string;
 }
 
 /** A receipt that counts as money received: a cancelled or bounced one does not. */
@@ -122,6 +138,9 @@ export class FeeMisService {
   async report(ctx: RequestContext, id: MisReportId, q: FeeMisQueryDto): Promise<MisReport> {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), (c) => {
+      if (id === 'day_book') return this.dayBook(c, q);
+      if (id === 'forecast') return this.forecast(c, yearId, q);
+      if (id === 'check') return this.check(c, yearId, q);
       if (id === 'mode_daywise') return this.modeDaywise(c, q);
       if (id === 'head_receipts') return this.headReceipts(c, q, false);
       if (id === 'daybook_grouped') return this.headReceipts(c, q, true);
@@ -303,26 +322,28 @@ export class FeeMisService {
       num('total', 'Total'),
       num('opening', 'Opening Dr.'),
       ...headCols.map((h) => num(`h${h.id}`, h.name)),
-      num('advance', 'Advance kept'),
+      // the school's sheet calls the credit carried on a receipt "Opening Cr."
+      num('advance', grouped ? 'Opening Cr.' : 'Advance kept'),
       num('fine', 'Fine'),
       num('bounce', 'Bounce Charge'),
     ];
     const columns: MisColumn[] = grouped
       ? [
-          num('sr', 'Sr. No.', undefined, 5),
-          text('admission_no', 'Admission Number', 11),
+          num('sr', 'Sr. No.', undefined, 6),
+          text('admission_no', 'Admission Number', 13),
           text('student', 'Student Full Name', 20),
-          text('grade', 'Grade', 7),
-          text('section', 'Section', 6),
-          text('fee_group', 'Fee Category', 9),
-          text('student_status', 'Student Status', 8),
-          text('receipt_no', 'Receipt Number', 15),
-          text('date', 'Receipt Date', 9),
-          text('mode', 'Payment Mode', 10),
-          text('gateway', 'Gateway Name', 9),
-          text('bank_name', 'Bank Name', 12),
-          text('reference', 'Reference Number', 14),
-          text('instrument_date', 'Payment Mode Date', 9),
+          text('grade', 'Grade', 9),
+          text('section', 'Section', 7),
+          text('fee_group', 'Fee Category', 10),
+          text('student_status', 'Student Status', 10),
+          text('receipt_no', 'Receipt Number', 16),
+          text('date', 'Receipt Dates', 10),
+          text('mode', 'Payment Mode', 11),
+          text('gateway', 'Gateway Name', 10),
+          text('date2', 'Payment Date', 10),
+          text('bank_name', 'Bank Name', 13),
+          text('reference', 'Reference Number', 16),
+          text('instrument_date', 'Payment Mode Date', 11),
           ...money,
         ]
       : [
@@ -350,10 +371,16 @@ export class FeeMisService {
     const close = (what: 'mode' | 'date') => {
       if (!grouped) return;
       if (curMode && (what === 'mode' || what === 'date'))
-        rows.push({ kind: 'subtotal', label: `Subtotal — ${curMode}`, cells: { ...modeSum } });
+        rows.push({
+          kind: 'subtotal',
+          level: 2,
+          label: `Subtotal — ${curMode}`,
+          cells: { ...modeSum },
+        });
       if (what === 'date' && curDate)
         rows.push({
           kind: 'subtotal',
+          level: 1,
           label: `Date Total — ${dmy(curDate)}`,
           cells: { ...dateSum },
         });
@@ -366,14 +393,24 @@ export class FeeMisService {
         curMode = '';
         dateSum = sums();
         sr = 0;
-        rows.push({ kind: 'group', label: `Receipt Dates: ${dmy(r.on_date)}`, cells: {} });
+        rows.push({
+          kind: 'group',
+          level: 1,
+          label: `Receipt Dates: ${dmy(r.on_date)}`,
+          cells: {},
+        });
       }
       if (grouped && r.mode !== curMode) {
         if (curMode)
-          rows.push({ kind: 'subtotal', label: `Subtotal — ${curMode}`, cells: { ...modeSum } });
+          rows.push({
+            kind: 'subtotal',
+            level: 2,
+            label: `Subtotal — ${curMode}`,
+            cells: { ...modeSum },
+          });
         curMode = r.mode;
         modeSum = sums();
-        rows.push({ kind: 'group', label: `Payment Mode: ${r.mode}`, cells: {} });
+        rows.push({ kind: 'group', level: 2, label: `Payment Mode: ${r.mode}`, cells: {} });
       }
       const m = by.get(r.id) ?? new Map<string, number>();
       const allocated = [...m.values()].reduce((a, v) => a + v, 0);
@@ -401,6 +438,7 @@ export class FeeMisService {
         cells: {
           sr,
           date: dmy(r.on_date),
+          date2: dmy(r.on_date),
           receipt_no: r.receipt_no,
           admission_no: r.admission_no,
           student: r.student,
@@ -427,12 +465,13 @@ export class FeeMisService {
     rows.push({ kind: 'total', label: 'Grand Total', cells: { ...grand } });
     return {
       report: grouped ? 'daybook_grouped' : 'head_receipts',
+      sheet: grouped ? 'Day Book' : undefined,
       title: grouped
         ? 'Day book (grouped by date and payment mode)'
         : 'Head-wise tally (receipt-wise)',
       filters: [`${dmy(from)} to ${dmy(to)}`, q.ledger ? `Ledger: ${q.ledger}` : 'All ledgers'],
       note: grouped
-        ? 'Bounced and cancelled receipts are not listed. Each head shows what the receipt is set against today (a refund with the fee kept due takes the amount off the head). Advance kept is money on the receipt not yet set against any fee.'
+        ? 'Bounced and cancelled receipts are not listed. Each head shows what the receipt is set against today (a refund with the fee kept due takes the amount off the head). Opening Cr. is money on the receipt not yet set against any fee (credit carried forward).'
         : 'A bounced or cancelled receipt is listed with its status and counts as zero. Each head shows what the receipt is set against today. Advance kept is money on the receipt not yet set against any fee.',
       columns,
       rows,
@@ -833,49 +872,612 @@ export class FeeMisService {
     };
   }
 
-  /** The report as Excel or PDF, laid out as on the screen. */
+  /** The report as Excel or PDF, laid out as on the screen, in the style of the school's own sheets. */
   async file(ctx: RequestContext, id: MisReportId, q: FeeMisQueryDto, format: 'xlsx' | 'pdf') {
     const r = await this.report(ctx, id, q);
     const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
-    const first = r.columns[0]!.key;
-    // a heading or a total writes its words in the first text column
-    const words = r.columns.find((x) => x.type === 'text')?.key ?? first;
-    const strong: number[] = [];
-    const rows = r.rows.map((row, i) => {
-      if (row.kind !== 'row') strong.push(i);
-      return r.columns.map((col) => {
-        if (row.kind !== 'row' && col.key === words && row.label) return row.label;
-        const v = row.cells[col.key];
-        if (v === null || v === undefined) return '';
-        return col.type === 'number' && typeof v === 'number' ? Number(v.toFixed(2)) : v;
+    const name = r.report.replace(/_/g, '-');
+    return format === 'pdf'
+      ? { bytes: await misPdf(r, head), filename: `${name}.pdf`, contentType: 'application/pdf' }
+      : {
+          bytes: await misXlsx(r, head),
+          filename: `${name}.xlsx`,
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+  }
+
+  // ---- the day book: every receipt, misc receipt and refund of the dates, with its summary --------------
+  private async dayBook(c: PoolClient, q: FeeMisQueryDto): Promise<MisReport> {
+    const { from, to } = this.range(q);
+    const def = datasetOrNull('fee_day_book')!;
+    const query = def.query({ from, to, ledger: q.ledger, mode: q.mode });
+    const got = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- the text is the day book dataset's own fixed query; values are bound
+      `${query.text} LIMIT 50000`,
+      query.values,
+    );
+    const day = (v: unknown) =>
+      v instanceof Date
+        ? `${String(v.getDate()).padStart(2, '0')}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getFullYear())}`
+        : dmy(v as string | null);
+    const KIND: Record<string, string> = {
+      receipt: 'Receipt',
+      misc: 'Misc receipt',
+      refund: 'Refund',
+    };
+    const list = got.rows;
+    const counted = list.filter((r) => r.status !== 'bounced');
+    const sum = (rows: Array<Record<string, unknown>>, key: string) =>
+      rows.reduce((a, r) => a + Number(r[key] ?? 0), 0);
+    const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+    const rows: MisRow[] = list.map((r, i) => ({
+      kind: 'row',
+      cells: {
+        sr: i + 1,
+        date: day(r.received_on),
+        kind: KIND[str(r.kind)] ?? str(r.kind),
+        ledger: str(r.ledger),
+        receipt_no: str(r.receipt_no),
+        admission_no: str(r.admission_no),
+        payer: str(r.payer),
+        section: str(r.section),
+        mode: str(r.mode),
+        instrument_no: str(r.instrument_no),
+        bank_name: str(r.bank_name),
+        reference: str(r.reference),
+        principal: Number(r.principal ?? 0),
+        late_fee: Number(r.late_fee ?? 0),
+        amount: Number(r.amount ?? 0),
+        status:
+          r.status === 'bounced'
+            ? 'Bounced (not counted)'
+            : r.status === 'refund'
+              ? 'Refund paid'
+              : (STATUS[str(r.status)] ?? str(r.status)),
+        received_by: str(r.received_by),
+        cleared_on: day(r.cleared_on),
+      },
+    }));
+    rows.push({
+      kind: 'total',
+      label: 'Total (bounced cheques not counted)',
+      cells: {
+        principal: sum(counted, 'principal'),
+        late_fee: sum(counted, 'late_fee'),
+        amount: sum(counted, 'amount'),
+      },
+    });
+    const table = (title: string, first: string, key: string): MisBlock => {
+      const names = [...new Set(counted.map((r) => str(r[key])))].sort();
+      return {
+        title,
+        columns: [
+          text('name', first, 22),
+          num('count', 'Entries', undefined, 9),
+          num('principal', 'Fee'),
+          num('late_fee', 'Late fee'),
+          num('amount', 'Amount', undefined, 13),
+        ],
+        rows: [
+          ...names.map((nm): MisRow => {
+            const of = counted.filter((r) => str(r[key]) === nm);
+            return {
+              kind: 'row',
+              cells: {
+                name: nm,
+                count: of.length,
+                principal: sum(of, 'principal'),
+                late_fee: sum(of, 'late_fee'),
+                amount: sum(of, 'amount'),
+              },
+            };
+          }),
+          {
+            kind: 'total',
+            label: 'Grand total',
+            cells: {
+              count: counted.length,
+              principal: sum(counted, 'principal'),
+              late_fee: sum(counted, 'late_fee'),
+              amount: sum(counted, 'amount'),
+            },
+          },
+        ],
+      };
+    };
+    const refunds = list.filter((r) => r.kind === 'refund');
+    const bounced = list.filter((r) => r.status === 'bounced');
+    const receipts = list.filter((r) => r.kind !== 'refund');
+    const ledgers = [...new Set(receipts.map((r) => str(r.ledger)))].sort();
+    return {
+      report: 'day_book',
+      title: 'Fee day book',
+      sheet: 'Day Book',
+      filters: [
+        `${dmy(from)} to ${dmy(to)}`,
+        q.ledger ? `Ledger: ${q.ledger}` : 'All ledgers',
+        ...(q.mode ? [`Mode: ${q.mode}`] : []),
+      ],
+      note: 'A cancelled receipt is not listed. A bounced cheque is listed with its status and is not counted in any total. A refund is a minus line on the day it was paid, so the totals are net of refunds.',
+      columns: [
+        num('sr', 'Sr No', undefined, 5),
+        text('date', 'Date', 9),
+        text('kind', 'Kind', 9),
+        text('ledger', 'Ledger', 7),
+        text('receipt_no', 'Receipt no.', 16),
+        text('admission_no', 'Admission no.', 10),
+        text('payer', 'Payer', 20),
+        text('section', 'Class', 8),
+        text('mode', 'Mode', 10),
+        text('instrument_no', 'Cheque / DD no.', 10),
+        text('bank_name', 'Bank', 14),
+        text('reference', 'Reference', 14),
+        num('principal', 'Fee'),
+        num('late_fee', 'Late fee'),
+        num('amount', 'Amount', undefined, 12),
+        text('status', 'Status', 13),
+        text('received_by', 'Received by', 13),
+        text('cleared_on', 'Bank cleared', 9),
+      ],
+      rows,
+      blocks: [
+        table('Summary: totals by mode', 'Mode', 'mode'),
+        table('Summary: totals by ledger', 'Ledger', 'ledger'),
+        {
+          title: 'Summary: other figures',
+          columns: [
+            text('name', 'Item', 34),
+            num('count', 'Entries', undefined, 9),
+            num('amount', 'Amount', undefined, 13),
+          ],
+          rows: [
+            {
+              kind: 'row',
+              cells: {
+                name: 'Refunds paid (already taken off the totals)',
+                count: refunds.length,
+                amount: -sum(refunds, 'amount'),
+              },
+            },
+            {
+              kind: 'row',
+              cells: {
+                name: 'Bounced cheques (listed, not counted)',
+                count: bounced.length,
+                amount: sum(bounced, 'amount'),
+              },
+            },
+            ...ledgers.map((l): MisRow => {
+              const nos = receipts
+                .filter((r) => str(r.ledger) === l && r.receipt_no)
+                .map((r) => str(r.receipt_no))
+                .sort();
+              return {
+                kind: 'row',
+                cells: {
+                  name: `Receipt numbers, ${l}: ${nos[0] ?? '—'} to ${nos[nos.length - 1] ?? '—'}`,
+                  count: nos.length,
+                  amount: null,
+                },
+              };
+            }),
+          ],
+        },
+      ],
+    };
+  }
+
+  // ---- forecast: what is billed, collected and still to come, by month or quarter -----------------------
+  private async forecast(c: PoolClient, yearId: string, q: FeeMisQueryDto): Promise<MisReport> {
+    const byHead = q.by === 'head';
+    const quarterly = q.view === 'quarter';
+    const periods = await c.query<{ sequence: number; name: string }>(
+      `SELECT sequence, name FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence`,
+      [yearId],
+    );
+    if (periods.rows.length === 0)
+      throw new DomainError('fees.no_periods', 'The fee months of this session are not set up', {
+        status: 409,
+      });
+    const short = (nm: string) => nm.split(' ')[0]!.slice(0, 3);
+    // a column block per month, or per three months of the session in their order
+    const buckets: Array<{ key: string; label: string; seqs: number[] }> = quarterly
+      ? Array.from({ length: Math.ceil(periods.rows.length / 3) }, (_, i) => {
+          const part = periods.rows.slice(i * 3, i * 3 + 3);
+          return {
+            key: `q${String(i + 1)}`,
+            label: `Q${String(i + 1)} (${short(part[0]!.name)}–${short(part[part.length - 1]!.name)})`,
+            seqs: part.map((p) => p.sequence),
+          };
+        })
+      : periods.rows.map((p) => ({
+          key: `m${String(p.sequence)}`,
+          label: p.name,
+          seqs: [p.sequence],
+        }));
+    const bucketOf = new Map<number, string>();
+    for (const b of buckets) for (const sq of b.seqs) bucketOf.set(sq, b.key);
+    const CLASS_OF = `LEFT JOIN LATERAL (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                             WHERE e.student_id = d.student_id AND e.academic_year_id = d.academic_year_id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) en ON true`;
+    const WHERE = `d.academic_year_id = $1 AND d.status <> 'cancelled' AND ($2::text IS NULL OR d.ledger::text = $2) AND ($3::bigint IS NULL OR en.class_id = $3)`;
+    const got = await c.query<{
+      id: string;
+      name: string;
+      sort: number;
+      sequence: number;
+      net: number;
+      paid: number;
+    }>(
+      // eslint-disable-next-line no-restricted-syntax -- the row key and the joins are fixed fragments; values are bound parameters
+      `SELECT ${byHead ? `h.id::text AS id, h.name AS name, h.sort_order AS sort` : `COALESCE(k.id::text, '0') AS id, COALESCE(k.name, k.code, 'No class') AS name, COALESCE(k.display_order, 9999) AS sort`},
+              fp.sequence, sum(d.net)::float AS net, sum(d.paid)::float AS paid
+         FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id JOIN fee_heads h ON h.id = d.head_id
+         ${CLASS_OF} LEFT JOIN classes k ON k.id = en.class_id
+        WHERE ${WHERE}
+        GROUP BY 1, 2, 3, fp.sequence`,
+      [yearId, q.ledger ?? null, q.classId ?? null],
+    );
+    const pupilsOf = await c.query<{ id: string; pupils: number }>(
+      // eslint-disable-next-line no-restricted-syntax -- the row key and the joins are fixed fragments; values are bound parameters
+      `SELECT ${byHead ? `d.head_id::text` : `COALESCE(en.class_id::text, '0')`} AS id, count(DISTINCT d.student_id)::int AS pupils
+         FROM fee_demands d ${CLASS_OF}
+        WHERE ${WHERE}
+        GROUP BY 1`,
+      [yearId, q.ledger ?? null, q.classId ?? null],
+    );
+    const pupils = new Map(pupilsOf.rows.map((x) => [x.id, x.pupils]));
+    const lines = new Map<string, { name: string; sort: number; cells: Record<string, number> }>();
+    for (const g of got.rows) {
+      const b = bucketOf.get(g.sequence);
+      if (!b) continue;
+      const l = lines.get(g.id) ?? { name: g.name, sort: g.sort, cells: {} };
+      l.cells[`e_${b}`] = (l.cells[`e_${b}`] ?? 0) + g.net;
+      l.cells[`c_${b}`] = (l.cells[`c_${b}`] ?? 0) + g.paid;
+      lines.set(g.id, l);
+    }
+    const columns: MisColumn[] = [
+      num('sr', 'Sr No', undefined, 5),
+      text('name', byHead ? 'Fee head' : 'Class', 16),
+      // a count of pupils, not money
+      text('count', 'Pupils', 7),
+      ...buckets.flatMap((b) => [
+        num(`e_${b.key}`, 'Expected', b.label),
+        num(`c_${b.key}`, 'Collected', b.label),
+        num(`b_${b.key}`, 'Balance', b.label),
+      ]),
+      num('e_all', 'Expected', 'Session total', 13),
+      num('c_all', 'Collected', 'Session total', 13),
+      num('b_all', 'Balance', 'Session total', 13),
+      text('pct', 'Collected %', 8, 'Session total'),
+    ];
+    const total: Record<string, number> = {};
+    const pct = (cv: number, ev: number) => (ev > 0 ? `${((cv / ev) * 100).toFixed(1)}%` : '—');
+    const rows: MisRow[] = [...lines.entries()]
+      .sort((a, b) => a[1].sort - b[1].sort || a[1].name.localeCompare(b[1].name))
+      .map(([id, l], i) => {
+        const cells: Record<string, string | number | null> = {
+          sr: i + 1,
+          name: l.name,
+          count: String(pupils.get(id) ?? 0),
+        };
+        let ev = 0;
+        let cv = 0;
+        for (const b of buckets) {
+          const e1 = l.cells[`e_${b.key}`] ?? 0;
+          const c1 = l.cells[`c_${b.key}`] ?? 0;
+          cells[`e_${b.key}`] = e1;
+          cells[`c_${b.key}`] = c1;
+          cells[`b_${b.key}`] = Number((e1 - c1).toFixed(2));
+          ev += e1;
+          cv += c1;
+        }
+        cells.e_all = ev;
+        cells.c_all = cv;
+        cells.b_all = Number((ev - cv).toFixed(2));
+        cells.pct = pct(cv, ev);
+        for (const [k, v] of Object.entries(cells))
+          if (typeof v === 'number' && k !== 'sr') total[k] = (total[k] ?? 0) + v;
+        return { kind: 'row' as const, cells };
+      });
+    rows.push({
+      kind: 'total',
+      label: 'Total',
+      cells: { ...total, pct: pct(total.c_all ?? 0, total.e_all ?? 0) },
+    });
+    return {
+      report: 'forecast',
+      title: `Fee forecast, ${quarterly ? 'quarter-wise' : 'month-wise'}, by ${byHead ? 'fee head' : 'class'}`,
+      filters: [
+        quarterly ? 'Quarter-wise' : 'Month-wise',
+        byHead ? 'By fee head' : 'By class',
+        q.ledger ? `Ledger: ${q.ledger}` : 'All ledgers',
+      ],
+      note: 'Expected is the fee billed for the month after concession and waiver, for every pupil billed. Collected is what receipts hold against that month today, whenever it was paid. Balance is the difference. A quarter is three fee months of the session in their order.',
+      columns,
+      rows,
+    };
+  }
+
+  // ---- report check: the same figures reached two ways must agree --------------------------------------
+  private async check(c: PoolClient, yearId: string, q: FeeMisQueryDto): Promise<MisReport> {
+    const year = await c.query<{ from: string; to: string }>(
+      `SELECT start_date::text AS "from", end_date::text AS "to" FROM academic_years WHERE id = $1`,
+      [yearId],
+    );
+    const from = q.from ?? year.rows[0]!.from;
+    const to = q.to ?? year.rows[0]!.to;
+    const span: FeeMisQueryDto = { ledger: q.ledger, from, to };
+    const L = q.ledger ?? null;
+    const one = async (sql: string, params: unknown[]) =>
+      Number((await c.query<{ v: string | null }>(sql, params)).rows[0]?.v ?? 0);
+    const totalOf = (r: MisReport, key: string) =>
+      Number(r.rows.find((x) => x.kind === 'total')?.cells[key] ?? 0);
+    // counted receipts of the dates, from the books
+    // eslint-disable-next-line no-restricted-syntax -- COUNTED is a fixed fragment written in this file
+    const RECEIPTS = `FROM fee_payments p WHERE ${COUNTED} AND p.received_on BETWEEN $1::date AND $2::date AND ($3::text IS NULL OR p.ledger::text = $3)`;
+    const r3 = [from, to, L];
+    /* eslint-disable no-restricted-syntax -- RECEIPTS and COUNTED are fixed fragments written here; values are bound parameters */
+    const base = {
+      amount: await one(`SELECT sum(p.amount) AS v ${RECEIPTS}`, r3),
+      late: await one(`SELECT sum(p.late_fee) AS v ${RECEIPTS}`, r3),
+      refundedOn: await one(`SELECT sum(p.refunded) AS v ${RECEIPTS}`, r3),
+      allocated: await one(
+        `SELECT sum((SELECT COALESCE(sum(a.amount), 0) FROM fee_payment_allocations a WHERE a.payment_id = p.id)) AS v ${RECEIPTS}`,
+        r3,
+      ),
+      latePosted: await one(
+        `SELECT sum((SELECT COALESCE(sum(l.amount), 0) FROM fee_late_fee_postings l WHERE l.payment_id = p.id)) AS v ${RECEIPTS}`,
+        r3,
+      ),
+      refundsOfThem: await one(
+        `SELECT sum((SELECT COALESCE(sum(r.amount), 0) FROM fee_refunds r WHERE r.payment_id = p.id AND r.status IN ('paid', 'approved'))) AS v ${RECEIPTS}`,
+        r3,
+      ),
+      overdrawn: await one(
+        `SELECT count(*) AS v ${RECEIPTS} AND p.amount - p.late_fee - p.refunded - COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0) < -0.005`,
+        r3,
+      ),
+      allAllocated: await one(
+        `SELECT sum(a.amount) AS v FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_payments p ON p.id = a.payment_id
+          WHERE d.academic_year_id = $1 AND ${COUNTED} AND ($2::text IS NULL OR d.ledger::text = $2)`,
+        [yearId, L],
+      ),
+      /* eslint-enable no-restricted-syntax */
+      refundsPaid: await one(
+        `SELECT sum(r.amount) AS v FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id
+          WHERE r.status = 'paid' AND r.paid_on BETWEEN $1::date AND $2::date AND ($3::text IS NULL OR COALESCE(p.ledger::text, 'school') = $3)`,
+        r3,
+      ),
+      billNet: await one(
+        `SELECT sum(d.net) AS v FROM fee_demands d WHERE d.academic_year_id = $1 AND d.status <> 'cancelled' AND ($2::text IS NULL OR d.ledger::text = $2)`,
+        [yearId, L],
+      ),
+      billPaid: await one(
+        `SELECT sum(d.paid) AS v FROM fee_demands d WHERE d.academic_year_id = $1 AND d.status <> 'cancelled' AND ($2::text IS NULL OR d.ledger::text = $2)`,
+        [yearId, L],
+      ),
+      allPaid: await one(
+        `SELECT sum(d.paid) AS v FROM fee_demands d WHERE d.academic_year_id = $1 AND ($2::text IS NULL OR d.ledger::text = $2)`,
+        [yearId, L],
+      ),
+      deadAllocations: await one(
+        `SELECT count(*) AS v FROM fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id JOIN fee_demands d ON d.id = a.demand_id
+          WHERE d.academic_year_id = $1 AND p.status IN ('bounced', 'reversed')`,
+        [yearId],
+      ),
+      overpaid: await one(
+        `SELECT count(*) AS v FROM fee_demands d WHERE d.academic_year_id = $1 AND d.status <> 'cancelled' AND d.net >= 0 AND d.paid > d.net + 0.005`,
+        [yearId],
+      ),
+      wrongStatus: await one(
+        `SELECT count(*) AS v FROM fee_demands d WHERE d.academic_year_id = $1 AND d.net > 0
+            AND ((d.status = 'paid' AND d.paid < d.net - 0.005) OR (d.status = 'pending' AND d.paid > 0.005)
+              OR (d.status = 'partial' AND (d.paid <= 0.005 OR d.paid >= d.net - 0.005)))`,
+        [yearId],
+      ),
+    };
+    // the same figures as the reports print them
+    const mode = await this.modeDaywise(c, span);
+    const book = await this.dayBook(c, span);
+    const heads = await this.headReceipts(c, span, false);
+    const grouped = await this.headReceipts(c, span, true);
+    const period = await this.pupilWise(c, yearId, {}, 'head');
+    const yearly = await this.pupilWise(c, yearId, {}, 'month');
+    const fore = await this.forecast(c, yearId, { ledger: q.ledger });
+    const partsOf = (r: MisReport) =>
+      Object.entries(r.rows.find((x) => x.kind === 'total')?.cells ?? {})
+        .filter(([k]) => k !== 'total')
+        .reduce((a, [, v]) => a + Number(v ?? 0), 0);
+    // misc receipts are in the day book only: they are taken out to compare it with the fee reports
+    const miscInBook = book.rows
+      .filter((x) => x.kind === 'row' && x.cells.kind === 'Misc receipt')
+      .reduce((a, x) => a + Number(x.cells.amount ?? 0), 0);
+    type Check = [
+      group: string,
+      what: string,
+      a: [string, number],
+      b: [string, number],
+      count?: boolean,
+    ];
+    const checks: Check[] = [
+      [
+        'Receipts',
+        'No receipt is set against more fee than it holds',
+        ['Receipts over-used', base.overdrawn],
+        ['Should be', 0],
+        true,
+      ],
+      [
+        'Receipts',
+        'Late fee on receipts = late fee postings',
+        ['On receipts', base.late],
+        ['Postings', base.latePosted],
+      ],
+      [
+        'Receipts',
+        'Refunded on receipts = refund vouchers approved for them',
+        ['On receipts', base.refundedOn],
+        ['Refund vouchers', base.refundsOfThem],
+      ],
+      [
+        'Receipts',
+        'No bounced or cancelled receipt still holds fee',
+        ['Lines still held', base.deadAllocations],
+        ['Should be', 0],
+        true,
+      ],
+      [
+        'Bills',
+        'Paid on the bills = what receipts hold against them',
+        ['Paid on fee lines', base.allPaid],
+        ['Held by receipts', base.allAllocated],
+      ],
+      [
+        'Bills',
+        'No fee line is paid more than it charges',
+        ['Lines over-paid', base.overpaid],
+        ['Should be', 0],
+        true,
+      ],
+      [
+        'Bills',
+        'Every fee line has the right status (pending, part paid, paid)',
+        ['Lines with a wrong status', base.wrongStatus],
+        ['Should be', 0],
+        true,
+      ],
+      [
+        'Reports',
+        'Mode-wise collection: Final Amount = Amt. Paid + Late Fee − Dr Amount',
+        ['Final Amount', totalOf(mode, 'final')],
+        ['Worked out', totalOf(mode, 'paid') + totalOf(mode, 'late') - totalOf(mode, 'dr')],
+      ],
+      [
+        'Reports',
+        'Mode-wise collection: the modes add up to Final Amount',
+        ['Final Amount', totalOf(mode, 'final')],
+        ['Sum of the modes', totalOf(mode, 'final2')],
+      ],
+      [
+        'Reports',
+        'Mode-wise collection = receipts less refunds paid, from the books',
+        ['Final Amount', totalOf(mode, 'final')],
+        ['Books', base.amount - base.refundsPaid],
+      ],
+      [
+        'Reports',
+        'Day book total (fee receipts only) = mode-wise Final Amount',
+        ['Day book less misc receipts', totalOf(book, 'amount') - miscInBook],
+        ['Mode-wise', totalOf(mode, 'final')],
+      ],
+      [
+        'Reports',
+        'Head-wise tally total = receipts received, from the books',
+        ['Head-wise tally', totalOf(heads, 'total')],
+        ['Books', base.amount],
+      ],
+      [
+        'Reports',
+        'Head-wise tally: heads + fine + advance + refunded = Total',
+        ['Columns + refunded', partsOf(heads) + base.refundedOn],
+        ['Total', totalOf(heads, 'total')],
+      ],
+      [
+        'Reports',
+        'Day book (grouped) Grand Total = head-wise tally',
+        ['Day book (grouped)', totalOf(grouped, 'total')],
+        ['Head-wise tally', totalOf(heads, 'total')],
+      ],
+      [
+        'Reports',
+        'Period fee head-wise: Total Due = fee billed, from the books',
+        ['Report', totalOf(period, 'due')],
+        ['Books', base.billNet],
+      ],
+      [
+        'Reports',
+        'Period fee head-wise: Total Paid = paid on the bills',
+        ['Report', totalOf(period, 'paid')],
+        ['Books', base.billPaid],
+      ],
+      [
+        'Reports',
+        'Yearly projection: Total Due = period fee head-wise',
+        ['Yearly projection', totalOf(yearly, 'due')],
+        ['Period fee head-wise', totalOf(period, 'due')],
+      ],
+      [
+        'Reports',
+        'Yearly projection: Total Paid = period fee head-wise',
+        ['Yearly projection', totalOf(yearly, 'paid')],
+        ['Period fee head-wise', totalOf(period, 'paid')],
+      ],
+      [
+        'Reports',
+        'Forecast: Expected = fee billed, from the books',
+        ['Forecast', totalOf(fore, 'e_all')],
+        ['Books', base.billNet],
+      ],
+      [
+        'Reports',
+        'Forecast: Collected = paid on the bills',
+        ['Forecast', totalOf(fore, 'c_all')],
+        ['Books', base.billPaid],
+      ],
+    ];
+    const rows: MisRow[] = [];
+    let group = '';
+    let bad = 0;
+    checks.forEach(([g, what, a, b, count], i) => {
+      if (g !== group) {
+        group = g;
+        rows.push({ kind: 'group', level: 1, label: g, cells: {} });
+      }
+      const diff = Number((a[1] - b[1]).toFixed(2));
+      const ok = Math.abs(diff) < 0.01;
+      if (!ok) bad += 1;
+      rows.push({
+        kind: 'row',
+        cells: {
+          sr: i + 1,
+          what,
+          a_name: a[0],
+          a: count ? String(a[1]) : a[1],
+          b_name: b[0],
+          b: count ? String(b[1]) : b[1],
+          diff: count ? String(diff) : diff,
+          result: ok ? 'Agrees' : 'DOES NOT AGREE',
+        },
       });
     });
-    return registerFile(
-      {
-        school: head.name,
-        address: head.address,
-        report: r.title,
-        details: [r.filters.join(' · '), generatedOn()],
-        legend: r.note,
-        columns: r.columns.map((col) => ({
-          label: col.label,
-          width: col.width,
-          right: col.type === 'number',
-          group: col.group,
-        })),
-        rows,
-        strong,
-        fontSize:
-          r.columns.length > 40
-            ? 4.5
-            : r.columns.length > 28
-              ? 5.5
-              : r.columns.length > 18
-                ? 6.5
-                : 8,
-        filename: r.report.replace(/_/g, '-'),
-      },
-      format,
-    );
+    rows.push({
+      kind: 'total',
+      label:
+        bad === 0
+          ? `All ${String(checks.length)} checks agree`
+          : `${String(bad)} of ${String(checks.length)} checks do not agree`,
+      cells: {},
+    });
+    return {
+      report: 'check',
+      title: 'Report check',
+      filters: [
+        `Receipts ${dmy(from)} to ${dmy(to)}`,
+        'Bills of the whole session',
+        q.ledger ? `Ledger: ${q.ledger}` : 'All ledgers',
+      ],
+      note: 'Each line reaches one figure two ways (from the books, and as a report prints it) and shows the difference. Receipts are checked for the dates chosen; bills for the whole session. A difference means an entry needs to be looked at; nothing is corrected from here.',
+      columns: [
+        num('sr', 'Sr No', undefined, 5),
+        text('what', 'What is checked', 44),
+        text('a_name', 'First figure', 26),
+        num('a', 'Amount', undefined, 14),
+        text('b_name', 'Second figure', 26),
+        num('b', 'Amount', undefined, 14),
+        num('diff', 'Difference', undefined, 12),
+        text('result', 'Result', 12),
+      ],
+      rows,
+    };
   }
 }

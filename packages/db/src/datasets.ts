@@ -570,10 +570,11 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                  LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
                 WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status = 'posted'
                UNION ALL
-               SELECT 'refund', p.ledger::text, p.receipt_no, r.paid_on, s.admission_no, s.display_name, k.code || '-' || cs.name, r.mode, NULL, NULL, r.reference,
+               -- a refund of last year's advance has no receipt behind it: it is listed by its voucher
+               SELECT 'refund', COALESCE(p.ledger::text, 'school'), COALESCE(p.receipt_no, r.voucher_no), r.paid_on, s.admission_no, s.display_name, k.code || '-' || cs.name, r.mode, NULL, NULL, r.reference,
                       -r.amount, 0, -r.amount, 'refund', u.display_name, NULL
-                 FROM fee_refunds r JOIN fee_payments p ON p.id = r.payment_id JOIN students s ON s.id = p.student_id LEFT JOIN users u ON u.id = r.decided_by
-                 LEFT JOIN enrolments e ON e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id AND e.status = 'active'
+                 FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id JOIN students s ON s.id = COALESCE(r.student_id, p.student_id) LEFT JOIN users u ON u.id = r.decided_by
+                 LEFT JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = COALESCE(r.academic_year_id, p.academic_year_id) AND e.status = 'active'
                  LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
                 WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
              ) x

@@ -24,6 +24,21 @@ export interface TablePdf {
   wrap?: boolean;
   /** Rows (by position) printed in bold: subtotals and totals. */
   strong?: number[];
+  /**
+   * Rows (by position) with a shaded band: a heading across the table (its words are the row's first
+   * filled cell, written from the left edge), a subtotal, or the grand total (dark, white letters).
+   */
+  shade?: Record<number, 'heading' | 'subheading' | 'subtotal' | 'total' | 'grand'>;
+  /** Small tables printed under the main one (a summary by mode, by ledger …), each with its own columns. */
+  after?: Array<{
+    title: string;
+    columns: Array<{ label: string; width: number; right?: boolean }>;
+    rows: Array<Array<string | number | null | undefined>>;
+    /** The last row is a total. */
+    total?: boolean;
+  }>;
+  /** A closing line under everything (the rule the figures follow). */
+  footnote?: string;
 }
 
 const W = 841.89; // A4 landscape
@@ -34,6 +49,14 @@ const INK = rgb(0.043, 0.122, 0.227);
 const MUTED = rgb(0.357, 0.4, 0.463);
 const LINE = rgb(0.86, 0.88, 0.92);
 const ZEBRA = rgb(0.965, 0.972, 0.985);
+// the bands of a grouped report, as in the school's own Excel sheets
+const BANDS = {
+  heading: rgb(0.933, 0.945, 0.984),
+  subheading: rgb(0.914, 0.925, 0.984),
+  subtotal: rgb(0.957, 0.965, 0.984),
+  total: rgb(0.875, 0.894, 0.969),
+  grand: rgb(0.11, 0.165, 0.439),
+};
 
 /** The built-in PDF fonts carry Latin letters only: anything else prints as "?" rather than failing. */
 const latin = (s: string) => s.replace(/[‐-―]/g, '-').replace(/[^\x20-\x7E\xA0-\xFF]/g, '?');
@@ -102,7 +125,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
     t.wrap
       ? wrapLines(font, text, FS, widths[i]! - 2 * PAD, 3)
       : [fit(font, text, FS, widths[i]! - 2 * PAD)];
-  const draw = (cells: string[][], font: PDFFont) => {
+  const draw = (cells: string[][], font: PDFFont, color = INK) => {
     let x = M;
     t.columns.forEach((c, i) => {
       cells[i]!.forEach((s, k) =>
@@ -115,7 +138,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
           y: y - k * LEAD,
           size: FS,
           font,
-          color: INK,
+          color,
         }),
       );
       x += widths[i]!;
@@ -211,7 +234,22 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       page = pdf.addPage([W, H]);
       head();
     }
-    const face = strongRows.has(n) ? bold : regular;
+    const band = t.shade?.[n];
+    if (band === 'heading' || band === 'subheading') {
+      // a heading runs across the table: its words are the first filled cell
+      const words = String(row.find((v) => v !== null && v !== undefined && v !== '') ?? '');
+      page.drawRectangle({ x: M, y: y - 5, width: W - 2 * M, height: ROW, color: BANDS[band] });
+      page.drawText(fit(bold, words, FS + 0.5, W - 2 * M - 2 * PAD), {
+        x: M + PAD,
+        y,
+        size: FS + 0.5,
+        font: bold,
+        color: NAVY,
+      });
+      y -= ROW;
+      return;
+    }
+    const face = strongRows.has(n) || band ? bold : regular;
     const cells = t.columns.map((_, i) => {
       const v = row[i];
       return cell(face, v === null || v === undefined ? '' : String(v), i);
@@ -221,19 +259,91 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       page = pdf.addPage([W, H]);
       head();
     }
-    if (n % 2 === 1)
+    if (band || n % 2 === 1)
       page.drawRectangle({
         x: M,
         y: y - 5 - extra,
         width: W - 2 * M,
         height: ROW + extra,
-        color: ZEBRA,
+        color: band ? BANDS[band] : ZEBRA,
       });
-    draw(cells, face);
+    draw(cells, face, band === 'grand' ? rgb(1, 1, 1) : INK);
     y -= ROW + extra;
   });
   if (!t.rows.length)
     page.drawText('Nothing to show.', { x: M, y, size: 9, font: regular, color: MUTED });
+  // the small tables under the main one: half the page wide, each with a title and its own header row
+  const SFS = Math.max(FS, 8);
+  const SROW = 16;
+  const fresh = () => {
+    page = pdf.addPage([W, H]);
+    pages.push(page);
+    page.drawRectangle({ x: 0, y: H - 30, width: W, height: 30, color: NAVY });
+    page.drawText(fit(bold, `${t.school} · ${t.title}`, 11, W - 2 * M), {
+      x: M,
+      y: H - 20,
+      size: 11,
+      font: bold,
+      color: rgb(1, 1, 1),
+    });
+    y = H - 30 - 22;
+  };
+  for (const block of t.after ?? []) {
+    if (y - (block.rows.length + 3) * SROW < M + 20) fresh();
+    else y -= 14;
+    const span = (W - 2 * M) * 0.55;
+    const sum = block.columns.reduce((a, c) => a + c.width, 0) || 1;
+    const bw = block.columns.map((c) => (span * c.width) / sum);
+    page.drawText(fit(bold, block.title, SFS + 1.5, span), {
+      x: M,
+      y,
+      size: SFS + 1.5,
+      font: bold,
+      color: NAVY,
+    });
+    y -= SROW + 2;
+    const line = (
+      cells: Array<string | number | null | undefined>,
+      font: PDFFont,
+      fill?: ReturnType<typeof rgb>,
+      color = INK,
+    ) => {
+      if (fill) page.drawRectangle({ x: M, y: y - 4, width: span, height: SROW, color: fill });
+      let x = M;
+      block.columns.forEach((c, i) => {
+        const v = cells[i];
+        const s = fit(font, v === null || v === undefined ? '' : String(v), SFS, bw[i]! - 8);
+        page.drawText(s, {
+          x: c.right ? x + bw[i]! - 4 - font.widthOfTextAtSize(s, SFS) : x + 4,
+          y,
+          size: SFS,
+          font,
+          color,
+        });
+        x += bw[i]!;
+      });
+      y -= SROW;
+    };
+    line(
+      block.columns.map((c) => c.label),
+      bold,
+      BANDS.heading,
+      NAVY,
+    );
+    block.rows.forEach((r, i) => {
+      if (y < M + 20) fresh();
+      const last = block.total && i === block.rows.length - 1;
+      line(r, last ? bold : regular, last ? BANDS.total : i % 2 === 1 ? ZEBRA : undefined);
+    });
+  }
+  if (t.footnote) {
+    if (y < M + 40) fresh();
+    y -= 10;
+    for (const l of wrapLines(regular, t.footnote, 8, W - 2 * M, 4)) {
+      page.drawText(l, { x: M, y, size: 8, font: regular, color: MUTED });
+      y -= 11;
+    }
+  }
   pages.forEach((p, i) =>
     p.drawText(
       `Page ${String(i + 1)} of ${String(pages.length)} · ${String(t.rows.length)} row(s)`,
