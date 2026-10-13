@@ -152,19 +152,34 @@ export class FeeRemindersService {
         continue;
       }
       const amount = p.balance.toFixed(2);
+      const inr = p.balance.toLocaleString('en-IN');
       for (const [name, mobile, email] of people)
         rows.push({
           name: name ?? 'Parent',
           mobile: mobile ?? null,
           email: email ?? null,
           vars: {
+            // the blanks Communication fills for a student by itself, so any of the school's templates
+            // reads the same here as when it is sent from Compose
+            recipient_name: name ?? 'Parent',
             guardian_name: name ?? 'Parent',
-            parent_name: name ?? 'Parent',
-            name: name ?? 'Parent',
+            father_name: p.father ?? '',
+            mother_name: p.mother ?? '',
             student_name: p.student,
             admission_no: p.admission_no,
             class: p.class ?? '',
-            section: p.class ?? '',
+            class_name: p.class_name ?? '',
+            section: p.section_name ?? '',
+            roll_no: p.roll_no ?? '',
+            fee_due: inr,
+            fee_due_heads: p.heads ?? '',
+            last_paid_amount:
+              p.last_paid_amount === null ? '' : p.last_paid_amount.toLocaleString('en-IN'),
+            last_paid_date: p.last_paid_on ? day(p.last_paid_on) : '',
+            date: day(new Date(Date.now() + 5.5 * 3600 * 1000).toISOString()),
+            // and the ones a fee reminder adds
+            parent_name: name ?? 'Parent',
+            name: name ?? 'Parent',
             amount,
             balance: amount,
             due_amount: amount,

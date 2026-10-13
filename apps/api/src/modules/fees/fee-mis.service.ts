@@ -330,9 +330,17 @@ export class FeeMisService {
       reminded_today: boolean;
       /** The channels the pupil was already reminded on today. */
       reminded_channels: string[];
+      heads: string | null;
+      section_name: string | null;
+      class_name: string | null;
+      roll_no: string | null;
+      last_paid_on: string | null;
+      last_paid_amount: number | null;
     }>(
       `WITH due AS (
          SELECT d.student_id, sum(d.net - d.paid)::float AS balance, min(d.due_on) AS oldest,
+                (SELECT string_agg(DISTINCT h.name, ', ') FROM fee_demands d2 JOIN fee_heads h ON h.id = d2.head_id
+                  WHERE d2.student_id = d.student_id AND d2.academic_year_id = $1 AND d2.status IN ('pending', 'partial') AND d2.net > d2.paid AND d2.due_on < $2::date) AS heads,
                 string_agg(DISTINCT lpad(fp.sequence::text, 2, '0') || ':' || to_char(make_date(fp.year, fp.month, 1), 'Mon'), ',') AS months
            FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
           WHERE d.academic_year_id = $1 AND d.status IN ('pending', 'partial') AND d.net > d.paid AND d.due_on < $2::date
@@ -349,7 +357,10 @@ export class FeeMisService {
               COALESCE((SELECT fd.name FROM fee_discounts fd WHERE fd.id = fp.discount_id),
                        (SELECT string_agg(DISTINCT fd.name, ', ') FROM student_fee_discounts sd JOIN fee_discounts fd ON fd.id = sd.discount_id
                          WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active')) AS discount,
-              due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.balance, due.months,
+              due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.balance, due.months, due.heads,
+              cs.name AS section_name, k.name AS class_name,
+              (SELECT e.roll_no::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS roll_no,
+              lp.received_on::text AS last_paid_on, lp.amount::float AS last_paid_amount,
               (SELECT max(fr.sent_on)::text FROM fee_reminders fr WHERE fr.student_id = s.id) AS last_reminded_on,
               EXISTS (SELECT 1 FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE) AS reminded_today,
               COALESCE((SELECT array_agg(DISTINCT fr.channel::text) FROM fee_reminders fr WHERE fr.student_id = s.id AND fr.sent_on = CURRENT_DATE), '{}') AS reminded_channels
@@ -358,6 +369,8 @@ export class FeeMisService {
                              ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) en ON true
          LEFT JOIN class_sections cs ON cs.id = en.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
          LEFT JOIN student_fee_profiles fp ON fp.student_id = s.id AND fp.academic_year_id = $1
+         LEFT JOIN LATERAL (SELECT p.received_on, p.amount FROM fee_payments p
+                             WHERE p.student_id = s.id AND p.status IN ('posted', 'partly_refunded', 'refunded') ORDER BY p.received_on DESC, p.id DESC LIMIT 1) lp ON true
          LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
                              WHERE sg.student_id = s.id AND sg.relation = 'father' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) f ON true
          LEFT JOIN LATERAL (SELECT g.display_name AS name, g.mobile, g.email::text AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
