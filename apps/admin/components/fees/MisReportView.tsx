@@ -73,7 +73,8 @@ function Table({
   const firstNumber = columns.findIndex((c) => c.type === 'number' && c.key !== 'sr');
   const labelSpan = firstNumber > 0 ? firstNumber : 1;
   return (
-    <div className="ep-table-wrap">
+    // a wide report scrolls sideways inside its box; the keyboard can reach it
+    <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={caption}>
       <table className="ep-table ep-table--dense">
         <caption className="ep-sr-only">{caption}</caption>
         <thead>
