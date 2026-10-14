@@ -12,6 +12,8 @@ export async function POST(req: Request) {
   const fd = await req.formData();
   const studentId = String(fd.get('studentId') ?? '');
   const amount = Number(fd.get('amount'));
+  // school fee or hostel fee: each is paid on its own
+  const ledger = fd.get('ledger') === 'hostel' ? 'hostel' : 'school';
   const back = new URL(`/fees?student=${encodeURIComponent(studentId)}`, req.url);
   if (!/^\d+$/.test(studentId) || !Number.isFinite(amount) || amount <= 0) {
     back.searchParams.set('error', 'validation-failed');
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
   try {
     out = await bff.api.fetch<{ intent: Intent; checkout: Checkout }>('/payments/intents/mine', {
       method: 'POST',
-      body: JSON.stringify({ studentId, amount }),
+      body: JSON.stringify({ studentId, amount, ledger }),
     });
   } catch (error) {
     if (error instanceof ApiError) {

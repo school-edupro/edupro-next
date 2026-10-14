@@ -29,6 +29,7 @@ export function PostReceiptForm({
   banks,
   accounts,
   payable,
+  payableByLedger,
   today,
   hasHostel,
   canSkipLateFee,
@@ -39,12 +40,18 @@ export function PostReceiptForm({
   banks: string[];
   accounts: SchoolAccount[];
   payable: string;
+  /** What is open on each fee type, when the pupil has hostel fee too. */
+  payableByLedger?: { school: string; hostel: string };
   today: string;
   hasHostel: boolean;
   canSkipLateFee: boolean;
 }) {
   const [value, setValue] = useState(modes[0] ? optionValue(modes[0]) : 'cash');
   const [ledger, setLedger] = useState('school');
+  const due = payableByLedger
+    ? payableByLedger[ledger === 'hostel' ? 'hostel' : 'school']
+    : payable;
+  const [amount, setAmount] = useState(Number(due) > 0 ? due : '');
   const mode = modes.find((m) => optionValue(m) === value);
   const kind = mode?.kind ?? 'cash';
   const cheque = kind === 'cheque' || kind === 'dd';
@@ -71,9 +78,14 @@ export function PostReceiptForm({
             min={1}
             step="0.01"
             required
-            defaultValue={Number(payable) > 0 ? payable : ''}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
           />
-          <span className="ep-field__help">Payable today: ₹{payable}</span>
+          <span className="ep-field__help">
+            {payableByLedger
+              ? `Open on ${ledger === 'hostel' ? 'hostel' : 'regular'} fee: ₹${due}. A part payment is taken; late fee runs on what is left.`
+              : `Payable today: ₹${payable}`}
+          </span>
         </label>
         <label className="ep-field">
           <span className="ep-field__label">Payment mode *</span>
@@ -108,7 +120,11 @@ export function PostReceiptForm({
               className="ep-select"
               name="ledger"
               value={ledger}
-              onChange={(e) => setLedger(e.target.value)}
+              onChange={(e) => {
+                setLedger(e.target.value);
+                const next = payableByLedger?.[e.target.value === 'hostel' ? 'hostel' : 'school'];
+                if (next !== undefined) setAmount(Number(next) > 0 ? next : '');
+              }}
             >
               <option value="school">Regular fee</option>
               <option value="hostel">Hostel fee</option>

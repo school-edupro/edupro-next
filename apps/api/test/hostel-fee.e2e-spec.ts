@@ -230,6 +230,31 @@ describe('hostel fee (e2e)', () => {
     expect(own.instalments.filter((i) => i.ledger === 'hostel').length).toBeGreaterThan(4);
   });
 
+  it('defaulters show school and hostel balances apart; online payment is per fee type', async () => {
+    const rep = await inject({
+      method: 'GET',
+      url: '/fees/mis/defaulters?asOf=2026-10-14',
+      headers: h(),
+    });
+    const row = (
+      rep.json().rows as Array<{ kind: string; cells: Record<string, number | string> }>
+    ).find((r) => r.kind === 'row' && r.cells.student_id === pupils.whole)!;
+    expect(Number(row.cells.school_balance) + Number(row.cells.hostel_balance)).toBe(
+      Number(row.cells.balance),
+    );
+    expect(Number(row.cells.hostel_balance)).toBeGreaterThan(0);
+    const hostelOnly = await inject({
+      method: 'GET',
+      url: '/fees/mis/defaulters?asOf=2026-10-14&ledger=hostel',
+      headers: h(),
+    });
+    const only = (
+      hostelOnly.json().rows as Array<{ kind: string; cells: Record<string, number | string> }>
+    ).find((r) => r.kind === 'row' && r.cells.student_id === pupils.whole)!;
+    expect(Number(only.cells.balance)).toBe(Number(only.cells.hostel_balance));
+    expect(Number(only.cells.school_balance)).toBe(0);
+  });
+
   it('leaving the hostel: later months go, and what was paid for them is carried forward', async () => {
     await change(pupils.leaves!, { hosteller: true, reason: 'Hosteller' });
     const pay = await inject({

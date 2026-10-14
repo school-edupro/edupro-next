@@ -37,6 +37,8 @@ export class CreateFeeIntentDto extends createZodDto(CreateFeeIntentSchema) {}
 export const CreateFamilyIntentSchema = z.object({
   studentId: IdSchema,
   amount: Amount,
+  /** School fee or hostel fee: each is paid on its own (0134). */
+  ledger: z.enum(['school', 'hostel']).default('school'),
 });
 export class CreateFamilyIntentDto extends createZodDto(CreateFamilyIntentSchema) {}
 

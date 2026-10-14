@@ -862,10 +862,13 @@ export class PaymentsService {
         status: 409,
       });
     // instalments the class keeps off online payment (Fee Pay = No) or hidden (Show = No) are paid at the counter
-    const blocked = ledger.instalments
-      .filter((i) => !i.feePay || !i.show)
-      .reduce((a, i) => a + Number(i.balance) + Number(i.lateFee.outstanding), 0);
-    const payable = Math.max(Number(ledger.totals.payable) - blocked, 0);
+    // school fee and hostel fee are paid apart: up to what is open on the chosen one
+    const payable = Math.max(
+      ledger.instalments
+        .filter((i) => i.ledger === dto.ledger && i.feePay && i.show)
+        .reduce((a, i) => a + Number(i.balance) + Number(i.lateFee.outstanding), 0),
+      0,
+    );
     if (dto.amount > payable + 0.005)
       throw new DomainError(
         'payments.amount_exceeds_dues',
@@ -882,6 +885,7 @@ export class PaymentsService {
         entityType: 'student',
         entityId: dto.studentId,
         amount: dto.amount,
+        ledger: dto.ledger,
         payer: {
           name: u.name,
           email: u.email ?? 'unknown@example.invalid',
@@ -948,8 +952,8 @@ export class PaymentsService {
 
   /** Success of a fee instalment intent: the receipt posts through app.post_receipt like a counter receipt. */
   async applyFeeInstalment(c: PoolClient, intent: IntentRow): Promise<void> {
-    const meta = await c.query<{ year: string | null }>(
-      `SELECT meta->>'academicYearId' AS year FROM payment_intents WHERE id = $1`,
+    const meta = await c.query<{ year: string | null; ledger: 'school' | 'hostel' }>(
+      `SELECT meta->>'academicYearId' AS year, CASE WHEN ledger = 'hostel' THEN 'hostel' ELSE 'school' END AS ledger FROM payment_intents WHERE id = $1`,
       [intent.id],
     );
     const yearId =
@@ -972,7 +976,7 @@ export class PaymentsService {
       instrumentDate: null,
       bankName: null,
       intentId: intent.id,
-      ledger: 'school',
+      ledger: meta.rows[0]?.ledger ?? 'school',
       collectLateFee: true,
       strictYear: false,
     });

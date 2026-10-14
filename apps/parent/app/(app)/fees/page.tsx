@@ -17,6 +17,8 @@ interface Instalment {
   lateFee: { amount: string; posted: string; outstanding: string };
   /** false: the class keeps this instalment off online payment */
   feePay?: boolean;
+  /** school fee or hostel fee: each is shown and paid on its own */
+  ledger?: string;
 }
 interface Payment {
   id: string;
@@ -38,6 +40,9 @@ interface Child {
     studentType: 'new' | 'old';
     payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
     hosteller: boolean;
+    hostelFrom?: string | null;
+    hostelTo?: string | null;
+    hostelPayPlan?: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
     transport: string | null;
     discounts: string[];
     optionalHeads: string[];
@@ -47,6 +52,8 @@ interface Child {
   payments: Payment[];
   refunds: Array<{ id: string; amount: string; status: string; reason: string }>;
   payableNow: string;
+  payableSchool?: string;
+  payableHostel?: string;
   hidden: number;
 }
 interface Intent {
@@ -88,10 +95,12 @@ const PAY_PLAN = {
  * What the parent may pay online: whole instalments of the child's pay plan, the oldest first. Each
  * choice is everything due up to and including that instalment (fee left + late fee).
  */
-function payChoices(c: Child): Array<{ label: string; amount: string }> {
+function payChoices(c: Child, ledger: string): Array<{ label: string; amount: string }> {
   const out: Array<{ label: string; amount: string }> = [];
   let sum = 0;
-  for (const i of c.instalments) {
+  const own = ledger === 'hostel' ? c.payableHostel : c.payableSchool;
+  const all = own ?? c.payableNow;
+  for (const i of c.instalments.filter((x) => (x.ledger ?? 'school') === ledger)) {
     if (i.feePay === false) continue;
     const due = Number(i.balance) + Number(i.lateFee.outstanding);
     if (due <= 0) continue;
@@ -99,10 +108,17 @@ function payChoices(c: Child): Array<{ label: string; amount: string }> {
     out.push({ label: i.label, amount: sum.toFixed(2) });
   }
   // the ledger's own figure is always offered, so nothing payable is left out by rounding
-  if (!out.some((o) => o.amount === Number(c.payableNow).toFixed(2)))
-    out.push({ label: 'All', amount: Number(c.payableNow).toFixed(2) });
+  if (Number(all) > 0 && !out.some((o) => o.amount === Number(all).toFixed(2)))
+    out.push({ label: 'All', amount: Number(all).toFixed(2) });
   return out;
 }
+
+const monthOf = (v: string) =>
+  new Date(`${v.slice(0, 10)}T00:00:00Z`).toLocaleString('en-IN', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 
 const tone = (s: Instalment['status']) =>
   s === 'paid' ? 'success' : s === 'overdue' ? 'danger' : s === 'due' ? 'warning' : 'neutral';
@@ -317,78 +333,129 @@ export default async function FeesPage({
               </div>
             ))}
           </div>
-          <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>{t(lang, 'Instalment')}</th>
-                <th>{t(lang, 'Due on')}</th>
-                <th style={{ textAlign: 'right' }}>{t(lang, 'Amount')}</th>
-                <th style={{ textAlign: 'right' }}>{t(lang, 'Balance')}</th>
-                <th style={{ textAlign: 'right' }}>{t(lang, 'Late fee')}</th>
-                <th>{t(lang, 'Status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {c.instalments.map((x) => (
-                <tr key={x.dueOn}>
-                  <td>{x.label}</td>
-                  <td>{x.dueOn}</td>
-                  <td style={{ textAlign: 'right' }}>₹{x.net}</td>
-                  <td style={{ textAlign: 'right' }}>₹{x.balance}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {Number(x.lateFee.outstanding) > 0 ? `₹${x.lateFee.outstanding}` : '—'}
-                  </td>
-                  <td>
-                    <Badge tone={tone(x.status)}>
-                      {t(
-                        lang,
-                        x.status === 'paid'
-                          ? 'Paid'
-                          : x.status === 'overdue'
-                            ? 'Overdue'
-                            : x.status === 'due'
-                              ? 'Due'
-                              : 'Upcoming',
-                      )}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {(() => {
+            // school fee and hostel fee are shown and paid on their own
+            const split = c.instalments.some((x) => x.ledger === 'hostel');
+            const stay =
+              c.fee?.hostelFrom || c.fee?.hostelTo
+                ? `${c.fee.hostelFrom ? monthOf(c.fee.hostelFrom) : t(lang, 'session start')} – ${c.fee.hostelTo ? monthOf(c.fee.hostelTo) : t(lang, 'session end')}`
+                : null;
+            return (split ? (['school', 'hostel'] as const) : (['school'] as const)).map(
+              (ledger) => {
+                const rows = c.instalments.filter((x) => (x.ledger ?? 'school') === ledger);
+                const title = ledger === 'hostel' ? 'Hostel fee' : 'School fee';
+                const payable =
+                  (ledger === 'hostel'
+                    ? c.payableHostel
+                    : split
+                      ? c.payableSchool
+                      : c.payableNow) ?? c.payableNow;
+                return (
+                  <section key={ledger} style={{ marginBottom: 'var(--sp-4)' }}>
+                    {split ? (
+                      <h4
+                        style={{
+                          fontFamily: 'var(--font-heading)',
+                          margin: 'var(--sp-3) 0 var(--sp-2)',
+                        }}
+                      >
+                        {t(lang, title)} · ₹{payable} {t(lang, 'to pay')}
+                        {ledger === 'hostel' && stay ? (
+                          <small className="ep-field__help">
+                            {' '}
+                            · {t(lang, 'In the hostel')}: {stay}
+                          </small>
+                        ) : null}
+                      </h4>
+                    ) : null}
+                    <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th>{t(lang, 'Instalment')}</th>
+                          <th>{t(lang, 'Due on')}</th>
+                          <th style={{ textAlign: 'right' }}>{t(lang, 'Amount')}</th>
+                          <th style={{ textAlign: 'right' }}>{t(lang, 'Balance')}</th>
+                          <th style={{ textAlign: 'right' }}>{t(lang, 'Late fee')}</th>
+                          <th>{t(lang, 'Status')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((x) => (
+                          <tr key={`${ledger}-${x.dueOn}`}>
+                            <td>{x.label}</td>
+                            <td>{x.dueOn}</td>
+                            <td style={{ textAlign: 'right' }}>₹{x.net}</td>
+                            <td style={{ textAlign: 'right' }}>₹{x.balance}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              {Number(x.lateFee.outstanding) > 0
+                                ? `₹${x.lateFee.outstanding}`
+                                : '—'}
+                            </td>
+                            <td>
+                              <Badge tone={tone(x.status)}>
+                                {t(
+                                  lang,
+                                  x.status === 'paid'
+                                    ? 'Paid'
+                                    : x.status === 'overdue'
+                                      ? 'Overdue'
+                                      : x.status === 'due'
+                                        ? 'Due'
+                                        : 'Upcoming',
+                                )}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {c.year.status === 'active' && Number(payable) > 0 && canPay ? (
+                      <form
+                        method="post"
+                        action="/fees/pay"
+                        style={{
+                          display: 'flex',
+                          gap: 'var(--sp-2)',
+                          alignItems: 'flex-end',
+                          marginTop: 'var(--sp-3)',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <input type="hidden" name="studentId" value={c.student.id} />
+                        <input type="hidden" name="ledger" value={ledger} />
+                        <label className="ep-field" style={{ margin: 0 }}>
+                          <span className="ep-field__label">{t(lang, 'Pay up to')}</span>
+                          <select
+                            className="ep-select"
+                            name="amount"
+                            defaultValue={Number(payable).toFixed(2)}
+                            required
+                            aria-label={`${t(lang, 'Pay up to')} · ${t(lang, title)}`}
+                          >
+                            {payChoices(c, ledger).map((o) => (
+                              <option key={o.amount} value={o.amount}>
+                                {o.label} · ₹{o.amount}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="ep-field__help">
+                            {t(lang, 'Whole instalments, the oldest first.')}
+                          </span>
+                        </label>
+                        <Button type="submit">
+                          {split ? `${t(lang, 'Pay')} ${t(lang, title)}` : t(lang, 'Pay online')}
+                        </Button>
+                      </form>
+                    ) : null}
+                  </section>
+                );
+              },
+            );
+          })()}
           {c.hidden > 0 ? (
             <p className="ep-field__help">
               {t(lang, 'Later instalments appear when the school opens them.')}
             </p>
-          ) : null}
-          {c.year.status === 'active' && Number(c.payableNow) > 0 && canPay ? (
-            <form
-              method="post"
-              action="/fees/pay"
-              style={{
-                display: 'flex',
-                gap: 'var(--sp-2)',
-                alignItems: 'flex-end',
-                marginTop: 'var(--sp-3)',
-                flexWrap: 'wrap',
-              }}
-            >
-              <input type="hidden" name="studentId" value={c.student.id} />
-              <label className="ep-field" style={{ margin: 0 }}>
-                <span className="ep-field__label">{t(lang, 'Pay up to')}</span>
-                <select className="ep-select" name="amount" defaultValue={c.payableNow} required>
-                  {payChoices(c).map((o) => (
-                    <option key={o.amount} value={o.amount}>
-                      {o.label} · ₹{o.amount}
-                    </option>
-                  ))}
-                </select>
-                <span className="ep-field__help">
-                  {t(lang, 'Whole instalments, the oldest first.')}
-                </span>
-              </label>
-              <Button type="submit">{t(lang, 'Pay online')}</Button>
-            </form>
           ) : null}
           <h4 style={{ fontFamily: 'var(--font-heading)', margin: 'var(--sp-4) 0 var(--sp-2)' }}>
             {t(lang, 'Receipts')}

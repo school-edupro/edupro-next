@@ -201,6 +201,9 @@ export class FeeLedgerService {
     children: Array<
       Ledger & {
         payableNow: string;
+        /** The same for school fee and for hostel fee, each paid on its own. */
+        payableSchool: string;
+        payableHostel: string;
         hidden: number;
       }
     >;
@@ -221,11 +224,22 @@ export class FeeLedgerService {
       const payableNow = visible
         .filter((i) => i.feePay)
         .reduce((sum, i) => sum + Number(i.balance) + Number(i.lateFee.outstanding), 0);
+      const of = (l: string) =>
+        fmt(
+          Math.max(
+            visible
+              .filter((i) => i.feePay && i.ledger === l)
+              .reduce((sum, i) => sum + Number(i.balance) + Number(i.lateFee.outstanding), 0),
+            0,
+          ),
+        );
       children.push({
         ...ledger,
         instalments: visible,
         hidden: ledger.instalments.length - visible.length,
         payableNow: fmt(Math.max(payableNow, 0)),
+        payableSchool: of('school'),
+        payableHostel: of('hostel'),
         lastRun: null,
         overrides: [],
       });

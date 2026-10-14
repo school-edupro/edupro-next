@@ -633,3 +633,31 @@ columns; Excel and PDF; tick rows and send a reminder.
 
 **Parents** see the announced fees of their child under Fees → Other fees, with the last date, the
 amount, what is paid and the seats. Misc fees are paid at the school counter.
+
+## Hostel fee
+
+Hostel fee has its own heads (ledger "hostel"), its own bills and its own receipts (HF/…). School fee
+and hostel fee are always paid apart.
+
+**Who pays hostel, and for which months.** On the pupil's page → Fees → *Request a change*:
+- *Hosteller: Yes* for the whole session, or *Hostel from month* / *Hostel to month* for part of it
+  (choosing months makes the pupil a hosteller). Months are whole months: joining in July charges July
+  onwards; leaving with last month August stops hostel from September.
+- Leaving after paying ahead: what was paid for the months that go is carried forward to the pupil's
+  next unpaid fee; what finds no due stays as advance on the receipt. The approval note says how much.
+- *Own hostel pay plan*: one pupil can pay hostel monthly while the hostel goes by quarter.
+All of these go for approval (Fee setup → Approval levels).
+
+**Hostel calendar** (Fee setup → Hostel calendar). *Same as school*: hostel instalments use the class
+calendar's dates and late fee. *Own hostel calendar*: a pay plan for hostel (for example quarterly), a
+last date for the first month of each instalment, and late fee by slabs, per day, or none. Unpaid hostel
+bills move to new dates as soon as it is saved. Enter hostel amounts per month in the class fee
+structure; the pay plan groups the months into instalments.
+
+**Paying.** At the counter choose *Fee type: Hostel fee*; the amount shows what is open on hostel only,
+and a part payment is taken (late fee runs on what is left after the last date). In the parent app a
+hosteller's fees show as two blocks, *School fee* and *Hostel fee*, each with its own Pay button, and
+the months in the hostel.
+
+**Defaulters** show *School balance* and *Hostel balance* beside the total; filter *Ledger: Hostel* to
+list and remind hostel dues only.

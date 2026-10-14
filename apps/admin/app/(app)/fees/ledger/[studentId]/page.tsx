@@ -142,6 +142,12 @@ export default async function FeeLedgerPage({
   const canPost = can('fees.receipt.post') && yearOpen;
   const tab: Tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : canPost ? 'pay' : 'dues';
   const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  // what is open on school fee and on hostel fee, each paid on its own
+  const openOn = (l: string) =>
+    ledger.instalments
+      .filter((i) => i.ledger === l)
+      .reduce((a, i) => a + Number(i.balance) + Number(i.lateFee.outstanding), 0)
+      .toFixed(2);
   const [modes, options, demandRows] = await Promise.all([
     tab === 'pay' && canPost
       ? apiFetch<{ data: Array<CounterMode & { atCounter: boolean }> }>('/fees/payment-modes')
@@ -367,6 +373,14 @@ export default async function FeeLedgerPage({
               banks={options.banks}
               accounts={options.accounts}
               payable={ledger.totals.payable}
+              payableByLedger={
+                ledger.instalments.some((i) => i.ledger === 'hostel')
+                  ? {
+                      school: openOn('school'),
+                      hostel: openOn('hostel'),
+                    }
+                  : undefined
+              }
               today={today}
               hasHostel={ledger.instalments.some((i) => i.ledger === 'hostel')}
               canSkipLateFee={can('fees.late_fee.manage')}

@@ -13,6 +13,13 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'School fee': 'विद्यालय शुल्क',
+  'Hostel fee': 'छात्रावास शुल्क',
+  'to pay': 'देय',
+  'In the hostel': 'छात्रावास में',
+  'session start': 'सत्र आरंभ',
+  'session end': 'सत्र अंत',
+  Pay: 'भुगतान करें',
   'Other fees': 'अन्य शुल्क',
   'Fees announced by the school for a trip, an activity or a form. They are paid at the school fee counter.':
     'विद्यालय द्वारा यात्रा, गतिविधि या फॉर्म के लिए घोषित शुल्क। ये विद्यालय के शुल्क काउंटर पर जमा होते हैं।',

@@ -330,6 +330,9 @@ export class FeeMisService {
       due: number;
       paid: number;
       balance: number;
+      /** what is left on school fee and on hostel fee */
+      school_balance: number;
+      hostel_balance: number;
       months: string | null;
       last_reminded_on: string | null;
       reminded_today: boolean;
@@ -344,6 +347,8 @@ export class FeeMisService {
     }>(
       `WITH due AS (
          SELECT d.student_id, sum(d.net)::float AS due, sum(d.paid)::float AS paid, sum(d.net - d.paid)::float AS balance,
+                (sum(d.net - d.paid) FILTER (WHERE d.ledger <> 'hostel'))::float AS school_balance,
+                (sum(d.net - d.paid) FILTER (WHERE d.ledger = 'hostel'))::float AS hostel_balance,
                 min(d.due_on) FILTER (WHERE d.net > d.paid) AS oldest,
                 (SELECT string_agg(DISTINCT h.name, ', ') FROM fee_demands d2 JOIN fee_heads h ON h.id = d2.head_id
                   WHERE d2.student_id = d.student_id AND d2.academic_year_id = $1 AND d2.status IN ('pending', 'partial') AND d2.net > d2.paid AND d2.due_on < $2::date) AS heads,
@@ -367,6 +372,7 @@ export class FeeMisService {
                        (SELECT string_agg(DISTINCT fd.name, ', ') FROM student_fee_discounts sd JOIN fee_discounts fd ON fd.id = sd.discount_id
                          WHERE sd.student_id = s.id AND sd.academic_year_id = $1 AND sd.status = 'active')) AS discount,
               due.oldest::text AS oldest_due, ($2::date - due.oldest)::int AS days_overdue, due.due, due.paid, due.balance, due.months, due.heads,
+              COALESCE(due.school_balance, 0) AS school_balance, COALESCE(due.hostel_balance, 0) AS hostel_balance,
               cs.name AS section_name, k.name AS class_name,
               (SELECT e.roll_no::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $1 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS roll_no,
               lp.received_on::text AS last_paid_on, lp.amount::float AS last_paid_amount,
@@ -442,6 +448,8 @@ export class FeeMisService {
         days_overdue: String(x.days_overdue),
         due: x.due,
         paid: x.paid,
+        school_balance: x.school_balance,
+        hostel_balance: x.hostel_balance,
         balance: x.balance,
         last_reminded: x.last_reminded_on ? dmy(x.last_reminded_on) : 'Never',
       },
@@ -452,6 +460,8 @@ export class FeeMisService {
       cells: {
         due: list.reduce((a, x) => a + x.due, 0),
         paid: list.reduce((a, x) => a + x.paid, 0),
+        school_balance: list.reduce((a, x) => a + x.school_balance, 0),
+        hostel_balance: list.reduce((a, x) => a + x.hostel_balance, 0),
         balance: total,
       },
     });
@@ -489,6 +499,8 @@ export class FeeMisService {
         text('days_overdue', 'Days overdue', 7),
         num('due', 'Due', undefined, 12),
         num('paid', 'Paid', undefined, 12),
+        num('school_balance', 'School balance', undefined, 12),
+        num('hostel_balance', 'Hostel balance', undefined, 12),
         num('balance', 'Balance', undefined, 12),
         text('last_reminded', 'Last reminded', 9),
       ],
