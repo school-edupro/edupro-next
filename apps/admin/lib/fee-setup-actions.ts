@@ -342,3 +342,41 @@ export async function requestOptionalHeads(fd: FormData) {
   }
   done(path);
 }
+
+/** The hostel calendar (0134): "same as school", or its own pay plan, last dates and late fee. */
+export async function saveHostelCalendar(fd: FormData) {
+  const path = '/fees/hostel-calendar';
+  const periods = fd
+    .getAll('periodIds')
+    .map(String)
+    .map((periodId) => ({
+      periodId,
+      dueOn: str(fd, `dueOn:${periodId}`) || null,
+      lateFeeAmount: num(fd, `lateFee:${periodId}`),
+      latePerDay: num(fd, `perDay:${periodId}`),
+      slabs: [1, 2, 3]
+        .map((i) => ({
+          on: str(fd, `slabOn${i}:${periodId}`),
+          amount: num(fd, `slabAmt${i}:${periodId}`),
+        }))
+        .filter((x): x is { on: string; amount: number } => x.on !== '' && x.amount !== null),
+    }));
+  try {
+    await apiFetch('/fees/hostel-calendar', {
+      method: 'PUT',
+      body: JSON.stringify({
+        mode: str(fd, 'mode') === 'own' ? 'own' : 'school',
+        payPlan: str(fd, 'payPlan') || null,
+        lateMode: ['slab', 'daywise', 'none'].includes(str(fd, 'lateMode'))
+          ? str(fd, 'lateMode')
+          : 'slab',
+        latePerDay: num(fd, 'latePerDay'),
+        lateMax: num(fd, 'lateMax'),
+        periods,
+      }),
+    });
+  } catch (error) {
+    fail(path, error);
+  }
+  done(path);
+}

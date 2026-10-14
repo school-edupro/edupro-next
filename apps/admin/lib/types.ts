@@ -882,6 +882,10 @@ export interface FeeProfile {
   payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | null;
   payPlanInForce: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
   hosteller: boolean;
+  hostelFrom: string | null;
+  hostelTo: string | null;
+  hostelPayPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | null;
+  hostelPayPlanInForce: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
 }
 export interface FeeDemandRow {
   id: string;

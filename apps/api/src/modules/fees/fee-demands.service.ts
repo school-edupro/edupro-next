@@ -30,6 +30,12 @@ export interface ProfileRow {
   instalmentsOverride: number | null;
   /** Sprint 14: hostel-ledger heads apply to hostellers */
   hosteller: boolean;
+  /** The months in the hostel (first day of a month); null = from the start / to the end. */
+  hostelFrom: string | null;
+  hostelTo: string | null;
+  /** The pupil's own hostel pay plan (through approval), and the one in force. */
+  hostelPayPlan: PayPlan | null;
+  hostelPayPlanInForce: PayPlan;
   /** True when no row exists yet and the defaults above would apply. */
   isDefault: boolean;
 }
@@ -69,7 +75,10 @@ const PROFILE_SELECT = `SELECT p.student_id::text AS "studentId", p.academic_yea
         (SELECT CASE WHEN s.admitted_on IS NOT NULL AND s.admitted_on >= y.start_date THEN 'new' ELSE 'old' END FROM students s, academic_years y WHERE s.id = p.student_id AND y.id = p.academic_year_id) AS "studentType",
         p.pay_plan AS "payPlan", app.fee_pay_plan(p.student_id, p.academic_year_id, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id WHERE e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1)) AS "payPlanInForce",
         p.transport_slab_id::text AS "transportSlabId", ts.name AS "transportSlab", p.transport_disabled AS "transportDisabled",
-        p.discount_id::text AS "discountId", d.name AS discount, p.opening_balance::text AS "openingBalance", p.notes, p.instalments_override AS "instalmentsOverride", p.hosteller, false AS "isDefault"
+        p.discount_id::text AS "discountId", d.name AS discount, p.opening_balance::text AS "openingBalance", p.notes, p.instalments_override AS "instalmentsOverride", p.hosteller,
+        p.hostel_from::text AS "hostelFrom", p.hostel_to::text AS "hostelTo", p.hostel_pay_plan AS "hostelPayPlan",
+        app.fee_hostel_plan(p.student_id, p.academic_year_id, app.fee_pay_plan(p.student_id, p.academic_year_id, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id WHERE e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1))) AS "hostelPayPlanInForce",
+        false AS "isDefault"
    FROM student_fee_profiles p LEFT JOIN transport_slabs ts ON ts.id = p.transport_slab_id LEFT JOIN fee_discounts d ON d.id = p.discount_id`;
 
 /** Student fee profiles and demand generation (S8-06): app.generate_fee_demand does the arithmetic. */
@@ -118,6 +127,10 @@ export class FeeDemandsService {
       openingBalance: '0.00',
       instalmentsOverride: null,
       hosteller: false,
+      hostelFrom: null,
+      hostelTo: null,
+      hostelPayPlan: null,
+      hostelPayPlanInForce: s.rows[0].plan,
       notes: null,
       isDefault: true,
     };

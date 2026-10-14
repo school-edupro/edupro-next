@@ -2707,6 +2707,18 @@ export async function requestProfileChange(fd: FormData) {
   const hosteller = str(fd, 'hosteller');
   if (hosteller === 'yes') body.hosteller = true;
   if (hosteller === 'no') body.hosteller = false;
+  // months in the hostel: "YYYY-MM" from the month pickers; "start" / "end" = the session's edge
+  const month = (k: string) => {
+    const v = str(fd, k);
+    return v === '' ? undefined : v === 'edge' ? null : `${v}-01`;
+  };
+  const from = month('hostelFrom');
+  const to = month('hostelTo');
+  if (from !== undefined) body.hostelFrom = from;
+  if (to !== undefined) body.hostelTo = to;
+  const hplan = str(fd, 'hostelPayPlan');
+  if (hplan === 'calendar') body.hostelPayPlan = null;
+  else if (hplan) body.hostelPayPlan = hplan;
   return run(`/people/students/${studentId}?tab=fees`, () =>
     apiFetch(`/fees/students/${studentId}/profile-changes`, {
       method: 'POST',

@@ -500,6 +500,7 @@ export async function Shell({
       '/fees/masters',
       '/fees/structures',
       '/fees/rules',
+      '/fees/hostel-calendar',
       '/fees/discounts',
       '/fees/approval',
     ],

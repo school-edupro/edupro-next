@@ -49,6 +49,12 @@ import type {
 } from '@/lib/types';
 import { sectionOptions } from '@/lib/sections';
 
+const monthName = (v: string) =>
+  new Date(`${v.slice(0, 10)}T00:00:00Z`).toLocaleString('en-IN', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 const PAY_PLAN = {
   monthly: 'Monthly',
   quarterly: 'Quarterly',
@@ -137,6 +143,19 @@ export default async function StudentPage({
           .then((r) => [...new Set(['general', ...r.data.map((x) => x.feeGroup)])])
           .catch(() => ['general'])
       : ['general'];
+  // the session's months, for the hostel from / to choice of a fee change
+  const sessionMonths = can('fees.profile_change.request')
+    ? await apiFetch<{ data: Array<{ month: number; year: number; name: string }> }>(
+        '/fees/periods',
+      )
+        .then((r) =>
+          r.data.map((x) => ({
+            value: `${String(x.year)}-${String(x.month).padStart(2, '0')}`,
+            label: x.name,
+          })),
+        )
+        .catch(() => [])
+    : [];
   const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
     <>
@@ -736,7 +755,12 @@ export default async function StudentPage({
                     'Pay plan',
                     `${PAY_PLAN[feeProfile.payPlanInForce]}${feeProfile.payPlan ? ' (own)' : ''}`,
                   ],
-                  ['Hosteller', feeProfile.hosteller ? 'Yes' : 'No'],
+                  [
+                    'Hosteller',
+                    feeProfile.hosteller
+                      ? `Yes${feeProfile.hostelFrom || feeProfile.hostelTo ? `, ${feeProfile.hostelFrom ? monthName(feeProfile.hostelFrom) : 'session start'} to ${feeProfile.hostelTo ? monthName(feeProfile.hostelTo) : 'session end'}` : ', whole session'} · hostel paid ${PAY_PLAN[feeProfile.hostelPayPlanInForce]}${feeProfile.hostelPayPlan ? ' (own)' : ''}`
+                      : 'No',
+                  ],
                   ['Transport', feeProfile.transportSlab ?? 'None'],
                   ...(Number(feeProfile.openingBalance) !== 0
                     ? [[f('openingBalance'), feeProfile.openingBalance]]
@@ -848,6 +872,39 @@ export default async function StudentPage({
                       { value: '', label: a('keep') },
                       { value: 'yes', label: a('yes') },
                       { value: 'no', label: a('no') },
+                    ]}
+                  />
+                  <SelectField
+                    id="chgHostelFrom"
+                    name="hostelFrom"
+                    label="Hostel from month"
+                    options={[
+                      { value: '', label: a('keep') },
+                      { value: 'edge', label: 'From the session start' },
+                      ...sessionMonths.map((m) => ({ value: m.value, label: m.label })),
+                    ]}
+                  />
+                  <SelectField
+                    id="chgHostelTo"
+                    name="hostelTo"
+                    label="Hostel to month (last month)"
+                    options={[
+                      { value: '', label: a('keep') },
+                      { value: 'edge', label: 'To the session end' },
+                      ...sessionMonths.map((m) => ({ value: m.value, label: m.label })),
+                    ]}
+                  />
+                  <SelectField
+                    id="chgHostelPlan"
+                    name="hostelPayPlan"
+                    label="Own hostel pay plan"
+                    options={[
+                      { value: '', label: a('keep') },
+                      { value: 'calendar', label: 'As the hostel calendar' },
+                      { value: 'monthly', label: 'Monthly' },
+                      { value: 'quarterly', label: 'Quarterly' },
+                      { value: 'half_yearly', label: 'Half-yearly' },
+                      { value: 'yearly', label: 'Yearly' },
                     ]}
                   />
                   <InputField
