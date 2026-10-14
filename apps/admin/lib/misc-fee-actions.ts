@@ -209,6 +209,9 @@ export async function miscReceiptRequest(fd: FormData) {
                 reference: str(fd, 'reference') || undefined,
               }
             : {}),
+          ...(kind === 'receipt_bounce' && str(fd, 'charge') !== ''
+            ? { charge: Number(str(fd, 'charge')) }
+            : {}),
         }),
       },
     );

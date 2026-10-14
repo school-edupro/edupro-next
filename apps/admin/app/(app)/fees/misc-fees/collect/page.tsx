@@ -43,10 +43,12 @@ function MiscReceiptRow({
   r,
   studentId,
   canAsk,
+  bounceCharge,
 }: {
   r: Receipt;
   studentId: string;
   canAsk: boolean;
+  bounceCharge: number;
 }) {
   const left = Number(r.amount) - Number(r.refunded);
   const cheque = r.mode === 'cheque' || r.mode === 'dd';
@@ -139,6 +141,23 @@ function MiscReceiptRow({
                     placeholder="Funds insufficient"
                   />
                 </label>
+                <label className="ep-field">
+                  <span className="ep-field__label">Bounce charge (₹)</span>
+                  <input
+                    className="ep-input"
+                    name="charge"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={bounceCharge}
+                    required
+                  />
+                  <span className="ep-field__help">
+                    From Fee setup (the class’s bounce charge, else the school’s). Change it only if
+                    the bank charged differently; 0 = no charge. On approval it is raised on the
+                    pupil as a misc fee “Cheque bounce charge”, due at once.
+                  </span>
+                </label>
                 <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
                   Send bounce for approval
                 </button>
@@ -224,6 +243,7 @@ export default async function MiscCollectPage({
   if (exact.length === 1) redirect(`/fees/misc-fees/collect?studentId=${exact[0]!.id}`);
   const data = studentId
     ? await apiFetch<{
+        bounceCharge: number;
         student: { id: string; name: string; admissionNo: string; class: string | null };
         lines: MiscPayLine[];
         receipts: Receipt[];
@@ -300,7 +320,13 @@ export default async function MiscCollectPage({
             ) : (
               <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
                 {data.receipts.map((r) => (
-                  <MiscReceiptRow key={r.id} r={r} studentId={data.student.id} canAsk={canPost} />
+                  <MiscReceiptRow
+                    key={r.id}
+                    r={r}
+                    studentId={data.student.id}
+                    canAsk={canPost}
+                    bounceCharge={data.bounceCharge}
+                  />
                 ))}
               </div>
             )}

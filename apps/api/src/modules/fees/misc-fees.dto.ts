@@ -96,6 +96,8 @@ export const MiscReceiptRequestSchema = z
     /** refund: how it is paid back */
     mode: z.enum(['cash', 'bank', 'cheque']).optional(),
     reference: z.string().trim().max(80).optional(),
+    /** bounce: the charge raised on the pupil (empty = the class's, else the school's; 0 = none) */
+    charge: z.number().min(0).max(100_000).optional(),
   })
   .refine((v) => v.kind !== 'receipt_refund' || (v.amount !== undefined && v.mode !== undefined), {
     message: 'a refund needs the amount and how it is paid back',

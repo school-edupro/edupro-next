@@ -47,7 +47,8 @@ const what = (r: MiscRequest) => {
       .join(', ');
   if (r.kind === 'add_pupils')
     return `${String(Array.isArray(p.pupils) ? p.pupils.length : 0)} pupil(s)`;
-  if (r.kind.startsWith('receipt_')) return `${r.receiptNo ?? ''} · ₹${String(p.amount ?? '')}`;
+  if (r.kind.startsWith('receipt_'))
+    return `${r.receiptNo ?? ''} · ₹${String(p.amount ?? '')}${r.kind === 'receipt_bounce' && Number(p.charge ?? 0) > 0 ? ` · bounce charge ₹${String(p.charge)}` : ''}`;
   return '';
 };
 

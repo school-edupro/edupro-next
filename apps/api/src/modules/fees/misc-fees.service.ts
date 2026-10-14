@@ -7,6 +7,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { assertPeriodOpen } from '../ops/ops.service';
+import { SETTINGS_CATALOGUE } from '../platform/settings.catalogue';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from './fee-approval';
 import { FeeSetupService } from './fee-setup.service';
@@ -323,6 +324,7 @@ export class MiscFeesService {
         [studentId, yearId],
       );
       return {
+        bounceCharge: await this.bounceCharge(c, studentId, yearId),
         student: {
           id: studentId,
           name: s.rows[0].name,
@@ -592,6 +594,55 @@ export class MiscFeesService {
     });
   }
 
+  /** The bounce charge of a pupil: the class's own when it has one, else the school's. */
+  private async bounceCharge(c: PoolClient, studentId: string, yearId: string): Promise<number> {
+    const setting = await c.query<{ v: string | null }>(
+      `SELECT app.setting('fees.bounce_charge') #>> '{}' AS v`,
+    );
+    return (
+      (await this.setup.bounceChargeFor(c, studentId, yearId)) ??
+      Number(setting.rows[0]?.v ?? SETTINGS_CATALOGUE['fees.bounce_charge']!.default)
+    );
+  }
+
+  /**
+   * The charge for a bounced misc cheque: a mandatory misc fee of the pupil under the bounce charge
+   * head, due at once. It stays on the misc ledger, is collected at the misc counter and shows in the
+   * misc dues report and to the parent.
+   */
+  private async raiseBounceCharge(
+    c: PoolClient,
+    x: { receiptNo: string; studentId: string; yearId: string; charge: number; reason: string },
+  ): Promise<string> {
+    const code =
+      (
+        await c.query<{ v: string | null }>(
+          `SELECT app.setting('fees.bounce_charge_head') #>> '{}' AS v`,
+        )
+      ).rows[0]?.v ?? 'BOUNCE';
+    const head = await c.query<{ id: string }>(
+      `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
+       VALUES (app.current_school_id(), $1, 'Cheque bounce charge', 'misc', 'school', 900, app.current_user_id(), app.current_user_id())
+       ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now() RETURNING id::text`,
+      [code],
+    );
+    const f = await c.query<{ id: string }>(
+      `INSERT INTO misc_fees (school_id, academic_year_id, head_id, title, amount, last_date, remark, mandatory, status, requested_by, announced_at)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, CURRENT_DATE, $5, true, 'announced', app.current_user_id(), now()) RETURNING id::text`,
+      [
+        x.yearId,
+        head.rows[0]!.id,
+        `Cheque bounce charge · ${x.receiptNo}`,
+        x.charge.toFixed(2),
+        `Cheque of receipt ${x.receiptNo} bounced: ${x.reason}`.slice(0, 300),
+      ],
+    );
+    await this.addLines(c, f.rows[0]!.id, [
+      { studentId: x.studentId, amount: x.charge, lastDate: null },
+    ]);
+    return f.rows[0]!.id;
+  }
+
   /** A misc receipt taken back: cancelled, a bounced cheque, or refunded in full or in part. */
   async requestReceipt(ctx: RequestContext, receiptId: string, dto: MiscReceiptRequestDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -604,8 +655,11 @@ export class MiscFeesService {
         payer: string;
         fee: string | null;
         line: string | null;
+        student: string | null;
+        year: string;
       }>(
-        `SELECT m.receipt_no, m.amount::text, m.refunded::text, m.status, m.mode, m.payer_name AS payer, l.misc_fee_id::text AS fee, m.misc_fee_student_id::text AS line
+        `SELECT m.receipt_no, m.amount::text, m.refunded::text, m.status, m.mode, m.payer_name AS payer, l.misc_fee_id::text AS fee, m.misc_fee_student_id::text AS line,
+                m.student_id::text AS student, m.academic_year_id::text AS year
            FROM misc_receipts m LEFT JOIN misc_fee_students l ON l.id = m.misc_fee_student_id WHERE m.id = $1 FOR UPDATE OF m`,
         [receiptId],
       );
@@ -646,7 +700,12 @@ export class MiscFeesService {
         payload:
           dto.kind === 'receipt_refund'
             ? { amount: dto.amount, mode: dto.mode, reference: dto.reference ?? null }
-            : { amount: left },
+            : dto.kind === 'receipt_bounce' && rec.student
+              ? {
+                  amount: left,
+                  charge: dto.charge ?? (await this.bounceCharge(c, rec.student, rec.year)),
+                }
+              : { amount: left },
         reason: dto.reason,
         subject: `${rec.payer}: receipt ${rec.receipt_no}: Rs. ${(dto.kind === 'receipt_refund' ? dto.amount! : left).toFixed(2)}`,
       });
@@ -767,8 +826,16 @@ export class MiscFeesService {
       return { added: n };
     }
     // a receipt taken back: the pupil's fee is unpaid again by what goes, and a seat held by it is free
-    const m = await c.query<{ amount: string; refunded: string; status: string }>(
-      `SELECT amount::text, refunded::text, status FROM misc_receipts WHERE id = $1 FOR UPDATE`,
+    const m = await c.query<{
+      amount: string;
+      refunded: string;
+      status: string;
+      receipt_no: string;
+      student: string | null;
+      year: string;
+    }>(
+      `SELECT amount::text, refunded::text, status, receipt_no, student_id::text AS student, academic_year_id::text AS year
+         FROM misc_receipts WHERE id = $1 FOR UPDATE`,
       [r.receiptId],
     );
     const rec = m.rows[0]!;
@@ -806,7 +873,22 @@ export class MiscFeesService {
           WHERE id = $1 AND status <> 'cancelled'`,
         [r.lineId, back.toFixed(2)],
       );
-    return { back: back.toFixed(2), ...(voucherNo ? { voucherNo } : {}) };
+    // a bounced cheque raises the bounce charge on the pupil, as a misc fee due at once
+    let chargeFeeId: string | undefined;
+    const charge = Number(p.charge ?? 0);
+    if (r.kind === 'receipt_bounce' && charge > 0 && rec.student)
+      chargeFeeId = await this.raiseBounceCharge(c, {
+        receiptNo: rec.receipt_no,
+        studentId: rec.student,
+        yearId: rec.year,
+        charge,
+        reason: r.reason,
+      });
+    return {
+      back: back.toFixed(2),
+      ...(voucherNo ? { voucherNo } : {}),
+      ...(chargeFeeId ? { charge: charge.toFixed(2), chargeFeeId } : {}),
+    };
   }
 
   // ---- collection at the counter --------------------------------------------------------------------

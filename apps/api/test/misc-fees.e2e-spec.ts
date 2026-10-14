@@ -370,6 +370,49 @@ describe('misc fees announced to pupils (e2e)', () => {
     expect(book.rows.find((r) => r.kind === 'total')!.cells.amount).toBe(100 + 500 - 200);
   });
 
+  it('a bounced misc cheque raises the bounce charge on the pupil as a misc fee due at once', async () => {
+    const r = await post('/fees/misc-fees', {
+      headId,
+      title: 'Picnic',
+      amount: 400,
+      lastDate: day(12),
+      mandatory: true,
+      studentIds: [pupils[2]],
+    });
+    const feeId = r.json().id as string;
+    await approve(feeId);
+    const line = (await linesOf(pupils[2]!)).lines.find((l) => l.title === 'Picnic')!;
+    const paid = await post('/fees/misc-fees/collect', {
+      studentId: pupils[2],
+      lines: [{ lineId: line.id, amount: 400 }],
+      mode: 'cheque',
+      instrumentNo: '445566',
+      bankName: 'SBI',
+    });
+    expect(paid.statusCode).toBe(201);
+    const receiptId = paid.json().receipts[0].id as string;
+    const ask = await post(`/fees/misc-fees/receipts/${receiptId}/request`, {
+      kind: 'receipt_bounce',
+      reason: 'Funds insufficient',
+      charge: 250,
+    });
+    expect(ask.statusCode).toBe(201);
+    const done = await approve(feeId);
+    expect(done.result).toMatchObject({ back: '400.00', charge: '250.00' });
+    const after = await linesOf(pupils[2]!);
+    expect(after.receipts.find((x) => x.id === receiptId)!.status).toBe('bounced');
+    expect(after.lines.find((l) => l.title === 'Picnic')).toMatchObject({ balance: '400.00' });
+    const charge = after.lines.find((l) => l.title.startsWith('Cheque bounce charge'))!;
+    expect(charge).toMatchObject({ balance: '250.00', blocked: null });
+    // and it is collected at the same counter
+    const pay = await post('/fees/misc-fees/collect', {
+      studentId: pupils[2],
+      lines: [{ lineId: charge.id, amount: 250 }],
+      mode: 'cash',
+    });
+    expect(pay.statusCode).toBe(201);
+  });
+
   it('with approval levels set, the request goes through My approvals', async () => {
     expect((await post('/workflow/definitions/defaults', {}, admin)).statusCode).toBe(201);
     const r = await post('/fees/misc-fees', {
