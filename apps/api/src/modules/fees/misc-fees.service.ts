@@ -313,10 +313,12 @@ export class MiscFeesService {
       );
       const receipts = await c.query<Record<string, unknown>>(
         `SELECT m.id::text, m.receipt_no AS "receiptNo", m.received_on::text AS "receivedOn", m.amount::text, m.refunded::text, m.mode, m.status,
+                m.instrument_no AS "instrumentNo", m.bank_name AS "bankName", m.reference, ru.display_name AS "receivedBy",
                 COALESCE(f.title, h.name) AS title, m.misc_fee_student_id IS NOT NULL AS announced,
                 (SELECT r.kind FROM misc_fee_requests r WHERE r.receipt_id = m.id AND r.status = 'pending' LIMIT 1) AS waiting
            FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
            LEFT JOIN misc_fee_students l ON l.id = m.misc_fee_student_id LEFT JOIN misc_fees f ON f.id = l.misc_fee_id
+           LEFT JOIN users ru ON ru.id = m.received_by
           WHERE m.student_id = $1 AND m.academic_year_id = $2 ORDER BY m.id DESC LIMIT 200`,
         [studentId, yearId],
       );
