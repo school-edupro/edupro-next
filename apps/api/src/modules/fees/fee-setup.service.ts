@@ -7,6 +7,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import type {
   AddPaymentModeDto,
   SetClassRulesDto,
+  SetHostelCalendarDto,
   SetPaymentModeDto,
   StudentDiscountInput,
   StudentOptionalHeadInput,
@@ -285,7 +286,10 @@ export class FeeSetupService {
   private async redate(c: PoolClient, yearId: string, classId: string | null): Promise<void> {
     await c.query(
       `UPDATE fee_demands d SET due_on = x.due, updated_at = now()
-         FROM (SELECT d2.id, app.fee_due_on_plan(fp.id, k.class_id, fp.due_on, app.fee_pay_plan(d2.student_id, $1, k.class_id)) AS due
+         FROM (SELECT d2.id,
+                      CASE WHEN d2.ledger = 'hostel'
+                           THEN app.fee_hostel_due_on(fp.id, k.class_id, fp.due_on, app.fee_hostel_plan(d2.student_id, $1, app.fee_pay_plan(d2.student_id, $1, k.class_id)))
+                           ELSE app.fee_due_on_plan(fp.id, k.class_id, fp.due_on, app.fee_pay_plan(d2.student_id, $1, k.class_id)) END AS due
                  FROM fee_demands d2
                  JOIN fee_periods fp ON fp.id = d2.period_id
                  JOIN LATERAL (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
@@ -296,6 +300,134 @@ export class FeeSetupService {
         WHERE d.id = x.id AND d.due_on IS DISTINCT FROM x.due`,
       [yearId, classId],
     );
+  }
+
+  // ---- the hostel's own calendar (0134) ---------------------------------------------------------------
+  /** The hostel calendar of the session, month by month beside the school's dates. */
+  async hostelCalendar(ctx: RequestContext) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const cal = await c.query<{
+        mode: 'school' | 'own';
+        payPlan: PayPlanCode | null;
+        lateMode: 'slab' | 'daywise' | 'none';
+        latePerDay: string | null;
+        lateMax: string | null;
+      }>(
+        `SELECT mode, pay_plan AS "payPlan", late_mode AS "lateMode", late_per_day::text AS "latePerDay", late_max::text AS "lateMax"
+           FROM fee_hostel_calendars WHERE academic_year_id = $1`,
+        [yearId],
+      );
+      const p = await c.query<{
+        periodId: string;
+        sequence: number;
+        name: string;
+        schoolDueOn: string;
+        dueOn: string | null;
+        lateFeeAmount: string | null;
+        latePerDay: string | null;
+        slabs: Array<{ on: string; amount: string }> | null;
+      }>(
+        `SELECT fp.id::text AS "periodId", fp.sequence, fp.name, fp.due_on::text AS "schoolDueOn",
+                r.due_on::text AS "dueOn", r.late_fee_amount::text AS "lateFeeAmount", r.late_per_day::text AS "latePerDay",
+                NULLIF(jsonb_strip_nulls(jsonb_build_array(
+                  CASE WHEN r.late_slab_1_on IS NOT NULL THEN jsonb_build_object('on', r.late_slab_1_on, 'amount', r.late_slab_1_amount::text) END,
+                  CASE WHEN r.late_slab_2_on IS NOT NULL THEN jsonb_build_object('on', r.late_slab_2_on, 'amount', r.late_slab_2_amount::text) END,
+                  CASE WHEN r.late_slab_3_on IS NOT NULL THEN jsonb_build_object('on', r.late_slab_3_on, 'amount', r.late_slab_3_amount::text) END)), '[null,null,null]') AS slabs
+           FROM fee_periods fp LEFT JOIN fee_hostel_period_rules r ON r.period_id = fp.id
+          WHERE fp.academic_year_id = $1 ORDER BY fp.sequence`,
+        [yearId],
+      );
+      const hostellers = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM student_fee_profiles WHERE academic_year_id = $1 AND hosteller`,
+        [yearId],
+      );
+      return {
+        mode: cal.rows[0]?.mode ?? 'school',
+        payPlan: cal.rows[0]?.payPlan ?? null,
+        lateMode: cal.rows[0]?.lateMode ?? 'slab',
+        latePerDay: cal.rows[0]?.latePerDay ?? null,
+        lateMax: cal.rows[0]?.lateMax ?? null,
+        hostellers: hostellers.rows[0]!.n,
+        periods: p.rows.map((x) => ({ ...x, slabs: (x.slabs ?? []).filter(Boolean) })),
+      };
+    });
+  }
+
+  /**
+   * The hostel calendar: "same as school", or its own pay plan, last dates and late fee. Hostel lines not
+   * yet paid take the new dates at once; a paid line keeps the date it was paid against.
+   */
+  async setHostelCalendar(ctx: RequestContext, dto: SetHostelCalendarDto) {
+    const yearId = this.year(ctx);
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      const periods = await c.query<{ id: string }>(
+        `SELECT id::text FROM fee_periods WHERE academic_year_id = $1`,
+        [yearId],
+      );
+      const known = new Set(periods.rows.map((x) => x.id));
+      await c.query(
+        `INSERT INTO fee_hostel_calendars (school_id, academic_year_id, mode, pay_plan, late_mode, late_per_day, late_max, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
+         ON CONFLICT (academic_year_id) DO UPDATE SET mode = EXCLUDED.mode, pay_plan = EXCLUDED.pay_plan, late_mode = EXCLUDED.late_mode,
+           late_per_day = EXCLUDED.late_per_day, late_max = EXCLUDED.late_max, updated_at = now(), updated_by = app.current_user_id()`,
+        [
+          yearId,
+          dto.mode,
+          dto.payPlan ?? null,
+          dto.lateMode,
+          dto.latePerDay ?? null,
+          Number(dto.lateMax ?? 0) > 0 ? dto.lateMax : null,
+        ],
+      );
+      for (const p of dto.periods) {
+        if (!known.has(p.periodId))
+          throw new DomainError('not-found', 'A month of another session was sent', {
+            status: 404,
+          });
+        const slabs = [...p.slabs].sort((a, b) => a.on.localeCompare(b.on));
+        const empty =
+          !p.dueOn &&
+          (p.lateFeeAmount ?? null) === null &&
+          (p.latePerDay ?? null) === null &&
+          slabs.length === 0;
+        if (empty) {
+          await c.query(`DELETE FROM fee_hostel_period_rules WHERE period_id = $1`, [p.periodId]);
+          continue;
+        }
+        await c.query(
+          `INSERT INTO fee_hostel_period_rules (school_id, period_id, due_on, late_fee_amount, late_slab_1_on, late_slab_1_amount,
+                  late_slab_2_on, late_slab_2_amount, late_slab_3_on, late_slab_3_amount, late_per_day, updated_by)
+           VALUES (app.current_school_id(), $1, $2::date, $3, $4::date, $5, $6::date, $7, $8::date, $9, $10, app.current_user_id())
+           ON CONFLICT (period_id) DO UPDATE SET due_on = EXCLUDED.due_on, late_fee_amount = EXCLUDED.late_fee_amount,
+             late_slab_1_on = EXCLUDED.late_slab_1_on, late_slab_1_amount = EXCLUDED.late_slab_1_amount,
+             late_slab_2_on = EXCLUDED.late_slab_2_on, late_slab_2_amount = EXCLUDED.late_slab_2_amount,
+             late_slab_3_on = EXCLUDED.late_slab_3_on, late_slab_3_amount = EXCLUDED.late_slab_3_amount,
+             late_per_day = EXCLUDED.late_per_day, updated_at = now(), updated_by = app.current_user_id()`,
+          [
+            p.periodId,
+            p.dueOn ?? null,
+            p.lateFeeAmount ?? null,
+            slabs[0]?.on ?? null,
+            slabs[0]?.amount ?? null,
+            slabs[1]?.on ?? null,
+            slabs[1]?.amount ?? null,
+            slabs[2]?.on ?? null,
+            slabs[2]?.amount ?? null,
+            p.latePerDay ?? null,
+          ],
+        );
+      }
+      await this.redate(c, yearId, null);
+      await this.audit.stage(ctx, c, {
+        action: 'fees.hostel_calendar.set',
+        entityType: 'fee_hostel_calendars',
+        entityId: yearId,
+        after: dto,
+      });
+    });
+    return this.hostelCalendar(ctx);
   }
 
   async schoolPayPlan(ctx: RequestContext): Promise<{ payPlan: PayPlanCode }> {

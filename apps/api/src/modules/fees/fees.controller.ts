@@ -31,6 +31,7 @@ import {
   RunCarryForwardDto,
   UndoCarryForwardDto,
   SetClassRulesDto,
+  SetHostelCalendarDto,
   SetPaymentModeDto,
   CreateDiscountDto,
   DecideAdjustmentDto,
@@ -242,6 +243,20 @@ export class FeesController {
     @Body() body: SetClassRulesDto,
   ) {
     return { data: await this.setup.setClassRules(ctx, classId, body) };
+  }
+
+  @Get('hostel-calendar')
+  @ApiOperation({ summary: "The hostel's own calendar of the session, or 'same as school'" })
+  @RequirePermission(FEES.masterView)
+  hostelCalendar(@ReqCtx() ctx: RequestContext) {
+    return this.setup.hostelCalendar(ctx);
+  }
+
+  @Put('hostel-calendar')
+  @ApiOperation({ summary: 'Set the hostel calendar: pay plan, last dates and late fee' })
+  @RequirePermission(FEES.masterManage)
+  setHostelCalendar(@ReqCtx() ctx: RequestContext, @Body() body: SetHostelCalendarDto) {
+    return this.setup.setHostelCalendar(ctx, body);
   }
 
   @Post('class-rules/:classId/clone')

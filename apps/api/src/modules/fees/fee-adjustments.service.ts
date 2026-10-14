@@ -982,11 +982,18 @@ export class FeeAdjustmentsService {
       if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
       await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
       const before = await c.query<Record<string, unknown>>(
-        `SELECT fee_group AS "feeGroup", pay_plan AS "payPlan", opening_balance::text AS "openingBalance", discount_id::text AS "discountId", hosteller, transport_slab_id::text AS "transportSlabId", transport_disabled AS "transportDisabled"
+        `SELECT fee_group AS "feeGroup", pay_plan AS "payPlan", opening_balance::text AS "openingBalance", discount_id::text AS "discountId", hosteller, transport_slab_id::text AS "transportSlabId", transport_disabled AS "transportDisabled",
+                hostel_from::text AS "hostelFrom", hostel_to::text AS "hostelTo", hostel_pay_plan AS "hostelPayPlan"
            FROM student_fee_profiles WHERE student_id = $1 AND academic_year_id = $2`,
         [studentId, yearId],
       );
-      const { reason, ...changes } = dto;
+      const { reason, ...asked } = dto;
+      // months in the hostel make the pupil a hosteller; leaving the hostel altogether is "not a hosteller"
+      const changes =
+        (asked.hostelFrom !== undefined || asked.hostelTo !== undefined) &&
+        asked.hosteller === undefined
+          ? { ...asked, hosteller: true }
+          : asked;
       const beforeDiscounts =
         dto.discounts === undefined
           ? undefined
@@ -1127,6 +1134,22 @@ export class FeeAdjustmentsService {
         ch.payPlan ? `pay plan ${String(ch.payPlan).replace(/_/g, '-')}` : 'pay plan as the class',
       );
     if (ch.hosteller !== undefined) parts.push(ch.hosteller ? 'hosteller' : 'not a hosteller');
+    const month = (v: unknown) =>
+      new Date(`${String(v)}T00:00:00Z`).toLocaleString('en-IN', {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+    if (ch.hostelFrom !== undefined || ch.hostelTo !== undefined)
+      parts.push(
+        `hostel ${ch.hostelFrom ? `from ${month(ch.hostelFrom)}` : 'from the start'} ${ch.hostelTo ? `to ${month(ch.hostelTo)}` : 'to the end of the session'}`,
+      );
+    if (ch.hostelPayPlan !== undefined)
+      parts.push(
+        ch.hostelPayPlan
+          ? `own hostel plan ${String(ch.hostelPayPlan).replace(/_/g, '-')}`
+          : 'hostel plan as the hostel calendar',
+      );
     if (ch.discountId !== undefined) {
       const d = ch.discountId
         ? await c.query<{ name: string }>(`SELECT name FROM fee_discounts WHERE id = $1`, [
@@ -1179,6 +1202,7 @@ export class FeeAdjustmentsService {
     if (!r) throw new DomainError('not-found', 'Profile change not found', { status: 404 });
     if (r.status !== 'pending') return;
     let runId: string | null = null;
+    let hostelNote: string | null = null;
     if (outcome === 'approved') {
       const ch = r.changes;
       await c.query(
@@ -1193,6 +1217,9 @@ export class FeeAdjustmentsService {
            hosteller = COALESCE($6, student_fee_profiles.hosteller),
            transport_slab_id = CASE WHEN $10::boolean THEN $7 ELSE student_fee_profiles.transport_slab_id END,
            transport_disabled = COALESCE($8, student_fee_profiles.transport_disabled),
+           hostel_from = CASE WHEN $14::boolean THEN $13::date ELSE student_fee_profiles.hostel_from END,
+           hostel_to = CASE WHEN $16::boolean THEN $15::date ELSE student_fee_profiles.hostel_to END,
+           hostel_pay_plan = CASE WHEN $18::boolean THEN $17 ELSE student_fee_profiles.hostel_pay_plan END,
            updated_at = now(), updated_by = app.current_user_id()`,
         [
           r.student_id,
@@ -1207,8 +1234,36 @@ export class FeeAdjustmentsService {
           ch.transportSlabId !== undefined,
           ch.payPlan !== undefined,
           ch.openingBalance === undefined ? null : Number(ch.openingBalance),
+          (ch.hostelFrom as string | null | undefined) ?? null,
+          ch.hostelFrom !== undefined,
+          (ch.hostelTo as string | null | undefined) ?? null,
+          ch.hostelTo !== undefined,
+          (ch.hostelPayPlan as string | null | undefined) ?? null,
+          ch.hostelPayPlan !== undefined,
         ],
       );
+      // a new hostel stay is written on a fresh profile too
+      if (
+        ch.hostelFrom !== undefined ||
+        ch.hostelTo !== undefined ||
+        ch.hostelPayPlan !== undefined
+      )
+        await c.query(
+          `UPDATE student_fee_profiles SET hostel_from = CASE WHEN $3 THEN $4::date ELSE hostel_from END,
+                  hostel_to = CASE WHEN $5 THEN $6::date ELSE hostel_to END,
+                  hostel_pay_plan = CASE WHEN $7 THEN $8 ELSE hostel_pay_plan END
+            WHERE student_id = $1 AND academic_year_id = $2`,
+          [
+            r.student_id,
+            r.academic_year_id,
+            ch.hostelFrom !== undefined,
+            (ch.hostelFrom as string | null | undefined) ?? null,
+            ch.hostelTo !== undefined,
+            (ch.hostelTo as string | null | undefined) ?? null,
+            ch.hostelPayPlan !== undefined,
+            (ch.hostelPayPlan as string | null | undefined) ?? null,
+          ],
+        );
       if (Array.isArray(ch.optionalHeads))
         await this.setup.replaceStudentOptionalHeads(
           c,
@@ -1235,10 +1290,67 @@ export class FeeAdjustmentsService {
         r.academic_year_id,
         runId,
       ]);
+      if (ch.hosteller !== undefined || ch.hostelFrom !== undefined || ch.hostelTo !== undefined)
+        hostelNote = await this.carryHostelOutsideStay(c, r.student_id, r.academic_year_id);
     }
     await c.query(
       `UPDATE fee_profile_changes SET status = $2::workflow_status, decided_by = app.current_user_id(), decided_at = now(), decision_note = $3, regenerated_run_id = $4 WHERE id = $1`,
-      [id, outcome, note, runId],
+      [id, outcome, [note, hostelNote].filter(Boolean).join(' · ') || null, runId],
+    );
+  }
+
+  /**
+   * Hostel months already paid that are now outside the pupil's stay (left the hostel, or no longer a
+   * hosteller): the line comes down to nothing and what was paid is carried forward to the pupil's next
+   * unpaid fee (what finds no due stays on the receipt as advance), as for transport.
+   */
+  private async carryHostelOutsideStay(
+    c: PoolClient,
+    studentId: string,
+    yearId: string,
+  ): Promise<string | null> {
+    const paid = await c.query<{ id: string; m: string; carry: string }>(
+      `SELECT d.id::text, to_char(make_date(fp.year, fp.month, 1), 'Mon YYYY') AS m, LEAST(d.paid, d.net)::text AS carry
+         FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
+         JOIN student_fee_profiles sp ON sp.student_id = d.student_id AND sp.academic_year_id = d.academic_year_id
+        WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.ledger = 'hostel' AND d.source = 'structure' AND d.paid > 0
+          AND NOT (sp.hosteller AND app.fee_in_hostel(sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))
+        ORDER BY fp.sequence`,
+      [studentId, yearId],
+    );
+    let total = 0;
+    let moved = 0;
+    for (const d of paid.rows) {
+      const amt = Number(d.carry);
+      if (amt <= 0) continue;
+      const r = await c.query<{ v: string }>(`SELECT app.paid_charge_to_fee($1, $2)::text AS v`, [
+        d.id,
+        amt.toFixed(2),
+      ]);
+      // the month is not charged at all now: the cut comes off the charge itself
+      await c.query(
+        `UPDATE fee_demands SET gross = gross - $2, discount = discount - $2,
+                status = CASE WHEN net <= 0 AND paid <= 0 THEN 'cancelled'::fee_demand_status ELSE status END, updated_at = now()
+          WHERE id = $1`,
+        [d.id, amt.toFixed(2)],
+      );
+      total += amt;
+      moved += Number(r.rows[0]!.v);
+    }
+    // unpaid hostel lines left from before (kept because a waiver points at them) go too
+    await c.query(
+      `UPDATE fee_demands d SET status = 'cancelled', updated_at = now()
+         FROM fee_periods fp, student_fee_profiles sp
+        WHERE fp.id = d.period_id AND sp.student_id = d.student_id AND sp.academic_year_id = d.academic_year_id
+          AND d.student_id = $1 AND d.academic_year_id = $2 AND d.ledger = 'hostel' AND d.source = 'structure' AND d.paid = 0 AND d.status = 'pending'
+          AND NOT (sp.hosteller AND app.fee_in_hostel(sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))`,
+      [studentId, yearId],
+    );
+    if (!paid.rows.length) return null;
+    const rs = (n: number) => `Rs. ${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    return (
+      `Hostel paid for ${paid.rows.map((x) => x.m).join(', ')} (${rs(total)}) is carried forward: ${rs(moved)} set against the next unpaid fee` +
+      (total - moved > 0.005 ? `, ${rs(total - moved)} kept as advance on the receipt` : '')
     );
   }
 

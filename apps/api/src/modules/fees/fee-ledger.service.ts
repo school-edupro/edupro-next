@@ -126,6 +126,12 @@ export interface Ledger {
     studentType: 'new' | 'old';
     payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
     hosteller: boolean;
+    /** The months in the hostel (first day of the month); null = from the start / to the end. */
+    hostelFrom: string | null;
+    hostelTo: string | null;
+    /** How often hostel is paid: the pupil's own plan, else the hostel calendar's, else the pay plan. */
+    hostelPayPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+    hostelOwnPlan: boolean;
     transport: string | null;
     discounts: string[];
     optionalHeads: string[];
@@ -250,12 +256,19 @@ export class FeeLedgerService {
         student_type: 'new' | 'old';
         pay_plan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
         hosteller: boolean;
+        hostel_from: string | null;
+        hostel_to: string | null;
+        hostel_pay_plan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+        hostel_own_plan: boolean;
         transport: string | null;
         discounts: string[];
         optional_heads: string[];
       }>(
         `SELECT s.id::text, s.display_name AS name, s.admission_no, s.status::text AS status,
                 COALESCE(fp.fee_group, 'general') AS fee_group, COALESCE(fp.hosteller, false) AS hosteller,
+                fp.hostel_from::text AS hostel_from, fp.hostel_to::text AS hostel_to, fp.hostel_pay_plan IS NOT NULL AS hostel_own_plan,
+                app.fee_hostel_plan(s.id, $2, app.fee_pay_plan(s.id, $2, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                                             WHERE e.student_id = s.id AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1))) AS hostel_pay_plan,
                 CASE WHEN s.admitted_on IS NOT NULL AND s.admitted_on >= y.start_date THEN 'new' ELSE 'old' END AS student_type,
                 app.fee_pay_plan(s.id, $2, (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
                                              WHERE e.student_id = s.id AND e.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1)) AS pay_plan,
@@ -454,6 +467,10 @@ export class FeeLedgerService {
           studentType: st.rows[0].student_type,
           payPlan: st.rows[0].pay_plan,
           hosteller: st.rows[0].hosteller,
+          hostelFrom: st.rows[0].hostel_from,
+          hostelTo: st.rows[0].hostel_to,
+          hostelPayPlan: st.rows[0].hostel_pay_plan,
+          hostelOwnPlan: st.rows[0].hostel_own_plan,
           transport: st.rows[0].transport,
           discounts: st.rows[0].discounts,
           optionalHeads: st.rows[0].optional_heads,

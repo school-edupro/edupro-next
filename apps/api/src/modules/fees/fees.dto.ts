@@ -308,6 +308,11 @@ export const RequestProfileChangeSchema = z
     openingBalance: z.number().min(-100_000_000).max(100_000_000).optional(),
     discountId: IdSchema.nullable().optional(),
     hosteller: z.boolean().optional(),
+    /** The months in the hostel (first day of the month); null = from the start / to the end of the session. */
+    hostelFrom: DateSchema.nullable().optional(),
+    hostelTo: DateSchema.nullable().optional(),
+    /** The pupil's own hostel pay plan; null = the hostel calendar's (or the school pay plan). */
+    hostelPayPlan: PayPlan.nullable().optional(),
     transportSlabId: IdSchema.nullable().optional(),
     transportDisabled: z.boolean().optional(),
     /** The pupil's additional discounts after approval (the whole list). */
@@ -323,11 +328,23 @@ export const RequestProfileChangeSchema = z
       v.openingBalance !== undefined ||
       v.discountId !== undefined ||
       v.hosteller !== undefined ||
+      v.hostelFrom !== undefined ||
+      v.hostelTo !== undefined ||
+      v.hostelPayPlan !== undefined ||
       v.transportSlabId !== undefined ||
       v.transportDisabled !== undefined ||
       v.discounts !== undefined ||
       v.optionalHeads !== undefined,
     { message: 'nothing to change' },
+  )
+  .refine(
+    (v) =>
+      [v.hostelFrom, v.hostelTo].every((d) => !d || d.endsWith('-01')) &&
+      (!v.hostelFrom || !v.hostelTo || v.hostelFrom <= v.hostelTo),
+    {
+      message:
+        'hostel months run from the first of a month, and the first month comes before the last',
+    },
   );
 export class RequestProfileChangeDto extends createZodDto(RequestProfileChangeSchema) {}
 
@@ -548,6 +565,34 @@ export const SetClassRulesSchema = z.object({
     .default([]),
 });
 export class SetClassRulesDto extends createZodDto(SetClassRulesSchema) {}
+
+/** The hostel's own calendar for the session (0134), or "same as school". */
+export const SetHostelCalendarSchema = z.object({
+  mode: z.enum(['school', 'own']),
+  /** how often hostel is paid; null = as the pupil's school pay plan */
+  payPlan: PayPlan.nullable().optional(),
+  lateMode: z.enum(['slab', 'daywise', 'none']).default('slab'),
+  latePerDay: Money.nullable().optional(),
+  /** day-wise: the most one instalment can be charged; null or 0 = no limit */
+  lateMax: Money.nullable().optional(),
+  periods: z
+    .array(
+      z.object({
+        periodId: IdSchema,
+        /** null = the month's own last date */
+        dueOn: DateSchema.nullable().optional(),
+        lateFeeAmount: Money.nullable().optional(),
+        slabs: z
+          .array(z.object({ on: DateSchema, amount: Money }))
+          .max(3)
+          .default([]),
+        latePerDay: Money.nullable().optional(),
+      }),
+    )
+    .max(12)
+    .default([]),
+});
+export class SetHostelCalendarDto extends createZodDto(SetHostelCalendarSchema) {}
 
 export const PAYMENT_MODES = ['cash', 'cheque', 'dd', 'upi', 'card', 'bank', 'online'] as const;
 export const SetPaymentModeSchema = z.object({
