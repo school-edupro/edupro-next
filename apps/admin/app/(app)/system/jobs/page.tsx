@@ -1,6 +1,7 @@
 import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
+import { WorkersPanel, type WorkersState } from '@/components/system/WorkersPanel';
 import { retryJob } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { OutboxRow, Page } from '@/lib/types';
@@ -15,11 +16,15 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const q = new URLSearchParams({ size: '200' });
   if (sp.status) q.set('status', sp.status);
   if (sp.queue) q.set('queue', sp.queue);
-  const jobs = await apiFetch<Page<OutboxRow>>(`/platform/jobs/outbox?${q.toString()}`);
+  const [jobs, workers] = await Promise.all([
+    apiFetch<Page<OutboxRow>>(`/platform/jobs/outbox?${q.toString()}`),
+    apiFetch<WorkersState>('/platform/jobs/workers').catch(() => null),
+  ]);
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
+      <WorkersPanel state={workers} />
       <div className="ep-filter-band">
         <form
           method="get"

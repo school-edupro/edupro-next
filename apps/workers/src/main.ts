@@ -6,6 +6,7 @@ import { createStorageDriver } from '@edupro/storage';
 import { buildAdapters } from './adapters';
 import { loadEnv, storageConfigFrom } from './env';
 import { createLogger } from './logger';
+import { startHeartbeat } from './heartbeat';
 import { OutboxPublisher } from './outbox-publisher';
 import { exportProcessor } from './processors/exports';
 import { SYSTEM_ENVELOPE, maintenanceProcessor } from './processors/maintenance';
@@ -184,6 +185,11 @@ async function main(): Promise<void> {
     { name: 'break_glass.expire', data: SYSTEM_ENVELOPE('break_glass.expire') },
   );
 
+  const heartbeat = startHeartbeat(connection, workers, {
+    storage: storage.name,
+    pdf: env.EXPORT_PDF_ENGINE,
+  });
+
   log.info(
     { queues: Object.keys(processors), storage: storage.name, pdf: env.EXPORT_PDF_ENGINE },
     'workers started',
@@ -191,6 +197,7 @@ async function main(): Promise<void> {
 
   const shutdown = async () => {
     log.info('shutting down');
+    await heartbeat.stop();
     await publisher.stop();
     await Promise.all(workers.map((w) => w.close()));
     await maintenance.close();

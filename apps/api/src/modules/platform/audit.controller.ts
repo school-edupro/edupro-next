@@ -55,6 +55,15 @@ export class AuditController {
     return { data: rows, page: { number: q.page, size: q.size, total } };
   }
 
+  @Get('jobs/workers')
+  @ApiOperation({
+    summary: 'Whether the worker processes are running, their queues, and what waits for them',
+  })
+  @RequirePermission(PLATFORM.jobsView)
+  workers(@ReqCtx() ctx: RequestContext) {
+    return this.jobs.workers(requireTenant(ctx));
+  }
+
   @Post('jobs/outbox/:id/retry')
   @RequirePermission(PLATFORM.jobsManage, { description: 'Retry or cancel background jobs' })
   retry(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {

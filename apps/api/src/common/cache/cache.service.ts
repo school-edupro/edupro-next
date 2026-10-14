@@ -113,6 +113,26 @@ export class CacheService implements OnModuleDestroy {
     }
   }
 
+  /** Every field of a Redis hash (the worker heartbeats); empty when Redis cannot be reached. */
+  async hashAll(key: string): Promise<Record<string, string>> {
+    if (!this.redisHealthy) return {};
+    try {
+      return await this.redis.hgetall(key);
+    } catch {
+      return {};
+    }
+  }
+
+  /** Removes fields of a Redis hash (a worker that stopped without saying so). */
+  async hashDel(key: string, fields: string[]): Promise<void> {
+    if (!this.redisHealthy || fields.length === 0) return;
+    try {
+      await this.redis.hdel(key, ...fields);
+    } catch {
+      // ignore
+    }
+  }
+
   get healthy(): boolean {
     return this.redisHealthy;
   }
