@@ -49,6 +49,13 @@ export function MiscCollectForm({
   const [mode, setMode] = useState('cash');
   const cheque = mode === 'cheque' || mode === 'dd';
   const total = open.reduce((a, l) => a + (Number(amounts[l.id]) || 0), 0);
+  // a fee with seats takes a seat only when paid in full
+  const short = open.some(
+    (l) =>
+      l.seats !== null &&
+      !!amounts[l.id] &&
+      Math.abs(Number(amounts[l.id]) - Number(l.balance)) > 0.005,
+  );
   return (
     <form action={action}>
       <input type="hidden" name="studentId" value={studentId} />
@@ -105,7 +112,6 @@ export function MiscCollectForm({
                           style={{ maxWidth: '9rem' }}
                           aria-label={`Amount received on ${l.title}`}
                           value={amounts[l.id] ?? ''}
-                          readOnly={l.seats !== null && (amounts[l.id] ?? '') !== ''}
                           onChange={(e) => setAmounts({ ...amounts, [l.id]: e.target.value })}
                         />
                         <button
@@ -120,6 +126,13 @@ export function MiscCollectForm({
                         >
                           {amounts[l.id] ? 'Clear' : 'Full'}
                         </button>
+                        {l.seats !== null &&
+                        amounts[l.id] &&
+                        Math.abs(Number(amounts[l.id]) - Number(l.balance)) > 0.005 ? (
+                          <span className="ep-field__error" role="alert">
+                            Limited seats: pay the full {rupees(l.balance)}
+                          </span>
+                        ) : null}
                       </span>
                     ) : l.status === 'paid' ? (
                       'Paid'
@@ -206,7 +219,7 @@ export function MiscCollectForm({
           </div>
           <p style={{ display: 'flex', gap: 'var(--sp-4)', alignItems: 'center' }}>
             <strong aria-live="polite">Total {rupees(total)}</strong>
-            <button type="submit" className="ep-btn ep-btn--primary" disabled={total <= 0}>
+            <button type="submit" className="ep-btn ep-btn--primary" disabled={total <= 0 || short}>
               Take the payment
             </button>
           </p>
