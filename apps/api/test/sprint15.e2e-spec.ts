@@ -845,7 +845,7 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       ).toBe(false);
       await withMigrator(async (c) => {
         await c.query(
-          `UPDATE comms_templates SET wa_template_name = 'fee_due_approved' WHERE school_id = $1 AND code = 'fee_due' AND channel = 'whatsapp'`,
+          `UPDATE comms_templates SET wa_template_name = 'fee_due_approved', wa_params = '["guardian_name","amount","student_name","section","as_of","school"]'::jsonb WHERE school_id = $1 AND code = 'fee_due' AND channel = 'whatsapp'`,
           [school.id],
         );
       });

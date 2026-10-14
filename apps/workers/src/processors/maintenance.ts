@@ -331,15 +331,28 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       // Sprint 12 (AI track): rebuild the reporting marts of every active school under its own tenant context.
       const schools = { rows: await schoolsFor(db, job) };
       let refreshed = 0;
+      let skipped = 0;
       for (const s of schools.rows) {
         try {
+          // one rebuild of a school at a time: two at once (a late run on top of the next) clash on the
+          // same rows; the second one is skipped, the first already brings the marts up to date
           const r = await db.withTenant(
             { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
-            (c) =>
-              c.query<{ o_mart: string; o_rows: number; o_ms: number }>(
+            async (c) => {
+              const lock = await c.query<{ ok: boolean }>(
+                `SELECT pg_try_advisory_xact_lock(hashtext('mart.refresh'), $1::int) AS ok`,
+                [Number(s.id)],
+              );
+              if (!lock.rows[0]?.ok) return null;
+              return c.query<{ o_mart: string; o_rows: number; o_ms: number }>(
                 'SELECT o_mart, o_rows, o_ms FROM app.refresh_marts()',
-              ),
+              );
+            },
           );
+          if (!r) {
+            skipped += 1;
+            continue;
+          }
           refreshed += 1;
           log.debug(
             { schoolId: s.id, marts: Object.fromEntries(r.rows.map((x) => [x.o_mart, x.o_rows])) },
@@ -352,7 +365,7 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
           );
         }
       }
-      log.info({ schools: schools.rows.length, refreshed }, 'insights refresh run');
+      log.info({ schools: schools.rows.length, refreshed, skipped }, 'insights refresh run');
       return;
     }
     if (kind === 'payments.reconcile') {

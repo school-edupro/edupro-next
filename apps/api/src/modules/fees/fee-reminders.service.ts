@@ -317,14 +317,23 @@ export class FeeRemindersService {
   private async assertWhatsappReady(c: PoolClient, dto: FeeReminderDto) {
     const wa = dto.channels.find((x) => x.channel === 'whatsapp');
     if (!wa) return;
-    const t = await c.query<{ name: string | null; wa: string | null }>(
-      `SELECT COALESCE(name, code) AS name, NULLIF(btrim(wa_template_name), '') AS wa FROM comms_templates WHERE id = $1`,
+    const t = await c.query<{ name: string | null; wa: string | null; noParams: boolean }>(
+      `SELECT COALESCE(name, code) AS name, NULLIF(btrim(wa_template_name), '') AS wa,
+              body LIKE '%{{%' AND jsonb_array_length(COALESCE(to_jsonb(wa_params), '[]'::jsonb)) = 0 AS "noParams"
+         FROM comms_templates WHERE id = $1`,
       [wa.templateId],
     );
     if (t.rows[0] && !t.rows[0].wa)
       throw new DomainError(
         'fees.reminder_whatsapp_not_approved',
         `The WhatsApp template "${t.rows[0].name ?? ''}" has no approved template name, so WhatsApp would refuse it. Choose an approved template, or add the approved name under Communication → Templates.`,
+        { status: 409 },
+      );
+    // Meta fills its numbered blanks from the parameters, in its own order: none set, and it refuses
+    if (t.rows[0]?.noParams)
+      throw new DomainError(
+        'fees.reminder_whatsapp_no_params',
+        `The WhatsApp template "${t.rows[0].name ?? ''}" has blanks but no "Parameters in Meta's order", so WhatsApp would refuse it. Set them under Communication → Templates, in the order of the approved template ({{1}}, {{2}}, …).`,
         { status: 409 },
       );
   }
