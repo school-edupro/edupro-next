@@ -804,7 +804,12 @@ export class MiscFeesService {
         r.miscFeeId,
         p.lastDate,
       ]);
-      return { lastDate: p.lastDate };
+      // a pupil whose own last date is earlier moves with the fee; one given a later date keeps it
+      const moved = await c.query(
+        `UPDATE misc_fee_students SET last_date = NULL, updated_at = now() WHERE misc_fee_id = $1 AND last_date IS NOT NULL AND last_date <= $2::date`,
+        [r.miscFeeId, p.lastDate],
+      );
+      return { lastDate: p.lastDate, pupilsMoved: moved.rowCount ?? 0 };
     }
     if (r.kind === 'close') {
       await c.query(`UPDATE misc_fees SET status = 'closed', updated_at = now() WHERE id = $1`, [

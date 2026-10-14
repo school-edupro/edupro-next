@@ -610,6 +610,11 @@ It has its own ledger and its own receipt series (MF/…); it never mixes with t
   yourself and the seniors on copy, then the send. Template blanks: `{{fee_name}}`, `{{fee_amount}}`,
   `{{fee_due}}`, `{{last_date}}`, `{{student_name}}`, `{{class}}`, `{{admission_no}}`.
   A misc fee reminder and a fee due reminder on the same day do not block each other.
+  Ready templates: **Misc fee: announcement** and **Misc fee: due reminder**, each for email, SMS and
+  WhatsApp (Communication → Templates). The email can be sent as it is. SMS needs its DLT template id
+  and WhatsApp its approved template name entered on the template first; register the wording shown
+  there. The email's button opens the parent portal; the fee is paid at the counter.
+- An extension moves every pupil whose own last date is earlier; a pupil given a later date keeps it.
 - *Extend the last date*, *Add more pupils*, *Close the fee*, and on a pupil's row *Change amount or
   date*: each is a request that goes for approval. A pupil's amount cannot go below what is paid.
 

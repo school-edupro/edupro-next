@@ -8,6 +8,13 @@ import {
   reminderTest,
 } from '@/lib/fee-reminder-actions';
 
+const rank = (code: string, pay: string) =>
+  code === (pay === 'all' ? 'misc_fee_announce' : 'misc_fee_due')
+    ? 0
+    : code.startsWith('misc_fee')
+      ? 1
+      : 2;
+
 /**
  * A fee reminder to the parents of defaulters: the pupils come from the defaulters report (the ticked
  * ones, or everyone its filters list); the message is a template for each channel, previewed and
@@ -63,8 +70,8 @@ export default async function FeeReminderPage({
         description={
           misc
             ? pay === 'all'
-              ? 'To the parents of every pupil the misc fee is announced for. Template blanks: {{fee_name}}, {{fee_amount}}, {{fee_due}}, {{last_date}}, {{student_name}}, {{class}}.'
-              : `To the parents of ${ids.length ? `the ${String(ids.length)} ticked` : 'everyone'} who still has to pay. A paid, closed or full fee is not asked for. Template blanks: {{fee_name}}, {{fee_due}}, {{last_date}}, {{student_name}}.`
+              ? 'To the parents of every pupil the misc fee is announced for. The “Misc fee: announcement” template is ready for email; SMS and WhatsApp go out once their DLT id and approved name are entered under Communication → Templates.'
+              : `To the parents of ${ids.length ? `the ${String(ids.length)} ticked` : 'everyone'} who still has to pay. A paid, closed or full fee is not asked for. Use the “Misc fee: due reminder” template.`
             : ids.length
               ? `To the parents of the ${String(ids.length)} pupil${ids.length === 1 ? '' : 's'} ticked on the defaulters list.`
               : 'To the parents of every pupil on the defaulters list as filtered.'
@@ -72,7 +79,12 @@ export default async function FeeReminderPage({
       />
       <ReminderCompose
         filter={filter}
-        templates={options.templates}
+        templates={
+          misc
+            ? // the misc fee templates first, the one that fits (announcement or reminder) on top
+              [...options.templates].sort((a, b) => rank(a.code, pay) - rank(b.code, pay))
+            : options.templates
+        }
         staff={options.staff}
         ccDefault={options.cc}
         whatsappNotApproved={options.whatsappNotApproved ?? 0}

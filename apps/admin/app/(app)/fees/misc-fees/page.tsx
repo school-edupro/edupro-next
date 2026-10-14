@@ -118,9 +118,6 @@ export default async function MiscFeesPage({
         <a className="ep-btn ep-btn--sm ep-btn--ghost" href="/fees/reports?report=misc_dues">
           Dues report
         </a>
-        <a className="ep-btn ep-btn--sm ep-btn--ghost" href="/fees/misc">
-          Other misc receipts
-        </a>
       </nav>
       {tab === 'announce' && canPost ? (
         heads.length === 0 ? (

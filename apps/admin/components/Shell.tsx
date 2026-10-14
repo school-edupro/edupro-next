@@ -83,7 +83,6 @@ const NAV: Array<{
       { href: '/fees/adjustments', label: 'adjustments', permission: 'fees.adjustment.request' },
       { href: '/fees/requests', label: 'feeRequests', permission: 'fees.adjustment.request' },
       { href: '/fees/misc-fees', label: 'miscFees', permission: 'fees.misc.view' },
-      { href: '/fees/misc', label: 'miscReceipts', permission: 'fees.misc.view' },
       { href: '/fees/reports', label: 'feeReports', permission: 'fees.ledger.view' },
       { href: '/fees/deposit-slips', label: 'feeDepositSlips', permission: 'fees.ledger.view' },
       { href: '/fees/bank', label: 'bankStatements', permission: 'payments.settlement.view' },

@@ -190,7 +190,14 @@ describe('misc fees announced to pupils (e2e)', () => {
     });
     expect(again.statusCode).toBe(409);
     await approve(feeId);
-    expect((await get(`/fees/misc-fees/${feeId}`)).fee.lastDate).toBe(day(60));
+    const moved = await get(`/fees/misc-fees/${feeId}`);
+    expect(moved.fee.lastDate).toBe(day(60));
+    // the pupil given day 40 of their own moves with the fee: nobody is left on an earlier date
+    expect(
+      (moved.lines as Array<{ lastDate: string; ownDate: boolean }>).every(
+        (l) => l.lastDate === day(60) && !l.ownDate,
+      ),
+    ).toBe(true);
   });
 
   it('limited seats go to those who pay first; a cancelled receipt gives the seat back', async () => {

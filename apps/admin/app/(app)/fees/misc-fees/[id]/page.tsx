@@ -208,7 +208,8 @@ export default async function MiscFeePage({
               </button>
             </form>
             <p className="ep-field__help">
-              A pupil with their own last date keeps it; change it on the pupil’s row below.
+              A pupil whose own last date is earlier moves to the new date too; a pupil given a
+              later date keeps it.
             </p>
           </details>
           <details style={{ marginTop: 'var(--sp-3)' }}>

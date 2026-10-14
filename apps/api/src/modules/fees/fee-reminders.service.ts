@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
+import { ENV, type Env } from '../../config/env';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { CreateRequestSchema, type CreateRequestDto } from '../comms/comms.dto';
@@ -32,6 +33,7 @@ export class FeeRemindersService {
     private readonly audit: AuditService,
     private readonly mis: FeeMisService,
     private readonly requests: RequestsService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -66,6 +68,8 @@ export class FeeRemindersService {
   /** The templates to choose from, the staff who can be put on copy, and the copy list kept by the school. */
   async options(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      // the misc fee announcement and reminder are there for a school made after they were added
+      await c.query(`SELECT app.misc_fee_seed_templates(app.current_school_id())`);
       const t = await c.query<{
         id: string;
         code: string;
@@ -280,6 +284,7 @@ export class FeeRemindersService {
             roll_no: p.roll_no ?? '',
             // the fee's own words, and the names a fee reminder template already uses
             fee_name: p.fee,
+            portal_link: `${this.env.PARENT_APP_URL}/fees`,
             misc_fee: p.fee,
             fee_head: p.head,
             fee_due_heads: p.fee,
