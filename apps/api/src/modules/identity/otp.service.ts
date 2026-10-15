@@ -209,11 +209,24 @@ export class OtpService {
       ]);
       return r.rows[0];
     });
-    // the same answer for an unknown login and for an account that may not sign in with a code alone
-    const blind: OtpStarted = { challengeId: randomUUID(), sentTo: null };
-    if (!found) return blind;
+    // the same answer for an unknown login and for an account that may not sign in with a code alone; a
+    // school that shows codes on screen has given up that secrecy for the rollout, so it is told plainly
+    const blind = async (): Promise<OtpStarted> => {
+      const plain = await this.db.global(async (c) => {
+        const r = await c.query<{ v: boolean }>(`SELECT app.otp_screen_offered() AS v`);
+        return r.rows[0]?.v ?? false;
+      });
+      if (plain)
+        throw new DomainError(
+          'auth.otp_not_found',
+          'No account was found for this email, mobile number or admission number, or it cannot sign in with a code. Ask the school office.',
+          { status: 404 },
+        );
+      return { challengeId: randomUUID(), sentTo: null };
+    };
+    if (!found) return blind();
     const p = await this.policy(found.user_id);
-    if (!p.otpOnly) return blind;
+    if (!p.otpOnly) return blind();
     if (await this.deviceRemembered(found.user_id, app, deviceToken))
       return { session: await this.session(found.sub, found.display_name, 'login', app) };
     return this.issue(

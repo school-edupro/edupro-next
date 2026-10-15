@@ -15,7 +15,7 @@ const Device = z
   .regex(/^[A-Za-z0-9_-]{20,100}$/)
   .optional();
 const StartSchema = z.object({
-  /** email or mobile number of the account */
+  /** email or mobile number of the account, or a pupil's admission number (its primary guardian) */
   login: z.string().trim().min(3).max(120),
   app: App,
   deviceToken: Device,

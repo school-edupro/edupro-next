@@ -23,7 +23,7 @@ export function CodeLoginForm({ returnTo, error }: { returnTo: string; error?: s
       ) : null}
       <div className="ep-field">
         <label className="ep-field__label" htmlFor="otp-login">
-          Email or mobile number
+          Email, mobile number or admission no.
         </label>
         <input
           id="otp-login"
@@ -35,7 +35,8 @@ export function CodeLoginForm({ returnTo, error }: { returnTo: string; error?: s
           autoComplete="username"
         />
         <span className="ep-field__help">
-          A 6-digit code is sent to the email the school has for you.
+          Parents can use the mobile or email given to the school, or their child’s admission
+          number. A 6-digit code is sent to the email the school has for you.
         </span>
       </div>
       <input type="hidden" name="returnTo" value={returnTo} />

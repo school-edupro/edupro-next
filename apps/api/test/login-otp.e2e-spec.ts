@@ -213,8 +213,9 @@ describe('sign-in with an emailed code (e2e)', () => {
       headers: {},
       json: { login: email, app: 'admin' },
     });
-    expect(notYet.statusCode).toBe(200);
-    expect(notYet.json().screenCode).toBeUndefined();
+    // the vague answer, or (when some school of this installation shows codes on screen) a plain "not found"
+    if (notYet.statusCode === 200) expect(notYet.json().screenCode).toBeUndefined();
+    else expect(notYet.json().type).toBe('auth.otp_not_found');
     expect((await setting('auth.login_mode', 'otp')).statusCode).toBe(200);
     await withMigrator((c) =>
       c.query(
@@ -231,15 +232,14 @@ describe('sign-in with an emailed code (e2e)', () => {
       })
     ).json();
     expect(st.screenCode).toMatch(/^\d{6}$/);
-    const unknown = (
-      await inject({
-        method: 'POST',
-        url: '/auth/otp/start',
-        headers: {},
-        json: { login: 'nobody@example.test', app: 'admin' },
-      })
-    ).json();
-    expect(Object.keys(unknown).sort()).toEqual(['challengeId', 'sentTo']);
+    // this school shows codes on screen: an unknown login is told so plainly
+    const unknown = await inject({
+      method: 'POST',
+      url: '/auth/otp/start',
+      headers: {},
+      json: { login: 'nobody@example.test', app: 'admin' },
+    });
+    expect(unknown.json().type).toBe('auth.otp_not_found');
     for (let i = 0; i < 4; i++) {
       const w = await inject({
         method: 'POST',
@@ -305,6 +305,83 @@ describe('sign-in with an emailed code (e2e)', () => {
       json: { login: email, app: 'admin' },
     });
     expect(soon.statusCode).toBe(409);
+  });
+
+  it("parents by the school's records: admission no. or the guardian's mobile; a first sign-in makes the account", async () => {
+    // code alone and on screen (set in the test before); the guardians have no login account yet
+    const mobile = `98${String(Date.now()).slice(-8)}`;
+    const ids = await withMigrator(async (c) => {
+      const st = await c.query<{ id: string }>(
+        `INSERT INTO students (school_id, admission_no, first_name, last_name) VALUES ($1, $2, 'Kid', 'Otp') RETURNING id::text`,
+        [school.id, `${s}K`],
+      );
+      const father = await c.query<{ id: string }>(
+        `INSERT INTO guardians (school_id, first_name, last_name, mobile, email) VALUES ($1, 'Father', 'Otp', $2, $3) RETURNING id::text`,
+        [school.id, mobile, `f.${s.toLowerCase()}@example.test`],
+      );
+      const mother = await c.query<{ id: string }>(
+        `INSERT INTO guardians (school_id, first_name, last_name, mobile) VALUES ($1, 'Mother', 'Otp', $2) RETURNING id::text`,
+        [school.id, mobile],
+      );
+      await c.query(
+        `INSERT INTO student_guardians (school_id, student_id, guardian_id, relation, is_primary) VALUES ($1, $2, $3, 'father', true), ($1, $2, $4, 'mother', false)`,
+        [school.id, st.rows[0]!.id, father.rows[0]!.id, mother.rows[0]!.id],
+      );
+      return { father: father.rows[0]!.id, mother: mother.rows[0]!.id };
+    });
+    const st = await inject({
+      method: 'POST',
+      url: '/auth/otp/start',
+      headers: {},
+      json: { login: `${s}k`, app: 'parent' },
+    });
+    expect(st.statusCode).toBe(200);
+    expect(st.json().sentTo).toMatch(/^f\*+@example\.test$/);
+    const ok = await inject({
+      method: 'POST',
+      url: '/auth/otp/verify',
+      headers: {},
+      json: { challengeId: st.json().challengeId, code: st.json().screenCode },
+    });
+    expect(ok.statusCode).toBe(200);
+    // the father now has an account: a guardian of the school with the parent role, linked to his record
+    const made = await withMigrator((c) =>
+      c.query<{ id: string; user_id: string | null; roles: string | null; person: string | null }>(
+        `SELECT g.id::text, g.user_id::text,
+                (SELECT string_agg(r.code, ',') FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = g.user_id AND ur.school_id = g.school_id) AS roles,
+                (SELECT m.person_type::text FROM user_school_memberships m WHERE m.user_id = g.user_id AND m.school_id = g.school_id) AS person
+           FROM guardians g WHERE g.id = ANY($1::bigint[]) ORDER BY g.id`,
+        [[ids.father, ids.mother]],
+      ),
+    );
+    expect(made.rows[0]).toMatchObject({ roles: 'parent', person: 'guardian' });
+    expect(made.rows[0]!.user_id).not.toBeNull();
+    // the mother shares the mobile: no second account
+    expect(made.rows[1]!.user_id).toBeNull();
+    // the shared mobile signs in to the same account
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE auth_otp_challenges SET created_at = created_at - interval '1 hour' WHERE user_id = $1`,
+        [made.rows[0]!.user_id],
+      ),
+    );
+    const byMobile = await inject({
+      method: 'POST',
+      url: '/auth/otp/start',
+      headers: {},
+      json: { login: mobile, app: 'parent' },
+    });
+    expect(byMobile.statusCode).toBe(200);
+    expect(byMobile.json().screenCode).toMatch(/^\d{6}$/);
+    // with the code on screen, an unknown login is told plainly
+    const unknown = await inject({
+      method: 'POST',
+      url: '/auth/otp/start',
+      headers: {},
+      json: { login: 'nobody-here@example.test', app: 'parent' },
+    });
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().type).toBe('auth.otp_not_found');
   });
 
   it('the school sees the codes shown on screen and who has no email, and can forget remembered devices', async () => {
