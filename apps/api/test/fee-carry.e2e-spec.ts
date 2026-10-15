@@ -20,6 +20,7 @@ interface Row {
   studentId: string;
   dueSchool: string;
   lateFee: string;
+  lateHostel: string;
   advance: string;
   net: string;
   enrolled: boolean;
@@ -41,7 +42,7 @@ describe('fee carry-forward to the new year (e2e)', () => {
   let teacher: SeededUser;
   let nextYearId: string;
   let sectionId: string;
-  const students: Record<'due' | 'advance' | 'clear' | 'left', string> = {} as never;
+  const students: Record<'due' | 'advance' | 'clear' | 'left' | 'hostel', string> = {} as never;
 
   const h = (u: SeededUser = admin, year?: string) => ({
     ...headersFor(u.sub, school.id),
@@ -92,6 +93,13 @@ describe('fee carry-forward to the new year (e2e)', () => {
       json: { code: 'TUI', name: 'Tuition fee', sortOrder: 1 },
     });
     expect(head.statusCode).toBe(201);
+    const hostelHead = await inject({
+      method: 'POST',
+      url: '/fees/heads',
+      headers: h(),
+      json: { code: 'HOS', name: 'Hostel fee', ledger: 'hostel', sortOrder: 2 },
+    });
+    expect(hostelHead.statusCode).toBe(201);
     const p = await inject({
       method: 'POST',
       url: '/fees/periods/generate',
@@ -105,7 +113,10 @@ describe('fee carry-forward to the new year (e2e)', () => {
       headers: h(),
       json: {
         feeGroup: 'general',
-        entries: [{ headId: head.json().id, amount: 1000, frequency: 'monthly' }],
+        entries: [
+          { headId: head.json().id, amount: 1000, frequency: 'monthly' },
+          { headId: hostelHead.json().id, amount: 500, frequency: 'monthly' },
+        ],
       },
     });
     expect(st.statusCode).toBe(200);
@@ -148,8 +159,45 @@ describe('fee carry-forward to the new year (e2e)', () => {
       });
       expect(g.statusCode).toBe(201);
     }
+    // "hostel": a hosteller whose school fee is paid on time and whose first hostel quarter is not
+    const hs = await inject({
+      method: 'POST',
+      url: '/people/students',
+      headers: h(),
+      json: {
+        admissionNo: 'FCF-hostel',
+        firstName: 'hostel',
+        lastName: 'Carry',
+        dob: '2015-01-01',
+        admittedOn: '2025-04-05',
+        enrolment: { classSectionId: sectionId, rollNo: roll },
+      },
+    });
+    students.hostel = hs.json().id as string;
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, hosteller) VALUES ($1, $2, $3, 'general', true)`,
+        [school.id, students.hostel, school.yearId],
+      ),
+    );
+    await inject({
+      method: 'POST',
+      url: `/fees/students/${students.hostel}/demands/generate`,
+      headers: h(),
+    });
     const receipt = (json: Record<string, unknown>) =>
       inject({ method: 'POST', url: '/payments/receipts', headers: h(accountant), json });
+    expect(
+      (
+        await receipt({
+          studentId: students.hostel,
+          amount: 12000,
+          mode: 'cash',
+          receivedOn: '2026-04-05',
+          ledger: 'school',
+        })
+      ).statusCode,
+    ).toBe(201);
     // "due": pays 5 000 of 12 000 on time for the first quarter only; later quarters stay unpaid
     expect(
       (
@@ -185,7 +233,7 @@ describe('fee carry-forward to the new year (e2e)', () => {
     ).toBe(201);
     // everyone but "left" is promoted to the new year
     await withMigrator(async (c) => {
-      for (const id of ['due', 'advance', 'clear'] as const)
+      for (const id of ['due', 'advance', 'clear', 'hostel'] as const)
         await c.query(
           `INSERT INTO enrolments (school_id, student_id, academic_year_id, class_section_id, status) VALUES ($1, $2, $3, $4, 'active')`,
           [school.id, students[id], nextYearId, sectionId],
@@ -250,7 +298,24 @@ describe('fee carry-forward to the new year (e2e)', () => {
       json: { toYearId: nextYearId, fromYearId: school.yearId },
     });
     expect(run.statusCode).toBe(201);
-    expect(run.json().students).toBe(2); // "left" has no class in the new year, "clear" owes nothing
+    expect(run.json().students).toBe(3); // "left" has no class in the new year, "clear" owes nothing
+    // the hosteller's unpaid hostel late fine opens on the new hostel bill, not the school bill
+    const hostelBefore = (await rowOf(students.hostel))!;
+    expect(Number(hostelBefore.lateHostel)).toBeGreaterThanOrEqual(200);
+    expect(hostelBefore.lateHostel).toBe(hostelBefore.lateFee); // the school fee was paid on time
+    const hd = (
+      await inject({
+        method: 'GET',
+        url: `/fees/students/${students.hostel}/demands`,
+        headers: h(),
+      })
+    ).json().rows as Array<Demand & { headCode: string; ledger: string }>;
+    const lateLines = hd.filter(
+      (d) => d.source === 'opening_balance' && d.headCode.startsWith('PREVLATE'),
+    );
+    expect(lateLines.map((d) => [d.headCode, d.ledger, d.net])).toEqual([
+      ['PREVLATEH', 'hostel', hostelBefore.lateHostel],
+    ]);
     const demands = (
       await inject({
         method: 'GET',

@@ -14,6 +14,8 @@ export interface CarryRow {
   dueSchool: string;
   dueHostel: string;
   lateFee: string;
+  /** the hostel part of lateFee: opens on the hostel bill (0145) */
+  lateHostel: string;
   advance: string;
   /** What the new year opens with: dues and late fine less the advance. */
   net: string;
@@ -45,6 +47,7 @@ const HEADS = {
   school: ['PREVDUE', 'Previous dues', 'opening_balance', 'school'],
   hostel: ['PREVDUEH', 'Previous dues (hostel)', 'opening_balance', 'hostel'],
   late: ['PREVLATE', 'Previous late fine', 'late_fee', 'school'],
+  lateHostel: ['PREVLATEH', 'Previous late fine (hostel)', 'late_fee', 'hostel'],
 } as const;
 
 /**
@@ -97,15 +100,15 @@ export class FeeCarryService {
       `SELECT p.student_id::text AS "studentId", s.display_name AS name, s.admission_no AS "admissionNo",
               (SELECT k.name || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
                 WHERE e.student_id = p.student_id AND e.academic_year_id = $1 ORDER BY e.id DESC LIMIT 1) AS section,
-              p.due_school::numeric(14,2)::text AS "dueSchool", p.due_hostel::numeric(14,2)::text AS "dueHostel", p.late_fee::numeric(14,2)::text AS "lateFee", p.advance::numeric(14,2)::text AS advance,
+              p.due_school::numeric(14,2)::text AS "dueSchool", p.due_hostel::numeric(14,2)::text AS "dueHostel", p.late_fee::numeric(14,2)::text AS "lateFee", p.late_hostel::numeric(14,2)::text AS "lateHostel", p.advance::numeric(14,2)::text AS advance,
               (p.due_school + p.due_hostel + p.late_fee - p.advance)::numeric(14,2)::text AS net, p.enrolled, p.carried
          FROM (
-           SELECT v.student_id, v.due_school, v.due_hostel, v.late_fee, v.advance, v.enrolled, false AS carried
+           SELECT v.student_id, v.due_school, v.due_hostel, v.late_fee, v.late_hostel, v.advance, v.enrolled, false AS carried
              FROM app.fee_carry_preview($1, $2) v
             WHERE NOT v.carried AND (v.due_school <> 0 OR v.due_hostel <> 0 OR v.late_fee <> 0 OR v.advance <> 0)
            UNION ALL
            -- already carried: what went across, as recorded
-           SELECT f.student_id, f.due_school, f.due_hostel, f.late_fee, f.advance, true, true
+           SELECT f.student_id, f.due_school, f.due_hostel, f.late_fee, f.late_hostel, f.advance, true, true
              FROM fee_carry_forwards f WHERE f.from_year_id = $1 AND f.to_year_id = $2 AND f.undone_at IS NULL
          ) p JOIN students s ON s.id = p.student_id
         ORDER BY section NULLS LAST, s.display_name`,
@@ -170,7 +173,7 @@ export class FeeCarryService {
   private async head(c: PoolClient, which: keyof typeof HEADS): Promise<void> {
     const [code, name, kind, ledger] = HEADS[which];
     const has =
-      which === 'late'
+      which === 'late' || which === 'lateHostel'
         ? await c.query(`SELECT 1 FROM fee_heads WHERE code = $1 AND deleted_at IS NULL`, [code])
         : await c.query(
             `SELECT 1 FROM fee_heads WHERE kind = 'opening_balance' AND ledger = $1::ledger_type AND deleted_at IS NULL`,
@@ -207,6 +210,7 @@ export class FeeCarryService {
       await this.head(c, 'school');
       await this.head(c, 'late');
       if (chosen.some((r) => Number(r.dueHostel) !== 0)) await this.head(c, 'hostel');
+      if (chosen.some((r) => Number(r.lateHostel) > 0)) await this.head(c, 'lateHostel');
       const run = await c.query<{ id: string }>(
         `INSERT INTO fee_carry_runs (school_id, from_year_id, to_year_id, ran_by) VALUES (app.current_school_id(), $1, $2, app.current_user_id()) RETURNING id::text`,
         [fromId, dto.toYearId],
@@ -222,8 +226,8 @@ export class FeeCarryService {
           [r.studentId, fromId],
         );
         await c.query(
-          `INSERT INTO fee_carry_forwards (school_id, run_id, student_id, from_year_id, to_year_id, due_school, due_hostel, late_fee, advance, demand_ids)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9::bigint[])`,
+          `INSERT INTO fee_carry_forwards (school_id, run_id, student_id, from_year_id, to_year_id, due_school, due_hostel, late_fee, advance, demand_ids, late_hostel)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9::bigint[], $10)`,
           [
             runId,
             r.studentId,
@@ -234,18 +238,30 @@ export class FeeCarryService {
             r.lateFee,
             r.advance,
             marked.rows.map((x) => x.id),
+            r.lateHostel,
           ],
         );
         // the new year's profile keeps the pupil's fee group and hostel flag, and opens with the carry
         await c.query(
           `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, hosteller, instalments_override,
-                  opening_balance, opening_hostel, opening_late_fee, created_by, updated_by)
+                  opening_balance, opening_hostel, opening_late_fee, opening_late_hostel, created_by, updated_by)
            SELECT app.current_school_id(), $1, $2, COALESCE(o.fee_group, 'general'), 'old', COALESCE(o.hosteller, false), o.instalments_override,
-                  $4::numeric - $7::numeric, $5, $6, app.current_user_id(), app.current_user_id()
+                  $4::numeric - $7::numeric, $5, $6::numeric - $8::numeric, $8, app.current_user_id(), app.current_user_id()
              FROM (SELECT 1) one LEFT JOIN student_fee_profiles o ON o.student_id = $1 AND o.academic_year_id = $3
            ON CONFLICT (student_id, academic_year_id) DO UPDATE SET opening_balance = EXCLUDED.opening_balance, opening_hostel = EXCLUDED.opening_hostel,
-             opening_late_fee = EXCLUDED.opening_late_fee, updated_at = now(), updated_by = app.current_user_id()`,
-          [r.studentId, dto.toYearId, fromId, r.dueSchool, r.dueHostel, r.lateFee, r.advance],
+             opening_late_fee = EXCLUDED.opening_late_fee, opening_late_hostel = EXCLUDED.opening_late_hostel,
+             updated_at = now(), updated_by = app.current_user_id()`,
+          // the school late fine on the school bill, the hostel late fine on the hostel bill
+          [
+            r.studentId,
+            dto.toYearId,
+            fromId,
+            r.dueSchool,
+            r.dueHostel,
+            r.lateFee,
+            r.advance,
+            r.lateHostel,
+          ],
         );
         await this.rebuild(c, r.studentId, dto.toYearId);
         due += Number(r.dueSchool) + Number(r.dueHostel);
@@ -313,7 +329,7 @@ export class FeeCarryService {
         [row.demand_ids],
       );
       await c.query(
-        `UPDATE student_fee_profiles SET opening_balance = 0, opening_hostel = 0, opening_late_fee = 0, updated_at = now(), updated_by = app.current_user_id()
+        `UPDATE student_fee_profiles SET opening_balance = 0, opening_hostel = 0, opening_late_fee = 0, opening_late_hostel = 0, updated_at = now(), updated_by = app.current_user_id()
           WHERE student_id = $1 AND academic_year_id = $2`,
         [studentId, toYearId],
       );
