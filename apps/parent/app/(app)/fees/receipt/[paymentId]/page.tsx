@@ -45,7 +45,9 @@ export default async function MyReceiptPage({
         </a>
       </div>
       {/* the school's receipt layout is wide: it prints on an A4 landscape page */}
-      <style>{'@page { size: A4 landscape; margin: 8mm; }'}</style>
+      {r.layout === 'classic' ? null : (
+        <style>{'@page { size: A4 landscape; margin: 8mm; }'}</style>
+      )}
       <FeeReceiptSheet r={r} label="Parent copy" />
     </>
   );

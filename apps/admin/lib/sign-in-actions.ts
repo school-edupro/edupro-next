@@ -11,6 +11,11 @@ export async function saveSignIn(fd: FormData) {
   const onScreen = fd.get('onScreen') === 'on';
   if (!['oneauth', 'oneauth_otp', 'otp'].includes(mode))
     back('error=1&detail=Choose how users sign in');
+  const channels = fd
+    .getAll('channels')
+    .map(String)
+    .filter((v) => ['email', 'whatsapp', 'sms'].includes(v));
+  if (channels.length === 0) back('error=1&detail=Tick at least one channel for the code');
   try {
     const id = (k: string) => {
       const v = String(fd.get(k) ?? '');
@@ -21,6 +26,7 @@ export async function saveSignIn(fd: FormData) {
       ['auth.otp_on_screen', onScreen],
       ['auth.otp_whatsapp_template', id('waTemplate')],
       ['auth.otp_sms_template', id('smsTemplate')],
+      ['auth.otp_channels', channels],
     ] as const)
       await apiFetch(`/platform/settings/${key}`, {
         method: 'PUT',

@@ -1,3 +1,4 @@
+import { FeeReceiptClassic } from './FeeReceiptClassic';
 const rupees = (v: string | number) =>
   Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dmy = (iso: string | null | undefined) => {
@@ -51,6 +52,10 @@ export interface FeeReceipt {
   /** The instalments paid as the pay plan names them (Q1, H2, Annual, the months). */
   instalment?: string | null;
   bounceCharge?: string;
+  /** The school's receipt layout (Fee setup -> Receipt numbers): two-panel or classic. */
+  layout?: 'two_panel' | 'classic';
+  /** The copies printed, e.g. Parent copy, School copy, Office copy. */
+  copies?: string[];
 }
 
 const FEE: Record<string, string> = { hostel: 'Hostel Fee', misc: 'Misc Fee' };
@@ -72,6 +77,7 @@ export function FeeReceiptSheet({
   /** Where the app serves the school's logo, if it can. */
   logoSrc?: string | null;
 }) {
+  if (r.layout === 'classic') return <FeeReceiptClassic r={r} label={label} />;
   const cancelled = r.status === 'reversed' || r.status === 'bounced';
   const fee = FEE[r.feeType] ?? 'Fee';
   // the heads paid, one line each (the instalment is named in the heading)

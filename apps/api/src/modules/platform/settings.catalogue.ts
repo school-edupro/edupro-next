@@ -81,6 +81,30 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Also show the sign-in code on screen (while emails are being corrected); every code shown is recorded',
     module: 'platform',
   },
+  'auth.otp_channels': {
+    schema: z.array(z.enum(['email', 'whatsapp', 'sms'])).min(1),
+    default: ['email', 'whatsapp', 'sms'],
+    description: 'Where the sign-in code goes (every ticked channel that reaches the user)',
+    module: 'platform',
+  },
+  'fees.bill_layout': {
+    schema: z.enum(['annual', 'instalment']),
+    default: 'annual',
+    description: "Fee bill layout: the school's annual bill, or the instalment-wise bill",
+    module: 'fees',
+  },
+  'fees.receipt_layout': {
+    schema: z.enum(['two_panel', 'classic']),
+    default: 'two_panel',
+    description: 'Fee receipt layout: two-panel (school layout) or classic',
+    module: 'fees',
+  },
+  'fees.receipt_copies': {
+    schema: z.enum(['parent', 'parent_school', 'parent_school_office']),
+    default: 'parent_school',
+    description: 'Copies of a receipt printed: parent; parent and school; parent, school and office',
+    module: 'fees',
+  },
   'auth.otp_sms_template': {
     schema: z.union([z.string().regex(/^\d{1,18}$/), z.literal('')]),
     default: '',

@@ -359,6 +359,10 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   not a hosteller (hostel dues of a pupil who left are taken).
 - **Bounce charge of a hostel cheque** is raised on the hostel fee (head *Cheque bounce charge
   (hostel)*), not the school fee.
+- **Bill and receipt layout** (Fee setup → Receipt numbers, layouts): Fee bill = *School annual bill*
+  or the earlier *Instalment bill*; Fee receipt = *Two-panel* (A4 landscape) or the earlier *Classic*
+  (A4 portrait); receipt copies = parent only / parent + school / parent + school + office. One choice
+  for school, hostel and misc fee; screen, print and PDF follow it (the parent app gives the parent copy).
 - **Payment gateways** (Fee setup → Payment gateways, school admin only, after a fresh strong sign-in):
   add the school's PayU, CCAvenue, Razorpay, SBI ePay or Atom account in **Test** mode with the sandbox
   keys, pay a small amount from the parent app, then switch to **Live** with the live keys. Keys are

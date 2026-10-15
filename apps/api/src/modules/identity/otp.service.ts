@@ -276,6 +276,13 @@ export class OtpService {
         });
       };
       const sent: string[] = [];
+      // the channels the school ticked (System -> Sign-in); every ticked one that reaches the user goes
+      const ticked = (
+        await c.query<{ v: string[] | null }>(`SELECT app.setting('auth.otp_channels') AS v`)
+      ).rows[0]?.v ?? ['email', 'whatsapp', 'sms'];
+      const on = (ch: string) => !Array.isArray(ticked) || ticked.length === 0 || ticked.includes(ch);
+      if (!on('email')) email = null;
+      if (!on('whatsapp') && !on('sms')) mobile = null;
       if (email) {
         await queue(
           'email',
@@ -308,7 +315,7 @@ export class OtpService {
           );
           return r.rows[0] ?? null;
         };
-        const wa = await pick('whatsapp');
+        const wa = on('whatsapp') ? await pick('whatsapp') : null;
         if (wa) {
           // the approved template's variables in Meta's order; an OTP template's one variable is the code
           const names = wa.wa_params && wa.wa_params.length ? wa.wa_params : ['otp'];
@@ -318,7 +325,7 @@ export class OtpService {
           });
           sent.push(`WhatsApp ${maskMobile(mobile)}`);
         }
-        const sms = await pick('sms');
+        const sms = on('sms') ? await pick('sms') : null;
         if (sms) {
           // the DLT text must match the registered one: only the variable is filled in
           await queue('sms', mobile, null, fill(sms.body), { templateId: sms.id });

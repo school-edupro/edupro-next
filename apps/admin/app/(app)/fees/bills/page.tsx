@@ -1,6 +1,7 @@
 import { Button, InputField, PageHeader } from '@edupro/ui';
 import { PrintButton } from '@/components/PrintButton';
 import { FeeBillSheet, type FeeBillView } from '@/components/fees/FeeBillSheet';
+import { InstalmentBillSheet } from '@/components/fees/InstalmentBillSheet';
 import { dmy } from '@/components/fees/sheets';
 import { ApiError, apiFetch } from '@/lib/api';
 
@@ -140,9 +141,16 @@ export default async function FeeBillsPage({
           </p>
         ) : null}
       </div>
-      {printable.map((b) => (
-        <FeeBillSheet key={b.student.id} b={b} />
-      ))}
+      {/* the school's bill layout (Fee setup -> Receipt numbers): the annual bill or the instalment-wise one */}
+      {printable.map((b) =>
+        b.layout === 'instalment' ? (
+          b.instalments.length > 0 ? (
+            <InstalmentBillSheet key={b.student.id} b={b as never} />
+          ) : null
+        ) : (
+          <FeeBillSheet key={b.student.id} b={b} />
+        ),
+      )}
     </>
   );
 }

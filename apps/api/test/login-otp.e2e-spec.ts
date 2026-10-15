@@ -433,6 +433,56 @@ describe('sign-in with an emailed code (e2e)', () => {
     expect(by.sms!.body).toBe(`Dear User,Your OTP is ${code}.Team Mobilise`);
   });
 
+  it('the code goes only on the channels the school ticked', async () => {
+    const set = await inject({
+      method: 'PUT',
+      url: '/platform/settings/auth.otp_channels',
+      headers: h(),
+      json: { value: ['whatsapp'] },
+    });
+    expect(set.statusCode).toBe(200);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE auth_otp_challenges SET created_at = created_at - interval '1 hour' WHERE user_id = $1`,
+        [clerk.id],
+      ),
+    );
+    const before = await withMigrator((c) =>
+      c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM comms_messages WHERE recipient_user_id = $1`,
+        [clerk.id],
+      ),
+    );
+    const st = await inject({
+      method: 'POST',
+      url: '/auth/otp/start',
+      headers: {},
+      json: { login: email, app: 'admin' },
+    });
+    expect(st.json().sentTo).toMatch(/^WhatsApp \d{2}\*{6}\d{2}$/);
+    const after = await withMigrator((c) =>
+      c.query<{ channel: string }>(
+        `SELECT channel::text FROM comms_messages WHERE recipient_user_id = $1 ORDER BY id OFFSET $2`,
+        [clerk.id, before.rows[0]!.n],
+      ),
+    );
+    expect(after.rows.map((r) => r.channel)).toEqual(['whatsapp']);
+    // none ticked is refused
+    const none = await inject({
+      method: 'PUT',
+      url: '/platform/settings/auth.otp_channels',
+      headers: h(),
+      json: { value: [] },
+    });
+    expect(none.statusCode).toBe(400);
+    await inject({
+      method: 'PUT',
+      url: '/platform/settings/auth.otp_channels',
+      headers: h(),
+      json: { value: ['email', 'whatsapp', 'sms'] },
+    });
+  });
+
   it('the school sees the codes shown on screen and who has no email, and can forget remembered devices', async () => {
     const log = await inject({ method: 'GET', url: '/auth/otp/screen-log', headers: h() });
     expect(log.statusCode).toBe(200);

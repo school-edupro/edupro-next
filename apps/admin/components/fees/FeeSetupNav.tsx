@@ -5,7 +5,7 @@ const TABS: Array<{ href: string; label: string }> = [
   { href: '/fees/hostel-calendar', label: 'Hostel calendar' },
   { href: '/fees/structures', label: 'Class fee structure' },
   { href: '/fees/discounts', label: 'Discount by head' },
-  { href: '/fees/masters', label: 'Receipt numbers' },
+  { href: '/fees/masters', label: 'Receipt numbers, layouts' },
   { href: '/fees/approval', label: 'Approval levels' },
   { href: '/fees/gateways', label: 'Payment gateways' },
 ];

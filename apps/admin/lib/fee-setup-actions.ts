@@ -400,3 +400,29 @@ export async function saveHostelCalendar(fd: FormData) {
   }
   done(path);
 }
+
+/** Fee setup -> Receipt numbers, layouts: the school's bill and receipt layout and the copies printed. */
+export async function saveFeeLayouts(fd: FormData) {
+  const path = '/fees/masters';
+  const pick = (k: string, allowed: string[], dflt: string) => {
+    const v = str(fd, k);
+    return allowed.includes(v) ? v : dflt;
+  };
+  try {
+    for (const [key, value] of [
+      ['fees.bill_layout', pick('billLayout', ['annual', 'instalment'], 'annual')],
+      ['fees.receipt_layout', pick('receiptLayout', ['two_panel', 'classic'], 'two_panel')],
+      [
+        'fees.receipt_copies',
+        pick('copies', ['parent', 'parent_school', 'parent_school_office'], 'parent_school'),
+      ],
+    ] as const)
+      await apiFetch(`/platform/settings/${key}`, {
+        method: 'PUT',
+        body: JSON.stringify({ value }),
+      });
+  } catch (error) {
+    fail(path, error);
+  }
+  done(path);
+}

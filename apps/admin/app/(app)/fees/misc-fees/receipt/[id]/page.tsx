@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { ReceiptCopy, type Receipt } from '@/components/fees/ReceiptCopy';
 import { rupees } from '@/components/fees/sheets';
@@ -16,8 +17,10 @@ export default async function MiscReceiptPage({
   const r = await apiFetch<Receipt>(`/fees/misc-fees/receipts/${id}/receipt-view`);
   return (
     <>
-      {/* the school's receipt layout is wide: each copy prints on an A4 landscape page */}
-      <style>{'@page { size: A4 landscape; margin: 8mm; }'}</style>
+      {/* the two-panel layout is wide: each copy prints on an A4 landscape page; the classic one stays portrait */}
+      {r.layout === 'classic' ? null : (
+        <style>{'@page { size: A4 landscape; margin: 8mm; }'}</style>
+      )}
       <div
         className="ep-noprint"
         style={{
@@ -44,9 +47,13 @@ export default async function MiscReceiptPage({
           Next pupil
         </a>
       </div>
-      <ReceiptCopy r={r} label="School copy" />
-      <hr className="ep-receipt__cut" />
-      <ReceiptCopy r={r} label="Parent copy" />
+      {/* the copies the school prints (Fee setup -> Receipt numbers) */}
+      {(r.copies?.length ? r.copies : ['Parent copy', 'School copy']).map((label, i) => (
+        <Fragment key={label}>
+          {i > 0 ? <hr className="ep-receipt__cut" /> : null}
+          <ReceiptCopy r={r} label={label} />
+        </Fragment>
+      ))}
     </>
   );
 }

@@ -15,6 +15,7 @@ export interface FeeBillView {
   billDate: string;
   generatedAt: string;
   ledger: 'all' | 'school' | 'hostel';
+  layout?: 'annual' | 'instalment';
   student: {
     id: string;
     name: string;

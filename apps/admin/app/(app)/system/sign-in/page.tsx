@@ -76,6 +76,9 @@ export default async function SignInSettingsPage({
   const mode = String(val('auth.login_mode') ?? 'oneauth');
   const onScreen = val('auth.otp_on_screen') === true;
   const smsTemplate = String(val('auth.otp_sms_template') ?? '');
+  const ticked = Array.isArray(val('auth.otp_channels'))
+    ? (val('auth.otp_channels') as string[])
+    : ['email', 'whatsapp', 'sms'];
   const waTemplate = String(val('auth.otp_whatsapp_template') ?? '');
   return (
     <>
@@ -123,14 +126,36 @@ export default async function SignInSettingsPage({
               </span>
             </label>
             <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-              <legend className="ep-field__label">
-                The code goes by email, WhatsApp and SMS together
-              </legend>
+              <legend className="ep-field__label">Send the code by</legend>
+              <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+                {(
+                  [
+                    ['email', 'Email'],
+                    ['whatsapp', 'WhatsApp'],
+                    ['sms', 'SMS'],
+                  ] as const
+                ).map(([v, label]) => (
+                  <label
+                    key={v}
+                    style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}
+                  >
+                    <input
+                      type="checkbox"
+                      name="channels"
+                      value={v}
+                      defaultChecked={ticked.includes(v)}
+                      disabled={!canEdit}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
               <p className="ep-field__help">
-                Email is a formatted letter from the school’s email. WhatsApp and SMS go to the
-                mobile on record with the school’s approved templates; the template’s variable gets
-                the code (WhatsApp: in Meta’s order; SMS: the registered DLT text, only the variable
-                filled).
+                Every ticked channel that can reach the user gets the code (at least one must be
+                ticked). Email is a formatted letter from the school’s email. WhatsApp and SMS go to
+                the mobile on record with the school’s approved templates; the template’s variable
+                gets the code (WhatsApp: in Meta’s order; SMS: the registered DLT text, only the
+                variable filled).
               </p>
               <div
                 style={{

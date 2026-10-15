@@ -308,10 +308,10 @@ export class FeesController {
   }
 
   @Get('payments/:id/receipt-file')
-  @ApiOperation({ summary: 'One receipt as a PDF made at once (school copy and parent copy)' })
+  @ApiOperation({ summary: "One receipt as a PDF made at once (the school's layout and copies)" })
   @RequirePermission(FEES.ledgerView)
   receiptFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.papers.receiptFile(ctx, id, ['School copy', 'Parent copy']);
+    return this.papers.receiptFile(ctx, id);
   }
 
   @Get('pay-plan')

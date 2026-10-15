@@ -523,4 +523,50 @@ describe('hostel fee (e2e)', () => {
     );
     expect(charge.rows[0]).toEqual({ ledger: 'hostel', code: 'BOUNCEH', net: '400.00' });
   });
+  it("the school's bill and receipt layout and copies decide the print and the PDF", async () => {
+    const set = (key: string, value: string) =>
+      inject({ method: 'PUT', url: `/platform/settings/${key}`, headers: h(), json: { value } });
+    const pay = await withMigrator((c) =>
+      c.query<{ id: string }>(
+        `SELECT id::text FROM fee_payments WHERE student_id = $1 AND status = 'posted' ORDER BY id LIMIT 1`,
+        [pupils.whole],
+      ),
+    );
+    const id = pay.rows[0]!.id;
+    const view = async () =>
+      (
+        await inject({ method: 'GET', url: `/fees/payments/${id}/receipt-view`, headers: h() })
+      ).json();
+    expect(await view()).toMatchObject({
+      layout: 'two_panel',
+      copies: ['Parent copy', 'School copy'],
+    });
+    expect((await set('fees.receipt_layout', 'classic')).statusCode).toBe(200);
+    expect((await set('fees.receipt_copies', 'parent_school_office')).statusCode).toBe(200);
+    expect(await view()).toMatchObject({
+      layout: 'classic',
+      copies: ['Parent copy', 'School copy', 'Office copy'],
+    });
+    const file = await inject({
+      method: 'GET',
+      url: `/fees/payments/${id}/receipt-file`,
+      headers: h(),
+    });
+    expect(file.statusCode).toBe(200);
+    expect(
+      Buffer.from(file.json().base64 as string, 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('%PDF');
+    expect((await set('fees.bill_layout', 'instalment')).statusCode).toBe(200);
+    const bill = await inject({
+      method: 'GET',
+      url: `/fees/students/${pupils.whole!}/bill`,
+      headers: h(),
+    });
+    expect(bill.json().layout).toBe('instalment');
+    await set('fees.receipt_layout', 'two_panel');
+    await set('fees.receipt_copies', 'parent_school');
+    await set('fees.bill_layout', 'annual');
+  });
 });

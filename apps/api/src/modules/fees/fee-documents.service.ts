@@ -1,4 +1,5 @@
 import { receiptLayoutPdf } from './receipt-layout-pdf';
+import { receiptPdf } from './receipt-pdf';
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { amountInWords } from '@edupro/db';
@@ -46,6 +47,8 @@ export interface FeeBill {
   generatedAt: string;
   /** all = school and hostel fee; school or hostel = that fee only */
   ledger: 'all' | 'school' | 'hostel';
+  /** the school's bill layout: the annual bill, or the instalment-wise one */
+  layout: 'annual' | 'instalment';
   student: {
     id: string;
     name: string;
@@ -259,6 +262,26 @@ export class FeeDocumentsService {
     };
   }
 
+  /** The school's bill and receipt layouts and the receipt copies printed (Fee setup -> Receipt numbers). */
+  private async layoutOf(c: PoolClient) {
+    const r = await c.query<{ bill: string | null; receipt: string | null; copies: string | null }>(
+      `SELECT app.setting('fees.bill_layout') #>> '{}' AS bill, app.setting('fees.receipt_layout') #>> '{}' AS receipt,
+              app.setting('fees.receipt_copies') #>> '{}' AS copies`,
+    );
+    const x = r.rows[0];
+    const copies = x?.copies ?? 'parent_school';
+    return {
+      bill: (x?.bill === 'instalment' ? 'instalment' : 'annual') as 'annual' | 'instalment',
+      receipt: (x?.receipt === 'classic' ? 'classic' : 'two_panel') as 'two_panel' | 'classic',
+      copies:
+        copies === 'parent'
+          ? ['Parent copy']
+          : copies === 'parent_school_office'
+            ? ['Parent copy', 'School copy', 'Office copy']
+            : ['Parent copy', 'School copy'],
+    };
+  }
+
   /** The bounce charge raised for a bounced receipt (the approved adjustment), else nothing. */
   private async bounceChargeOf(c: PoolClient, paymentId: string): Promise<string> {
     const r = await c.query<{ v: string | null }>(
@@ -328,9 +351,14 @@ export class FeeDocumentsService {
 
   // ---- receipt as it prints -----------------------------------------------------------------------
   /** The receipt as a PDF made at once: one page per copy. Sent as base64 for the web apps to stream. */
-  async receiptFile(ctx: RequestContext, paymentId: string, copies: string[]) {
+  async receiptFile(ctx: RequestContext, paymentId: string, copies?: string[]) {
     const r = await this.receiptView(ctx, paymentId);
-    const bytes = await receiptLayoutPdf(r, copies, await this.logo(ctx, r.letterhead.logoFileId));
+    // the school's layout and copies, unless the caller names the copies (a parent gets the parent copy)
+    const which = copies ?? r.copies;
+    const bytes =
+      r.layout === 'classic'
+        ? await receiptPdf(r, which)
+        : await receiptLayoutPdf(r, which, await this.logo(ctx, r.letterhead.logoFileId));
     return {
       filename: `receipt-${(r.receiptNo ?? paymentId).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
       contentType: 'application/pdf',
@@ -437,6 +465,7 @@ export class FeeDocumentsService {
         ...(await this.receiptParticulars(c, r.student_id, r.academic_year_id)),
         instalment: await this.instalmentLabel(c, r.id),
         bounceCharge: r.status === 'bounced' ? await this.bounceChargeOf(c, r.id) : '0.00',
+        ...(await this.layoutOf(c).then((l) => ({ layout: l.receipt, copies: l.copies }))),
       };
     });
   }
@@ -500,6 +529,7 @@ export class FeeDocumentsService {
         ...(await this.receiptParticulars(c, r.student_id, r.academic_year_id)),
         instalment: r.title ?? null,
         bounceCharge: '0.00',
+        ...(await this.layoutOf(c).then((l) => ({ layout: l.receipt, copies: l.copies }))),
       };
     });
   }
@@ -685,6 +715,7 @@ export class FeeDocumentsService {
         billDate: ledger.asOf,
         generatedAt: x.now,
         ledger: ledgerOf,
+        layout: (await this.layoutOf(c)).bill,
         student: {
           ...head.student,
           dob: x.dob,
