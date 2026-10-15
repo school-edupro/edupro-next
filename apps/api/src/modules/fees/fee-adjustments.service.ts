@@ -875,8 +875,17 @@ export class FeeAdjustmentsService {
             applied = { waived: w.rows[0]!.v };
           } else {
             let headId: string | null = null;
-            if (before.kind === 'bounce' && Number(before.charge) > 0)
-              headId = await this.bounceHead(c);
+            if (before.kind === 'bounce' && Number(before.charge) > 0) {
+              // the charge goes to the fee the cheque was for: a hostel receipt's on the hostel head
+              const l = await c.query<{ ledger: string }>(
+                `SELECT ledger::text FROM fee_payments WHERE id = $1`,
+                [before.paymentId],
+              );
+              headId = await this.bounceHead(
+                c,
+                l.rows[0]?.ledger === 'hostel' ? 'hostel' : 'school',
+              );
+            }
             // what the receipt had paid is kept with the request: the allocations go when it is taken back
             await c.query(
               `UPDATE fee_adjustments SET lines = (
@@ -924,19 +933,29 @@ export class FeeAdjustmentsService {
     }
   }
 
-  /** The misc head that carries bounce charges (setting fees.bounce_charge_head), created when missing. */
-  private async bounceHead(c: PoolClient): Promise<string> {
+  /**
+   * The misc head that carries bounce charges (setting fees.bounce_charge_head), created when missing. A
+   * hostel receipt's charge has its own head on the hostel ledger (BOUNCEH, 0139).
+   */
+  private async bounceHead(c: PoolClient, ledger: 'school' | 'hostel' = 'school'): Promise<string> {
     const code =
-      (
-        await c.query<{ v: string | null }>(
-          `SELECT app.setting('fees.bounce_charge_head') #>> '{}' AS v`,
-        )
-      ).rows[0]?.v ?? 'BOUNCE';
+      ledger === 'hostel'
+        ? 'BOUNCEH'
+        : ((
+            await c.query<{ v: string | null }>(
+              `SELECT app.setting('fees.bounce_charge_head') #>> '{}' AS v`,
+            )
+          ).rows[0]?.v ?? 'BOUNCE');
     const r = await c.query<{ id: string }>(
       `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
-       VALUES (app.current_school_id(), $1, 'Cheque bounce charge', 'misc', 'school', 900, app.current_user_id(), app.current_user_id())
+       VALUES (app.current_school_id(), $1, $2, 'misc', $3::ledger_type, $4, app.current_user_id(), app.current_user_id())
        ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now() RETURNING id::text`,
-      [code],
+      [
+        code,
+        ledger === 'hostel' ? 'Cheque bounce charge (hostel)' : 'Cheque bounce charge',
+        ledger,
+        ledger === 'hostel' ? 901 : 900,
+      ],
     );
     return r.rows[0]!.id;
   }

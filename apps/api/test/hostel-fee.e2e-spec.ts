@@ -477,4 +477,50 @@ describe('hostel fee (e2e)', () => {
     }>;
     expect(ids.every((b) => b.schedules.every((x) => x.ledger === 'hostel'))).toBe(true);
   });
+
+  it('a bounced hostel cheque raises its bounce charge on the hostel fee, not the school fee', async () => {
+    const chq = await inject({
+      method: 'POST',
+      url: '/payments/receipts',
+      headers: h(accountant),
+      json: {
+        studentId: pupils.joins,
+        amount: 3000,
+        mode: 'cheque',
+        instrumentNo: '901122',
+        instrumentDate: '2026-10-01',
+        bankName: 'SBI',
+        receivedOn: '2026-10-01',
+        ledger: 'hostel',
+      },
+    });
+    expect(chq.statusCode).toBe(201);
+    const req = await inject({
+      method: 'POST',
+      url: '/fees/adjustments',
+      headers: h(accountant),
+      json: {
+        kind: 'bounce',
+        paymentId: chq.json().paymentId,
+        reason: 'Funds insufficient',
+        charge: 400,
+      },
+    });
+    expect(req.statusCode).toBe(201);
+    const ok = await inject({
+      method: 'POST',
+      url: `/fees/adjustments/${req.json().id as string}/decide`,
+      headers: h(),
+      json: { outcome: 'approved', note: 'ok' },
+    });
+    expect([200, 201]).toContain(ok.statusCode);
+    const charge = await withMigrator((c) =>
+      c.query<{ ledger: string; code: string; net: string }>(
+        `SELECT d.ledger::text, h.code, d.net::text FROM fee_adjustments j JOIN fee_demands d ON d.id = j.charge_demand_id
+           JOIN fee_heads h ON h.id = d.head_id WHERE j.id = $1`,
+        [req.json().id],
+      ),
+    );
+    expect(charge.rows[0]).toEqual({ ledger: 'hostel', code: 'BOUNCEH', net: '400.00' });
+  });
 });
