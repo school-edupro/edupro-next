@@ -10,7 +10,7 @@ type Status = 'open' | 'in_progress' | 'answered' | 'closed';
 interface Detail {
   id: string;
   number: string;
-  desk: 'parent' | 'staff' | 'provider';
+  desk: 'parent' | 'staff' | 'provider' | 'hostel';
   head: string;
   studentName: string | null;
   section: string | null;

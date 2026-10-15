@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ type: 'validation-failed' }, { status: 400 });
   q.set('month', month);
   const desk = req.nextUrl.searchParams.get('desk');
-  if (desk && ['parent', 'staff', 'provider'].includes(desk)) q.set('desk', desk);
+  if (desk && ['parent', 'staff', 'provider', 'hostel'].includes(desk)) q.set('desk', desk);
   const bucket = req.nextUrl.searchParams.get('bucket');
   if (bucket && ['raised', 'resolved', 'escalated', 'breached', 'open'].includes(bucket))
     q.set('bucket', bucket);

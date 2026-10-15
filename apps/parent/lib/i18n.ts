@@ -1017,6 +1017,18 @@ const DICT: Record<string, string> = {
   Lunch: 'दोपहर का भोजन',
   Snacks: 'नाश्ता (शाम)',
   Dinner: 'रात का भोजन',
+  Complaints: 'शिकायतें',
+  'Something wrong in your child\u2019s room (a fan, water, furniture, cleaning, food)? Tell the warden here.':
+    'बच्चे के कमरे में कोई समस्या (पंखा, पानी, फ़र्नीचर, सफ़ाई, भोजन)? यहाँ वार्डन को बताएँ।',
+  'Being worked on': 'काम चल रहा है',
+  'Raise the complaint': 'शिकायत दर्ज करें',
+  'From the hostel': 'छात्रावास से',
+  'Complaint raised. The warden will look into it.': 'शिकायत दर्ज हुई। वार्डन इसे देखेंगे।',
+  'Action taken': 'की गई कार्रवाई',
+  Discipline: 'अनुशासन',
+  Safety: 'सुरक्षा',
+  Property: 'संपत्ति',
+  Other: 'अन्य',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

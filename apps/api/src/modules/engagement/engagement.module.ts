@@ -81,6 +81,7 @@ import { QueriesService } from './queries.service';
   exports: [
     QueriesService,
     HelpdeskService,
+    ClinicService,
     FamilyService,
     PrivacyService,
     EngagementPlusService,

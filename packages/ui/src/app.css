@@ -7188,3 +7188,26 @@ a.hs-bed__who:hover {
   display: grid;
   gap: var(--sp-1);
 }
+/* hostel dashboard: one small bar chart per measure over the last days */
+.hs-trends {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+.hs-trend {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+}
+.hs-trend__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 4rem;
+}
+.hs-trend__bar {
+  flex: 1;
+  min-height: 1px;
+  background: var(--action-primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}

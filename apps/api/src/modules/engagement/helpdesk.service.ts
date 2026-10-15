@@ -36,8 +36,9 @@ const DESK_LABEL: Record<Desk, string> = {
   parent: 'Parent query',
   staff: 'Staff query',
   provider: 'ERP provider ticket',
+  hostel: 'Hostel complaint',
 };
-const PREFIX: Record<Desk, string> = { parent: 'Q/', staff: 'S/', provider: 'T/' };
+const PREFIX: Record<Desk, string> = { parent: 'Q/', staff: 'S/', provider: 'T/', hostel: 'H/' };
 
 const SELECT = `SELECT q.id::text, q.number, q.desk, q.kind::text, q.category_code, COALESCE(k.name, q.category_code) AS head,
        q.student_id::text, s.display_name AS student_name, s.admission_no,
@@ -477,6 +478,86 @@ export class HelpdeskService {
   }
 
   // ---- raising (staff and provider desks; parent queries come through the family endpoints) --------
+  /** A hostel complaint's place: the room given, or the room of the boarder's bed today. */
+  private async hostelWhere(c: PoolClient, roomId?: string, studentId?: string) {
+    if (studentId) {
+      const r = (
+        await c.query<{ hostel_id: string | null; room_id: string | null }>(
+          `SELECT r.hostel_id::text, r.id::text AS room_id FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id
+             JOIN hostel_rooms r ON r.id = b.room_id
+            WHERE a.student_id = $1 AND a.from_date <= (now() AT TIME ZONE 'Asia/Kolkata')::date
+              AND (a.to_date IS NULL OR a.to_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date) LIMIT 1`,
+          [studentId],
+        )
+      ).rows[0];
+      if (!r?.hostel_id)
+        throw new DomainError('hostel.not_boarder', 'The pupil holds no hostel bed today', {
+          status: 409,
+        });
+      return { hostelId: r.hostel_id, roomId: roomId ?? r.room_id, studentId };
+    }
+    const r = (
+      await c.query<{ hostel_id: string }>(
+        `SELECT hostel_id::text FROM hostel_rooms WHERE id = $1`,
+        [roomId],
+      )
+    ).rows[0];
+    if (!r) throw new DomainError('not-found', 'Room not found', { status: 404 });
+    return { hostelId: r.hostel_id, roomId: roomId!, studentId: null };
+  }
+
+  /**
+   * A parent's hostel complaint about the child's room (the hostel module checks the child is theirs):
+   * the same ticket as a staff one, raised by the parent.
+   */
+  async raiseHostelForFamily(
+    ctx: RequestContext,
+    dto: { studentId: string; categoryCode: string; subject: string; body: string },
+  ) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.viewer.requireYear(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      await c.query(`SELECT app.helpdesk_ensure_defaults()`);
+      const head = await c.query(
+        `SELECT 1 FROM query_categories WHERE desk = 'hostel' AND code = $1 AND status = 'active'`,
+        [dto.categoryCode],
+      );
+      if (!head.rowCount)
+        throw new DomainError('validation-failed', 'Choose what the complaint is about', {
+          status: 400,
+        });
+      const where = await this.hostelWhere(c, undefined, dto.studentId);
+      const no = await c.query<{ n: string }>(`SELECT app.next_query_no($1) AS n`, [yearId]);
+      const number = no.rows[0]!.n.replace(/^Q\//, PREFIX.hostel);
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO parent_queries (school_id, academic_year_id, number, kind, category_code, raised_by_user_id, subject, body, file_ids,
+                                     desk, priority, channel, request_id, hostel_id, hostel_room_id, student_id)
+         VALUES (app.current_school_id(), $1, $2, 'complaint', $3, app.current_user_id(), $4, $5, '[]'::jsonb, 'hostel', 'normal', 'parent',
+                 app.current_request_id(), $6, $7, $8)
+         RETURNING id::text`,
+        [
+          yearId,
+          number,
+          dto.categoryCode,
+          dto.subject,
+          dto.body,
+          where.hostelId,
+          where.roomId,
+          dto.studentId,
+        ],
+      );
+      const id = r.rows[0]!.id;
+      await this.audit.stage(ctx, c, {
+        action: 'helpdesk.ticket.raise',
+        entityType: 'parent_queries',
+        entityId: id,
+        after: { number, desk: 'hostel', head: dto.categoryCode, studentId: dto.studentId },
+      });
+      await this.notifyOwner(c, id, 'new');
+      return { id, number };
+    });
+  }
+
   async create(ctx: RequestContext, dto: CreateTicketDto) {
     const tenant = requireTenant(ctx);
     const yearId = this.viewer.requireYear(tenant);
@@ -493,13 +574,16 @@ export class HelpdeskService {
           extra: { errors: { categoryCode: 'Choose a query type' } },
         });
       await this.checkFiles(c, dto.fileIds);
+      const where =
+        dto.desk === 'hostel' ? await this.hostelWhere(c, dto.hostelRoomId, dto.studentId) : null;
       const no = await c.query<{ n: string }>(`SELECT app.next_query_no($1) AS n`, [yearId]);
       const number = no.rows[0]!.n.replace(/^Q\//, PREFIX[dto.desk]);
       const r = await c.query<{ id: string }>(
         `INSERT INTO parent_queries (school_id, academic_year_id, number, kind, category_code, raised_by_user_id, subject, body, file_ids,
-                                     desk, employee_id, priority, module, channel, request_id)
+                                     desk, employee_id, priority, module, channel, request_id, hostel_id, hostel_room_id, student_id)
          VALUES (app.current_school_id(), $1, $2, 'query', $3, app.current_user_id(), $4, $5, $6::jsonb, $7,
-                 (SELECT id FROM employees WHERE user_id = app.current_user_id() AND deleted_at IS NULL LIMIT 1), $8, $9, 'admin', app.current_request_id())
+                 (SELECT id FROM employees WHERE user_id = app.current_user_id() AND deleted_at IS NULL LIMIT 1), $8, $9, 'admin', app.current_request_id(),
+                 $10, $11, $12)
          RETURNING id::text`,
         [
           yearId,
@@ -511,6 +595,9 @@ export class HelpdeskService {
           dto.desk,
           dto.priority,
           dto.module ?? null,
+          where?.hostelId ?? null,
+          where?.roomId ?? null,
+          where?.studentId ?? null,
         ],
       );
       const id = r.rows[0]!.id;
@@ -1204,8 +1291,8 @@ export class HelpdeskService {
                 (SELECT round(100.0 * count(*) FILTER (WHERE t.level = 1 AND t.breached_at IS NULL AND t.escalated_at IS NULL) / NULLIF(count(*), 0), 0)::int
                    FROM t WHERE t.desk = d.desk AND t.closed_at >= mo.starts AND t.closed_at < mo.ends) AS within_sla,
                 (SELECT round(avg(t.rating)::numeric, 1)::float FROM t WHERE t.desk = d.desk AND t.closed_at >= mo.starts AND t.closed_at < mo.ends AND t.rating IS NOT NULL) AS rating
-           FROM mo CROSS JOIN (VALUES ('parent'), ('staff'), ('provider')) AS d(desk)
-          ORDER BY mo.month, array_position(ARRAY['parent', 'staff', 'provider'], d.desk)`,
+           FROM mo CROSS JOIN (VALUES ('parent'), ('staff'), ('provider'), ('hostel')) AS d(desk)
+          ORDER BY mo.month, array_position(ARRAY['parent', 'staff', 'provider', 'hostel'], d.desk)`,
         params,
       );
       const p2: unknown[] = [];

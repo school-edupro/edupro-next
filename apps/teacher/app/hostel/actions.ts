@@ -172,3 +172,57 @@ export async function saveDiet(fd: FormData) {
   }
   redirect(`${back}&ok=1`);
 }
+
+/** The warden's sick-bay note: a clinic visit of the boarder (the clinic tells the family by its rule). */
+export async function saveSickbay(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/hostel/sickbay?studentId=${encodeURIComponent(studentId)}&name=${encodeURIComponent(str(fd, 'name'))}`;
+  const temp = Number(str(fd, 'temperatureC'));
+  try {
+    await bff.api.fetch('/hostel/sickbay', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        complaint: str(fd, 'complaint'),
+        temperatureC: str(fd, 'temperatureC') && Number.isFinite(temp) ? temp : undefined,
+        treatment: str(fd, 'treatment') || undefined,
+        outcome: ['rest', 'back_to_class', 'sent_home', 'referred'].includes(str(fd, 'outcome'))
+          ? str(fd, 'outcome')
+          : 'rest',
+        referredTo: str(fd, 'referredTo') || undefined,
+        remark: str(fd, 'remark') || undefined,
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(
+    `/hostel?ok=1&detail=${encodeURIComponent('Sick-bay note saved in the clinic record.')}`,
+  );
+}
+
+export async function saveIncident(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/hostel/incident?studentId=${encodeURIComponent(studentId)}&name=${encodeURIComponent(str(fd, 'name'))}`;
+  let out: { parentTold?: boolean; principalTold?: boolean } = {};
+  try {
+    out = await bff.api.fetch('/hostel/incidents', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        category: str(fd, 'category'),
+        severity: str(fd, 'severity') === 'serious' ? 'serious' : 'minor',
+        what: str(fd, 'what'),
+        action: str(fd, 'action') || undefined,
+        tellParent: fd.get('tellParent') === 'on',
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(
+    `/hostel?ok=1&detail=${encodeURIComponent(
+      `Incident recorded.${out.parentTold ? ' The parent has been told.' : ''}${out.principalTold ? ' The principal has been told.' : ''}`,
+    )}`,
+  );
+}

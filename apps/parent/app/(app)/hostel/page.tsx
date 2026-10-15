@@ -5,7 +5,7 @@ import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { addVisitor, removeVisitor } from './actions';
+import { addVisitor, raiseComplaint, removeVisitor } from './actions';
 
 interface Visitors {
   onRecord: Array<{ name: string; relation: string; mobile: string | null }>;
@@ -31,6 +31,37 @@ interface Menu {
     }>;
   } | null;
 }
+
+interface Complaint {
+  id: string;
+  number: string;
+  status: string;
+  subject: string;
+  head: string;
+  openedAt: string;
+  closedAt: string | null;
+  resolution: string | null;
+}
+interface Incident {
+  id: string;
+  occurredAt: string;
+  category: string;
+  what: string;
+  action: string | null;
+}
+const CSTATUS: Record<string, [string, 'warning' | 'info' | 'success' | 'neutral']> = {
+  open: ['Open', 'warning'],
+  in_progress: ['Being worked on', 'info'],
+  answered: ['Answered', 'success'],
+  closed: ['Closed', 'neutral'],
+};
+const CATEGORY: Record<string, string> = {
+  discipline: 'Discipline',
+  health: 'Health',
+  safety: 'Safety',
+  property: 'Property',
+  other: 'Other',
+};
 
 const DIET: Record<string, string> = {
   veg: 'Vegetarian',
@@ -63,12 +94,26 @@ export default async function HostelPage({
   if (!kid) redirect('/');
   let menu: Menu;
   let visitors: Visitors | null = null;
+  let complaints: Complaint[] = [];
+  let heads: Array<{ code: string; name: string }> = [];
+  let incidents: Incident[] = [];
   try {
     menu = await bff.api.fetch<Menu>(
       `/hostel/mine/menu?studentId=${kid.id}${/^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? '') ? `&weekOf=${sp.week}` : ''}`,
     );
     if (menu.hostel)
-      visitors = await bff.api.fetch<Visitors>(`/hostel/mine/visitors?studentId=${kid.id}`);
+      [visitors, complaints, heads, incidents] = await Promise.all([
+        bff.api.fetch<Visitors>(`/hostel/mine/visitors?studentId=${kid.id}`),
+        bff.api
+          .fetch<{ data: Complaint[] }>(`/hostel/mine/complaints?studentId=${kid.id}`)
+          .then((r) => r.data),
+        bff.api
+          .fetch<{ data: Array<{ code: string; name: string }> }>('/hostel/mine/complaint-heads')
+          .then((r) => r.data),
+        bff.api
+          .fetch<{ data: Incident[] }>(`/hostel/mine/incidents?studentId=${kid.id}`)
+          .then((r) => r.data),
+      ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403) redirect('/');
@@ -80,6 +125,13 @@ export default async function HostelPage({
     d.setUTCDate(d.getUTCDate() + n);
     return d.toISOString().slice(0, 10);
   };
+  const when = (v: string) =>
+    new Date(v).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    });
   const dayName = (iso: string) =>
     new Date(`${iso}T00:00:00Z`).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
       weekday: 'short',
@@ -105,7 +157,9 @@ export default async function HostelPage({
             lang,
             sp.ok === 'removed'
               ? 'Removed from the list.'
-              : 'Added. The warden will approve the visitor.',
+              : sp.ok === 'complaint'
+                ? 'Complaint raised. The warden will look into it.'
+                : 'Added. The warden will approve the visitor.',
           )}
         </div>
       ) : null}
@@ -309,6 +363,96 @@ export default async function HostelPage({
               </div>
             )}
           </Card>
+          <Card title={t(lang, 'Complaints')} style={{ marginTop: 'var(--sp-4)' }}>
+            <p className="ep-field__help">
+              {t(
+                lang,
+                'Something wrong in your child’s room (a fan, water, furniture, cleaning, food)? Tell the warden here.',
+              )}
+            </p>
+            {complaints.length ? (
+              <ul className="fp-rcpts" style={{ marginBottom: 'var(--sp-3)' }}>
+                {complaints.map((c) => (
+                  <li key={c.id}>
+                    <span>
+                      <strong>{c.subject}</strong>{' '}
+                      <span className="ep-field__help">
+                        {c.number} · {c.head} · {when(c.openedAt)}
+                      </span>
+                      {c.resolution ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          {t(lang, 'Resolution')}: {c.resolution}
+                        </span>
+                      ) : null}
+                    </span>
+                    <Badge tone={CSTATUS[c.status]?.[1] ?? 'neutral'}>
+                      {t(lang, CSTATUS[c.status]?.[0] ?? c.status)}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <form action={raiseComplaint} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+              <input type="hidden" name="studentId" value={kid.id} />
+              <label className="ep-field" htmlFor="hc-head">
+                <span className="ep-field__label">{t(lang, 'About')} *</span>
+                <select id="hc-head" name="categoryCode" className="ep-select" required>
+                  {heads.map((x) => (
+                    <option key={x.code} value={x.code}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ep-field" htmlFor="hc-subj">
+                <span className="ep-field__label">{t(lang, 'Subject')} *</span>
+                <input
+                  id="hc-subj"
+                  name="subject"
+                  className="ep-input"
+                  required
+                  minLength={3}
+                  maxLength={200}
+                />
+              </label>
+              <label className="ep-field" htmlFor="hc-body">
+                <span className="ep-field__label">{t(lang, 'Details')} *</span>
+                <textarea
+                  id="hc-body"
+                  name="body"
+                  className="ep-input"
+                  rows={3}
+                  required
+                  minLength={3}
+                  maxLength={2000}
+                />
+              </label>
+              <div>
+                <Button type="submit">{t(lang, 'Raise the complaint')}</Button>
+              </div>
+            </form>
+          </Card>
+
+          {incidents.length ? (
+            <Card title={t(lang, 'From the hostel')} style={{ marginTop: 'var(--sp-4)' }}>
+              <ul className="fp-rcpts">
+                {incidents.map((i) => (
+                  <li key={i.id}>
+                    <span>
+                      <strong>{t(lang, CATEGORY[i.category] ?? i.category)}</strong>{' '}
+                      <span className="ep-field__help">{when(i.occurredAt)}</span>
+                      <span style={{ display: 'block' }}>{i.what}</span>
+                      {i.action ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          {t(lang, 'Action taken')}: {i.action}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
         </>
       )}
     </main>

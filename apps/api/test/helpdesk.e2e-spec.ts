@@ -500,7 +500,7 @@ describe('helpdesk (e2e)', () => {
       escalated: number;
     }>;
     expect(new Set(months.map((m) => m.month)).size).toBe(6);
-    expect(months).toHaveLength(18);
+    expect(months).toHaveLength(24); // six months × four desks (parent, staff, provider, hostel)
     const thisMonth = months.at(-1)!.month;
     const parentNow = months.find((m) => m.month === thisMonth && m.desk === 'parent')!;
     expect(parentNow.raised).toBeGreaterThanOrEqual(2);

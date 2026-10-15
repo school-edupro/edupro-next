@@ -190,7 +190,10 @@
     "hostelRollcall": "हाज़िरी",
     "hostelVisitors": "छात्रावास आगंतुक",
     "hostelGate": "गेट पर छात्रावास आगंतुक",
-    "hostelMess": "भोजनालय"
+    "hostelMess": "भोजनालय",
+    "hostelDashboard": "छात्रावास डैशबोर्ड",
+    "hostelComplaints": "छात्रावास शिकायतें",
+    "hostelIncidents": "घटनाएँ"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

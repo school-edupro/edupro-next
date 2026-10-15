@@ -62,3 +62,23 @@ export async function removeVisitor(fd: FormData) {
   }
   redirect(`${back}&ok=removed`);
 }
+
+/** A parent's complaint about the child's room; it goes to the head warden. */
+export async function raiseComplaint(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/hostel?student=${encodeURIComponent(studentId)}`;
+  try {
+    await bff.api.fetch('/hostel/mine/complaints', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        categoryCode: str(fd, 'categoryCode'),
+        subject: str(fd, 'subject'),
+        body: str(fd, 'body'),
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=complaint`);
+}

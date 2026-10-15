@@ -34,6 +34,8 @@ const INTRO: Record<string, string> = {
   staff: 'Raised by employees from the teacher app or here: salary, HR, IT, facilities and more.',
   provider:
     'Tickets from school staff to the ERP provider. The provider answers here; late tickets reach the provider’s senior person.',
+  hostel:
+    'Room and maintenance complaints of the hostels, raised by parents in the portal or by wardens and the office. Each goes to the head warden of the hostel (or the owner of its head) and moves up the escalation matrix when late.',
 };
 
 const SIZES = ['10', '25', '50', '100'];

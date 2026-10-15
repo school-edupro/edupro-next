@@ -9,7 +9,7 @@ interface Ticket {
   id: string;
   raisedByUserId: string;
   number: string;
-  desk: 'parent' | 'staff' | 'provider';
+  desk: 'parent' | 'staff' | 'provider' | 'hostel';
   head: string;
   studentName: string | null;
   section: string | null;
@@ -51,6 +51,7 @@ const DESK: Record<Ticket['desk'], string> = {
   parent: 'Family query',
   staff: 'Staff query',
   provider: 'ERP ticket',
+  hostel: 'Hostel complaint',
 };
 
 /**

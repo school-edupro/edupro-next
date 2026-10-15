@@ -316,3 +316,65 @@ export const DietSchema = z.object({
   notes: Optional(200),
 });
 export class DietDto extends createZodDto(DietSchema) {}
+
+// ---- H4: incidents, sick bay, dashboard, complaints ---------------------------------------------------------
+export const HOSTEL_H4 = {
+  incident: 'hostel.incident.manage',
+  incidentView: 'hostel.incident.view',
+} as const;
+
+export const IncidentSchema = z.object({
+  studentId: IdSchema,
+  /** "YYYY-MM-DD HH:MM" India time; empty = now */
+  occurredAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}$/, 'YYYY-MM-DD HH:MM')
+    .optional(),
+  category: z.enum(['discipline', 'health', 'safety', 'property', 'other']),
+  severity: z.enum(['minor', 'serious']).default('minor'),
+  what: z.string().trim().min(5).max(1000),
+  action: Optional(1000),
+  tellParent: z.boolean().default(false),
+});
+export class IncidentDto extends createZodDto(IncidentSchema) {}
+
+export const IncidentsQuerySchema = z.object({
+  hostelId: IdSchema.optional(),
+  studentId: IdSchema.optional(),
+  category: z.enum(['discipline', 'health', 'safety', 'property', 'other']).optional(),
+  from: DateSchema.optional(),
+});
+export class IncidentsQueryDto extends createZodDto(IncidentsQuerySchema) {}
+
+export const SickbaySchema = z.object({
+  studentId: IdSchema,
+  complaint: z.string().trim().min(2).max(300),
+  temperatureC: z.number().min(30).max(45).optional(),
+  treatment: Optional(500),
+  outcome: z.enum(['rest', 'back_to_class', 'sent_home', 'referred']).default('rest'),
+  referredTo: Optional(160),
+  remark: Optional(300),
+});
+export class SickbayDto extends createZodDto(SickbaySchema) {}
+
+export const DashboardQuerySchema = z.object({
+  days: z.coerce.number().int().min(7).max(90).default(30),
+});
+export class DashboardQueryDto extends createZodDto(DashboardQuerySchema) {}
+
+export const ComplaintSchema = z.object({
+  studentId: IdSchema,
+  categoryCode: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9_]{1,40}$/),
+  subject: Text(200),
+  body: Text(2000),
+});
+export class ComplaintDto extends createZodDto(ComplaintSchema) {}
+
+export const ComplaintsQuerySchema = z.object({
+  hostelId: IdSchema.optional(),
+  show: z.enum(['open', 'closed', 'all']).default('open'),
+});
+export class ComplaintsQueryDto extends createZodDto(ComplaintsQuerySchema) {}

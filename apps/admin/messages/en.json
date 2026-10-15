@@ -190,7 +190,10 @@
     "hostelRollcall": "Roll-call",
     "hostelVisitors": "Hostel visitors",
     "hostelGate": "Hostel visitor at the gate",
-    "hostelMess": "Mess"
+    "hostelMess": "Mess",
+    "hostelDashboard": "Hostel dashboard",
+    "hostelComplaints": "Hostel complaints",
+    "hostelIncidents": "Incidents"
   },
   "shell": {
     "primaryNavigation": "Primary",

@@ -10,7 +10,7 @@ export const HELPDESK = {
   provider: 'helpdesk.provider.respond',
 } as const;
 
-export const DeskSchema = z.enum(['parent', 'staff', 'provider']);
+export const DeskSchema = z.enum(['parent', 'staff', 'provider', 'hostel']);
 export type Desk = z.infer<typeof DeskSchema>;
 export const PrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 const Files = z.array(IdSchema).max(5).default([]);
@@ -36,15 +36,23 @@ export class ListTicketsDto extends createZodDto(ListTicketsSchema) {}
 export const ExportTicketsSchema = ListTicketsSchema.omit({ page: true, size: true });
 export class ExportTicketsDto extends createZodDto(ExportTicketsSchema) {}
 
-export const CreateTicketSchema = z.object({
-  desk: z.enum(['staff', 'provider']),
-  categoryCode: Code,
-  subject: z.string().trim().min(3).max(200),
-  body: z.string().trim().min(3).max(5000),
-  priority: PrioritySchema.default('normal'),
-  module: z.string().trim().max(60).optional(),
-  fileIds: Files,
-});
+export const CreateTicketSchema = z
+  .object({
+    desk: z.enum(['staff', 'provider', 'hostel']),
+    categoryCode: Code,
+    subject: z.string().trim().min(3).max(200),
+    body: z.string().trim().min(3).max(5000),
+    priority: PrioritySchema.default('normal'),
+    module: z.string().trim().max(60).optional(),
+    fileIds: Files,
+    /** hostel desk: the room the complaint is about, or the boarder (whose room it is) */
+    hostelRoomId: IdSchema.optional(),
+    studentId: IdSchema.optional(),
+  })
+  .refine((v) => v.desk !== 'hostel' || v.hostelRoomId || v.studentId, {
+    message: 'Say which room (or boarder) the complaint is about',
+    path: ['hostelRoomId'],
+  });
 export class CreateTicketDto extends createZodDto(CreateTicketSchema) {}
 
 export const ReplySchema = z.object({

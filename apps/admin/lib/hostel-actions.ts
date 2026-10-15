@@ -536,3 +536,52 @@ export async function registerHostelVisit(fd: FormData) {
       : `${out.number ?? ''}: ask the visitor to wait — ${out.why ?? ''}. The warden has been asked to allow or refuse.`,
   );
 }
+
+// ---- H4: complaints and incidents -------------------------------------------------------------------------
+/** A complaint about a room, raised by the office on the helpdesk's hostel desk. */
+export async function raiseHostelComplaint(fd: FormData) {
+  const to = `${BASE}/complaints`;
+  let out: { id?: string; number?: string } = {};
+  try {
+    out = await apiFetch('/helpdesk/tickets', {
+      method: 'POST',
+      body: JSON.stringify({
+        desk: 'hostel',
+        categoryCode: str(fd, 'categoryCode'),
+        subject: str(fd, 'subject'),
+        body: str(fd, 'body'),
+        priority: str(fd, 'priority') || 'normal',
+        hostelRoomId: str(fd, 'roomId'),
+        fileIds: [],
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, `Complaint ${out.number ?? ''} raised. It is with the head warden of the hostel.`);
+}
+
+export async function recordIncident(fd: FormData) {
+  const to = here(fd, `${BASE}/incidents`);
+  let out: { parentTold?: boolean; principalTold?: boolean } = {};
+  try {
+    out = await apiFetch('/hostel/incidents', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        occurredAt: str(fd, 'occurredAt').replace('T', ' ') || undefined,
+        category: str(fd, 'category'),
+        severity: str(fd, 'severity') === 'serious' ? 'serious' : 'minor',
+        what: str(fd, 'what'),
+        action: str(fd, 'action'),
+        tellParent: fd.get('tellParent') === 'on',
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(
+    `${BASE}/incidents`,
+    `Incident recorded.${out.parentTold ? ' The parent has been told.' : ''}${out.principalTold ? ' The principal and school admins have been told.' : ''}`,
+  );
+}

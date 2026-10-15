@@ -395,6 +395,7 @@ const NAV: Array<{
   {
     section: 'hostel',
     items: [
+      { href: '/hostel/dashboard', label: 'hostelDashboard', permission: 'hostel.room.view' },
       { href: '/hostel', label: 'hostelOccupancy', permission: 'hostel.room.view' },
       { href: '/hostel/allot', label: 'hostelAllot', permission: 'hostel.allot.manage' },
       { href: '/hostel/leave', label: 'hostelLeave', permission: 'hostel.leave.view' },
@@ -402,6 +403,8 @@ const NAV: Array<{
       { href: '/hostel/visitors', label: 'hostelVisitors', permission: 'hostel.visit.view' },
       { href: '/hostel/visit', label: 'hostelGate', permission: 'hostel.visit.gate' },
       { href: '/hostel/mess', label: 'hostelMess', permission: 'hostel.room.view' },
+      { href: '/hostel/complaints', label: 'hostelComplaints', permission: 'hostel.room.view' },
+      { href: '/hostel/incidents', label: 'hostelIncidents', permission: 'hostel.incident.view' },
       { href: '/hostel/register', label: 'hostelRegister', permission: 'hostel.room.view' },
       { href: '/hostel/setup', label: 'hostelSetup', permission: 'hostel.setup.manage' },
     ],

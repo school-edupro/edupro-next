@@ -63,6 +63,17 @@ interface Visitor {
   mobile: string;
   hasPhoto: boolean;
 }
+interface Complaint {
+  id: string;
+  number: string;
+  status: string;
+  subject: string;
+  head: string;
+  room: string | null;
+  pupil: string | null;
+  openedAt: string;
+  overdue: boolean;
+}
 interface Meal {
   id: string;
   hostelId: string;
@@ -101,28 +112,34 @@ export default async function HostelDeskPage({
   let visits: Visit[];
   let visitors: Visitor[];
   let meals: Meal[];
+  let complaints: Complaint[];
   try {
-    [today, sessions, pending, handover, away, visits, visitors, meals] = await Promise.all([
-      bff.api.fetch<Today>('/hostel/today'),
-      bff.api
-        .fetch<{ data: Session[] }>('/hostel/sessions')
-        .then((r) => r.data.filter((s) => s.active)),
-      bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=pending').then((r) => r.data),
-      bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=handover').then((r) => r.data),
-      bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=out').then((r) => r.data),
-      bff.api
-        .fetch<{ data: Visit[] }>('/hostel/visits?show=waiting')
-        .then((r) => r.data)
-        .catch(() => [] as Visit[]),
-      bff.api
-        .fetch<{ data: Visitor[] }>('/hostel/visitors?status=pending')
-        .then((r) => r.data)
-        .catch(() => [] as Visitor[]),
-      bff.api
-        .fetch<{ data: Meal[] }>('/hostel/meals')
-        .then((r) => r.data.filter((m) => m.active))
-        .catch(() => [] as Meal[]),
-    ]);
+    [today, sessions, pending, handover, away, visits, visitors, meals, complaints] =
+      await Promise.all([
+        bff.api.fetch<Today>('/hostel/today'),
+        bff.api
+          .fetch<{ data: Session[] }>('/hostel/sessions')
+          .then((r) => r.data.filter((s) => s.active)),
+        bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=pending').then((r) => r.data),
+        bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=handover').then((r) => r.data),
+        bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=out').then((r) => r.data),
+        bff.api
+          .fetch<{ data: Visit[] }>('/hostel/visits?show=waiting')
+          .then((r) => r.data)
+          .catch(() => [] as Visit[]),
+        bff.api
+          .fetch<{ data: Visitor[] }>('/hostel/visitors?status=pending')
+          .then((r) => r.data)
+          .catch(() => [] as Visitor[]),
+        bff.api
+          .fetch<{ data: Meal[] }>('/hostel/meals')
+          .then((r) => r.data.filter((m) => m.active))
+          .catch(() => [] as Meal[]),
+        bff.api
+          .fetch<{ data: Complaint[] }>('/hostel/complaints?show=open')
+          .then((r) => r.data)
+          .catch(() => [] as Complaint[]),
+      ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403) redirect('/');
@@ -382,6 +399,38 @@ export default async function HostelDeskPage({
             </a>
           </p>
         ) : null}
+      </Card>
+
+      <Card
+        title={`${t(lang, 'Open complaints')} (${String(complaints.length)})`}
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        {complaints.length === 0 ? (
+          <p className="ep-field__help">{t(lang, 'No open complaint.')}</p>
+        ) : (
+          <ul className="fp-rcpts">
+            {complaints.map((c) => (
+              <li key={c.id}>
+                <span>
+                  <strong>{c.subject}</strong>{' '}
+                  <span className="ep-field__help">
+                    {c.number} · {c.head}
+                  </span>
+                  <span className="ep-field__help" style={{ display: 'block' }}>
+                    {c.room ? `${t(lang, 'Room')} ${c.room}` : ''}
+                    {c.pupil ? ` · ${c.pupil}` : ''} · {when(c.openedAt)}
+                  </span>
+                </span>
+                <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                  {c.overdue ? <Badge tone="danger">{t(lang, 'Late')}</Badge> : null}
+                  <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/queries/t/${c.id}`}>
+                    {t(lang, 'Answer')}
+                  </a>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card title={`${t(lang, 'Visitors to approve')} (${String(visitors.length)})`}>

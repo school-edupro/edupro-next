@@ -1,17 +1,19 @@
-/** Helpdesk (0056): parent queries, staff queries and tickets to the ERP provider. */
-export type Desk = 'parent' | 'staff' | 'provider';
+/** Helpdesk (0056): parent queries, staff queries, tickets to the ERP provider and hostel complaints (0150). */
+export type Desk = 'parent' | 'staff' | 'provider' | 'hostel';
 export type TicketStatus = 'open' | 'in_progress' | 'answered' | 'closed';
 
-export const DESKS: Desk[] = ['parent', 'staff', 'provider'];
+export const DESKS: Desk[] = ['parent', 'staff', 'provider', 'hostel'];
 export const DESK_LABEL: Record<Desk, string> = {
   parent: 'Parent queries',
   staff: 'Staff queries',
   provider: 'ERP provider tickets',
+  hostel: 'Hostel complaints',
 };
 export const DESK_ONE: Record<Desk, string> = {
   parent: 'Parent query',
   staff: 'Staff query',
   provider: 'ERP provider ticket',
+  hostel: 'Hostel complaint',
 };
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Open',

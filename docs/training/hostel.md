@@ -108,3 +108,31 @@ Communication → Templates.
 
 Messages (SMS / WhatsApp when ready under Communication → Templates): `hostel_visit_waiting` to the
 wardens, `hostel_visit_parent` to the parent.
+
+## 9. Complaints (Hostel → Complaints; Helpdesk → Hostel complaints)
+
+Room and maintenance complaints are a **fourth helpdesk desk**. Heads (Helpdesk set-up → Hostel
+complaints): Electrical, Plumbing and water, Furniture, Cleaning, Mess and food, Other — owned by the
+**warden** role (the complaint goes to the **head warden of that hostel**) or a named employee, with SLA
+hours and the escalation matrix like every desk. Parents raise them on the portal's Hostel page about
+the child's room; wardens and the office raise them for a room (Hostel → Complaints, or the staff app).
+The warden answers and closes from the staff app (Hostel desk → Open complaints → Answer, the Queries
+screen). Numbers start with `H/`.
+
+## 10. Incidents and the sick bay
+
+- **Incidents** (Hostel → Incidents; staff app → roll-call → Incident): kind (discipline, health, safety,
+  property, other), minor or serious, what happened, action taken. Tick **tell the parent** to send it
+  and show it on the portal's Hostel page ("From the hostel"). A **serious** incident also goes to the
+  principal and the school admins.
+- **Sick bay** (staff app → roll-call → Sick bay): complaint, temperature, treatment, outcome. It is
+  saved as a **clinic visit** of the pupil (marked "Hostel sick bay"), so it is in the clinic record and
+  the family is told by the clinic's own rule.
+
+## 11. Dashboard (Hostel → Dashboard)
+
+Boarders and beds, away and overdue, absent at roll-call today, visitors waiting, open and late
+complaints, the hostel fee due now; each hostel today (roll-calls taken, meals marked, visits,
+visitors to approve, complaints); the last 7 / 30 / 90 days (absences, late returns, leave, visits,
+complaints, meals skipped, incidents); and the hostel fee of the session per hostel for today's
+boarders (fee, paid, due now, % collected).

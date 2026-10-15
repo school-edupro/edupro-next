@@ -72,12 +72,15 @@ setup, rooms by seater, booking, complaints, feedback).
   (`hostel_meal_marks` + `hostel_meal_skips`; away pupils left out), `hostel_diets` with the allergy from
   `students.profile.medical_condition`. Parent portal Hostel page: approved visitors and the week's menu.
 
-### H4 · Complaints, incidents and the parent view
+### H4 · Complaints, incidents and the parent view — built 2026-10-15 (migration 0150)
 
-- **Complaints**: room or maintenance complaints (category, room, photo), assigned, then in progress,
-  then closed, with history, as in the legacy module. Raised by the warden, the parent or the pupil.
-- **Incidents**: discipline and incident register (pupil, date, what happened, action, parent informed).
-- **Sick bay**: the warden adds a clinic visit to the clinic record.
+- **Complaints**: a fourth helpdesk desk `hostel` (`parent_queries.hostel_id / hostel_room_id`, prefix
+  `H/`); heads owned by role `warden` route to the hostel's head warden (`app.helpdesk_before_write`),
+  SLA and escalation as every desk. Parents raise through `/hostel/mine/complaints`; staff through
+  `/helpdesk/tickets` with `desk = hostel` and a room.
+- **Incidents**: `hostel_incidents` (category, minor / serious, what, action, tell_parent); the parent is
+  told and sees it in the portal when ticked; serious ones go to the principal and school admins.
+- **Sick bay**: the warden's note is a clinic visit (`ClinicService.createVisit`, remark "Hostel sick bay").
 - **Parent portal Hostel page**: room and warden contact, roll-call and leave history, apply for
   leave, approved visitors, mess menu, complaints.
 - **Dashboard**: occupancy, out today, absent at roll-call, open complaints.

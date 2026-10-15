@@ -118,11 +118,30 @@ export default async function RollcallPage({
             {roll.pupils.map((p) => (
               <li key={p.studentId} className="fp-pay__row" style={{ gridTemplateColumns: '1fr' }}>
                 <input type="hidden" name="studentId" value={p.studentId} />
-                <div>
-                  <strong>{p.name}</strong>{' '}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 'var(--sp-2)',
+                    flexWrap: 'wrap',
+                    alignItems: 'baseline',
+                  }}
+                >
+                  <strong>{p.name}</strong>
                   <span className="ep-field__help">
                     {p.admissionNo} · {t(lang, 'Room')} {p.room} · {t(lang, 'Bed')} {p.bed}
                   </span>
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`/hostel/sickbay?studentId=${p.studentId}&name=${encodeURIComponent(p.name)}`}
+                  >
+                    {t(lang, 'Sick bay')}
+                  </a>
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`/hostel/incident?studentId=${p.studentId}&name=${encodeURIComponent(p.name)}`}
+                  >
+                    {t(lang, 'Incident')}
+                  </a>
                 </div>
                 {p.away ? (
                   <p className="ep-field__help" style={{ margin: 0 }}>
