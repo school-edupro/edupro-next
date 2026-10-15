@@ -503,6 +503,7 @@ export async function Shell({
       '/fees/rules',
       '/fees/hostel-calendar',
       '/fees/gateways',
+      '/fees/layout-preview',
       '/fees/discounts',
       '/fees/approval',
     ],

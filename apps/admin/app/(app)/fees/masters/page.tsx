@@ -103,7 +103,15 @@ export default async function FeeMastersPage({
                     defaultChecked={current === v}
                     disabled={!canLayout}
                   />{' '}
-                  <strong>{title}</strong>
+                  <strong>{title}</strong>{' '}
+                  <a
+                    href={`/fees/layout-preview?kind=${name === 'billLayout' ? 'bill' : 'receipt'}&layout=${v}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: 'underline' }}
+                  >
+                    Preview
+                  </a>
                   <span className="ep-field__help" style={{ display: 'block' }}>
                     {help}
                   </span>

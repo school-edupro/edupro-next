@@ -262,6 +262,18 @@ export class FeeDocumentsService {
     };
   }
 
+  /** The latest fee receipt of the school (and its pupil), for the layout preview; nothing before the first. */
+  async layoutSample(
+    ctx: RequestContext,
+  ): Promise<{ paymentId: string | null; studentId: string | null }> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ id: string; student_id: string }>(
+        `SELECT p.id::text AS id, p.student_id::text AS student_id FROM fee_payments p WHERE p.status IN ('posted', 'partly_refunded') ORDER BY p.id DESC LIMIT 1`,
+      );
+      return { paymentId: r.rows[0]?.id ?? null, studentId: r.rows[0]?.student_id ?? null };
+    });
+  }
+
   /** The school's bill and receipt layouts and the receipt copies printed (Fee setup -> Receipt numbers). */
   private async layoutOf(c: PoolClient) {
     const r = await c.query<{ bill: string | null; receipt: string | null; copies: string | null }>(

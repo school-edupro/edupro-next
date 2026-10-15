@@ -307,6 +307,16 @@ export class FeesController {
     return this.papers.receiptView(ctx, id);
   }
 
+  @Get('layout-sample')
+  @ApiOperation({
+    summary:
+      "The school's latest fee receipt and its pupil, to preview the bill and receipt layouts",
+  })
+  @RequirePermission(FEES.masterView)
+  layoutSample(@ReqCtx() ctx: RequestContext) {
+    return this.papers.layoutSample(ctx);
+  }
+
   @Get('payments/:id/receipt-file')
   @ApiOperation({ summary: "One receipt as a PDF made at once (the school's layout and copies)" })
   @RequirePermission(FEES.ledgerView)
