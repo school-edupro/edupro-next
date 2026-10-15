@@ -14,6 +14,7 @@ interface Hit {
 interface Check {
   pupil: { id: string; name: string; admissionNo: string };
   hostel: { id: string; name: string };
+  away: boolean;
   inHours: boolean;
   hours: string;
   listed: boolean;
@@ -115,6 +116,13 @@ export default async function HostelVisitGatePage({
             title={`2. ${check.pupil.name} · ${check.hostel.name}`}
             style={{ marginBottom: 'var(--sp-4)' }}
           >
+            {check.away ? (
+              <div style={{ marginBottom: 'var(--sp-2)' }}>
+                <Alert tone="danger">
+                  The pupil is away on hostel leave: any visitor waits for the warden.
+                </Alert>
+              </div>
+            ) : null}
             {check.inHours ? (
               <Alert tone="success">Visiting hours are on ({check.hours}).</Alert>
             ) : (

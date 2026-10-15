@@ -287,7 +287,7 @@ export class HostelMessService {
               EXISTS (SELECT 1 FROM gate_passes g WHERE g.student_id = st.id AND g.kind IN ('hostel_home', 'hostel_outing')
                          AND g.out_at <= $3::timestamptz AND (g.in_at IS NULL OR g.in_at > $3::timestamptz)) AS away,
               sk.id IS NOT NULL AS skipped, sk.reason,
-              d.diet, d.no_onion_garlic, NULLIF(btrim(st.profile->>'medical_condition'), '') AS allergy
+              d.diet, d.no_onion_garlic, CASE WHEN lower(btrim(COALESCE(st.profile->>'medical_condition', ''))) IN ('', 'na', 'n/a', 'nil', 'none', 'no', '-', '--', 'not applicable') THEN NULL ELSE btrim(st.profile->>'medical_condition') END AS allergy
          FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id
          LEFT JOIN hostel_blocks bl ON bl.id = r.block_id
          JOIN students st ON st.id = a.student_id
@@ -373,7 +373,7 @@ export class HostelMessService {
         `SELECT st.id::text AS "studentId", st.display_name AS name, st.admission_no AS "admissionNo",
                 COALESCE(bl.name || '-', '') || r.room_no AS room, COALESCE(d.diet, 'veg') AS diet,
                 COALESCE(d.no_onion_garlic, false) AS "noOnionGarlic", d.notes,
-                NULLIF(btrim(st.profile->>'medical_condition'), '') AS allergy, d.student_id IS NOT NULL AS set
+                CASE WHEN lower(btrim(COALESCE(st.profile->>'medical_condition', ''))) IN ('', 'na', 'n/a', 'nil', 'none', 'no', '-', '--', 'not applicable') THEN NULL ELSE btrim(st.profile->>'medical_condition') END AS allergy, d.student_id IS NOT NULL AS set
            FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id
            LEFT JOIN hostel_blocks bl ON bl.id = r.block_id JOIN students st ON st.id = a.student_id
            LEFT JOIN hostel_diets d ON d.student_id = st.id

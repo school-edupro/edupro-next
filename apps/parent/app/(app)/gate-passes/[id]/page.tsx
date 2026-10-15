@@ -59,6 +59,19 @@ export default async function GatePassPage({
     [t(lang, 'Child'), studentLabel(p, t(lang, 'Adm. no.'))],
     [t(lang, 'Pass for'), t(lang, KIND[p.kind])],
     [t(lang, 'When'), `${p.onDate}${p.atTime ? `, ${p.atTime}` : ''}`],
+    [
+      t(lang, 'Back in the hostel by'),
+      p.returnBy && (p.kind === 'hostel_home' || p.kind === 'hostel_outing')
+        ? new Date(p.returnBy).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : null,
+    ],
     [t(lang, 'Reason'), p.reason],
     [
       t(lang, 'Who takes the child'),

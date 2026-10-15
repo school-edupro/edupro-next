@@ -49,7 +49,10 @@ export async function applyGatePass(fd: FormData) {
       })
     ).id;
   } catch (error) {
-    fail(`/gate-passes/new?student=${encodeURIComponent(studentId)}`, error);
+    fail(
+      `/gate-passes/new?student=${encodeURIComponent(studentId)}&kind=${encodeURIComponent(str(fd, 'kind'))}`,
+      error,
+    );
   }
   redirect(`/gate-passes/${id}?ok=1`);
 }

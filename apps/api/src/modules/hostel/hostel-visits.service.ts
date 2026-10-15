@@ -284,6 +284,16 @@ export class HostelVisitsService {
   private hoursText = (rows: Array<{ weekday: number; from: string; to: string }>) =>
     rows.length ? rows.map((h) => `${DAYS[h.weekday]} ${h.from}–${h.to}`).join(', ') : 'Any time';
 
+  /** The pupil is out on hostel leave now (checked out at the gate, not back in). */
+  private async awayNow(c: PoolClient, studentId: string): Promise<boolean> {
+    const r = await c.query<{ away: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM gate_passes g WHERE g.student_id = $1 AND g.kind IN ('hostel_home', 'hostel_outing')
+                        AND g.state = 'out') AS away`,
+      [studentId],
+    );
+    return r.rows[0]!.away;
+  }
+
   // ---- at the gate --------------------------------------------------------------------------------------
   /** Boarders by name or admission no., with their hostel and room (the gate's search). */
   async boarders(ctx: RequestContext, q: string) {
@@ -327,6 +337,7 @@ export class HostelVisitsService {
       return {
         pupil: { id: q.studentId, name: pupil.name, admissionNo: pupil.admission_no },
         hostel: h,
+        away: await this.awayNow(c, q.studentId),
         inHours,
         hours: this.hoursText(hours),
         listed: !!match,
@@ -360,7 +371,8 @@ export class HostelVisitsService {
       const inHours = (
         await c.query<{ ok: boolean }>(`SELECT app.hostel_in_visit_hours($1) AS ok`, [h.id])
       ).rows[0]!.ok;
-      const state = isListed && inHours ? 'inside' : 'waiting';
+      const away = await this.awayNow(c, dto.studentId);
+      const state = isListed && inHours && !away ? 'inside' : 'waiting';
       const photo = photoOf(dto.photo);
       const r = await c.query<{ id: string; number: string }>(
         `INSERT INTO visitor_log (school_id, source, state, visitor_name, mobile, visitor_type, party_size, id_proof_kind, id_proof_last4,
@@ -394,6 +406,7 @@ export class HostelVisitsService {
       const why = [
         isListed ? null : 'not on the approved list',
         inHours ? null : 'outside visiting hours',
+        away ? 'the pupil is away on hostel leave' : null,
       ]
         .filter(Boolean)
         .join(' and ');

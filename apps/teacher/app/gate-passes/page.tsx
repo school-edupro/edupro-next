@@ -64,6 +64,22 @@ const timeOf = (v: string) =>
     hour: '2-digit',
     minute: '2-digit',
   });
+/** The return time, with its day when that is not the day the pass is for (hostel home leave). */
+const backBy = (p: { returnBy: string | null; onDate: string }) => {
+  if (!p.returnBy) return '';
+  const day = new Date(new Date(p.returnBy).getTime() + 5.5 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  return day === p.onDate
+    ? timeOf(p.returnBy)
+    : new Date(p.returnBy).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+};
 const who = (p: Pass, adm: string) =>
   p.audience === 'student'
     ? `${p.student ?? ''}${p.section ? ` (${p.section})` : ''}${p.admissionNo ? ` · ${adm} ${p.admissionNo}` : ''}`
@@ -143,7 +159,7 @@ export default async function GatePassesPage({
           <p style={{ marginTop: 0 }}>
             {p.onDate}
             {p.atTime ? `, ${p.atTime}` : ''}
-            {p.returnBy ? ` · ${t(lang, 'back by')} ${timeOf(p.returnBy)}` : ''} · {p.reason}
+            {p.returnBy ? ` · ${t(lang, 'back by')} ${backBy(p)}` : ''} · {p.reason}
           </p>
           <p className="ep-field__help">
             {[
@@ -187,7 +203,7 @@ export default async function GatePassesPage({
           <p style={{ marginTop: 0 }}>
             {p.onDate}
             {p.atTime ? `, ${p.atTime}` : ''}
-            {p.returnBy ? ` · ${t(lang, 'back by')} ${timeOf(p.returnBy)}` : ''} · {p.reason}
+            {p.returnBy ? ` · ${t(lang, 'back by')} ${backBy(p)}` : ''} · {p.reason}
           </p>
           <p className="ep-field__help">
             {[

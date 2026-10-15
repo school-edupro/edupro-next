@@ -306,6 +306,19 @@ describe('hostel module H2 (e2e)', () => {
     expect(hand.json()).toMatchObject({ ok: true, pass: { state: 'handed_over' } });
     const out = await post(`/gate-passes/${ids.home}/out`, guard, { gate: 'Main gate' });
     expect(out.json()).toMatchObject({ state: 'out', stage: 'Out on leave: to come back' });
+    // a visitor for him now waits for the warden: the pupil is away
+    const chk = await get(`/hostel/visits/check?studentId=${ids.ravi}`, guard);
+    expect(chk.away).toBe(true);
+    const visit = await post('/hostel/visits', guard, {
+      studentId: ids.ravi,
+      visitorName: 'Papa ravi',
+      mobile: '9876500071',
+      relation: 'Father',
+    });
+    expect(visit.json()).toMatchObject({
+      state: 'waiting',
+      why: 'the pupil is away on hostel leave',
+    });
     // the roll marks him on leave by itself, whatever the warden ticks
     const roll = await post('/hostel/rollcall', warden, {
       sessionId: ids.night,

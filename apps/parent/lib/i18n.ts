@@ -1029,6 +1029,7 @@ const DICT: Record<string, string> = {
   Safety: 'सुरक्षा',
   Property: 'संपत्ति',
   Other: 'अन्य',
+  'Back in the hostel by': 'छात्रावास में वापसी',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */
