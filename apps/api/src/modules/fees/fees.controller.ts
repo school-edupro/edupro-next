@@ -18,6 +18,7 @@ import {
   AddPaymentModeDto,
   CloneClassRulesDto,
   BillQueryDto,
+  MyBillQueryDto,
   ClassBillsQueryDto,
   TaxCertificateQueryDto,
   MyTaxCertificateQueryDto,
@@ -486,6 +487,17 @@ export class FeesController {
     return this.papers.bill(ctx, id, q.upTo, q.ledger);
   }
 
+  @Get('students/:id/bill/file')
+  @ApiOperation({ summary: 'The fee bill of one pupil for the whole session, as a PDF' })
+  @RequirePermission(FEES.ledgerView)
+  studentBillFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: BillQueryDto,
+  ) {
+    return this.papers.billFile(ctx, id, q.ledger);
+  }
+
   @Get('bills')
   @ApiOperation({ summary: 'The fee bills of a class or a section, for printing' })
   @RequirePermission(FEES.ledgerView)
@@ -620,6 +632,22 @@ export class FeesController {
   async myReceiptFile(@ReqCtx() ctx: RequestContext, @Param('paymentId') paymentId: string) {
     await this.ledger.assertMyReceipt(ctx, paymentId);
     return this.papers.receiptFile(ctx, paymentId, ['Parent copy']);
+  }
+
+  @Get('mine/bill')
+  @ApiOperation({ summary: "The fee bill of one of the family's children, for the whole session" })
+  @RequirePermission(FEES.familyView)
+  async myBill(@ReqCtx() ctx: RequestContext, @Query() q: MyBillQueryDto) {
+    await this.ledger.assertMyStudent(ctx, q.studentId);
+    return this.papers.bill(ctx, q.studentId, '9999-12-31', q.ledger);
+  }
+
+  @Get('mine/bill/file')
+  @ApiOperation({ summary: "The fee bill of one of the family's children as a PDF" })
+  @RequirePermission(FEES.familyView)
+  async myBillFile(@ReqCtx() ctx: RequestContext, @Query() q: MyBillQueryDto) {
+    await this.ledger.assertMyStudent(ctx, q.studentId);
+    return this.papers.billFile(ctx, q.studentId, q.ledger);
   }
 
   @Get('mine/exports/:id')

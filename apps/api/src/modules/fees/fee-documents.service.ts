@@ -1,5 +1,6 @@
 import { receiptLayoutPdf } from './receipt-layout-pdf';
 import { receiptPdf } from './receipt-pdf';
+import { billPdf } from './bill-pdf';
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { amountInWords } from '@edupro/db';
@@ -373,6 +374,21 @@ export class FeeDocumentsService {
         : await receiptLayoutPdf(r, which, await this.logo(ctx, r.letterhead.logoFileId));
     return {
       filename: `receipt-${(r.receiptNo ?? paymentId).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  /** The fee bill of the whole session as a PDF, in the school's bill layout. */
+  async billFile(
+    ctx: RequestContext,
+    studentId: string,
+    ledgerOf: 'all' | 'school' | 'hostel' = 'all',
+  ) {
+    const b = await this.bill(ctx, studentId, '9999-12-31', ledgerOf);
+    const bytes = await billPdf(b, await this.logo(ctx, b.letterhead.logoFileId));
+    return {
+      filename: `fee-bill-${b.billNo.replace(/[^A-Za-z0-9]+/g, '-')}${ledgerOf === 'all' ? '' : `-${ledgerOf}`}.pdf`,
       contentType: 'application/pdf',
       base64: bytes.toString('base64'),
     };

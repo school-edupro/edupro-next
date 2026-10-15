@@ -6955,3 +6955,136 @@ a.ep-tabs__tab {
     flex-wrap: wrap;
   }
 }
+
+/* parent portal, Dues and receipts: the fee summary, the instalments to tick and the pay bar */
+.fp-due {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin: var(--sp-3) 0;
+}
+.fp-due__tile {
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.fp-due__tile--lead {
+  border-color: var(--border-accent);
+  background: var(--surface-subtle);
+}
+.fp-due__amt {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  color: var(--text-heading);
+}
+.fp-pay__list {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.fp-pay__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.fp-pay__row--on {
+  border-color: var(--action-primary);
+  box-shadow: 0 0 0 1px var(--action-primary);
+}
+.fp-pay__tick {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--action-primary);
+}
+.fp-pay__what {
+  display: grid;
+  gap: var(--sp-1);
+}
+.fp-pay__amt {
+  display: grid;
+  justify-items: end;
+  gap: var(--sp-1);
+}
+.fp-pay__gws {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+.fp-gw {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.fp-gw--on {
+  border-color: var(--action-primary);
+  background: var(--surface-subtle);
+}
+.fp-pay__bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+.fp-pay__total {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  color: var(--text-heading);
+}
+.fp-rcpts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.fp-rcpts li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+@media (max-width: 900px) {
+  /* above the phone tab bar */
+  .fp-pay__bar {
+    bottom: calc(var(--sp-9) + env(safe-area-inset-bottom));
+    flex-wrap: nowrap;
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .fp-pay__bar .ep-kicker,
+  .fp-pay__bar .ep-field__help {
+    display: none;
+  }
+  .fp-pay__total {
+    font-size: var(--fs-h4);
+  }
+}

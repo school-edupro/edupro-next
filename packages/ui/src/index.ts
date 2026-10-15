@@ -59,3 +59,9 @@ export {
 } from './components/LessonReport';
 export { CodeLoginForm, OtpCodeForm } from './components/OtpSignIn';
 export { FeeReceiptSheet, type FeeReceipt } from './components/FeeReceiptSheet';
+export {
+  FeeBillSheet,
+  InstalmentBillSheet,
+  type FeeBillView,
+  type InstalmentBill,
+} from './components/FeeBillSheet';

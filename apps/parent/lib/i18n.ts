@@ -943,6 +943,28 @@ const DICT: Record<string, string> = {
   'to acknowledge': 'की पुष्टि बाकी',
   Circulars: 'परिपत्र',
   'Words in the notice': 'सूचना के शब्द',
+  Instalments: 'किस्तें',
+  Fee: 'शुल्क',
+  'Paid at the school fee counter only.': 'केवल स्कूल फीस काउंटर पर जमा होगी।',
+  'Tick the instalments to pay. They are paid the oldest first, so a tick takes the earlier ones with it.':
+    'भुगतान के लिए किस्तें चुनें। सबसे पुरानी किस्त पहले जमा होती है, इसलिए एक किस्त चुनने पर उससे पहले की किस्तें भी चुनी जाती हैं।',
+  'No convenience charge': 'कोई सुविधा शुल्क नहीं',
+  'Total to pay': 'कुल देय',
+  'Tick an instalment to pay': 'भुगतान के लिए किस्त चुनें',
+  'Online payment is not open for this fee yet. Please pay at the school fee counter.':
+    'इस शुल्क का ऑनलाइन भुगतान अभी उपलब्ध नहीं है। कृपया स्कूल फीस काउंटर पर जमा करें।',
+  'What is due, pay online, every receipt of this session and the fee bill.':
+    'बकाया, ऑनलाइन भुगतान, इस सत्र की सभी रसीदें और फीस बिल।',
+  'Due now': 'अभी देय',
+  'Late fee included': 'विलंब शुल्क सहित',
+  'Fee bill': 'फीस बिल',
+  'No other fees.': 'कोई अन्य शुल्क नहीं।',
+  Regular: 'नियमित',
+  Hostel: 'छात्रावास',
+  Print: 'प्रिंट',
+  'The fee bill could not be made. Please try again.':
+    'फीस बिल नहीं बन सका। कृपया फिर से प्रयास करें।',
+  'Partly refunded': 'आंशिक वापसी',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

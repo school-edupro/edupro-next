@@ -315,6 +315,27 @@ new, pay plan, hosteller, transport, discounts and optional heads. The parent po
 plan, fee group, transport, discounts and optional heads above the instalments. The single "Discount"
 box on the profile is gone: discounts are given only in the _Discounts by month_ panel of the Fees tab.
 
+## Dues and receipts on the parent portal
+
+The parent's **Fees** page is one child at a time (the sibling switch picks the child). At the top:
+**Due now** (late fee included), split into school fee, hostel fee (hostellers) and other fees; each
+figure opens its tab. The tabs:
+
+- **School fee** and **Hostel fee**: each instalment is a card with its last date, fee, paid, late fee
+  and what is left. The parent ticks the instalments to pay; they go the oldest first, so ticking one
+  ticks the earlier ones and clearing one clears the later ones. Everything due today starts ticked.
+  An instalment the class keeps off online payment (_Fee pay_ off in the class calendar) shows "paid at
+  the school fee counter only" and has no tick box. Below: the gateways the school takes that fee
+  through (Fee setup → Payment gateways) with their convenience charge, and a bar with the total
+  (fee + charge) and **Pay**. The school fee and the hostel fee are paid separately.
+- **Other fees**: the misc fees announced for the child, each with **Pay online** when a gateway takes
+  misc fees.
+- **Receipts**: every receipt of the session marked School fee or Hostel fee, bounced or refunded,
+  with **View** and **Download PDF**; below, the online payment attempts.
+- **Fee bill**: the bill of the whole session in the layout the school chose (annual or instalment),
+  for All / Regular / Hostel (hostellers), with **Print** and **Download PDF**. The school can make the
+  same PDF from the API (`GET /fees/students/:id/bill/file`).
+
 ## Receipts for parents, and approvals of late fee and transfer
 
 - **Parent portal receipt**: each receipt has **View** (the same receipt design as the school prints,

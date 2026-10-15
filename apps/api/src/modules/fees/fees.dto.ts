@@ -684,6 +684,9 @@ export const BillLedger = z.enum(['all', 'school', 'hostel']).default('all');
 export const BillQuerySchema = z.object({ upTo: DateSchema.optional(), ledger: BillLedger });
 export class BillQueryDto extends createZodDto(BillQuerySchema) {}
 
+export const MyBillQuerySchema = z.object({ studentId: IdSchema, ledger: BillLedger });
+export class MyBillQueryDto extends createZodDto(MyBillQuerySchema) {}
+
 export const ClassBillsQuerySchema = z
   .object({
     classId: IdSchema.optional(),

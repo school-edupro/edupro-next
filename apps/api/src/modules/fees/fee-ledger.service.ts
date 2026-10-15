@@ -578,6 +578,15 @@ export class FeeLedgerService {
     if (!mine) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
   }
 
+  /** The pupil is one of the signed-in family's children (a parent sees only their own bills). */
+  async assertMyStudent(ctx: RequestContext, studentId: string): Promise<void> {
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family')
+      throw new DomainError('permission-denied', 'Families only', { status: 403 });
+    if (!v.students.some((s) => s.id === studentId))
+      throw new DomainError('not-found', 'Pupil not found', { status: 404 });
+  }
+
   async myReceiptPdf(ctx: RequestContext, paymentId: string) {
     const tenant = requireTenant(ctx);
     const v = await this.viewer.resolve(ctx, 'fees.family.view');
