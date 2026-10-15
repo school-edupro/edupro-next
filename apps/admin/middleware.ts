@@ -6,6 +6,8 @@ const PUBLIC_PATHS = [
   '/api/auth/callback',
   '/api/auth/dev',
   '/api/auth/otp',
+  // the gateway posts the result from its own site (no session cookie); the API checks its signature
+  '/api/payments/return',
   '/healthz',
 ];
 
