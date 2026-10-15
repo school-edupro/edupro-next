@@ -508,7 +508,7 @@ export class DecisionsService {
         ? {
             status: intent.status,
             txnId: intent.txnId,
-            form: intent.status === 'succeeded' ? null : this.payments.gatewayForm(intent),
+            form: intent.status === 'succeeded' ? null : await this.payments.gatewayForm(intent),
           }
         : null,
     };

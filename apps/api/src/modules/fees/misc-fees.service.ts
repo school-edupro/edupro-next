@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -90,6 +90,7 @@ const REQUEST = `SELECT r.id::text, r.misc_fee_id::text AS "miscFeeId", f.title 
  */
 @Injectable()
 export class MiscFeesService {
+  private readonly log = new Logger('MiscFeesService');
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
@@ -911,6 +912,65 @@ export class MiscFeesService {
           status: 400,
         });
       await this.setup.assertModeFields(c, { ...dto, ledger: 'misc' } as never);
+      const out = await this.collectIn(c, yearId, dto);
+      await this.audit.stage(ctx, c, {
+        action: 'fees.misc.collect',
+        entityType: 'misc_receipts',
+        entityId: out.receipts[0]!.id,
+        after: { studentId: dto.studentId, mode: dto.mode, receipts: out.receipts },
+      });
+      return out;
+    });
+  }
+
+  /**
+   * An online payment of a misc fee went through (purpose misc, entity misc_fee_student): the MF receipt is
+   * written as at the counter, mode online, with the gateway reference and the convenience charge apart. A
+   * limited-seat fee paid online books the seat; it was free when the payment started, so a seat taken in
+   * between is still given (the money is in) and logged for the office.
+   */
+  async onlinePaid(
+    c: PoolClient,
+    intent: {
+      entityId: string | null;
+      amount: string;
+      charge: string;
+      providerRef: string | null;
+      id: string;
+    },
+  ) {
+    if (!intent.entityId) return;
+    const line = await c.query<{ student_id: string; year: string }>(
+      `SELECT l.student_id::text, f.academic_year_id::text AS year FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id WHERE l.id = $1`,
+      [intent.entityId],
+    );
+    if (!line.rows[0]) return;
+    const fee = Number(intent.amount) - Number(intent.charge);
+    const out = await this.collectIn(
+      c,
+      line.rows[0].year,
+      {
+        studentId: line.rows[0].student_id,
+        lines: [{ lineId: intent.entityId, amount: fee }],
+        mode: 'online' as never,
+        reference: intent.providerRef ?? undefined,
+      },
+      { online: true },
+    );
+    await c.query(`UPDATE misc_receipts SET convenience_charge = $2 WHERE id = $1`, [
+      out.receipts[0]!.id,
+      intent.charge,
+    ]);
+  }
+
+  /** The counter's collection, inside the caller's transaction (also the online success). */
+  private async collectIn(
+    c: PoolClient,
+    yearId: string,
+    dto: Omit<CollectMiscFeeDto, 'mode'> & { mode: string },
+    opts: { online?: boolean } = {},
+  ) {
+    {
       const on = dto.receivedOn ?? today();
       const fy = await c.query<{ fy: string | null }>(
         `SELECT app.financial_year_for($1::date)::text AS fy`,
@@ -982,7 +1042,9 @@ export class MiscFeesService {
             `SELECT count(*)::int AS n FROM misc_fee_students WHERE misc_fee_id = $1 AND status = 'paid'`,
             [line.fee_id],
           );
-          if (taken.rows[0]!.n >= line.seats)
+          if (taken.rows[0]!.n >= line.seats && opts.online)
+            this.log.warn(`misc fee ${line.fee_id}: a seat paid online after all seats were taken`);
+          else if (taken.rows[0]!.n >= line.seats)
             throw new DomainError(
               'misc.full',
               `All ${String(line.seats)} seats of ${line.title} are taken`,
@@ -1028,13 +1090,7 @@ export class MiscFeesService {
           amount: want.amount.toFixed(2),
         });
       }
-      await this.audit.stage(ctx, c, {
-        action: 'fees.misc.collect',
-        entityType: 'misc_receipts',
-        entityId: receipts[0]!.id,
-        after: { studentId: dto.studentId, mode: dto.mode, receipts },
-      });
       return { receipts, total: receipts.reduce((a, x) => a + Number(x.amount), 0).toFixed(2) };
-    });
+    }
   }
 }

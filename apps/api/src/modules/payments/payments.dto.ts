@@ -15,7 +15,7 @@ export const PAYMENTS = {
   settlementManage: 'payments.settlement.manage',
 } as const;
 
-export const PROVIDERS = ['mock', 'payu', 'razorpay', 'ccavenue'] as const;
+export const PROVIDERS = ['mock', 'payu', 'razorpay', 'ccavenue', 'sbiepay', 'atom'] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -39,8 +39,44 @@ export const CreateFamilyIntentSchema = z.object({
   amount: Amount,
   /** School fee or hostel fee: each is paid on its own (0134). */
   ledger: z.enum(['school', 'hostel']).default('school'),
+  /** the gateway the payer chose, when the fee has more than one */
+  gatewayId: IdSchema.optional(),
 });
 export class CreateFamilyIntentDto extends createZodDto(CreateFamilyIntentSchema) {}
+
+/** A misc fee of one's own child, paid online in full (0142). */
+export const CreateFamilyMiscIntentSchema = z.object({
+  lineId: IdSchema,
+  gatewayId: IdSchema.optional(),
+});
+export class CreateFamilyMiscIntentDto extends createZodDto(CreateFamilyMiscIntentSchema) {}
+
+const Key = z.string().trim().max(400);
+export const SaveGatewaySchema = z.object({
+  id: IdSchema.optional(),
+  provider: z.enum(['payu', 'ccavenue', 'razorpay', 'sbiepay', 'atom']),
+  label: z.string().trim().min(2).max(60),
+  mode: z.enum(['test', 'live']),
+  config: z.record(z.string(), Key).default({}),
+  /** keys: an empty one keeps what is saved */
+  secret: z.record(z.string(), Key).default({}),
+  chargePercent: z.number().min(0).max(20).default(0),
+  chargeFlat: z.number().min(0).max(10000).default(0),
+  active: z.boolean().default(true),
+  bankAccountId: IdSchema.nullable().optional(),
+});
+export class SaveGatewayDto extends createZodDto(SaveGatewaySchema) {}
+export const GatewayRoutesSchema = z.object({
+  school: z.array(IdSchema).max(10).optional(),
+  hostel: z.array(IdSchema).max(10).optional(),
+  misc: z.array(IdSchema).max(10).optional(),
+  admission: z.array(IdSchema).max(10).optional(),
+});
+export class GatewayRoutesDto extends createZodDto(GatewayRoutesSchema) {}
+export const GatewayOptionsQuerySchema = z.object({
+  ledger: z.enum(['school', 'hostel', 'misc', 'admission']).default('school'),
+});
+export class GatewayOptionsQueryDto extends createZodDto(GatewayOptionsQuerySchema) {}
 
 export const ModeSchema = z.enum(['cash', 'cheque', 'dd', 'upi', 'bank', 'card']);
 
@@ -222,7 +258,7 @@ export class RefundRegisterFileQueryDto extends createZodDto(RefundRegisterFileQ
 
 // ---- Sprint 13: settlements ----------------------------------------------------------------------
 export const UploadSettlementSchema = z.object({
-  provider: z.enum(['payu', 'razorpay', 'ccavenue', 'mock']),
+  provider: z.enum(['payu', 'razorpay', 'ccavenue', 'sbiepay', 'atom', 'mock']),
   settlementRef: z.string().trim().min(1).max(80),
   settledOn: DateSchema,
   utr: z.string().trim().max(60).optional(),

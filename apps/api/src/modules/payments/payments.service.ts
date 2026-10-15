@@ -31,6 +31,9 @@ import {
   type RecordOfflinePaymentDto,
 } from './payments.dto';
 import { buildRequest, mockResponse, money, verifyResponse, type PayuRequest } from './payu';
+import * as atom from './adapters/atom';
+import * as sbiepay from './adapters/sbiepay';
+import { GatewaysService, chargeOn, type FeeLedger, type GatewayAccount } from './gateways.service';
 
 export interface IntentRow {
   id: string;
@@ -49,6 +52,10 @@ export interface IntentRow {
   payerEmail: string | null;
   payerMobile: string | null;
   returnUrl: string | null;
+  /** The school's gateway account the payment goes through (0142); null = the deployment's gateway. */
+  gatewayId: string | null;
+  /** Convenience charge on top of the fee, inside amount. */
+  charge: string;
   succeededAt: string | null;
   failedReason: string | null;
   createdAt: string;
@@ -82,6 +89,7 @@ export interface ReceiptResult {
 
 const COLS = `id::text, purpose::text, entity_type AS "entityType", entity_id::text AS "entityId", amount::text, currency, status::text, provider, txn_id AS "txnId",
   provider_ref AS "providerRef", provider_order_id AS "providerOrderId", refunded::text, payer_name AS "payerName", payer_email AS "payerEmail", payer_mobile AS "payerMobile", return_url AS "returnUrl",
+  gateway_id::text AS "gatewayId", charge::text,
   succeeded_at AS "succeededAt", failed_reason AS "failedReason", created_at AS "createdAt"`;
 
 const toRow = (r: Record<string, unknown>): IntentRow =>
@@ -115,7 +123,8 @@ const originOf = (url: string | null, fallback: string): string => {
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
-  private readonly handlers = new Map<string, SuccessHandler>();
+  /** Several modules may handle one purpose (misc: consent forms, misc fees): each picks its entity type. */
+  private readonly handlers = new Map<string, SuccessHandler[]>();
   private refundHandler: RefundEventHandler | null = null;
   /** Network calls to the gateways go through here so tests can stand in for the provider. */
   gatewayFetch: typeof fetch = (input, init) => fetch(input, init);
@@ -127,10 +136,11 @@ export class PaymentsService {
     private readonly viewer: ViewerService,
     private readonly ledger: FeeLedgerService,
     private readonly feeSetup: FeeSetupService,
+    private readonly gateways: GatewaysService,
   ) {}
 
   onSuccess(purpose: IntentRow['purpose'], handler: SuccessHandler): void {
-    this.handlers.set(purpose, handler);
+    this.handlers.set(purpose, [...(this.handlers.get(purpose) ?? []), handler]);
   }
 
   onRefundEvent(handler: RefundEventHandler): void {
@@ -171,21 +181,39 @@ export class PaymentsService {
       createdByUser?: string | null;
       createdByApplicant?: string | null;
       requestId?: string | null;
+      /** the gateway the payer chose; else the first one set up for the fee */
+      gatewayId?: string | null;
     },
   ): Promise<IntentRow> {
-    const provider = await this.providerFor(c);
+    // the school's own gateway for this fee (Fees -> Payment gateways), else the deployment's
+    const ledger: FeeLedger =
+      input.ledger ??
+      (input.purpose === 'admission_fee'
+        ? 'admission'
+        : input.purpose === 'misc'
+          ? 'misc'
+          : 'school');
+    const options = await this.gateways.options(c, ledger);
+    const chosen = input.gatewayId ? options.find((o) => o.id === input.gatewayId) : options[0];
+    if (input.gatewayId && !chosen)
+      throw new DomainError('payments.gateway_not_offered', 'This gateway does not take this fee', {
+        status: 409,
+      });
+    const account = chosen ? await this.gateways.accountIn(c, chosen.id) : null;
+    const provider: Provider = account ? account.provider : await this.providerFor(c);
+    const charge = chosen ? chargeOn(input.amount, chosen) : 0;
     const txnId = `EP${Date.now().toString(36).toUpperCase()}${randomBytes(4).toString('hex').toUpperCase()}`;
     const r = await c.query<Record<string, unknown>>(
       // eslint-disable-next-line no-restricted-syntax -- column list constant; values are bound parameters
-      `INSERT INTO payment_intents (school_id, purpose, entity_type, entity_id, ledger, amount, provider, txn_id, payer_name, payer_email, payer_mobile, return_url, created_by_user, created_by_applicant, request_id, expires_at)
-       VALUES (app.current_school_id(), $1::payment_purpose, $2, $3, $4::ledger_type, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now() + interval '2 days')
+      `INSERT INTO payment_intents (school_id, purpose, entity_type, entity_id, ledger, amount, provider, txn_id, payer_name, payer_email, payer_mobile, return_url, created_by_user, created_by_applicant, request_id, expires_at, gateway_id, charge)
+       VALUES (app.current_school_id(), $1::payment_purpose, $2, $3, $4::ledger_type, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now() + interval '2 days', $15, $16)
        RETURNING ${COLS}`,
       [
         input.purpose,
         input.entityType,
         input.entityId,
-        input.ledger ?? (input.purpose === 'admission_fee' ? 'admission' : 'school'),
-        money(input.amount),
+        ledger,
+        money(input.amount + charge),
         provider,
         txnId,
         input.payer.name,
@@ -195,6 +223,8 @@ export class PaymentsService {
         input.createdByUser ?? null,
         input.createdByApplicant ?? null,
         input.requestId ?? null,
+        account?.id ?? null,
+        money(charge),
       ],
     );
     let row = toRow(r.rows[0]!);
@@ -202,7 +232,7 @@ export class PaymentsService {
       let order: razorpay.RazorpayOrder;
       try {
         order = await razorpay.createOrder(
-          razorpayCredentials(this.env),
+          account ? this.razorpayOf(account) : razorpayCredentials(this.env),
           { amount: row.amount, receipt: txnId, notes: { txnId, intentId: row.id } },
           this.gatewayFetch,
         );
@@ -223,16 +253,53 @@ export class PaymentsService {
     }
     await c.query(
       `INSERT INTO payment_events (school_id, intent_id, kind, payload) VALUES (app.current_school_id(), $1, 'created', $2::jsonb)`,
-      [row.id, JSON.stringify({ amount: row.amount, purpose: row.purpose, provider })],
+      [
+        row.id,
+        JSON.stringify({
+          amount: row.amount,
+          charge: row.charge,
+          purpose: row.purpose,
+          provider,
+          gatewayId: row.gatewayId,
+        }),
+      ],
     );
     return row;
   }
 
-  /** What the browser needs to pay: an auto-posted form (PayU, CCAvenue, mock) or the Razorpay checkout. */
-  checkout(intent: IntentRow): Checkout {
+  private razorpayOf(a: GatewayAccount) {
+    return {
+      keyId: a.config.keyId ?? '',
+      keySecret: a.secret.keySecret ?? '',
+      webhookSecret: a.secret.webhookSecret ?? '',
+      baseUrl: a.url,
+    };
+  }
+  private ccavenueOf(a: GatewayAccount) {
+    return {
+      merchantId: a.config.merchantId ?? '',
+      accessCode: a.config.accessCode ?? '',
+      workingKey: a.secret.workingKey ?? '',
+      baseUrl: a.url,
+    };
+  }
+
+  /** The account of an intent, when it went through the school's own gateway. */
+  private async accountOf(intent: IntentRow): Promise<GatewayAccount | null> {
+    return intent.gatewayId ? this.gateways.accountById(intent.gatewayId) : null;
+  }
+
+  /**
+   * What the browser needs to pay: an auto-posted form (PayU, CCAvenue, SBI ePay, Atom, mock) or the Razorpay
+   * checkout. A school gateway account brings its own keys and test / live address; the return carries the
+   * account (gw) so the answer is checked with the same keys.
+   */
+  async checkout(intent: IntentRow): Promise<Checkout> {
+    const account = await this.accountOf(intent);
     const origin = originOf(intent.returnUrl, this.env.PUBLIC_APP_URL);
     const returnEndpoint = (provider: Provider) =>
-      `${origin}/api/payments/return?provider=${provider}`;
+      `${origin}/api/payments/return?provider=${provider}${account ? `&gw=${account.id}` : ''}`;
+    const mode = (fallback: 'mock' | 'test' | 'live') => (account ? account.mode : fallback);
     if (intent.provider === 'razorpay') {
       if (!intent.providerOrderId)
         throw new DomainError('payments.order_missing', 'The gateway order was not created', {
@@ -242,7 +309,7 @@ export class PaymentsService {
         kind: 'razorpay',
         provider: 'razorpay',
         mode: 'live',
-        keyId: this.env.RAZORPAY_KEY_ID,
+        keyId: account ? (account.config.keyId ?? '') : this.env.RAZORPAY_KEY_ID,
         orderId: intent.providerOrderId,
         amount: razorpay.toPaise(intent.amount),
         currency: 'INR',
@@ -261,7 +328,7 @@ export class PaymentsService {
     if (intent.provider === 'ccavenue') {
       const form = ccavenue.buildForm(
         {
-          merchant_id: this.env.CCAVENUE_MERCHANT_ID,
+          merchant_id: account ? (account.config.merchantId ?? '') : this.env.CCAVENUE_MERCHANT_ID,
           order_id: intent.txnId,
           amount: money(intent.amount),
           currency: 'INR',
@@ -274,11 +341,53 @@ export class PaymentsService {
           merchant_param1: intent.id,
           merchant_param2: intent.purpose,
         },
-        ccavenueCredentials(this.env),
+        account ? this.ccavenueOf(account) : ccavenueCredentials(this.env),
       );
-      return { ...form, provider: 'ccavenue', mode: 'live' };
+      return { ...form, provider: 'ccavenue', mode: mode('live') };
+    }
+    if (intent.provider === 'sbiepay' && account) {
+      const form = sbiepay.buildForm(
+        {
+          orderNo: intent.txnId,
+          amount: money(intent.amount),
+          customerId: intent.entityId ?? 'NA',
+          successUrl: returnEndpoint('sbiepay'),
+          failUrl: returnEndpoint('sbiepay'),
+          otherDetails: intent.purpose,
+        },
+        {
+          merchantId: account.config.merchantId ?? '',
+          key: account.secret.key ?? '',
+          baseUrl: account.url,
+        },
+      );
+      return { ...form, provider: 'sbiepay', mode: account.mode };
+    }
+    if (intent.provider === 'atom' && account) {
+      const form = atom.buildForm(
+        {
+          txnId: intent.txnId,
+          amount: money(intent.amount),
+          name: intent.payerName ?? 'Payer',
+          email: intent.payerEmail ?? '',
+          mobile: intent.payerMobile ?? '',
+          returnUrl: returnEndpoint('atom'),
+          customerAccount: intent.entityId ?? '0',
+        },
+        {
+          login: account.config.login ?? '',
+          password: account.secret.password ?? '',
+          productId: account.config.productId ?? '',
+          reqHashKey: account.secret.reqHashKey ?? '',
+          resHashKey: account.secret.resHashKey ?? '',
+          baseUrl: account.url,
+        },
+      );
+      return { ...form, provider: 'atom', mode: account.mode };
     }
     // PayU and the development mock share the PayU field set
+    const key = account ? (account.config.merchantKey ?? '') : this.env.PAYU_KEY;
+    const salt = account ? (account.secret.salt ?? '') : this.env.PAYU_SALT;
     const fields: PayuRequest = buildRequest(
       {
         txnid: intent.txnId,
@@ -291,22 +400,22 @@ export class PaymentsService {
         furl: returnEndpoint('payu'),
         udf1: intent.id,
       },
-      this.env.PAYU_KEY,
-      this.env.PAYU_SALT,
+      key,
+      salt,
     );
     const mock = intent.provider === 'mock';
     return {
       kind: 'form',
       provider: intent.provider,
-      mode: mock ? 'mock' : this.modeOf('payu'),
-      action: mock ? '/api/v1/payments/payu/mock' : this.env.PAYU_BASE_URL,
+      mode: mock ? 'mock' : mode(this.modeOf('payu')),
+      action: mock ? '/api/v1/payments/payu/mock' : account ? account.url : this.env.PAYU_BASE_URL,
       method: 'POST',
       fields: fields as unknown as Record<string, string>,
     };
   }
 
   /** Sprint 9 name kept for the admissions module and the public app. */
-  gatewayForm(intent: IntentRow): Checkout {
+  gatewayForm(intent: IntentRow): Promise<Checkout> {
     return this.checkout(intent);
   }
 
@@ -420,9 +529,10 @@ export class PaymentsService {
           [intent.id, n.providerRef],
         );
         const updated = { ...intent, status: 'succeeded' as const, providerRef: n.providerRef };
-        const handler = this.handlers.get(intent.purpose);
-        if (handler) await handler(c, updated);
-        else this.logger.warn(`no success handler for purpose ${intent.purpose}`);
+        const handlers = this.handlers.get(intent.purpose) ?? [];
+        for (const handler of handlers) await handler(c, updated);
+        if (handlers.length === 0)
+          this.logger.warn(`no success handler for purpose ${intent.purpose}`);
         return {
           outcome: 'applied',
           intentId: intent.id,
@@ -444,7 +554,15 @@ export class PaymentsService {
   }
 
   /** PayU: server notification, browser return and the mock all carry the signed PayU field set. */
-  async handlePayuWebhook(body: PayuWebhookDto, source: 'webhook' | 'return' | 'mock') {
+  async handlePayuWebhook(
+    body: PayuWebhookDto,
+    source: 'webhook' | 'return' | 'mock',
+    gw?: string,
+  ) {
+    // the school's account that took the payment checks the hash (named on the return, else by the transaction)
+    const account = source === 'mock' ? null : await this.accountFor(gw, body.txnid, 'payu', null);
+    const key = account ? (account.config.merchantKey ?? '') : this.env.PAYU_KEY;
+    const salt = account ? (account.secret.salt ?? '') : this.env.PAYU_SALT;
     // the mock speaks PayU, so its notifications share PayU's idempotency keys (a replayed mock success is a replay)
     return this.applyNotification(
       {
@@ -454,7 +572,7 @@ export class PaymentsService {
         providerRef: body.mihpayid ?? null,
         status: body.status.toLowerCase() === 'success' ? 'success' : 'failure',
         amount: body.amount,
-        signatureOk: verifyResponse(body, this.env.PAYU_KEY, this.env.PAYU_SALT),
+        signatureOk: verifyResponse(body, key, salt),
         reason: String(body.error_Message ?? body.status),
         payload: body,
       },
@@ -463,7 +581,8 @@ export class PaymentsService {
   }
 
   /** Razorpay checkout handler / return: HMAC over order id and payment id. Only successes come this way. */
-  async handleRazorpayReturn(body: RazorpayReturnDto) {
+  async handleRazorpayReturn(body: RazorpayReturnDto, gw?: string) {
+    const account = await this.accountFor(gw, null, 'razorpay', body.razorpay_order_id);
     return this.applyNotification(
       {
         provider: 'razorpay',
@@ -472,7 +591,10 @@ export class PaymentsService {
         providerRef: body.razorpay_payment_id,
         status: 'success',
         amount: null,
-        signatureOk: razorpay.verifyCheckout(body, this.env.RAZORPAY_KEY_SECRET),
+        signatureOk: razorpay.verifyCheckout(
+          body,
+          account ? (account.secret.keySecret ?? '') : this.env.RAZORPAY_KEY_SECRET,
+        ),
         reason: null,
         payload: body,
       },
@@ -485,13 +607,21 @@ export class PaymentsService {
     rawBody: string | Buffer,
     signature: string | undefined,
     body: RazorpayWebhookDto,
+    gw?: string,
   ) {
+    const ev = razorpay.readWebhook(body as unknown as razorpay.RazorpayWebhookEvent);
+    // each school's account has its own webhook secret: the webhook URL names it (gw), else the order does
+    const account = await this.accountFor(
+      gw,
+      null,
+      'razorpay',
+      ev.kind === 'payment' ? ev.orderId : null,
+    );
     const signatureOk = razorpay.verifyWebhook(
       rawBody,
       signature,
-      this.env.RAZORPAY_WEBHOOK_SECRET,
+      account ? (account.secret.webhookSecret ?? '') : this.env.RAZORPAY_WEBHOOK_SECRET,
     );
-    const ev = razorpay.readWebhook(body as unknown as razorpay.RazorpayWebhookEvent);
     if (ev.kind === 'refund') {
       if (!signatureOk) {
         this.logger.warn(`razorpay refund webhook with a bad signature (${ev.refundId ?? '?'})`);
@@ -536,8 +666,14 @@ export class PaymentsService {
   }
 
   /** CCAvenue redirect and cancel URLs: the encrypted response must open with the working key. */
-  async handleCcavenueReturn(body: CcavenueReturnDto) {
-    const resp = ccavenue.readResponse(body.encResp, this.env.CCAVENUE_WORKING_KEY);
+  async handleCcavenueReturn(body: CcavenueReturnDto, gw?: string) {
+    const account = gw ? await this.gateways.accountById(gw) : null;
+    const resp = ccavenue.readResponse(
+      body.encResp,
+      account?.provider === 'ccavenue'
+        ? (account.secret.workingKey ?? '')
+        : this.env.CCAVENUE_WORKING_KEY,
+    );
     if (!resp) {
       this.logger.warn('ccavenue response did not decrypt with the working key');
       return { outcome: 'rejected', intentId: null, status: null, returnUrl: null };
@@ -556,6 +692,68 @@ export class PaymentsService {
       },
       'return',
     );
+  }
+
+  /** SBI ePay posts back encData, encrypted with the account's key: that it opens is the proof. */
+  async handleSbiepayReturn(body: { encData?: string }, gw?: string) {
+    const account = gw ? await this.gateways.accountById(gw) : null;
+    const resp =
+      account?.provider === 'sbiepay' && body.encData
+        ? sbiepay.readResponse(body.encData, account.secret.key ?? '')
+        : null;
+    if (!resp) {
+      this.logger.warn('sbiepay response did not decrypt with the account key');
+      return { outcome: 'rejected', intentId: null, status: null, returnUrl: null };
+    }
+    return this.applyNotification(
+      {
+        provider: 'sbiepay',
+        txnId: resp.orderNo,
+        orderId: null,
+        providerRef: resp.atrn || null,
+        status: sbiepay.outcomeOf(resp.status),
+        amount: resp.amount,
+        signatureOk: true,
+        reason: resp.reason,
+        payload: { fields: resp.raw },
+      },
+      'return',
+    );
+  }
+
+  /** Atom posts back the result signed with the account's response hash key. */
+  async handleAtomReturn(body: atom.AtomResponse, gw?: string) {
+    const account = await this.accountFor(gw, body.mer_txn ?? null, 'atom', null);
+    const ok =
+      account?.provider === 'atom' && atom.verifyResponse(body, account.secret.resHashKey ?? '');
+    return this.applyNotification(
+      {
+        provider: 'atom',
+        txnId: body.mer_txn ?? null,
+        orderId: null,
+        providerRef: body.mmp_txn ?? null,
+        status: atom.outcomeOf(body.f_code),
+        amount: body.amt ?? null,
+        signatureOk: Boolean(ok),
+        reason: body.desc ?? body.f_code ?? null,
+        payload: body,
+      },
+      'return',
+    );
+  }
+
+  /** The school account of a gateway answer: named by the return (gw) or found by the transaction / order. */
+  private async accountFor(
+    gw: string | undefined,
+    txnId: string | null,
+    provider: string,
+    orderId: string | null,
+  ): Promise<GatewayAccount | null> {
+    if (gw) {
+      const a = await this.gateways.accountById(gw);
+      if (a && a.provider === provider) return a;
+    }
+    return this.gateways.accountOfTxn(txnId, provider, orderId);
   }
 
   /** Development only: signs a gateway response for the intent and feeds it to the notification path. */
@@ -582,7 +780,7 @@ export class PaymentsService {
       throw new DomainError('payments.mock_disabled', 'This intent belongs to a real gateway', {
         status: 409,
       });
-    const form = this.checkout({ ...intent, provider: 'mock' });
+    const form = await this.checkout({ ...intent, provider: 'mock', gatewayId: null });
     if (form.kind !== 'form') throw new DomainError('payments.mock_disabled', 'Not a form intent');
     const response = mockResponse(
       form.fields as unknown as PayuRequest,
@@ -846,7 +1044,7 @@ export class PaymentsService {
         entityId: intent.id,
         after: { studentId: dto.studentId, amount: intent.amount, provider: intent.provider },
       });
-      return { intent, form: this.checkout(intent) };
+      return { intent, form: await this.checkout(intent) };
     });
   }
 
@@ -886,6 +1084,7 @@ export class PaymentsService {
         entityId: dto.studentId,
         amount: dto.amount,
         ledger: dto.ledger,
+        gatewayId: dto.gatewayId ?? null,
         payer: {
           name: u.name,
           email: u.email ?? 'unknown@example.invalid',
@@ -910,8 +1109,92 @@ export class PaymentsService {
           family: true,
         },
       });
-      return { intent, checkout: this.checkout(intent) };
+      return { intent, checkout: await this.checkout(intent) };
     });
+  }
+
+  /**
+   * A guardian pays one of their children's misc fees online, in full (0142): an announced fee still open
+   * (an optional one up to its last date), with a seat free when it has seats. The receipt is written when
+   * the gateway confirms (MiscFeesService.onlinePaid).
+   */
+  async createFamilyMiscIntent(ctx: RequestContext, dto: { lineId: string; gatewayId?: string }) {
+    const tenant = requireTenant(ctx);
+    const v = await this.viewer.resolve(ctx, 'fees.family.view');
+    if (v.kind !== 'family')
+      throw new DomainError('permission-denied', 'Only a parent can pay here', { status: 403 });
+    return this.db.tenant(tenant, async (c) => {
+      const l = await c.query<{
+        student_id: string;
+        title: string;
+        amount: string;
+        paid: string;
+        status: string;
+        fee_status: string;
+        mandatory: boolean;
+        last: string;
+        seats: number | null;
+        taken: number;
+      }>(
+        `SELECT l.student_id::text, f.title, l.amount::text, l.paid::text, l.status, f.status AS fee_status, f.mandatory,
+                COALESCE(l.last_date, f.last_date)::text AS last, f.seats,
+                (SELECT count(*)::int FROM misc_fee_students x WHERE x.misc_fee_id = f.id AND x.status = 'paid') AS taken
+           FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id WHERE l.id = $1`,
+        [dto.lineId],
+      );
+      const line = l.rows[0];
+      if (!line || !v.students.some((s) => s.id === line.student_id))
+        throw new DomainError('permission-denied', 'Not a fee of your child', { status: 403 });
+      const balance = Number(line.amount) - Number(line.paid);
+      const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+      if (line.fee_status !== 'announced' || line.status === 'cancelled' || balance <= 0)
+        throw new DomainError('misc.closed', `${line.title} is not open for payment`, {
+          status: 409,
+        });
+      if (!line.mandatory && line.last < today)
+        throw new DomainError('misc.closed', `${line.title} closed on its last date`, {
+          status: 409,
+        });
+      if (line.seats !== null && line.taken >= line.seats)
+        throw new DomainError('misc.full', `All seats of ${line.title} are taken`, { status: 409 });
+      const me = await c.query<{ name: string; email: string | null; mobile: string | null }>(
+        `SELECT display_name AS name, email, mobile FROM users WHERE id = app.current_user_id()`,
+      );
+      const u = me.rows[0]!;
+      const intent = await this.createIntent(c, {
+        purpose: 'misc',
+        entityType: 'misc_fee_student',
+        entityId: dto.lineId,
+        ledger: 'misc',
+        amount: balance,
+        gatewayId: dto.gatewayId ?? null,
+        payer: {
+          name: u.name,
+          email: u.email ?? 'unknown@example.invalid',
+          mobile: u.mobile ?? '',
+        },
+        returnUrl: `${this.env.PARENT_APP_URL}/fees?student=${line.student_id}`,
+        createdByUser: ctx.user.id,
+        requestId: ctx.requestId,
+      });
+      await this.audit.stage(ctx, c, {
+        action: 'payments.intent.create',
+        entityType: 'payment_intents',
+        entityId: intent.id,
+        after: {
+          miscLine: dto.lineId,
+          amount: intent.amount,
+          charge: intent.charge,
+          provider: intent.provider,
+        },
+      });
+      return { intent, checkout: await this.checkout(intent) };
+    });
+  }
+
+  /** The gateways a fee may be paid through (for the payer to choose), with their convenience charge. */
+  async gatewayOptions(ctx: RequestContext, ledger: FeeLedger) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.gateways.options(c, ledger));
   }
 
   /** Sprint 19: a guardian reopens the checkout of an intent they created (e.g. a consent-form fee). */
@@ -930,7 +1213,7 @@ export class PaymentsService {
           status: 404,
         });
       const intent = toRow(r.rows[0]);
-      return { intent, checkout: this.checkout(intent) };
+      return { intent, checkout: await this.checkout(intent) };
     });
   }
 
@@ -964,10 +1247,12 @@ export class PaymentsService {
         )
       ).rows[0]?.id;
     if (!yearId || !intent.entityId) return;
+    // the receipt is for the fee; the convenience charge is kept on it apart
+    const fee = Number(intent.amount) - Number(intent.charge ?? 0);
     await this.post(c, {
       studentId: intent.entityId,
       yearId,
-      amount: intent.amount,
+      amount: fee.toFixed(2),
       receivedOn: null,
       mode: 'online',
       reference: intent.providerRef,
@@ -980,6 +1265,11 @@ export class PaymentsService {
       collectLateFee: true,
       strictYear: false,
     });
+    if (Number(intent.charge ?? 0) > 0)
+      await c.query(`UPDATE fee_payments SET convenience_charge = $2 WHERE intent_id = $1`, [
+        intent.id,
+        intent.charge,
+      ]);
   }
 }
 

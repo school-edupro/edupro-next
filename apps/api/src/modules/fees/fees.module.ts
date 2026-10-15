@@ -72,6 +72,7 @@ import { FeesController } from './fees.controller';
     AuditService,
   ],
   exports: [
+    MiscFeesService,
     FeeMastersService,
     FeeDemandsService,
     FeeLedgerService,

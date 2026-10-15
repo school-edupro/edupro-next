@@ -7,7 +7,9 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   CcavenueReturnDto,
   CreateFamilyIntentDto,
+  CreateFamilyMiscIntentDto,
   CreateFeeIntentDto,
+  GatewayOptionsQueryDto,
   DecideRefundDto,
   ListIntentsQueryDto,
   ListRefundsQueryDto,
@@ -43,15 +45,15 @@ export class PaymentsController {
   @Post('payu/webhook')
   @Public()
   @ApiOperation({ summary: 'PayU server-to-server notification (signature verified, idempotent)' })
-  webhook(@Body() body: PayuWebhookDto) {
-    return this.payments.handlePayuWebhook(body, 'webhook');
+  webhook(@Body() body: PayuWebhookDto, @Query('gw') gw?: string) {
+    return this.payments.handlePayuWebhook(body, 'webhook', gw);
   }
 
   @Post('payu/return')
   @Public()
   @ApiOperation({ summary: 'PayU browser return (same verification as the webhook)' })
-  returned(@Body() body: PayuWebhookDto) {
-    return this.payments.handlePayuWebhook(body, 'return');
+  returned(@Body() body: PayuWebhookDto, @Query('gw') gw?: string) {
+    return this.payments.handlePayuWebhook(body, 'return', gw);
   }
 
   @Post('payu/mock')
@@ -66,8 +68,8 @@ export class PaymentsController {
   @Post('razorpay/return')
   @Public()
   @ApiOperation({ summary: 'Razorpay checkout handler: order id, payment id and signature' })
-  razorpayReturned(@Body() body: RazorpayReturnDto) {
-    return this.payments.handleRazorpayReturn(body);
+  razorpayReturned(@Body() body: RazorpayReturnDto, @Query('gw') gw?: string) {
+    return this.payments.handleRazorpayReturn(body, gw);
   }
 
   @Post('razorpay/webhook')
@@ -77,16 +79,35 @@ export class PaymentsController {
     @Req() req: FastifyRequest,
     @Headers('x-razorpay-signature') signature: string | undefined,
     @Body() body: RazorpayWebhookDto,
+    @Query('gw') gw?: string,
   ) {
     const raw = (req as unknown as { rawBody?: Buffer }).rawBody ?? JSON.stringify(body);
-    return this.payments.handleRazorpayWebhook(raw, signature, body);
+    return this.payments.handleRazorpayWebhook(raw, signature, body, gw);
   }
 
   @Post('ccavenue/return')
   @Public()
   @ApiOperation({ summary: 'CCAvenue redirect and cancel URL: encrypted response' })
-  ccavenueReturned(@Body() body: CcavenueReturnDto) {
-    return this.payments.handleCcavenueReturn(body);
+  ccavenueReturned(@Body() body: CcavenueReturnDto, @Query('gw') gw?: string) {
+    return this.payments.handleCcavenueReturn(body, gw);
+  }
+
+  @Post('sbiepay/return')
+  @Public()
+  @ApiOperation({
+    summary: "SBI ePay success and fail URL: encData opened with the school account's key",
+  })
+  sbiepayReturned(@Body() body: Record<string, string>, @Query('gw') gw?: string) {
+    return this.payments.handleSbiepayReturn({ encData: body?.encData ?? body?.encdata }, gw);
+  }
+
+  @Post('atom/return')
+  @Public()
+  @ApiOperation({
+    summary: "Atom return URL: result signed with the school account's response hash key",
+  })
+  atomReturned(@Body() body: Record<string, string>, @Query('gw') gw?: string) {
+    return this.payments.handleAtomReturn(body ?? {}, gw);
   }
 
   // ---- intents -----------------------------------------------------------------------------------
@@ -114,6 +135,24 @@ export class PaymentsController {
   @RequirePermission(PAYMENTS.familyPay)
   createMine(@ReqCtx() ctx: RequestContext, @Body() body: CreateFamilyIntentDto) {
     return this.payments.createFamilyIntent(ctx, body);
+  }
+
+  @Post('intents/mine/misc')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "A guardian pays a child's misc fee online, in full" })
+  @RequirePermission(PAYMENTS.familyPay)
+  createMineMisc(@ReqCtx() ctx: RequestContext, @Body() body: CreateFamilyMiscIntentDto) {
+    return this.payments.createFamilyMiscIntent(ctx, body);
+  }
+
+  @Get('gateways/options')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'The gateways a fee may be paid through, with their convenience charge',
+  })
+  @RequirePermission(PAYMENTS.familyPay)
+  async gatewayOptions(@ReqCtx() ctx: RequestContext, @Query() q: GatewayOptionsQueryDto) {
+    return { data: await this.payments.gatewayOptions(ctx, q.ledger) };
   }
 
   @Post('intents/mine/:id/checkout')

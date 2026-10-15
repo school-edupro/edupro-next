@@ -77,11 +77,15 @@ describe('permission coverage', () => {
       'OtpController.offered (auth/otp)',
       'OtpController.start (auth/otp)',
       'OtpController.verify (auth/otp)',
+      // Atom signs its answer with the school account's response hash key (HMAC-SHA512, constant time) (0142)
+      'PaymentsController.atomReturned (payments)',
       'PaymentsController.ccavenueReturned (payments)',
       'PaymentsController.mock (payments)',
       'PaymentsController.razorpayReturned (payments)',
       'PaymentsController.razorpayWebhook (payments)',
       'PaymentsController.returned (payments)',
+      // SBI ePay answers encrypted with the school account's AES key: it opens only with that key (0142)
+      'PaymentsController.sbiepayReturned (payments)',
       'PaymentsController.webhook (payments)',
       'PublicAdmissionsController.challenge (public/admissions)',
       'PublicAdmissionsController.createApplication (public/admissions)',
