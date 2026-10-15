@@ -12,11 +12,15 @@ const BULK = 'fees.bulk.upload';
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const Id = z.string().regex(/^\d{1,18}$/);
 
-class FormatDto extends createZodDto(z.object({ classId: Id.optional() })) {}
+/** school = regular fee, hostel = hostel fee */
+const Ledger = z.enum(['school', 'hostel']).default('school');
+class FormatDto extends createZodDto(z.object({ classId: Id.optional(), ledger: Ledger })) {}
+class ListDto extends createZodDto(z.object({ ledger: z.enum(['school', 'hostel']).optional() })) {}
 class UploadDto extends createZodDto(
   z.object({
     fileBase64: z.string().min(20).max(4_000_000),
     fileName: z.string().trim().max(200).optional(),
+    ledger: Ledger,
   }),
 ) {}
 class SubmitDto extends createZodDto(
@@ -45,7 +49,7 @@ export class FeeOpeningController {
   })
   @RequirePermission(BULK)
   async format(@ReqCtx() ctx: RequestContext, @Query() q: FormatDto, @Res() reply: FastifyReply) {
-    const f = await this.opening.format(ctx, q.classId);
+    const f = await this.opening.format(ctx, q.classId, q.ledger);
     reply
       .header('content-type', XLSX)
       .header('content-disposition', `attachment; filename="${f.filename}"`)
@@ -55,8 +59,8 @@ export class FeeOpeningController {
   @Get('uploads')
   @ApiOperation({ summary: 'Opening balance files of the year' })
   @RequirePermission(BULK)
-  async list(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.opening.list(ctx) };
+  async list(@ReqCtx() ctx: RequestContext, @Query() q: ListDto) {
+    return { data: await this.opening.list(ctx, q.ledger) };
   }
 
   @Get('uploads/:id')
@@ -69,7 +73,7 @@ export class FeeOpeningController {
   @ApiOperation({ summary: 'Upload and check an opening balance file (kept as a draft)' })
   @RequirePermission(BULK)
   upload(@ReqCtx() ctx: RequestContext, @Body() body: UploadDto) {
-    return this.opening.upload(ctx, body.fileBase64, body.fileName);
+    return this.opening.upload(ctx, body.fileBase64, body.fileName, body.ledger);
   }
 
   @Post('uploads/:id/submit')

@@ -24,6 +24,7 @@ interface Row {
 }
 interface Upload {
   id: string;
+  ledger: 'school' | 'hostel';
   fileName: string | null;
   rows: Row[];
   totalRows: number;
@@ -44,6 +45,7 @@ interface Upload {
     notRebuilt: Array<{ admissionNo: string; why: string }>;
   } | null;
 }
+const FEE = { school: 'Regular (school fee)', hostel: 'Hosteller (hostel fee)' } as const;
 const STATE: Record<Upload['status'], [string, 'neutral' | 'warning' | 'success' | 'danger']> = {
   draft: ['Checked, not sent', 'neutral'],
   pending: ['Waiting for approval', 'warning'],
@@ -67,24 +69,35 @@ const drcr = (v: string | null) => {
 export default async function OpeningBalancesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ upload?: string; ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    upload?: string;
+    ledger?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
+  // regular (school) fee or hostel fee: the format, the upload and the list follow it
+  const open =
+    sp.upload && /^\d+$/.test(sp.upload)
+      ? await apiFetch<Upload>(`/fees/opening/uploads/${sp.upload}`).catch(() => null)
+      : null;
+  // a file opened from its link shows its own fee type
+  const ledger: 'school' | 'hostel' =
+    sp.ledger === 'hostel' || sp.ledger === 'school' ? sp.ledger : (open?.ledger ?? 'school');
   const me = await getMe();
   const canUpload = me.permissions.includes('fees.bulk.upload');
   const canDecide = me.permissions.includes('fees.adjustment.approve');
-  const [files, classes, open] = await Promise.all([
+  const [files, classes] = await Promise.all([
     canUpload
-      ? apiFetch<{ data: Upload[] }>('/fees/opening/uploads')
+      ? apiFetch<{ data: Upload[] }>(`/fees/opening/uploads?ledger=${ledger}`)
           .then((r) => r.data)
           .catch(() => [])
       : Promise.resolve([] as Upload[]),
     apiFetch<Page<{ id: string; code: string; name: string }>>('/academics/classes?size=200')
       .then((r) => r.data)
       .catch(() => []),
-    sp.upload && /^\d+$/.test(sp.upload)
-      ? apiFetch<Upload>(`/fees/opening/uploads/${sp.upload}`).catch(() => null)
-      : Promise.resolve(null),
   ]);
   return (
     <>
@@ -94,11 +107,31 @@ export default async function OpeningBalancesPage({
         description="What each pupil owed (dues, Dr) or had paid in advance (Cr) before this session, for many pupils at once. Use it when moving from the old software, or to correct figures. From the second year on, Carry forward to new year does this by itself."
       />
       <Notice params={sp} />
+      <nav
+        aria-label="Fee type"
+        className="ep-tabs-links"
+        style={{ marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}
+      >
+        {(['school', 'hostel'] as const).map((l) => (
+          <a
+            key={l}
+            href={`/fees/opening-balances?ledger=${l}`}
+            aria-current={l === ledger ? 'page' : undefined}
+          >
+            {FEE[l]}
+          </a>
+        ))}
+      </nav>
+      <p className="ep-field__help">
+        {ledger === 'hostel'
+          ? 'Hostel fee: the hostel dues (Dr) or hostel advance (Cr) of each pupil before this session. They go on the hostel bill, apart from school fee.'
+          : 'Regular (school) fee: the school dues (Dr) or advance (Cr) of each pupil before this session. Hostel dues have their own file under Hosteller.'}
+      </p>
       {!canUpload ? (
         <Card>You do not have the right to upload fee files.</Card>
       ) : (
         <>
-          <Card title="1. Download the format">
+          <Card title={`1. Download the format · ${FEE[ledger]}`}>
             <p className="ep-field__help">
               Blank, or with the pupils of one class already written and their present opening
               balance filled in. Three columns matter: the admission number, the amount, and Dr
@@ -110,10 +143,12 @@ export default async function OpeningBalancesPage({
               style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'end', flexWrap: 'wrap' }}
             >
               <input type="hidden" name="kind" value="opening" />
+              <input type="hidden" name="ledger" value={ledger} />
               <label className="ep-field" htmlFor="obClass">
                 <span className="ep-field__label">Class</span>
                 <select className="ep-select" id="obClass" name="classId" defaultValue="">
                   <option value="">Blank format (no pupils)</option>
+                  {/* the hostel format lists the class's hostellers */}
                   {classes.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.code} · {k.name}
@@ -127,7 +162,10 @@ export default async function OpeningBalancesPage({
             </form>
           </Card>
 
-          <Card title="2. Upload the filled file" style={{ marginTop: 'var(--sp-4)' }}>
+          <Card
+            title={`2. Upload the filled file · ${FEE[ledger]}`}
+            style={{ marginTop: 'var(--sp-4)' }}
+          >
             <form
               action={uploadOpeningBalances}
               style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'end', flexWrap: 'wrap' }}
@@ -143,6 +181,7 @@ export default async function OpeningBalancesPage({
                   required
                 />
               </label>
+              <input type="hidden" name="ledger" value={ledger} />
               <Button type="submit">Upload and check</Button>
             </form>
             <p className="ep-field__help">
@@ -152,7 +191,7 @@ export default async function OpeningBalancesPage({
 
           {open ? (
             <Card
-              title={`3. Check: ${open.fileName ?? `file ${open.id}`}`}
+              title={`3. Check: ${open.fileName ?? `file ${open.id}`} · ${FEE[open.ledger]}`}
               style={{ marginTop: 'var(--sp-4)' }}
               actions={<Badge tone={STATE[open.status][1]}>{STATE[open.status][0]}</Badge>}
             >
@@ -307,7 +346,10 @@ export default async function OpeningBalancesPage({
             </Card>
           ) : null}
 
-          <Card title="Files of this session" style={{ marginTop: 'var(--sp-4)' }}>
+          <Card
+            title={`Files of this session · ${FEE[ledger]}`}
+            style={{ marginTop: 'var(--sp-4)' }}
+          >
             {files.length === 0 ? (
               <p>No file has been uploaded yet.</p>
             ) : (
@@ -336,7 +378,7 @@ export default async function OpeningBalancesPage({
                           <div className="ep-field__help">{u.uploadedBy ?? ''}</div>
                         </td>
                         <td>
-                          <a href={`/fees/opening-balances?upload=${u.id}`}>
+                          <a href={`/fees/opening-balances?ledger=${u.ledger}&upload=${u.id}`}>
                             {u.fileName ?? `File ${u.id}`}
                           </a>
                         </td>

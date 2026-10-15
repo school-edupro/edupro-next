@@ -10,12 +10,13 @@ const FILES: Record<string, [path: string, name: string]> = {
 export async function GET(req: Request) {
   const kind = new URL(req.url).searchParams.get('kind') ?? '';
   const classId = new URL(req.url).searchParams.get('classId') ?? '';
+  const hostel = new URL(req.url).searchParams.get('ledger') === 'hostel';
   // opening balances: blank, or with the pupils of a class and their present figure filled in
   const file =
     kind === 'opening'
       ? ([
-          `/fees/opening/format.xlsx${/^\d{1,18}$/.test(classId) ? `?classId=${classId}` : ''}`,
-          'opening-balance-format.xlsx',
+          `/fees/opening/format.xlsx?ledger=${hostel ? 'hostel' : 'school'}${/^\d{1,18}$/.test(classId) ? `&classId=${classId}` : ''}`,
+          hostel ? 'hostel-opening-balance-format.xlsx' : 'opening-balance-format.xlsx',
         ] as [string, string])
       : FILES[kind];
   if (!file) return NextResponse.json({ type: 'not-found' }, { status: 404 });

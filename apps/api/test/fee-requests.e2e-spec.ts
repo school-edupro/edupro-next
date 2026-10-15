@@ -769,6 +769,65 @@ describe('fee changes that wait for approval (e2e)', () => {
     expect(await openingOf(students.b)).toBe(-300);
   });
 
+  it('a hostel opening balance file writes the hostel figure and bills it on the hostel fee, not the school fee', async () => {
+    // FRQ-a is made a hosteller; FRQ-b stays a day scholar
+    await withMigrator((c) =>
+      c.query(`UPDATE student_fee_profiles SET hosteller = true WHERE student_id = $1`, [
+        students.a,
+      ]),
+    );
+    const file = await sheet(
+      ['Admission no.', 'Amount', 'Dr / Cr'],
+      [
+        ['FRQ-a', 1200, 'Dr'],
+        ['FRQ-b', 50, 'Cr'],
+      ],
+    );
+    const up = await inject({
+      method: 'POST',
+      url: '/fees/opening/uploads',
+      headers: h(accountant),
+      json: { fileBase64: file, fileName: 'hostel.xlsx', ledger: 'hostel' },
+    });
+    expect(up.statusCode).toBe(201);
+    expect(up.json()).toMatchObject({ ledger: 'hostel', goodRows: 1, totalDr: '1200.00' });
+    // the school figure of FRQ-a is shown apart: the hostel figure was nothing before
+    expect(up.json().rows[0]).toMatchObject({ before: '0.00', opening: '1200.00' });
+    expect(up.json().rows[1].error).toBe(
+      'Hostel advance for a pupil who is not a hosteller this session',
+    );
+    const list = await inject({
+      method: 'GET',
+      url: '/fees/opening/uploads?ledger=hostel',
+      headers: h(accountant),
+    });
+    expect(list.json().data.every((u: { ledger: string }) => u.ledger === 'hostel')).toBe(true);
+    await inject({
+      method: 'POST',
+      url: `/fees/opening/uploads/${up.json().id}/submit`,
+      headers: h(accountant),
+      json: { action: 'submit', reason: 'Hostel dues from the old software' },
+    });
+    const ok = await inject({
+      method: 'POST',
+      url: `/fees/opening/uploads/${up.json().id}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(ok.json()).toMatchObject({ status: 'applied', result: { applied: 1, billsRebuilt: 1 } });
+    const fig = await withMigrator((c) =>
+      c.query<{ school: string; hostel: string; line: string | null }>(
+        `SELECT p.opening_balance::text AS school, p.opening_hostel::text AS hostel,
+                (SELECT d.ledger::text FROM fee_demands d JOIN fee_heads hh ON hh.id = d.head_id
+                  WHERE d.student_id = p.student_id AND d.academic_year_id = p.academic_year_id AND d.source = 'opening_balance' AND hh.ledger = 'hostel') AS line
+           FROM student_fee_profiles p WHERE p.student_id = $1`,
+        [students.a],
+      ),
+    );
+    // the school opening balance of the earlier file is untouched; the hostel dues are a hostel line
+    expect(fig.rows[0]).toEqual({ school: '500.00', hostel: '1200.00', line: 'hostel' });
+  });
+
   it('the opening balance of one pupil changes through the fee change request, not directly', async () => {
     const direct = await inject({
       method: 'PUT',

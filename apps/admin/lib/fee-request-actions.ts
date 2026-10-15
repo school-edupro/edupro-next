@@ -350,19 +350,20 @@ export async function requestAdvanceRefund(fd: FormData) {
 
 // ---- opening balances from Excel (0121) -----------------------------------------------------------
 export async function uploadOpeningBalances(fd: FormData) {
-  const path = '/fees/opening-balances?tab=upload';
+  const ledger = str(fd, 'ledger') === 'hostel' ? 'hostel' : 'school';
+  const path = `/fees/opening-balances?ledger=${ledger}`;
   const { base64, name } = await fileBase64(fd, path);
   let id = '';
   try {
     const r = await apiFetch<{ id: string }>('/fees/opening/uploads', {
       method: 'POST',
-      body: JSON.stringify({ fileBase64: base64, fileName: name }),
+      body: JSON.stringify({ fileBase64: base64, fileName: name, ledger }),
     });
     id = r.id;
   } catch (error) {
     fail(path, error);
   }
-  redirect(`/fees/opening-balances?upload=${id}`);
+  redirect(`/fees/opening-balances?ledger=${ledger}&upload=${id}`);
 }
 
 export async function submitOpeningBalances(fd: FormData) {

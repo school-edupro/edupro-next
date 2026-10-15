@@ -351,6 +351,14 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   and Total due − Total received + Refund (+ Advance) = Balance payable, in words, with the school's
   notes on online payment, cheque bounce charge and late fee. **Fee type** chooses All, Regular
   (school fee) or Hosteller (hostel fee); for a class, pupils with nothing on that fee are left out.
+- **Opening balances from Excel** (Fees → Opening balances): choose **Regular (school fee)** or
+  **Hosteller (hostel fee)** at the top. The format, the upload, the check ("Now" / "Becomes") and the
+  files list follow it. A hostel file writes the pupil's hostel opening balance, billed on the hostel
+  fee under *Previous dues (hostel)*; the school figure is not touched, and the other way round. The
+  hostel format with a class lists its hostellers; a hostel advance (Cr) is refused for a pupil who is
+  not a hosteller (hostel dues of a pupil who left are taken).
+- **Bounce charge of a hostel cheque** is raised on the hostel fee (head *Cheque bounce charge
+  (hostel)*), not the school fee.
 - **Fee type on the reports** (Fees → Reports centre): every collection, dues and accounts report has
   *Fee type: All · Regular (school fee) · Hosteller (hostel fee)* (Tally vouchers also *Misc fee*):
   Day book, Day book (grouped), Mode-wise collection, Head-wise tally, Cheque bounce, Defaulters, Period

@@ -24,8 +24,18 @@ export interface OpeningRow {
   opening: string | null;
   error: string | null;
 }
+export type OpeningLedger = 'school' | 'hostel';
+/** The fee profile column a file writes: the regular opening balance, or the hostel one. */
+const COLUMN: Record<OpeningLedger, string> = {
+  school: 'opening_balance',
+  hostel: 'opening_hostel',
+};
+const FEE: Record<OpeningLedger, string> = { school: 'Regular fee', hostel: 'Hostel fee' };
+
 export interface OpeningUpload {
   id: string;
+  /** school = regular fee, hostel = hostel fee (0140) */
+  ledger: OpeningLedger;
   fileName: string | null;
   rows: OpeningRow[];
   totalRows: number;
@@ -49,7 +59,7 @@ export interface OpeningUpload {
 }
 
 // eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
-const SELECT = `SELECT u.id::text, u.file_name AS "fileName", u.rows, u.total_rows AS "totalRows", u.good_rows AS "goodRows", u.total_dr::text AS "totalDr", u.total_cr::text AS "totalCr",
+const SELECT = `SELECT u.id::text, u.ledger::text AS ledger, u.file_name AS "fileName", u.rows, u.total_rows AS "totalRows", u.good_rows AS "goodRows", u.total_dr::text AS "totalDr", u.total_cr::text AS "totalCr",
         u.status, u.reason, uu.display_name AS "uploadedBy", u.uploaded_at::text AS "uploadedAt", du.display_name AS "decidedBy", u.decided_at::text AS "decidedAt",
         u.decision_note AS "decisionNote", u.workflow_instance_id::text AS "workflowInstanceId", ${WAITING_WITH('u.workflow_instance_id')} AS "waitingWith", u.result
    FROM fee_opening_uploads u LEFT JOIN users uu ON uu.id = u.uploaded_by LEFT JOIN users du ON du.id = u.decided_by`;
@@ -84,8 +94,9 @@ export class FeeOpeningService {
   }
 
   /** The sheet to fill; with a class, its pupils and their present opening balance are filled in. */
-  async format(ctx: RequestContext, classId?: string) {
+  async format(ctx: RequestContext, classId?: string, ledger: OpeningLedger = 'school') {
     const yearId = this.year(ctx);
+    const col = COLUMN[ledger];
     const rows = classId
       ? await this.db.tenant(requireTenant(ctx), async (c) => {
           const r = await c.query<{
@@ -94,13 +105,16 @@ export class FeeOpeningService {
             section: string;
             opening: string | null;
           }>(
-            `SELECT s.admission_no, s.display_name AS name, k.code || '-' || cs.name AS section, p.opening_balance::text AS opening
+            // eslint-disable-next-line no-restricted-syntax -- col is one of two fixed column names; values are bound
+            `SELECT s.admission_no, s.display_name AS name, k.code || '-' || cs.name AS section, p.${col}::text AS opening
                FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
                JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
                LEFT JOIN student_fee_profiles p ON p.student_id = s.id AND p.academic_year_id = e.academic_year_id
               WHERE e.academic_year_id = $1 AND e.status = 'active' AND cs.class_id = $2
+                -- the hostel format lists the hostellers, and anyone who already has a hostel figure
+                AND ($3::text = 'school' OR COALESCE(p.hosteller, false) OR COALESCE(p.opening_hostel, 0) <> 0)
               ORDER BY cs.name, e.roll_no NULLS LAST, s.display_name`,
-            [yearId, classId],
+            [yearId, classId, ledger],
           );
           return r.rows.map((x) => {
             const v = Number(x.opening ?? 0);
@@ -115,9 +129,10 @@ export class FeeOpeningService {
         })
       : [];
     return {
-      filename: 'opening-balance-format.xlsx',
+      filename:
+        ledger === 'hostel' ? 'hostel-opening-balance-format.xlsx' : 'opening-balance-format.xlsx',
       bytes: await templateSheet({
-        sheet: 'Opening balance',
+        sheet: ledger === 'hostel' ? 'Hostel opening balance' : 'Opening balance',
         columns: [
           { header: HEADERS[0]!, width: 18, required: true },
           { header: HEADERS[1]!, width: 16 },
@@ -126,6 +141,9 @@ export class FeeOpeningService {
           { header: HEADERS[4]!, width: 12 },
         ],
         guide: [
+          ledger === 'hostel'
+            ? 'HOSTEL FEE: these figures are the hostel dues or advance, billed on the hostel fee (not the school fee).'
+            : 'REGULAR (SCHOOL) FEE: these figures are the school dues or advance (the hostel fee has its own file).',
           'One pupil in each row: the admission number, the amount, and Dr or Cr. Name and class are only for your reading and may be left out.',
           'Dr (debit): dues, what the pupil owes from before this session. Cr (credit): advance, what the pupil paid before.',
           'Write the amount without a minus sign and choose Dr or Cr. Amount empty or 0 means no opening balance.',
@@ -137,13 +155,13 @@ export class FeeOpeningService {
     };
   }
 
-  async list(ctx: RequestContext): Promise<OpeningUpload[]> {
+  async list(ctx: RequestContext, ledger?: OpeningLedger): Promise<OpeningUpload[]> {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<OpeningUpload>(
-        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; the year is a bound parameter
-        `${SELECT} WHERE u.academic_year_id = $1 ORDER BY u.id DESC LIMIT 50`,
-        [yearId],
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; the year and fee type are bound parameters
+        `${SELECT} WHERE u.academic_year_id = $1 AND ($2::text IS NULL OR u.ledger::text = $2) ORDER BY u.id DESC LIMIT 50`,
+        [yearId, ledger ?? null],
       );
       // the list does not need every row of every file
       return r.rows.map((u) => ({ ...u, rows: [] }));
@@ -155,8 +173,14 @@ export class FeeOpeningService {
   }
 
   /** Reads and checks the file; it is kept as a draft with the reason beside every row that fails. */
-  async upload(ctx: RequestContext, fileBase64: string, fileName?: string): Promise<OpeningUpload> {
+  async upload(
+    ctx: RequestContext,
+    fileBase64: string,
+    fileName?: string,
+    ledger: OpeningLedger = 'school',
+  ): Promise<OpeningUpload> {
     const yearId = this.year(ctx);
+    const col = COLUMN[ledger];
     const sheet = await readSheet(fileBase64, [HEADERS[0]!, HEADERS[1]!, HEADERS[2]!]);
     if (sheet.length === 0)
       throw new DomainError('validation-failed', 'The file has no rows', { status: 400 });
@@ -172,11 +196,14 @@ export class FeeOpeningService {
         section: string | null;
         opening: string | null;
         status: string;
+        hosteller: boolean;
       }>(
+        // eslint-disable-next-line no-restricted-syntax -- col is one of two fixed column names; values are bound
         `SELECT s.admission_no, s.id::text, s.display_name AS name, s.status::text,
+                COALESCE((SELECT p.hosteller FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $2), false) AS hosteller,
                 (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
                   WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' ORDER BY e.id DESC LIMIT 1) AS section,
-                (SELECT p.opening_balance::text FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $2) AS opening
+                (SELECT p.${col}::text FROM student_fee_profiles p WHERE p.student_id = s.id AND p.academic_year_id = $2) AS opening
            FROM students s WHERE s.deleted_at IS NULL AND lower(s.admission_no) = ANY($1::text[])`,
         [nos.map((n) => n.toLowerCase()), yearId],
       );
@@ -214,7 +241,10 @@ export class FeeOpeningService {
                     ? 'Write the amount without a minus sign and choose Dr or Cr'
                     : amount > 0 && !isDr && !isCr
                       ? 'Choose Dr (dues) or Cr (advance)'
-                      : null;
+                      : // an advance on hostel fee belongs to a hosteller; old hostel dues may stay with a pupil who left
+                        ledger === 'hostel' && isCr && amount > 0 && !s.hosteller
+                        ? 'Hostel advance for a pupil who is not a hosteller this session'
+                        : null;
         seen.add(admissionNo.toLowerCase());
         rows.push({
           row: r.row,
@@ -233,8 +263,8 @@ export class FeeOpeningService {
       const sum = (f: (v: number) => number) =>
         good.reduce((a, r) => a + f(Number(r.opening)), 0).toFixed(2);
       const ins = await c.query<{ id: string }>(
-        `INSERT INTO fee_opening_uploads (school_id, academic_year_id, file_name, rows, total_rows, good_rows, total_dr, total_cr, uploaded_by)
-         VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, $5, $6, $7, app.current_user_id()) RETURNING id::text`,
+        `INSERT INTO fee_opening_uploads (school_id, academic_year_id, file_name, rows, total_rows, good_rows, total_dr, total_cr, uploaded_by, ledger)
+         VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, $5, $6, $7, app.current_user_id(), $8::ledger_type) RETURNING id::text`,
         [
           yearId,
           fileName ?? null,
@@ -243,13 +273,14 @@ export class FeeOpeningService {
           good.length,
           sum((v) => Math.max(v, 0)),
           sum((v) => Math.max(-v, 0)),
+          ledger,
         ],
       );
       await this.audit.stage(ctx, c, {
         action: 'fees.opening_upload.upload',
         entityType: 'fee_opening_uploads',
         entityId: ins.rows[0]!.id,
-        after: { fileName, rows: rows.length, good: good.length },
+        after: { fileName, ledger, rows: rows.length, good: good.length },
       });
       return this.find(c, ins.rows[0]!.id);
     });
@@ -293,8 +324,8 @@ export class FeeOpeningService {
         ctx,
         { code: FEE_OPENING_FLOW, name: 'Opening balances from Excel' },
         id,
-        `Opening balances: ${String(u.goodRows)} pupils, dues Rs. ${u.totalDr}, advance Rs. ${u.totalCr}`,
-        { fileName: u.fileName, reason: dto.reason },
+        `Opening balances (${FEE[u.ledger]}): ${String(u.goodRows)} pupils, dues Rs. ${u.totalDr}, advance Rs. ${u.totalCr}`,
+        { fileName: u.fileName, reason: dto.reason, ledger: u.ledger },
       );
       if (instanceId)
         await c.query(`UPDATE fee_opening_uploads SET workflow_instance_id = $2 WHERE id = $1`, [
@@ -333,11 +364,20 @@ export class FeeOpeningService {
       ).rows[0]!.y;
       await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
       result = { applied: 0, billsRebuilt: 0, notRebuilt: [] };
+      const col = COLUMN[u.ledger];
+      // the bill puts a hostel opening balance on the hostel ledger under a hostel opening head
+      if (u.ledger === 'hostel')
+        await c.query(
+          `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
+           SELECT app.current_school_id(), 'PREVDUEH', 'Previous dues (hostel)', 'opening_balance', 'hostel', 0, app.current_user_id(), app.current_user_id()
+            WHERE NOT EXISTS (SELECT 1 FROM fee_heads WHERE kind = 'opening_balance' AND ledger = 'hostel' AND deleted_at IS NULL)`,
+        );
       for (const r of u.rows.filter((x) => !x.error && x.studentId)) {
         await c.query(
-          `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, opening_balance, created_by, updated_by)
+          // eslint-disable-next-line no-restricted-syntax -- col is one of two fixed column names; values are bound
+          `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, fee_group, student_type, ${col}, created_by, updated_by)
            VALUES (app.current_school_id(), $1, $2, 'general', 'old', $3, app.current_user_id(), app.current_user_id())
-           ON CONFLICT (student_id, academic_year_id) DO UPDATE SET opening_balance = EXCLUDED.opening_balance, updated_at = now(), updated_by = app.current_user_id()`,
+           ON CONFLICT (student_id, academic_year_id) DO UPDATE SET ${col} = EXCLUDED.${col}, updated_at = now(), updated_by = app.current_user_id()`,
           [r.studentId, yearId, r.opening],
         );
         result.applied += 1;
@@ -369,7 +409,7 @@ export class FeeOpeningService {
       action: `fees.opening_upload.${dto.outcome}`,
       entityType: 'fee_opening_uploads',
       entityId: id,
-      after: { note: dto.note, ...(result ? { applied: result.applied } : {}) },
+      after: { note: dto.note, ledger: u.ledger, ...(result ? { applied: result.applied } : {}) },
     });
   }
 
