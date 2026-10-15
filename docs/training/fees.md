@@ -351,6 +351,11 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   and Total due − Total received + Refund (+ Advance) = Balance payable, in words, with the school's
   notes on online payment, cheque bounce charge and late fee. **Fee type** chooses All, Regular
   (school fee) or Hosteller (hostel fee); for a class, pupils with nothing on that fee are left out.
+- **Fee type on the reports** (Fees → Reports centre): every collection, dues and accounts report has
+  *Fee type: All · Regular (school fee) · Hosteller (hostel fee)* (Tally vouchers also *Misc fee*):
+  Day book, Day book (grouped), Mode-wise collection, Head-wise tally, Cheque bounce, Defaulters, Period
+  fee head-wise, Yearly projection, Forecast, Tally vouchers and Report check. School + hostel add up
+  to All. Misc fee dues has no fee-type filter (misc fees are their own).
 - **Fee type on the pupil's fee page**: above the tabs, *All · Regular (school fee) · Hosteller
   (hostel fee)*. Take payment (the fee type starts on the one chosen), Dues, Head and month, Waive
   fee, Receipts, Late fee and the KPI tiles show only that fee; the choice stays as you move between

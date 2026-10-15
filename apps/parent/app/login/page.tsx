@@ -1,13 +1,14 @@
-import { Button, Card } from '@edupro/ui';
+import { Button, Card, CodeLoginForm } from '@edupro/ui';
 import { bff } from '@/lib/bff';
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string; error?: string }>;
+  searchParams: Promise<{ returnTo?: string; error?: string; otpError?: string }>;
 }) {
   const params = await searchParams;
   const returnTo = params.returnTo && params.returnTo.startsWith('/') ? params.returnTo : '/';
+  const codeOffered = await bff.otp.offered();
   return (
     <main
       style={{
@@ -42,6 +43,11 @@ export default async function LoginPage({
         >
           Continue with One Auth
         </a>
+        {codeOffered ? (
+          <div style={{ marginTop: 'var(--sp-5)' }}>
+            <CodeLoginForm returnTo={returnTo} error={params.otpError} />
+          </div>
+        ) : null}
         {bff.env.devBypass ? (
           <form
             method="post"

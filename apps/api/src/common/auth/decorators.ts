@@ -12,3 +12,10 @@ export const AuthenticatedOnly = () => SetMetadata(AUTHENTICATED_ONLY, true);
 
 /** The route works with or without X-School-Id (for example GET /me lists memberships). */
 export const TenantOptional = () => SetMetadata(TENANT_OPTIONAL, true);
+
+export const OTP_EXEMPT = 'edupro:otp-exempt';
+/**
+ * Reachable with a One Auth token before the emailed code is checked (0136): only the routes that send and
+ * check that code. Every other route refuses a One Auth token when a school of the user asks a code.
+ */
+export const OtpExempt = () => SetMetadata(OTP_EXEMPT, true);

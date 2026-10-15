@@ -73,6 +73,7 @@ const PAGES = [
   '/academics/lesson-plans',
   '/attendance/rules',
   '/system/privacy',
+  '/system/sign-in',
   '/fees/masters',
   '/fees/rules',
   '/fees/hostel-calendar',

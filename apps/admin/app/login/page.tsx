@@ -1,16 +1,18 @@
-import { Button, Card } from '@edupro/ui';
+import { Button, Card, CodeLoginForm } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { DEMO_ROLES } from '@/lib/demo-roles';
 import { env } from '@/lib/env';
+import { otp } from '@/lib/otp';
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string; error?: string }>;
+  searchParams: Promise<{ returnTo?: string; error?: string; otpError?: string }>;
 }) {
   const params = await searchParams;
   const t = await getTranslations('login');
   const returnTo = params.returnTo && params.returnTo.startsWith('/') ? params.returnTo : '/';
+  const codeOffered = await otp.offered();
   return (
     <main
       style={{
@@ -43,6 +45,11 @@ export default async function LoginPage({
         >
           {t('continue')}
         </a>
+        {codeOffered ? (
+          <div style={{ marginTop: 'var(--sp-5)' }}>
+            <CodeLoginForm returnTo={returnTo} error={params.otpError} />
+          </div>
+        ) : null}
         {env.devBypass ? (
           <form
             method="post"

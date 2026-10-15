@@ -71,6 +71,12 @@ describe('permission coverage', () => {
       'GpsController.ingest (transport/gps)',
       'HealthController.health (health)',
       'MetricsController.metricsText (metrics)',
+      // sign-in with an emailed code (0136): before any session exists. start answers the same for an unknown
+      // login; verify checks a 6-digit code bound to its challenge (5 tries, 10 minutes, one per 30 s, five in
+      // 15 minutes per user, in the database); offered says only whether any school uses it.
+      'OtpController.offered (auth/otp)',
+      'OtpController.start (auth/otp)',
+      'OtpController.verify (auth/otp)',
       'PaymentsController.ccavenueReturned (payments)',
       'PaymentsController.mock (payments)',
       'PaymentsController.razorpayReturned (payments)',

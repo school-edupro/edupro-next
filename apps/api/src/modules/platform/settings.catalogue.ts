@@ -67,6 +67,20 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Month in which the academic session starts (4 = April)',
     module: 'platform',
   },
+  'auth.login_mode': {
+    schema: z.enum(['oneauth', 'oneauth_otp', 'otp']),
+    default: 'oneauth',
+    description:
+      'How users sign in: One Auth only, One Auth then a code by email, or the emailed code alone (0136)',
+    module: 'platform',
+  },
+  'auth.otp_on_screen': {
+    schema: z.boolean(),
+    default: false,
+    description:
+      'Also show the sign-in code on screen (while emails are being corrected); every code shown is recorded',
+    module: 'platform',
+  },
   'security.session_hours': {
     schema: z.number().int().min(1).max(24),
     default: 12,

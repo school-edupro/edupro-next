@@ -455,6 +455,7 @@ const NAV: Array<{
       { href: '/system/templates', label: 'templates', permission: 'platform.template.view' },
       { href: '/system/audit', label: 'auditLog', permission: 'platform.audit.view' },
       { href: '/system/security', label: 'security', permission: 'platform.security.view' },
+      { href: '/system/sign-in', label: 'signIn', permission: 'platform.settings.view' },
       {
         href: '/system/service-keys',
         label: 'serviceKeys',

@@ -70,6 +70,8 @@ const EnvSchema = z.object({
     .string()
     .min(32)
     .default('dev-impersonation-secret-change-me-0123456789'),
+  // Sign-in with an emailed code (0136): our session token after the code is checked.
+  OTP_JWT_SECRET: z.string().min(32).default('dev-otp-jwt-secret-change-me-0123456789abc'),
   IMPERSONATION_MAX_MINUTES: z.coerce.number().int().min(5).max(240).default(60),
   SECURITY_ALERT_THRESHOLD: z.coerce.number().int().min(1).default(10),
   SECURITY_ALERT_WEBHOOK: z.string().url().optional(),
@@ -138,6 +140,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (env.NODE_ENV === 'production' && env.APPLICANT_JWT_SECRET.startsWith('dev-')) {
     throw new Error('Refusing to start: APPLICANT_JWT_SECRET must be set in production');
+  }
+  if (env.NODE_ENV === 'production' && env.OTP_JWT_SECRET.startsWith('dev-')) {
+    throw new Error('Refusing to start: OTP_JWT_SECRET must be set in production');
   }
   if (env.NODE_ENV === 'production' && env.IMPERSONATION_JWT_SECRET.startsWith('dev-')) {
     throw new Error('Refusing to start: IMPERSONATION_JWT_SECRET must be set in production');

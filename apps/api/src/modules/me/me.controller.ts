@@ -84,7 +84,7 @@ export class MeController {
     @ReqCtx() ctx: RequestContext,
     @Body() body: { method?: string; app?: string; userAgent?: string; ip?: string },
   ) {
-    const method = body?.method === 'dev' ? 'dev' : 'oidc';
+    const method = body?.method === 'dev' ? 'dev' : body?.method === 'otp' ? 'otp' : 'oidc';
     const app = ['admin', 'parent', 'teacher'].includes(String(body?.app))
       ? String(body?.app)
       : 'admin';

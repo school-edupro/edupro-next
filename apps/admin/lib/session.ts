@@ -27,7 +27,7 @@ const COOKIE = 'edupro_session';
 const CONTEXT_COOKIE = 'edupro_ctx';
 const MAX_AGE_SECONDS = 12 * 60 * 60;
 
-function key(): Uint8Array {
+export function key(): Uint8Array {
   const raw = Buffer.from(env.sessionSecret, 'base64');
   if (raw.length >= 32) return new Uint8Array(raw.subarray(0, 32));
   // Fallback for non-base64 secrets: derive 32 bytes deterministically (dev only).

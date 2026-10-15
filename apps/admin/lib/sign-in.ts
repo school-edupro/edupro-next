@@ -1,7 +1,7 @@
 import { env } from '@/lib/env';
 
 /** Tells the API a sign-in happened (for "last sign-in" in the user card); never fails the sign-in. */
-export async function recordSignIn(req: Request, token: string, method: 'oidc' | 'dev') {
+export async function recordSignIn(req: Request, token: string, method: 'oidc' | 'dev' | 'otp') {
   try {
     await fetch(`${env.apiBaseUrl}/api/v1/me/sign-in`, {
       method: 'POST',

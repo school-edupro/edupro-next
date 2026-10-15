@@ -66,8 +66,8 @@ const FILTERS: Partial<
   mode_daywise: ['dates', 'ledger'],
   head_receipts: ['dates', 'ledger', 'class'],
   cheque_bounce: ['dates', 'ledger'],
-  period_headwise: ['months', 'class'],
-  yearly_projection: ['months', 'class'],
+  period_headwise: ['months', 'ledger', 'class'],
+  yearly_projection: ['months', 'ledger', 'class'],
   forecast: ['view', 'ledger', 'class'],
   check: ['dates', 'ledger'],
   misc_dues: ['miscfee', 'class'],
@@ -418,12 +418,12 @@ export async function MisReportView({
           <SelectField
             id="ledger"
             name="ledger"
-            label="Ledger"
+            label="Fee type"
             defaultValue={sp.ledger ?? ''}
             options={[
               { value: '', label: 'All' },
-              { value: 'school', label: 'School' },
-              { value: 'hostel', label: 'Hostel' },
+              { value: 'school', label: 'Regular (school fee)' },
+              { value: 'hostel', label: 'Hosteller (hostel fee)' },
             ]}
           />
         ) : null}

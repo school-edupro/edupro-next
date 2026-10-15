@@ -257,13 +257,13 @@ export default async function FeeReportsPage({
               <SelectField
                 id="ledger"
                 name="ledger"
-                label={r('ledger')}
+                label="Fee type"
                 defaultValue={sp.ledger ?? ''}
                 options={[
                   { value: '', label: r('any') },
-                  { value: 'school', label: 'school' },
-                  { value: 'hostel', label: 'hostel' },
-                  { value: 'misc', label: 'misc' },
+                  { value: 'school', label: 'Regular (school fee)' },
+                  { value: 'hostel', label: 'Hosteller (hostel fee)' },
+                  { value: 'misc', label: 'Misc fee' },
                 ]}
               />
             )}

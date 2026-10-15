@@ -1220,10 +1220,11 @@ export class FeeMisService {
          LEFT JOIN LATERAL (SELECT gu.display_name AS name, gu.mobile FROM student_guardians sg JOIN guardians gu ON gu.id = sg.guardian_id
                              WHERE sg.student_id = s.id AND gu.deleted_at IS NULL ORDER BY (sg.relation = 'father') DESC, sg.is_primary DESC, sg.id LIMIT 1) g ON true
         WHERE s.deleted_at IS NULL AND ($2::bigint IS NULL OR cs.class_id = $2)
-          AND EXISTS (SELECT 1 FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1)
+          AND EXISTS (SELECT 1 FROM fee_demands d WHERE d.student_id = s.id AND d.academic_year_id = $1
+                        AND ($3::text IS NULL OR d.ledger::text = $3))
         ORDER BY k.display_order, cs.name, s.display_name
         LIMIT 5000`,
-      [yearId, q.classId ?? null],
+      [yearId, q.classId ?? null, q.ledger ?? null],
     );
     const ids = pupils.rows.map((p) => p.id!);
     const dem = await c.query<{
@@ -1245,8 +1246,9 @@ export class FeeMisService {
               sum(d.gross)::float AS gross, sum(d.discount)::float AS discount, sum(d.net)::float AS net, sum(d.paid)::float AS paid
          FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id JOIN fee_heads h ON h.id = d.head_id
         WHERE d.academic_year_id = $1 AND d.student_id = ANY($2::bigint[]) AND d.status <> 'cancelled' AND fp.sequence BETWEEN $3 AND $4
+          AND ($5::text IS NULL OR d.ledger::text = $5)
         GROUP BY 1, 2`,
-      [yearId, ids, first, last],
+      [yearId, ids, first, last, q.ledger ?? null],
     );
     const extra = await c.query<{
       student_id: string;
@@ -1257,13 +1259,17 @@ export class FeeMisService {
     }>(
       `SELECT s.id::text AS student_id,
               COALESCE((SELECT sum(l.amount) FROM fee_late_fee_postings l JOIN fee_payments p ON p.id = l.payment_id
-                         WHERE p.student_id = s.id AND p.academic_year_id = $1 AND p.status IN ('posted', 'partly_refunded', 'refunded')), 0)::float AS late,
-              COALESCE((SELECT sum(a.charge) FROM fee_adjustments a WHERE a.student_id = s.id AND a.academic_year_id = $1 AND a.kind = 'bounce' AND a.status = 'approved'), 0)::float AS bounce,
-              COALESCE((SELECT sum(a.amount) FROM fee_adjustments a WHERE a.student_id = s.id AND a.academic_year_id = $1 AND a.kind = 'waiver' AND a.status = 'approved' AND a.undone_at IS NULL), 0)::float AS waived,
+                         WHERE p.student_id = s.id AND p.academic_year_id = $1 AND p.status IN ('posted', 'partly_refunded', 'refunded')
+                           AND ($3::text IS NULL OR l.ledger::text = $3)), 0)::float AS late,
+              COALESCE((SELECT sum(a.charge) FROM fee_adjustments a WHERE a.student_id = s.id AND a.academic_year_id = $1 AND a.kind = 'bounce' AND a.status = 'approved'
+                           AND ($3::text IS NULL OR (SELECT pp.ledger::text FROM fee_payments pp WHERE pp.id = a.payment_id) = $3)), 0)::float AS bounce,
+              COALESCE((SELECT sum(a.amount) FROM fee_adjustments a WHERE a.student_id = s.id AND a.academic_year_id = $1 AND a.kind = 'waiver' AND a.status = 'approved' AND a.undone_at IS NULL
+                           AND ($3::text IS NULL OR (SELECT dd.ledger::text FROM fee_demands dd WHERE dd.id = a.demand_id) = $3)), 0)::float AS waived,
               COALESCE((SELECT sum(r.amount) FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id
-                         WHERE COALESCE(r.student_id, p.student_id) = s.id AND COALESCE(r.academic_year_id, p.academic_year_id) = $1 AND r.status = 'paid'), 0)::float AS refunded
+                         WHERE COALESCE(r.student_id, p.student_id) = s.id AND COALESCE(r.academic_year_id, p.academic_year_id) = $1 AND r.status = 'paid'
+                           AND ($3::text IS NULL OR COALESCE(p.ledger::text, 'school') = $3)), 0)::float AS refunded
          FROM students s WHERE s.id = ANY($2::bigint[])`,
-      [yearId, ids],
+      [yearId, ids, q.ledger ?? null],
     );
     const more = new Map(extra.rows.map((x) => [x.student_id, x]));
     const cell = new Map<string, Map<string, (typeof dem.rows)[number]>>();
@@ -1381,6 +1387,11 @@ export class FeeMisService {
       filters: [
         span,
         q.classId ? 'One class' : 'All classes',
+        q.ledger === 'hostel'
+          ? 'Hostel fee'
+          : q.ledger === 'school'
+            ? 'Regular (school) fee'
+            : 'All fee',
         `${String(pupils.rows.length)} pupil(s)`,
       ],
       note:

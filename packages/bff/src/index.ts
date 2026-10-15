@@ -6,6 +6,9 @@ import { EncryptJWT, jwtDecrypt } from 'jose';
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import * as client from 'openid-client';
+import { createOtp, type OtpApp } from './otp';
+
+export { createOtp, type OtpApp, type OtpPending, type OtpSessionOut } from './otp';
 
 export interface BffOptions {
   /** Cookie prefix, for example "edupro_parent". */
@@ -100,18 +103,19 @@ export function createBff(options: BffOptions) {
   }
 
   /** Tells the API a sign-in happened (for "last sign-in"); never blocks or fails the sign-in. */
-  const recordSignIn = async (req: NextRequest, token: string, method: 'oidc' | 'dev') => {
+  const appName: OtpApp = options.cookie.includes('teacher')
+    ? 'teacher'
+    : options.cookie.includes('parent')
+      ? 'parent'
+      : 'admin';
+  const recordSignIn = async (req: NextRequest, token: string, method: 'oidc' | 'dev' | 'otp') => {
     try {
       await fetch(`${env.apiBaseUrl}/api/v1/me/sign-in`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           method,
-          app: options.cookie.includes('teacher')
-            ? 'teacher'
-            : options.cookie.includes('parent')
-              ? 'parent'
-              : 'admin',
+          app: appName,
           userAgent: req.headers.get('user-agent') ?? undefined,
           ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined,
         }),
@@ -155,6 +159,16 @@ export function createBff(options: BffOptions) {
       store.delete(SESSION_COOKIE);
     },
   };
+
+  /** Sign-in with a code by email (0136): the code alone, or a code after One Auth. */
+  const otp = createOtp({
+    cookie: options.cookie,
+    app: appName,
+    apiBaseUrl: () => env.apiBaseUrl,
+    sessionKey: key,
+    writeSession: (s) => session.write(s),
+    recordSignIn: (req, token) => recordSignIn(req, token, 'otp'),
+  });
 
   let configPromise: Promise<client.Configuration> | undefined;
   const oidcConfig = () => {
@@ -246,6 +260,9 @@ export function createBff(options: BffOptions) {
         });
         const claims = tokens.claims();
         if (!claims?.sub) throw new Error('no subject');
+        // a school that asks a code after One Auth: the session waits for the code (/login/otp)
+        const held = await otp.afterOneAuth(req, tokens.access_token, safeReturn(pending.returnTo));
+        if (held) return held;
         const expiresIn = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600;
         await session.write({
           sub: claims.sub,
@@ -342,5 +359,5 @@ export function createBff(options: BffOptions) {
       return NextResponse.next({ request: { headers } });
     };
 
-  return { env, session, api, handlers, middleware, cookies: { session: SESSION_COOKIE } };
+  return { env, session, api, handlers, otp, middleware, cookies: { session: SESSION_COOKIE } };
 }

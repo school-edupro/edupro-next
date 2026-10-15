@@ -14,6 +14,7 @@ training sessions.
 | Communication | [communication.md](communication.md) | Office and principal (60 min)                |
 | Engagement    | [engagement.md](engagement.md)       | Office, class teachers (60 min)              |
 | Fees          | [fees.md](fees.md)                   | Accounts (2 sessions, 90 min each)           |
+| Sign-in       | [sign-in.md](sign-in.md)             | School admin (15 min)                        |
 | Exams         | [exams.md](exams.md)                 | Examination cell, teachers (90 min)          |
 | Transport     | [transport.md](transport.md)         | Transport office and accounts (60 min)       |
 

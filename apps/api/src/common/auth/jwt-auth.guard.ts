@@ -10,8 +10,9 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { randomUUID } from 'node:crypto';
 import { ENV, type Env } from '../../config/env';
 import { IdentityService } from '../../modules/identity/identity.service';
+import { OtpService } from '../../modules/identity/otp.service';
 import type { AuthenticatedUser, ContextualRequest } from '../http/request-context';
-import { IS_PUBLIC } from './decorators';
+import { IS_PUBLIC, OTP_EXEMPT } from './decorators';
 
 /**
  * First guard in the chain. Verifies the One Auth JWT (or the development bypass token), resolves the user
@@ -20,10 +21,13 @@ import { IS_PUBLIC } from './decorators';
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
+  /** The sign-in rule of a user (0136), kept a minute so each request does not read it again. */
+  private readonly otpRule = new Map<string, { required: boolean; until: number }>();
 
   constructor(
     private readonly reflector: Reflector,
     private readonly identity: IdentityService,
+    private readonly otp: OtpService,
     @Inject(ENV) private readonly env: Env,
   ) {
     this.jwks = createRemoteJWKSet(new URL(env.ONEAUTH_JWKS_URL));
@@ -54,6 +58,7 @@ export class JwtAuthGuard implements CanActivate {
     let dev = false;
     let mobile: string | null = null;
     let impersonation: AuthenticatedUser['impersonation'];
+    let oneAuth = false;
 
     if (token.startsWith('dev:')) {
       if (!this.env.AUTH_DEV_BYPASS || this.env.NODE_ENV === 'production') {
@@ -92,6 +97,17 @@ export class JwtAuthGuard implements CanActivate {
         expiresAt: session.expiresAt.toISOString(),
       };
       if (!req.headers['x-school-id']) req.headers['x-school-id'] = session.schoolId;
+    } else if (token.startsWith('otp.')) {
+      // Session token given after the emailed code was checked (0136): the code alone, or One Auth and the code.
+      const payload = await this.verifySigned(
+        token.slice('otp.'.length),
+        this.env.OTP_JWT_SECRET,
+        'edupro-otp',
+      );
+      sub = typeof payload.sub === 'string' ? payload.sub : '';
+      const amr = Array.isArray(payload.amr) ? (payload.amr as string[]) : [];
+      mfa = amr.includes('mfa');
+      authTime = typeof payload.iat === 'number' ? payload.iat : undefined;
     } else if (token.startsWith('compat.')) {
       // Session token issued by the compatibility handshake (S4-05): HS256, short-lived, carries the school.
       const payload = await this.verifyCompat(token.slice('compat.'.length));
@@ -108,6 +124,7 @@ export class JwtAuthGuard implements CanActivate {
         (payload as { mobile?: unknown; phone_number?: unknown }).mobile ??
         (payload as { phone_number?: unknown }).phone_number;
       mobile = typeof claimMobile === 'string' ? claimMobile : null;
+      oneAuth = true;
     }
     if (!sub)
       throw new UnauthorizedException({ type: 'unauthenticated', detail: 'Token has no subject' });
@@ -118,6 +135,21 @@ export class JwtAuthGuard implements CanActivate {
         type: 'user-not-provisioned',
         detail: 'This identity has no EduPro account. Ask your school administrator for access.',
       });
+    }
+
+    // A school that asks the emailed code takes a One Auth token only on the routes that send and check it.
+    if (
+      oneAuth &&
+      !this.reflector.getAllAndOverride<boolean>(OTP_EXEMPT, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      if (await this.otpRequired(resolved.id))
+        throw new UnauthorizedException({
+          type: 'otp-required',
+          detail: 'Enter the code sent to your email to finish signing in',
+        });
     }
 
     const user: AuthenticatedUser = { ...resolved, mfa, dev };
@@ -131,6 +163,15 @@ export class JwtAuthGuard implements CanActivate {
       userAgent: req.headers['user-agent'],
     };
     return true;
+  }
+
+  private async otpRequired(userId: string): Promise<boolean> {
+    const hit = this.otpRule.get(userId);
+    if (hit && hit.until > Date.now()) return hit.required;
+    const required = (await this.otp.policy(userId)).otpRequired;
+    this.otpRule.set(userId, { required, until: Date.now() + 60_000 });
+    if (this.otpRule.size > 5000) this.otpRule.clear();
+    return required;
   }
 
   private async verifyCompat(token: string): Promise<JWTPayload> {

@@ -36,7 +36,7 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ['@edupro/ui'],
+  transpilePackages: ['@edupro/ui', '@edupro/bff'],
   output: 'standalone',
   // the help centre reads content/help/*.md at request time (Sprint 22)
   outputFileTracingIncludes: {

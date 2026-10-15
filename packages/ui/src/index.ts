@@ -57,3 +57,4 @@ export {
   type LessonFilters,
   type LessonDetailData,
 } from './components/LessonReport';
+export { CodeLoginForm, OtpCodeForm } from './components/OtpSignIn';
