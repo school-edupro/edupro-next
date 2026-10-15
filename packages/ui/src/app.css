@@ -6420,6 +6420,106 @@ a.ep-tabs__tab {
   gap: var(--sp-2) var(--sp-5);
   margin-bottom: var(--sp-4);
 }
+/* fee bill (annual layout): letterhead with logo, two-column particulars, ruled tables */
+.ep-bill__letterhead {
+  display: grid;
+  grid-template-columns: 6rem 1fr 6rem;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+  margin-bottom: var(--sp-3);
+}
+.ep-bill__logo {
+  max-width: 6rem;
+  max-height: 6rem;
+}
+.ep-bill__school {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  color: var(--text-link);
+}
+.ep-bill__line {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-bill__title {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-bold);
+  color: var(--text-heading);
+}
+.ep-bill__meta {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content 1fr;
+  gap: var(--sp-1) var(--sp-4);
+  margin: var(--sp-3) 0;
+}
+.ep-bill__meta dt {
+  font-weight: var(--fw-bold);
+  color: var(--text-heading);
+}
+.ep-bill__meta dd {
+  margin: 0;
+}
+.ep-bill__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-small);
+}
+.ep-bill__table thead .ep-bill__num {
+  white-space: normal;
+}
+.ep-bill__table .ep-bill__nowrap {
+  white-space: nowrap;
+}
+.ep-bill__table th,
+.ep-bill__table td {
+  border: 1px solid var(--border-strong);
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  vertical-align: top;
+}
+.ep-bill__table thead th {
+  background: var(--surface-subtle);
+  font-size: var(--fs-caption);
+  white-space: normal;
+}
+.ep-bill__table .ep-bill__num {
+  text-align: right;
+  white-space: nowrap;
+}
+.ep-bill__section th {
+  text-decoration: underline;
+}
+.ep-bill__caption {
+  margin: var(--sp-4) 0 0;
+  font-weight: var(--fw-bold);
+  color: var(--text-heading);
+}
+.ep-bill__h {
+  margin: var(--sp-5) 0 0;
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-bold);
+  color: var(--text-heading);
+}
+.ep-bill__notes {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+@media (max-width: 40rem) {
+  .ep-bill__meta {
+    grid-template-columns: max-content 1fr;
+  }
+  .ep-bill__letterhead {
+    grid-template-columns: 1fr;
+  }
+}
 .ep-print-sheet__sign {
   display: flex;
   justify-content: space-between;

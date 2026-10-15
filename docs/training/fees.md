@@ -342,6 +342,19 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   with **Pay online** for a parent who cannot pay from home: choose the instalments, enter the payer's
   name, mobile and email, and the gateway opens on the school's screen. The receipt posts by itself.
 - **Fee bill**: opens for the full year; "Bill for" narrows it to what is due up to today or a date.
+  Since 2026-10-15 it prints as the annual fee bill: letterhead (logo, address, phone, email,
+  website), Fee Bill No. (school prefix / session / admission no., the same on every print), the
+  pupil's particulars (date of birth, father, mother, route / stop), the heads of the session "till
+  March …" with Optional fees and Hostel fees in their own sections, any discount, the grand total,
+  the instalment schedule of each fee (Q1… with last date, payable, paid, balance, late fee), the fee
+  received (receipt, payment type, cheque / transaction no., date, amount, late fee, bounce charge),
+  and Total due − Total received + Refund (+ Advance) = Balance payable, in words, with the school's
+  notes on online payment, cheque bounce charge and late fee. **Fee type** chooses All, Regular
+  (school fee) or Hosteller (hostel fee); for a class, pupils with nothing on that fee are left out.
+- **Fee type on the pupil's fee page**: above the tabs, *All · Regular (school fee) · Hosteller
+  (hostel fee)*. Take payment (the fee type starts on the one chosen), Dues, Head and month, Waive
+  fee, Receipts, Late fee and the KPI tiles show only that fee; the choice stays as you move between
+  tabs, and the Fee bill button opens the bill for it.
 
 - **Receipt cancellation and cheque bounce** (ledger → Receipts) also go through Fee setup → Approval
   levels and are approved from My approvals; the receipt is cancelled, or bounced with its charge, on

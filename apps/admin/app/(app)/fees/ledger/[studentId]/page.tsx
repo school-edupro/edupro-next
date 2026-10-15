@@ -129,6 +129,7 @@ export default async function FeeLedgerPage({
     detail?: string;
     asOf?: string;
     tab?: string;
+    fee?: string;
   }>;
 }) {
   const { studentId } = await params;
@@ -138,6 +139,26 @@ export default async function FeeLedgerPage({
   const ledger = await apiFetch<FeeLedger>(
     `/fees/students/${studentId}/ledger${sp.asOf ? `?asOf=${sp.asOf}` : ''}`,
   );
+  // All fee, Regular (school fee) or Hosteller (hostel fee): every tab shows the fee chosen
+  const fee: 'all' | 'school' | 'hostel' =
+    sp.fee === 'school' || sp.fee === 'hostel' ? sp.fee : 'all';
+  const onFee = (l: string) => fee === 'all' || l === fee;
+  const inst = ledger.instalments.filter((i) => onFee(i.ledger));
+  const pays = ledger.payments.filter((p) => onFee(p.ledger));
+  const add = (f: (i: FeeLedgerInstalment) => string) =>
+    inst.reduce((a, i) => a + Number(f(i)), 0).toFixed(2);
+  const totals =
+    fee === 'all'
+      ? ledger.totals
+      : {
+          net: add((i) => i.net),
+          paid: add((i) => i.paid),
+          balance: add((i) => i.balance),
+          lateFeeOutstanding: add((i) => i.lateFee.outstanding),
+          payable: (
+            Number(add((i) => i.balance)) + Number(add((i) => i.lateFee.outstanding))
+          ).toFixed(2),
+        };
   const yearOpen = ledger.year.status === 'active';
   const canPost = can('fees.receipt.post') && yearOpen;
   const tab: Tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : canPost ? 'pay' : 'dues';
@@ -243,9 +264,7 @@ export default async function FeeLedgerPage({
       : { available: '0', open: false };
   // charges already paid, which can be adjusted in fee through approval
   const paidLate =
-    tab === 'latefee'
-      ? ledger.payments.filter((p) => p.status === 'posted' && Number(p.lateFee) > 0)
-      : [];
+    tab === 'latefee' ? pays.filter((p) => p.status === 'posted' && Number(p.lateFee) > 0) : [];
   const paidCharges =
     tab === 'latefee' && can('fees.adjustment.request')
       ? await apiFetch<{ data: Array<{ demandId: string; label: string; paid: string }> }>(
@@ -254,7 +273,8 @@ export default async function FeeLedgerPage({
           .then((r) => r.data)
           .catch(() => [])
       : [];
-  const link = (k: Tab) => `/fees/ledger/${studentId}?tab=${k}${sp.asOf ? `&asOf=${sp.asOf}` : ''}`;
+  const link = (k: Tab, f: string = fee) =>
+    `/fees/ledger/${studentId}?tab=${k}${sp.asOf ? `&asOf=${sp.asOf}` : ''}${f !== 'all' ? `&fee=${f}` : ''}`;
   const diff = ledger.lastRun?.diff ?? null;
   const canAsk = can('fees.adjustment.request') && yearOpen;
   return (
@@ -306,7 +326,7 @@ export default async function FeeLedgerPage({
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <a
               className="ep-btn ep-btn--ghost ep-btn--sm"
-              href={`/fees/bills?studentId=${studentId}`}
+              href={`/fees/bills?studentId=${studentId}${fee !== 'all' ? `&ledger=${fee}` : ''}`}
             >
               Fee bill
             </a>
@@ -341,13 +361,13 @@ export default async function FeeLedgerPage({
       >
         <KpiTile
           label="Payable today"
-          value={money(ledger.totals.payable)}
+          value={money(totals.payable)}
           hint={`As on ${dmy(ledger.asOf)}`}
         />
-        <KpiTile label="Fee balance" value={money(ledger.totals.balance)} />
-        <KpiTile label="Late fee to collect" value={money(ledger.totals.lateFeeOutstanding)} />
-        <KpiTile label="Paid this year" value={money(ledger.totals.paid)} />
-        <KpiTile label="Fee of the year" value={money(ledger.totals.net)} />
+        <KpiTile label="Fee balance" value={money(totals.balance)} />
+        <KpiTile label="Late fee to collect" value={money(totals.lateFeeOutstanding)} />
+        <KpiTile label="Paid this year" value={money(totals.paid)} />
+        <KpiTile label="Fee of the year" value={money(totals.net)} />
       </div>
       <Notice params={sp} />
       <nav
@@ -358,10 +378,33 @@ export default async function FeeLedgerPage({
         {TABS.filter(([k]) => k !== 'pay' || canPost).map(([k, label]) => (
           <a key={k} href={link(k)} aria-current={k === tab ? 'page' : undefined}>
             {label}
-            {k === 'receipts' ? ` (${ledger.payments.length})` : ''}
+            {k === 'receipts' ? ` (${pays.length})` : ''}
           </a>
         ))}
       </nav>
+      <nav
+        aria-label="Fee type"
+        className="ep-tabs-links ep-noprint"
+        style={{ marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}
+      >
+        {(
+          [
+            ['all', 'All'],
+            ['school', 'Regular (school fee)'],
+            ['hostel', 'Hosteller (hostel fee)'],
+          ] as const
+        ).map(([f, label]) => (
+          <a key={f} href={link(tab, f)} aria-current={f === fee ? 'page' : undefined}>
+            {label}
+          </a>
+        ))}
+      </nav>
+      {fee === 'hostel' && inst.length === 0 ? (
+        <p className="ep-alert ep-alert--info" role="status">
+          No hostel fee this session: the pupil is{' '}
+          {ledger.fee.hosteller ? 'a hosteller with no hostel lines yet' : 'a day scholar'}.
+        </p>
+      ) : null}
 
       {tab === 'pay' && canPost ? (
         <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
@@ -372,7 +415,7 @@ export default async function FeeLedgerPage({
               modes={modes}
               banks={options.banks}
               accounts={options.accounts}
-              payable={ledger.totals.payable}
+              payable={totals.payable}
               payableByLedger={
                 ledger.instalments.some((i) => i.ledger === 'hostel')
                   ? {
@@ -384,10 +427,11 @@ export default async function FeeLedgerPage({
               today={today}
               hasHostel={ledger.instalments.some((i) => i.ledger === 'hostel')}
               canSkipLateFee={can('fees.late_fee.manage')}
+              defaultLedger={fee === 'all' ? undefined : fee}
             />
           </Card>
           <Card title="What is due">
-            <Dues instalments={ledger.instalments.filter((i) => i.status !== 'paid')} />
+            <Dues instalments={inst.filter((i) => i.status !== 'paid')} />
           </Card>
         </div>
       ) : null}
@@ -405,6 +449,7 @@ export default async function FeeLedgerPage({
             }}
           >
             <input type="hidden" name="tab" value="dues" />
+            {fee !== 'all' ? <input type="hidden" name="fee" value={fee} /> : null}
             <InputField
               id="asOf"
               name="asOf"
@@ -416,7 +461,7 @@ export default async function FeeLedgerPage({
               Show
             </Button>
           </form>
-          <Dues instalments={ledger.instalments} />
+          <Dues instalments={inst} />
           {canAsk ? (
             <p style={{ marginTop: 'var(--sp-4)' }}>
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href={link('waive')}>
@@ -451,7 +496,7 @@ export default async function FeeLedgerPage({
               ) : null}
               <WaiverGrid
                 studentId={studentId}
-                lines={demandRows}
+                lines={demandRows.filter((r) => onFee(r.ledger))}
                 action={requestFeeWaivers}
                 waiting={waitingWaivers.map((w) => w.demandId ?? '')}
               />
@@ -536,7 +581,7 @@ export default async function FeeLedgerPage({
 
       {tab === 'matrix' ? (
         <Card title="Fee head by month">
-          <Matrix rows={allRows} />
+          <Matrix rows={allRows.filter((r) => onFee(r.ledger))} />
         </Card>
       ) : null}
 
@@ -617,11 +662,11 @@ export default async function FeeLedgerPage({
               )}
             </details>
           ) : null}
-          {ledger.payments.length === 0 ? (
+          {pays.length === 0 ? (
             <p className="ep-field__help">No receipt yet.</p>
           ) : (
             <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
-              {ledger.payments.map((p) => (
+              {pays.map((p) => (
                 <ReceiptRow
                   waiting={waitingOn(p.id)}
                   bounceCharge={ledger.bounceCharge}
@@ -666,7 +711,7 @@ export default async function FeeLedgerPage({
               A second request for the same instalment is not taken until this is decided.
             </div>
           ) : null}
-          {ledger.overrides.length === 0 ? (
+          {ledger.overrides.filter((o) => onFee(o.ledger)).length === 0 ? (
             <p>No late fee has been fixed for this pupil.</p>
           ) : (
             <div className="ep-table-wrap">
@@ -686,25 +731,30 @@ export default async function FeeLedgerPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {ledger.overrides.map((o) => (
-                    <tr key={o.id}>
-                      <td>{o.periodName}</td>
-                      <td style={{ textAlign: 'right' }}>{money(o.amount)}</td>
-                      <td>{o.reason}</td>
-                      <td>{o.createdBy ?? '—'}</td>
-                      <td>
-                        {can('fees.late_fee.manage') && yearOpen ? (
-                          <form action={revokeLateFeeOverride}>
-                            <input type="hidden" name="studentId" value={studentId} />
-                            <input type="hidden" name="overrideId" value={o.id} />
-                            <Button type="submit" variant="ghost" size="sm">
-                              Remove
-                            </Button>
-                          </form>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
+                  {ledger.overrides
+                    .filter((o) => onFee(o.ledger))
+                    .map((o) => (
+                      <tr key={o.id}>
+                        <td>
+                          {o.periodName}
+                          {o.ledger === 'hostel' ? ' (hostel)' : ''}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{money(o.amount)}</td>
+                        <td>{o.reason}</td>
+                        <td>{o.createdBy ?? '—'}</td>
+                        <td>
+                          {can('fees.late_fee.manage') && yearOpen ? (
+                            <form action={revokeLateFeeOverride}>
+                              <input type="hidden" name="studentId" value={studentId} />
+                              <input type="hidden" name="overrideId" value={o.id} />
+                              <Button type="submit" variant="ghost" size="sm">
+                                Remove
+                              </Button>
+                            </form>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -718,7 +768,7 @@ export default async function FeeLedgerPage({
                   id="ovPeriod"
                   name="periodId"
                   label="Instalment"
-                  options={ledger.instalments
+                  options={inst
                     .filter((i) => i.lateFee.periodId)
                     .map((i) => ({
                       value: i.lateFee.periodId!,

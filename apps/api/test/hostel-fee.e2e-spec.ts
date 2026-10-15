@@ -411,4 +411,70 @@ describe('hostel fee (e2e)', () => {
     expect(q2.dueOn).toBe('2026-07-20');
     expect(q2.lateFee.amount).toBe('500.00');
   });
+  it('the fee bill: all, school or hostel fee, with schedule, receipts and a balance that adds up', async () => {
+    type Bill = {
+      billNo: string;
+      ledger: string;
+      heads: Array<{ ledger: string; head: string; amount: string }>;
+      discount: string;
+      schedules: Array<{
+        ledger: string;
+        payPlan: string;
+        rows: Array<{ no: string; payable: string; paid: string; balance: string }>;
+      }>;
+      receipts: Array<{
+        receiptNo: string;
+        amount: string;
+        lateFee: string;
+        finalAmount: string;
+        counted: boolean;
+      }>;
+      summary: { due: string; received: string; refund: string; advance: string; balance: string };
+      instalments: unknown[];
+    };
+    const bill = async (ledger: string) => {
+      const r = await inject({
+        method: 'GET',
+        url: `/fees/students/${pupils.whole!}/bill?ledger=${ledger}&upTo=2027-03-31`,
+        headers: h(accountant),
+      });
+      expect(r.statusCode).toBe(200);
+      return r.json() as Bill;
+    };
+    const all = await bill('all');
+    expect(all.billNo).toBe(`${all.billNo.split('/')[0]}/${all.billNo.split('/')[1]}/HST-whole`);
+    expect(all.schedules.map((x) => x.ledger)).toEqual(['school', 'hostel']);
+    expect(all.heads.map((x) => x.ledger)).toEqual(['school', 'hostel']);
+    const hostel = await bill('hostel');
+    expect(hostel.schedules.map((x) => x.ledger)).toEqual(['hostel']);
+    expect(hostel.heads.every((x) => x.ledger === 'hostel')).toBe(true);
+    // the 4 000 part payment was taken on hostel: it shows on the hostel bill, not on the school bill
+    expect(hostel.receipts.map((x) => x.amount)).toEqual(['4000.00']);
+    const school = await bill('school');
+    expect(school.receipts).toHaveLength(0);
+    expect(school.schedules.map((x) => x.ledger)).toEqual(['school']);
+    for (const b of [all, hostel, school]) {
+      const s = b.summary;
+      // due - received + refund + advance = balance payable
+      expect(Number(s.due) - Number(s.received) + Number(s.refund) + Number(s.advance)).toBeCloseTo(
+        Number(s.balance),
+        2,
+      );
+      const heads = b.heads.reduce((a, x) => a + Number(x.amount), 0) - Number(b.discount);
+      const payable = b.schedules.flatMap((x) => x.rows).reduce((a, r) => a + Number(r.payable), 0);
+      expect(heads).toBeCloseTo(payable, 2);
+    }
+    // the class's bills keep to the fee type: a day scholar of the class has no hostel bill
+    const cls = await inject({
+      method: 'GET',
+      url: `/fees/bills?classId=${classId}&upTo=2027-03-31&ledger=hostel`,
+      headers: h(accountant),
+    });
+    expect(cls.statusCode).toBe(200);
+    const ids = cls.json().data as Array<{
+      student: { admissionNo: string };
+      schedules: Array<{ ledger: string }>;
+    }>;
+    expect(ids.every((b) => b.schedules.every((x) => x.ledger === 'hostel'))).toBe(true);
+  });
 });

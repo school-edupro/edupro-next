@@ -56,6 +56,8 @@ export interface DemandRow {
   status: string;
   dueOn: string;
   source: string;
+  /** school or hostel */
+  ledger: string;
 }
 
 export interface DemandSummary {
@@ -299,7 +301,7 @@ export class FeeDemandsService {
       const r = await c.query<DemandRow>(
         // eslint-disable-next-line no-restricted-syntax -- where is built from fixed fragments; values are bound parameters
         `SELECT d.id::text, d.period_id::text AS "periodId", p.name AS "periodName", p.sequence, p.instalment, d.head_id::text AS "headId", h.code AS "headCode", h.name AS "headName",
-                d.gross::text, d.discount::text, d.net::text, d.paid::text, d.status::text, d.due_on::text AS "dueOn", d.source
+                d.gross::text, d.discount::text, d.net::text, d.paid::text, d.status::text, d.due_on::text AS "dueOn", d.source, d.ledger::text AS ledger
            FROM fee_demands d JOIN fee_periods p ON p.id = d.period_id JOIN fee_heads h ON h.id = d.head_id
           WHERE ${where} ORDER BY p.sequence, h.sort_order, h.code`,
         params,

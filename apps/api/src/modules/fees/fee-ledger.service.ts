@@ -71,6 +71,8 @@ export interface LedgerPayment {
   settled: boolean;
   /** Sprint 16: the day the cheque/DD cleared (bank statement match), when known. */
   clearedOn: string | null;
+  /** school or hostel: the fee the receipt was taken for */
+  ledger: string;
 }
 
 export interface LedgerRefund {
@@ -87,6 +89,8 @@ export interface LedgerRefund {
 
 export interface LedgerOverride {
   id: string;
+  /** school or hostel */
+  ledger: string;
   periodId: string;
   periodName: string;
   amount: string;
@@ -477,7 +481,7 @@ export class FeeLedgerService {
         [studentId, yearId],
       );
       const overrides = await c.query<LedgerOverride>(
-        `SELECT o.id::text, o.period_id::text AS "periodId", p.name AS "periodName", o.amount::text, o.reason, u.display_name AS "createdBy", o.created_at::text AS "createdAt"
+        `SELECT o.id::text, o.ledger::text AS ledger, o.period_id::text AS "periodId", p.name AS "periodName", o.amount::text, o.reason, u.display_name AS "createdBy", o.created_at::text AS "createdAt"
            FROM fee_late_fee_overrides o JOIN fee_periods p ON p.id = o.period_id LEFT JOIN users u ON u.id = o.created_by
           WHERE o.student_id = $1 AND o.academic_year_id = $2 AND o.revoked_at IS NULL ORDER BY p.sequence`,
         [studentId, yearId],
@@ -647,8 +651,9 @@ export class FeeLedgerService {
       bank_name: string | null;
       settled: boolean;
       cleared_on: string | null;
+      ledger: string;
     }>(
-      `SELECT p.id::text, p.receipt_no, p.received_on::text, p.amount::text, COALESCE(p.mode_label, p.mode) AS mode, p.mode AS mode_kind, p.reference, p.remarks,
+      `SELECT p.id::text, p.ledger::text AS ledger, p.receipt_no, p.received_on::text, p.amount::text, COALESCE(p.mode_label, p.mode) AS mode, p.mode AS mode_kind, p.reference, p.remarks,
               (SELECT b.name || ' · …' || right(a.account_no, 4) FROM school_bank_accounts a JOIN banks b ON b.id = a.bank_id WHERE a.id = p.bank_account_id) AS deposit_account, u.display_name AS received_by, p.intent_id::text, p.cleared_on::text,
               COALESCE((SELECT sum(a.amount) FROM fee_payment_allocations a WHERE a.payment_id = p.id), 0)::text AS allocated,
               p.late_fee::text, p.refunded::text, p.status, p.instrument_no, p.bank_name, (p.settlement_line_id IS NOT NULL) AS settled
@@ -683,6 +688,7 @@ export class FeeLedgerService {
       bankName: x.bank_name,
       settled: x.settled,
       clearedOn: x.cleared_on,
+      ledger: x.ledger,
     }));
   }
 

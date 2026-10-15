@@ -33,6 +33,7 @@ export function PostReceiptForm({
   today,
   hasHostel,
   canSkipLateFee,
+  defaultLedger,
 }: {
   action: (fd: FormData) => Promise<void>;
   studentId: string;
@@ -45,9 +46,11 @@ export function PostReceiptForm({
   today: string;
   hasHostel: boolean;
   canSkipLateFee: boolean;
+  /** The fee type chosen first (the page's Regular / Hosteller filter). */
+  defaultLedger?: 'school' | 'hostel';
 }) {
   const [value, setValue] = useState(modes[0] ? optionValue(modes[0]) : 'cash');
-  const [ledger, setLedger] = useState('school');
+  const [ledger, setLedger] = useState<string>(defaultLedger ?? 'school');
   const due = payableByLedger
     ? payableByLedger[ledger === 'hostel' ? 'hostel' : 'school']
     : payable;

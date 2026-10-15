@@ -903,6 +903,8 @@ export interface FeeDemandRow {
   status: string;
   dueOn: string;
   source: string;
+  /** school or hostel */
+  ledger: string;
 }
 export interface FeeDemandSummary {
   rows: FeeDemandRow[];
@@ -1465,6 +1467,8 @@ export interface FeeLedgerPayment {
   instrumentNo: string | null;
   bankName: string | null;
   settled: boolean;
+  /** school or hostel: the fee the receipt was taken for */
+  ledger: string;
 }
 export interface FeeLedgerRefund {
   id: string;
@@ -1526,6 +1530,7 @@ export interface FeeLedger {
   refunds: FeeLedgerRefund[];
   overrides: Array<{
     id: string;
+    ledger: string;
     periodId: string;
     periodName: string;
     amount: string;

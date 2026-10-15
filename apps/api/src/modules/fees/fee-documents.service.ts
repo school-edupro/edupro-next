@@ -20,17 +20,84 @@ export interface BillInstalment {
   balance: string;
   lateFee: string;
 }
+export interface BillStudent {
+  id: string;
+  name: string;
+  admissionNo: string;
+  section: string | null;
+  guardian: string | null;
+}
 export interface FeeBill {
   school: { name: string; address: string };
+  /** Contact lines and the logo of the bill's letterhead. */
+  letterhead: {
+    phone: string | null;
+    email: string | null;
+    website: string | null;
+    logoFileId: string | null;
+  };
+  /** <school prefix>/<session>/<admission no>: the same every time the bill is printed. */
+  billNo: string;
   year: string;
+  /** The session's first and last months, for "April 2026 to March 2027". */
+  session: { from: string; to: string };
   billDate: string;
+  generatedAt: string;
+  /** all = school and hostel fee; school or hostel = that fee only */
+  ledger: 'all' | 'school' | 'hostel';
   student: {
     id: string;
     name: string;
     admissionNo: string;
     section: string | null;
     guardian: string | null;
+    dob: string | null;
+    father: string | null;
+    mother: string | null;
+    route: string | null;
   };
+  /** What the bill covers, head by head (print name), up to the last month in scope. */
+  heads: Array<{ ledger: string; head: string; optional: boolean; amount: string }>;
+  discount: string;
+  headsThrough: string | null;
+  /** The instalments of each fee, paid or not, with what is still to pay. */
+  schedules: Array<{
+    ledger: string;
+    payPlan: string;
+    rows: Array<{
+      no: string;
+      months: string;
+      dueOn: string;
+      payable: string;
+      paid: string;
+      balance: string;
+      lateFee: string;
+    }>;
+  }>;
+  /** Receipts of the session for the fee(s) on the bill. */
+  receipts: Array<{
+    receiptNo: string | null;
+    mode: string;
+    instrumentNo: string | null;
+    receivedOn: string;
+    amount: string;
+    lateFee: string;
+    bounceCharge: string;
+    status: string;
+    counted: boolean;
+    finalAmount: string;
+  }>;
+  summary: {
+    due: string;
+    lateFee: string;
+    received: string;
+    refund: string;
+    advance: string;
+    balance: string;
+    balanceWords: string;
+  };
+  notes: { bounceCharge: string; lateFeeMode: string; latePerDay: string | null };
+  /** The instalments with something to pay, head by head (the earlier bill), kept for older callers. */
   instalments: BillInstalment[];
   totals: { fee: string; lateFee: string; payable: string; payableWords: string };
 }
@@ -63,7 +130,7 @@ export interface FnfBill {
   school: { name: string; address: string };
   year: string;
   billDate: string;
-  student: FeeBill['student'];
+  student: BillStudent;
   lastMonth: { sequence: number; name: string };
   /** Charged up to the last month and still unpaid. */
   dues: Array<{ head: string; period: string; balance: string }>;
@@ -311,10 +378,21 @@ export class FeeDocumentsService {
   }
 
   // ---- fee bill ---------------------------------------------------------------------------------
-  /** What is payable now: every instalment with a balance that is due up to the date (default: visible to the family). */
-  async bill(ctx: RequestContext, studentId: string, upTo?: string): Promise<FeeBill> {
+  /**
+   * The fee bill of a pupil: the heads of the session (or up to a date), the instalment schedule with
+   * what is paid and what is left, the receipts, and the balance. `ledger` keeps it to school or hostel
+   * fee. Without `upTo`, the instalments to pay are those open to the family.
+   */
+  async bill(
+    ctx: RequestContext,
+    studentId: string,
+    upTo?: string,
+    ledgerOf: 'all' | 'school' | 'hostel' = 'all',
+  ): Promise<FeeBill> {
     const yearId = this.year(ctx);
     const ledger: Ledger = await this.ledger.ledger(ctx, studentId);
+    const onBill = (l: string) => ledgerOf === 'all' || l === ledgerOf;
+    const inScope = (dueOn: string) => !upTo || dueOn <= upTo;
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const head = await this.head(c, studentId, yearId);
       const lines = await c.query<{
@@ -334,8 +412,66 @@ export class FeeDocumentsService {
           ORDER BY d.due_on, min(h.sort_order)`,
         [studentId, yearId],
       );
+      const heads = await c.query<{
+        ledger: string;
+        head: string;
+        optional: boolean;
+        gross: string;
+        discount: string;
+      }>(
+        `SELECT d.ledger::text AS ledger, COALESCE(NULLIF(h.print_group, ''), h.name) AS head, bool_and(h.is_optional) AS optional,
+                sum(d.gross)::text AS gross, sum(d.discount)::text AS discount
+           FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id
+          WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.status IN ('pending', 'partial', 'paid')
+            AND ($3::date IS NULL OR d.due_on <= $3::date) AND ($4::text = 'all' OR d.ledger::text = $4)
+          GROUP BY d.ledger, COALESCE(NULLIF(h.print_group, ''), h.name)
+          ORDER BY (d.ledger <> 'school'), bool_and(h.is_optional), min(h.sort_order)`,
+        [studentId, yearId, upTo ?? null, ledgerOf],
+      );
+      const extra = await c.query<{
+        dob: string | null;
+        father: string | null;
+        mother: string | null;
+        route: string | null;
+        phone: string | null;
+        email: string | null;
+        website: string | null;
+        logo: string | null;
+        prefix: string;
+        year_from: string;
+        year_to: string;
+        through: string | null;
+        late_per_day: string | null;
+        now: string;
+      }>(
+        `SELECT s.dob::text,
+                (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                  WHERE sg.student_id = s.id AND sg.relation = 'father' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS father,
+                (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                  WHERE sg.student_id = s.id AND sg.relation = 'mother' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS mother,
+                (SELECT concat_ws(' / ', r.name, COALESCE(a.stop_name, st.name)) FROM student_route_assignments a JOIN transport_routes r ON r.id = a.route_id
+                   LEFT JOIN transport_stops st ON st.id = a.stop_id
+                  WHERE a.student_id = s.id AND a.academic_year_id = $2 AND (a.valid_to IS NULL OR a.valid_to >= CURRENT_DATE)
+                  ORDER BY a.valid_from DESC NULLS LAST, a.id DESC LIMIT 1) AS route,
+                NULLIF(sc.contact->>'phone', '') AS phone, NULLIF(COALESCE(NULLIF(sc.contact->>'accountsEmail', ''), sc.contact->>'email'), '') AS email,
+                NULLIF(sc.contact->>'website', '') AS website, NULLIF(sc.branding->>'logoFileId', '') AS logo,
+                COALESCE(NULLIF(sc.branding->>'prefix', ''), sc.code) AS prefix,
+                to_char(y.start_date, 'FMMonth YYYY') AS year_from, to_char(y.end_date, 'FMMonth YYYY') AS year_to,
+                (SELECT to_char(make_date(fp.year, fp.month, 1), 'FMMonth YYYY') FROM fee_periods fp
+                  WHERE fp.academic_year_id = $2 AND ($3::date IS NULL OR make_date(fp.year, fp.month, 1) <= $3::date)
+                  ORDER BY fp.sequence DESC LIMIT 1) AS through,
+                COALESCE((SELECT cc.late_per_day FROM fee_class_charges cc JOIN class_sections cs ON cs.class_id = cc.class_id JOIN enrolments e ON e.class_section_id = cs.id
+                           WHERE e.student_id = s.id AND e.academic_year_id = $2 AND cc.academic_year_id = $2 ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1),
+                         NULLIF(app.setting('fees.late_fee_per_day') #>> '{}', '')::numeric)::text AS late_per_day,
+                to_char(now() AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI:SS') AS now
+           FROM students s JOIN schools sc ON sc.id = app.current_school_id() JOIN academic_years y ON y.id = $2
+          WHERE s.id = $1`,
+        [studentId, yearId, upTo ?? null],
+      );
+      const x = extra.rows[0]!;
       const due = ledger.instalments.filter(
         (i) =>
+          onBill(i.ledger) &&
           Number(i.balance) + Number(i.lateFee.outstanding) > 0 &&
           (upTo ? i.dueOn <= upTo : i.visible),
       );
@@ -358,10 +494,101 @@ export class FeeDocumentsService {
       }));
       const fee = instalments.reduce((a, i) => a + Number(i.balance), 0);
       const late = instalments.reduce((a, i) => a + Number(i.lateFee), 0);
+      // the schedule: every instalment of the fee(s) in scope, numbered as the plan names them
+      const plans: Record<string, string> = {
+        school: ledger.fee.payPlan,
+        hostel: ledger.fee.hostelPayPlan,
+      };
+      const prefix: Record<string, string> = { quarterly: 'Q', half_yearly: 'H', yearly: 'Annual' };
+      const schedules = (['school', 'hostel'] as const)
+        .filter((l) => onBill(l))
+        .map((l) => {
+          const rows = ledger.instalments.filter((i) => i.ledger === l && inScope(i.dueOn));
+          const p = plans[l] ?? 'monthly';
+          return {
+            ledger: l,
+            payPlan: p,
+            rows: rows.map((i, n) => ({
+              no: p === 'yearly' ? 'Annual' : prefix[p] ? `${prefix[p]}${n + 1}` : `${n + 1}`,
+              months: i.label,
+              dueOn: i.dueOn,
+              payable: i.net,
+              paid: i.paid,
+              balance: i.balance,
+              lateFee: i.lateFee.outstanding,
+            })),
+          };
+        })
+        .filter((s) => s.rows.length > 0);
+      const shown = ledger.payments.filter(
+        (p) => onBill(p.ledger) && (p.status as string) !== 'reversed',
+      );
+      const counted = (p: (typeof shown)[number]) => p.status !== 'bounced';
+      const receipts = shown
+        .slice()
+        .reverse()
+        .map((p) => ({
+          receiptNo: p.receiptNo,
+          mode: p.mode,
+          instrumentNo: p.instrumentNo ?? p.reference,
+          receivedOn: p.receivedOn,
+          amount: fmt(Number(p.amount) - Number(p.lateFee)),
+          lateFee: p.lateFee,
+          bounceCharge: p.status === 'bounced' ? ledger.bounceCharge : '0.00',
+          status: p.status,
+          counted: counted(p),
+          finalAmount: counted(p) ? p.amount : '0.00',
+        }));
+      const scheduled = schedules.flatMap((s) => s.rows);
+      const net = scheduled.reduce((a, r) => a + Number(r.payable), 0);
+      const balance = scheduled.reduce((a, r) => a + Number(r.balance), 0);
+      const lateOpen = scheduled.reduce((a, r) => a + Number(r.lateFee), 0);
+      const latePosted = shown.filter(counted).reduce((a, p) => a + Number(p.lateFee), 0);
+      const received = shown.filter(counted).reduce((a, p) => a + Number(p.amount), 0);
+      const refund = shown.reduce((a, p) => a + Number(p.refunded), 0);
+      const payable = balance + lateOpen;
+      // what was taken and is not on the instalments in scope: advance, or paid ahead of the date
+      const advance = Math.max(received - refund - (net - balance) - latePosted, 0);
       return {
         ...head,
+        letterhead: { phone: x.phone, email: x.email, website: x.website, logoFileId: x.logo },
+        billNo: `${x.prefix}/${ledger.year.code}/${head.student.admissionNo}`,
         year: ledger.year.code,
+        session: { from: x.year_from, to: x.year_to },
         billDate: ledger.asOf,
+        generatedAt: x.now,
+        ledger: ledgerOf,
+        student: {
+          ...head.student,
+          dob: x.dob,
+          father: x.father ?? ledger.student.father,
+          mother: x.mother,
+          route: x.route,
+        },
+        heads: heads.rows.map((h) => ({
+          ledger: h.ledger,
+          head: h.head,
+          optional: h.optional,
+          amount: h.gross,
+        })),
+        discount: fmt(heads.rows.reduce((a, h) => a + Number(h.discount), 0)),
+        headsThrough: x.through,
+        schedules,
+        receipts,
+        summary: {
+          due: fmt(net + latePosted + lateOpen),
+          lateFee: fmt(latePosted + lateOpen),
+          received: fmt(received),
+          refund: fmt(refund),
+          advance: fmt(advance),
+          balance: fmt(payable),
+          balanceWords: amountInWords(fmt(Math.max(payable, 0))),
+        },
+        notes: {
+          bounceCharge: ledger.bounceCharge,
+          lateFeeMode: ledger.lateFeeMode,
+          latePerDay: x.late_per_day,
+        },
         instalments,
         totals: {
           fee: fmt(fee),
@@ -376,7 +603,12 @@ export class FeeDocumentsService {
   /** The bills of a class or a section, for printing in one go. Pupils who owe nothing are left out. */
   async bills(
     ctx: RequestContext,
-    q: { classId?: string; sectionId?: string; upTo?: string },
+    q: {
+      classId?: string;
+      sectionId?: string;
+      upTo?: string;
+      ledger?: 'all' | 'school' | 'hostel';
+    },
   ): Promise<FeeBill[]> {
     const yearId = this.year(ctx);
     if (!q.classId && !q.sectionId)
@@ -394,7 +626,7 @@ export class FeeDocumentsService {
     });
     const out: FeeBill[] = [];
     for (const id of ids) {
-      const b = await this.bill(ctx, id, q.upTo);
+      const b = await this.bill(ctx, id, q.upTo, q.ledger ?? 'all');
       if (b.instalments.length > 0) out.push(b);
     }
     return out;

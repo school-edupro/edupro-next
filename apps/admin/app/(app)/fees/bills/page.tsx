@@ -1,30 +1,11 @@
 import { Button, InputField, PageHeader } from '@edupro/ui';
 import { PrintButton } from '@/components/PrintButton';
-import { PupilMeta, SheetHead, dmy, rupees } from '@/components/fees/sheets';
+import { FeeBillSheet, type FeeBillView } from '@/components/fees/FeeBillSheet';
+import { dmy } from '@/components/fees/sheets';
 import { ApiError, apiFetch } from '@/lib/api';
 
-interface Bill {
-  school: { name: string; address: string };
-  year: string;
-  billDate: string;
-  student: {
-    id: string;
-    name: string;
-    admissionNo: string;
-    section: string | null;
-    guardian: string | null;
-  };
-  instalments: Array<{
-    label: string;
-    dueOn: string;
-    challanOn: string | null;
-    ledger: string;
-    lines: Array<{ head: string; fee: string; discount: string; paid: string; balance: string }>;
-    balance: string;
-    lateFee: string;
-  }>;
-  totals: { fee: string; lateFee: string; payable: string; payableWords: string };
-}
+type Bill = FeeBillView;
+const LEDGERS = ['all', 'school', 'hostel'] as const;
 
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 
@@ -38,6 +19,7 @@ export default async function FeeBillsPage({
     upTo?: string;
     scope?: string;
     view?: string;
+    ledger?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -46,6 +28,8 @@ export default async function FeeBillsPage({
   const picked = sp.upTo && /^\d{4}-\d{2}-\d{2}$/.test(sp.upTo) ? sp.upTo : today();
   const upTo = scope === 'year' ? '9999-12-31' : scope === 'today' ? today() : picked;
   const parentView = sp.view === 'parent' && Boolean(sp.studentId);
+  // all fee, regular (school) fee only, or hostel fee only
+  const ledger = LEDGERS.find((l) => l === sp.ledger) ?? 'all';
   let bills: Bill[] = [];
   let problem: string | null = null;
   try {
@@ -53,12 +37,15 @@ export default async function FeeBillsPage({
     if (sp.studentId)
       bills = [
         await apiFetch<Bill>(
-          `/fees/students/${sp.studentId}/bill${parentView ? '' : `?upTo=${upTo}`}`,
+          `/fees/students/${sp.studentId}/bill?ledger=${ledger}${parentView ? '' : `&upTo=${upTo}`}`,
         ),
       ];
     else if (sp.classId)
-      bills = (await apiFetch<{ data: Bill[] }>(`/fees/bills?classId=${sp.classId}&upTo=${upTo}`))
-        .data;
+      bills = (
+        await apiFetch<{ data: Bill[] }>(
+          `/fees/bills?classId=${sp.classId}&upTo=${upTo}&ledger=${ledger}`,
+        )
+      ).data;
   } catch (error) {
     problem =
       error instanceof ApiError && typeof error.problem.detail === 'string'
@@ -66,13 +53,15 @@ export default async function FeeBillsPage({
         : 'The bills could not be made.';
   }
   const asked = Boolean(sp.studentId || sp.classId);
+  // one pupil's bill prints even when all is paid (it shows the receipts); a class's only those who owe
+  const printable = bills.filter((b) => b.schedules.length > 0 || b.receipts.length > 0);
   return (
     <>
       <div className="ep-noprint">
         <PageHeader
           kicker="Fees"
           title="Fee bills for print"
-          description="What is payable up to the date, head by head, with the late fee. Pupils who owe nothing are left out. Bills are opened from Fees → Demands (a class) or from a pupil’s ledger."
+          description="The annual fee bill: heads of the session, the instalment schedule with what is paid and left, the receipts and the balance. Choose all fee, regular (school) fee or hostel fee. For a class, pupils who owe nothing are left out. Bills are opened from Fees → Demands (a class) or from a pupil’s fee page."
         />
         <form
           method="get"
@@ -90,6 +79,15 @@ export default async function FeeBillsPage({
           </a>
           {sp.classId ? <input type="hidden" name="classId" value={sp.classId} /> : null}
           {sp.studentId ? <input type="hidden" name="studentId" value={sp.studentId} /> : null}
+          <label className="ep-field" htmlFor="ledger">
+            <span className="ep-field__label">Fee type</span>
+            <select className="ep-select" id="ledger" name="ledger" defaultValue={ledger}>
+              <option value="all">All (school and hostel)</option>
+              <option value="school">Regular (school fee)</option>
+              <option value="hostel">Hosteller (hostel fee)</option>
+            </select>
+          </label>
+          {parentView ? <input type="hidden" name="view" value="parent" /> : null}
           {!parentView ? (
             <>
               <label className="ep-field" htmlFor="scope">
@@ -107,15 +105,13 @@ export default async function FeeBillsPage({
                 type="date"
                 defaultValue={picked}
               />
-              <Button type="submit" variant="secondary">
-                Show
-              </Button>
             </>
           ) : null}
-          {bills.some((b) => b.instalments.length > 0) ? (
-            <PrintButton
-              label={`Print ${bills.filter((b) => b.instalments.length > 0).length} bill(s)`}
-            />
+          <Button type="submit" variant="secondary">
+            Show
+          </Button>
+          {printable.length > 0 ? (
+            <PrintButton label={`Print ${printable.length} bill(s)`} />
           ) : null}
         </form>
         {problem ? (
@@ -134,7 +130,7 @@ export default async function FeeBillsPage({
             parent app shows them today. Receipts are on the pupil’s ledger.
           </p>
         ) : null}
-        {asked && !problem && bills.every((b) => b.instalments.length === 0) ? (
+        {asked && !problem && printable.length === 0 ? (
           <p className="ep-field__help">
             {parentView
               ? 'Nothing is payable for the parent today.'
@@ -144,92 +140,9 @@ export default async function FeeBillsPage({
           </p>
         ) : null}
       </div>
-      {bills
-        .filter((b) => b.instalments.length > 0)
-        .map((b) => (
-          <section
-            key={b.student.id}
-            className="ep-print-sheet"
-            aria-label={`Fee bill of ${b.student.name}`}
-            style={{ marginTop: 'var(--sp-5)' }}
-          >
-            <SheetHead school={b.school} title={`Fee bill · Session ${b.year}`} />
-            <PupilMeta student={b.student} extra={[['Bill date', dmy(b.billDate)]]} />
-            <table className="ep-table ep-table--dense">
-              <caption className="ep-sr-only">Fee payable by {b.student.name}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Instalment</th>
-                  <th scope="col">Last date</th>
-                  <th scope="col">Particulars</th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Fee
-                  </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Discount
-                  </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Paid
-                  </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Payable (₹)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {b.instalments.flatMap((i) => [
-                  ...i.lines.map((l, n) => (
-                    <tr key={`${i.dueOn}-${i.ledger}-${l.head}`}>
-                      <td>
-                        {n === 0 ? `${i.label}${i.ledger === 'hostel' ? ' (hostel)' : ''}` : ''}
-                      </td>
-                      <td>
-                        {n === 0 ? dmy(i.dueOn) : ''}
-                        {n === 0 && i.challanOn ? (
-                          <div className="ep-field__help">Challan: {dmy(i.challanOn)}</div>
-                        ) : null}
-                      </td>
-                      <td>{l.head}</td>
-                      <td style={{ textAlign: 'right' }}>{rupees(l.fee)}</td>
-                      <td style={{ textAlign: 'right' }}>{rupees(l.discount)}</td>
-                      <td style={{ textAlign: 'right' }}>{rupees(l.paid)}</td>
-                      <td style={{ textAlign: 'right' }}>{rupees(l.balance)}</td>
-                    </tr>
-                  )),
-                  Number(i.lateFee) > 0 ? (
-                    <tr key={`${i.dueOn}-${i.ledger}-late`}>
-                      <td />
-                      <td />
-                      <td>Late fee</td>
-                      <td />
-                      <td />
-                      <td />
-                      <td style={{ textAlign: 'right' }}>{rupees(i.lateFee)}</td>
-                    </tr>
-                  ) : null,
-                ])}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row" colSpan={6}>
-                    Total payable
-                  </th>
-                  <th style={{ textAlign: 'right' }}>{rupees(b.totals.payable)}</th>
-                </tr>
-              </tfoot>
-            </table>
-            <p style={{ marginTop: 'var(--sp-3)' }}>
-              Amount in words: <strong>{b.totals.payableWords}</strong>
-            </p>
-            <p className="ep-field__help">
-              Late fee is as on the bill date and may change with the date of payment.
-            </p>
-            <div className="ep-print-sheet__sign">
-              <span>Parent’s signature</span>
-              <span>Accounts office</span>
-            </div>
-          </section>
-        ))}
+      {printable.map((b) => (
+        <FeeBillSheet key={b.student.id} b={b} />
+      ))}
     </>
   );
 }

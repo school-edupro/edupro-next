@@ -473,7 +473,7 @@ export class FeesController {
   @ApiOperation({ summary: 'The fee bill of one pupil: what is payable now, head by head' })
   @RequirePermission(FEES.ledgerView)
   studentBill(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: BillQueryDto) {
-    return this.papers.bill(ctx, id, q.upTo);
+    return this.papers.bill(ctx, id, q.upTo, q.ledger);
   }
 
   @Get('bills')

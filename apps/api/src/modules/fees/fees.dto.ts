@@ -679,7 +679,9 @@ export const DepositSlipLimitSchema = z.object({ limit: z.number().int().min(0).
 export class DepositSlipLimitDto extends createZodDto(DepositSlipLimitSchema) {}
 
 // ---- Printed fee papers: bill, tax certificate, provisional bill of a withdrawal ----------------------
-export const BillQuerySchema = z.object({ upTo: DateSchema.optional() });
+/** all = school and hostel fee; school (regular) or hostel = that fee only */
+export const BillLedger = z.enum(['all', 'school', 'hostel']).default('all');
+export const BillQuerySchema = z.object({ upTo: DateSchema.optional(), ledger: BillLedger });
 export class BillQueryDto extends createZodDto(BillQuerySchema) {}
 
 export const ClassBillsQuerySchema = z
@@ -687,6 +689,7 @@ export const ClassBillsQuerySchema = z
     classId: IdSchema.optional(),
     sectionId: IdSchema.optional(),
     upTo: DateSchema.optional(),
+    ledger: BillLedger,
   })
   .refine((v) => v.classId || v.sectionId, { message: 'choose a class or a section' });
 export class ClassBillsQueryDto extends createZodDto(ClassBillsQuerySchema) {}
