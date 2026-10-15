@@ -32,6 +32,7 @@ export default async function OtpPage({
           secondFactor={pending.purpose === 'second_factor'}
           error={sp.error}
           resent={sp.resent === '1'}
+          allowRemember={pending.rememberAllowed === true}
         />
       </Card>
     </main>

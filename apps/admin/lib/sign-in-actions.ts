@@ -27,6 +27,7 @@ export async function saveSignIn(fd: FormData) {
       ['auth.otp_whatsapp_template', id('waTemplate')],
       ['auth.otp_sms_template', id('smsTemplate')],
       ['auth.otp_channels', channels],
+      ['auth.otp_remember', fd.get('remember') === 'on'],
     ] as const)
       await apiFetch(`/platform/settings/${key}`, {
         method: 'PUT',

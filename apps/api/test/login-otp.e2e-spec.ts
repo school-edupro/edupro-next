@@ -145,6 +145,8 @@ describe('sign-in with an emailed code (e2e)', () => {
 
   it('a right code gives a session; "remember" skips the code next time on that browser', async () => {
     expect((await setting('auth.otp_on_screen', true)).statusCode).toBe(200);
+    // the school allows "remember this device" (off by default: the code every time)
+    expect((await setting('auth.otp_remember', true)).statusCode).toBe(200);
     const t = await oneAuthToken(clerk.sub);
     // codes are one per 30 seconds: let the earlier one age
     await withMigrator((c) =>
@@ -203,6 +205,22 @@ describe('sign-in with an emailed code (e2e)', () => {
       json: { app: 'teacher', deviceToken: session.deviceToken },
     });
     expect(teacherApp.json().session).toBeUndefined();
+    // the school switches remembering off: the same browser is asked the code again
+    expect((await setting('auth.otp_remember', false)).statusCode).toBe(200);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE auth_otp_challenges SET created_at = created_at - interval '1 hour' WHERE user_id = $1`,
+        [clerk.id],
+      ),
+    );
+    const again2 = await inject({
+      method: 'POST',
+      url: '/auth/otp/second-factor/start',
+      headers: { authorization: `Bearer ${t}` },
+      json: { app: 'admin', deviceToken: session.deviceToken },
+    });
+    expect(again2.json().session).toBeUndefined();
+    expect(again2.json()).toMatchObject({ rememberAllowed: false });
   });
 
   it('the code alone: email or mobile, the same answer for an unknown login, five wrong tries lock it', async () => {

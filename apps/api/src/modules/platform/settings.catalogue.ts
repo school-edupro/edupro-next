@@ -81,6 +81,12 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Also show the sign-in code on screen (while emails are being corrected); every code shown is recorded',
     module: 'platform',
   },
+  'auth.otp_remember': {
+    schema: z.boolean(),
+    default: false,
+    description: 'Allow "remember this device" (30 days without the code); off = the code at every sign-in',
+    module: 'platform',
+  },
   'auth.otp_channels': {
     schema: z.array(z.enum(['email', 'whatsapp', 'sms'])).min(1),
     default: ['email', 'whatsapp', 'sms'],

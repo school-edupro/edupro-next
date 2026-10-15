@@ -75,6 +75,7 @@ export default async function SignInSettingsPage({
   const val = (k: string) => settings.find((s) => s.key === k)?.value;
   const mode = String(val('auth.login_mode') ?? 'oneauth');
   const onScreen = val('auth.otp_on_screen') === true;
+  const remember = val('auth.otp_remember') === true;
   const smsTemplate = String(val('auth.otp_sms_template') ?? '');
   const ticked = Array.isArray(val('auth.otp_channels'))
     ? (val('auth.otp_channels') as string[])
@@ -122,6 +123,21 @@ export default async function SignInSettingsPage({
                   For the rollout, while emails are being corrected. Anyone at the sign-in screen
                   can then sign in as the user, so the email no longer protects the account: switch
                   it off once the emails below are fixed. Every code shown is listed at the bottom.
+                </span>
+              </span>
+            </label>
+            <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-start' }}>
+              <input
+                type="checkbox"
+                name="remember"
+                defaultChecked={remember}
+                disabled={!canEdit}
+              />
+              <span>
+                <strong>Allow “Remember this device” for 30 days</strong>
+                <span className="ep-field__help" style={{ display: 'block' }}>
+                  Off (the default): the code is asked at every sign-in, whether by admission no.,
+                  mobile or email, and devices remembered earlier no longer skip it.
                 </span>
               </span>
             </label>

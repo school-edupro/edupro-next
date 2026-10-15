@@ -15,6 +15,8 @@ export interface OtpPending {
   sentTo: string | null;
   /** Shown on screen when the school allows it (the rollout while emails are corrected). */
   screenCode?: string;
+  /** The school lets this browser be remembered; else no "remember" box and the code every time. */
+  rememberAllowed?: boolean;
   /** The email or mobile typed, to send a new code. */
   login?: string;
   /** One Auth token held until the code is given (second factor). */
@@ -163,6 +165,7 @@ export function createOtp(o: OtpOptions) {
         challengeId: String(r.json.challengeId),
         sentTo: (r.json.sentTo as string | null) ?? null,
         screenCode: r.json.screenCode as string | undefined,
+        rememberAllowed: Boolean(r.json.rememberAllowed),
         oneAuthToken,
         returnTo: safe(returnTo),
       });
@@ -192,6 +195,7 @@ export function createOtp(o: OtpOptions) {
           challengeId: String(r.json.challengeId),
           sentTo: (r.json.sentTo as string | null) ?? null,
           screenCode: r.json.screenCode as string | undefined,
+          rememberAllowed: Boolean(r.json.rememberAllowed),
           login,
           returnTo,
         });
@@ -238,6 +242,7 @@ export function createOtp(o: OtpOptions) {
           challengeId: String(r.json.challengeId),
           sentTo: (r.json.sentTo as string | null) ?? null,
           screenCode: r.json.screenCode as string | undefined,
+          rememberAllowed: Boolean(r.json.rememberAllowed),
         });
         return to(req, '/login/otp?resent=1');
       },

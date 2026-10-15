@@ -25,6 +25,8 @@ export interface OtpStarted {
   session?: OtpSession;
   /** One Auth alone is enough for this user (no school asks a code). */
   notRequired?: boolean;
+  /** The school lets this browser be remembered (System -> Sign-in); else the code is asked every time. */
+  rememberAllowed?: boolean;
 }
 export interface OtpSession {
   accessToken: string;
@@ -108,15 +110,18 @@ export class OtpService {
         otp_only: boolean;
         on_screen: boolean;
         school_id: string | null;
-      }>(`SELECT otp_required, otp_only, on_screen, school_id::text FROM app.login_policy($1)`, [
-        userId,
-      ]);
+        remember: boolean;
+      }>(
+        `SELECT otp_required, otp_only, on_screen, school_id::text, remember FROM app.login_policy($1)`,
+        [userId],
+      );
       const p = r.rows[0];
       return {
         otpRequired: p?.otp_required ?? false,
         otpOnly: p?.otp_only ?? false,
         onScreen: p?.on_screen ?? false,
         schoolId: p?.school_id ?? null,
+        remember: p?.remember ?? false,
       };
     });
   }
@@ -166,6 +171,7 @@ export class OtpService {
     app: OtpApp,
     onScreen: boolean,
     meta: { ip?: string; userAgent?: string; requestId: string },
+    rememberAllowed = false,
   ): Promise<OtpStarted> {
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const email = validEmail(user.email) ? user.email : null;
@@ -206,6 +212,7 @@ export class OtpService {
     return {
       challengeId: id,
       sentTo: sent.length ? sent.join(' · ') : null,
+      rememberAllowed,
       ...(onScreen ? { screenCode: code } : {}),
     };
   }
@@ -280,7 +287,8 @@ export class OtpService {
       const ticked = (
         await c.query<{ v: string[] | null }>(`SELECT app.setting('auth.otp_channels') AS v`)
       ).rows[0]?.v ?? ['email', 'whatsapp', 'sms'];
-      const on = (ch: string) => !Array.isArray(ticked) || ticked.length === 0 || ticked.includes(ch);
+      const on = (ch: string) =>
+        !Array.isArray(ticked) || ticked.length === 0 || ticked.includes(ch);
       if (!on('email')) email = null;
       if (!on('whatsapp') && !on('sms')) mobile = null;
       if (email) {
@@ -373,7 +381,7 @@ export class OtpService {
     if (!found) return blind();
     const p = await this.policy(found.user_id);
     if (!p.otpOnly) return blind();
-    if (await this.deviceRemembered(found.user_id, app, deviceToken))
+    if (p.remember && (await this.deviceRemembered(found.user_id, app, deviceToken)))
       return { session: await this.session(found.sub, found.display_name, 'login', app) };
     return this.issue(
       {
@@ -387,6 +395,7 @@ export class OtpService {
       app,
       p.onScreen,
       meta,
+      p.remember,
     );
   }
 
@@ -399,7 +408,7 @@ export class OtpService {
     const p = await this.policy(ctx.user.id);
     if (!p.otpRequired) return { notRequired: true };
     const u = await this.user(ctx.user.id);
-    if (await this.deviceRemembered(ctx.user.id, app, deviceToken))
+    if (p.remember && (await this.deviceRemembered(ctx.user.id, app, deviceToken)))
       return { session: await this.session(u.sub, u.displayName, 'second_factor', app) };
     return this.issue(
       { id: ctx.user.id, email: u.email, mobile: u.mobile, displayName: u.displayName },
@@ -412,6 +421,7 @@ export class OtpService {
         userAgent: ctx.userAgent,
         requestId: ctx.requestId,
       },
+      p.remember,
     );
   }
 
@@ -469,7 +479,8 @@ export class OtpService {
     const u = await this.user(owner);
     const app = r.app ?? 'admin';
     const s: OtpSession = await this.session(u.sub, u.displayName, purpose, app);
-    if (remember) {
+    // the school decides whether a browser may be remembered (off: the code at every sign-in)
+    if (remember && (await this.policy(owner)).remember) {
       const deviceToken = randomBytes(32).toString('base64url');
       await this.db.global((c) =>
         c.query(`SELECT app.otp_trust_device($1, $2, $3, $4, $5)`, [

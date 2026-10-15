@@ -53,7 +53,10 @@ export function OtpCodeForm({
   secondFactor,
   error,
   resent,
+  allowRemember = false,
 }: {
+  /** The school lets this browser be remembered for 30 days (System -> Sign-in). */
+  allowRemember?: boolean;
   sentTo: string | null;
   screenCode?: string;
   /** After One Auth (two steps) rather than the code alone. */
@@ -120,10 +123,12 @@ export function OtpCodeForm({
             style={{ fontSize: 'var(--fs-h4)', letterSpacing: '0.3em' }}
           />
         </div>
-        <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-          <input type="checkbox" name="remember" />
-          Remember this device for 30 days (not on a shared computer)
-        </label>
+        {allowRemember ? (
+          <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+            <input type="checkbox" name="remember" />
+            Remember this device for 30 days (not on a shared computer)
+          </label>
+        ) : null}
         <Button type="submit">Verify and sign in</Button>
       </form>
       <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
