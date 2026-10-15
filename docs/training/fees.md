@@ -648,10 +648,17 @@ and hostel fee are always paid apart.
 - *Own hostel pay plan*: one pupil can pay hostel monthly while the hostel goes by quarter.
 All of these go for approval (Fee setup → Approval levels).
 
-**Hostel calendar** (Fee setup → Hostel calendar). *Same as school*: hostel instalments use the class
-calendar's dates and late fee. *Own hostel calendar*: a pay plan for hostel (for example quarterly), a
-last date for the first month of each instalment, and late fee by slabs, per day, or none. Unpaid hostel
-bills move to new dates as soon as it is saved. Enter hostel amounts per month in the class fee
+**Hostel calendar** (Fee setup → Hostel calendar). *Same as school*: hostel instalments use each
+class's calendar (dates, late fee, Show, Fee pay) and nothing else on the page applies. *Own hostel
+calendar*: a pay plan for hostel (for example quarterly) and late fee by slabs, per day, or none; the
+months grid is kept like the class calendar: start date, last date, late fee and slabs (or rate per day),
+challan date, Fee pay and Show. The *Instalment* column shows which months go together (Apr – Jun,
+then "with Apr"); only the first month of an instalment counts, the grey rows serve pupils on an own
+monthly hostel plan. An empty last date takes the class calendar's date of that month. The ↓ copies the
+first month down the column (dates a month later each row). Saving checks the dates as the class
+calendar does: slab dates after the last date and in order, the start date not after the last date,
+dates near the session, a date and an amount for each slab, and a rate when late fee is per day. Unpaid
+hostel bills move to new dates as soon as it is saved. Enter hostel amounts per month in the class fee
 structure; the pay plan groups the months into instalments.
 
 **Paying.** At the counter choose *Fee type: Hostel fee*; the amount shows what is open on hostel only,

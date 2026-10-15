@@ -341,6 +341,31 @@ export class FeeLedgerService {
         [studentId, yearId],
       );
       const ruleOf = new Map(classRules.rows.map((r) => [r.period_id, r]));
+      // under the hostel's own calendar, hostel instalments take these from the hostel months instead (0135)
+      const hostelRules = await c.query<{
+        period_id: string;
+        start_on: string | null;
+        challan_on: string | null;
+        fee_pay: boolean;
+        show: boolean;
+      }>(
+        `SELECT hr.period_id::text, hr.start_on::text, hr.challan_on::text, hr.fee_pay, hr.show
+           FROM fee_hostel_period_rules hr JOIN fee_periods fp ON fp.id = hr.period_id
+           JOIN fee_hostel_calendars hc ON hc.academic_year_id = fp.academic_year_id AND hc.mode = 'own'
+          WHERE fp.academic_year_id = $1`,
+        [yearId],
+      );
+      const hostelOwn =
+        (
+          await c.query(
+            `SELECT 1 FROM fee_hostel_calendars WHERE academic_year_id = $1 AND mode = 'own'`,
+            [yearId],
+          )
+        ).rowCount === 1;
+      const hostelRuleOf = new Map(hostelRules.rows.map((r) => [r.period_id, r]));
+      const hostelStep = { monthly: 1, quarterly: 3, half_yearly: 6, yearly: 12 }[
+        st.rows[0].hostel_pay_plan
+      ];
       const groups = await c.query<{
         due_on: string;
         ledger: string;
@@ -384,7 +409,17 @@ export class FeeLedgerService {
           periods.rows.find((p) => p.due_on === g.due_on) ??
           first;
         // the rule of the instalment's first month speaks for the instalment
-        const rule = first ? ruleOf.get(first.id) : undefined;
+        // a hostel instalment of the own hostel calendar: the hostel month that starts the instalment
+        const hostelStart =
+          g.ledger === 'hostel' && hostelOwn && first
+            ? bySeq.get(Math.floor((first.sequence - 1) / hostelStep) * hostelStep + 1)
+            : undefined;
+        const rule =
+          hostelOwn && g.ledger === 'hostel'
+            ? hostelStart && hostelRuleOf.get(hostelStart.id)
+            : first
+              ? ruleOf.get(first.id)
+              : undefined;
         const visibleFrom =
           rule?.start_on ??
           anchor?.visible_from ??

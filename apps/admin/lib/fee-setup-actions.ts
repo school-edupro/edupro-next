@@ -27,10 +27,24 @@ const fail = (path: string, error: unknown): never => {
   throw error;
 };
 const done = (path: string) => redirect(`${path}${path.includes('?') ? '&' : '?'}ok=1`);
+const refuse = (path: string, detail: string): never =>
+  redirect(
+    `${path}${path.includes('?') ? '&' : '?'}error=1&detail=${encodeURIComponent(detail.slice(0, 300))}`,
+  );
+/** A late-fee slab needs both its date and its amount; one without the other was dropped unseen. */
+const halfSlab = (fd: FormData, periodIds: string[]): string | null => {
+  for (const id of periodIds)
+    for (const i of [1, 2, 3])
+      if ((str(fd, `slabOn${i}:${id}`) === '') !== (str(fd, `slabAmt${i}:${id}`) === ''))
+        return `Last date ${i} and Late fee ${i} go together: fill both or neither (month ${periodIds.indexOf(id) + 1})`;
+  return null;
+};
 
 export async function saveClassRules(fd: FormData) {
   const classId = str(fd, 'classId');
   const path = `/fees/rules?classId=${classId}`;
+  const half = halfSlab(fd, fd.getAll('periodIds').map(String));
+  if (half) refuse(path, half);
   const periods = fd
     .getAll('periodIds')
     .map(String)
@@ -346,6 +360,8 @@ export async function requestOptionalHeads(fd: FormData) {
 /** The hostel calendar (0134): "same as school", or its own pay plan, last dates and late fee. */
 export async function saveHostelCalendar(fd: FormData) {
   const path = '/fees/hostel-calendar';
+  const half = str(fd, 'mode') === 'own' ? halfSlab(fd, fd.getAll('periodIds').map(String)) : null;
+  if (half) refuse(path, half);
   const periods = fd
     .getAll('periodIds')
     .map(String)
@@ -360,6 +376,10 @@ export async function saveHostelCalendar(fd: FormData) {
           amount: num(fd, `slabAmt${i}:${periodId}`),
         }))
         .filter((x): x is { on: string; amount: number } => x.on !== '' && x.amount !== null),
+      startOn: str(fd, `startOn:${periodId}`) || null,
+      challanOn: str(fd, `challanOn:${periodId}`) || null,
+      feePay: str(fd, `feePay:${periodId}`) !== 'no',
+      show: str(fd, `show:${periodId}`) !== 'no',
     }));
   try {
     await apiFetch('/fees/hostel-calendar', {

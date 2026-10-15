@@ -667,6 +667,10 @@
 }
 
 /* ---- Form ----------------------------------------------------------------------- */
+/* the hidden attribute wins over a class's display (a hidden .ep-field stays in the form, unseen) */
+[hidden] {
+  display: none !important;
+}
 .ep-field {
   display: flex;
   flex-direction: column;

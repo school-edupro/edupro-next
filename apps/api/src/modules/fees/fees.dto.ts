@@ -587,6 +587,13 @@ export const SetHostelCalendarSchema = z.object({
           .max(3)
           .default([]),
         latePerDay: Money.nullable().optional(),
+        /** parents see the hostel instalment from this date */
+        startOn: DateSchema.nullable().optional(),
+        challanOn: DateSchema.nullable().optional(),
+        /** parents may pay it online */
+        feePay: z.boolean().optional(),
+        /** parents see it at all */
+        show: z.boolean().optional(),
       }),
     )
     .max(12)

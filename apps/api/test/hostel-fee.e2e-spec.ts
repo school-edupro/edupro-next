@@ -33,6 +33,7 @@ describe('hostel fee (e2e)', () => {
   let accountant: SeededUser;
   let periods: Array<{ id: string; sequence: number; dueOn: string }>;
   const pupils: Record<string, string> = {};
+  let classId: string;
   const h = (u: SeededUser = admin) => headersFor(u.sub, school.id);
   const ledger = async (id: string) =>
     (await inject({ method: 'GET', url: `/fees/students/${id}/ledger`, headers: h() })).json() as {
@@ -100,6 +101,7 @@ describe('hostel fee (e2e)', () => {
       headers: h(),
       json: { code: 'IX', name: 'Class IX', displayOrder: 9 },
     });
+    classId = cls.json().id as string;
     const sec = await inject({
       method: 'POST',
       url: `/academics/classes/${cls.json().id as string}/sections`,
@@ -278,5 +280,135 @@ describe('hostel fee (e2e)', () => {
     const rows = await hostel(pupils.leaves!);
     expect(rows.flatMap((i) => i.sequences).sort((a, b) => a - b)).toEqual([1, 2]);
     expect(rows.reduce((a, i) => a + Number(i.net), 0)).toBe(6000);
+  });
+  it('both calendars refuse late-fee dates before the last date or out of order, and empty rates', async () => {
+    const put = (json: Record<string, unknown>) =>
+      inject({ method: 'PUT', url: '/fees/hostel-calendar', headers: h(), json });
+    const before = await put({
+      mode: 'own',
+      payPlan: 'quarterly',
+      lateMode: 'slab',
+      periods: [
+        {
+          periodId: seq(1).id,
+          dueOn: '2026-04-20',
+          lateFeeAmount: 300,
+          slabs: [{ on: '2026-04-15', amount: 500 }],
+        },
+      ],
+    });
+    expect(before.statusCode).toBe(422);
+    expect(before.json().detail).toContain('Last date 1');
+    const order = await put({
+      mode: 'own',
+      lateMode: 'slab',
+      periods: [
+        {
+          periodId: seq(1).id,
+          dueOn: '2026-04-20',
+          slabs: [
+            { on: '2026-05-10', amount: 500 },
+            { on: '2026-05-01', amount: 700 },
+          ],
+        },
+      ],
+    });
+    expect(order.statusCode).toBe(422);
+    expect(order.json().detail).toContain('Last date 2');
+    const far = await put({
+      mode: 'own',
+      lateMode: 'slab',
+      periods: [{ periodId: seq(1).id, dueOn: '2031-04-20', lateFeeAmount: 300 }],
+    });
+    expect(far.statusCode).toBe(422);
+    expect(far.json().detail).toContain('outside the session');
+    const start = await put({
+      mode: 'own',
+      lateMode: 'slab',
+      periods: [
+        { periodId: seq(1).id, dueOn: '2026-04-20', startOn: '2026-04-25', lateFeeAmount: 1 },
+      ],
+    });
+    expect(start.statusCode).toBe(422);
+    expect(start.json().detail).toContain('start date');
+    const noRate = await put({ mode: 'own', lateMode: 'daywise', periods: [] });
+    expect(noRate.statusCode).toBe(422);
+    expect(noRate.json().detail).toContain('per day');
+    // the class calendar takes the same checks
+    const cls = await inject({
+      method: 'PUT',
+      url: `/fees/class-rules/${classId}`,
+      headers: h(),
+      json: {
+        periods: [
+          {
+            periodId: seq(1).id,
+            dueOn: '2026-04-20',
+            slabs: [{ on: '2026-04-20', amount: 200 }],
+          },
+        ],
+      },
+    });
+    expect(cls.statusCode).toBe(422);
+    expect(cls.json().detail).toContain('Last date 1');
+  });
+
+  it("hostel months carry Show, Fee pay and start date; an empty hostel date takes the class calendar's", async () => {
+    const classDate = await inject({
+      method: 'PUT',
+      url: `/fees/class-rules/${classId}`,
+      headers: h(),
+      json: { periods: [{ periodId: seq(10).id, dueOn: '2026-10-07' }] },
+    });
+    expect(classDate.statusCode).toBe(200);
+    const cal = await inject({
+      method: 'PUT',
+      url: '/fees/hostel-calendar',
+      headers: h(),
+      json: {
+        mode: 'own',
+        payPlan: 'quarterly',
+        lateMode: 'slab',
+        periods: [
+          { periodId: seq(1).id, dueOn: '2026-04-20', lateFeeAmount: 300 },
+          { periodId: seq(4).id, dueOn: '2026-07-20', lateFeeAmount: 500, startOn: '2026-07-01' },
+          { periodId: seq(10).id, feePay: false },
+        ],
+      },
+    });
+    expect(cal.statusCode).toBe(200);
+    expect(
+      cal.json().periods.find((p: { periodId: string }) => p.periodId === seq(10).id),
+    ).toMatchObject({
+      feePay: false,
+      show: true,
+      dueOn: null,
+    });
+    const l = (
+      await inject({
+        method: 'GET',
+        url: `/fees/students/${pupils.joins!}/ledger`,
+        headers: h(),
+      })
+    ).json() as { instalments: Array<Instalment & { feePay: boolean; visibleFrom: string }> };
+    const oct = l.instalments.find((i) => i.ledger === 'hostel' && i.sequences[0] === 10)!;
+    expect(oct).toMatchObject({ dueOn: '2026-10-07', feePay: false });
+    const jul = l.instalments.find((i) => i.ledger === 'hostel' && i.sequences[0] === 4)!;
+    expect(jul.visibleFrom).toBe('2026-07-01');
+    // the school instalment of October keeps the class calendar's Fee pay
+    expect(l.instalments.find((i) => i.ledger === 'school' && i.sequences[0] === 10)).toMatchObject(
+      {
+        feePay: true,
+      },
+    );
+  });
+
+  it('a pupil who joins in the middle of a quarter is charged the late fee of its first month', async () => {
+    await change(pupils.joins!, { hostelFrom: '2026-08-01', reason: 'Joined in August' });
+    const rows = await hostel(pupils.joins!);
+    const q2 = rows.find((i) => i.sequences[0] === 5)!; // August and September: the July quarter
+    expect(q2.sequences).toEqual([5, 6]);
+    expect(q2.dueOn).toBe('2026-07-20');
+    expect(q2.lateFee.amount).toBe('500.00');
   });
 });

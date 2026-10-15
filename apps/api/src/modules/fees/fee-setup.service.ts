@@ -98,6 +98,67 @@ export class FeeSetupService {
     return tenant.academicYearId;
   }
 
+  /**
+   * The checks both calendars share (class and hostel): dates near the session, late-fee slab dates
+   * after the last date and in order, and a start date not after the last date. A month's empty last
+   * date is checked by the date that applies to it.
+   */
+  private async checkCalendar(
+    c: PoolClient,
+    yearId: string,
+    periods: Array<{
+      periodId: string;
+      dueOn?: string | null;
+      slabs: Array<{ on: string; amount: number }>;
+      startOn?: string | null;
+      challanOn?: string | null;
+    }>,
+  ): Promise<void> {
+    const y = await c.query<{ from: string; to: string }>(
+      `SELECT (start_date - 92)::text AS from, (end_date + 92)::text AS to FROM academic_years WHERE id = $1`,
+      [yearId],
+    );
+    const span = y.rows[0];
+    const months = await c.query<{ id: string; name: string; due_on: string }>(
+      `SELECT id::text, name, due_on::text FROM fee_periods WHERE academic_year_id = $1`,
+      [yearId],
+    );
+    const byId = new Map(months.rows.map((m) => [m.id, m]));
+    const dmy = (v: string) => v.split('-').reverse().join('-');
+    const bad = (month: string, why: string) => {
+      throw new DomainError('fees.calendar_invalid', `${month}: ${why}`, { status: 422 });
+    };
+    for (const p of periods) {
+      const m = byId.get(p.periodId);
+      if (!m)
+        throw new DomainError('not-found', 'A month of another session was sent', { status: 404 });
+      const due = p.dueOn || m.due_on;
+      const dates: Array<[string, string | null | undefined]> = [
+        ['the last date', p.dueOn],
+        ['the start date', p.startOn],
+        ['the challan date', p.challanOn],
+        ...p.slabs.map((s, i): [string, string] => [`Last date ${i + 1}`, s.on]),
+      ];
+      if (span)
+        for (const [what, v] of dates)
+          if (v && (v < span.from || v > span.to))
+            bad(m.name, `${what} ${dmy(v)} is outside the session`);
+      if (p.startOn && p.startOn > due)
+        bad(m.name, `the start date ${dmy(p.startOn)} is after the last date ${dmy(due)}`);
+      let prev = due;
+      p.slabs.forEach((s, i) => {
+        if (s.on <= prev)
+          bad(
+            m.name,
+            i === 0
+              ? `Last date 1 (${dmy(s.on)}) must be after the last date ${dmy(due)}`
+              : `Last date ${i + 1} (${dmy(s.on)}) must be after Last date ${i} (${dmy(prev)})`,
+          );
+        prev = s.on;
+      });
+    }
+  }
+
   // ---- class rules ------------------------------------------------------------------------------
   async classRules(ctx: RequestContext, classId: string): Promise<ClassRules> {
     const yearId = this.year(ctx);
@@ -169,6 +230,7 @@ export class FeeSetupService {
       if (cls.rowCount === 0)
         throw new DomainError('not-found', 'Class not found', { status: 404 });
       await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+      await this.checkCalendar(c, yearId, dto.periods);
       for (const p of dto.periods) {
         const own = await c.query(
           `SELECT 1 FROM fee_periods WHERE id = $1 AND academic_year_id = $2`,
@@ -326,10 +388,15 @@ export class FeeSetupService {
         dueOn: string | null;
         lateFeeAmount: string | null;
         latePerDay: string | null;
+        startOn: string | null;
+        challanOn: string | null;
+        feePay: boolean;
+        show: boolean;
         slabs: Array<{ on: string; amount: string }> | null;
       }>(
         `SELECT fp.id::text AS "periodId", fp.sequence, fp.name, fp.due_on::text AS "schoolDueOn",
                 r.due_on::text AS "dueOn", r.late_fee_amount::text AS "lateFeeAmount", r.late_per_day::text AS "latePerDay",
+                r.start_on::text AS "startOn", r.challan_on::text AS "challanOn", COALESCE(r.fee_pay, true) AS "feePay", COALESCE(r.show, true) AS show,
                 NULLIF(jsonb_strip_nulls(jsonb_build_array(
                   CASE WHEN r.late_slab_1_on IS NOT NULL THEN jsonb_build_object('on', r.late_slab_1_on, 'amount', r.late_slab_1_amount::text) END,
                   CASE WHEN r.late_slab_2_on IS NOT NULL THEN jsonb_build_object('on', r.late_slab_2_on, 'amount', r.late_slab_2_amount::text) END,
@@ -342,7 +409,11 @@ export class FeeSetupService {
         `SELECT count(*)::int AS n FROM student_fee_profiles WHERE academic_year_id = $1 AND hosteller`,
         [yearId],
       );
+      const school = await c.query<{ v: PayPlanCode | null }>(
+        `SELECT NULLIF(app.setting('fees.pay_plan') #>> '{}', '') AS v`,
+      );
       return {
+        schoolPayPlan: school.rows[0]?.v ?? 'monthly',
         mode: cal.rows[0]?.mode ?? 'school',
         payPlan: cal.rows[0]?.payPlan ?? null,
         lateMode: cal.rows[0]?.lateMode ?? 'slab',
@@ -367,6 +438,26 @@ export class FeeSetupService {
         [yearId],
       );
       const known = new Set(periods.rows.map((x) => x.id));
+      if (dto.mode === 'own') {
+        await this.checkCalendar(c, yearId, dto.periods);
+        const perDay =
+          Number(dto.latePerDay ?? 0) > 0 || dto.periods.some((p) => Number(p.latePerDay ?? 0) > 0);
+        if (dto.lateMode === 'daywise' && !perDay)
+          throw new DomainError(
+            'fees.calendar_invalid',
+            'Per-day late fee needs the amount per day (or choose “No late fee on hostel”)',
+            { status: 422 },
+          );
+        if (
+          dto.lateMode === 'slab' &&
+          !dto.periods.some((p) => p.lateFeeAmount != null || p.slabs.length > 0)
+        )
+          throw new DomainError(
+            'fees.calendar_invalid',
+            'Late fee by slabs needs a late fee or slab on at least one month (or choose “No late fee on hostel”)',
+            { status: 422 },
+          );
+      }
       await c.query(
         `INSERT INTO fee_hostel_calendars (school_id, academic_year_id, mode, pay_plan, late_mode, late_per_day, late_max, updated_by)
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
@@ -391,20 +482,27 @@ export class FeeSetupService {
           !p.dueOn &&
           (p.lateFeeAmount ?? null) === null &&
           (p.latePerDay ?? null) === null &&
-          slabs.length === 0;
+          slabs.length === 0 &&
+          !p.startOn &&
+          !p.challanOn &&
+          p.feePay !== false &&
+          p.show !== false;
         if (empty) {
           await c.query(`DELETE FROM fee_hostel_period_rules WHERE period_id = $1`, [p.periodId]);
           continue;
         }
         await c.query(
           `INSERT INTO fee_hostel_period_rules (school_id, period_id, due_on, late_fee_amount, late_slab_1_on, late_slab_1_amount,
-                  late_slab_2_on, late_slab_2_amount, late_slab_3_on, late_slab_3_amount, late_per_day, updated_by)
-           VALUES (app.current_school_id(), $1, $2::date, $3, $4::date, $5, $6::date, $7, $8::date, $9, $10, app.current_user_id())
+                  late_slab_2_on, late_slab_2_amount, late_slab_3_on, late_slab_3_amount, late_per_day,
+                  start_on, challan_on, fee_pay, show, updated_by)
+           VALUES (app.current_school_id(), $1, $2::date, $3, $4::date, $5, $6::date, $7, $8::date, $9, $10,
+                   $11::date, $12::date, $13, $14, app.current_user_id())
            ON CONFLICT (period_id) DO UPDATE SET due_on = EXCLUDED.due_on, late_fee_amount = EXCLUDED.late_fee_amount,
              late_slab_1_on = EXCLUDED.late_slab_1_on, late_slab_1_amount = EXCLUDED.late_slab_1_amount,
              late_slab_2_on = EXCLUDED.late_slab_2_on, late_slab_2_amount = EXCLUDED.late_slab_2_amount,
              late_slab_3_on = EXCLUDED.late_slab_3_on, late_slab_3_amount = EXCLUDED.late_slab_3_amount,
-             late_per_day = EXCLUDED.late_per_day, updated_at = now(), updated_by = app.current_user_id()`,
+             late_per_day = EXCLUDED.late_per_day, start_on = EXCLUDED.start_on, challan_on = EXCLUDED.challan_on,
+             fee_pay = EXCLUDED.fee_pay, show = EXCLUDED.show, updated_at = now(), updated_by = app.current_user_id()`,
           [
             p.periodId,
             p.dueOn ?? null,
@@ -416,6 +514,10 @@ export class FeeSetupService {
             slabs[2]?.on ?? null,
             slabs[2]?.amount ?? null,
             p.latePerDay ?? null,
+            p.startOn ?? null,
+            p.challanOn ?? null,
+            p.feePay !== false,
+            p.show !== false,
           ],
         );
       }
