@@ -12,9 +12,15 @@ export async function saveSignIn(fd: FormData) {
   if (!['oneauth', 'oneauth_otp', 'otp'].includes(mode))
     back('error=1&detail=Choose how users sign in');
   try {
+    const id = (k: string) => {
+      const v = String(fd.get(k) ?? '');
+      return /^\d{1,18}$/.test(v) ? v : '';
+    };
     for (const [key, value] of [
       ['auth.login_mode', mode],
       ['auth.otp_on_screen', onScreen],
+      ['auth.otp_whatsapp_template', id('waTemplate')],
+      ['auth.otp_sms_template', id('smsTemplate')],
     ] as const)
       await apiFetch(`/platform/settings/${key}`, {
         method: 'PUT',

@@ -81,6 +81,18 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'Also show the sign-in code on screen (while emails are being corrected); every code shown is recorded',
     module: 'platform',
   },
+  'auth.otp_sms_template': {
+    schema: z.union([z.string().regex(/^\d{1,18}$/), z.literal('')]),
+    default: '',
+    description: 'SMS template (DLT) for the sign-in code; empty = the active OTP template with a DLT id',
+    module: 'platform',
+  },
+  'auth.otp_whatsapp_template': {
+    schema: z.union([z.string().regex(/^\d{1,18}$/), z.literal('')]),
+    default: '',
+    description: 'WhatsApp template (Meta approved) for the sign-in code; empty = the active OTP template',
+    module: 'platform',
+  },
   'security.session_hours': {
     schema: z.number().int().min(1).max(24),
     default: 12,

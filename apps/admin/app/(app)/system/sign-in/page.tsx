@@ -57,13 +57,26 @@ export default async function SignInSettingsPage({
   const sp = await searchParams;
   const me = await getMe();
   const canEdit = me.permissions.includes('platform.settings.edit');
-  const [settings, log] = await Promise.all([
+  const [settings, log, waTemplates, smsTemplates] = await Promise.all([
     apiFetch<{ data: Setting[] }>('/platform/settings').then((r) => r.data),
     apiFetch<Log>('/auth/otp/screen-log'),
+    // only templates that can be sent: WhatsApp with the approved name, SMS with the DLT id
+    apiFetch<{ data: Array<{ id: string; name: string; waTemplateName: string | null }> }>(
+      '/comms/templates?channel=whatsapp&status=active',
+    )
+      .then((r) => r.data.filter((t) => t.waTemplateName))
+      .catch(() => []),
+    apiFetch<{ data: Array<{ id: string; name: string; dltTemplateId: string | null }> }>(
+      '/comms/templates?channel=sms&status=active',
+    )
+      .then((r) => r.data.filter((t) => t.dltTemplateId?.trim()))
+      .catch(() => []),
   ]);
   const val = (k: string) => settings.find((s) => s.key === k)?.value;
   const mode = String(val('auth.login_mode') ?? 'oneauth');
   const onScreen = val('auth.otp_on_screen') === true;
+  const smsTemplate = String(val('auth.otp_sms_template') ?? '');
+  const waTemplate = String(val('auth.otp_whatsapp_template') ?? '');
   return (
     <>
       <PageHeader
@@ -109,6 +122,59 @@ export default async function SignInSettingsPage({
                 </span>
               </span>
             </label>
+            <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+              <legend className="ep-field__label">
+                The code goes by email, WhatsApp and SMS together
+              </legend>
+              <p className="ep-field__help">
+                Email is a formatted letter from the school’s email. WhatsApp and SMS go to the
+                mobile on record with the school’s approved templates; the template’s variable gets
+                the code (WhatsApp: in Meta’s order; SMS: the registered DLT text, only the variable
+                filled).
+              </p>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 'var(--sp-3)',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))',
+                }}
+              >
+                <label className="ep-field" htmlFor="otpWa">
+                  <span className="ep-field__label">WhatsApp template</span>
+                  <select
+                    className="ep-select"
+                    id="otpWa"
+                    name="waTemplate"
+                    defaultValue={waTemplate}
+                    disabled={!canEdit}
+                  >
+                    <option value="">Find the OTP template by itself</option>
+                    {waTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.waTemplateName})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ep-field" htmlFor="otpSms">
+                  <span className="ep-field__label">SMS template (DLT)</span>
+                  <select
+                    className="ep-select"
+                    id="otpSms"
+                    name="smsTemplate"
+                    defaultValue={smsTemplate}
+                    disabled={!canEdit}
+                  >
+                    <option value="">Find the OTP template by itself</option>
+                    {smsTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} (DLT {t.dltTemplateId})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </fieldset>
             <p className="ep-field__help">
               A user of several schools follows the strictest: a code is asked when any of the
               schools asks it, and the code alone works only when every school allows it. “Remember

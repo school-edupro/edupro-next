@@ -384,6 +384,55 @@ describe('sign-in with an emailed code (e2e)', () => {
     expect(unknown.json().type).toBe('auth.otp_not_found');
   });
 
+  it('the code goes as a formatted email, the approved WhatsApp template and the DLT SMS', async () => {
+    await withMigrator(async (c) => {
+      await c.query(
+        `INSERT INTO comms_templates (school_id, code, channel, name, body, status, dlt_template_id)
+         VALUES ($1, 'otp_sms_test', 'sms', 'OTP message', 'Dear User,Your OTP is {{otp}}.Team Mobilise', 'active', '1207163922745202205')`,
+        [school.id],
+      );
+      await c.query(
+        `INSERT INTO comms_templates (school_id, code, channel, name, body, status, wa_template_name)
+         VALUES ($1, 'otp_verifcation', 'whatsapp', 'otp_verifcation', '*{{otp}}* is your verification code. For your security, do not share this code.', 'active', 'otp_verifcation')`,
+        [school.id],
+      );
+      await c.query(
+        `UPDATE auth_otp_challenges SET created_at = created_at - interval '1 hour' WHERE user_id = $1`,
+        [clerk.id],
+      );
+    });
+    const st = await inject({
+      method: 'POST',
+      url: '/auth/otp/start',
+      headers: {},
+      json: { login: email, app: 'admin' },
+    });
+    expect(st.statusCode).toBe(200);
+    expect(st.json().sentTo).toMatch(
+      /@example\.test · WhatsApp \d{2}\*{6}\d{2} · SMS \d{2}\*{6}\d{2}$/,
+    );
+    const code = st.json().screenCode as string;
+    const msgs = await withMigrator((c) =>
+      c.query<{
+        channel: string;
+        subject: string | null;
+        body: string;
+        format: string;
+        params: string[] | null;
+      }>(
+        `SELECT channel::text, subject, body, format, params FROM comms_messages
+          WHERE school_id = $1 AND recipient_user_id = $2 AND created_at > now() - interval '1 minute' ORDER BY id`,
+        [school.id, clerk.id],
+      ),
+    );
+    const by = Object.fromEntries(msgs.rows.map((m) => [m.channel, m]));
+    expect(by.email!.format).toBe('html');
+    expect(by.email!.body).toContain(code);
+    expect(by.email!.subject).toContain(code);
+    expect(by.whatsapp!.params).toEqual([code]);
+    expect(by.sms!.body).toBe(`Dear User,Your OTP is ${code}.Team Mobilise`);
+  });
+
   it('the school sees the codes shown on screen and who has no email, and can forget remembered devices', async () => {
     const log = await inject({ method: 'GET', url: '/auth/otp/screen-log', headers: h() });
     expect(log.statusCode).toBe(200);

@@ -40,6 +40,41 @@ const mask = (email: string | null): string | null => {
   const [name = '', domain = ''] = email.split('@');
   return `${name.slice(0, 1)}${'*'.repeat(Math.max(name.length - 1, 2))}@${domain}`;
 };
+const maskMobile = (m: string) => `${m.slice(0, 2)}******${m.slice(-2)}`;
+const esc = (v: string) =>
+  v.replace(
+    /[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!,
+  );
+/** The sign-in code as a formatted email on the school's letterhead (inline styles, for every mail client). */
+function otpLetter(
+  school: { name: string; address: string | null; phone: string | null; mail: string | null },
+  name: string,
+  code: string,
+): string {
+  const contact = [school.phone, school.mail]
+    .filter(Boolean)
+    .map((v) => esc(v!))
+    .join(' · ');
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;font-family:Arial,Helvetica,sans-serif;color:#0b1f3a">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;padding:24px 0"><tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #d7deea">
+<tr><td style="background:#0b2a5b;color:#ffffff;padding:18px 24px">
+<div style="font-size:20px;font-weight:bold">${esc(school.name)}</div>
+${school.address ? `<div style="font-size:12px;opacity:.85;margin-top:4px">${esc(school.address)}</div>` : ''}
+</td></tr>
+<tr><td style="padding:24px">
+<p style="margin:0 0 12px;font-size:15px">Dear ${esc(name)},</p>
+<p style="margin:0 0 16px;font-size:15px">Use this code to sign in to ${esc(school.name)}:</p>
+<div style="text-align:center;margin:8px 0 18px"><span style="display:inline-block;font-size:32px;font-weight:bold;letter-spacing:8px;padding:12px 22px;border:2px dashed #0b2a5b;border-radius:8px;background:#f4f7fc">${code}</span></div>
+<p style="margin:0 0 8px;font-size:14px">The code works <strong>once</strong>, for <strong>${CODE_MINUTES} minutes</strong>.</p>
+<p style="margin:0 0 8px;font-size:14px;color:#8a1c1c">Do not share this code with anyone, not even school staff.</p>
+<p style="margin:0;font-size:13px;color:#5b6676">If you did not try to sign in, ignore this email and tell the school office.</p>
+</td></tr>
+<tr><td style="background:#f4f7fc;padding:14px 24px;font-size:12px;color:#5b6676;border-top:1px solid #d7deea">
+${contact ? `${contact}<br>` : ''}This is an automatic email; please do not reply.
+</td></tr></table></td></tr></table></body></html>`;
+}
 const validEmail = (v: string | null): v is string => !!v && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 /**
@@ -125,7 +160,7 @@ export class OtpService {
 
   /** Makes a code, records it, and mails it through the school's email (the comms queue). */
   private async issue(
-    user: { id: string; email: string | null; displayName: string },
+    user: { id: string; email: string | null; mobile: string | null; displayName: string },
     schoolId: string | null,
     purpose: OtpPurpose,
     app: OtpApp,
@@ -134,10 +169,11 @@ export class OtpService {
   ): Promise<OtpStarted> {
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const email = validEmail(user.email) ? user.email : null;
-    if (!email && !onScreen)
+    const mobile = user.mobile && /^\d{10}$/.test(user.mobile) ? user.mobile : null;
+    if (!email && !mobile && !onScreen)
       throw new DomainError(
         'auth.otp_no_email',
-        'There is no valid email on record for this account. Ask the school office to correct it.',
+        'There is no valid email or mobile on record for this account. Ask the school office to correct it.',
         { status: 422 },
       );
     const id = await this.db.global(async (c) => {
@@ -149,7 +185,7 @@ export class OtpService {
           purpose,
           app,
           this.hash(code),
-          email,
+          email ?? (mobile ? `mobile ${maskMobile(mobile)}` : null),
           onScreen,
           meta.ip ?? null,
           meta.userAgent ?? null,
@@ -158,37 +194,139 @@ export class OtpService {
       );
       return r.rows[0]!.id;
     });
-    if (email && schoolId) {
-      const tenant = {
-        schoolId,
-        userId: user.id,
-        allowedSchoolIds: [schoolId],
-        requestId: meta.requestId,
-      };
-      const ctx = { requestId: meta.requestId, tenant } as unknown as RequestContext;
+    const sent: string[] = [];
+    if (schoolId && (email || mobile)) {
       try {
-        await this.db.tenant(tenant, async (c) => {
-          const m = await c.query<{ id: string }>(
-            `INSERT INTO comms_messages (school_id, channel, recipient_user_id, recipient_address, subject, body, status, request_id, created_by)
-             VALUES (app.current_school_id(), 'email', $1, $2, $3, $4, 'queued', $5, $1) RETURNING id::text`,
-            [
-              user.id,
-              email,
-              `${code} is your sign-in code`,
-              `Dear ${user.displayName},\n\nYour code to sign in is ${code}. It works once, for ${CODE_MINUTES} minutes.\n\nIf you did not try to sign in, ignore this email and tell the school office.`,
-              meta.requestId,
-            ],
-          );
-          await this.outbox.enqueue(c, ctx, QUEUES.notifications, 'comms.message', {
-            messageId: m.rows[0]!.id,
-          });
-        });
+        sent.push(...(await this.send(schoolId, user, code, email, mobile, meta.requestId)));
       } catch (error) {
-        // the code stands; on screen it can still be used, and a resend tries the mail again
-        this.log.warn(`sign-in code mail not queued: ${(error as Error).message}`);
+        // the code stands; on screen it can still be used, and a resend tries again
+        this.log.warn(`sign-in code not queued: ${(error as Error).message}`);
       }
     }
-    return { challengeId: id, sentTo: mask(email), ...(onScreen ? { screenCode: code } : {}) };
+    return {
+      challengeId: id,
+      sentTo: sent.length ? sent.join(' · ') : null,
+      ...(onScreen ? { screenCode: code } : {}),
+    };
+  }
+
+  /**
+   * Queues the code on every channel the user can be reached on (email, WhatsApp, SMS), through the school's
+   * providers. Email is a formatted letter on the school's letterhead; WhatsApp and SMS use the school's
+   * approved templates (System -> Sign-in, else the active OTP templates: a WhatsApp template with an
+   * approved name, an SMS one with a DLT id). Returns where it went, masked.
+   */
+  private async send(
+    schoolId: string,
+    user: { id: string; displayName: string },
+    code: string,
+    email: string | null,
+    mobile: string | null,
+    requestId: string,
+  ): Promise<string[]> {
+    const tenant = { schoolId, userId: user.id, allowedSchoolIds: [schoolId], requestId };
+    const ctx = { requestId, tenant } as unknown as RequestContext;
+    return this.db.tenant(tenant, async (c) => {
+      const school = (
+        await c.query<{
+          name: string;
+          address: string | null;
+          phone: string | null;
+          mail: string | null;
+        }>(
+          `SELECT name, NULLIF(concat_ws(', ', NULLIF(address->>'line1', ''), NULLIF(address->>'city', ''), NULLIF(address->>'state', '')), '') AS address,
+                  NULLIF(contact->>'phone', '') AS phone, NULLIF(contact->>'email', '') AS mail
+             FROM schools WHERE id = app.current_school_id()`,
+        )
+      ).rows[0]!;
+      const vars: Record<string, string> = {
+        otp: code,
+        code,
+        minutes: String(CODE_MINUTES),
+        school: school.name,
+        name: user.displayName,
+      };
+      const fill = (t: string) =>
+        t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] ?? '');
+      const queue = async (
+        channel: 'email' | 'sms' | 'whatsapp',
+        to: string,
+        subject: string | null,
+        body: string,
+        extra: { templateId?: string; params?: string[]; format?: 'text' | 'html' } = {},
+      ) => {
+        const m = await c.query<{ id: string }>(
+          `INSERT INTO comms_messages (school_id, template_id, channel, recipient_user_id, recipient_address, subject, body, format, variables, params, status, request_id, created_by)
+           VALUES (app.current_school_id(), $1, $2::comms_channel, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, 'queued', $10, $3) RETURNING id::text`,
+          [
+            extra.templateId ?? null,
+            channel,
+            user.id,
+            to,
+            subject,
+            body,
+            extra.format ?? 'text',
+            JSON.stringify(vars),
+            extra.params ? JSON.stringify(extra.params) : null,
+            requestId,
+          ],
+        );
+        await this.outbox.enqueue(c, ctx, QUEUES.notifications, 'comms.message', {
+          messageId: m.rows[0]!.id,
+        });
+      };
+      const sent: string[] = [];
+      if (email) {
+        await queue(
+          'email',
+          email,
+          `${code} is your sign-in code · ${school.name}`,
+          otpLetter(school, user.displayName, code),
+          {
+            format: 'html',
+          },
+        );
+        sent.push(mask(email)!);
+      }
+      if (mobile) {
+        const pick = async (channel: 'sms' | 'whatsapp') => {
+          const chosen = (
+            await c.query<{ v: string | null }>(
+              `SELECT NULLIF(app.setting($1) #>> '{}', '') AS v`,
+              [channel === 'sms' ? 'auth.otp_sms_template' : 'auth.otp_whatsapp_template'],
+            )
+          ).rows[0]?.v;
+          const r = await c.query<{ id: string; body: string; wa_params: string[] | null }>(
+            `SELECT t.id::text, t.body, t.wa_params FROM comms_templates t
+              WHERE t.channel = $1::comms_channel AND t.status = 'active'
+                AND (CASE WHEN $1 = 'sms' THEN COALESCE(btrim(t.dlt_template_id), '') <> '' ELSE COALESCE(btrim(t.wa_template_name), '') <> '' END)
+                AND (($2::bigint IS NOT NULL AND t.id = $2::bigint)
+                  OR ($2::bigint IS NULL AND t.body ~ '\{\{\s*(otp|code)\s*\}\}'))
+              ORDER BY (t.code = 'login_otp') DESC, (t.name ILIKE '%otp%' OR t.code ILIKE '%otp%' OR t.wa_template_name ILIKE '%otp%') DESC, t.id DESC
+              LIMIT 1`,
+            [channel, chosen && /^\d+$/.test(chosen) ? chosen : null],
+          );
+          return r.rows[0] ?? null;
+        };
+        const wa = await pick('whatsapp');
+        if (wa) {
+          // the approved template's variables in Meta's order; an OTP template's one variable is the code
+          const names = wa.wa_params && wa.wa_params.length ? wa.wa_params : ['otp'];
+          await queue('whatsapp', mobile, null, fill(wa.body), {
+            templateId: wa.id,
+            params: names.map((n) => vars[n.replace(/[{}\s]/g, '')] ?? ''),
+          });
+          sent.push(`WhatsApp ${maskMobile(mobile)}`);
+        }
+        const sms = await pick('sms');
+        if (sms) {
+          // the DLT text must match the registered one: only the variable is filled in
+          await queue('sms', mobile, null, fill(sms.body), { templateId: sms.id });
+          sent.push(`SMS ${maskMobile(mobile)}`);
+        }
+      }
+      return sent;
+    });
   }
 
   /** Code-only sign-in, step 1: the email or mobile number of the account. */
@@ -204,7 +342,8 @@ export class OtpService {
         sub: string;
         email: string | null;
         display_name: string;
-      }>(`SELECT user_id::text, sub, email, display_name FROM app.otp_find_user($1)`, [
+        mobile: string | null;
+      }>(`SELECT user_id::text, sub, email, display_name, mobile FROM app.otp_find_user($1)`, [
         login.trim(),
       ]);
       return r.rows[0];
@@ -230,7 +369,12 @@ export class OtpService {
     if (await this.deviceRemembered(found.user_id, app, deviceToken))
       return { session: await this.session(found.sub, found.display_name, 'login', app) };
     return this.issue(
-      { id: found.user_id, email: found.email, displayName: found.display_name },
+      {
+        id: found.user_id,
+        email: found.email,
+        mobile: found.mobile,
+        displayName: found.display_name,
+      },
       p.schoolId,
       'login',
       app,
@@ -251,7 +395,7 @@ export class OtpService {
     if (await this.deviceRemembered(ctx.user.id, app, deviceToken))
       return { session: await this.session(u.sub, u.displayName, 'second_factor', app) };
     return this.issue(
-      { id: ctx.user.id, email: u.email, displayName: u.displayName },
+      { id: ctx.user.id, email: u.email, mobile: u.mobile, displayName: u.displayName },
       p.schoolId,
       'second_factor',
       app,
@@ -266,14 +410,16 @@ export class OtpService {
 
   private async user(userId: string) {
     return this.db.global(async (c) => {
-      const r = await c.query<{ sub: string; email: string | null; display_name: string }>(
-        `SELECT sub, email, display_name FROM app.otp_user($1)`,
-        [userId],
-      );
+      const r = await c.query<{
+        sub: string;
+        email: string | null;
+        display_name: string;
+        mobile: string | null;
+      }>(`SELECT sub, email, display_name, mobile FROM app.otp_user($1)`, [userId]);
       const u = r.rows[0];
       if (!u)
         throw new DomainError('unauthenticated', 'The account is not active', { status: 401 });
-      return { sub: u.sub, email: u.email, displayName: u.display_name };
+      return { sub: u.sub, email: u.email, mobile: u.mobile, displayName: u.display_name };
     });
   }
 
