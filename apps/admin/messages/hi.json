@@ -193,7 +193,8 @@
     "hostelMess": "भोजनालय",
     "hostelDashboard": "छात्रावास डैशबोर्ड",
     "hostelComplaints": "छात्रावास शिकायतें",
-    "hostelIncidents": "घटनाएँ"
+    "hostelIncidents": "घटनाएँ",
+    "landingPages": "लैंडिंग पेज"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

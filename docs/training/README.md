@@ -18,6 +18,7 @@ training sessions.
 | Exams         | [exams.md](exams.md)                 | Examination cell, teachers (90 min)          |
 | Transport     | [transport.md](transport.md)         | Transport office and accounts (60 min)       |
 | Hostel        | [hostel.md](hostel.md)               | Hostel office, wardens and accounts (45 min) |
+| Landing page  | [landing-page.md](landing-page.md)   | All admin users; school admin (10 min)        |
 
 Session format: 20 minutes of demonstration on the demo school, 40 minutes of hands-on with the
 exercises, 20 minutes of questions; the trainer records questions that need a change in the product in

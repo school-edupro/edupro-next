@@ -26,6 +26,7 @@ import { AttendanceModule } from './modules/attendance/attendance.module';
 import { EngagementModule } from './modules/engagement/engagement.module';
 import { TransportModule } from './modules/transport/transport.module';
 import { HostelModule } from './modules/hostel/hostel.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { PlannerModule } from './modules/planner/planner.module';
 import { InsightsModule } from './modules/insights/insights.module';
 import { TemplatesModule } from './modules/platform/templates/templates.module';
@@ -78,6 +79,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     AttendanceModule,
     TransportModule,
     HostelModule,
+    DashboardModule,
     EngagementModule,
     PlannerModule,
     InsightsModule,

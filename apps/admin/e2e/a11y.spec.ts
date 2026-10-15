@@ -105,6 +105,7 @@ const PAGES = [
   '/fees/tax-certificate/12229',
   '/fees/fnf/12229',
   '/hostel',
+  '/system/landing',
   '/hostel/allot?student=12307',
   '/hostel/allot?sq=sharma',
   '/hostel/register',

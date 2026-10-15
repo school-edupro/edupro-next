@@ -193,7 +193,8 @@
     "hostelMess": "Mess",
     "hostelDashboard": "Hostel dashboard",
     "hostelComplaints": "Hostel complaints",
-    "hostelIncidents": "Incidents"
+    "hostelIncidents": "Incidents",
+    "landingPages": "Landing pages"
   },
   "shell": {
     "primaryNavigation": "Primary",
