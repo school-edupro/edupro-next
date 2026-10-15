@@ -393,6 +393,15 @@ const NAV: Array<{
     ],
   },
   {
+    section: 'hostel',
+    items: [
+      { href: '/hostel', label: 'hostelOccupancy', permission: 'hostel.room.view' },
+      { href: '/hostel/allot', label: 'hostelAllot', permission: 'hostel.allot.manage' },
+      { href: '/hostel/register', label: 'hostelRegister', permission: 'hostel.room.view' },
+      { href: '/hostel/setup', label: 'hostelSetup', permission: 'hostel.setup.manage' },
+    ],
+  },
+  {
     section: 'library',
     items: [
       { href: '/library', label: 'catalogue', permission: 'library.catalogue.view' },
@@ -601,7 +610,9 @@ export async function Shell({
         !features ||
         features.has(g.section) ||
         // appointments ride on the engagement module switch
-        ((g.section === 'appointments' || g.section === 'clinic') && features.has('engagement'))),
+        ((g.section === 'appointments' || g.section === 'clinic') && features.has('engagement')) ||
+        // the hostel rides on the fee module switch (its fee is on the hostel ledger)
+        (g.section === 'hostel' && features.has('fees'))),
   );
   const portal =
     me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??

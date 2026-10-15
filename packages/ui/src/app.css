@@ -7088,3 +7088,90 @@ a.ep-tabs__tab {
     font-size: var(--fs-h4);
   }
 }
+
+/* hostel occupancy board: rooms as cards, each bed free / taken / blocked */
+.hs-rooms {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+.hs-room {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  background: var(--surface-card);
+}
+.hs-room--off {
+  background: var(--surface-subtle);
+}
+.hs-room__head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  align-items: baseline;
+  margin-bottom: var(--sp-2);
+}
+.hs-beds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.hs-bed {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  font-size: var(--fs-small);
+}
+.hs-bed__label {
+  font-weight: var(--fw-semibold);
+  text-align: center;
+}
+.hs-bed__who {
+  display: grid;
+  color: var(--text-body);
+  text-decoration: none;
+}
+a.hs-bed__who:hover {
+  text-decoration: underline;
+}
+.hs-bed__who small {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}
+.hs-bed--taken {
+  background: var(--status-info-bg);
+  border-color: var(--status-info);
+}
+.hs-bed--free {
+  background: var(--status-success-bg);
+  border-color: var(--status-success);
+}
+.hs-bed--blocked {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+.hs-two {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+.hs-form {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.hs-h {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+}

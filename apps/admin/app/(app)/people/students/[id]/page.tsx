@@ -156,6 +156,14 @@ export default async function StudentPage({
         )
         .catch(() => [])
     : [];
+  // the bed the pupil holds (Hostel module), shown beside the hosteller fact
+  const hostelBed = can('hostel.room.view')
+    ? await apiFetch<{
+        current: { place: string; fromDate: string; toDate: string | null } | null;
+      }>(`/hostel/students/${id}`)
+        .then((r) => r.current)
+        .catch(() => null)
+    : null;
   const issuedTc = tcs.find((x) => x.status === 'issued');
   return (
     <>
@@ -761,6 +769,16 @@ export default async function StudentPage({
                       ? `Yes${feeProfile.hostelFrom || feeProfile.hostelTo ? `, ${feeProfile.hostelFrom ? monthName(feeProfile.hostelFrom) : 'session start'} to ${feeProfile.hostelTo ? monthName(feeProfile.hostelTo) : 'session end'}` : ', whole session'} · hostel paid ${PAY_PLAN[feeProfile.hostelPayPlanInForce]}${feeProfile.hostelPayPlan ? ' (own)' : ''}`
                       : 'No',
                   ],
+                  ...(can('hostel.room.view')
+                    ? [
+                        [
+                          'Hostel bed',
+                          hostelBed
+                            ? `${hostelBed.place}, since ${hostelBed.fromDate.split('-').reverse().join('-')}${hostelBed.toDate ? ` (leaving ${hostelBed.toDate.split('-').reverse().join('-')})` : ''}`
+                            : 'None',
+                        ],
+                      ]
+                    : []),
                   ['Transport', feeProfile.transportSlab ?? 'None'],
                   ...(Number(feeProfile.openingBalance) !== 0
                     ? [[f('openingBalance'), feeProfile.openingBalance]]

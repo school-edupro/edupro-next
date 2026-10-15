@@ -180,7 +180,12 @@
     "withdrawalSettings": "Withdrawal settings",
     "studentStrength": "Student strength",
     "schoolTransfers": "Transfers between schools",
-    "rollNumbers": "Roll numbers and sections"
+    "rollNumbers": "Roll numbers and sections",
+    "hostel": "Hostel",
+    "hostelOccupancy": "Occupancy",
+    "hostelAllot": "Allot beds",
+    "hostelRegister": "Allotment register",
+    "hostelSetup": "Hostel set-up"
   },
   "shell": {
     "primaryNavigation": "Primary",

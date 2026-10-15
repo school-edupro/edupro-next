@@ -180,7 +180,12 @@
     "withdrawalSettings": "निकासी सेटिंग",
     "studentStrength": "छात्र संख्या रिपोर्ट",
     "schoolTransfers": "स्कूलों के बीच स्थानांतरण",
-    "rollNumbers": "रोल नंबर और सेक्शन"
+    "rollNumbers": "रोल नंबर और सेक्शन",
+    "hostel": "छात्रावास",
+    "hostelOccupancy": "अधिभोग",
+    "hostelAllot": "बिस्तर आवंटन",
+    "hostelRegister": "आवंटन रजिस्टर",
+    "hostelSetup": "छात्रावास सेटअप"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
