@@ -9,8 +9,10 @@ and parents sign in. Developer sign-in is not affected.
 | **One Auth, then a code by email** | After One Auth, a 6-digit code is mailed; the user types it. Two steps: the safest. |
 | **A code by email alone** | On the sign-in page, *Sign in with a code by email*: the email or mobile number, then the code. One Auth still works and also asks the code. |
 
-- The code is mailed from the school's email (Communication settings) by the background workers; it
-  works **once, for 10 minutes**. One new code every 30 seconds, five in 15 minutes, five tries a code.
+- The code goes **on every channel at once**: a formatted email from the school's email, the school's
+  approved WhatsApp template (e.g. `otp_verifcation`, the code as its variable) and the DLT SMS template
+  (e.g. 1207163922745202205); pick them on the Sign-in page or leave "Find the OTP template by itself".
+  Sent by the background workers; it works **once, for 10 minutes**. One new code every 30 seconds, five in 15 minutes, five tries a code.
 - **Also show the code on screen**: for the rollout, while emails are being corrected. Anyone at the
   sign-in screen can then sign in as that user, so switch it off once emails are fixed. Every code
   shown on screen is listed on the same page (when, who, app, IP address).

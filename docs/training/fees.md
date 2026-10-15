@@ -359,6 +359,15 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   not a hosteller (hostel dues of a pupil who left are taken).
 - **Bounce charge of a hostel cheque** is raised on the hostel fee (head *Cheque bounce charge
   (hostel)*), not the school fee.
+- **Payment gateways** (Fee setup → Payment gateways, school admin only, after a fresh strong sign-in):
+  add the school's PayU, CCAvenue, Razorpay, SBI ePay or Atom account in **Test** mode with the sandbox
+  keys, pay a small amount from the parent app, then switch to **Live** with the live keys. Keys are
+  typed once and never shown again (an empty box keeps them). Tick which gateways take the regular,
+  hostel, misc and admission fee; with several, the parent chooses. A **convenience charge** (% and/or
+  ₹) is added on top of the fee, shown before paying and kept apart from the fee on the receipt; 0 = the
+  school bears it. Give PayU and Razorpay the webhook address shown on the gateway's card.
+- **Misc fees online**: parents pay an open misc fee in full from the parent app (Other fees → Pay
+  online); the MF receipt is written when the gateway confirms, and a limited-seat fee books the seat.
 - **Fee type on the reports** (Fees → Reports centre): every collection, dues and accounts report has
   *Fee type: All · Regular (school fee) · Hosteller (hostel fee)* (Tally vouchers also *Misc fee*):
   Day book, Day book (grouped), Mode-wise collection, Head-wise tally, Cheque bounce, Defaulters, Period
