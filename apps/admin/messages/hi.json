@@ -187,7 +187,10 @@
     "hostelRegister": "आवंटन रजिस्टर",
     "hostelSetup": "छात्रावास सेटअप",
     "hostelLeave": "छुट्टी और बाहर जाना",
-    "hostelRollcall": "हाज़िरी"
+    "hostelRollcall": "हाज़िरी",
+    "hostelVisitors": "छात्रावास आगंतुक",
+    "hostelGate": "गेट पर छात्रावास आगंतुक",
+    "hostelMess": "भोजनालय"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

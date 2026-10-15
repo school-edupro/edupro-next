@@ -79,3 +79,32 @@ principal and school admins too. Hostel → **Leave and outings** shows away now
 waiting, all. SMS / WhatsApp go out when the templates `hostel_absent`, `hostel_absent_warden`,
 `hostel_leave_overdue`, `hostel_leave_overdue_staff` (and the gate pass ones) are ready under
 Communication → Templates.
+
+## 7. Approved visitors and hostel visits
+
+- **The list**: parents and guardians on the school record are approved by themselves. A parent adds
+  other people in the portal (Hostel → Add a visitor: name, relation, mobile, a small photo); a warden of
+  the pupil's hostel approves or rejects it (staff app → Hostel desk, or Hostel → Visitors → Visitors to
+  approve). The office adds people directly (Hostel → Visitors → Approved lists), approved at once.
+- **Visiting hours**: Set-up → Roll-call and leave rules → Visiting hours, one slot a day per hostel. No
+  slots at all = visits any time.
+- **At the gate** (Hostel → Hostel visitor at the gate; Gate / Security and Front Desk): find the boarder,
+  see the approved list and whether visiting hours are on, enter the visitor (name, mobile, relation, a
+  live photo). On the list and in hours → let in, the parent is told. Otherwise the visitor **waits**: the
+  wardens get a message and allow or refuse from the staff app; the parent is told either way. The visit
+  is an entry of the visitor register, so it leaves through the same exit step.
+
+## 8. Mess (Hostel → Mess)
+
+- **Meals** of each hostel with their time (Breakfast 07:30, Lunch 13:00 …).
+- **Weekly menu**: a grid of day × meal that repeats every week. **This week** shows the week with any
+  **change for a day** (a festival lunch); an empty change goes back to the weekly menu. Parents see
+  the week in the portal (Hostel → Mess menu).
+- **Meal attendance** (staff app → Hostel desk → Mess today → Who skipped): tick who skipped; everyone
+  else holding a bed and not away on leave had the meal.
+- **Diet list** for the kitchen: the warden sets each boarder's diet (vegetarian, with egg, non-veg, Jain,
+  vegan; no onion-garlic; a note); the allergy shown is the *Medical condition / allergy* on the
+  student record.
+
+Messages (SMS / WhatsApp when ready under Communication → Templates): `hostel_visit_waiting` to the
+wardens, `hostel_visit_parent` to the parent.

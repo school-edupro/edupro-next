@@ -59,6 +59,7 @@ const NAV: NavGroup[] = [
       { href: '/calendar', label: 'Calendar' },
       { href: '/directory', label: 'School directory' },
       { href: '/transport', label: 'School bus' },
+      { href: '/hostel', label: 'Hostel' },
       { href: '/library', label: 'Library' },
     ],
   },

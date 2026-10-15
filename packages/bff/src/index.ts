@@ -207,6 +207,18 @@ export function createBff(options: BffOptions) {
     me(): Promise<Me> {
       return api.fetch<Me>('/me');
     },
+    /** The API's response as it is (a photo, a file): for route handlers that pass bytes on. */
+    async raw(path: string): Promise<Response> {
+      const s = await session.read();
+      if (!s) throw new ApiError(401, { type: 'unauthenticated' });
+      const headers = new Headers({
+        Authorization: `Bearer ${s.accessToken}`,
+        'X-Request-Id': crypto.randomUUID(),
+      });
+      if (s.schoolId) headers.set('X-School-Id', s.schoolId);
+      if (s.academicYearId) headers.set('X-Academic-Year-Id', s.academicYearId);
+      return fetch(`${env.apiBaseUrl}/api/v1${path}`, { headers, cache: 'no-store' });
+    },
   };
 
   const safeReturn = (returnTo: string | null | undefined): string =>

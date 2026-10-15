@@ -375,3 +375,164 @@ export async function saveSession(fd: FormData) {
   }
   done(to, id ? 'Session saved.' : 'Session added.');
 }
+
+// ---- H3: visitors, visiting hours, the mess --------------------------------------------------------------
+/** Visiting hours of a hostel: one slot per weekday (empty day = no visits; all empty = any time). */
+export async function saveVisitHours(fd: FormData) {
+  const to = `${BASE}/setup?tab=rules`;
+  const hours = [0, 1, 2, 3, 4, 5, 6]
+    .map((weekday) => ({
+      weekday,
+      from: str(fd, `from-${String(weekday)}`),
+      to: str(fd, `to-${String(weekday)}`),
+    }))
+    .filter((h) => h.from && h.to);
+  try {
+    await apiFetch(`/hostel/hostels/${str(fd, 'hostelId')}/visit-hours`, {
+      method: 'PUT',
+      body: JSON.stringify({ hours }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, hours.length ? 'Visiting hours saved.' : 'Visiting hours cleared: visits any time.');
+}
+
+export async function saveMeal(fd: FormData) {
+  const to = here(fd, `${BASE}/mess`);
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(id ? `/hostel/meals/${id}` : '/hostel/meals', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        hostelId: str(fd, 'hostelId'),
+        name: str(fd, 'name'),
+        atTime: str(fd, 'atTime'),
+        active: id ? fd.get('active') === 'on' : true,
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, id ? 'Meal saved.' : 'Meal added.');
+}
+
+/** The weekly menu grid: a cell per meal and weekday (m-<mealId>-<weekday>). */
+export async function saveMenuWeek(fd: FormData) {
+  const to = here(fd, `${BASE}/mess`);
+  const entries: Array<{ mealId: string; weekday: number; items: string }> = [];
+  for (const [k, v] of fd.entries()) {
+    const m = /^m-(\d{1,18})-([0-6])$/.exec(k);
+    if (m) entries.push({ mealId: m[1]!, weekday: Number(m[2]), items: String(v).trim() });
+  }
+  try {
+    await apiFetch('/hostel/menu', {
+      method: 'PUT',
+      body: JSON.stringify({ hostelId: str(fd, 'hostelId'), entries }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, 'Weekly menu saved.');
+}
+
+export async function saveMenuChange(fd: FormData) {
+  const to = here(fd, `${BASE}/mess`);
+  try {
+    await apiFetch('/hostel/menu/change', {
+      method: 'PUT',
+      body: JSON.stringify({
+        mealId: str(fd, 'mealId'),
+        onDate: str(fd, 'onDate'),
+        items: str(fd, 'items'),
+        note: str(fd, 'note'),
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(
+    to,
+    str(fd, 'items') ? 'Change for the day saved.' : 'Back to the weekly menu for that day.',
+  );
+}
+
+export async function decideHostelVisit(fd: FormData) {
+  const to = here(fd, `${BASE}/visitors`);
+  const outcome = str(fd, 'outcome') === 'refused' ? 'refused' : 'allowed';
+  try {
+    await apiFetch(`/hostel/visits/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, note: str(fd, 'note') }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(
+    to,
+    outcome === 'allowed'
+      ? 'Visitor allowed in. The parent has been told.'
+      : 'Visit refused. The parent has been told.',
+  );
+}
+
+export async function decideHostelVisitor(fd: FormData) {
+  const to = here(fd, `${BASE}/visitors?tab=approve`);
+  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  try {
+    await apiFetch(`/hostel/visitors/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, note: str(fd, 'note') }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, outcome === 'approved' ? 'Visitor approved.' : 'Visitor not approved.');
+}
+
+export async function addHostelVisitor(fd: FormData) {
+  const to = here(fd, `${BASE}/visitors?tab=lists`);
+  try {
+    await apiFetch('/hostel/visitors', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        name: str(fd, 'name'),
+        relation: str(fd, 'relation'),
+        mobile: str(fd, 'mobile'),
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, 'Visitor added to the list (approved).');
+}
+
+/** The gate registers a hostel visitor (live photo optional). */
+export async function registerHostelVisit(fd: FormData) {
+  const to = here(fd, `${BASE}/visit`);
+  let out: { number?: string; state?: string; why?: string | null } = {};
+  try {
+    out = await apiFetch('/hostel/visits', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        visitorName: str(fd, 'visitorName'),
+        mobile: str(fd, 'mobile'),
+        relation: str(fd, 'relation'),
+        partySize: num(fd, 'partySize', 1),
+        idProofKind: str(fd, 'idProofKind'),
+        gate: str(fd, 'gate'),
+        photo: str(fd, 'photo') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(
+    `${BASE}/visit`,
+    out.state === 'inside'
+      ? `${out.number ?? ''}: let the visitor in. The parent has been told.`
+      : `${out.number ?? ''}: ask the visitor to wait — ${out.why ?? ''}. The warden has been asked to allow or refuse.`,
+  );
+}

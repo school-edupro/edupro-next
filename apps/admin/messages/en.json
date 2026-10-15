@@ -187,7 +187,10 @@
     "hostelRegister": "Allotment register",
     "hostelSetup": "Hostel set-up",
     "hostelLeave": "Leave and outings",
-    "hostelRollcall": "Roll-call"
+    "hostelRollcall": "Roll-call",
+    "hostelVisitors": "Hostel visitors",
+    "hostelGate": "Hostel visitor at the gate",
+    "hostelMess": "Mess"
   },
   "shell": {
     "primaryNavigation": "Primary",

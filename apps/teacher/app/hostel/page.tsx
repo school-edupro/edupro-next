@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { decideVisit, decideVisitor } from './actions';
 
 interface Today {
   boarders: number;
@@ -40,6 +41,38 @@ interface Leave {
   overdue: boolean;
 }
 
+interface Visit {
+  id: string;
+  number: string;
+  visitorName: string;
+  mobile: string | null;
+  purpose: string;
+  pupil: string;
+  hostel: string;
+  listed: boolean;
+  inHours: boolean;
+  createdAt: string;
+  hasPhoto: boolean;
+}
+interface Visitor {
+  id: string;
+  pupil: string;
+  admissionNo: string;
+  name: string;
+  relation: string;
+  mobile: string;
+  hasPhoto: boolean;
+}
+interface Meal {
+  id: string;
+  hostelId: string;
+  hostel: string;
+  name: string;
+  atTime: string;
+  active: boolean;
+  markedToday: string | null;
+}
+
 const when = (v: string | null) =>
   v
     ? new Date(v).toLocaleString('en-IN', {
@@ -65,8 +98,11 @@ export default async function HostelDeskPage({
   let pending: Leave[];
   let handover: Leave[];
   let away: Leave[];
+  let visits: Visit[];
+  let visitors: Visitor[];
+  let meals: Meal[];
   try {
-    [today, sessions, pending, handover, away] = await Promise.all([
+    [today, sessions, pending, handover, away, visits, visitors, meals] = await Promise.all([
       bff.api.fetch<Today>('/hostel/today'),
       bff.api
         .fetch<{ data: Session[] }>('/hostel/sessions')
@@ -74,6 +110,18 @@ export default async function HostelDeskPage({
       bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=pending').then((r) => r.data),
       bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=handover').then((r) => r.data),
       bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=out').then((r) => r.data),
+      bff.api
+        .fetch<{ data: Visit[] }>('/hostel/visits?show=waiting')
+        .then((r) => r.data)
+        .catch(() => [] as Visit[]),
+      bff.api
+        .fetch<{ data: Visitor[] }>('/hostel/visitors?status=pending')
+        .then((r) => r.data)
+        .catch(() => [] as Visitor[]),
+      bff.api
+        .fetch<{ data: Meal[] }>('/hostel/meals')
+        .then((r) => r.data.filter((m) => m.active))
+        .catch(() => [] as Meal[]),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -119,6 +167,67 @@ export default async function HostelDeskPage({
         <KpiTile label={t(lang, 'Overdue')} value={String(today.overdue)} />
         <KpiTile label={t(lang, 'Absent at roll-call today')} value={String(today.absentToday)} />
       </div>
+
+      {visits.length ? (
+        <Card
+          title={`${t(lang, 'Visitors waiting at the gate')} (${String(visits.length)})`}
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          <ul className="fp-rcpts">
+            {visits.map((v) => (
+              <li key={v.id}>
+                <span style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
+                  {v.hasPhoto ? (
+                    <img
+                      src={`/hostel/photo/visit/${v.id}`}
+                      alt={v.visitorName}
+                      width={56}
+                      height={56}
+                      style={{ objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                    />
+                  ) : null}
+                  <span>
+                    <strong>{v.visitorName}</strong> → {v.pupil}
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      {v.purpose} · {v.mobile ?? '—'} · {when(v.createdAt)}
+                    </span>
+                    <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+                      {v.listed ? null : (
+                        <Badge tone="danger">{t(lang, 'Not on the approved list')}</Badge>
+                      )}
+                      {v.inHours ? null : (
+                        <Badge tone="warning">{t(lang, 'Outside visiting hours')}</Badge>
+                      )}
+                    </span>
+                  </span>
+                </span>
+                <form
+                  action={decideVisit}
+                  style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}
+                >
+                  <input type="hidden" name="id" value={v.id} />
+                  <button
+                    type="submit"
+                    name="outcome"
+                    value="allowed"
+                    className="ep-btn ep-btn--primary ep-btn--sm"
+                  >
+                    {t(lang, 'Allow in')}
+                  </button>
+                  <button
+                    type="submit"
+                    name="outcome"
+                    value="refused"
+                    className="ep-btn ep-btn--secondary ep-btn--sm"
+                  >
+                    {t(lang, 'Refuse')}
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <Card title={t(lang, 'Roll-call')} style={{ marginBottom: 'var(--sp-4)' }}>
         {sessions.length === 0 ? (
@@ -227,6 +336,100 @@ export default async function HostelDeskPage({
                   </span>
                 </span>
                 {l.overdue ? <Badge tone="danger">{t(lang, 'Overdue')}</Badge> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <Card
+        title={t(lang, 'Mess today')}
+        style={{ marginTop: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}
+      >
+        {meals.length === 0 ? (
+          <p className="ep-field__help">{t(lang, 'No meals are set up for your hostel.')}</p>
+        ) : (
+          <ul className="fp-rcpts">
+            {meals.map((m) => (
+              <li key={m.id}>
+                <span>
+                  <strong>
+                    {t(lang, m.name)} · {m.atTime}
+                  </strong>
+                  <span className="ep-field__help" style={{ display: 'block' }}>
+                    {m.hostel}
+                  </span>
+                </span>
+                <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                  {m.markedToday ? <Badge tone="success">{t(lang, 'Marked')}</Badge> : null}
+                  <a
+                    className="ep-btn ep-btn--secondary ep-btn--sm"
+                    href={`/hostel/meal?mealId=${m.id}`}
+                  >
+                    {t(lang, 'Who skipped')}
+                  </a>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {meals.length ? (
+          <p style={{ marginTop: 'var(--sp-3)' }}>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/hostel/diets?hostelId=${meals[0]!.hostelId}`}
+            >
+              {t(lang, 'Diet list for the kitchen')}
+            </a>
+          </p>
+        ) : null}
+      </Card>
+
+      <Card title={`${t(lang, 'Visitors to approve')} (${String(visitors.length)})`}>
+        {visitors.length === 0 ? (
+          <p className="ep-field__help">{t(lang, 'No visitor is waiting for approval.')}</p>
+        ) : (
+          <ul className="fp-rcpts">
+            {visitors.map((v) => (
+              <li key={v.id}>
+                <span style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
+                  {v.hasPhoto ? (
+                    <img
+                      src={`/hostel/photo/visitor/${v.id}`}
+                      alt={v.name}
+                      width={48}
+                      height={48}
+                      style={{ objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                    />
+                  ) : null}
+                  <span>
+                    <strong>{v.name}</strong> ({v.relation}) · {v.mobile}
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      {t(lang, 'for')} {v.pupil} · {v.admissionNo}
+                    </span>
+                  </span>
+                </span>
+                <form
+                  action={decideVisitor}
+                  style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}
+                >
+                  <input type="hidden" name="id" value={v.id} />
+                  <button
+                    type="submit"
+                    name="outcome"
+                    value="approved"
+                    className="ep-btn ep-btn--primary ep-btn--sm"
+                  >
+                    {t(lang, 'Approve')}
+                  </button>
+                  <button
+                    type="submit"
+                    name="outcome"
+                    value="rejected"
+                    className="ep-btn ep-btn--secondary ep-btn--sm"
+                  >
+                    {t(lang, 'Reject')}
+                  </button>
+                </form>
               </li>
             ))}
           </ul>

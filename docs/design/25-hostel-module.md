@@ -60,12 +60,17 @@ setup, rooms by seater, booking, complaints, feedback).
 - **Staff app**: Hostel desk (today, sessions, leave waiting, to hand over, away), roll-call, hand-over.
   **Admin**: Leave and outings, Roll-call report, rules and sessions under Set-up.
 
-### H3 · Visitors and mess
+### H3 · Visitors and mess — built 2026-10-15 (migration 0149)
 
-- **Approved visitors** per pupil (name, relation, mobile, photo), kept by office and parents. The
-  visitor register warns when a visitor is not on the list.
-- **Mess**: weekly menu by meal (shown in the parent portal), meal attendance (tick absentees), and a
-  special diet list built from the health record's allergies plus diets added in the hostel.
+- **Approved visitors** per pupil (`hostel_visitors`, photo in `hostel_visitor_photos`): parents add in
+  the portal, a warden of the pupil's hostel approves, the office adds directly; guardians on record
+  count as approved. **Visiting hours** per hostel (`hostel_visit_hours`; none = any time).
+- **Hostel visits** on the visitor register (`visitor_log.student_id / hostel_id / hostel_listed /
+  hostel_in_hours / warden_decision`): listed and in hours → inside; otherwise waiting until a warden
+  allows (inside) or refuses (cancelled); wardens and parent told. Gate: `hostel.visit.gate`.
+- **Mess**: `hostel_meals`, weekly `hostel_menu` and dated `hostel_menu_changes`, meal attendance
+  (`hostel_meal_marks` + `hostel_meal_skips`; away pupils left out), `hostel_diets` with the allergy from
+  `students.profile.medical_condition`. Parent portal Hostel page: approved visitors and the week's menu.
 
 ### H4 · Complaints, incidents and the parent view
 

@@ -11,6 +11,7 @@ import {
   saveHostelRules,
   saveRoomType,
   saveSession,
+  saveVisitHours,
   saveWardens,
   setBed,
   updateRoom,
@@ -101,6 +102,19 @@ export default async function HostelSetupPage({
     apiFetch<{ data: RoomType[] }>('/hostel/room-types').then((r) => r.data),
   ]);
   const hostel = hostels.find((h) => h.id === sp.hostel) ?? hostels[0];
+  const hours: Record<string, Array<{ weekday: number; from: string; to: string }>> = tab ===
+  'rules'
+    ? Object.fromEntries(
+        await Promise.all(
+          hostels.map(async (h) => [
+            h.id,
+            await apiFetch<{ data: Array<{ weekday: number; from: string; to: string }> }>(
+              `/hostel/hostels/${h.id}/visit-hours`,
+            ).then((r) => r.data),
+          ]),
+        ),
+      )
+    : {};
   const [rules, sessions] = await Promise.all([
     tab === 'rules' ? apiFetch<Rules>('/hostel/settings') : Promise.resolve<Rules | null>(null),
     tab === 'rules'
@@ -702,6 +716,54 @@ export default async function HostelSetupPage({
                     </Button>
                   </form>
                 ))}
+              <h3 className="hs-h" style={{ margin: 'var(--sp-4) 0 var(--sp-2)' }}>
+                Visiting hours
+              </h3>
+              <form
+                action={saveVisitHours}
+                style={{ display: 'grid', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}
+              >
+                <input type="hidden" name="hostelId" value={h.id} />
+                <p className="ep-field__help" style={{ margin: 0 }}>
+                  One slot a day; leave a day empty for no visits that day. All empty = visits any
+                  time. A visit outside these hours waits at the gate for the warden.
+                </p>
+                <div className="hs-hours">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, wd) => {
+                    const slot = (hours[h.id] ?? []).find((x) => x.weekday === wd);
+                    return (
+                      <fieldset key={d} className="hs-hours__day">
+                        <legend className="ep-field__label">{d}</legend>
+                        <label className="ep-sr-only" htmlFor={`vh-f-${h.id}-${String(wd)}`}>
+                          {d} from
+                        </label>
+                        <input
+                          id={`vh-f-${h.id}-${String(wd)}`}
+                          name={`from-${String(wd)}`}
+                          type="time"
+                          className="ep-input"
+                          defaultValue={slot?.from ?? ''}
+                        />
+                        <label className="ep-sr-only" htmlFor={`vh-t-${h.id}-${String(wd)}`}>
+                          {d} to
+                        </label>
+                        <input
+                          id={`vh-t-${h.id}-${String(wd)}`}
+                          name={`to-${String(wd)}`}
+                          type="time"
+                          className="ep-input"
+                          defaultValue={slot?.to ?? ''}
+                        />
+                      </fieldset>
+                    );
+                  })}
+                </div>
+                <div>
+                  <Button type="submit" variant="secondary">
+                    Save visiting hours
+                  </Button>
+                </div>
+              </form>
               <form action={saveSession} className="ep-hd__row">
                 <input type="hidden" name="hostelId" value={h.id} />
                 <label className="ep-field" htmlFor={`s-new-${h.id}`}>

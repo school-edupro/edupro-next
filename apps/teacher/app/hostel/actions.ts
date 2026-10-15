@@ -99,3 +99,76 @@ export async function handOver(fd: FormData) {
     `/hostel?ok=1&detail=${encodeURIComponent('Handed over. The gate lets the pupil out against the pass.')}`,
   );
 }
+
+/** A warden allows or refuses a visit waiting at the gate. */
+export async function decideVisit(fd: FormData) {
+  const outcome = str(fd, 'outcome') === 'refused' ? 'refused' : 'allowed';
+  try {
+    await bff.api.fetch(`/hostel/visits/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, note: str(fd, 'note') || undefined }),
+    });
+  } catch (error) {
+    fail('/hostel', error);
+  }
+  redirect(
+    `/hostel?ok=1&detail=${encodeURIComponent(outcome === 'allowed' ? 'Visitor allowed in. The parent has been told.' : 'Visit refused. The parent has been told.')}`,
+  );
+}
+
+/** A warden approves or rejects a visitor a parent added. */
+export async function decideVisitor(fd: FormData) {
+  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  try {
+    await bff.api.fetch(`/hostel/visitors/${str(fd, 'id')}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, note: str(fd, 'note') || undefined }),
+    });
+  } catch (error) {
+    fail('/hostel', error);
+  }
+  redirect(
+    `/hostel?ok=1&detail=${encodeURIComponent(outcome === 'approved' ? 'Visitor approved.' : 'Visitor not approved.')}`,
+  );
+}
+
+/** Who skipped a meal (everyone else not away had it). */
+export async function saveMeal(fd: FormData) {
+  const mealId = str(fd, 'mealId');
+  const on = str(fd, 'on');
+  const back = `/hostel/meal?mealId=${encodeURIComponent(mealId)}&on=${encodeURIComponent(on)}`;
+  const skips = fd
+    .getAll('skip')
+    .map(String)
+    .map((id) => ({ studentId: id, reason: str(fd, `r-${id}`) || undefined }));
+  let out: { served: number; skipped: number; away: number } = { served: 0, skipped: 0, away: 0 };
+  try {
+    out = await bff.api.fetch('/hostel/meal-roll', {
+      method: 'POST',
+      body: JSON.stringify({ mealId, on, skips }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(
+    `${back}&ok=1&detail=${encodeURIComponent(`Saved: ${String(out.served)} had the meal, ${String(out.skipped)} skipped, ${String(out.away)} away.`)}`,
+  );
+}
+
+/** The hostel's diet of a pupil. */
+export async function saveDiet(fd: FormData) {
+  const back = `/hostel/diets?hostelId=${encodeURIComponent(str(fd, 'hostelId'))}`;
+  try {
+    await bff.api.fetch(`/hostel/diets/${str(fd, 'studentId')}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        diet: str(fd, 'diet') || 'veg',
+        noOnionGarlic: fd.get('noOnionGarlic') === 'on',
+        notes: str(fd, 'notes') || undefined,
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=1`);
+}

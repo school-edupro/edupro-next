@@ -7175,3 +7175,16 @@ a.hs-bed__who:hover {
   font-size: var(--fs-h4);
   color: var(--text-heading);
 }
+.hs-hours {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+}
+.hs-hours__day {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  margin: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
