@@ -1,3 +1,4 @@
+import { FilesModule } from '../files/files.module';
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
@@ -35,7 +36,14 @@ import { FeesController } from './fees.controller';
  * hostel ledger, reconciliation.
  */
 @Module({
-  imports: [ReportsModule, TemplatesModule, DailyAcademicsModule, WorkflowModule, CommsModule],
+  imports: [
+    ReportsModule,
+    TemplatesModule,
+    DailyAcademicsModule,
+    WorkflowModule,
+    CommsModule,
+    FilesModule,
+  ],
   controllers: [
     FeesController,
     FeeRequestsController,

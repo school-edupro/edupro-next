@@ -58,3 +58,4 @@ export {
   type LessonDetailData,
 } from './components/LessonReport';
 export { CodeLoginForm, OtpCodeForm } from './components/OtpSignIn';
+export { FeeReceiptSheet, type FeeReceipt } from './components/FeeReceiptSheet';

@@ -1,5 +1,5 @@
-import { receiptPdf } from './receipt-pdf';
-import { Injectable } from '@nestjs/common';
+import { receiptLayoutPdf } from './receipt-layout-pdf';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { amountInWords } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
@@ -8,6 +8,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ViewerService } from '../academics/daily/viewer.service';
 import { schoolHead } from '../attendance/register-file';
 import { FeeLedgerService, type Ledger } from './fee-ledger.service';
+import { STORAGE_DRIVER, type StorageDriver } from '../files/storage';
 
 export interface BillInstalment {
   label: string;
@@ -183,6 +184,7 @@ export class FeeDocumentsService {
     private readonly db: DbService,
     private readonly ledger: FeeLedgerService,
     private readonly viewer: ViewerService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -192,6 +194,107 @@ export class FeeDocumentsService {
         status: 409,
       });
     return y;
+  }
+
+  /**
+   * What the receipt prints besides the money (the school's receipt layout): the letterhead (logo, contact,
+   * board affiliation and school number), both parents, their mobiles, the pupil's address, category and
+   * bus route / stop / slab, and the bounce charge of the pupil.
+   */
+  private async receiptParticulars(c: PoolClient, studentId: string, yearId: string) {
+    const r = await c.query<{
+      phone: string | null;
+      email: string | null;
+      website: string | null;
+      logo: string | null;
+      board: string | null;
+      affiliation: string | null;
+      school_no: string | null;
+      father: string | null;
+      mother: string | null;
+      mobiles: string | null;
+      address: string | null;
+      category: string | null;
+      route: string | null;
+      stop: string | null;
+      slab: string | null;
+    }>(
+      `SELECT NULLIF(sc.contact->>'phone', '') AS phone,
+              NULLIF(COALESCE(NULLIF(sc.contact->>'accountsEmail', ''), sc.contact->>'email'), '') AS email,
+              NULLIF(sc.contact->>'website', '') AS website, NULLIF(sc.branding->>'logoFileId', '') AS logo,
+              sc.board, sc.affiliation_no AS affiliation, NULLIF(sc.branding->>'schoolNo', '') AS school_no,
+              (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND sg.relation = 'father' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS father,
+              (SELECT concat_ws(' ', g.first_name, g.last_name) FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND sg.relation = 'mother' AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS mother,
+              (SELECT string_agg(DISTINCT g.mobile, ' , ') FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND g.deleted_at IS NULL AND NULLIF(g.mobile, '') IS NOT NULL) AS mobiles,
+              NULLIF(concat_ws(', ', NULLIF(s.address->>'line1', ''), NULLIF(s.address->>'line2', ''), NULLIF(s.address->>'area', ''),
+                               NULLIF(s.address->>'city', ''), NULLIF(COALESCE(s.address->>'pincode', s.address->>'pin'), '')), '') AS address,
+              s.category::text AS category,
+              (SELECT r.name FROM student_route_assignments a JOIN transport_routes r ON r.id = a.route_id
+                WHERE a.student_id = s.id AND a.academic_year_id = $2 ORDER BY (a.valid_to IS NULL) DESC, a.valid_from DESC NULLS LAST, a.id DESC LIMIT 1) AS route,
+              (SELECT COALESCE(a.stop_name, st.name) FROM student_route_assignments a LEFT JOIN transport_stops st ON st.id = a.stop_id
+                WHERE a.student_id = s.id AND a.academic_year_id = $2 ORDER BY (a.valid_to IS NULL) DESC, a.valid_from DESC NULLS LAST, a.id DESC LIMIT 1) AS stop,
+              (SELECT sl.name FROM student_fee_profiles fp JOIN transport_slabs sl ON sl.id = fp.transport_slab_id
+                WHERE fp.student_id = s.id AND fp.academic_year_id = $2 AND NOT COALESCE(fp.transport_disabled, false)) AS slab
+         FROM students s JOIN schools sc ON sc.id = app.current_school_id() WHERE s.id = $1`,
+      [studentId, yearId],
+    );
+    const x = r.rows[0];
+    return {
+      letterhead: {
+        phone: x?.phone ?? null,
+        email: x?.email ?? null,
+        website: x?.website ?? null,
+        logoFileId: x?.logo ?? null,
+        affiliation: x?.affiliation
+          ? `Affiliated to ${x.board ?? 'the'} Board${x.affiliation ? ` No: ${x.affiliation}` : ''}${x.school_no ? ` · School No: ${x.school_no}` : ''}`
+          : null,
+      },
+      parents: [x?.father, x?.mother].filter(Boolean).join(' / ') || null,
+      mobiles: x?.mobiles ?? null,
+      address: x?.address ?? null,
+      transport: [x?.category, x?.route, x?.stop, x?.slab].map((v) => v ?? '').join(' / '),
+    };
+  }
+
+  /** The bounce charge raised for a bounced receipt (the approved adjustment), else nothing. */
+  private async bounceChargeOf(c: PoolClient, paymentId: string): Promise<string> {
+    const r = await c.query<{ v: string | null }>(
+      `SELECT sum(charge)::numeric(12,2)::text AS v FROM fee_adjustments WHERE payment_id = $1 AND kind = 'bounce' AND status = 'approved'`,
+      [paymentId],
+    );
+    return r.rows[0]?.v ?? '0.00';
+  }
+
+  /** The instalments a receipt paid, named as the pay plan names them: Q1, H2, Annual, or the months. */
+  private async instalmentLabel(c: PoolClient, paymentId: string) {
+    const r = await c.query<{ plan: string; nos: number[]; months: string[] }>(
+      `WITH p AS (SELECT student_id, academic_year_id, ledger FROM fee_payments WHERE id = $1),
+            k AS (SELECT (SELECT cs.class_id FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                           WHERE e.student_id = p.student_id AND e.academic_year_id = p.academic_year_id
+                           ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS class_id FROM p),
+            n AS (SELECT d.due_on, dense_rank() OVER (ORDER BY d.due_on) AS no
+                    FROM fee_demands d, p WHERE d.student_id = p.student_id AND d.academic_year_id = p.academic_year_id
+                     AND d.ledger = p.ledger AND d.status IN ('pending', 'partial', 'paid'))
+       SELECT (SELECT CASE WHEN p.ledger = 'hostel'
+                           THEN app.fee_hostel_plan(p.student_id, p.academic_year_id, app.fee_pay_plan(p.student_id, p.academic_year_id, k.class_id))
+                           ELSE app.fee_pay_plan(p.student_id, p.academic_year_id, k.class_id) END FROM p, k) AS plan,
+              COALESCE((SELECT array_agg(DISTINCT n.no ORDER BY n.no) FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id
+                          JOIN (SELECT DISTINCT due_on, no FROM n) n ON n.due_on = d.due_on WHERE a.payment_id = $1), '{}') AS nos,
+              COALESCE((SELECT array_agg(fp.name ORDER BY fp.sequence) FROM (SELECT DISTINCT fp.id, fp.name, fp.sequence
+                          FROM fee_payment_allocations a JOIN fee_demands d ON d.id = a.demand_id JOIN fee_periods fp ON fp.id = d.period_id
+                         WHERE a.payment_id = $1) fp), '{}') AS months`,
+      [paymentId],
+    );
+    const x = r.rows[0];
+    if (!x || x.nos.length === 0) return null;
+    const prefix: Record<string, string> = { quarterly: 'Q', half_yearly: 'H' };
+    if (x.plan === 'yearly') return 'Annual';
+    if (prefix[x.plan]) return x.nos.map((n) => `${prefix[x.plan]}${n}`).join(', ');
+    const m = x.months.map((v) => v.split(' ')[0]!.slice(0, 3));
+    return m.length > 3 ? `${m[0]} – ${m[m.length - 1]}` : m.join(', ');
   }
 
   private async head(c: PoolClient, studentId: string, yearId: string) {
@@ -227,12 +330,30 @@ export class FeeDocumentsService {
   /** The receipt as a PDF made at once: one page per copy. Sent as base64 for the web apps to stream. */
   async receiptFile(ctx: RequestContext, paymentId: string, copies: string[]) {
     const r = await this.receiptView(ctx, paymentId);
-    const bytes = await receiptPdf(r, copies);
+    const bytes = await receiptLayoutPdf(r, copies, await this.logo(ctx, r.letterhead.logoFileId));
     return {
       filename: `receipt-${(r.receiptNo ?? paymentId).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
       contentType: 'application/pdf',
       base64: bytes.toString('base64'),
     };
+  }
+
+  /** The school's logo for a printed paper (PNG or JPEG); nothing when there is none or it cannot be read. */
+  private async logo(ctx: RequestContext, fileId: string | null) {
+    if (!fileId || !/^\d{1,18}$/.test(fileId)) return null;
+    try {
+      const f = await this.db.tenant(requireTenant(ctx), async (c) => {
+        const r = await c.query<{ object_key: string; content_type: string }>(
+          `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
+          [fileId],
+        );
+        return r.rows[0];
+      });
+      if (!f) return null;
+      return { contentType: f.content_type, bytes: await this.storage.read(f.object_key) };
+    } catch {
+      return null;
+    }
   }
 
   async receiptView(ctx: RequestContext, paymentId: string) {
@@ -313,6 +434,9 @@ export class FeeDocumentsService {
         receivedBy: r.received_by,
         depositAccount: r.deposit_account,
         lines: lines.rows,
+        ...(await this.receiptParticulars(c, r.student_id, r.academic_year_id)),
+        instalment: await this.instalmentLabel(c, r.id),
+        bounceCharge: r.status === 'bounced' ? await this.bounceChargeOf(c, r.id) : '0.00',
       };
     });
   }
@@ -373,6 +497,9 @@ export class FeeDocumentsService {
         receivedBy: r.received_by,
         depositAccount: null,
         lines: [{ head: r.title ?? r.head, period: r.title ? r.head : '', amount: r.amount }],
+        ...(await this.receiptParticulars(c, r.student_id, r.academic_year_id)),
+        instalment: r.title ?? null,
+        bounceCharge: '0.00',
       };
     });
   }

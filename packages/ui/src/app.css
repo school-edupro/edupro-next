@@ -6562,6 +6562,135 @@ a.ep-tabs__tab {
   }
 }
 
+/* fee receipt, the school's two-panel layout: school and pupil on the left, the money on the right */
+.ep-rcpt {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 2px solid var(--text-heading);
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font-size: var(--fs-small);
+  max-width: 64rem;
+  margin: 0 auto;
+}
+.ep-rcpt__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ep-rcpt__panel + .ep-rcpt__panel {
+  border-left: 2px solid var(--text-heading);
+}
+.ep-rcpt__head {
+  display: grid;
+  grid-template-columns: 4rem 1fr 4rem;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  text-align: center;
+  border-bottom: 1px solid var(--text-heading);
+}
+.ep-rcpt__logo {
+  max-width: 4rem;
+  max-height: 4rem;
+}
+.ep-rcpt__school {
+  margin: 0;
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-bold);
+  color: var(--text-link);
+}
+.ep-rcpt__line {
+  margin: 0;
+  font-size: var(--fs-caption);
+}
+.ep-rcpt__band {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--text-heading);
+  font-weight: var(--fw-bold);
+  text-align: center;
+}
+.ep-rcpt__spaced {
+  letter-spacing: 0.35em;
+  word-spacing: 0.6em;
+}
+.ep-rcpt__rows {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+  padding: var(--sp-2);
+}
+.ep-rcpt__rows dd {
+  margin: 0;
+}
+.ep-rcpt__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ep-rcpt__table th,
+.ep-rcpt__table td {
+  border: 1px solid var(--text-heading);
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+}
+.ep-rcpt__table thead th,
+.ep-rcpt__table .ep-rcpt__shade {
+  background: var(--surface-subtle);
+}
+.ep-rcpt__num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+.ep-rcpt__total {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--surface-subtle);
+  font-weight: var(--fw-bold);
+}
+.ep-rcpt__stamp {
+  margin: var(--sp-2) var(--sp-2) 0 auto;
+  width: 60%;
+  min-height: 3.5rem;
+  border: 1px solid var(--text-heading);
+  border-radius: var(--radius-md);
+}
+.ep-rcpt__foot {
+  margin: var(--sp-2);
+  text-align: right;
+}
+.ep-rcpt__note {
+  margin: 0;
+  padding: var(--sp-2);
+}
+.ep-rcpt__void {
+  display: inline-block;
+  margin-left: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border: 2px solid var(--status-danger-text);
+  color: var(--status-danger-text);
+  font-weight: var(--fw-bold);
+}
+@media (max-width: 48rem) {
+  .ep-rcpt {
+    grid-template-columns: 1fr;
+  }
+  .ep-rcpt__panel + .ep-rcpt__panel {
+    border-left: 0;
+    border-top: 2px solid var(--text-heading);
+  }
+}
+@media print {
+  .ep-rcpt {
+    max-width: none;
+    break-inside: avoid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* First sign-in on the parent / student portal: welcome, privacy notice, consent choices. */
 .fp-ob {
   min-height: 100vh;

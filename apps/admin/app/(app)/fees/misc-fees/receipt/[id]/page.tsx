@@ -16,6 +16,8 @@ export default async function MiscReceiptPage({
   const r = await apiFetch<Receipt>(`/fees/misc-fees/receipts/${id}/receipt-view`);
   return (
     <>
+      {/* the school's receipt layout is wide: each copy prints on an A4 landscape page */}
+      <style>{'@page { size: A4 landscape; margin: 8mm; }'}</style>
       <div
         className="ep-noprint"
         style={{
