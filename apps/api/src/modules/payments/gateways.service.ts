@@ -49,14 +49,15 @@ export const GATEWAY_FIELDS: Record<
     secret: [['key', 'Encryption key']],
   },
   atom: {
-    name: 'Atom (NTT DATA)',
+    name: 'Atom (NTT DATA AIPAY)',
     config: [
-      ['login', 'Merchant id (login)'],
+      ['login', 'Merchant id (MID)'],
       ['productId', 'Product id'],
     ],
     secret: [
-      ['password', 'Password'],
-      ['reqHashKey', 'Request hash key'],
+      ['password', 'Transaction password'],
+      ['reqEncKey', 'Request encryption key (AES)'],
+      ['resDecKey', 'Response decryption key (AES)'],
       ['resHashKey', 'Response hash key'],
     ],
   },

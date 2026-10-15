@@ -1,119 +1,224 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  pbkdf2Sync,
+  timingSafeEqual,
+} from 'node:crypto';
 
 /**
- * Atom (NTT DATA) paynetz redirect. The browser posts the transaction to Atom with a request signature,
- * HMAC-SHA512(login + pass + ttype + prodid + txnid + amt + txncurr) under the request hash key; Atom posts
- * back the result with HMAC-SHA512(mmp_txn + mer_txn + f_code + prod + discriminator + amt + bank_txn) under
- * the response hash key, checked in constant time. f_code "Ok" is success. Verify with the test
- * credentials: Atom also offers a newer AES "AIPAY" checkout that some merchants are given instead.
+ * Atom / NTT DATA "AIPAY" (the kit Atom issues today). Three steps:
+ *  1. AUTH, server to server: the payment as JSON, AES-256-CBC encrypted with the request encryption key
+ *     (key = PBKDF2-HMAC-SHA512(key, salt = the key, 65536 rounds, 32 bytes), IV = bytes 0..15, hex), posted
+ *     as encData + merchId; Atom answers encData (decrypted with the response key) with an atomTokenId.
+ *  2. The browser loads Atom's atomcheckout.js and opens AtomPaynetz with the token.
+ *  3. Atom posts the result to our return URL as encData; it must open with the response decryption key,
+ *     and its signature, HMAC-SHA512(merchId + atomTxnId + merchTxnId + totalAmount + statusCode +
+ *     subChannel + bankTxnId) under the response hash key, must match (constant time). OTS0000 = success.
+ * Addresses and the key/salt rule follow the AIPAY kit; check them against the kit Atom gave the school.
  */
 export interface AtomCredentials {
-  login: string;
+  merchId: string;
   password: string;
   productId: string;
-  reqHashKey: string;
+  reqEncKey: string;
+  resDecKey: string;
   resHashKey: string;
-  baseUrl: string;
+  mode: 'test' | 'live';
 }
 
 export const ATOM_URLS = {
-  test: 'https://paynetzuat.atomtech.in/paynetz/epi/fts',
-  live: 'https://payment.atomtech.in/paynetz/epi/fts',
+  test: 'https://paynetzuat.atomtech.in/ots/aipay/auth',
+  live: 'https://payment1.atomtech.in/ots/aipay/auth',
+};
+export const ATOM_SCRIPTS = {
+  test: 'https://pgtest.atomtech.in/staticdata/ots/js/atomcheckout.js',
+  live: 'https://psa.atomtech.in/staticdata/ots/js/atomcheckout.js',
 };
 
-const hmac = (data: string, key: string) => createHmac('sha512', key).update(data, 'utf8').digest('hex');
+const IV = Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+const keyOf = (key: string) =>
+  pbkdf2Sync(Buffer.from(key, 'utf8'), Buffer.from(key, 'utf8'), 65536, 32, 'sha512');
 
+export function encrypt(plain: string, key: string): string {
+  const c = createCipheriv('aes-256-cbc', keyOf(key), IV);
+  return Buffer.concat([c.update(plain, 'utf8'), c.final()])
+    .toString('hex')
+    .toUpperCase();
+}
+
+export function decrypt(hex: string, key: string): string | null {
+  try {
+    const d = createDecipheriv('aes-256-cbc', keyOf(key), IV);
+    return Buffer.concat([d.update(Buffer.from(hex, 'hex')), d.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** Atom's date: yyyy-MM-dd HH:mm:ss, Indian time. */
 const stamp = (d: Date) => {
-  const p = (n: number) => String(n).padStart(2, '0');
-  // Atom wants dd/mm/yyyy hh:mm:ss, Indian time
   const ist = new Date(d.getTime() + 5.5 * 3600 * 1000);
-  return `${p(ist.getUTCDate())}/${p(ist.getUTCMonth() + 1)}/${ist.getUTCFullYear()} ${p(ist.getUTCHours())}:${p(ist.getUTCMinutes())}:${p(ist.getUTCSeconds())}`;
+  return ist.toISOString().replace('T', ' ').slice(0, 19);
 };
 
-export interface AtomRequest {
+export interface AtomPayment {
   txnId: string;
   amount: string;
-  name: string;
   email: string;
   mobile: string;
-  returnUrl: string;
   customerAccount: string;
 }
 
-export function buildForm(r: AtomRequest, c: AtomCredentials, now = new Date()) {
-  const ttype = 'NBFundTransfer';
-  const fields: Record<string, string> = {
-    login: c.login,
-    pass: c.password,
-    ttype,
-    prodid: c.productId,
-    amt: r.amount,
-    txncurr: 'INR',
-    txnscamt: '0',
-    clientcode: Buffer.from(r.name || 'Payer').toString('base64'),
-    txnid: r.txnId,
-    date: stamp(now),
-    custacc: r.customerAccount || '0',
-    udf1: r.name,
-    udf2: r.email,
-    udf3: r.mobile,
-    ru: r.returnUrl,
-    signature: hmac(`${c.login}${c.password}${ttype}${c.productId}${r.txnId}${r.amount}INR`, c.reqHashKey),
+/** The AUTH request in AIPAY's JSON shape. */
+export function authPayload(p: AtomPayment, c: AtomCredentials, now = new Date()) {
+  return {
+    payInstrument: {
+      headDetails: { version: 'OTSv1.1', api: 'AUTH', platform: 'FLASH' },
+      merchDetails: {
+        merchId: c.merchId,
+        userId: '',
+        password: c.password,
+        merchTxnId: p.txnId,
+        merchTxnDate: stamp(now),
+      },
+      payDetails: {
+        amount: Number(p.amount).toFixed(2),
+        product: c.productId,
+        custAccNo: p.customerAccount || '0',
+        txnCurrency: 'INR',
+      },
+      custDetails: { custEmail: p.email || 'na@example.com', custMobile: p.mobile || '0000000000' },
+      extras: { udf1: '', udf2: '', udf3: '', udf4: '', udf5: '' },
+    },
   };
-  return { kind: 'form' as const, action: c.baseUrl, method: 'POST' as const, fields };
 }
 
-export interface AtomResponse {
-  mmp_txn?: string;
-  mer_txn?: string;
-  amt?: string;
-  prod?: string;
-  date?: string;
-  bank_txn?: string;
-  f_code?: string;
-  discriminator?: string;
-  bank_name?: string;
-  desc?: string;
-  signature?: string;
-  [k: string]: string | undefined;
+/** Step 1: the token for the checkout. Throws with Atom's message when it refuses. */
+export async function requestToken(
+  p: AtomPayment,
+  c: AtomCredentials,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const body = new URLSearchParams({
+    encData: encrypt(JSON.stringify(authPayload(p, c)), c.reqEncKey),
+    merchId: c.merchId,
+  });
+  const res = await fetchImpl(ATOM_URLS[c.mode], {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await res.text();
+  const enc = new URLSearchParams(text).get('encData');
+  const plain = enc ? decrypt(enc, c.resDecKey) : null;
+  if (!plain) throw new Error(`Atom AUTH: HTTP ${String(res.status)} ${text.slice(0, 160)}`);
+  const json = JSON.parse(plain) as {
+    atomTokenId?: string | number;
+    responseDetails?: { txnStatusCode?: string; txnMessage?: string; txnDescription?: string };
+  };
+  const ok = json.responseDetails?.txnStatusCode === 'OTS0000' && json.atomTokenId;
+  if (!ok)
+    throw new Error(
+      `Atom AUTH: ${json.responseDetails?.txnStatusCode ?? '?'} ${json.responseDetails?.txnDescription ?? json.responseDetails?.txnMessage ?? ''}`.trim(),
+    );
+  return String(json.atomTokenId);
 }
 
-export function responseSignature(r: AtomResponse, resHashKey: string): string {
-  return hmac(
-    `${r.mmp_txn ?? ''}${r.mer_txn ?? ''}${r.f_code ?? ''}${r.prod ?? ''}${r.discriminator ?? ''}${r.amt ?? ''}${r.bank_txn ?? ''}`,
-    resHashKey,
-  );
+export interface AtomResult {
+  merchId: string;
+  merchTxnId: string;
+  atomTxnId: string;
+  totalAmount: string;
+  statusCode: string;
+  description: string;
+  subChannel: string;
+  bankTxnId: string;
+  signature: string;
 }
 
-export function verifyResponse(r: AtomResponse, resHashKey: string): boolean {
+/** Step 3: Atom's answer, opened with the response key; null when it does not open. */
+export function readResponse(encData: string, resDecKey: string): AtomResult | null {
+  const plain = decrypt(encData, resDecKey);
+  if (!plain) return null;
+  try {
+    const j = JSON.parse(plain) as { payInstrument?: Record<string, Record<string, unknown>> };
+    const pi = j.payInstrument ?? {};
+    const merch = (pi.merchDetails ?? {}) as Record<string, unknown>;
+    const pay = (pi.payDetails ?? {}) as Record<string, unknown>;
+    const resp = (pi.responseDetails ?? {}) as Record<string, unknown>;
+    const mode = (pi.payModeSpecificData ?? {}) as Record<string, unknown>;
+    const sub = mode.subChannel;
+    const bank = (mode.bankDetails ?? {}) as Record<string, unknown>;
+    return {
+      merchId: String(merch.merchId ?? ''),
+      merchTxnId: String(merch.merchTxnId ?? ''),
+      atomTxnId: String(pay.atomTxnId ?? ''),
+      totalAmount: Number(pay.totalAmount ?? pay.amount ?? 0).toFixed(2),
+      statusCode: String(resp.statusCode ?? ''),
+      description: String(resp.description ?? resp.message ?? ''),
+      subChannel: String(Array.isArray(sub) ? (sub[0] ?? '') : (sub ?? '')),
+      bankTxnId: String(bank.bankTxnId ?? ''),
+      signature: String(pay.signature ?? ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function signatureOf(r: AtomResult, resHashKey: string): string {
+  return createHmac('sha512', resHashKey)
+    .update(
+      `${r.merchId}${r.atomTxnId}${r.merchTxnId}${r.totalAmount}${r.statusCode}${r.subChannel}${r.bankTxnId}`,
+      'utf8',
+    )
+    .digest('hex');
+}
+
+export function verify(r: AtomResult, resHashKey: string): boolean {
   if (!r.signature) return false;
-  const want = Buffer.from(responseSignature(r, resHashKey));
+  const want = Buffer.from(signatureOf(r, resHashKey));
   const got = Buffer.from(r.signature.toLowerCase());
   return want.length === got.length && timingSafeEqual(want, got);
 }
 
-export const outcomeOf = (fCode: string | undefined): 'success' | 'failure' =>
-  (fCode ?? '').toLowerCase() === 'ok' ? 'success' : 'failure';
+export const outcomeOf = (code: string): 'success' | 'failure' | 'pending' =>
+  code === 'OTS0000' ? 'success' : code === 'OTS0551' ? 'pending' : 'failure';
 
-/** For tests and the development mock: the answer Atom would post. */
+/** For tests and the development mock: the answer Atom would post (encData). */
 export function mockResponse(
   txnId: string,
   amount: string,
-  productId: string,
+  merchId: string,
   outcome: 'success' | 'failure',
+  resDecKey: string,
   resHashKey: string,
-): AtomResponse {
-  const r: AtomResponse = {
-    mmp_txn: `${Date.now()}`,
-    mer_txn: txnId,
-    amt: amount,
-    prod: productId,
-    date: stamp(new Date()),
-    bank_txn: `B${Date.now()}`,
-    f_code: outcome === 'success' ? 'Ok' : 'F',
-    discriminator: 'NB',
-    bank_name: 'Atom Bank',
+): string {
+  const r: AtomResult = {
+    merchId,
+    merchTxnId: txnId,
+    atomTxnId: `${Date.now()}`,
+    totalAmount: Number(amount).toFixed(2),
+    statusCode: outcome === 'success' ? 'OTS0000' : 'OTS0600',
+    description: outcome === 'success' ? 'SUCCESS' : 'CANCELLED',
+    subChannel: 'NB',
+    bankTxnId: `B${Date.now()}`,
+    signature: '',
   };
-  r.signature = responseSignature(r, resHashKey);
-  return r;
+  r.signature = signatureOf(r, resHashKey);
+  return encrypt(
+    JSON.stringify({
+      payInstrument: {
+        merchDetails: { merchId, merchTxnId: txnId },
+        payDetails: { atomTxnId: r.atomTxnId, totalAmount: Number(amount), signature: r.signature },
+        responseDetails: { statusCode: r.statusCode, description: r.description },
+        payModeSpecificData: {
+          subChannel: [r.subChannel],
+          bankDetails: { bankTxnId: r.bankTxnId },
+        },
+      },
+    }),
+    resDecKey,
+  );
 }

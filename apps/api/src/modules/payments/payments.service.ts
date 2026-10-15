@@ -251,6 +251,43 @@ export class PaymentsService {
       );
       row = toRow(u.rows[0]!);
     }
+    if (provider === 'atom' && account) {
+      // Atom AIPAY: the token for the checkout comes from Atom's AUTH call (kept as the provider order)
+      const creds = this.atomOf(account);
+      if (!creds.reqEncKey || !creds.resDecKey || !creds.resHashKey || !creds.password)
+        throw new DomainError(
+          'payments.gateway_keys_missing',
+          'Atom is not set up fully: the school admin enters the AIPAY keys in Fee setup -> Payment gateways',
+          { status: 409 },
+        );
+      let token: string;
+      try {
+        token = await atom.requestToken(
+          {
+            txnId,
+            amount: row.amount,
+            email: input.payer.email,
+            mobile: input.payer.mobile,
+            customerAccount: input.entityId,
+          },
+          creds,
+          this.gatewayFetch,
+        );
+      } catch (error) {
+        this.logger.error(`atom auth failed for ${txnId}: ${(error as Error).message}`);
+        throw new DomainError(
+          'payments.gateway_unavailable',
+          `Atom did not accept the payment: ${(error as Error).message}`.slice(0, 200),
+          { status: 502 },
+        );
+      }
+      const u = await c.query<Record<string, unknown>>(
+        // eslint-disable-next-line no-restricted-syntax -- column list constant; values are bound parameters
+        `UPDATE payment_intents SET provider_order_id = $2, updated_at = now() WHERE id = $1 RETURNING ${COLS}`,
+        [row.id, token],
+      );
+      row = toRow(u.rows[0]!);
+    }
     await c.query(
       `INSERT INTO payment_events (school_id, intent_id, kind, payload) VALUES (app.current_school_id(), $1, 'created', $2::jsonb)`,
       [
@@ -273,6 +310,17 @@ export class PaymentsService {
       keySecret: a.secret.keySecret ?? '',
       webhookSecret: a.secret.webhookSecret ?? '',
       baseUrl: a.url,
+    };
+  }
+  private atomOf(a: GatewayAccount): atom.AtomCredentials {
+    return {
+      merchId: a.config.login ?? '',
+      password: a.secret.password ?? '',
+      productId: a.config.productId ?? '',
+      reqEncKey: a.secret.reqEncKey ?? '',
+      resDecKey: a.secret.resDecKey ?? '',
+      resHashKey: a.secret.resHashKey ?? '',
+      mode: a.mode,
     };
   }
   private ccavenueOf(a: GatewayAccount) {
@@ -364,26 +412,26 @@ export class PaymentsService {
       return { ...form, provider: 'sbiepay', mode: account.mode };
     }
     if (intent.provider === 'atom' && account) {
-      const form = atom.buildForm(
-        {
-          txnId: intent.txnId,
-          amount: money(intent.amount),
-          name: intent.payerName ?? 'Payer',
-          email: intent.payerEmail ?? '',
-          mobile: intent.payerMobile ?? '',
-          returnUrl: returnEndpoint('atom'),
-          customerAccount: intent.entityId ?? '0',
-        },
-        {
-          login: account.config.login ?? '',
-          password: account.secret.password ?? '',
-          productId: account.config.productId ?? '',
-          reqHashKey: account.secret.reqHashKey ?? '',
-          resHashKey: account.secret.resHashKey ?? '',
-          baseUrl: account.url,
-        },
-      );
-      return { ...form, provider: 'atom', mode: account.mode };
+      if (!intent.providerOrderId)
+        throw new DomainError(
+          'payments.order_missing',
+          'Atom did not give a token for this payment',
+          {
+            status: 409,
+          },
+        );
+      return {
+        kind: 'atom',
+        provider: 'atom',
+        mode: account.mode,
+        scriptUrl: atom.ATOM_SCRIPTS[account.mode],
+        atomTokenId: intent.providerOrderId,
+        merchId: account.config.login ?? '',
+        custEmail: intent.payerEmail ?? '',
+        custMobile: intent.payerMobile ?? '',
+        returnUrl: returnEndpoint('atom'),
+        env: account.mode === 'live' ? 'prod' : 'uat',
+      };
     }
     // PayU and the development mock share the PayU field set
     const key = account ? (account.config.merchantKey ?? '') : this.env.PAYU_KEY;
@@ -721,22 +769,28 @@ export class PaymentsService {
     );
   }
 
-  /** Atom posts back the result signed with the account's response hash key. */
-  async handleAtomReturn(body: atom.AtomResponse, gw?: string) {
-    const account = await this.accountFor(gw, body.mer_txn ?? null, 'atom', null);
-    const ok =
-      account?.provider === 'atom' && atom.verifyResponse(body, account.secret.resHashKey ?? '');
+  /** Atom AIPAY posts back encData: it must open with the account's response key and carry its signature. */
+  async handleAtomReturn(body: { encData?: string; merchId?: string }, gw?: string) {
+    const account = gw ? await this.gateways.accountById(gw) : null;
+    const resp =
+      account?.provider === 'atom' && body.encData
+        ? atom.readResponse(body.encData, account.secret.resDecKey ?? '')
+        : null;
+    if (!resp) {
+      this.logger.warn('atom response did not open with the account key');
+      return { outcome: 'rejected', intentId: null, status: null, returnUrl: null };
+    }
     return this.applyNotification(
       {
         provider: 'atom',
-        txnId: body.mer_txn ?? null,
+        txnId: resp.merchTxnId || null,
         orderId: null,
-        providerRef: body.mmp_txn ?? null,
-        status: atom.outcomeOf(body.f_code),
-        amount: body.amt ?? null,
-        signatureOk: Boolean(ok),
-        reason: body.desc ?? body.f_code ?? null,
-        payload: body,
+        providerRef: resp.atomTxnId || null,
+        status: atom.outcomeOf(resp.statusCode),
+        amount: resp.totalAmount,
+        signatureOk: atom.verify(resp, account!.secret.resHashKey ?? ''),
+        reason: resp.description || resp.statusCode,
+        payload: { ...resp, signature: undefined },
       },
       'return',
     );

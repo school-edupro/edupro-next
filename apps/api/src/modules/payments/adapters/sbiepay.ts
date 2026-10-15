@@ -106,7 +106,11 @@ export function readResponse(encData: string, key: string): SbiepayResponse | nu
 }
 
 export const outcomeOf = (status: string): 'success' | 'failure' | 'pending' =>
-  status === 'SUCCESS' ? 'success' : status === 'PENDING' || status === 'BOOKED' ? 'pending' : 'failure';
+  status === 'SUCCESS'
+    ? 'success'
+    : status === 'PENDING' || status === 'BOOKED'
+      ? 'pending'
+      : 'failure';
 
 /** For tests and the development mock: the answer SBI ePay would post. */
 export function mockResponse(
@@ -116,7 +120,16 @@ export function mockResponse(
   key: string,
 ): string {
   return encrypt(
-    [orderNo, `ATRN${Date.now()}`, outcome === 'success' ? 'SUCCESS' : 'FAIL', amount, 'INR', 'NB', 'NA', outcome === 'success' ? 'Success' : 'Failed'].join('|'),
+    [
+      orderNo,
+      `ATRN${Date.now()}`,
+      outcome === 'success' ? 'SUCCESS' : 'FAIL',
+      amount,
+      'INR',
+      'NB',
+      'NA',
+      outcome === 'success' ? 'Success' : 'Failed',
+    ].join('|'),
     key,
   );
 }

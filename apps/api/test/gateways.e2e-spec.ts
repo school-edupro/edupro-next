@@ -9,6 +9,7 @@ import * as atom from '../src/modules/payments/adapters/atom';
 import * as ccavenue from '../src/modules/payments/adapters/ccavenue';
 import * as sbiepay from '../src/modules/payments/adapters/sbiepay';
 import { mockResponse } from '../src/modules/payments/payu';
+import { PaymentsService } from '../src/modules/payments/payments.service';
 import {
   createApp,
   headersFor,
@@ -32,6 +33,8 @@ describe('payment gateways (e2e)', () => {
   const gw: Record<string, string> = {};
   const h = (u: SeededUser = admin, extra = '') => headersFor(`${u.sub}${extra}`, school.id);
   const SBI_KEY = Buffer.from('0123456789abcdef').toString('base64');
+  const REQ_ENC = 'A4476C2062FFA58980DC8F79EB6A799E';
+  const RES_DEC = '75AEF0FA1B94B3C10D4F5B268F757F11';
 
   beforeAll(async () => {
     const s = stamp('GWY');
@@ -180,7 +183,12 @@ describe('payment gateways (e2e)', () => {
         'atom',
         'Atom',
         { login: '197', productId: 'NSE' },
-        { password: 'Test@123', reqHashKey: 'KEY123657234', resHashKey: 'KEYRESP123657234' },
+        {
+          password: 'Test@123',
+          reqEncKey: REQ_ENC,
+          resDecKey: RES_DEC,
+          resHashKey: 'KEYRESP123657234',
+        },
       ],
     ] as const) {
       const r = await inject({
@@ -357,7 +365,24 @@ describe('payment gateways (e2e)', () => {
       json: { encData: enc },
     });
     expect(ra.json()).toMatchObject({ outcome: 'applied', status: 'succeeded' });
-    // Atom: a bad signature is refused, the right one applied
+    // Atom AIPAY: our server asks Atom for a token (Atom stood in for here); the browser opens Atom's checkout
+    const sent: string[] = [];
+    app.get(PaymentsService).gatewayFetch = (async (url: string, init?: { body?: string }) => {
+      sent.push(String(url));
+      const asked = atom.decrypt(
+        new URLSearchParams(init?.body ?? '').get('encData') ?? '',
+        REQ_ENC,
+      );
+      expect(asked).toContain('"api":"AUTH"');
+      const answer = atom.encrypt(
+        JSON.stringify({
+          atomTokenId: 15000000085830,
+          responseDetails: { txnStatusCode: 'OTS0000' },
+        }),
+        RES_DEC,
+      );
+      return new Response(`merchId=197&encData=${answer}`, { status: 200 });
+    }) as never;
     const b = await inject({
       method: 'POST',
       url: '/payments/intents/mine/misc',
@@ -365,9 +390,27 @@ describe('payment gateways (e2e)', () => {
       json: { lineId: lines[1], gatewayId: gw.atom },
     });
     expect(b.statusCode).toBe(201);
-    const bi = b.json() as { intent: { txnId: string } };
+    const bi = b.json() as {
+      intent: { txnId: string };
+      checkout: { kind: string; atomTokenId: string; scriptUrl: string; env: string };
+    };
+    expect(sent).toEqual([atom.ATOM_URLS.test]);
+    expect(bi.checkout).toMatchObject({
+      kind: 'atom',
+      atomTokenId: '15000000085830',
+      scriptUrl: atom.ATOM_SCRIPTS.test,
+      env: 'uat',
+    });
+    // an answer signed with another hash key is refused; one that does not open with the key too
     const forged = {
-      ...atom.mockResponse(bi.intent.txnId, '750.00', 'NSE', 'success', 'not-the-key'),
+      encData: atom.mockResponse(
+        bi.intent.txnId,
+        '750.00',
+        '197',
+        'success',
+        RES_DEC,
+        'not-the-key',
+      ),
     };
     expect(
       (
@@ -379,7 +422,36 @@ describe('payment gateways (e2e)', () => {
         })
       ).json().outcome,
     ).toBe('rejected');
-    const real = atom.mockResponse(bi.intent.txnId, '750.00', 'NSE', 'success', 'KEYRESP123657234');
+    const unreadable = {
+      encData: atom.mockResponse(
+        bi.intent.txnId,
+        '750.00',
+        '197',
+        'success',
+        'another-key-000',
+        'KEYRESP123657234',
+      ),
+    };
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: `/payments/atom/return?gw=${gw.atom}`,
+          headers: {},
+          json: unreadable,
+        })
+      ).json().outcome,
+    ).toBe('rejected');
+    const real = {
+      encData: atom.mockResponse(
+        bi.intent.txnId,
+        '750.00',
+        '197',
+        'success',
+        RES_DEC,
+        'KEYRESP123657234',
+      ),
+    };
     expect(
       (
         await inject({

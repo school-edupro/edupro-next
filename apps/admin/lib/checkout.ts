@@ -18,6 +18,19 @@ export type Checkout =
       fields: Record<string, string>;
     }
   | {
+      /** Atom AIPAY: Atom's checkout script opened with the token from the AUTH call */
+      kind: 'atom';
+      provider: string;
+      mode: 'test' | 'live';
+      scriptUrl: string;
+      atomTokenId: string;
+      merchId: string;
+      custEmail: string;
+      custMobile: string;
+      returnUrl: string;
+      env: 'uat' | 'prod';
+    }
+  | {
       kind: 'razorpay';
       keyId: string;
       orderId: string;
@@ -51,6 +64,30 @@ export function renderCheckout(
   opts: { cancelHref: string; mockStudent?: string; mockBack?: string },
 ): Response {
   const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' };
+  if (checkout.kind === 'atom') {
+    // only Atom's own script address may be loaded (the API gives one of its two known addresses)
+    const script =
+      /^https:\/\/(pgtest|psa)\.atomtech\.in\/staticdata\/ots\/js\/atomcheckout\.js$/.test(
+        checkout.scriptUrl,
+      )
+        ? checkout.scriptUrl
+        : '';
+    const options = {
+      atomTokenId: checkout.atomTokenId,
+      merchId: checkout.merchId,
+      custEmail: checkout.custEmail,
+      custMobile: checkout.custMobile,
+      returnUrl: checkout.returnUrl,
+    };
+    return new Response(
+      page(
+        'Pay',
+        `<h1>Paying ₹${esc(intent.amount)}</h1><p>Transaction <code>${esc(intent.txnId)}</code>. The Atom payment page opens now; if it does not, use the button.</p><p><button id="pay">Open payment page</button> <a class="btn ghost" href="${esc(opts.cancelHref)}">Cancel</a></p>`,
+        `<script src="${esc(script)}"></script><script>var o=${JSON.stringify(options).replace(/</g, '\\u003c')};function go(){new AtomPaynetz(o,${JSON.stringify(checkout.env)})}document.getElementById('pay').onclick=go;go();</script>`,
+      ),
+      { headers },
+    );
+  }
   if (checkout.kind === 'razorpay') {
     const options = {
       key: checkout.keyId,

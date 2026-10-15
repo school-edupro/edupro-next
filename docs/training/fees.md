@@ -370,6 +370,9 @@ box on the profile is gone: discounts are given only in the _Discounts by month_
   hostel, misc and admission fee; with several, the parent chooses. A **convenience charge** (% and/or
   ₹) is added on top of the fee, shown before paying and kept apart from the fee on the receipt; 0 = the
   school bears it. Give PayU and Razorpay the webhook address shown on the gateway's card.
+- **Atom** is the NTT DATA **AIPAY** kit: enter Merchant id, Product id, Transaction password, Request
+  encryption key, Response decryption key and Response hash key (from Atom's kit or dashboard). The
+  payment opens on Atom's own payment page; its answer is checked with the response keys.
 - **Misc fees online**: parents pay an open misc fee in full from the parent app (Other fees → Pay
   online); the MF receipt is written when the gateway confirms, and a limited-seat fee books the seat.
 - **Fee type on the reports** (Fees → Reports centre): every collection, dues and accounts report has

@@ -17,6 +17,19 @@ export type Checkout =
       fields: Record<string, string>;
     }
   | {
+      /** Atom AIPAY: the browser opens Atom's checkout script with the token from AUTH */
+      kind: 'atom';
+      provider: 'atom';
+      mode: 'test' | 'live';
+      scriptUrl: string;
+      atomTokenId: string;
+      merchId: string;
+      custEmail: string;
+      custMobile: string;
+      returnUrl: string;
+      env: 'uat' | 'prod';
+    }
+  | {
       kind: 'razorpay';
       provider: 'razorpay';
       mode: 'live';

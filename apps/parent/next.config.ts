@@ -22,10 +22,15 @@ const GATEWAYS = [
   'https://secure.payu.in',
   'https://test.payu.in',
   'https://*.ccavenue.com',
+  'https://*.sbiepay.sbi',
+  'https://*.atomtech.in',
 ];
 const cspPay = [
-  ...base,
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
+  // a directive given twice counts once: the pay pages replace connect-src with their own
+  ...base.filter((d) => !d.startsWith('connect-src')),
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://pgtest.atomtech.in https://psa.atomtech.in",
+  // Atom's checkout script calls its own servers
+  "connect-src 'self' https://*.atomtech.in",
   `form-action 'self' ${GATEWAYS.join(' ')}`,
   `frame-src ${GATEWAYS.join(' ')}`,
 ].join('; ');
@@ -48,14 +53,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: '/(fees|consents)/pay',
+        source: '/(fees|consents)/(pay|pay-misc)',
         headers: [
           ...common,
           ...(production ? [{ key: 'Content-Security-Policy', value: cspPay }] : []),
         ],
       },
       {
-        source: '/((?!fees/pay|consents/pay).*)',
+        source: '/((?!fees/pay|fees/pay-misc|consents/pay).*)',
         headers: [
           ...common,
           ...(production ? [{ key: 'Content-Security-Policy', value: csp }] : []),
