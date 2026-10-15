@@ -397,6 +397,8 @@ const NAV: Array<{
     items: [
       { href: '/hostel', label: 'hostelOccupancy', permission: 'hostel.room.view' },
       { href: '/hostel/allot', label: 'hostelAllot', permission: 'hostel.allot.manage' },
+      { href: '/hostel/leave', label: 'hostelLeave', permission: 'hostel.leave.view' },
+      { href: '/hostel/rollcall', label: 'hostelRollcall', permission: 'hostel.room.view' },
       { href: '/hostel/register', label: 'hostelRegister', permission: 'hostel.room.view' },
       { href: '/hostel/setup', label: 'hostelSetup', permission: 'hostel.setup.manage' },
     ],

@@ -4,8 +4,9 @@ export type PassState =
 export interface Pass {
   id: string;
   number: string;
-  kind: 'early_leave' | 'late_arrival';
+  kind: 'early_leave' | 'late_arrival' | 'hostel_home' | 'hostel_outing';
   state: PassState;
+  returnBy?: string | null;
   onDate: string;
   atTime: string | null;
   reason: string;
@@ -36,15 +37,28 @@ export function stateOf(
       return ['Waiting for the school', 'warning'];
     case 'approved':
       return [
-        p.kind === 'early_leave' ? 'Approved: collect at the front desk' : 'Approved',
+        p.kind === 'early_leave'
+          ? 'Approved: collect at the front desk'
+          : p.kind === 'hostel_home'
+            ? 'Approved: collect from the hostel warden'
+            : 'Approved',
         'success',
       ];
     case 'handed_over':
-      return ['Handed over at the front desk', 'info'];
+      return [
+        p.kind === 'hostel_home' ? 'Handed over at the hostel' : 'Handed over at the front desk',
+        'info',
+      ];
     case 'out':
-      return ['Left the school', 'neutral'];
+      return [
+        p.kind === 'hostel_home' || p.kind === 'hostel_outing' ? 'Out on leave' : 'Left the school',
+        'neutral',
+      ];
     case 'returned':
-      return ['Came in', 'neutral'];
+      return [
+        p.kind === 'hostel_home' || p.kind === 'hostel_outing' ? 'Back in the hostel' : 'Came in',
+        'neutral',
+      ];
     case 'rejected':
       return ['Not approved', 'danger'];
     default:
@@ -54,6 +68,8 @@ export function stateOf(
 export const KIND: Record<Pass['kind'], string> = {
   early_leave: 'Leaving early',
   late_arrival: 'Arriving late',
+  hostel_home: 'Home leave (hostel)',
+  hostel_outing: 'Outing (hostel)',
 };
 /** 05 / Oct Mon for the date block of a card, from a plain date. */
 export const dateParts = (d: string) => {

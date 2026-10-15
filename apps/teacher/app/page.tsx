@@ -43,6 +43,12 @@ export default async function HomePage() {
       '/bus-attendance',
     ],
     [
+      t(lang, 'Hostel desk'),
+      t(lang, 'Roll-call, leave to approve, pupils to hand over and pupils away'),
+      can('hostel.rollcall.mark') || can('hostel.leave.view'),
+      '/hostel',
+    ],
+    [
       t(lang, 'Student leave'),
       t(lang, 'Approve the leave families applied for'),
       can('attendance.leave.decide'),

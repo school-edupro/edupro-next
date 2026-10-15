@@ -185,7 +185,9 @@
     "hostelOccupancy": "Occupancy",
     "hostelAllot": "Allot beds",
     "hostelRegister": "Allotment register",
-    "hostelSetup": "Hostel set-up"
+    "hostelSetup": "Hostel set-up",
+    "hostelLeave": "Leave and outings",
+    "hostelRollcall": "Roll-call"
   },
   "shell": {
     "primaryNavigation": "Primary",

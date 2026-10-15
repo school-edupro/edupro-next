@@ -11,8 +11,11 @@ interface Options {
   data: Array<{
     id: string;
     name: string;
+    /** the hostel the child boards in, when a boarder: home leave and outings are open */
+    hostel: string | null;
     guardians: Array<{ relation: string; name: string }>;
   }>;
+  outingReturnBy: string;
 }
 
 /**
@@ -39,8 +42,14 @@ export default async function NewGatePassPage({
   const student =
     options.data.find((s) => s.id === chosen?.id) ??
     (options.data.length === 1 ? options.data[0]! : null);
-  const kind =
-    sp.kind === 'late_arrival' ? 'late_arrival' : sp.kind === 'early_leave' ? 'early_leave' : null;
+  const KINDS = ['early_leave', 'late_arrival', 'hostel_home', 'hostel_outing'] as const;
+  const kind = (KINDS as readonly string[]).includes(sp.kind ?? '')
+    ? (sp.kind as (typeof KINDS)[number])
+    : null;
+  const hostelKind = kind === 'hostel_home' || kind === 'hostel_outing';
+  // hostel leave only for a boarder
+  const usable = kind && (!hostelKind || student?.hostel) ? kind : null;
+  const escorted = usable === 'early_leave' || usable === 'hostel_home';
   const today = dayOf(new Date().toISOString());
   const onRecord = (student?.guardians ?? []).filter((g) =>
     ['father', 'mother', 'guardian'].includes(g.relation),
@@ -91,6 +100,20 @@ export default async function NewGatePassPage({
               [
                 ['early_leave', 'Leaving early', 'Someone collects the child before school ends'],
                 ['late_arrival', 'Arriving late', 'The child comes after school has started'],
+                ...(student.hostel
+                  ? ([
+                      [
+                        'hostel_home',
+                        'Home leave (hostel)',
+                        'You or someone you name collects the child from the hostel; back on a later day',
+                      ],
+                      [
+                        'hostel_outing',
+                        'Outing (hostel)',
+                        'The child goes out and comes back to the hostel the same day',
+                      ],
+                    ] as const)
+                  : []),
               ] as const
             ).map(([k, label, help]) => (
               <a
@@ -106,11 +129,14 @@ export default async function NewGatePassPage({
           </div>
         </Card>
       ) : null}
-      {student && kind ? (
+      {student && kind && !usable ? (
+        <Card>{t(lang, 'Hostel leave is for children who board in the hostel.')}</Card>
+      ) : null}
+      {student && usable ? (
         <Card title={`3. ${t(lang, 'When, why and with whom')}`}>
           <form action={applyGatePass} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
             <input type="hidden" name="studentId" value={student.id} />
-            <input type="hidden" name="kind" value={kind} />
+            <input type="hidden" name="kind" value={usable} />
             <label className="ep-field" htmlFor="ng-date">
               <span className="ep-field__label">{t(lang, 'Date')} *</span>
               <input
@@ -125,10 +151,41 @@ export default async function NewGatePassPage({
             </label>
             <label className="ep-field" htmlFor="ng-time">
               <span className="ep-field__label">
-                {t(lang, kind === 'early_leave' ? 'Time of leaving' : 'Time of arriving')} *
+                {t(lang, usable === 'late_arrival' ? 'Time of arriving' : 'Time of leaving')} *
               </span>
               <input id="ng-time" name="atTime" type="time" className="ep-input" required />
             </label>
+            {usable === 'hostel_home' ? (
+              <label className="ep-field" htmlFor="ng-rdate">
+                <span className="ep-field__label">{t(lang, 'Back in the hostel on')} *</span>
+                <input
+                  id="ng-rdate"
+                  name="returnOn"
+                  type="date"
+                  className="ep-input"
+                  required
+                  min={today}
+                />
+              </label>
+            ) : null}
+            {hostelKind ? (
+              <label className="ep-field" htmlFor="ng-rtime">
+                <span className="ep-field__label">{t(lang, 'Back by (time)')}</span>
+                <input
+                  id="ng-rtime"
+                  name="returnAt"
+                  type="time"
+                  className="ep-input"
+                  max={usable === 'hostel_outing' ? options.outingReturnBy : undefined}
+                  defaultValue={usable === 'hostel_outing' ? options.outingReturnBy : '17:00'}
+                />
+                <span className="ep-field__help">
+                  {usable === 'hostel_outing'
+                    ? `${t(lang, 'An outing comes back the same day, by')} ${options.outingReturnBy}. ${t(lang, 'The warden and you are told if the child is late.')}`
+                    : t(lang, 'The warden and you are told if the child is late.')}
+                </span>
+              </label>
+            ) : null}
             <label className="ep-field" htmlFor="ng-reason">
               <span className="ep-field__label">{t(lang, 'Reason')} *</span>
               <input
@@ -140,7 +197,7 @@ export default async function NewGatePassPage({
                 maxLength={300}
               />
             </label>
-            {kind === 'early_leave' ? (
+            {escorted ? (
               <>
                 <fieldset className="ep-slots">
                   <legend className="ep-field__label">{t(lang, 'Who takes the child')} *</legend>
@@ -174,7 +231,9 @@ export default async function NewGatePassPage({
                 <p className="ep-field__help" style={{ margin: 0 }}>
                   {t(
                     lang,
-                    'For someone else, fill the three boxes below. At the front desk the school sends a one-time code to your mobile before handing over the child.',
+                    usable === 'hostel_home'
+                      ? 'For someone else, fill the three boxes below. At the hostel the warden sends a one-time code to your mobile before handing over the child.'
+                      : 'For someone else, fill the three boxes below. At the front desk the school sends a one-time code to your mobile before handing over the child.',
                   )}
                 </p>
                 <label className="ep-field" htmlFor="ng-ename">

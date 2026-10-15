@@ -1,0 +1,237 @@
+import { Badge, Card, KpiTile, PageHeader } from '@edupro/ui';
+import { redirect } from 'next/navigation';
+import { ApiError } from '@edupro/bff';
+import { bff } from '@/lib/bff';
+import { currentLang, t } from '@/lib/i18n';
+
+interface Today {
+  boarders: number;
+  away: number;
+  overdue: number;
+  toHandOver: number;
+  waiting: number;
+  sessions: number;
+  rollsTaken: number;
+  absentToday: number;
+}
+interface Session {
+  id: string;
+  hostel: string;
+  name: string;
+  atTime: string;
+  active: boolean;
+  takenToday: string | null;
+}
+interface Leave {
+  id: string;
+  number: string;
+  kind: 'hostel_home' | 'hostel_outing';
+  state: string;
+  name: string;
+  admissionNo: string;
+  hostel: string | null;
+  onDate: string;
+  atTime: string | null;
+  returnBy: string | null;
+  outAt: string | null;
+  reason: string;
+  escortName: string | null;
+  escortRelation: string | null;
+  overdue: boolean;
+}
+
+const when = (v: string | null) =>
+  v
+    ? new Date(v).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—';
+const KIND = { hostel_home: 'Home leave', hostel_outing: 'Outing' } as const;
+
+/** The warden's hostel desk: today in numbers, the roll-call sessions, and the leave to act on. */
+export default async function HostelDeskPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ok?: string; detail?: string; error?: string }>;
+}) {
+  const sp = await searchParams;
+  const lang = await currentLang();
+  let today: Today;
+  let sessions: Session[];
+  let pending: Leave[];
+  let handover: Leave[];
+  let away: Leave[];
+  try {
+    [today, sessions, pending, handover, away] = await Promise.all([
+      bff.api.fetch<Today>('/hostel/today'),
+      bff.api
+        .fetch<{ data: Session[] }>('/hostel/sessions')
+        .then((r) => r.data.filter((s) => s.active)),
+      bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=pending').then((r) => r.data),
+      bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=handover').then((r) => r.data),
+      bff.api.fetch<{ data: Leave[] }>('/hostel/leaves?show=out').then((r) => r.data),
+    ]);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
+    if (error instanceof ApiError && error.status === 403) redirect('/');
+    throw error;
+  }
+  return (
+    <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
+      <PageHeader
+        kicker={t(lang, 'Hostel')}
+        title={t(lang, 'Hostel desk')}
+        description={t(
+          lang,
+          'Roll-call, leave waiting for you, pupils to hand over and pupils away.',
+        )}
+        actions={
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/">
+            {t(lang, 'Home')}
+          </a>
+        }
+      />
+      {sp.ok ? (
+        <div
+          className="ep-alert ep-alert--success"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {sp.detail ?? t(lang, 'Saved.')}
+        </div>
+      ) : null}
+      {sp.error ? (
+        <div
+          className="ep-alert ep-alert--danger"
+          role="alert"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {sp.detail || sp.error}
+        </div>
+      ) : null}
+      <div className="ep-kpis" style={{ marginBottom: 'var(--sp-4)' }}>
+        <KpiTile label={t(lang, 'Boarders')} value={String(today.boarders)} />
+        <KpiTile label={t(lang, 'Away on leave')} value={String(today.away)} />
+        <KpiTile label={t(lang, 'Overdue')} value={String(today.overdue)} />
+        <KpiTile label={t(lang, 'Absent at roll-call today')} value={String(today.absentToday)} />
+      </div>
+
+      <Card title={t(lang, 'Roll-call')} style={{ marginBottom: 'var(--sp-4)' }}>
+        {sessions.length === 0 ? (
+          <p className="ep-field__help">
+            {t(lang, 'No roll-call sessions are set up for your hostel. Ask the hostel office.')}
+          </p>
+        ) : (
+          <ul className="fp-rcpts">
+            {sessions.map((s) => (
+              <li key={s.id}>
+                <span>
+                  <strong>
+                    {s.name} · {s.atTime}
+                  </strong>
+                  <span className="ep-field__help" style={{ display: 'block' }}>
+                    {s.hostel}
+                  </span>
+                </span>
+                <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                  {s.takenToday ? (
+                    <Badge tone="success">{t(lang, 'Taken')}</Badge>
+                  ) : (
+                    <Badge tone="warning">{t(lang, 'Not taken')}</Badge>
+                  )}
+                  <a
+                    className="ep-btn ep-btn--secondary ep-btn--sm"
+                    href={`/hostel/rollcall?sessionId=${s.id}`}
+                  >
+                    {s.takenToday ? t(lang, 'Open') : t(lang, 'Take the roll')}
+                  </a>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card
+        title={`${t(lang, 'Leave waiting for you')} (${String(pending.length)})`}
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        {pending.length === 0 ? (
+          <p className="ep-field__help">{t(lang, 'Nothing is waiting.')}</p>
+        ) : (
+          <>
+            <ul className="fp-rcpts">
+              {pending.map((l) => (
+                <li key={l.id}>
+                  <span>
+                    <strong>{l.name}</strong> <Badge tone="info">{t(lang, KIND[l.kind])}</Badge>
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      {l.onDate}
+                      {l.atTime ? ` ${l.atTime}` : ''} → {when(l.returnBy)} · {l.reason}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p style={{ marginTop: 'var(--sp-3)' }}>
+              <a className="ep-btn ep-btn--primary ep-btn--sm" href="/gate-passes">
+                {t(lang, 'Approve or reject')}
+              </a>
+            </p>
+          </>
+        )}
+      </Card>
+
+      <Card
+        title={`${t(lang, 'To hand over today')} (${String(handover.length)})`}
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        {handover.length === 0 ? (
+          <p className="ep-field__help">{t(lang, 'No home leave to hand over today.')}</p>
+        ) : (
+          <ul className="fp-rcpts">
+            {handover.map((l) => (
+              <li key={l.id}>
+                <span>
+                  <strong>{l.name}</strong> · {l.number}
+                  <span className="ep-field__help" style={{ display: 'block' }}>
+                    {t(lang, 'Collected by')} {l.escortName ?? '—'}
+                    {l.escortRelation ? ` (${l.escortRelation})` : ''} · {t(lang, 'back by')}{' '}
+                    {when(l.returnBy)}
+                  </span>
+                </span>
+                <a className="ep-btn ep-btn--primary ep-btn--sm" href={`/hostel/handover/${l.id}`}>
+                  {t(lang, 'Hand over')}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title={`${t(lang, 'Away now')} (${String(away.length)})`}>
+        {away.length === 0 ? (
+          <p className="ep-field__help">{t(lang, 'Every boarder is in.')}</p>
+        ) : (
+          <ul className="fp-rcpts">
+            {away.map((l) => (
+              <li key={l.id}>
+                <span>
+                  <strong>{l.name}</strong> <Badge tone="neutral">{t(lang, KIND[l.kind])}</Badge>
+                  <span className="ep-field__help" style={{ display: 'block' }}>
+                    {t(lang, 'Out')} {when(l.outAt)} · {t(lang, 'back by')} {when(l.returnBy)}
+                  </span>
+                </span>
+                {l.overdue ? <Badge tone="danger">{t(lang, 'Overdue')}</Badge> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </main>
+  );
+}

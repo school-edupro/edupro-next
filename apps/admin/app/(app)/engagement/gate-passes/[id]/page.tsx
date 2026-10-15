@@ -41,10 +41,13 @@ export default async function GatePassPage({
     p.kind === 'early_leave';
   const canOut =
     may('engagement.gate_pass.gate') &&
-    ((student && p.state === 'handed_over') || (!student && p.state === 'approved'));
+    ((student && p.state === 'handed_over') ||
+      (student && p.kind === 'hostel_outing' && p.state === 'approved') ||
+      (!student && p.state === 'approved'));
   const canIn =
     may('engagement.gate_pass.gate') &&
-    ((p.kind === 'rgp' && p.state === 'out') ||
+    (((p.kind === 'rgp' || p.kind === 'hostel_home' || p.kind === 'hostel_outing') &&
+      p.state === 'out') ||
       (p.kind === 'late_arrival' && p.state === 'approved'));
   const facts: Array<[string, string | null]> = [
     ['Pass', `${p.kindLabel} · ${p.number}`],

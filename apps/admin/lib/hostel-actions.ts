@@ -337,3 +337,41 @@ export async function uploadBeds(fd: FormData) {
   });
   redirect(`${to}?${q.toString()}`);
 }
+
+// ---- H2: rules and roll-call sessions -------------------------------------------------------------------
+export async function saveHostelRules(fd: FormData) {
+  const to = `${BASE}/setup?tab=rules`;
+  try {
+    await apiFetch('/hostel/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        lateGraceMinutes: num(fd, 'lateGraceMinutes', 30),
+        escalateAfterHours: num(fd, 'escalateAfterHours', 6),
+        outingReturnBy: str(fd, 'outingReturnBy') || '19:00',
+        alertParentAbsent: fd.get('alertParentAbsent') === 'on',
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, 'Hostel rules saved.');
+}
+
+export async function saveSession(fd: FormData) {
+  const to = `${BASE}/setup?tab=rules`;
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(id ? `/hostel/sessions/${id}` : '/hostel/sessions', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        hostelId: str(fd, 'hostelId'),
+        name: str(fd, 'name'),
+        atTime: str(fd, 'atTime'),
+        active: id ? fd.get('active') === 'on' : true,
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(to, id ? 'Session saved.' : 'Session added.');
+}

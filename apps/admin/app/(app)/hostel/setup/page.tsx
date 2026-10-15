@@ -8,7 +8,9 @@ import {
   deleteBlock,
   saveBlock,
   saveHostel,
+  saveHostelRules,
   saveRoomType,
+  saveSession,
   saveWardens,
   setBed,
   updateRoom,
@@ -51,6 +53,20 @@ interface Room {
   remarks: string | null;
   beds: Array<{ id: string; label: string; status: 'active' | 'blocked'; used: boolean }>;
 }
+interface Rules {
+  lateGraceMinutes: number;
+  escalateAfterHours: number;
+  outingReturnBy: string;
+  alertParentAbsent: boolean;
+}
+interface Session {
+  id: string;
+  hostelId: string;
+  hostel: string;
+  name: string;
+  atTime: string;
+  active: boolean;
+}
 interface Employee {
   id: string;
   displayName: string;
@@ -61,6 +77,7 @@ const TABS = [
   { id: 'hostels', label: 'Hostels and wardens' },
   { id: 'types', label: 'Room types and fee' },
   { id: 'rooms', label: 'Rooms and beds' },
+  { id: 'rules', label: 'Roll-call and leave rules' },
 ] as const;
 const GENDER = { boys: 'Boys', girls: 'Girls', mixed: 'Boys and girls' } as const;
 
@@ -84,6 +101,12 @@ export default async function HostelSetupPage({
     apiFetch<{ data: RoomType[] }>('/hostel/room-types').then((r) => r.data),
   ]);
   const hostel = hostels.find((h) => h.id === sp.hostel) ?? hostels[0];
+  const [rules, sessions] = await Promise.all([
+    tab === 'rules' ? apiFetch<Rules>('/hostel/settings') : Promise.resolve<Rules | null>(null),
+    tab === 'rules'
+      ? apiFetch<{ data: Session[] }>('/hostel/sessions').then((r) => r.data)
+      : Promise.resolve([] as Session[]),
+  ]);
   const [rooms, employees] = await Promise.all([
     tab === 'rooms' && hostel
       ? apiFetch<{ data: Room[] }>(`/hostel/rooms?hostelId=${hostel.id}`).then((r) => r.data)
@@ -560,6 +583,154 @@ export default async function HostelSetupPage({
             </Card>
           </>
         )
+      ) : null}
+      {tab === 'rules' && rules ? (
+        <>
+          <Card title="Leave and roll-call rules" style={{ marginBottom: 'var(--sp-4)' }}>
+            <form action={saveHostelRules} className="ep-hd__row">
+              <label className="ep-field" htmlFor="hr-grace">
+                <span className="ep-field__label">Late after (minutes past the return time)</span>
+                <input
+                  id="hr-grace"
+                  name="lateGraceMinutes"
+                  type="number"
+                  min={0}
+                  max={1440}
+                  className="ep-input"
+                  defaultValue={rules.lateGraceMinutes}
+                />
+              </label>
+              <label className="ep-field" htmlFor="hr-esc">
+                <span className="ep-field__label">
+                  Tell the principal / admin after (hours late)
+                </span>
+                <input
+                  id="hr-esc"
+                  name="escalateAfterHours"
+                  type="number"
+                  min={1}
+                  max={168}
+                  className="ep-input"
+                  defaultValue={rules.escalateAfterHours}
+                />
+              </label>
+              <label className="ep-field" htmlFor="hr-out">
+                <span className="ep-field__label">Outing: back by (latest)</span>
+                <input
+                  id="hr-out"
+                  name="outingReturnBy"
+                  type="time"
+                  className="ep-input"
+                  defaultValue={rules.outingReturnBy}
+                />
+              </label>
+              <label className="ep-field" htmlFor="hr-alert" style={{ alignSelf: 'center' }}>
+                <span>
+                  <input
+                    id="hr-alert"
+                    name="alertParentAbsent"
+                    type="checkbox"
+                    defaultChecked={rules.alertParentAbsent}
+                  />{' '}
+                  Tell the parent when absent at roll-call
+                </span>
+              </label>
+              <Button type="submit">Save rules</Button>
+            </form>
+            <p className="ep-field__help">
+              A pupil late back from leave: the parent and the head warden are told once, the
+              principal and school admins after the hours set. Messages go on SMS and WhatsApp when
+              their templates are ready (Communication → Templates, codes starting hostel_).
+            </p>
+          </Card>
+          {hostels.map((h) => (
+            <Card
+              key={h.id}
+              title={`Roll-call sessions · ${h.name}`}
+              style={{ marginBottom: 'var(--sp-4)' }}
+            >
+              {sessions
+                .filter((x) => x.hostelId === h.id)
+                .map((x) => (
+                  <form
+                    key={x.id}
+                    action={saveSession}
+                    className="ep-hd__row"
+                    style={{ marginBottom: 'var(--sp-2)' }}
+                  >
+                    <input type="hidden" name="id" value={x.id} />
+                    <input type="hidden" name="hostelId" value={h.id} />
+                    <label className="ep-field" htmlFor={`s-n-${x.id}`}>
+                      <span className="ep-field__label">Session</span>
+                      <input
+                        id={`s-n-${x.id}`}
+                        name="name"
+                        className="ep-input"
+                        required
+                        maxLength={40}
+                        defaultValue={x.name}
+                      />
+                    </label>
+                    <label className="ep-field" htmlFor={`s-t-${x.id}`}>
+                      <span className="ep-field__label">Time</span>
+                      <input
+                        id={`s-t-${x.id}`}
+                        name="atTime"
+                        type="time"
+                        className="ep-input"
+                        required
+                        defaultValue={x.atTime}
+                      />
+                    </label>
+                    <label
+                      className="ep-field"
+                      htmlFor={`s-a-${x.id}`}
+                      style={{ alignSelf: 'center' }}
+                    >
+                      <span>
+                        <input
+                          id={`s-a-${x.id}`}
+                          name="active"
+                          type="checkbox"
+                          defaultChecked={x.active}
+                        />{' '}
+                        In use
+                      </span>
+                    </label>
+                    <Button type="submit" variant="secondary">
+                      Save
+                    </Button>
+                  </form>
+                ))}
+              <form action={saveSession} className="ep-hd__row">
+                <input type="hidden" name="hostelId" value={h.id} />
+                <label className="ep-field" htmlFor={`s-new-${h.id}`}>
+                  <span className="ep-field__label">New session</span>
+                  <input
+                    id={`s-new-${h.id}`}
+                    name="name"
+                    className="ep-input"
+                    required
+                    maxLength={40}
+                    placeholder="e.g. Night"
+                  />
+                </label>
+                <label className="ep-field" htmlFor={`s-newt-${h.id}`}>
+                  <span className="ep-field__label">Time</span>
+                  <input
+                    id={`s-newt-${h.id}`}
+                    name="atTime"
+                    type="time"
+                    className="ep-input"
+                    required
+                    defaultValue="21:30"
+                  />
+                </label>
+                <Button type="submit">Add</Button>
+              </form>
+            </Card>
+          ))}
+        </>
       ) : null}
     </>
   );

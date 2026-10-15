@@ -65,7 +65,7 @@ export class HostelService {
    * The hostels the user may see: all for the office (set-up or allotment rights), else those the user is
    * a warden of. null = no limit.
    */
-  private async scope(ctx: RequestContext, c: PoolClient): Promise<string[] | null> {
+  async scope(ctx: RequestContext, c: PoolClient): Promise<string[] | null> {
     const p = ctx.permissions;
     if (!p || p.has(HOSTEL.setup) || p.has(HOSTEL.allot)) return null;
     const r = await c.query<{ id: string }>(

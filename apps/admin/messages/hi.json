@@ -185,7 +185,9 @@
     "hostelOccupancy": "अधिभोग",
     "hostelAllot": "बिस्तर आवंटन",
     "hostelRegister": "आवंटन रजिस्टर",
-    "hostelSetup": "छात्रावास सेटअप"
+    "hostelSetup": "छात्रावास सेटअप",
+    "hostelLeave": "छुट्टी और बाहर जाना",
+    "hostelRollcall": "हाज़िरी"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

@@ -33,9 +33,13 @@ export async function applyGatePass(fd: FormData) {
         method: 'POST',
         body: JSON.stringify({
           studentId,
-          kind: str(fd, 'kind') === 'late_arrival' ? 'late_arrival' : 'early_leave',
+          kind: ['late_arrival', 'hostel_home', 'hostel_outing'].includes(str(fd, 'kind'))
+            ? str(fd, 'kind')
+            : 'early_leave',
           onDate: str(fd, 'onDate') || undefined,
           atTime: str(fd, 'atTime') || undefined,
+          returnOn: str(fd, 'returnOn') || undefined,
+          returnAt: str(fd, 'returnAt') || undefined,
           reason: str(fd, 'reason'),
           escortKind: str(fd, 'escortKind') || undefined,
           escortName: str(fd, 'escortName') || undefined,

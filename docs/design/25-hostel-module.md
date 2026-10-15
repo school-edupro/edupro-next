@@ -45,14 +45,20 @@ setup, rooms by seater, booking, complaints, feedback).
 - **Pupil profile**: a Hostel card (hostel, room, bed, since, warden).
 - **Permissions**: `hostel.setup.manage`, `hostel.allot.manage`, `hostel.room.view`.
 
-### H2 · Roll-call and leave
+### H2 · Roll-call and leave — built 2026-10-15 (migration 0148)
 
 - **Roll-call**: sessions per hostel (for example morning, night), one tick per bed; pupils on
   approved leave are marked so on their own. Absent without leave alerts the warden and the parent.
-- **Hostel leave**: a new gate pass kind `hostel_leave` (from and to date and time, escort, reason).
-  The parent asks in the portal and confirms with an OTP. The warden approves or refuses in the staff
-  app. The gate screen checks the pupil out and in, and the parent gets WhatsApp or SMS at each step.
-  A pupil who is not back by the end time is flagged late.
+- **Hostel leave**: two gate pass kinds. `hostel_home`: overnight or longer, collected by a parent or
+  named escort, handed over by the warden (live photo, one-time code to the parent for someone not on
+  record), then out at the gate. `hostel_outing`: same day, back by the school's latest time, straight
+  to the gate. Asked by the parent in the portal; approved by a warden of the pupil's hostel (one
+  approval level, the pupil's wardens); the gate marks out and back in; `late_minutes` kept.
+- **Late back**: `app.hostel_leave_tick()` (workers `hostel.leave_tick`, every 10 minutes): past
+  return_by + grace the parent and the head warden are told once (`overdue_at`); past the escalation
+  hours the principal and school admins (`escalated_at`). Rules in `hostel_settings`.
+- **Staff app**: Hostel desk (today, sessions, leave waiting, to hand over, away), roll-call, hand-over.
+  **Admin**: Leave and outings, Roll-call report, rules and sessions under Set-up.
 
 ### H3 · Visitors and mess
 

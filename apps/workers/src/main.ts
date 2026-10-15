@@ -173,6 +173,12 @@ async function main(): Promise<void> {
     { every: 5 * 60 * 1000 },
     { name: 'helpdesk.escalate', data: SYSTEM_ENVELOPE('helpdesk.escalate') },
   );
+  // hostel: pupils late back from hostel leave (parent, head warden; later the principal), every ten minutes
+  await maintenance.upsertJobScheduler(
+    'hostel.leave_tick',
+    { every: 10 * 60 * 1000 },
+    { name: 'hostel.leave_tick', data: SYSTEM_ENVELOPE('hostel.leave_tick') },
+  );
   // appointments: reminders, no-shows and wiping expired one-time codes, every five minutes
   await maintenance.upsertJobScheduler(
     'appointments.tick',

@@ -480,6 +480,21 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       if (moved) log.info({ moved }, 'helpdesk escalation run');
       return;
     }
+    if (kind === 'hostel.leave_tick') {
+      // Hostel (0148): pupils out on hostel leave past their return time and the grace; the database
+      // function tells the parent and the head warden once, and the principal / admin past the hours set.
+      const schools = { rows: await schoolsFor(db, job) };
+      let done = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.hostel_leave_tick() AS n'),
+        );
+        done += r.rows[0]?.n ?? 0;
+      }
+      if (done) log.info({ done }, 'hostel leave tick');
+      return;
+    }
     if (kind === 'appointments.tick') {
       // Appointments (0059): the database function sends the reminders, marks the visits nobody came to
       // and wipes expired one-time codes from the message log.

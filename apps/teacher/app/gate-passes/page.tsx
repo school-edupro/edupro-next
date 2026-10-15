@@ -9,7 +9,7 @@ interface Pass {
   id: string;
   number: string;
   audience: 'student' | 'staff';
-  kind: 'early_leave' | 'late_arrival' | 'rgp' | 'nrgp';
+  kind: 'early_leave' | 'late_arrival' | 'rgp' | 'nrgp' | 'hostel_home' | 'hostel_outing';
   state: string;
   stage: string;
   onDate: string;
@@ -40,6 +40,8 @@ const KIND: Record<Pass['kind'], string> = {
   late_arrival: 'Late arrival',
   rgp: 'RGP · returnable',
   nrgp: 'NRGP · non-returnable',
+  hostel_home: 'Hostel home leave',
+  hostel_outing: 'Hostel outing',
 };
 const TONE: Record<string, 'warning' | 'success' | 'danger' | 'info' | 'neutral'> = {
   pending: 'warning',

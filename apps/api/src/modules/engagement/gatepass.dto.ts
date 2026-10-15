@@ -32,13 +32,21 @@ const blank = <T extends z.ZodTypeAny>(s: T) =>
     s.optional(),
   );
 
-/** A pupil's pass: leaving early with someone, or arriving late. */
+/**
+ * A pupil's pass: leaving early with someone, or arriving late; for a hosteller, home leave (collected by a
+ * parent or escort, back on a later day) or an outing (out and back the same day).
+ */
 export const StudentPassSchema = z
   .object({
     studentId: IdSchema,
-    kind: z.enum(['early_leave', 'late_arrival']).default('early_leave'),
+    kind: z
+      .enum(['early_leave', 'late_arrival', 'hostel_home', 'hostel_outing'])
+      .default('early_leave'),
     onDate: blank(DateSchema),
     atTime: blank(TimeSchema),
+    /** hostel leave: when the pupil is back (outing: the same day; time empty = the school's latest) */
+    returnOn: blank(DateSchema),
+    returnAt: blank(TimeSchema),
     reason: z.string().trim().min(3).max(300),
     /** Who takes the child: a parent or guardian on the school's record, or someone else. */
     escortKind: blank(z.enum(['father', 'mother', 'guardian', 'other'])),
@@ -46,9 +54,13 @@ export const StudentPassSchema = z
     escortRelation: blank(z.string().trim().max(60)),
     escortMobile: blank(Mobile),
   })
-  .refine((v) => v.kind !== 'early_leave' || v.escortKind, {
+  .refine((v) => !(v.kind === 'early_leave' || v.kind === 'hostel_home') || v.escortKind, {
     message: 'Say who takes the child',
     path: ['escortKind'],
+  })
+  .refine((v) => v.kind !== 'hostel_home' || v.returnOn, {
+    message: 'Give the day the pupil comes back to the hostel',
+    path: ['returnOn'],
   })
   .refine((v) => v.escortKind !== 'other' || (v.escortName && v.escortMobile), {
     message: 'Give the name and mobile of the person who takes the child',

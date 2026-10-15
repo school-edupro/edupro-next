@@ -53,10 +53,13 @@ export default async function GatePassGatePage({
   const student = found?.audience === 'student';
   const canOut =
     found &&
-    ((student && found.state === 'handed_over') || (!student && found.state === 'approved'));
+    ((student && found.state === 'handed_over') ||
+      (student && found.kind === 'hostel_outing' && found.state === 'approved') ||
+      (!student && found.state === 'approved'));
   const canIn =
     found &&
-    ((found.kind === 'rgp' && found.state === 'out') ||
+    (((found.kind === 'rgp' || found.kind === 'hostel_home' || found.kind === 'hostel_outing') &&
+      found.state === 'out') ||
       (found.kind === 'late_arrival' && found.state === 'approved'));
   return (
     <>
@@ -132,9 +135,13 @@ export default async function GatePassGatePage({
                 </div>
               ))}
           </dl>
-          {student && found.kind === 'early_leave' && found.state === 'approved' ? (
+          {student &&
+          (found.kind === 'early_leave' || found.kind === 'hostel_home') &&
+          found.state === 'approved' ? (
             <Alert tone="warning">
-              Do not let the child out yet: the front desk has not handed the child over.
+              Do not let the child out yet: the{' '}
+              {found.kind === 'hostel_home' ? 'hostel warden' : 'front desk'} has not handed the
+              child over.
             </Alert>
           ) : null}
           {found.state === 'pending' ? (

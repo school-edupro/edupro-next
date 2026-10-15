@@ -965,6 +965,25 @@ const DICT: Record<string, string> = {
   'The fee bill could not be made. Please try again.':
     'फीस बिल नहीं बन सका। कृपया फिर से प्रयास करें।',
   'Partly refunded': 'आंशिक वापसी',
+  'Home leave (hostel)': 'घर की छुट्टी (छात्रावास)',
+  'You or someone you name collects the child from the hostel; back on a later day':
+    'आप या आपके बताए व्यक्ति बच्चे को छात्रावास से ले जाएँ; बाद के दिन वापसी',
+  'Outing (hostel)': 'बाहर जाना (छात्रावास)',
+  'The child goes out and comes back to the hostel the same day':
+    'बच्चा बाहर जाकर उसी दिन छात्रावास लौटता है',
+  'Back in the hostel on': 'छात्रावास में वापसी की तारीख',
+  'Back by (time)': 'वापसी का समय',
+  'An outing comes back the same day, by': 'बाहर जाने पर उसी दिन लौटना है, इस समय तक:',
+  'The warden and you are told if the child is late.':
+    'देर होने पर वार्डन और आपको सूचना दी जाती है।',
+  'For someone else, fill the three boxes below. At the hostel the warden sends a one-time code to your mobile before handing over the child.':
+    'किसी और के लिए नीचे के तीन खाने भरें। छात्रावास में वार्डन बच्चे को सौंपने से पहले आपके मोबाइल पर एक बार का कोड भेजेंगे।',
+  'Hostel leave is for children who board in the hostel.':
+    'छात्रावास की छुट्टी केवल छात्रावास में रहने वाले बच्चों के लिए है।',
+  'Approved: collect from the hostel warden': 'स्वीकृत: छात्रावास वार्डन से लें',
+  'Handed over at the hostel': 'छात्रावास में सौंपा गया',
+  'Out on leave': 'छुट्टी पर बाहर',
+  'Back in the hostel': 'छात्रावास में वापस',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

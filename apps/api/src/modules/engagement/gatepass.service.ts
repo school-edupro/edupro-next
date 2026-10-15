@@ -74,13 +74,18 @@ const SELECT = `SELECT p.id::text, p.audience, p.kind, p.source, p.state, p.on_d
   LEFT JOIN users hu ON hu.id = p.handover_by`;
 const FROM = `FROM gate_passes p LEFT JOIN students s ON s.id = p.student_id LEFT JOIN employees e ON e.id = p.employee_id`;
 
+/** Kinds that go out and must come back in at the gate. */
+const RETURNING = new Set(['rgp', 'hostel_home', 'hostel_outing']);
+/** Hostel leave: the pupil's hostel wardens approve; out and back at the gate. */
+export const HOSTEL_KINDS = new Set(['hostel_home', 'hostel_outing']);
+
 /** Where a pass stands for the people who work it. */
 const STAGE_SQL: Record<string, string> = {
   approval: `p.state = 'pending'`,
-  handover: `p.state = 'approved' AND p.audience = 'student' AND p.kind = 'early_leave'`,
-  gate: `(p.state = 'handed_over' OR (p.state = 'approved' AND NOT (p.audience = 'student' AND p.kind = 'early_leave')))`,
-  out: `p.state = 'out' AND p.kind = 'rgp'`,
-  closed: `(p.state IN ('returned', 'rejected', 'cancelled') OR (p.state = 'out' AND p.kind <> 'rgp'))`,
+  handover: `p.state = 'approved' AND p.audience = 'student' AND p.kind IN ('early_leave', 'hostel_home')`,
+  gate: `(p.state = 'handed_over' OR (p.state = 'approved' AND NOT (p.audience = 'student' AND p.kind IN ('early_leave', 'hostel_home'))))`,
+  out: `p.state = 'out' AND p.kind IN ('rgp', 'hostel_home', 'hostel_outing')`,
+  closed: `(p.state IN ('returned', 'rejected', 'cancelled') OR (p.state = 'out' AND p.kind NOT IN ('rgp', 'hostel_home', 'hostel_outing')))`,
   today: `p.on_date = ${TODAY}`,
   all: `true`,
 };
@@ -90,7 +95,7 @@ export interface PassRow {
   /** The pass number once approved; before that the request number. */
   number: string;
   audience: Audience;
-  kind: 'early_leave' | 'late_arrival' | 'rgp' | 'nrgp';
+  kind: 'early_leave' | 'late_arrival' | 'rgp' | 'nrgp' | 'hostel_home' | 'hostel_outing';
   source: string;
   state: PassState;
   stage: string;
@@ -142,10 +147,22 @@ function stageOf(x: { state: string; audience: string; kind: string }): string {
   if (x.state === 'approved')
     return x.audience === 'student' && x.kind === 'early_leave'
       ? 'Approved: hand over at the front desk'
-      : 'Approved: show at the gate';
+      : x.kind === 'hostel_home'
+        ? 'Approved: the warden hands over'
+        : 'Approved: show at the gate';
   if (x.state === 'handed_over') return 'Handed over: going to the gate';
-  if (x.state === 'out') return x.kind === 'rgp' ? 'Out: to come back' : 'Left the campus';
-  if (x.state === 'returned') return x.kind === 'late_arrival' ? 'Came in' : 'Back in: completed';
+  if (x.state === 'out')
+    return x.kind === 'rgp'
+      ? 'Out: to come back'
+      : RETURNING.has(x.kind)
+        ? 'Out on leave: to come back'
+        : 'Left the campus';
+  if (x.state === 'returned')
+    return x.kind === 'late_arrival'
+      ? 'Came in'
+      : HOSTEL_KINDS.has(x.kind)
+        ? 'Back in the hostel'
+        : 'Back in: completed';
   return x.state === 'rejected' ? 'Not approved' : 'Cancelled';
 }
 
@@ -201,6 +218,8 @@ const toRow = (x: Row): PassRow => ({
 });
 
 const KIND_LABEL: Record<string, string> = {
+  hostel_home: 'Hostel home leave',
+  hostel_outing: 'Hostel outing',
   early_leave: 'Early leave',
   late_arrival: 'Late arrival',
   rgp: 'RGP (returnable)',
@@ -439,10 +458,27 @@ export class GatePassService {
   private async startApprovals(c: PoolClient, id: string): Promise<void> {
     const s = await this.settings(c);
     const p = await this.find(c, id);
-    const mode = p.audience === 'student' ? s.studentMode : s.staffMode;
-    const need = p.audience === 'student' ? s.studentNeed : s.staffNeed;
+    const mode = HOSTEL_KINDS.has(p.kind)
+      ? 'sequence'
+      : p.audience === 'student'
+        ? s.studentMode
+        : s.staffMode;
+    const need = HOSTEL_KINDS.has(p.kind)
+      ? 1
+      : p.audience === 'student'
+        ? s.studentNeed
+        : s.staffNeed;
     const rows: Array<{ label: string; users: string[]; mandatory: boolean }> = [];
-    for (const l of (await this.levels(c, p.audience)).filter((x) => x.active)) {
+    // hostel leave: the wardens of the pupil's hostel decide (any one of them)
+    const hostel = HOSTEL_KINDS.has(p.kind);
+    if (hostel) {
+      const w = await c.query<{ ids: string[] }>(
+        `SELECT app.hostel_warden_users(app.hostel_of($1, $2::date))::text[] AS ids`,
+        [p.studentId, p.onDate],
+      );
+      rows.push({ label: 'Warden', users: w.rows[0]?.ids ?? [], mandatory: false });
+    }
+    for (const l of hostel ? [] : (await this.levels(c, p.audience)).filter((x) => x.active)) {
       const users = (await this.approversOf(c, l, p.studentId)).filter(
         (u) => u !== p.requestedById || p.audience === 'student',
       );
@@ -726,7 +762,9 @@ export class GatePassService {
             outcome === 'approved'
               ? p.audience === 'student' && p.kind === 'early_leave'
                 ? 'The gate pass is approved. The person collecting the child reports to the front desk, where a photo is taken; the gate lets the child out against this pass.'
-                : 'The gate pass is approved. Show the QR code below, or the attached card, at the school gate.'
+                : p.kind === 'hostel_home'
+                  ? 'The hostel leave is approved. The person collecting the pupil reports to the hostel warden, where a photo is taken; the gate lets the pupil out against this pass and back in on return.'
+                  : 'The gate pass is approved. Show the QR code below, or the attached card, at the school gate.'
               : `The gate pass was not approved${note ? `: ${note}` : '.'}`,
           rows: this.mailRows(p),
           pass: id,
@@ -1005,7 +1043,7 @@ export class GatePassService {
       await this.settings(c);
       const more = await c.query<Row>(
         // eslint-disable-next-line no-restricted-syntax -- TODAY is a constant; values bound
-        `SELECT count(*) FILTER (WHERE p.state = 'out' AND p.kind = 'rgp' AND p.return_by < now())::int AS overdue,
+        `SELECT count(*) FILTER (WHERE p.state = 'out' AND p.kind IN ('rgp', 'hostel_home', 'hostel_outing') AND p.return_by < now())::int AS overdue,
                 count(*) FILTER (WHERE p.on_date = ${TODAY} AND p.audience = 'student')::int AS students_today,
                 count(*) FILTER (WHERE p.on_date = ${TODAY} AND p.audience = 'staff')::int AS staff_today,
                 count(*) FILTER (WHERE p.on_date = ${TODAY} AND p.state = 'rejected')::int AS rejected_today,
@@ -1015,7 +1053,7 @@ export class GatePassService {
       );
       const out = await c.query<Row>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant
-        `${SELECT} WHERE p.state = 'out' AND p.kind = 'rgp' ORDER BY p.return_by NULLS LAST LIMIT 20`,
+        `${SELECT} WHERE p.state = 'out' AND p.kind IN ('rgp', 'hostel_home', 'hostel_outing') ORDER BY p.return_by NULLS LAST LIMIT 20`,
       );
       const x = more.rows[0] ?? {};
       return {
@@ -1091,7 +1129,7 @@ export class GatePassService {
         ist(p.outAt),
         ist(p.inAt),
         p.outAt && p.inAt ? Math.round((Date.parse(p.inAt) - Date.parse(p.outAt)) / 60_000) : '',
-        p.kind === 'rgp' && p.returnBy && p.outAt
+        RETURNING.has(p.kind) && p.returnBy && p.outAt
           ? Date.parse(p.inAt ?? new Date().toISOString()) > Date.parse(p.returnBy)
             ? 'Yes'
             : 'No'
@@ -1127,6 +1165,51 @@ export class GatePassService {
     }));
   }
 
+  /**
+   * Hostel leave: the pupil holds a bed on the day, and the return time. An outing comes back the same
+   * day (by the school's latest time when none is given); home leave on the day given.
+   */
+  private async hostelReturn(c: PoolClient, dto: StudentPassDto): Promise<string> {
+    const r = await c.query<{ today: string; hostel: string | null; latest: string | null }>(
+      `SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS today,
+              app.hostel_of($1, COALESCE($2::date, (now() AT TIME ZONE 'Asia/Kolkata')::date))::text AS hostel,
+              (SELECT to_char(outing_return_by, 'HH24:MI') FROM hostel_settings WHERE school_id = app.current_school_id()) AS latest`,
+      [dto.studentId, dto.onDate ?? null],
+    );
+    const x = r.rows[0]!;
+    const on = dto.onDate ?? x.today;
+    if (!x.hostel)
+      throw new DomainError(
+        'gate_pass.not_hosteller',
+        `The pupil holds no hostel bed on ${on}: hostel leave is for boarders`,
+        { status: 400 },
+      );
+    const outing = dto.kind === 'hostel_outing';
+    if (outing && dto.returnOn && dto.returnOn !== on)
+      throw new DomainError('gate_pass.outing_same_day', 'An outing comes back the same day', {
+        status: 400,
+      });
+    const day = outing ? on : dto.returnOn!;
+    const time = dto.returnAt ?? (outing ? (x.latest ?? '19:00') : '18:00');
+    const back = `${day}T${time}:00+05:30`;
+    const leaves = `${on}T${dto.atTime ?? '00:00'}:00+05:30`;
+    if (Date.parse(back) <= Date.parse(leaves))
+      throw new DomainError(
+        'gate_pass.return_before_leave',
+        'The return must be after the leave starts',
+        {
+          status: 400,
+        },
+      );
+    if (outing && x.latest && time > x.latest)
+      throw new DomainError(
+        'gate_pass.outing_too_late',
+        `An outing must be back by ${x.latest}; ask for home leave for longer`,
+        { status: 400 },
+      );
+    return back;
+  }
+
   private async createStudent(
     c: PoolClient,
     ctx: RequestContext,
@@ -1137,6 +1220,7 @@ export class GatePassService {
       dto.studentId,
     ]);
     if (!st.rowCount) throw new DomainError('not-found', 'Student not found', { status: 404 });
+    const returnBy = HOSTEL_KINDS.has(dto.kind) ? await this.hostelReturn(c, dto) : null;
     let name = dto.escortName ?? null;
     let relation = dto.escortRelation ?? null;
     let mobile = dto.escortMobile ?? null;
@@ -1157,9 +1241,9 @@ export class GatePassService {
     const r = await c.query<{ id: string }>(
       // eslint-disable-next-line no-restricted-syntax -- TODAY is a constant; values bound
       `INSERT INTO gate_passes (school_id, audience, student_id, kind, source, on_date, at_time, reason, escort_kind, escort_name, escort_relation,
-                                escort_mobile, requested_by, request_id)
+                                escort_mobile, requested_by, request_id, return_by)
        VALUES (app.current_school_id(), 'student', $1, $2, $3, COALESCE($4::date, ${TODAY}), $5::time, $6, $7, $8, $9, $10, app.current_user_id(),
-               app.current_request_id()) RETURNING id::text`,
+               app.current_request_id(), $11::timestamptz) RETURNING id::text`,
       [
         dto.studentId,
         dto.kind,
@@ -1171,6 +1255,7 @@ export class GatePassService {
         name,
         relation,
         mobile,
+        returnBy,
       ],
     );
     const id = r.rows[0]!.id;
@@ -1198,16 +1283,26 @@ export class GatePassService {
     const v = await this.family(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const data = [];
-      for (const s of v.students)
+      for (const s of v.students) {
+        // a boarder (holds a hostel bed today) may also ask for home leave or an outing
+        const b = await c.query<{ hostel: string | null }>(
+          `SELECT (SELECT name FROM hostels WHERE id = app.hostel_of($1, (now() AT TIME ZONE 'Asia/Kolkata')::date)) AS hostel`,
+          [s.id],
+        );
         data.push({
           id: s.id,
           name: s.name,
+          hostel: b.rows[0]?.hostel ?? null,
           guardians: (await this.guardiansOf(c, s.id)).map((g) => ({
             relation: g.relation,
             name: g.name,
           })),
         });
-      return { data };
+      }
+      const set = await c.query<{ t: string }>(
+        `SELECT to_char(outing_return_by, 'HH24:MI') AS t FROM hostel_settings WHERE school_id = app.current_school_id()`,
+      );
+      return { data, outingReturnBy: set.rows[0]?.t ?? '19:00' };
     });
   }
 
@@ -1296,11 +1391,11 @@ export class GatePassService {
   private myWhere(q: MyPassesDto, params: unknown[], where: string[]): string {
     if (q.state === 'open')
       where.push(
-        `p.state IN ('pending', 'approved', 'handed_over') OR (p.state = 'out' AND p.kind = 'rgp')`,
+        `(p.state IN ('pending', 'approved', 'handed_over') OR (p.state = 'out' AND p.kind IN ('rgp', 'hostel_home', 'hostel_outing')))`,
       );
     if (q.state === 'past')
       where.push(
-        `(p.state IN ('returned', 'rejected', 'cancelled') OR (p.state = 'out' AND p.kind <> 'rgp'))`,
+        `(p.state IN ('returned', 'rejected', 'cancelled') OR (p.state = 'out' AND p.kind NOT IN ('rgp', 'hostel_home', 'hostel_outing')))`,
       );
     if (q.from) {
       params.push(q.from);
@@ -1482,6 +1577,19 @@ export class GatePassService {
   }
 
   /** A one-time code to the parent before the child goes with someone who is not on the record. */
+  /** Home leave is handed over by a warden of the pupil's hostel (or the hostel office). */
+  private async assertHostelHandover(c: PoolClient, ctx: RequestContext, p: PassRow) {
+    if (p.kind !== 'hostel_home' || ctx.permissions?.has('hostel.allot.manage')) return;
+    const w = await c.query<{ ok: boolean }>(
+      `SELECT app.current_user_id() = ANY (app.hostel_warden_users(app.hostel_of($1, $2::date))) AS ok`,
+      [p.studentId, p.onDate],
+    );
+    if (!w.rows[0]?.ok)
+      throw new DomainError('permission-denied', "Only a warden of the pupil's hostel hands over", {
+        status: 403,
+      });
+  }
+
   async sendOtp(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const p = await this.find(c, id, true);
@@ -1489,6 +1597,7 @@ export class GatePassService {
         throw new DomainError('conflict', 'This pass is not waiting for hand-over', {
           status: 409,
         });
+      await this.assertHostelHandover(c, ctx, p);
       // the parent who asked, else the guardian who takes the school's notices
       const g = await c.query<{ mobile: string }>(
         `SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
@@ -1544,10 +1653,15 @@ export class GatePassService {
   async handover(ctx: RequestContext, id: string, dto: HandoverDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const p = await this.find(c, id, true);
-      if (p.state !== 'approved' || p.audience !== 'student' || p.kind !== 'early_leave')
+      if (
+        p.state !== 'approved' ||
+        p.audience !== 'student' ||
+        !(p.kind === 'early_leave' || p.kind === 'hostel_home')
+      )
         throw new DomainError('conflict', 'This pass is not waiting for hand-over', {
           status: 409,
         });
+      await this.assertHostelHandover(c, ctx, p);
       const today = await c.query<{ ok: boolean }>(
         `SELECT $1::date = (now() AT TIME ZONE 'Asia/Kolkata')::date AS ok`,
         [p.onDate],
@@ -1653,17 +1767,28 @@ export class GatePassService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const p = await this.find(c, id, true);
       const student = p.audience === 'student';
-      if (student && p.kind === 'early_leave' && p.state === 'approved')
+      if (
+        student &&
+        (p.kind === 'early_leave' || p.kind === 'hostel_home') &&
+        p.state === 'approved'
+      )
         throw new DomainError(
           'gate_pass.not_handed_over',
-          'The front desk has not handed the child over yet',
+          p.kind === 'hostel_home'
+            ? 'The warden has not handed the pupil over yet'
+            : 'The front desk has not handed the child over yet',
           { status: 409 },
         );
       if (student && p.kind === 'late_arrival')
         throw new DomainError('conflict', 'This is a late-arrival pass: let the pupil in', {
           status: 409,
         });
-      if (!((student && p.state === 'handed_over') || (!student && p.state === 'approved')))
+      const outing = student && p.kind === 'hostel_outing' && p.state === 'approved';
+      if (!(
+        (student && p.state === 'handed_over') ||
+        outing ||
+        (!student && p.state === 'approved')
+      ))
         throw new DomainError('conflict', `This pass is ${p.stage.toLowerCase()}`, { status: 409 });
       const today = await c.query<{ ok: boolean }>(
         `SELECT $1::date = (now() AT TIME ZONE 'Asia/Kolkata')::date AS ok`,
@@ -1693,7 +1818,8 @@ export class GatePassService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const p = await this.find(c, id, true);
       const late = p.kind === 'late_arrival' && p.state === 'approved';
-      if (!late && !(p.kind === 'rgp' && p.state === 'out'))
+      const back = HOSTEL_KINDS.has(p.kind) && p.state === 'out';
+      if (!late && !back && !(p.kind === 'rgp' && p.state === 'out'))
         throw new DomainError('conflict', `This pass is ${p.stage.toLowerCase()}`, { status: 409 });
       for (const i of dto.items)
         await c.query(
@@ -1705,7 +1831,18 @@ export class GatePassService {
                 gate_note = COALESCE(NULLIF(concat_ws(' · ', gate_note, $2::text), ''), gate_note), updated_at = now() WHERE id = $1`,
         [id, dto.note ?? null],
       );
-      if (late) await this.textOwners(c, 'gate_pass_in', p, { time: this.vars(p).now! });
+      if (back) {
+        // back from hostel leave: how late, past the return time and the school's grace
+        await c.query(
+          `UPDATE gate_passes g
+              SET late_minutes = CASE WHEN floor(extract(epoch FROM g.in_at - g.return_by) / 60)
+                                       > COALESCE((SELECT late_grace_minutes FROM hostel_settings WHERE school_id = g.school_id), 30)
+                                      THEN floor(extract(epoch FROM g.in_at - g.return_by) / 60)::int END
+            WHERE g.id = $1 AND g.return_by IS NOT NULL`,
+          [id],
+        );
+      }
+      if (late || back) await this.textOwners(c, 'gate_pass_in', p, { time: this.vars(p).now! });
       await this.audit.stage(ctx, c, {
         action: 'engagement.gate_pass.in',
         entityType: 'gate_passes',
@@ -1801,6 +1938,7 @@ export class GatePassService {
                 p.kind === 'late_arrival' ? 'Arriving' : 'Leaving',
                 `${p.onDate}${p.atTime ? `, ${p.atTime}` : ''}`,
               ],
+              ['Back by', HOSTEL_KINDS.has(p.kind) && p.returnBy ? ist(p.returnBy) : null],
               [
                 'With',
                 p.escortName

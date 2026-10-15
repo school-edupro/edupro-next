@@ -1,7 +1,8 @@
 /** Gate pass v2 (0069): the shapes and labels the ERP screens share. */
 export type PassState =
   'pending' | 'approved' | 'rejected' | 'cancelled' | 'handed_over' | 'out' | 'returned';
-export type PassKind = 'early_leave' | 'late_arrival' | 'rgp' | 'nrgp';
+export type PassKind =
+  'early_leave' | 'late_arrival' | 'rgp' | 'nrgp' | 'hostel_home' | 'hostel_outing';
 
 export interface GatePass {
   id: string;
@@ -135,6 +136,8 @@ export const KIND_LABEL: Record<PassKind, string> = {
   late_arrival: 'Late arrival',
   rgp: 'RGP · returnable',
   nrgp: 'NRGP · non-returnable',
+  hostel_home: 'Hostel home leave',
+  hostel_outing: 'Hostel outing',
 };
 export const STATE_TONE: Record<PassState, 'warning' | 'success' | 'danger' | 'info' | 'neutral'> =
   {

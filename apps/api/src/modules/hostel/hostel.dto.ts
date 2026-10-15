@@ -127,3 +127,63 @@ export const ImportSchema = z.object({
   apply: z.boolean().default(false),
 });
 export class ImportDto extends createZodDto(ImportSchema) {}
+
+// ---- H2: roll-call, leave, settings ------------------------------------------------------------------------
+export const HOSTEL_H2 = {
+  rollcall: 'hostel.rollcall.mark',
+  leave: 'hostel.leave.view',
+} as const;
+
+const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:MM');
+
+export const HostelSettingsSchema = z.object({
+  lateGraceMinutes: z.number().int().min(0).max(1440),
+  escalateAfterHours: z.number().int().min(1).max(168),
+  outingReturnBy: TimeSchema,
+  alertParentAbsent: z.boolean(),
+});
+export class HostelSettingsDto extends createZodDto(HostelSettingsSchema) {}
+
+export const SessionSchema = z.object({
+  hostelId: IdSchema,
+  name: Text(40),
+  atTime: TimeSchema,
+  active: z.boolean().default(true),
+});
+export class SessionDto extends createZodDto(SessionSchema) {}
+
+export const RollcallQuerySchema = z.object({
+  sessionId: IdSchema,
+  on: DateSchema.optional(),
+});
+export class RollcallQueryDto extends createZodDto(RollcallQuerySchema) {}
+
+export const RollcallSaveSchema = z.object({
+  sessionId: IdSchema,
+  on: DateSchema,
+  marks: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        status: z.enum(['present', 'absent', 'on_leave', 'sick']),
+        note: Optional(200),
+      }),
+    )
+    .min(1)
+    .max(2000),
+});
+export class RollcallSaveDto extends createZodDto(RollcallSaveSchema) {}
+
+export const LeavesQuerySchema = z.object({
+  hostelId: IdSchema.optional(),
+  /** out = away now; overdue = past the return time; handover = home leave approved for today; all = the last 500 */
+  show: z.enum(['out', 'overdue', 'handover', 'pending', 'all']).default('out'),
+});
+export class LeavesQueryDto extends createZodDto(LeavesQuerySchema) {}
+
+export const RollcallReportSchema = z.object({
+  hostelId: IdSchema.optional(),
+  from: DateSchema,
+  to: DateSchema,
+});
+export class RollcallReportDto extends createZodDto(RollcallReportSchema) {}
