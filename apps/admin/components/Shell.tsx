@@ -502,6 +502,7 @@ export async function Shell({
       '/fees/structures',
       '/fees/rules',
       '/fees/hostel-calendar',
+      '/fees/gateways',
       '/fees/discounts',
       '/fees/approval',
     ],

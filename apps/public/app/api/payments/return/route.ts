@@ -7,20 +7,23 @@ const PUBLIC_URL = process.env.PUBLIC_APP_URL ?? 'http://localhost:3003';
  * PayU posts the signed result here (surl/furl). The fields go to the API, which verifies the signature and
  * applies the outcome exactly once; the browser then lands on the intent's return page (the status page).
  */
-const PROVIDERS = new Set(['payu', 'razorpay', 'ccavenue']);
+const PROVIDERS = new Set(['payu', 'razorpay', 'ccavenue', 'sbiepay', 'atom']);
 
 export async function POST(req: Request) {
   // Sprint 13: the gateway is named on the return URL; PayU stays the default
   const provider = PROVIDERS.has(new URL(req.url).searchParams.get('provider') ?? '')
     ? new URL(req.url).searchParams.get('provider')!
     : 'payu';
+  // the school's gateway account that took the payment: its keys check the answer
+  const gwRaw = new URL(req.url).searchParams.get('gw') ?? '';
+  const gw = /^\d{1,18}$/.test(gwRaw) ? gwRaw : '';
   const fd = await req.formData();
   const body: Record<string, string> = {};
   for (const [k, v] of fd.entries()) if (typeof v === 'string') body[k] = v;
   let paid = '0';
   let target = new URL('/', PUBLIC_URL);
   try {
-    const res = await fetch(`${API}/api/v1/payments/${provider}/return`, {
+    const res = await fetch(`${API}/api/v1/payments/${provider}/return${gw ? `?gw=${gw}` : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body),

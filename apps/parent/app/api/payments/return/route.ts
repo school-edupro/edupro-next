@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 const API = process.env.INTERNAL_API_BASE_URL ?? 'http://localhost:4000';
 const APP_URL = process.env.PARENT_APP_URL ?? 'http://localhost:3001';
-const PROVIDERS = new Set(['payu', 'razorpay', 'ccavenue']);
+const PROVIDERS = new Set(['payu', 'razorpay', 'ccavenue', 'sbiepay', 'atom']);
 
 /**
  * Sprint 13: the gateway posts its result here (PayU surl/furl, Razorpay callback_url, CCAvenue redirect
@@ -14,6 +14,9 @@ export async function POST(req: Request) {
   const provider = PROVIDERS.has(url.searchParams.get('provider') ?? '')
     ? url.searchParams.get('provider')!
     : 'payu';
+  // the school's gateway account that took the payment: its keys check the answer
+  const gwRaw = url.searchParams.get('gw') ?? '';
+  const gw = /^\d{1,18}$/.test(gwRaw) ? gwRaw : '';
   const body: Record<string, string> = {};
   const type = req.headers.get('content-type') ?? '';
   if (type.includes('application/json')) {
@@ -25,7 +28,7 @@ export async function POST(req: Request) {
   let paid = '0';
   let target = new URL('/fees', APP_URL);
   try {
-    const res = await fetch(`${API}/api/v1/payments/${provider}/return`, {
+    const res = await fetch(`${API}/api/v1/payments/${provider}/return${gw ? `?gw=${gw}` : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body),

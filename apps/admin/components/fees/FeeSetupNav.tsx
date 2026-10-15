@@ -7,6 +7,7 @@ const TABS: Array<{ href: string; label: string }> = [
   { href: '/fees/discounts', label: 'Discount by head' },
   { href: '/fees/masters', label: 'Receipt numbers' },
   { href: '/fees/approval', label: 'Approval levels' },
+  { href: '/fees/gateways', label: 'Payment gateways' },
 ];
 
 export function FeeSetupNav({ current }: { current: string }) {

@@ -77,6 +77,7 @@ const PAGES = [
   '/fees/masters',
   '/fees/rules',
   '/fees/hostel-calendar',
+  '/fees/gateways',
   '/fees/rules?classId=3282',
   '/fees/structures?classId=3282',
   '/fees/discounts',

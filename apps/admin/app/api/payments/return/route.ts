@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 
 const APP_URL = process.env.ADMIN_APP_URL ?? 'http://localhost:3000';
-const PROVIDERS = new Set(['payu', 'razorpay', 'ccavenue']);
+const PROVIDERS = new Set(['payu', 'razorpay', 'ccavenue', 'sbiepay', 'atom']);
 
 /**
  * Sprint 13: gateways post their result here for intents the accounts desk created (return URL on the
@@ -14,6 +14,9 @@ export async function POST(req: Request) {
   const provider = PROVIDERS.has(url.searchParams.get('provider') ?? '')
     ? url.searchParams.get('provider')!
     : 'payu';
+  // the school's gateway account that took the payment: its keys check the answer
+  const gwRaw = url.searchParams.get('gw') ?? '';
+  const gw = /^\d{1,18}$/.test(gwRaw) ? gwRaw : '';
   const body: Record<string, string> = {};
   const type = req.headers.get('content-type') ?? '';
   if (type.includes('application/json')) {
@@ -25,12 +28,15 @@ export async function POST(req: Request) {
   let paid = '0';
   let target = new URL('/fees/payments', APP_URL);
   try {
-    const res = await fetch(`${env.apiBaseUrl}/api/v1/payments/${provider}/return`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    });
+    const res = await fetch(
+      `${env.apiBaseUrl}/api/v1/payments/${provider}/return${gw ? `?gw=${gw}` : ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      },
+    );
     const out = (await res.json().catch(() => ({}))) as {
       outcome?: string;
       status?: string | null;

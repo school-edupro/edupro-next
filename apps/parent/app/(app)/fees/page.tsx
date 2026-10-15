@@ -5,7 +5,7 @@ import { ApiError } from '@edupro/bff';
 import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
-import { currentLang, t } from '@/lib/i18n';
+import { currentLang, t, type Lang } from '@/lib/i18n';
 
 interface Instalment {
   dueOn: string;
@@ -64,6 +64,70 @@ interface Intent {
   provider: string;
   entityId: string | null;
   createdAt: string;
+}
+
+interface GatewayOption {
+  id: string;
+  provider: string;
+  label: string;
+  chargePercent: string;
+  chargeFlat: string;
+}
+
+/** What a gateway adds on top of the fee, in words ("₹5 + 1.5%"), or nothing when the school bears it. */
+const chargeText = (g: GatewayOption) => {
+  const pct = Number(g.chargePercent);
+  const flat = Number(g.chargeFlat);
+  const parts = [flat > 0 ? `₹${flat.toFixed(2)}` : '', pct > 0 ? `${pct}%` : ''].filter(Boolean);
+  return parts.join(' + ');
+};
+
+/** The gateway choice of a Pay form: radio buttons when the fee has several, else the one gateway's charge. */
+function GatewayPick({
+  options,
+  lang,
+  name,
+}: {
+  options: GatewayOption[];
+  lang: Lang;
+  name: string;
+}) {
+  if (options.length === 0) return null;
+  if (options.length === 1) {
+    const c = chargeText(options[0]!);
+    return (
+      <>
+        <input type="hidden" name="gatewayId" value={options[0]!.id} />
+        {c ? (
+          <span className="ep-field__help">
+            {t(lang, 'Convenience charge')}: {c}
+          </span>
+        ) : null}
+      </>
+    );
+  }
+  return (
+    <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+      <legend className="ep-field__label">{t(lang, 'Pay through')}</legend>
+      {options.map((g, i) => (
+        <label key={g.id} style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+          <input
+            type="radio"
+            name="gatewayId"
+            value={g.id}
+            defaultChecked={i === 0}
+            aria-describedby={name}
+          />
+          {g.label}
+          {chargeText(g) ? (
+            <span className="ep-field__help">
+              ({t(lang, 'Convenience charge')} {chargeText(g)})
+            </span>
+          ) : null}
+        </label>
+      ))}
+    </fieldset>
+  );
 }
 
 interface MiscChild {
@@ -177,6 +241,19 @@ export default async function FeesPage({
     .catch(() => [] as MiscChild[]);
   // Sprint 16: the Pay button follows the permission, not whether the intents call answered
   const canPay = permissions.includes('payments.family.pay');
+  // the gateways the school takes each fee through (Fee setup -> Payment gateways), with their charge
+  const gatewaysOf = async (ledger: string) =>
+    canPay
+      ? bff.api
+          .fetch<{ data: GatewayOption[] }>(`/payments/gateways/options?ledger=${ledger}`)
+          .then((r) => r.data)
+          .catch(() => [] as GatewayOption[])
+      : [];
+  const [gwSchool, gwHostel, gwMisc] = await Promise.all([
+    gatewaysOf('school'),
+    gatewaysOf('hostel'),
+    gatewaysOf('misc'),
+  ]);
   // Sprint 14: a queued receipt PDF; the worker renders it and the link appears when ready
   const exportStatus = sp.export
     ? await bff.api
@@ -442,6 +519,11 @@ export default async function FeesPage({
                             {t(lang, 'Whole instalments, the oldest first.')}
                           </span>
                         </label>
+                        <GatewayPick
+                          options={ledger === 'hostel' ? gwHostel : gwSchool}
+                          lang={lang}
+                          name={`pay-${c.student.id}-${ledger}`}
+                        />
                         <Button type="submit">
                           {split ? `${t(lang, 'Pay')} ${t(lang, title)}` : t(lang, 'Pay online')}
                         </Button>
@@ -534,7 +616,9 @@ export default async function FeesPage({
           <p className="ep-field__help">
             {t(
               lang,
-              'Fees announced by the school for a trip, an activity or a form. They are paid at the school fee counter.',
+              gwMisc.length && canPay
+                ? 'Fees announced by the school for a trip, an activity or a form. Pay online in full, or at the school fee counter.'
+                : 'Fees announced by the school for a trip, an activity or a form. They are paid at the school fee counter.',
             )}
           </p>
           <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
@@ -549,6 +633,11 @@ export default async function FeesPage({
                   {t(lang, 'Paid')}
                 </th>
                 <th scope="col">{t(lang, 'Status')}</th>
+                {gwMisc.length && canPay ? (
+                  <th scope="col">
+                    <span className="ep-sr-only">{t(lang, 'Pay online')}</span>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -578,6 +667,24 @@ export default async function FeesPage({
                           : `${t(lang, 'To pay')} ₹${l.balance}`}
                     </Badge>
                   </td>
+                  {gwMisc.length && canPay ? (
+                    <td>
+                      {l.status !== 'paid' && !l.blocked && Number(l.balance) > 0 ? (
+                        <form
+                          method="post"
+                          action="/fees/pay-misc"
+                          style={{ display: 'grid', gap: 'var(--sp-1)' }}
+                        >
+                          <input type="hidden" name="lineId" value={l.id} />
+                          <input type="hidden" name="studentId" value={m.student.id} />
+                          <GatewayPick options={gwMisc} lang={lang} name={`misc-${l.id}`} />
+                          <Button type="submit" size="sm">
+                            {t(lang, 'Pay online')} ₹{l.balance}
+                          </Button>
+                        </form>
+                      ) : null}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
