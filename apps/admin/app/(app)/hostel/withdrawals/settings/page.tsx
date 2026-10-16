@@ -35,7 +35,7 @@ export default async function HostelWithdrawalSettingsPage({
       <PageHeader
         kicker="Hostel withdrawal settings"
         title="Steps and notice"
-        description="Who clears a pupil leaving the hostel, in which order, and the notice the school asks for. Departments at the same step work in parallel; the last step settles the hostel fee."
+        description="The notice the school asks for, and the hostel's steps when a hosteller leaves the school. The approval levels of leaving the hostel are on Fee setup → Approval levels."
       />
       <HostelNav current="/hostel/withdrawals" permissions={me.permissions} />
       <Notice params={sp} />
@@ -69,11 +69,17 @@ export default async function HostelWithdrawalSettingsPage({
           <Button type="submit">Save</Button>
         </form>
       </Card>
-      <Card title="Steps">
+      <Card title="Approval levels" style={{ marginBottom: 'var(--sp-4)' }}>
+        <p style={{ margin: 0 }}>
+          Who may start a hostel withdrawal and who approves it, level by level, are set on{' '}
+          <a href="/fees/approval">Fee setup → Approval levels</a> (Hostel withdrawal).
+        </p>
+      </Card>
+      <Card title="Steps when a hosteller leaves the school">
         <p className="ep-field__help">
-          “Warden of the pupil’s hostel” is the warden of the hostel the pupil stays in. A step that
-          raises a charge (damages, mess dues) puts it on the pupil as a misc fee. A step marked
-          “also when leaving the school” clears a hosteller inside the school withdrawal.
+          These clear a hosteller inside the school withdrawal (People → Withdrawals). “Warden of
+          the pupil’s hostel” is the warden of the hostel the pupil stays in. A step that raises a
+          charge (damages, mess dues) puts it on the pupil as a misc fee.
         </p>
         <WithdrawalDepartmentsEditor
           departments={s.departments}

@@ -12,194 +12,52 @@ import {
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import {
-  bypassHostelStep,
+  approveHostelWithdrawal,
   cancelHostelWithdrawal,
-  clearHostelStep,
   completeHostelWithdrawal,
+  rejectHostelWithdrawal,
 } from '@/lib/hostel-withdrawal-actions';
-import type { HostelClearance, HostelWithdrawal } from '@/lib/types';
+import type { HostelApprovalStep, HostelWithdrawal } from '@/lib/types';
 
-const TONE: Record<HostelClearance['status'], 'success' | 'warning' | 'danger'> = {
-  cleared: 'success',
-  hold: 'danger',
-  pending: 'warning',
+const STEP: Record<
+  HostelApprovalStep['status'],
+  ['success' | 'warning' | 'danger' | 'neutral', string]
+> = {
+  approved: ['success', 'approved'],
+  pending: ['warning', 'waiting'],
+  rejected: ['danger', 'not approved'],
+  skipped: ['neutral', 'not reached'],
 };
 const OK: Record<string, string> = {
-  started: 'The hostel withdrawal is started.',
-  saved: 'Saved.',
-  bypassed: 'Bypassed.',
+  started: 'The hostel withdrawal is started and sent for approval.',
+  approved: 'Approved.',
+  rejected: 'Not approved: the pupil keeps the bed.',
   completed: 'The pupil has left the hostel: the bed is free and the hostel fee is settled.',
   cancelled: 'The hostel withdrawal is cancelled; the pupil keeps the bed.',
 };
 const rupees = (v: string | number) => `₹${Number(v).toLocaleString('en-IN')}`;
 
-function Docs({ docs }: { docs: Array<{ fileId: string; name: string | null }> }) {
-  if (!docs.length) return null;
+function FeeChoice({ current }: { current: 'carry' | 'refund' }) {
   return (
-    <div className="ep-filecell">
-      <span className="ep-field__help">Documents</span>
-      {docs.map((d, i) => (
-        <FileLinks
-          key={d.fileId}
-          href={`/api/files/${d.fileId}/download`}
-          label={`document ${String(i + 1)}`}
-        />
-      ))}
-    </div>
+    <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+      <legend className="ep-field__label">Hostel fee paid after it stops</legend>
+      <label className="ep-roles__tick">
+        <input type="radio" name="feeChoice" value="carry" defaultChecked={current === 'carry'} />{' '}
+        Carry forward (stays with the school as advance on the hostel receipt)
+      </label>
+      <label className="ep-roles__tick">
+        <input type="radio" name="feeChoice" value="refund" defaultChecked={current === 'refund'} />{' '}
+        Refund to the parent (through the refund approval)
+      </label>
+    </fieldset>
   );
 }
 
-/** One step's department: what it found, who clears it, and the form for them. */
-function Department({ w, x }: { w: HostelWithdrawal; x: HostelClearance }) {
-  const waiting = x.status !== 'cleared' && x.step === w.currentStep;
-  const label =
-    x.status === 'cleared'
-      ? x.bypassed
-        ? 'bypassed'
-        : x.auto
-          ? 'cleared automatically'
-          : 'cleared'
-      : x.status === 'hold'
-        ? 'on hold'
-        : waiting
-          ? 'waiting'
-          : 'later step';
-  return (
-    <div className="ep-wd__dept" data-status={x.status}>
-      <div className="ep-wd__dept-head">
-        <strong>{x.departmentName}</strong>
-        <Badge tone={x.status === 'pending' && !waiting ? 'neutral' : TONE[x.status]}>
-          {label}
-        </Badge>
-        {x.settles ? <Badge tone="info">settles the fee</Badge> : null}
-      </div>
-      <div className="ep-field__help">Cleared by {x.approvers.join(' or ')}</div>
-      {x.check ? (
-        <div className={x.check.due > 0 ? 'ep-wd__check ep-wd__check--due' : 'ep-wd__check'}>
-          {x.check.detail}
-        </div>
-      ) : null}
-      {x.remarks ? <div>{x.remarks}</div> : null}
-      {Number(x.dues) > 0 && !x.check ? <div>Dues {rupees(x.dues)}</div> : null}
-      {Number(x.charge) > 0 ? (
-        <div>
-          {x.chargeKind === 'mess' ? 'Mess dues' : 'Damages'} {rupees(x.charge)} raised as a misc
-          fee
-        </div>
-      ) : null}
-      <Docs docs={x.documents} />
-      {x.actedBy || x.actedAt ? (
-        <div className="ep-field__help">
-          {x.actedBy ?? 'System'}
-          {x.actedAt ? ` · ${new Date(x.actedAt).toLocaleString('en-IN')}` : ''}
-        </div>
-      ) : null}
-      {x.canAct ? (
-        <details className="ep-wd__act" open={waiting}>
-          <summary>Record {x.departmentName}</summary>
-          <form action={clearHostelStep} className="ep-wd__form">
-            <input type="hidden" name="id" value={w.id} />
-            <input type="hidden" name="department" value={x.department} />
-            <label className="ep-field" htmlFor={`st-${x.id}`}>
-              <span className="ep-field__label">Decision</span>
-              <select id={`st-${x.id}`} name="status" className="ep-select" defaultValue="cleared">
-                <option value="cleared">Clear</option>
-                <option value="hold">Hold (something is pending)</option>
-              </select>
-            </label>
-            {x.chargeKind && !x.chargeMiscFeeId ? (
-              <label className="ep-field" htmlFor={`ch-${x.id}`}>
-                <span className="ep-field__label">
-                  {x.chargeKind === 'mess' ? 'Mess dues to charge (₹)' : 'Damages to charge (₹)'}
-                </span>
-                <input
-                  id={`ch-${x.id}`}
-                  name="charge"
-                  className="ep-input"
-                  inputMode="decimal"
-                  placeholder="0"
-                />
-                <span className="ep-field__help">Put on the pupil as a misc fee, due at once.</span>
-              </label>
-            ) : null}
-            {x.settles ? (
-              <fieldset className="ep-field ep-wd__wide" style={{ border: 0, padding: 0 }}>
-                <legend className="ep-field__label">Hostel fee paid after it stops</legend>
-                <label className="ep-roles__tick">
-                  <input
-                    type="radio"
-                    name="feeChoice"
-                    value="carry"
-                    defaultChecked={w.feeChoice === 'carry'}
-                  />{' '}
-                  Carry forward (stays with the school as advance on the receipt)
-                </label>
-                <label className="ep-roles__tick">
-                  <input
-                    type="radio"
-                    name="feeChoice"
-                    value="refund"
-                    defaultChecked={w.feeChoice === 'refund'}
-                  />{' '}
-                  Refund to the parent (through the fee approval levels)
-                </label>
-              </fieldset>
-            ) : null}
-            <label className="ep-field ep-wd__wide" htmlFor={`re-${x.id}`}>
-              <span className="ep-field__label">Remarks</span>
-              <input
-                id={`re-${x.id}`}
-                name="remarks"
-                className="ep-input"
-                maxLength={500}
-                defaultValue={x.auto ? '' : (x.remarks ?? '')}
-              />
-            </label>
-            <label className="ep-field ep-wd__wide" htmlFor={`do-${x.id}`}>
-              <span className="ep-field__label">
-                Document{x.documentRequired ? ' (required to clear)' : ' (optional)'}
-              </span>
-              <input
-                id={`do-${x.id}`}
-                name="documents"
-                type="file"
-                multiple
-                className="ep-input"
-                accept="application/pdf,image/png,image/jpeg,image/webp"
-              />
-            </label>
-            <Button type="submit" size="sm">
-              Save
-            </Button>
-          </form>
-          {x.bypassAllowed && x.status !== 'cleared' ? (
-            <form action={bypassHostelStep} className="ep-wd__form">
-              <input type="hidden" name="id" value={w.id} />
-              <input type="hidden" name="department" value={x.department} />
-              <label className="ep-field ep-wd__wide" htmlFor={`by-${x.id}`}>
-                <span className="ep-field__label">Bypass reason</span>
-                <input
-                  id={`by-${x.id}`}
-                  name="reason"
-                  className="ep-input"
-                  minLength={3}
-                  maxLength={300}
-                  required
-                  placeholder="e.g. no mess dues on record"
-                />
-              </label>
-              <Button type="submit" size="sm" variant="ghost">
-                Bypass {x.departmentName}
-              </Button>
-            </form>
-          ) : null}
-        </details>
-      ) : null}
-    </div>
-  );
-}
-
-/** A hostel withdrawal: its steps, completion (bed and fee) and cancel. */
+/**
+ * A hostel withdrawal: what was asked (dates, damages, mess dues), its approval levels (Fee setup →
+ * Approval levels → Hostel withdrawal) with the decision for the approver of the current level, and
+ * what the last approval did to the bed and the hostel fee.
+ */
 export default async function HostelWithdrawalPage({
   params,
   searchParams,
@@ -215,8 +73,7 @@ export default async function HostelWithdrawalPage({
   ]);
   const canManage = me.permissions.includes('hostel.withdrawal.manage');
   const open = w.status === 'requested' || w.status === 'cleared';
-  const steps = [...new Set(w.clearances.map((x) => x.step))].sort((a, b) => a - b);
-  const charges = w.clearances.reduce((n, x) => n + Number(x.charge), 0);
+  const charges = Number(w.damageCharge) + Number(w.messCharge);
   return (
     <>
       <Breadcrumbs
@@ -244,54 +101,131 @@ export default async function HostelWithdrawalPage({
       />
       <HostelNav current="/hostel/withdrawals" permissions={me.permissions} />
       <Notice params={{ ...sp, detail: sp.ok ? (OK[sp.ok] ?? sp.detail) : sp.detail }} />
-      <Card style={{ marginBottom: 'var(--sp-4)' }}>
+
+      <Card title="What is asked" style={{ marginBottom: 'var(--sp-4)' }}>
         {w.noticeShort ? (
           <p className="ep-alert ep-alert--warning" role="status" style={{ marginTop: 0 }}>
             Short notice: the leaving date is less than {w.noticeDays ?? 0} days after the request,
             so the hostel fee of the month after leaving is charged too.
           </p>
         ) : null}
-        {w.remarks ? <p style={{ marginTop: 0 }}>{w.remarks}</p> : null}
-        <Docs docs={w.documents} />
+        <dl className="hs-dl">
+          <dt>Last day in the hostel</dt>
+          <dd>{dmy(w.leavingOn)}</dd>
+          <dt>Hostel fee up to</dt>
+          <dd>
+            {w.feeUntil
+              ? monthLabel(w.feeUntil)
+              : `${monthLabel(w.leavingOn)}${w.noticeShort ? ' and the next month' : ''} (on approval)`}
+          </dd>
+          <dt>Damages (room and inventory)</dt>
+          <dd>{Number(w.damageCharge) > 0 ? rupees(w.damageCharge) : 'none'}</dd>
+          <dt>Mess dues</dt>
+          <dd>{Number(w.messCharge) > 0 ? rupees(w.messCharge) : 'none'}</dd>
+          {w.chargeRemarks ? (
+            <>
+              <dt>About the charges</dt>
+              <dd>{w.chargeRemarks}</dd>
+            </>
+          ) : null}
+        </dl>
+        {charges > 0 && w.status !== 'completed' ? (
+          <p className="ep-field__help">
+            The charges become misc fees of the pupil on the last approval.
+          </p>
+        ) : null}
+        {w.remarks ? <p>{w.remarks}</p> : null}
+        {w.documents.length ? (
+          <div className="ep-filecell">
+            <span className="ep-field__help">Documents</span>
+            {w.documents.map((d, i) => (
+              <FileLinks
+                key={d.fileId}
+                href={`/api/files/${d.fileId}/download`}
+                label={`document ${String(i + 1)}`}
+              />
+            ))}
+          </div>
+        ) : null}
         {w.requestedBy ? (
           <div className="ep-field__help">
             Started by {w.requestedBy} · request of {dmy(w.requestedOn)}
           </div>
         ) : null}
-        {charges > 0 ? (
-          <div className="ep-field__help">Charges raised: {rupees(charges)} (misc fees)</div>
-        ) : null}
         {w.cancelReason ? <div className="ep-field__help">Cancelled: {w.cancelReason}</div> : null}
       </Card>
 
-      <div className="ep-wd__steps">
-        {steps.map((step) => {
-          const list = w.clearances.filter((x) => x.step === step);
-          const done = list.every((x) => x.status === 'cleared');
-          return (
-            <section
-              key={step}
-              className="ep-wd__step"
-              data-current={w.currentStep === step ? 'true' : undefined}
-              aria-label={`Step ${String(step)}`}
-            >
-              <h2 className="ep-wd__step-title">
-                Step {step}{' '}
-                {done ? (
-                  <Badge tone="success">done</Badge>
-                ) : w.currentStep === step && open ? (
-                  <Badge tone="warning">now</Badge>
-                ) : null}
-              </h2>
-              <div className="ep-wd__depts">
-                {list.map((x) => (
-                  <Department key={x.id} w={w} x={x} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+      <Card title="Approval" style={{ marginBottom: 'var(--sp-4)' }}>
+        {w.approval ? (
+          <ol className="hs-approval">
+            {w.approval.steps.map((s) => (
+              <li
+                key={s.id}
+                data-current={
+                  s.status === 'pending' && s.level === w.approval!.currentLevel
+                    ? 'true'
+                    : undefined
+                }
+              >
+                <div>
+                  <strong>
+                    Level {s.level} · {s.name}
+                  </strong>{' '}
+                  {s.status === 'pending' && s.level !== w.approval!.currentLevel ? (
+                    <Badge tone="neutral">later</Badge>
+                  ) : (
+                    <Badge tone={STEP[s.status][0]}>{STEP[s.status][1]}</Badge>
+                  )}
+                </div>
+                <div className="ep-field__help">
+                  {s.actedBy
+                    ? `${s.actedBy}${s.actedAt ? ` · ${new Date(s.actedAt).toLocaleString('en-IN')}` : ''}`
+                    : s.assignees.length
+                      ? `With ${s.assignees.slice(0, 4).join(', ')}${s.assignees.length > 4 ? ` and ${String(s.assignees.length - 4)} more` : ''}`
+                      : ''}
+                </div>
+                {s.note ? <div>{s.note}</div> : null}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p style={{ margin: 0 }}>
+            The approval levels of a hostel withdrawal are switched off: the hostel office completes
+            it.
+          </p>
+        )}
+        {w.decidedNote && w.status === 'rejected' ? (
+          <p className="ep-alert ep-alert--danger" role="status">
+            Not approved: {w.decidedNote}
+          </p>
+        ) : null}
+        {w.myStep ? (
+          <form className="hs-form" style={{ marginTop: 'var(--sp-3)', maxWidth: '40rem' }}>
+            <input type="hidden" name="id" value={w.id} />
+            {w.myStep.lastLevel ? <FeeChoice current={w.feeChoice} /> : null}
+            <label className="ep-field" htmlFor="hw-note">
+              <span className="ep-field__label">Note (needed to not approve)</span>
+              <input id="hw-note" name="note" className="ep-input" maxLength={500} />
+            </label>
+            <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+              <Button type="submit" formAction={approveHostelWithdrawal}>
+                {w.myStep.lastLevel ? 'Approve: leave the hostel' : 'Approve'}
+              </Button>
+              <Button type="submit" variant="secondary" formAction={rejectHostelWithdrawal}>
+                Do not approve
+              </Button>
+            </span>
+            {w.myStep.lastLevel ? (
+              <span className="ep-field__help">
+                The last approval gives up the bed on {dmy(w.leavingOn)}, settles the hostel fee and
+                raises the charges.
+              </span>
+            ) : null}
+          </form>
+        ) : w.status === 'requested' && w.waitingWith ? (
+          <p className="ep-field__help">Waiting with: {w.waitingWith}.</p>
+        ) : null}
+      </Card>
 
       <div className="ep-wd__end">
         <Card title="Leaving the hostel">
@@ -303,37 +237,20 @@ export default async function HostelWithdrawalPage({
               </p>
               {w.feeNote ? <p className="ep-field__help">{w.feeNote}</p> : null}
             </>
-          ) : w.status === 'cancelled' ? (
-            <p style={{ margin: 0 }}>Cancelled: the pupil keeps the bed.</p>
+          ) : w.status === 'cancelled' || w.status === 'rejected' ? (
+            <p style={{ margin: 0 }}>The pupil keeps the bed.</p>
+          ) : w.canComplete ? (
+            <form action={completeHostelWithdrawal} className="hs-form">
+              <input type="hidden" name="id" value={w.id} />
+              <FeeChoice current={w.feeChoice} />
+              <Button type="submit">Complete: leave the hostel</Button>
+            </form>
           ) : (
-            <>
-              <p style={{ marginTop: 0 }}>
-                When every step has cleared: the bed is given up on {dmy(w.leavingOn)}, the hostel
-                fee stops after {w.noticeShort ? 'the next month' : 'the leaving month'}, and hostel
-                months paid after that are{' '}
-                {w.feeChoice === 'refund' ? 'sent for refund' : 'carried forward'}. The parent is
-                told.
-              </p>
-              {w.canComplete ? (
-                <ConfirmAction
-                  action={completeHostelWithdrawal}
-                  fields={{ id: w.id }}
-                  label="Complete: leave the hostel"
-                  title={`${w.studentName} leaves the hostel?`}
-                  confirmLabel="Complete"
-                  variant="primary"
-                >
-                  The bed {w.place} is given up on {dmy(w.leavingOn)} and the hostel fee is settled.
-                  This cannot be undone here; to come back, the pupil is allotted a bed again.
-                </ConfirmAction>
-              ) : (
-                <p className="ep-field__help">
-                  {w.status === 'requested'
-                    ? 'Waiting for the steps above.'
-                    : 'The hostel office completes it.'}
-                </p>
-              )}
-            </>
+            <p style={{ margin: 0 }}>
+              On the last approval the bed is given up on {dmy(w.leavingOn)}, the hostel fee stops
+              after {w.noticeShort ? 'the next month' : 'the leaving month'}, the charges become
+              misc fees and the parent is told.
+            </p>
           )}
         </Card>
         {open && canManage ? (
@@ -347,8 +264,7 @@ export default async function HostelWithdrawalPage({
               confirmVariant="danger"
               reason={{ label: 'Why', placeholder: 'e.g. the parent changed their mind' }}
             >
-              The pupil keeps the bed. Charges already raised stay as misc fees (cancel them from
-              Misc fees if they were wrong).
+              The pupil keeps the bed and the approval stops. Nothing is charged.
             </ConfirmAction>
           </Card>
         ) : null}

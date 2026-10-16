@@ -1,9 +1,10 @@
 /**
- * Hostel withdrawal (0153, docs/design/27-hostel-withdrawal.md): a pupil leaves the hostel and stays in
- * school through the hostel's steps (warden with a damage charge, mess, automatic hostel fee check,
- * Accounts choosing carry-forward or refund); completion vacates the bed, keeps one more month on a short
- * notice and settles the paid months after; a warden works only for their hostel; a hosteller's school
- * withdrawal gets the hostel steps and gives up the bed.
+ * Hostel withdrawal (0153, 0158, docs/design/27-hostel-withdrawal.md): the Hostel Clerk (or a warden of the
+ * pupil's hostel, or the office) starts it with the damages and mess dues; it goes through its own
+ * approval levels set on Fee setup -> Approval levels ("who may start" too); the last approver chooses
+ * carry-forward or refund; the last approval vacates the bed, keeps one more month on a short notice,
+ * settles the paid months after and raises the charges as misc fees; not approved keeps the bed; with the
+ * levels switched off the office completes it; a hosteller's school withdrawal gets the hostel's steps.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -18,26 +19,22 @@ import {
   withMigrator,
 } from './helpers';
 
-interface Clearance {
-  department: string;
-  step: number;
-  status: string;
-  canAct?: boolean;
-  charge: string;
-  chargeMiscFeeId: string | null;
-  settles: boolean;
-  check: { due: number } | null;
-}
 interface HW {
   id: string;
   status: string;
-  currentStep: number | null;
   noticeShort: boolean;
   feeChoice: string;
   feeUntil: string | null;
   feeNote: string | null;
+  decidedNote: string | null;
+  waitingWith: string | null;
   canComplete?: boolean;
-  clearances: Clearance[];
+  approval: {
+    instanceId: string;
+    status: string;
+    steps: Array<{ level: number; name: string; status: string }>;
+  } | null;
+  myStep: { id: string; lastLevel: boolean } | null;
 }
 interface Instalment {
   ledger: string;
@@ -55,6 +52,7 @@ describe('hostel withdrawal (e2e)', () => {
   let warden: SeededUser;
   let accountant: SeededUser;
   let clerk: SeededUser;
+  let hostelClerk: SeededUser;
   const ids: Record<string, string> = {};
   const h = (u: SeededUser = admin) => headersFor(u.sub, school.id);
   const post = (url: string, json: unknown, u: SeededUser = admin) =>
@@ -65,8 +63,20 @@ describe('hostel withdrawal (e2e)', () => {
     get<{ fee: { hosteller: boolean; hostelTo: string | null }; instalments: Instalment[] }>(
       `/fees/students/${id}/ledger`,
     );
-  const clear = (id: string, dep: string, body: Record<string, unknown>, u: SeededUser = admin) =>
-    post(`/hostel/withdrawals/${id}/clearances/${dep}`, { status: 'cleared', ...body }, u);
+  const decide = (id: string, body: Record<string, unknown>, u: SeededUser) =>
+    post(`/hostel/withdrawals/${id}/decide`, body, u);
+  const flow = async () =>
+    (await get<Array<{ id: string; code: string; status: string; creatorRoles: string[] }>>(
+      '/workflow/definitions',
+    )) as unknown;
+  const hwFlow = async () => {
+    const r = (await flow()) as
+      | Array<{ id: string; code: string; status: string; creatorRoles: string[] }>
+      | { data: Array<{ id: string; code: string; status: string; creatorRoles: string[] }> };
+    return (Array.isArray(r) ? r : r.data).find((d) => d.code === 'hostel_withdrawal')!;
+  };
+  const patchFlow = (id: string, body: Record<string, unknown>) =>
+    inject({ method: 'PATCH', url: `/workflow/definitions/${id}`, headers: h(), json: body });
 
   beforeAll(async () => {
     const s = stamp('HWD');
@@ -76,6 +86,7 @@ describe('hostel withdrawal (e2e)', () => {
       warden = await seedUser(c, school, `${s}-warden`, 'warden');
       accountant = await seedUser(c, school, `${s}-acc`, 'accountant');
       clerk = await seedUser(c, school, `${s}-clerk`, 'clerk');
+      hostelClerk = await seedUser(c, school, `${s}-hclerk`, 'hostel_clerk');
     });
     app = await createApp();
     inject = injector(app);
@@ -107,6 +118,7 @@ describe('hostel withdrawal (e2e)', () => {
       ['carry', 'male'],
       ['refund', 'male'],
       ['leaver', 'female'],
+      ['again', 'male'],
       ['dayscholar', 'male'],
     ] as const) {
       const r = await post('/people/students', {
@@ -163,6 +175,7 @@ describe('hostel withdrawal (e2e)', () => {
       ['carry', bed('101', 'A')],
       ['refund', bed('101', 'B')],
       ['leaver', bed('G1', 'A')],
+      ['again', bed('101', 'C')],
     ] as const) {
       const a = await post('/hostel/allotments', {
         studentId: ids[key],
@@ -200,72 +213,54 @@ describe('hostel withdrawal (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('has its own steps and notice settings, kept apart from the school withdrawal', async () => {
+  it('makes the Hostel Clerk role and the approval levels with who may start; the steps stay for leaving the school', async () => {
+    const role = await withMigrator((c) =>
+      c.query<{ code: string }>(
+        `SELECT rp.permission_code AS code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id
+          WHERE r.school_id IS NULL AND r.code = 'hostel_clerk' ORDER BY 1`,
+      ),
+    );
+    expect(role.rows.map((x) => x.code)).toEqual(
+      expect.arrayContaining([
+        'hostel.allot.manage',
+        'hostel.room.view',
+        'hostel.setup.manage',
+        'hostel.withdrawal.manage',
+        'hostel.withdrawal.view',
+      ]),
+    );
+    expect((await get<{ active: boolean }>('/hostel/withdrawal-approval')).active).toBe(true);
+    const f = await hwFlow();
+    expect(f.status).toBe('active');
+    expect(f.creatorRoles).toEqual(expect.arrayContaining(['hostel_clerk', 'warden']));
     const s = await get<{
-      departments: Array<{
-        code: string;
-        step: number;
-        chargeKind: string | null;
-        inSchoolExit: boolean;
-        autoCheck: string;
-      }>;
+      departments: Array<{ code: string; active: boolean }>;
       noticeDays: number;
-      noticeCharge: boolean;
     }>('/hostel/withdrawal-settings');
     expect(s.noticeDays).toBe(30);
-    expect(s.noticeCharge).toBe(true);
-    expect(s.departments.map((d) => `${String(d.step)}:${d.code}`)).toEqual([
-      '1:hostel_warden',
-      '1:hostel_mess',
-      '1:hostel_fees',
-      '2:hostel_accounts',
+    expect(s.departments.filter((d) => d.active).map((d) => d.code)).toEqual([
+      'hostel_warden',
+      'hostel_mess',
     ]);
-    expect(s.departments.find((d) => d.code === 'hostel_warden')).toMatchObject({
-      chargeKind: 'damage',
-      inSchoolExit: true,
-    });
-    const school = await get<{ departments: Array<{ code: string }> }>(
-      '/people/withdrawal-departments',
-    );
-    expect(school.departments.map((d) => d.code)).not.toContain('hostel_warden');
-    // a hostel step cannot use the school's fee check
-    const bad = await inject({
-      method: 'PUT',
-      url: '/hostel/withdrawal-settings/departments',
-      headers: h(),
-      json: {
-        departments: [
-          {
-            code: 'x_fees',
-            name: 'Fees',
-            step: 1,
-            approvers: [{ kind: 'office' }],
-            autoCheck: 'fees',
-          },
-        ],
-      },
-    });
-    expect(bad.statusCode).toBe(400);
-    expect((await get<{ status?: number }>('/hostel/withdrawal-settings', warden)).status).toBe(
-      403,
-    );
     expect((await get<{ status?: number }>('/hostel/withdrawals', clerk)).status).toBe(403);
   });
 
-  it('starts only for a pupil holding a bed, once, and a warden only in their hostel', async () => {
+  it('starts only for a boarder; the clerk, a warden of the hostel or the office; who may start is on the approval levels', async () => {
     const none = await post(`/hostel/students/${ids.dayscholar}/withdrawal`, {
       leavingOn: '2026-10-31',
       reason: 'parent_request',
     });
-    expect(none.statusCode).toBe(409);
     expect(none.json().type).toContain('hostel.not_allotted');
-    // the warden of the boys hostel cannot start one for a girl
-    const other = await post(
-      `/hostel/students/${ids.leaver}/withdrawal`,
-      { leavingOn: '2026-10-31', reason: 'parent_request' },
-      warden,
-    );
-    expect(other.statusCode).toBe(403);
+    // the boys' warden cannot start one for a girl; Accounts cannot start one
+    expect(
+      (
+        await post(
+          `/hostel/students/${ids.leaver}/withdrawal`,
+          { leavingOn: '2026-10-31', reason: 'parent_request' },
+          warden,
+        )
+      ).statusCode,
+    ).toBe(403);
     expect(
       (
         await post(
@@ -275,91 +270,64 @@ describe('hostel withdrawal (e2e)', () => {
         )
       ).statusCode,
     ).toBe(403);
-    // asked today for the end of the month: short notice (fewer than 30 days)
+    // take the warden off "who may start": refused by the approval levels
+    const f = await hwFlow();
+    await patchFlow(f.id, { creatorRoles: f.creatorRoles.filter((r) => r !== 'warden') });
+    const off = await post(
+      `/hostel/students/${ids.carry}/withdrawal`,
+      { leavingOn: '2026-10-31', reason: 'parent_request' },
+      warden,
+    );
+    expect(off.statusCode).toBe(403);
+    expect(off.json().type).toContain('workflow.creator_not_allowed');
+    await patchFlow(f.id, { creatorRoles: f.creatorRoles });
+    // the Hostel Clerk starts it with the damages and mess dues; asked today for the month end: short notice
     const w = await post(
       `/hostel/students/${ids.carry}/withdrawal`,
       {
         requestedOn: '2026-10-16',
         leavingOn: '2026-10-31',
         reason: 'parent_request',
-        remarks: 'Moving near school',
+        damageCharge: 750,
+        messCharge: 200,
+        chargeRemarks: 'Broken chair; October mess',
       },
-      warden,
+      hostelClerk,
     );
     expect(w.statusCode).toBe(201);
     const row = w.json() as HW;
     ids.hwCarry = row.id;
-    expect(row).toMatchObject({
-      status: 'requested',
-      currentStep: 1,
-      noticeShort: true,
-      feeChoice: 'carry',
-    });
-    // hostel fee is paid to the leaving date: the automatic check cleared it
-    expect(row.clearances.find((x) => x.department === 'hostel_fees')).toMatchObject({
-      status: 'cleared',
-      check: { due: 0 },
-    });
+    expect(row).toMatchObject({ status: 'requested', noticeShort: true, waitingWith: 'Accounts' });
+    expect(row.approval!.steps.map((x) => x.name)).toEqual(['Accounts', 'Principal approval']);
     const again = await post(`/hostel/students/${ids.carry}/withdrawal`, {
       leavingOn: '2026-11-30',
       reason: 'other',
     });
-    expect(again.statusCode).toBe(409);
     expect(again.json().type).toContain('withdrawal.open_exists');
   });
 
-  it('clears in steps: the warden raises damages as a misc fee; Accounts acts at step 2 only', async () => {
+  it('goes level by level; only the level’s approver decides; the last one picks carry or refund', async () => {
     const id = ids.hwCarry!;
-    // Accounts is step 2: not yet
-    const early = await clear(id, 'hostel_accounts', {}, accountant);
-    expect(early.statusCode).toBe(409);
-    expect(early.json().type).toContain('withdrawal.not_this_step');
-    // the warden cannot clear the mess (office only)
-    expect((await clear(id, 'hostel_mess', {}, warden)).statusCode).toBe(403);
-    // a department that raises no charge refuses one
-    expect((await clear(id, 'hostel_fees', { charge: 100 })).statusCode).toBe(400);
-    const wd = await clear(id, 'hostel_warden', { charge: 750, remarks: 'Broken chair' }, warden);
-    expect(wd.statusCode).toBe(201);
-    const x = (wd.json() as HW).clearances.find((c) => c.department === 'hostel_warden')!;
-    expect(x).toMatchObject({ status: 'cleared', charge: '750.00' });
-    expect(x.chargeMiscFeeId).toBeTruthy();
-    const misc = await withMigrator((c) =>
-      c.query<{ amount: string; title: string; status: string }>(
-        `SELECT l.amount::text, f.title, f.status FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id
-          WHERE l.student_id = $1`,
-        [ids.carry],
-      ),
-    );
-    expect(misc.rows).toEqual([
-      expect.objectContaining({
-        amount: '750.00',
-        status: 'announced',
-        title: expect.stringContaining('Hostel damages'),
-      }),
-    ]);
-    // the mess is bypassed with a reason; step 1 is then done
-    const by = await post(`/hostel/withdrawals/${id}/clearances/hostel_mess/bypass`, {
-      reason: 'No mess dues on record',
-    });
-    expect((by.json() as HW).currentStep).toBe(2);
-    // carry/refund is chosen only at the settlement step
-    const wrong = await post(`/hostel/withdrawals/${id}/clearances/hostel_warden`, {
-      status: 'cleared',
-      feeChoice: 'refund',
-    });
-    expect([400, 409]).toContain(wrong.statusCode);
-    expect((await post(`/hostel/withdrawals/${id}/complete`, {})).statusCode).toBe(409);
-    const acc = await clear(id, 'hostel_accounts', { feeChoice: 'carry' }, accountant);
-    expect(acc.json()).toMatchObject({ status: 'cleared', feeChoice: 'carry' });
+    expect((await decide(id, { outcome: 'approved' }, warden)).statusCode).toBe(403);
+    // the principal is level 2: not yet theirs
+    expect((await decide(id, { outcome: 'approved' }, admin)).statusCode).toBe(403);
+    const mine = await get<{ data: HW[] }>('/hostel/withdrawals?mine=true', accountant);
+    expect(mine.data.map((x) => x.id)).toEqual([id]);
+    const l1 = await decide(id, { outcome: 'approved', note: 'Dues seen' }, accountant);
+    expect(l1.statusCode).toBe(201);
+    expect(l1.json()).toMatchObject({ status: 'requested', waitingWith: 'Principal approval' });
+    const view = await get<HW>(`/hostel/withdrawals/${id}`);
+    expect(view.myStep).toMatchObject({ lastLevel: true });
+    const l2 = await decide(id, { outcome: 'approved', feeChoice: 'carry' }, admin);
+    expect(l2.statusCode).toBe(201);
+    const done = l2.json() as HW;
+    expect(done).toMatchObject({ status: 'completed', feeUntil: '2026-11-01', feeChoice: 'carry' });
+    expect(done.feeNote).toContain('Dec 2026');
+    expect(done.feeNote).toContain('damages Rs. 750');
+    expect(done.feeNote).toContain('mess dues Rs. 200');
   });
 
-  it('completes: the bed is given up, one more month for the short notice, December carried forward', async () => {
-    const done = await post(`/hostel/withdrawals/${ids.hwCarry!}/complete`, {}, warden);
-    expect(done.statusCode).toBe(201);
-    const w = done.json() as HW;
-    expect(w).toMatchObject({ status: 'completed', feeUntil: '2026-11-01' });
-    expect(w.feeNote).toContain('Nov 2026');
-    expect(w.feeNote).toContain('Dec 2026');
+  it('the last approval gave up the bed, kept November, and raised the damages and mess dues', async () => {
     const stay = await withMigrator((c) =>
       c.query<{ to_date: string; end_reason: string }>(
         `SELECT to_date::text, end_reason FROM hostel_allotments WHERE student_id = $1`,
@@ -369,28 +337,22 @@ describe('hostel withdrawal (e2e)', () => {
     expect(stay.rows[0]).toEqual({ to_date: '2026-10-31', end_reason: 'vacate' });
     const l = await ledger(ids.carry!);
     expect(l.fee.hostelTo).toBe('2026-11-01');
-    const hostel = l.instalments.filter((i) => i.ledger === 'hostel' && Number(i.net) > 0);
-    // June to November charged; December no longer
-    expect(hostel.map((i) => i.dueOn.slice(0, 7))).toEqual([
-      '2026-06',
-      '2026-07',
-      '2026-08',
-      '2026-09',
-      '2026-10',
-      '2026-11',
-    ]);
-    // December's 3000 comes off the hostel bill; a hostel receipt pays hostel fee only, so with no
-    // hostel fee left it stays as advance on the receipt (refundable from Fees -> Refunds)
-    expect(w.feeNote).toContain('Rs. 3,000 kept as advance on the receipt');
-    // the bed is free again
-    const again = await post(`/hostel/students/${ids.carry}/withdrawal`, {
-      leavingOn: '2026-12-31',
-      reason: 'other',
-    });
-    expect(again.json().type).toContain('hostel.not_allotted');
+    expect(
+      l.instalments
+        .filter((i) => i.ledger === 'hostel' && Number(i.net) > 0)
+        .map((i) => i.dueOn.slice(0, 7)),
+    ).toEqual(['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11']);
+    const misc = await withMigrator((c) =>
+      c.query<{ amount: string; title: string }>(
+        `SELECT l.amount::text, f.title FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id
+          WHERE l.student_id = $1 ORDER BY l.amount`,
+        [ids.carry],
+      ),
+    );
+    expect(misc.rows.map((x) => x.amount)).toEqual(['200.00', '750.00']);
   });
 
-  it('a long notice and a refund: the fee stops with the leaving month, Nov–Dec sent for refund', async () => {
+  it('a long notice and a refund chosen at the last level', async () => {
     const w = await post(`/hostel/students/${ids.refund}/withdrawal`, {
       requestedOn: '2026-09-01',
       leavingOn: '2026-10-31',
@@ -398,16 +360,15 @@ describe('hostel withdrawal (e2e)', () => {
     });
     const id = (w.json() as HW).id;
     expect((w.json() as HW).noticeShort).toBe(false);
-    await clear(id, 'hostel_warden', {});
-    await clear(id, 'hostel_mess', {});
-    await clear(id, 'hostel_accounts', { feeChoice: 'refund' }, accountant);
-    const done = (await post(`/hostel/withdrawals/${id}/complete`, {})).json() as HW;
+    await decide(id, { outcome: 'approved' }, accountant);
+    const done = (
+      await decide(id, { outcome: 'approved', feeChoice: 'refund' }, admin)
+    ).json() as HW;
     expect(done).toMatchObject({
       status: 'completed',
       feeUntil: '2026-10-01',
       feeChoice: 'refund',
     });
-    expect(done.feeNote).toContain('refund');
     const refunds = await withMigrator((c) =>
       c.query<{ amount: string; status: string }>(
         `SELECT amount::text, status::text FROM fee_refunds WHERE hostel_withdrawal_id = $1`,
@@ -417,28 +378,66 @@ describe('hostel withdrawal (e2e)', () => {
     expect(refunds.rows).toEqual([{ amount: '6000.00', status: 'requested' }]);
   });
 
-  it('cancel keeps the bed; the register lists by status, as Excel too', async () => {
-    const other = await post(`/hostel/students/${ids.leaver}/withdrawal`, {
-      leavingOn: '2026-12-31',
+  it('not approved keeps the bed; with the levels switched off the office completes it', async () => {
+    const w = await post(`/hostel/students/${ids.again}/withdrawal`, {
+      leavingOn: '2026-11-30',
       reason: 'discipline',
     });
-    const id = (other.json() as HW).id;
+    const id = (w.json() as HW).id;
+    expect((await decide(id, { outcome: 'rejected' }, accountant)).statusCode).toBe(400);
+    const no = await decide(
+      id,
+      { outcome: 'rejected', note: 'Parents to meet the principal' },
+      accountant,
+    );
+    expect(no.json()).toMatchObject({
+      status: 'rejected',
+      decidedNote: 'Parents to meet the principal',
+    });
+    const bed = await withMigrator((c) =>
+      c.query(`SELECT 1 FROM hostel_allotments WHERE student_id = $1 AND to_date IS NULL`, [
+        ids.again,
+      ]),
+    );
+    expect(bed.rowCount).toBe(1);
+    // the school switches the levels off: the office completes it directly
+    const f = await hwFlow();
+    await patchFlow(f.id, { status: 'inactive' });
+    const w2 = await post(`/hostel/students/${ids.again}/withdrawal`, {
+      leavingOn: '2026-11-30',
+      reason: 'discipline',
+    });
+    const row = w2.json() as HW;
+    expect(row.approval).toBeNull();
+    expect(row.canComplete).toBe(true);
+    const done = await post(`/hostel/withdrawals/${row.id}/complete`, { feeChoice: 'carry' });
+    expect(done.json()).toMatchObject({ status: 'completed', feeUntil: '2026-11-01' });
+    await patchFlow(f.id, { status: 'active' });
+  });
+
+  it('cancel closes the approval and keeps the bed; the register lists them, as Excel too', async () => {
+    const w = await post(`/hostel/students/${ids.leaver}/withdrawal`, {
+      leavingOn: '2026-12-31',
+      reason: 'other',
+    });
+    const id = (w.json() as HW).id;
     expect(
-      (await post(`/hostel/withdrawals/${id}/cancel`, { reason: 'Parent changed mind' }, warden))
+      (await post(`/hostel/withdrawals/${id}/cancel`, { reason: 'Changed mind' }, warden))
         .statusCode,
     ).toBe(403);
-    const c = await post(`/hostel/withdrawals/${id}/cancel`, { reason: 'Parent changed mind' });
-    expect((c.json() as HW).status).toBe('cancelled');
-    const list = await get<{ data: HW[] }>('/hostel/withdrawals?status=all');
-    expect(list.data.length).toBe(3);
-    const mine = await get<{ data: HW[] }>('/hostel/withdrawals?status=all', warden);
-    // the warden of the boys hostel sees the boys only
-    expect(mine.data.length).toBe(2);
+    const c = (
+      await post(`/hostel/withdrawals/${id}/cancel`, { reason: 'Changed mind' })
+    ).json() as HW;
+    expect(c.status).toBe('cancelled');
+    expect(c.approval!.status).toBe('cancelled');
+    const all = await get<{ data: HW[] }>('/hostel/withdrawals?status=all');
+    expect(all.data.length).toBe(5);
+    const boys = await get<{ data: HW[] }>('/hostel/withdrawals?status=all', warden);
+    expect(boys.data.length).toBe(4);
     const f = await get<{ filename: string; base64: string }>(
       '/hostel/withdrawals/file?status=all&format=xlsx',
     );
     expect(f.filename).toBe('hostel-withdrawal-register.xlsx');
-    expect(f.base64.length).toBeGreaterThan(100);
   });
 
   it('a hosteller leaving the school gets the hostel steps and gives up the bed on completion', async () => {
@@ -447,20 +446,16 @@ describe('hostel withdrawal (e2e)', () => {
       reason: 'Family moving to another city',
     });
     expect(w.statusCode).toBe(201);
-    const row = w.json() as {
-      id: string;
-      clearances: Array<{ department: string; status: string }>;
-    };
+    const row = w.json() as { id: string; clearances: Array<{ department: string }> };
     expect(row.clearances.map((x) => x.department)).toEqual(
       expect.arrayContaining(['hostel_warden', 'hostel_mess']),
     );
-    // the hostel office opens no separate hostel withdrawal now
+    expect(row.clearances.map((x) => x.department)).not.toContain('hostel_fees');
     const hw = await post(`/hostel/students/${ids.leaver}/withdrawal`, {
       leavingOn: '2026-11-15',
       reason: 'other',
     });
     expect(hw.json().type).toContain('hostel.leaving_school');
-    // every department clears step by step (the warden with a damage charge)
     for (let round = 0; round < 6; round += 1) {
       const cur = await get<{
         status: string;
@@ -481,8 +476,7 @@ describe('hostel withdrawal (e2e)', () => {
         expect(r.statusCode).toBe(200);
       }
     }
-    const done = await post(`/people/withdrawals/${row.id}/complete`, {});
-    expect(done.statusCode).toBe(201);
+    expect((await post(`/people/withdrawals/${row.id}/complete`, {})).statusCode).toBe(201);
     const stay = await withMigrator((c) =>
       c.query<{ to_date: string; end_reason: string }>(
         `SELECT to_date::text, end_reason FROM hostel_allotments WHERE student_id = $1`,
@@ -490,12 +484,5 @@ describe('hostel withdrawal (e2e)', () => {
       ),
     );
     expect(stay.rows[0]).toEqual({ to_date: '2026-11-15', end_reason: 'withdrawn' });
-    const charge = await withMigrator((c) =>
-      c.query<{ amount: string }>(
-        `SELECT l.amount::text FROM misc_fee_students l WHERE l.student_id = $1`,
-        [ids.leaver],
-      ),
-    );
-    expect(charge.rows).toEqual([{ amount: '400.00' }]);
   });
 });

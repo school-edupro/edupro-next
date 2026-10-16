@@ -94,3 +94,40 @@ step.
   - a school withdrawal of a hosteller (hostel step added, bed vacated, fee stopped).
 - Browser walk-through and a11y on the new pages; test cases in
   `docs/testing/hostel-withdrawal-test-cases.md`.
+
+## Part 2 (16 Oct 2026, migration 0158): approval levels and the Hostel Clerk
+
+Changed by the user after the first build:
+
+- **Hostel Clerk** is a new built-in role (`hostel_clerk`). It can:
+  - start, complete and cancel hostel withdrawals;
+  - allot, transfer and vacate beds;
+  - open the registers and reports (occupancy, register, leave, visitors, incidents, withdrawal
+    register);
+  - change the hostel set-up.
+- **Who may start one** is the "Started by" list of the hostel withdrawal's own card on
+  **Fee setup → Approval levels** (workflow `hostel_withdrawal`).
+  - The default list is Hostel Clerk, Warden, School Admin and Group Admin.
+  - A warden starts one only for a pupil of their own hostel.
+- **The steps are replaced by approval levels** set on the same card (default: Accounts, then
+  Principal).
+  - The **damages and mess dues are entered at the start**.
+  - The approver of each level approves or does not approve, from the withdrawal page or the
+    Approvals inbox.
+  - The **last approver chooses carry-forward or refund**; the default is carry-forward.
+  - "Not approved" needs a note, and the pupil keeps the bed.
+- **The last approval:**
+  - gives up the bed on the leaving date;
+  - stops the hostel fee after the leaving month, or after the next month on a short notice;
+  - carries forward or refunds the paid later months;
+  - raises the damages and mess dues as misc fees;
+  - tells the parent.
+- **With the card switched off**, the hostel office completes the withdrawal itself, choosing
+  carry-forward or refund.
+- **The hostel's steps (Warden, Mess)** remain only for a hosteller leaving the school, inside the
+  school withdrawal. The steps "hostel fee dues" and "accounts" are switched off.
+- **API:**
+  - `POST /hostel/withdrawals/:id/decide {outcome, note, feeChoice}`;
+  - `GET /hostel/withdrawal-approval`, which makes the levels the first time;
+  - `POST /hostel/withdrawals/:id/complete {feeChoice}` when the levels are off.
+  - The approval completion is hooked with `WorkflowService.onComplete('hostel_withdrawal')`.

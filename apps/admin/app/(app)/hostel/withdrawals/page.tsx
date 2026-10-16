@@ -7,9 +7,9 @@ import type { HostelWithdrawal } from '@/lib/types';
 
 const STATUSES = [
   ['open', 'Open'],
-  ['requested', 'In clearance'],
-  ['cleared', 'Ready to complete'],
+  ['requested', 'Waiting for approval'],
   ['completed', 'Left the hostel'],
+  ['rejected', 'Not approved'],
   ['cancelled', 'Cancelled'],
   ['all', 'All'],
 ] as const;
@@ -73,7 +73,7 @@ export default async function HostelWithdrawalsPage({
       <PageHeader
         kicker="Hostel"
         title="Hostel withdrawals"
-        description="Pupils leaving the hostel and staying in school. Each step clears them; completion gives up the bed and settles the hostel fee. A pupil leaving the school is cleared by the hostel inside the school withdrawal."
+        description="Pupils leaving the hostel and staying in school. Each goes through the approval levels of Fee setup → Approval levels; the last approval gives up the bed and settles the hostel fee. A pupil leaving the school is cleared by the hostel inside the school withdrawal."
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             {can('hostel.withdrawal.manage') ? (
@@ -213,14 +213,7 @@ export default async function HostelWithdrawalsPage({
                     {w.noticeShort ? <div className="ep-field__help">short notice</div> : null}
                   </td>
                   <td>{HW_REASON[w.reason]}</td>
-                  <td>
-                    {w.status === 'requested'
-                      ? w.clearances
-                          .filter((x) => x.status !== 'cleared' && x.step === w.currentStep)
-                          .map((x) => x.departmentName)
-                          .join(', ')
-                      : '—'}
-                  </td>
+                  <td>{w.status === 'requested' ? (w.waitingWith ?? 'Hostel office') : '—'}</td>
                   <td>
                     <Badge tone={HW_TONE[w.status] ?? 'neutral'}>{HW_STATUS[w.status]}</Badge>
                   </td>

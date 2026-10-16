@@ -7737,3 +7737,31 @@ a.db-list__main:hover strong {
     font-size: var(--fs-h3);
   }
 }
+/* hostel withdrawal: what is asked, and the approval levels */
+.hs-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+}
+.hs-dl dt {
+  color: var(--text-muted);
+}
+.hs-dl dd {
+  margin: 0;
+}
+.hs-approval {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.hs-approval li {
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.hs-approval li[data-current] {
+  border-color: var(--border-accent);
+}

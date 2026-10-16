@@ -1,5 +1,5 @@
 'use server';
-/** Hostel withdrawal (docs/design/27-hostel-withdrawal.md): start, clear, bypass, complete, cancel, settings. */
+/** Hostel withdrawal (docs/design/27-hostel-withdrawal.md): start, approve or reject, complete, cancel, settings. */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
@@ -86,6 +86,9 @@ export async function startHostelWithdrawal(fd: FormData) {
         reason: str(fd, 'reason'),
         remarks: str(fd, 'remarks') || undefined,
         documents: files.map((fileId) => ({ fileId })),
+        damageCharge: Number(str(fd, 'damageCharge') || '0'),
+        messCharge: Number(str(fd, 'messCharge') || '0'),
+        chargeRemarks: str(fd, 'chargeRemarks') || undefined,
       }),
     });
     id = out.id;
@@ -96,53 +99,46 @@ export async function startHostelWithdrawal(fd: FormData) {
   redirect(`${BASE}/${id}?ok=started`);
 }
 
-export async function clearHostelStep(fd: FormData) {
+/** The approver of the current level approves or rejects; the last level picks carry-forward or refund. */
+export async function decideHostelWithdrawal(fd: FormData) {
   const id = str(fd, 'id');
   const to = `${BASE}/${id}`;
+  const outcome = str(fd, 'outcome') === 'rejected' ? 'rejected' : 'approved';
+  const choice = str(fd, 'feeChoice');
   try {
-    const files = await uploadAll(fd, 'documents');
-    const choice = str(fd, 'feeChoice');
-    await apiFetch(
-      `/hostel/withdrawals/${id}/clearances/${encodeURIComponent(str(fd, 'department'))}`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          status: str(fd, 'status') || 'cleared',
-          dues: Number(str(fd, 'dues') || '0'),
-          charge: Number(str(fd, 'charge') || '0'),
-          remarks: str(fd, 'remarks') || undefined,
-          documents: files.map((fileId) => ({ fileId })),
-          ...(choice === 'carry' || choice === 'refund' ? { feeChoice: choice } : {}),
-        }),
-      },
-    );
+    await apiFetch(`/hostel/withdrawals/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({
+        outcome,
+        note: str(fd, 'note') || undefined,
+        ...(choice === 'carry' || choice === 'refund' ? { feeChoice: choice } : {}),
+      }),
+    });
   } catch (error) {
     back(to, error);
   }
-  revalidatePath(to);
-  redirect(`${to}?ok=saved`);
+  revalidatePath(BASE);
+  redirect(`${to}?ok=${outcome}`);
 }
-
-export async function bypassHostelStep(fd: FormData) {
-  const id = str(fd, 'id');
-  const to = `${BASE}/${id}`;
-  try {
-    await apiFetch(
-      `/hostel/withdrawals/${id}/clearances/${encodeURIComponent(str(fd, 'department'))}/bypass`,
-      { method: 'POST', body: JSON.stringify({ reason: str(fd, 'reason') }) },
-    );
-  } catch (error) {
-    back(to, error);
-  }
-  revalidatePath(to);
-  redirect(`${to}?ok=bypassed`);
+/** One action per button: a button's own name/value does not reach a server action. */
+export async function approveHostelWithdrawal(fd: FormData) {
+  fd.set('outcome', 'approved');
+  return decideHostelWithdrawal(fd);
+}
+export async function rejectHostelWithdrawal(fd: FormData) {
+  fd.set('outcome', 'rejected');
+  return decideHostelWithdrawal(fd);
 }
 
 export async function completeHostelWithdrawal(fd: FormData) {
   const id = str(fd, 'id');
   const to = `${BASE}/${id}`;
   try {
-    await apiFetch(`/hostel/withdrawals/${id}/complete`, { method: 'POST' });
+    const choice = str(fd, 'feeChoice');
+    await apiFetch(`/hostel/withdrawals/${id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(choice === 'carry' || choice === 'refund' ? { feeChoice: choice } : {}),
+    });
   } catch (error) {
     back(to, error);
   }

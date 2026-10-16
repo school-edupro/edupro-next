@@ -2429,12 +2429,15 @@ export interface SchoolTransfer {
 }
 
 /** Hostel withdrawal (docs/design/27-hostel-withdrawal.md). */
-export interface HostelClearance extends Omit<Clearance, 'gatesTc'> {
-  charge: string;
-  chargeMiscFeeId: string | null;
-  chargeKind: 'damage' | 'mess' | null;
-  /** the last step (Accounts): chooses carry-forward or refund */
-  settles: boolean;
+export interface HostelApprovalStep {
+  id: string;
+  level: number;
+  name: string;
+  status: 'pending' | 'approved' | 'rejected' | 'skipped';
+  assignees: string[];
+  actedBy: string | null;
+  actedAt: string | null;
+  note: string | null;
 }
 export interface HostelWithdrawal {
   id: string;
@@ -2450,16 +2453,26 @@ export interface HostelWithdrawal {
   reason: 'parent_request' | 'discipline' | 'health' | 'other';
   remarks: string | null;
   documents: Array<{ fileId: string; name: string | null }>;
-  status: 'requested' | 'cleared' | 'completed' | 'cancelled';
-  currentStep: number | null;
+  status: 'requested' | 'cleared' | 'completed' | 'cancelled' | 'rejected';
   feeChoice: 'carry' | 'refund';
   noticeDays: number | null;
   noticeShort: boolean;
+  damageCharge: string;
+  messCharge: string;
+  chargeRemarks: string | null;
   feeUntil: string | null;
   feeNote: string | null;
+  decidedNote: string | null;
   requestedBy: string | null;
   completedAt: string | null;
   cancelReason: string | null;
-  clearances: HostelClearance[];
+  approval: {
+    instanceId: string;
+    status: string;
+    currentLevel: number;
+    steps: HostelApprovalStep[];
+  } | null;
+  waitingWith: string | null;
+  myStep: { id: string; lastLevel: boolean } | null;
   canComplete?: boolean;
 }

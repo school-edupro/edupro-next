@@ -223,9 +223,7 @@ export function WithdrawalDepartmentsEditor({
                     }
                   >
                     <option value="none">None</option>
-                    {hostel ? (
-                      <option value="hostel_fees">Hostel fee dues</option>
-                    ) : (
+                    {hostel ? null : (
                       <>
                         <option value="fees">Fee dues</option>
                         <option value="library">Library books and fines</option>
@@ -249,7 +247,6 @@ export function WithdrawalDepartmentsEditor({
                     ? ([
                         ['bypassAllowed', 'May be bypassed'],
                         ['documentRequired', 'Document required'],
-                        ['inSchoolExit', 'Also when leaving the school'],
                       ] as const)
                     : ([
                         ['bypassAllowed', 'May be bypassed'],

@@ -7,13 +7,8 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { FeeAdjustmentsService } from '../fees/fee-adjustments.service';
 import { startFeeApproval } from '../fees/fee-approval';
-import type { ClearanceDto, BypassDto } from '../people/lifecycle/lifecycle.dto';
-import {
-  WithdrawalsService,
-  approverName,
-  type WithdrawalApprover,
-} from '../people/lifecycle/withdrawals.service';
-import { WorkflowService } from '../workflow/workflow.service';
+import { WithdrawalsService } from '../people/lifecycle/withdrawals.service';
+import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { raiseHostelCharge } from './hostel-charge';
 import {
   HOSTEL_WD,
@@ -22,31 +17,35 @@ import {
 } from './hostel-withdrawal.dto';
 import { HostelService } from './hostel.service';
 
-type Status = 'requested' | 'cleared' | 'completed' | 'cancelled';
+type Status = 'requested' | 'cleared' | 'completed' | 'cancelled' | 'rejected';
 
-export interface HostelClearanceRow {
+/** The approval levels of a hostel withdrawal (Fee setup -> Approval levels, "Hostel withdrawal"). */
+export const HW_FLOW = { code: 'hostel_withdrawal', entityType: 'hostel_withdrawal' } as const;
+const DEFAULT_LEVELS = [
+  {
+    level: 1,
+    name: 'Accounts',
+    resolver: { kind: 'role', roleCode: 'accountant' },
+    slaHours: 48,
+  },
+  {
+    level: 2,
+    name: 'Principal approval',
+    resolver: { kind: 'role', roleCode: 'school_admin' },
+    slaHours: 48,
+  },
+];
+const DEFAULT_CREATORS = ['hostel_clerk', 'warden', 'school_admin', 'group_admin'];
+
+export interface ApprovalStep {
   id: string;
-  department: string;
-  departmentName: string;
-  step: number;
-  status: 'pending' | 'cleared' | 'hold';
-  dues: string;
-  charge: string;
-  chargeMiscFeeId: string | null;
-  chargeKind: 'damage' | 'mess' | null;
-  remarks: string | null;
-  bypassed: boolean;
-  auto: boolean;
-  check: { kind: string; due: number; detail: string } | null;
-  documents: Array<{ fileId: string; name: string | null }>;
-  approvers: string[];
-  bypassAllowed: boolean;
-  documentRequired: boolean;
-  /** the Accounts settlement step chooses carry-forward or refund */
-  settles: boolean;
+  level: number;
+  name: string;
+  status: 'pending' | 'approved' | 'rejected' | 'skipped';
+  assignees: string[];
   actedBy: string | null;
   actedAt: string | null;
-  canAct?: boolean;
+  note: string | null;
 }
 
 export interface HostelWithdrawalRow {
@@ -64,53 +63,49 @@ export interface HostelWithdrawalRow {
   remarks: string | null;
   documents: Array<{ fileId: string; name: string | null }>;
   status: Status;
-  currentStep: number | null;
   feeChoice: 'carry' | 'refund';
   noticeDays: number | null;
   noticeShort: boolean;
+  damageCharge: string;
+  messCharge: string;
+  chargeRemarks: string | null;
   feeUntil: string | null;
   feeNote: string | null;
+  decidedNote: string | null;
   requestedBy: string | null;
   completedAt: string | null;
   cancelReason: string | null;
-  clearances: HostelClearanceRow[];
+  /** the approval levels it goes through; null when the school has them switched off */
+  approval: {
+    instanceId: string;
+    status: string;
+    currentLevel: number;
+    steps: ApprovalStep[];
+  } | null;
+  /** who it waits with now (the current level's name) */
+  waitingWith: string | null;
+  /** per viewer: the pending step is theirs; lastLevel = they choose carry-forward or refund */
+  myStep: { id: string; lastLevel: boolean } | null;
+  /** per viewer: no approval levels in force, the office completes it */
   canComplete?: boolean;
 }
 
-interface Db extends Omit<HostelWithdrawalRow, 'clearances' | 'completedAt'> {
+interface Db extends Omit<HostelWithdrawalRow, 'completedAt' | 'approval' | 'myStep'> {
   yearId: string;
+  instanceId: string | null;
   completedAt: Date | null;
-  clearances: Array<Omit<HostelClearanceRow, 'approvers'> & { approverList: WithdrawalApprover[] }>;
-}
-
-interface Actor {
-  userId: string;
-  roleIds: Set<string>;
-  hostels: Set<string>;
-  /** "School office": the withdrawal manage right with the hostel office rights (set-up or allotment) */
-  manage: boolean;
-  /** the hostels a warden without the office rights works in; null = all */
-  only: string[] | null;
 }
 
 const SELECT = `SELECT w.id::text, w.student_id::text AS "studentId", s.display_name AS "studentName", s.admission_no AS "admissionNo",
         sec.label AS section, h.id::text AS "hostelId", h.name AS "hostelName", rm.room_no || '-' || b.label AS place,
         w.requested_on::text AS "requestedOn", w.leaving_on::text AS "leavingOn", w.reason, w.remarks, w.documents, w.status,
-        w.current_step AS "currentStep", w.fee_choice AS "feeChoice", w.notice_days AS "noticeDays", w.notice_short AS "noticeShort",
-        w.fee_until::text AS "feeUntil", w.fee_note AS "feeNote", w.academic_year_id::text AS "yearId",
+        w.fee_choice AS "feeChoice", w.notice_days AS "noticeDays", w.notice_short AS "noticeShort",
+        w.damage_charge::text AS "damageCharge", w.mess_charge::text AS "messCharge", w.charge_remarks AS "chargeRemarks",
+        w.fee_until::text AS "feeUntil", w.fee_note AS "feeNote", w.decided_note AS "decidedNote", w.academic_year_id::text AS "yearId",
+        w.workflow_instance_id::text AS "instanceId",
         u.display_name AS "requestedBy", w.completed_at AS "completedAt", w.cancel_reason AS "cancelReason",
-        COALESCE((SELECT jsonb_agg(jsonb_build_object(
-                    'id', x.id::text, 'department', x.department, 'departmentName', COALESCE(d.name, initcap(x.department)), 'step', x.step,
-                    'status', x.status, 'dues', x.dues::text, 'charge', x.charge::text, 'chargeMiscFeeId', x.charge_misc_fee_id::text,
-                    'chargeKind', d.charge_kind, 'remarks', x.remarks, 'bypassed', x.bypassed, 'auto', x.auto, 'check', x.check_result,
-                    'documents', x.documents, 'approverList', COALESCE(d.approvers, '[{"kind":"office"}]'::jsonb),
-                    'bypassAllowed', COALESCE(d.bypass_allowed, false), 'documentRequired', COALESCE(d.document_required, false),
-                    'autoCheck', COALESCE(d.auto_check, 'none'), 'autoClear', COALESCE(d.auto_clear, false),
-                    'settles', x.step = (SELECT max(step) FROM hostel_withdrawal_clearances WHERE withdrawal_id = w.id),
-                    'actedBy', (SELECT display_name FROM users WHERE id = x.acted_by), 'actedAt', x.acted_at)
-                    ORDER BY x.step, COALESCE(d.sort_order, 0), x.id)
-                    FROM hostel_withdrawal_clearances x LEFT JOIN withdrawal_departments d ON d.id = x.department_id
-                   WHERE x.withdrawal_id = w.id), '[]'::jsonb) AS clearances
+        (SELECT st.name FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level
+          WHERE i.id = w.workflow_instance_id AND i.status = 'pending' LIMIT 1) AS "waitingWith"
    FROM hostel_withdrawals w JOIN students s ON s.id = w.student_id
    JOIN hostel_allotments a ON a.id = w.allotment_id JOIN hostel_beds b ON b.id = a.bed_id
    JOIN hostel_rooms rm ON rm.id = b.room_id JOIN hostels h ON h.id = rm.hostel_id
@@ -126,10 +121,11 @@ const REASON: Record<string, string> = {
   other: 'Other',
 };
 const STATUS: Record<Status, string> = {
-  requested: 'In clearance',
-  cleared: 'Cleared',
+  requested: 'Waiting for approval',
+  cleared: 'Approved, to complete',
   completed: 'Left the hostel',
   cancelled: 'Cancelled',
+  rejected: 'Not approved',
 };
 const dmy = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('-') : '');
 const monthOf = (d: string) => `${d.slice(0, 7)}-01`;
@@ -147,13 +143,13 @@ const rs = (n: number) => `Rs. ${n.toLocaleString('en-IN', { maximumFractionDigi
 
 /**
  * Hostel withdrawal (docs/design/27-hostel-withdrawal.md): a pupil leaves the hostel and stays in
- * school. The hostel office or a warden starts it with the leaving date; the hostel's departments clear
- * it in steps (the same engine and settings page as the school withdrawal: approvers, automatic hostel fee
- * check, bypass, documents), the warden's damages and the mess dues become misc fees on the pupil, and
- * the last step (Accounts) chooses carry-forward or refund. Completion vacates the bed on the leaving
- * date; the hostel fee runs to the leaving month (one more when the notice was short and the school
- * charges it); paid hostel months after that are carried to the next unpaid fee or refunded through the
- * fee approval levels; the parent is told.
+ * school. The Hostel Clerk, a warden of the pupil's hostel or the office starts it (the roles allowed are
+ * set as "who may start" on Fee setup -> Approval levels) with the leaving date, the room damages and the
+ * mess dues. It then goes through the hostel withdrawal's own approval levels; the last approver chooses
+ * carry-forward or refund. The last approval vacates the bed on the leaving date, keeps the hostel fee to
+ * the leaving month (one more when the notice was short and the school charges it), carries forward or
+ * refunds the hostel months paid after that, raises the damages and mess dues as misc fees and tells the
+ * parent. With the levels switched off the office completes it itself.
  */
 @Injectable()
 export class HostelWithdrawalsService {
@@ -177,6 +173,26 @@ export class HostelWithdrawalsService {
         r.rows[0]?.days !== null && r.rows[0]?.days !== undefined ? Number(r.rows[0].days) : 30,
       noticeCharge: (r.rows[0]?.charge ?? 'true') !== 'false',
     };
+  }
+
+  /** The school's approval levels of a hostel withdrawal, made with the standard two levels the first time. */
+  private async ensureFlow(c: PoolClient) {
+    await c.query(
+      `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, creator_roles, created_by, updated_by)
+       SELECT app.current_school_id(), $1, 'Hostel withdrawal', $2, $3::jsonb, $4::text[], app.current_user_id(), app.current_user_id()
+        WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE code = $1 AND deleted_at IS NULL)`,
+      [HW_FLOW.code, HW_FLOW.entityType, JSON.stringify(DEFAULT_LEVELS), DEFAULT_CREATORS],
+    );
+    const r = await c.query<{ status: string }>(
+      `SELECT status::text FROM workflow_definitions WHERE code = $1 AND deleted_at IS NULL`,
+      [HW_FLOW.code],
+    );
+    return r.rows[0]?.status === 'active';
+  }
+
+  /** Makes sure the approval levels exist (Fee setup -> Approval levels lists and edits them). */
+  async approvalFlow(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => ({ active: await this.ensureFlow(c) }));
   }
 
   async settings(ctx: RequestContext) {
@@ -221,74 +237,100 @@ export class HostelWithdrawalsService {
   }
 
   // ---- reading -------------------------------------------------------------------------------------
-  private async actor(c: PoolClient, ctx: RequestContext): Promise<Actor> {
-    const roles = await c.query<{ role_id: string }>(
-      `SELECT role_id::text FROM user_roles WHERE user_id = app.current_user_id() AND revoked_at IS NULL
-          AND valid_from <= CURRENT_DATE AND (valid_to IS NULL OR valid_to >= CURRENT_DATE)`,
-    );
-    const hostels = await c.query<{ id: string }>(
-      `SELECT hw.hostel_id::text AS id FROM hostel_wardens hw JOIN employees e ON e.id = hw.employee_id
-        WHERE e.user_id = app.current_user_id()`,
-    );
-    const only = await this.hostel.scope(ctx, c);
-    return {
-      userId: ctx.user.id,
-      roleIds: new Set(roles.rows.map((x) => x.role_id)),
-      hostels: new Set(hostels.rows.map((x) => x.id)),
-      manage: (ctx.permissions?.has(HOSTEL_WD.manage) ?? false) && only === null,
-      only,
-    };
+  /** The hostels a warden without the office rights works in; null = all (office, clerk, accounts). */
+  private async only(c: PoolClient, ctx: RequestContext) {
+    return this.hostel.scope(ctx, c);
   }
 
-  /** A warden starts, completes and cancels only for a pupil of their own hostel. */
-  private ownHostel(actor: Actor, hostelId: string) {
-    if (actor.only && !actor.only.includes(hostelId))
+  /** A warden starts and cancels only for a pupil of their own hostel. */
+  private ownHostel(only: string[] | null, hostelId: string) {
+    if (only && !only.includes(hostelId))
       throw new DomainError('hostel.not_your_hostel', 'The pupil stays in another hostel', {
         status: 403,
       });
   }
 
-  private named(a: WithdrawalApprover, actor: Actor, hostelId: string): boolean {
-    if (a.kind === 'office') return actor.manage;
-    if (a.kind === 'hostel_warden') return actor.hostels.has(hostelId);
-    if (a.kind === 'role') return actor.roleIds.has(a.roleId);
-    if (a.kind === 'user') return a.userId === actor.userId;
-    return false;
+  private async approvalOf(c: PoolClient, instanceId: string | null) {
+    if (!instanceId) return null;
+    const i = await c.query<{ status: string; current_level: number }>(
+      `SELECT status::text, current_level FROM workflow_instances WHERE id = $1`,
+      [instanceId],
+    );
+    if (!i.rows[0]) return null;
+    const steps = await c.query<{
+      id: string;
+      level: number;
+      name: string;
+      status: ApprovalStep['status'];
+      assignees: string[] | null;
+      assignee_ids: string[];
+      acted_by: string | null;
+      acted_at: Date | null;
+      note: string | null;
+    }>(
+      `SELECT s.id::text, s.level, s.name, s.status::text,
+              (SELECT array_agg(u.display_name ORDER BY u.display_name) FROM users u WHERE u.id = ANY(s.assignee_user_ids)) AS assignees,
+              s.assignee_user_ids::text[] AS assignee_ids,
+              (SELECT display_name FROM users WHERE id = s.acted_by) AS acted_by, s.acted_at, s.note
+         FROM workflow_steps s WHERE s.instance_id = $1 ORDER BY s.level`,
+      [instanceId],
+    );
+    return {
+      instanceId,
+      status: i.rows[0].status,
+      currentLevel: i.rows[0].current_level,
+      steps: steps.rows.map((s) => ({
+        id: s.id,
+        level: s.level,
+        name: s.name,
+        status: s.status,
+        assignees: s.assignees ?? [],
+        actedBy: s.acted_by,
+        actedAt: s.acted_at ? s.acted_at.toISOString() : null,
+        note: s.note,
+      })),
+      assigneeIds: new Map(steps.rows.map((s) => [s.id, s.assignee_ids])),
+    };
   }
 
-  private view(r: Db, actor: Actor | null): HostelWithdrawalRow {
-    const open = r.status === 'requested' || r.status === 'cleared';
-    const { yearId: _year, completedAt, ...rest } = r;
-    void _year;
+  private async view(
+    c: PoolClient,
+    ctx: RequestContext,
+    r: Db,
+    only: string[] | null,
+  ): Promise<HostelWithdrawalRow> {
+    const { yearId: _y, instanceId, completedAt, ...rest } = r;
+    void _y;
+    const a = await this.approvalOf(c, instanceId);
+    const pending =
+      a && a.status === 'pending'
+        ? a.steps.find((s) => s.level === a.currentLevel && s.status === 'pending')
+        : undefined;
+    const mine =
+      pending && (a?.assigneeIds.get(pending.id) ?? []).includes(ctx.user.id)
+        ? {
+            id: pending.id,
+            lastLevel: pending.level === Math.max(...(a?.steps.map((s) => s.level) ?? [0])),
+          }
+        : null;
+    const manage = ctx.permissions?.has(HOSTEL_WD.manage) ?? false;
     return {
       ...rest,
       documents: r.documents ?? [],
       completedAt: completedAt ? completedAt.toISOString() : null,
-      clearances: r.clearances.map(({ approverList, ...x }) => {
-        const {
-          autoCheck: _a,
-          autoClear: _b,
-          ...y
-        } = x as typeof x & {
-          autoCheck?: string;
-          autoClear?: boolean;
-        };
-        void _a;
-        void _b;
-        return {
-          ...y,
-          approvers: approverList.map(approverName),
-          canAct: actor
-            ? open &&
-              x.status !== 'cleared' &&
-              x.step === r.currentStep &&
-              (actor.manage || approverList.some((a) => this.named(a, actor, r.hostelId)))
-            : undefined,
-        };
-      }),
-      canComplete: actor
-        ? r.status === 'cleared' && (actor.manage || (actor.only?.includes(r.hostelId) ?? false))
-        : undefined,
+      approval: a
+        ? {
+            instanceId: a.instanceId,
+            status: a.status,
+            currentLevel: a.currentLevel,
+            steps: a.steps,
+          }
+        : null,
+      myStep: mine,
+      canComplete:
+        manage &&
+        (r.status === 'cleared' || (r.status === 'requested' && !instanceId)) &&
+        (!only || only.includes(r.hostelId)),
     };
   }
 
@@ -303,7 +345,7 @@ export class HostelWithdrawalsService {
 
   async list(ctx: RequestContext, q: ListHostelWithdrawalsDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const actor = await this.actor(c, ctx);
+      const only = await this.only(c, ctx);
       const params: unknown[] = [];
       const where: string[] = [];
       const add = (v: unknown) => {
@@ -312,8 +354,13 @@ export class HostelWithdrawalsService {
       };
       if (q.status === 'open' || q.mine) where.push(`w.status IN ('requested', 'cleared')`);
       else if (q.status !== 'all') where.push(`w.status = ${add(q.status)}`);
-      // a warden without the office rights sees their own hostels (Accounts and the office see all)
-      if (actor.only?.length) where.push(`h.id = ANY(${add(actor.only)}::bigint[])`);
+      // "waiting for me": the pending approval step is mine
+      if (q.mine)
+        where.push(`EXISTS (SELECT 1 FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level
+                            WHERE i.id = w.workflow_instance_id AND i.status = 'pending' AND st.status = 'pending'
+                              AND app.current_user_id() = ANY(st.assignee_user_ids))`);
+      // a warden without the office rights sees their own hostels (the office and Accounts see all)
+      if (only?.length && !q.mine) where.push(`h.id = ANY(${add(only)}::bigint[])`);
       if (q.hostelId) where.push(`h.id = ${add(q.hostelId)}`);
       if (q.leavingFrom) where.push(`w.leaving_on >= ${add(q.leavingFrom)}::date`);
       if (q.leavingTo) where.push(`w.leaving_on <= ${add(q.leavingTo)}::date`);
@@ -326,20 +373,16 @@ export class HostelWithdrawalsService {
         `${SELECT} WHERE ${where.length ? where.join(' AND ') : 'true'} ORDER BY w.leaving_on DESC, w.id DESC LIMIT 2000`,
         params,
       );
-      let rows = r.rows.map((x) => this.view(x, actor));
-      if (q.mine) rows = rows.filter((w) => w.clearances.some((x) => x.canAct));
-      return { rows: rows.slice((q.page - 1) * q.size, q.page * q.size), total: rows.length };
+      const page = r.rows.slice((q.page - 1) * q.size, q.page * q.size);
+      const rows: HostelWithdrawalRow[] = [];
+      for (const x of page) rows.push(await this.view(c, ctx, x, only));
+      return { rows, total: r.rows.length };
     });
   }
 
   async listFile(ctx: RequestContext, q: ListHostelWithdrawalsDto, format: 'xlsx' | 'pdf') {
     const { rows } = await this.list(ctx, { ...q, page: 1, size: 500 });
     const head = await this.db.tenant(requireTenant(ctx), (c) => schoolHead(c));
-    const waiting = (w: HostelWithdrawalRow) =>
-      w.clearances
-        .filter((x) => x.status !== 'cleared' && x.step === w.currentStep)
-        .map((x) => x.departmentName)
-        .join(', ');
     return registerFile(
       {
         school: head.name,
@@ -382,9 +425,9 @@ export class HostelWithdrawalsService {
           dmy(w.requestedOn),
           dmy(w.leavingOn),
           REASON[w.reason] ?? w.reason,
-          w.clearances.reduce((n, x) => n + Number(x.charge), 0) || '',
+          Number(w.damageCharge) + Number(w.messCharge) || '',
           w.feeUntil ? monthLabel(w.feeUntil) : '',
-          w.status === 'requested' ? waiting(w) : '',
+          w.waitingWith ?? '',
           STATUS[w.status],
         ]),
         filename: 'hostel-withdrawal-register',
@@ -397,18 +440,20 @@ export class HostelWithdrawalsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const row = await this.findDb(c, id);
       if (!row) throw new DomainError('not-found', 'Hostel withdrawal not found', { status: 404 });
-      return this.view(row, await this.actor(c, ctx));
+      return this.view(c, ctx, row, await this.only(c, ctx));
     });
   }
 
   async forStudent(ctx: RequestContext, studentId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const actor = await this.actor(c, ctx);
+      const only = await this.only(c, ctx);
       // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values are bound parameters
       const r = await c.query<Db>(`${SELECT} WHERE w.student_id = $1 ORDER BY w.id DESC`, [
         studentId,
       ]);
-      return r.rows.map((x) => this.view(x, actor));
+      const out: HostelWithdrawalRow[] = [];
+      for (const x of r.rows) out.push(await this.view(c, ctx, x, only));
+      return out;
     });
   }
 
@@ -424,8 +469,8 @@ export class HostelWithdrawalsService {
         status: 409,
       });
     const id = await this.db.tenant(tenant, async (c) => {
-      const s = await c.query<{ name: string; status: string }>(
-        `SELECT display_name AS name, status::text FROM students WHERE id = $1 AND deleted_at IS NULL`,
+      const s = await c.query<{ name: string; admission_no: string; status: string }>(
+        `SELECT display_name AS name, admission_no, status::text FROM students WHERE id = $1 AND deleted_at IS NULL`,
         [studentId],
       );
       if (!s.rows[0]) throw new DomainError('not-found', 'Pupil not found', { status: 404 });
@@ -448,8 +493,7 @@ export class HostelWithdrawalsService {
         throw new DomainError('hostel.before_stay', `The stay started on ${dmy(bed.from_date)}`, {
           status: 422,
         });
-      // a warden without the office rights starts one only for a pupil of their hostel
-      this.ownHostel(await this.actor(c, ctx), bed.hostel_id);
+      this.ownHostel(await this.only(c, ctx), bed.hostel_id);
       const school = await c.query(
         `SELECT 1 FROM student_withdrawals WHERE student_id = $1 AND status IN ('requested', 'cleared')`,
         [studentId],
@@ -460,21 +504,11 @@ export class HostelWithdrawalsService {
           'The pupil is leaving the school: the hostel is cleared within that withdrawal',
           { status: 409 },
         );
-      const departments = await this.withdrawals.departmentsIn(c, true, 'hostel');
-      if (!departments.length)
-        throw new DomainError(
-          'withdrawal.no_departments',
-          'Set up the hostel withdrawal steps first',
-          { status: 409 },
-        );
       const files = await this.checkFiles(c, dto.documents ?? []);
       const { noticeDays, noticeCharge } = await this.setting(c);
       const requestedOn =
         dto.requestedOn ?? new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
-      if (
-        dto.leavingOn < requestedOn &&
-        Date.parse(requestedOn) - Date.parse(dto.leavingOn) > 31 * 86400e3
-      )
+      if (Date.parse(requestedOn) - Date.parse(dto.leavingOn) > 31 * 86400e3)
         throw new DomainError(
           'hostel.leaving_too_old',
           'The leaving date may be at most 31 days before the request',
@@ -485,8 +519,9 @@ export class HostelWithdrawalsService {
       try {
         const r = await c.query<{ id: string }>(
           `INSERT INTO hostel_withdrawals (school_id, student_id, academic_year_id, allotment_id, requested_on, leaving_on, reason, remarks, documents,
-                                           current_step, notice_days, notice_short, requested_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4::date, $5::date, $6, $7, $8::jsonb, $9, $10, $11, app.current_user_id(), app.current_user_id())
+                                           notice_days, notice_short, damage_charge, mess_charge, charge_remarks, requested_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4::date, $5::date, $6, $7, $8::jsonb, $9, $10, $11, $12, $13,
+                   app.current_user_id(), app.current_user_id())
            RETURNING id::text`,
           [
             studentId,
@@ -497,9 +532,11 @@ export class HostelWithdrawalsService {
             dto.reason,
             dto.remarks ?? null,
             JSON.stringify(files),
-            Math.min(...departments.map((d) => d.step)),
             noticeDays,
             noticeCharge && days < noticeDays,
+            dto.damageCharge.toFixed(2),
+            dto.messCharge.toFixed(2),
+            dto.chargeRemarks ?? null,
           ],
         );
         id = r.rows[0]!.id;
@@ -512,11 +549,27 @@ export class HostelWithdrawalsService {
           );
         throw error;
       }
-      for (const d of departments)
-        await c.query(
-          `INSERT INTO hostel_withdrawal_clearances (school_id, withdrawal_id, department, department_id, step) VALUES (app.current_school_id(), $1, $2, $3, $4)`,
-          [id, d.code, d.id, d.step],
-        );
+      // the approval levels of Fee setup -> Approval levels (they also say who may start one)
+      let instanceId: string | null = null;
+      if (await this.ensureFlow(c)) {
+        const inst = await this.workflow.start(c, ctx, {
+          definitionCode: HW_FLOW.code,
+          entityType: HW_FLOW.entityType,
+          entityId: id,
+          subject: `Hostel withdrawal: ${s.rows[0].name} (${s.rows[0].admission_no}) leaving on ${dmy(dto.leavingOn)}`,
+          payload: {
+            studentId,
+            leavingOn: dto.leavingOn,
+            damageCharge: dto.damageCharge,
+            messCharge: dto.messCharge,
+          },
+        });
+        instanceId = inst.id;
+        await c.query(`UPDATE hostel_withdrawals SET workflow_instance_id = $2 WHERE id = $1`, [
+          id,
+          instanceId,
+        ]);
+      }
       await this.audit.stage(ctx, c, {
         action: 'hostel.withdrawal.start',
         entityType: 'hostel_withdrawals',
@@ -527,12 +580,13 @@ export class HostelWithdrawalsService {
           leavingOn: dto.leavingOn,
           reason: dto.reason,
           noticeShort: noticeCharge && days < noticeDays,
-          departments: departments.map((d) => `${String(d.step)}:${d.code}`),
+          damageCharge: dto.damageCharge,
+          messCharge: dto.messCharge,
+          approval: instanceId,
         },
       });
       return id;
     });
-    await this.runChecks(ctx, id);
     return this.get(ctx, id);
   }
 
@@ -554,280 +608,202 @@ export class HostelWithdrawalsService {
     return out;
   }
 
-  // ---- steps ---------------------------------------------------------------------------------------------
-  private async advance(c: PoolClient, id: string) {
-    await c.query(
-      `UPDATE hostel_withdrawals w SET
-          current_step = (SELECT min(step) FROM hostel_withdrawal_clearances WHERE withdrawal_id = w.id AND status <> 'cleared'),
-          status = CASE WHEN EXISTS (SELECT 1 FROM hostel_withdrawal_clearances WHERE withdrawal_id = w.id AND status <> 'cleared')
-                        THEN 'requested' ELSE 'cleared' END,
-          updated_at = now()
-        WHERE w.id = $1 AND w.status IN ('requested', 'cleared')`,
-      [id],
-    );
-  }
-
-  /** The automatic hostel fee check of the current step; clears by itself when nothing is due. */
-  private async runChecks(ctx: RequestContext, id: string) {
-    const tenant = requireTenant(ctx);
-    for (let round = 0; round < 10; round += 1) {
-      const w = await this.db.tenant(tenant, (c) => this.findDb(c, id));
-      if (!w || w.status !== 'requested' || w.currentStep === null) return;
-      const due = (
-        w.clearances as Array<Db['clearances'][number] & { autoCheck: string; autoClear: boolean }>
-      ).filter(
-        (x) =>
-          x.step === w.currentStep && x.status !== 'cleared' && !x.check && x.autoCheck !== 'none',
-      );
-      if (!due.length) return;
-      const results = await Promise.all(
-        due.map(async (x) => ({
-          x,
-          result: await this.withdrawals.feeDues(ctx, w.studentId, w.leavingOn, 'hostel'),
-        })),
-      );
-      const before = w.currentStep;
-      const after = await this.db.tenant(tenant, async (c) => {
-        for (const { x, result } of results) {
-          const clear = x.autoClear && result.due === 0;
-          await c.query(
-            `UPDATE hostel_withdrawal_clearances SET check_result = $2::jsonb, dues = $3,
-                    status = CASE WHEN $4 THEN 'cleared'::clearance_status ELSE status END, auto = $4,
-                    remarks = CASE WHEN $4 THEN 'Cleared automatically: ' || $5 ELSE remarks END,
-                    acted_at = CASE WHEN $4 THEN now() ELSE acted_at END
-              WHERE id = $1`,
-            [x.id, JSON.stringify(result), result.due, clear, result.detail],
-          );
-        }
-        await this.advance(c, id);
-        const r = await c.query<{ step: number | null }>(
-          `SELECT current_step AS step FROM hostel_withdrawals WHERE id = $1`,
-          [id],
-        );
-        return r.rows[0]?.step ?? null;
-      });
-      if (after === before) return;
-    }
-  }
-
-  private async actOn(
+  // ---- approval ------------------------------------------------------------------------------------------
+  /**
+   * The approver of the current level decides here (the Approvals inbox works too). At the last level
+   * the approver chooses carry-forward or refund of the hostel months paid after the fee stops.
+   */
+  async decide(
     ctx: RequestContext,
     id: string,
-    department: string,
-    apply: (c: PoolClient, x: Db['clearances'][number], w: Db) => Promise<Record<string, unknown>>,
-    action: string,
+    dto: { outcome: 'approved' | 'rejected'; note?: string; feeChoice?: 'carry' | 'refund' },
+  ): Promise<HostelWithdrawalRow> {
+    const w = await this.get(ctx, id);
+    if (w.status !== 'requested' || !w.approval || w.approval.status !== 'pending')
+      throw new DomainError('withdrawal.not_open', 'Nothing is waiting for approval here', {
+        status: 409,
+      });
+    if (!w.myStep)
+      throw new DomainError('workflow.not_assignee', 'This level is not assigned to you', {
+        status: 403,
+      });
+    if (dto.outcome === 'rejected' && !dto.note?.trim())
+      throw new DomainError('validation-failed', 'Give the reason for not approving', {
+        status: 400,
+      });
+    if (dto.feeChoice && w.myStep.lastLevel && dto.outcome === 'approved')
+      await this.db.tenant(requireTenant(ctx), (c) =>
+        c.query(`UPDATE hostel_withdrawals SET fee_choice = $2, updated_at = now() WHERE id = $1`, [
+          id,
+          dto.feeChoice,
+        ]),
+      );
+    await this.workflow.act(ctx, w.myStep.id, dto.outcome, { note: dto.note });
+    return this.get(ctx, id);
+  }
+
+  /** The approval levels are done (WorkflowService.onComplete): leave the hostel, or not approved. */
+  async onApprovalComplete(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
   ) {
+    const w = await this.findDb(c, instance.entityId, true);
+    if (!w || w.status !== 'requested') return;
+    if (outcome === 'rejected') {
+      const note = instance.steps.find((s) => s.status === 'rejected')?.note ?? null;
+      await c.query(
+        `UPDATE hostel_withdrawals SET status = 'rejected', decided_note = $2, updated_at = now() WHERE id = $1`,
+        [w.id, note],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'hostel.withdrawal.rejected',
+        entityType: 'hostel_withdrawals',
+        entityId: w.id,
+        after: { note },
+      });
+      return;
+    }
+    await this.completeIn(c, ctx, w);
+  }
+
+  /** With the approval levels switched off, the office completes it (choosing carry-forward or refund). */
+  async complete(
+    ctx: RequestContext,
+    id: string,
+    feeChoice?: 'carry' | 'refund',
+  ): Promise<HostelWithdrawalRow> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const w = await this.findDb(c, id, true);
       if (!w) throw new DomainError('not-found', 'Hostel withdrawal not found', { status: 404 });
+      this.ownHostel(await this.only(c, ctx), w.hostelId);
+      if (w.instanceId && w.status === 'requested')
+        throw new DomainError(
+          'withdrawal.clearance_pending',
+          'It is waiting for its approval levels; it completes on the last approval',
+          { status: 409 },
+        );
       if (w.status !== 'requested' && w.status !== 'cleared')
         throw new DomainError(
           'withdrawal.not_open',
-          'The hostel withdrawal is already completed or cancelled',
+          'The hostel withdrawal is already completed, cancelled or not approved',
           { status: 409 },
         );
-      const x = w.clearances.find((y) => y.department === department);
-      if (!x)
-        throw new DomainError('not-found', `No clearance for "${department}"`, { status: 404 });
-      if (x.step !== w.currentStep && x.status !== 'cleared')
-        throw new DomainError(
-          'withdrawal.not_this_step',
-          `${x.departmentName} acts at step ${String(x.step)}; the withdrawal is at step ${String(w.currentStep ?? '-')}`,
-          { status: 409 },
-        );
-      const actor = await this.actor(c, ctx);
-      if (!actor.manage && !x.approverList.some((a) => this.named(a, actor, w.hostelId)))
-        throw new DomainError(
-          'withdrawal.not_assigned',
-          `${x.departmentName} is cleared by ${x.approverList.map(approverName).join(' or ')}`,
-          { status: 403 },
-        );
-      const after = await apply(c, x, w);
-      await this.advance(c, id);
-      await this.audit.stage(ctx, c, {
-        action,
-        entityType: 'hostel_withdrawals',
-        entityId: id,
-        before: { department, status: x.status },
-        after: { department, ...after },
-      });
-    });
-    await this.runChecks(ctx, id);
-    return this.get(ctx, id);
-  }
-
-  async clearance(ctx: RequestContext, id: string, department: string, dto: ClearanceDto) {
-    return this.actOn(
-      ctx,
-      id,
-      department,
-      async (c, x, w) => {
-        const added = await this.checkFiles(c, dto.documents ?? []);
-        const documents = [...(x.documents ?? []), ...added];
-        if (dto.status === 'cleared' && x.documentRequired && !documents.length)
-          throw new DomainError(
-            'withdrawal.document_required',
-            `${x.departmentName} needs a document attached to clear`,
-            { status: 400 },
-          );
-        const charge = await raiseHostelCharge(c, {
-          department: x,
-          amount: dto.charge ?? 0,
-          studentId: w.studentId,
-          yearId: w.yearId,
-          what: `leaving the hostel on ${dmy(w.leavingOn)}`,
-        });
-        if (dto.feeChoice) {
-          if (!x.settles)
-            throw new DomainError(
-              'hostel.not_settlement',
-              'Carry-forward or refund is chosen at the last step (Accounts)',
-              { status: 400 },
-            );
-          await c.query(`UPDATE hostel_withdrawals SET fee_choice = $2 WHERE id = $1`, [
-            w.id,
-            dto.feeChoice,
-          ]);
-        }
-        await c.query(
-          `UPDATE hostel_withdrawal_clearances SET status = $2::clearance_status, dues = $3, remarks = $4, documents = $5::jsonb,
-                  bypassed = false, auto = false, acted_by = app.current_user_id(), acted_at = now(),
-                  charge = COALESCE($6, charge), charge_misc_fee_id = COALESCE($7, charge_misc_fee_id) WHERE id = $1`,
-          [
-            x.id,
-            dto.status,
-            dto.dues,
-            dto.remarks ?? null,
-            JSON.stringify(documents),
-            charge?.amount ?? null,
-            charge?.miscFeeId ?? null,
-          ],
-        );
-        return {
-          status: dto.status,
-          dues: dto.dues,
-          remarks: dto.remarks ?? null,
-          documents: added.length,
-          charge: charge?.amount ?? null,
-          feeChoice: dto.feeChoice ?? null,
-        };
-      },
-      'hostel.withdrawal.clear',
-    );
-  }
-
-  async bypass(ctx: RequestContext, id: string, department: string, dto: BypassDto) {
-    return this.actOn(
-      ctx,
-      id,
-      department,
-      async (c, x) => {
-        if (!x.bypassAllowed)
-          throw new DomainError('withdrawal.no_bypass', `${x.departmentName} cannot be bypassed`, {
-            status: 409,
-          });
-        await c.query(
-          `UPDATE hostel_withdrawal_clearances SET status = 'cleared', bypassed = true, auto = false, remarks = $2,
-                  acted_by = app.current_user_id(), acted_at = now() WHERE id = $1`,
-          [x.id, `Bypassed: ${dto.reason}`],
-        );
-        return { status: 'cleared', bypassed: true, reason: dto.reason };
-      },
-      'hostel.withdrawal.bypass',
-    );
-  }
-
-  // ---- completion and cancel ----------------------------------------------------------------------------
-  async complete(ctx: RequestContext, id: string): Promise<HostelWithdrawalRow> {
-    await this.db.tenant(requireTenant(ctx), async (c) => {
-      const w = await this.findDb(c, id, true);
-      if (!w) throw new DomainError('not-found', 'Hostel withdrawal not found', { status: 404 });
-      this.ownHostel(await this.actor(c, ctx), w.hostelId);
-      if (w.status !== 'cleared')
-        throw new DomainError(
-          w.status === 'requested' ? 'withdrawal.clearance_pending' : 'withdrawal.not_open',
-          w.status === 'requested'
-            ? 'Every step must clear the pupil first'
-            : 'The hostel withdrawal is already completed or cancelled',
-          { status: 409 },
-        );
-      const stay = await c.query<{ from_date: string; to_date: string | null }>(
-        `SELECT from_date::text, to_date::text FROM hostel_allotments WHERE id = $1 FOR UPDATE`,
-        [
-          (
-            await c.query<{ a: string }>(
-              `SELECT allotment_id::text AS a FROM hostel_withdrawals WHERE id = $1`,
-              [id],
-            )
-          ).rows[0]!.a,
-        ],
-      );
-      if (stay.rows[0]?.to_date !== null)
-        throw new DomainError(
-          'hostel.not_allotted',
-          'The bed was already given up (vacated or moved); cancel this withdrawal',
-          { status: 409 },
-        );
-      // 1. the bed is given up on the leaving date
-      await c.query(
-        `UPDATE hostel_allotments SET to_date = $2, end_reason = 'vacate', end_remarks = $3, ended_at = now(), ended_by = app.current_user_id()
-          WHERE student_id = $1 AND to_date IS NULL`,
-        [w.studentId, w.leavingOn, `Hostel withdrawal: ${REASON[w.reason] ?? w.reason}`],
-      );
-      // 2. the hostel fee runs to the leaving month, one more when the notice was short
-      const feeUntil = w.noticeShort ? nextMonth(w.leavingOn) : monthOf(w.leavingOn);
-      const sync = await this.hostel.syncFee(c, w.studentId, w.yearId, feeUntil);
-      // 3. paid hostel months after that: carried forward or refunded (Accounts' choice)
-      let note: string;
-      if (!sync.synced) note = `The hostel fee was not changed: ${sync.note ?? 'no fee set-up'}`;
-      else if (w.feeChoice === 'refund') note = await this.refundOutsideStay(c, ctx, w);
-      else
-        note =
-          (await this.adjustments.carryHostelOutsideStay(c, w.studentId, w.yearId)) ??
-          'No hostel month paid after the fee stops';
-      const until = `Hostel fee up to ${monthLabel(feeUntil)}${w.noticeShort ? ' (short notice)' : ''}.`;
-      await c.query(
-        `UPDATE hostel_withdrawals SET status = 'completed', completed_at = now(), completed_by = app.current_user_id(),
-                fee_until = $2::date, fee_note = $3, updated_at = now(), updated_by = app.current_user_id()
-          WHERE id = $1`,
-        [id, feeUntil, `${until} ${note}`],
-      );
-      // 4. the parent is told (when the school has made the template ready)
-      const school = await c.query<{ name: string }>(
-        `SELECT name FROM schools WHERE id = app.current_school_id()`,
-      );
-      await c.query(
-        `SELECT app.template_to_mobiles('hostel_withdrawn_parent', ARRAY(
-           SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
-            WHERE sg.student_id = $1 AND sg.receives_notifications AND g.mobile IS NOT NULL), $2::jsonb)`,
-        [
-          w.studentId,
-          JSON.stringify({
-            who: w.studentName.split(' ')[0],
-            hostel: w.hostelName,
-            date: dmy(w.leavingOn),
-            until: monthLabel(feeUntil),
-            fee: w.feeChoice === 'refund' ? 'Any hostel fee paid after that is refunded.' : '',
-            school: school.rows[0]?.name ?? '',
-          }),
-        ],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'hostel.withdrawal.complete',
-        entityType: 'hostel_withdrawals',
-        entityId: id,
-        before: { status: w.status },
-        after: {
-          status: 'completed',
-          studentId: w.studentId,
-          leavingOn: w.leavingOn,
-          feeUntil,
-          feeChoice: w.feeChoice,
-          note,
-        },
-      });
+      if (feeChoice) {
+        await c.query(`UPDATE hostel_withdrawals SET fee_choice = $2 WHERE id = $1`, [
+          id,
+          feeChoice,
+        ]);
+        w.feeChoice = feeChoice;
+      }
+      await this.completeIn(c, ctx, w);
     });
     return this.get(ctx, id);
+  }
+
+  private async completeIn(c: PoolClient, ctx: RequestContext, w: Db) {
+    const stay = await c.query<{ to_date: string | null }>(
+      `SELECT a.to_date::text FROM hostel_allotments a JOIN hostel_withdrawals hw ON hw.allotment_id = a.id WHERE hw.id = $1`,
+      [w.id],
+    );
+    if (stay.rows[0]?.to_date !== null)
+      throw new DomainError(
+        'hostel.not_allotted',
+        'The bed was already given up (vacated or moved); cancel this withdrawal',
+        { status: 409 },
+      );
+    // 1. the bed is given up on the leaving date
+    await c.query(
+      `UPDATE hostel_allotments SET to_date = $2, end_reason = 'vacate', end_remarks = $3, ended_at = now(), ended_by = app.current_user_id()
+        WHERE student_id = $1 AND to_date IS NULL`,
+      [w.studentId, w.leavingOn, `Hostel withdrawal: ${REASON[w.reason] ?? w.reason}`],
+    );
+    // 2. the hostel fee runs to the leaving month, one more when the notice was short
+    const feeUntil = w.noticeShort ? nextMonth(w.leavingOn) : monthOf(w.leavingOn);
+    const sync = await this.hostel.syncFee(c, w.studentId, w.yearId, feeUntil);
+    // 3. paid hostel months after that: carried forward or refunded
+    let note: string;
+    if (!sync.synced) note = `The hostel fee was not changed: ${sync.note ?? 'no fee set-up'}`;
+    else if (w.feeChoice === 'refund') note = await this.refundOutsideStay(c, ctx, w);
+    else
+      note =
+        (await this.adjustments.carryHostelOutsideStay(c, w.studentId, w.yearId)) ??
+        'No hostel month paid after the fee stops';
+    // 4. damages and mess dues entered at the start become misc fees of the pupil
+    const what = `leaving the hostel on ${dmy(w.leavingOn)}`;
+    const damage = await raiseHostelCharge(c, {
+      department: {
+        departmentName: 'Room and inventory',
+        chargeKind: 'damage',
+        charge: '0',
+        chargeMiscFeeId: null,
+      },
+      amount: Number(w.damageCharge),
+      studentId: w.studentId,
+      yearId: w.yearId,
+      what,
+    });
+    const mess = await raiseHostelCharge(c, {
+      department: {
+        departmentName: 'Mess',
+        chargeKind: 'mess',
+        charge: '0',
+        chargeMiscFeeId: null,
+      },
+      amount: Number(w.messCharge),
+      studentId: w.studentId,
+      yearId: w.yearId,
+      what,
+    });
+    const charges = [
+      damage ? `damages ${rs(damage.amount)}` : null,
+      mess ? `mess dues ${rs(mess.amount)}` : null,
+    ].filter(Boolean);
+    const until = `Hostel fee up to ${monthLabel(feeUntil)}${w.noticeShort ? ' (short notice)' : ''}.`;
+    const feeNote = `${until} ${note}${charges.length ? ` Raised as misc fees: ${charges.join(', ')}.` : ''}`;
+    await c.query(
+      `UPDATE hostel_withdrawals SET status = 'completed', completed_at = now(), completed_by = app.current_user_id(),
+              fee_until = $2::date, fee_note = $3, damage_misc_fee_id = $4, mess_misc_fee_id = $5,
+              updated_at = now(), updated_by = app.current_user_id()
+        WHERE id = $1`,
+      [w.id, feeUntil, feeNote, damage?.miscFeeId ?? null, mess?.miscFeeId ?? null],
+    );
+    // 5. the parent is told (when the school has made the template ready)
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    await c.query(
+      `SELECT app.template_to_mobiles('hostel_withdrawn_parent', ARRAY(
+         SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+          WHERE sg.student_id = $1 AND sg.receives_notifications AND g.mobile IS NOT NULL), $2::jsonb)`,
+      [
+        w.studentId,
+        JSON.stringify({
+          who: w.studentName.split(' ')[0],
+          hostel: w.hostelName,
+          date: dmy(w.leavingOn),
+          until: monthLabel(feeUntil),
+          fee: w.feeChoice === 'refund' ? 'Any hostel fee paid after that is refunded.' : '',
+          school: school.rows[0]?.name ?? '',
+        }),
+      ],
+    );
+    await this.audit.stage(ctx, c, {
+      action: 'hostel.withdrawal.complete',
+      entityType: 'hostel_withdrawals',
+      entityId: w.id,
+      before: { status: w.status },
+      after: {
+        status: 'completed',
+        studentId: w.studentId,
+        leavingOn: w.leavingOn,
+        feeUntil,
+        feeChoice: w.feeChoice,
+        note,
+        charges,
+      },
+    });
   }
 
   /**
@@ -914,17 +890,29 @@ export class HostelWithdrawalsService {
     return `Hostel paid after the fee stops (${rs(total)}) is sent for refund${inApproval ? ' through the approval levels' : '; it waits on Fees → Refunds'}.`;
   }
 
+  /** Cancelled before it is approved: the pupil keeps the bed; a pending approval is closed. */
   async cancel(ctx: RequestContext, id: string, reason: string): Promise<HostelWithdrawalRow> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const w = await this.findDb(c, id, true);
       if (!w) throw new DomainError('not-found', 'Hostel withdrawal not found', { status: 404 });
-      this.ownHostel(await this.actor(c, ctx), w.hostelId);
+      this.ownHostel(await this.only(c, ctx), w.hostelId);
       if (w.status !== 'requested' && w.status !== 'cleared')
         throw new DomainError(
           'withdrawal.not_open',
           'Only an open hostel withdrawal can be cancelled',
           { status: 409 },
         );
+      if (w.instanceId) {
+        await c.query(
+          `UPDATE workflow_steps SET status = 'skipped' WHERE instance_id = $1 AND status = 'pending'`,
+          [w.instanceId],
+        );
+        await c.query(
+          `UPDATE workflow_instances SET status = 'cancelled', completed_at = now(), updated_at = now()
+            WHERE id = $1 AND status = 'pending'`,
+          [w.instanceId],
+        );
+      }
       await c.query(
         `UPDATE hostel_withdrawals SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now(), updated_by = app.current_user_id()
           WHERE id = $1`,

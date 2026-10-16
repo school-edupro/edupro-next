@@ -4,12 +4,12 @@ The **Hostel** menu keeps the boarding house: hostels, rooms and beds, who holds
 wardens. The hostel **fee** stays in Fees (hostel ledger, hostel calendar, hostel bill and receipts);
 an allotment here keeps it in step by itself. Plan and later phases: `docs/design/25-hostel-module.md`.
 
-| Who | Rights |
-|---|---|
-| School admin | everything (*hostel.setup.manage*, *hostel.allot.manage*, *hostel.room.view*) |
-| Hostel office | give the role with *hostel.allot.manage* and *hostel.room.view* |
-| **Warden** (new role) | sees only the hostels they are a warden of; allots nothing |
-| Accountant | sees the hostels and who stays where |
+| Who                   | Rights                                                                        |
+| --------------------- | ----------------------------------------------------------------------------- |
+| School admin          | everything (_hostel.setup.manage_, _hostel.allot.manage_, _hostel.room.view_) |
+| Hostel office         | give the role with _hostel.allot.manage_ and _hostel.room.view_               |
+| **Warden** (new role) | sees only the hostels they are a warden of; allots nothing                    |
+| Accountant            | sees the hostels and who stays where                                          |
 
 ## 1. Set-up (Hostel → Set-up)
 
@@ -17,7 +17,7 @@ an allotment here keeps it in step by itself. Plan and later phases: `docs/desig
    Blocks with their number of floors. Wardens are staff: tick the head warden. Give each warden
    the **Warden** role (Access → Users).
 2. **Room types and fee**: name, beds (seater), AC, and the **hostel fee group**. The fee group is
-   a fee group of *Fee setup → Fee structures* that holds the hostel heads for that kind of room
+   a fee group of _Fee setup → Fee structures_ that holds the hostel heads for that kind of room
    (for example `ac_double` with Boarding ₹5,000 a month). Leave it empty and the pupil pays by
    their own fee group, as before the module. Changing the group re-prices the unpaid hostel months
    of the pupils in those rooms.
@@ -51,7 +51,7 @@ Every stay is kept: **Register** lists them by hostel, dates, staying now or end
 
 A hostel on a day: beds, taken (with %), free and blocked; the same by room type; and every room by
 block and floor with its beds — green free (click to allot), blue taken (click the pupil), grey blocked.
-The pupil's **Fees** tab also shows the bed (*Hostel bed*).
+The pupil's **Fees** tab also shows the bed (_Hostel bed_).
 
 ## 5. Roll-call (staff app → Hostel desk; admin: Hostel → Roll-call)
 
@@ -64,14 +64,14 @@ Hostel → Roll-call lists every roll of a period with the absentees, and the se
 
 ## 6. Hostel leave and outings (parent portal, staff app, gate)
 
-| | Home leave | Outing |
-|---|---|---|
-| Who asks | Parent: Gate passes → Request → *Home leave (hostel)* | Parent: *Outing (hostel)* |
-| When back | the day and time given | the same day, by the school's latest time (rules) |
-| Collected | by the father, mother, guardian on record or someone named (one-time code to the parent) | goes alone |
-| Approves | a warden of the pupil's hostel (staff app → Gate passes) | the same |
-| Leaves | warden **hands over** (staff app → Hostel desk → Hand over: live photo; code and remark for someone not on record), then the gate lets out | straight to the gate |
-| Comes back | the gate marks **back in**; minutes late are kept | the same |
+|            | Home leave                                                                                                                                 | Outing                                            |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| Who asks   | Parent: Gate passes → Request → _Home leave (hostel)_                                                                                      | Parent: _Outing (hostel)_                         |
+| When back  | the day and time given                                                                                                                     | the same day, by the school's latest time (rules) |
+| Collected  | by the father, mother, guardian on record or someone named (one-time code to the parent)                                                   | goes alone                                        |
+| Approves   | a warden of the pupil's hostel (staff app → Gate passes)                                                                                   | the same                                          |
+| Leaves     | warden **hands over** (staff app → Hostel desk → Hand over: live photo; code and remark for someone not on record), then the gate lets out | straight to the gate                              |
+| Comes back | the gate marks **back in**; minutes late are kept                                                                                          | the same                                          |
 
 Only boarders (holding a bed on the day) can ask. A pupil not back by the return time plus the grace:
 the parent and the head warden are told once (workers, every 10 minutes); past the hours set the
@@ -103,7 +103,7 @@ Communication → Templates.
 - **Meal attendance** (staff app → Hostel desk → Mess today → Who skipped): tick who skipped; everyone
   else holding a bed and not away on leave had the meal.
 - **Diet list** for the kitchen: the warden sets each boarder's diet (vegetarian, with egg, non-veg, Jain,
-  vegan; no onion-garlic; a note); the allergy shown is the *Medical condition / allergy* on the
+  vegan; no onion-garlic; a note); the allergy shown is the _Medical condition / allergy_ on the
   student record.
 
 Messages (SMS / WhatsApp when ready under Communication → Templates): `hostel_visit_waiting` to the
@@ -136,3 +136,31 @@ complaints, the hostel fee due now; each hostel today (roll-calls taken, meals m
 visitors to approve, complaints); the last 7 / 30 / 90 days (absences, late returns, leave, visits,
 complaints, meals skipped, incidents); and the hostel fee of the session per hostel for today's
 boarders (fee, paid, due now, % collected).
+
+## Hostel withdrawal (a pupil leaves the hostel, stays in school)
+
+- **Who starts it:**
+  - the **Hostel Clerk** (a new role, given under Access);
+  - the warden of the pupil's hostel;
+  - the office.
+- **Who may start, and who approves level by level:** set on **Fee setup → Approval levels →
+  Hostel withdrawal**.
+- **To start:** Hostel → Withdrawals → New withdrawal. Find the boarder, then give:
+  - the request date and the last day in the hostel;
+  - the reason;
+  - the **damages** and **mess dues** found;
+  - the parent's letter.
+- **Approving:**
+  - Each level approves or does not approve (with a note), on the withdrawal page or in Approvals.
+  - The **last level chooses**: carry forward the hostel fee paid for later months (it stays as
+    advance on the hostel receipt) or refund it.
+- **On the last approval:**
+  - the bed is free from the leaving date;
+  - the hostel fee runs to the leaving month (one more month if the notice was shorter than the
+    school's notice period);
+  - damages and mess dues become misc fees;
+  - the parent is told.
+- **Hostel → Withdrawals → Steps and notice:**
+  - the notice period;
+  - the hostel steps (Warden, Mess) used when a hosteller **leaves the school** (People →
+    Withdrawals).

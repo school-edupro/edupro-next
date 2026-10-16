@@ -253,9 +253,10 @@ const DEFAULTS: DefaultDepartment[] = [
 ];
 
 /**
- * The hostel withdrawal's departments a school starts with (docs/design/27-hostel-withdrawal.md): the
- * warden checks the room and its inventory (damages), the mess its dues, the hostel fee is checked by
- * itself, then Accounts settles. Warden and Mess also clear a hosteller who leaves the school.
+ * The hostel's steps a school starts with (docs/design/27-hostel-withdrawal.md): they clear a hosteller
+ * who leaves the school, inside the school withdrawal. The warden checks the room and its inventory
+ * (damages), the mess its dues; each raises its amount as a misc fee. (Leaving only the hostel goes
+ * through its approval levels on Fee setup -> Approval levels.)
  */
 const HOSTEL_DEFAULTS: DefaultDepartment[] = [
   {
@@ -285,30 +286,6 @@ const HOSTEL_DEFAULTS: DefaultDepartment[] = [
     active: true,
     chargeKind: 'mess',
     inSchoolExit: true,
-  },
-  {
-    code: 'hostel_fees',
-    name: 'Hostel fee dues',
-    step: 1,
-    approvers: [{ kind: 'role_code', code: 'accountant' }, { kind: 'office' }],
-    autoCheck: 'hostel_fees',
-    autoClear: true,
-    bypassAllowed: false,
-    documentRequired: false,
-    gatesTc: false,
-    active: true,
-  },
-  {
-    code: 'hostel_accounts',
-    name: 'Accounts settlement',
-    step: 2,
-    approvers: [{ kind: 'role_code', code: 'accountant' }, { kind: 'office' }],
-    autoCheck: 'none',
-    autoClear: false,
-    bypassAllowed: false,
-    documentRequired: false,
-    gatesTc: false,
-    active: true,
   },
 ];
 
@@ -882,14 +859,14 @@ export class WithdrawalsService {
         `INSERT INTO withdrawal_clearances (school_id, withdrawal_id, department, department_id, step) VALUES (app.current_school_id(), $1, $2, $3, $4)`,
         [id, d.code, d.id, d.step],
       );
-    // a hosteller (a bed held on the leaving date or after) is also cleared by the hostel departments
-    // marked "also when leaving the school" (docs/design/27-hostel-withdrawal.md)
+    // a hosteller (a bed held on the leaving date or after) is also cleared by the hostel's steps
+    // (Hostel -> Withdrawals -> Steps; docs/design/27-hostel-withdrawal.md)
     const boarder = await c.query(
       `SELECT 1 FROM hostel_allotments WHERE student_id = $1 AND (to_date IS NULL OR to_date >= $2::date)`,
       [studentId, dto.leavingOn],
     );
     if (boarder.rowCount)
-      for (const d of (await this.departmentsIn(c, true, 'hostel')).filter((x) => x.inSchoolExit)) {
+      for (const d of await this.departmentsIn(c, true, 'hostel')) {
         if (departments.some((x) => x.code === d.code)) continue;
         departments.push(d);
         await c.query(

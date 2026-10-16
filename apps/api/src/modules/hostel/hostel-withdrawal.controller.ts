@@ -2,14 +2,12 @@ import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import {
-  BypassDto,
-  CancelDto,
-  ClearanceDto,
-  SaveDepartmentsDto,
-} from '../people/lifecycle/lifecycle.dto';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
+import { CancelDto, SaveDepartmentsDto } from '../people/lifecycle/lifecycle.dto';
 import { WithdrawalsService } from '../people/lifecycle/withdrawals.service';
 import {
+  CompleteHostelWithdrawalDto,
+  DecideHostelWithdrawalDto,
   HOSTEL_WD,
   HostelWithdrawalSettingsDto,
   HostelWithdrawalsFileDto,
@@ -95,34 +93,38 @@ export class HostelWithdrawalController {
     return this.hw.get(ctx, id);
   }
 
-  @Post('withdrawals/:id/clearances/:department')
-  @ApiOperation({ summary: 'Clear, hold or reopen a step; a charge becomes a misc fee' })
-  @RequirePermission(HOSTEL_WD.clear, { description: 'Clear a hostel withdrawal for a department' })
-  clear(
+  @Post('withdrawals/:id/decide')
+  @ApiOperation({
+    summary:
+      'The approver of the current level approves or rejects (the last one picks carry or refund)',
+  })
+  @AuthenticatedOnly()
+  decide(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
-    @Param('department') department: string,
-    @Body() body: ClearanceDto,
+    @Body() body: DecideHostelWithdrawalDto,
   ) {
-    return this.hw.clearance(ctx, id, department, body);
+    return this.hw.decide(ctx, id, body);
   }
 
-  @Post('withdrawals/:id/clearances/:department/bypass')
-  @RequirePermission(HOSTEL_WD.clear)
-  bypass(
-    @ReqCtx() ctx: RequestContext,
-    @Param('id') id: string,
-    @Param('department') department: string,
-    @Body() body: BypassDto,
-  ) {
-    return this.hw.bypass(ctx, id, department, body);
+  @Get('withdrawal-approval')
+  @ApiOperation({ summary: 'Makes sure the hostel withdrawal approval levels exist' })
+  @RequirePermission('workflow.definition.view')
+  approval(@ReqCtx() ctx: RequestContext) {
+    return this.hw.approvalFlow(ctx);
   }
 
   @Post('withdrawals/:id/complete')
-  @ApiOperation({ summary: 'Vacate the bed and settle the hostel fee' })
+  @ApiOperation({
+    summary: 'With the approval levels switched off: vacate the bed and settle the hostel fee',
+  })
   @RequirePermission(HOSTEL_WD.manage)
-  complete(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.hw.complete(ctx, id);
+  complete(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: CompleteHostelWithdrawalDto,
+  ) {
+    return this.hw.complete(ctx, id, body.feeChoice);
   }
 
   @Post('withdrawals/:id/cancel')

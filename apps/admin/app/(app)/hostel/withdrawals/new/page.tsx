@@ -51,7 +51,7 @@ export default async function NewHostelWithdrawalPage({
       <PageHeader
         kicker="Hostel withdrawal"
         title="A pupil leaves the hostel"
-        description="For a pupil who stays in school. A pupil leaving the school is withdrawn from People → Withdrawals; the hostel clears them there."
+        description="For a pupil who stays in school. It goes through the approval levels set on Fee setup → Approval levels (Hostel withdrawal), which also say who may start one. A pupil leaving the school is withdrawn from People → Withdrawals; the hostel clears them there."
       />
       <HostelNav current="/hostel/withdrawals" permissions={me.permissions} />
       <Notice params={sp} />
@@ -140,6 +140,42 @@ export default async function NewHostelWithdrawalPage({
                   <option value="other">Other</option>
                 </select>
               </label>
+              <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+                <legend className="ep-field__label">Room check and mess</legend>
+                <label className="ep-field" htmlFor="nw-dmg">
+                  <span className="ep-field__label">Damages to charge (₹)</span>
+                  <input
+                    id="nw-dmg"
+                    name="damageCharge"
+                    className="ep-input"
+                    inputMode="decimal"
+                    placeholder="0"
+                  />
+                </label>
+                <label className="ep-field" htmlFor="nw-mess">
+                  <span className="ep-field__label">Mess dues (₹)</span>
+                  <input
+                    id="nw-mess"
+                    name="messCharge"
+                    className="ep-input"
+                    inputMode="decimal"
+                    placeholder="0"
+                  />
+                </label>
+                <label className="ep-field" htmlFor="nw-crem">
+                  <span className="ep-field__label">About the charges</span>
+                  <input
+                    id="nw-crem"
+                    name="chargeRemarks"
+                    className="ep-input"
+                    maxLength={500}
+                    placeholder="e.g. broken chair; October mess"
+                  />
+                </label>
+                <span className="ep-field__help">
+                  Raised as misc fees of the pupil on the last approval.
+                </span>
+              </fieldset>
               <label className="ep-field" htmlFor="nw-rem">
                 <span className="ep-field__label">Remarks</span>
                 <textarea
@@ -163,7 +199,7 @@ export default async function NewHostelWithdrawalPage({
                   accept="application/pdf,image/png,image/jpeg,image/webp"
                 />
               </label>
-              <Button type="submit">Start the withdrawal</Button>
+              <Button type="submit">Start and send for approval</Button>
             </form>
           </Card>
         ) : (
