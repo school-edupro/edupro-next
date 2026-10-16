@@ -9,33 +9,46 @@ export interface WidgetDef {
   anyOf: string[];
   /** wide widgets take two columns on a large screen */
   wide?: boolean;
+  /** what the school may set besides title and size: days ahead or rows shown, [min, max, default] */
+  days?: [number, number, number];
+  count?: [number, number, number];
 }
 
 export const WIDGETS: WidgetDef[] = [
   { key: 'profile', title: 'Profile', anyOf: [] },
-  { key: 'quick_actions', title: 'Quick actions', anyOf: [], wide: true },
-  { key: 'today', title: 'Today at a glance', anyOf: [], wide: true },
-  { key: 'approvals', title: 'Waiting for me', anyOf: [] },
-  { key: 'news', title: 'News and office orders', anyOf: [] },
+  { key: 'quick_actions', title: 'Quick Actions', anyOf: [], wide: true },
+  { key: 'today', title: 'Today at a Glance', anyOf: [], wide: true },
+  { key: 'approvals', title: 'Waiting for Me', anyOf: [] },
+  { key: 'news', title: 'News and Office Orders', anyOf: [], count: [3, 20, 8] },
   {
     key: 'attendance_trend',
-    title: 'Attendance trend',
+    title: 'Attendance Trend',
     anyOf: ['attendance.session.view', 'attendance.session.mark'],
     wide: true,
   },
-  { key: 'staff_attendance', title: 'Staff attendance today', anyOf: ['attendance.punch.view'] },
-  { key: 'birthdays_staff', title: 'Staff birthdays', anyOf: ['people.employee.view'] },
-  { key: 'birthdays_students', title: 'Student birthdays', anyOf: ['people.student.view'] },
-  { key: 'holidays', title: 'Holidays', anyOf: [] },
+  { key: 'staff_attendance', title: 'Staff Attendance Today', anyOf: ['attendance.punch.view'] },
+  {
+    key: 'birthdays_staff',
+    title: 'Staff Birthdays',
+    anyOf: ['people.employee.view'],
+    days: [1, 31, 7],
+  },
+  {
+    key: 'birthdays_students',
+    title: 'Student Birthdays',
+    anyOf: ['people.student.view'],
+    days: [1, 31, 7],
+  },
+  { key: 'holidays', title: 'Holidays', anyOf: [], count: [3, 20, 8] },
   {
     key: 'fees_today',
-    title: 'Fee collection today',
+    title: 'Fee Collection Today',
     anyOf: ['fees.ledger.view', 'fees.demand.view'],
     wide: true,
   },
   {
     key: 'fees_dues',
-    title: 'Dues and defaulters',
+    title: 'Dues and Defaulters',
     anyOf: ['fees.ledger.view', 'fees.demand.view'],
   },
   {
@@ -45,7 +58,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     key: 'front_office',
-    title: 'Front office',
+    title: 'Front Office',
     anyOf: [
       'engagement.visitor.manage',
       'engagement.gate_pass.view',
@@ -56,6 +69,7 @@ export const WIDGETS: WidgetDef[] = [
     key: 'helpdesk',
     title: 'Helpdesk',
     anyOf: ['helpdesk.ticket.respond', 'engagement.query.view'],
+    count: [1, 10, 3],
   },
   {
     key: 'transport',
@@ -153,3 +167,17 @@ export const ROLE_ORDER = [
 ];
 
 export const FALLBACK = ['profile', 'quick_actions', 'approvals', 'news', 'holidays'];
+
+/** Roles that never land on the admin app (portal and staff-app users, support accounts). */
+export const NO_LANDING = new Set([
+  'parent',
+  'student',
+  'former_parent',
+  'former_student',
+  'class_teacher',
+  'subject_teacher',
+  'auditor',
+  'erp_support',
+  'support_engineer',
+  'sensitive_data_viewer',
+]);

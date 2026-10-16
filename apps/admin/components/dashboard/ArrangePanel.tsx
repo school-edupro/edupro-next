@@ -40,13 +40,13 @@ export function ArrangePanel({
     });
   return (
     <details className="db-arrange">
-      <summary className="ep-btn ep-btn--ghost ep-btn--sm">Arrange my page</summary>
+      <summary className="ep-btn ep-btn--secondary ep-btn--sm">Arrange my page</summary>
       <form action={saveMyLayout} className="db-arrange__body">
         <input type="hidden" name="widgets" value={order.map((o) => o.key).join(',')} />
         <input type="hidden" name="hidden" value={off.join(',')} />
         <input type="hidden" name="quickActions" value={pins.join(',')} />
         <fieldset className="db-arrange__set">
-          <legend className="ep-field__label">Widgets (top to bottom)</legend>
+          <legend className="ep-field__label">Widgets, top to bottom</legend>
           <ol className="db-arrange__list">
             {order.map((w, i) => (
               <li key={w.key} className="db-arrange__row">

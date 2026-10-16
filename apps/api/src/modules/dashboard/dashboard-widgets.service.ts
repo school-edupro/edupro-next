@@ -4,6 +4,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { PushService } from '../comms/push.service';
+import { InsightsService } from '../insights/insights.service';
 
 /** Days from today to the next birthday (0 = today), India time; 29 Feb counts on 28 Feb in other years. */
 const NEXT = `(SELECT (make_date(y, extract(month FROM dob)::int,
@@ -17,6 +18,7 @@ const NEXT = `(SELECT (make_date(y, extract(month FROM dob)::int,
  * The landing page data the API has no other endpoint for: staff and pupil birthdays (today and the next
  * days, with who was wished) and the wish itself — a push to the staff app or to the pupil's parents in
  * the portal, and SMS / WhatsApp by the template `birthday_wish` when the school has made it ready.
+ * The fee widgets get the fee part of the principal's dashboard (the accountant has no insights right).
  * Every other widget reads the module's own dashboard endpoint from the admin app.
  */
 @Injectable()
@@ -25,11 +27,15 @@ export class DashboardWidgetsService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly push: PushService,
+    private readonly insights: InsightsService,
   ) {}
 
-  async data(ctx: RequestContext, key: string) {
-    if (key === 'birthdays_staff') return this.birthdays(ctx, 'employee');
-    if (key === 'birthdays_students') return this.birthdays(ctx, 'student');
+  async data(ctx: RequestContext, key: string, days?: number) {
+    if (key === 'birthdays_staff') return this.birthdays(ctx, 'employee', days);
+    if (key === 'birthdays_students') return this.birthdays(ctx, 'student', days);
+    // the fee figures of the principal's dashboard, for those who see fees but not the insights
+    if (key === 'fees_today' || key === 'fees_dues')
+      return (await this.insights.principal(ctx)).fees;
     throw new DomainError('not-found', 'This widget reads its module directly', { status: 404 });
   }
 

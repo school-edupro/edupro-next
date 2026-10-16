@@ -2,15 +2,29 @@
 import { apiFetch } from './api';
 import { myApprovals, type ApprovalGroup } from './approvals';
 
+export interface QuickItem {
+  href: string;
+  label?: string;
+  icon?: string;
+}
+
 export interface Layout {
   role: string | null;
   roleName: string | null;
-  widgets: Array<{ key: string; title: string; wide?: boolean }>;
+  widgets: Array<{ key: string; title: string; wide?: boolean; days?: number; count?: number }>;
   hidden: string[];
   available: Array<{ key: string; title: string }>;
-  quickActions: string[];
+  /** in order, with the school's own label and icon */
+  quickActions: QuickItem[];
+  /** the role's links to pages outside EduPro */
+  links: QuickItem[];
+  /** the school keeps the role's page as set */
+  locked: boolean;
   personal: boolean;
 }
+
+/** A page outside EduPro (opens in a new tab). */
+export const isExternal = (href: string) => href.startsWith('https://');
 
 export interface Person {
   id: string;
@@ -61,6 +75,7 @@ export async function loadWidgets(layout: Layout, permissions: string[]) {
   const keys = new Set(layout.widgets.map((w) => w.key));
   const has = (p: string) => permissions.includes(p);
   const need = (...k: string[]) => k.some((x) => keys.has(x));
+  const setting = (k: string) => layout.widgets.find((w) => w.key === k);
   const [
     principal,
     desk,
@@ -81,6 +96,7 @@ export async function loadWidgets(layout: Layout, permissions: string[]) {
     library,
     cheques,
     refunds,
+    feesOnly,
   ] = await Promise.all([
     need('today', 'attendance_trend', 'fees_today', 'fees_dues') && has('insights.dashboard.view')
       ? quiet(apiFetch<Principal>('/insights/principal'))
@@ -115,7 +131,9 @@ export async function loadWidgets(layout: Layout, permissions: string[]) {
               publishFrom: string;
               isPinned: boolean;
             }>;
-          }>('/academics/notices?status=published&size=8').then((r) => r.data),
+          }>(
+            `/academics/notices?status=published&size=${String(setting('news')?.count ?? 8)}`,
+          ).then((r) => r.data),
         )
       : null,
     need('holidays')
@@ -135,10 +153,18 @@ export async function loadWidgets(layout: Layout, permissions: string[]) {
       : null,
     need('approvals', 'today') ? quiet(myApprovals(permissions)) : null,
     need('birthdays_staff')
-      ? quiet(apiFetch<{ today: Person[]; upcoming: Person[] }>('/dashboard/w/birthdays_staff'))
+      ? quiet(
+          apiFetch<{ today: Person[]; upcoming: Person[] }>(
+            `/dashboard/w/birthdays_staff?days=${String(setting('birthdays_staff')?.days ?? 7)}`,
+          ),
+        )
       : null,
     need('birthdays_students')
-      ? quiet(apiFetch<{ today: Person[]; upcoming: Person[] }>('/dashboard/w/birthdays_students'))
+      ? quiet(
+          apiFetch<{ today: Person[]; upcoming: Person[] }>(
+            `/dashboard/w/birthdays_students?days=${String(setting('birthdays_students')?.days ?? 7)}`,
+          ),
+        )
       : null,
     need('admissions')
       ? quiet(
@@ -244,10 +270,17 @@ export async function loadWidgets(layout: Layout, permissions: string[]) {
           ),
         )
       : null,
+    // without the insights right, the fee figures come from the landing page's own endpoint
+    need('today', 'fees_today', 'fees_dues') &&
+    !has('insights.dashboard.view') &&
+    (has('fees.ledger.view') || has('fees.demand.view'))
+      ? quiet(apiFetch<Principal['fees']>('/dashboard/w/fees_today'))
+      : null,
   ]);
   return {
     today: today(),
     principal,
+    fees: principal?.fees ?? feesOnly,
     desk,
     punch,
     notices,

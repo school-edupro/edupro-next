@@ -8,6 +8,8 @@ export interface Action {
   section: string;
   sectionLabel: string;
   icon: IconName;
+  /** a page outside EduPro: opens in a new tab */
+  external?: boolean;
 }
 
 /**
@@ -39,11 +41,18 @@ export function QuickActions({ pinned, all }: { pinned: Action[]; all: Action[] 
         <ul className="db-qa__grid">
           {tiles.map((a) => (
             <li key={a.href}>
-              <a className="db-qa__tile" href={a.href}>
+              <a
+                className="db-qa__tile"
+                href={a.href}
+                {...(a.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              >
                 <span className="db-qa__icon" aria-hidden="true">
                   <Icon name={a.icon} size={20} />
                 </span>
-                <span className="db-qa__label">{a.label}</span>
+                <span className="db-qa__label">
+                  {a.label}
+                  {a.external ? <span className="ep-sr-only"> (opens in a new tab)</span> : null}
+                </span>
                 <span className="db-qa__section">{a.sectionLabel}</span>
               </a>
             </li>

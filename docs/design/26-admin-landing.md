@@ -39,3 +39,21 @@ MyClassboard — a "today" strip, work queues first, everything one click from t
 - API: `GET /dashboard` (the user's widgets in order, each with its data, permission-checked);
   `PUT /dashboard/layout`; `PUT /dashboard/defaults/:role`; `POST /dashboard/wish`.
 - The quick-action catalogue is the admin menu (`components/Shell.tsx` NAV), filtered by permission.
+
+## Part 2 (0152): the school's configuration and the design rules
+
+- `dashboard_role_defaults` gains `settings` (per widget: title, size, days, count; ranges in the
+  catalogue) and `locked`; `quick_actions` holds ordered items (`href`, `label`, `icon`; an `https://`
+  href is a school link and needs a label); `role_code` accepts the codes of the school's own roles.
+- API: `DELETE /dashboard/defaults/:role` (back to built-in), `POST …/:role/copy {from}`,
+  `POST …/:role/apply` (clears the role holders' `user_dashboards`), `GET /dashboard/preview/:role`
+  (layout by the role's permissions, plus the permission list), `GET /dashboard/w/fees_today` (the fee part
+  of the principal dashboard for anyone who sees fees), `?days=` on the birthday widgets.
+- Landing role: a school role with a landing set > `ROLE_ORDER` > other school role > any; portal,
+  teacher and support roles (`NO_LANDING`) never land on the admin app.
+- Mobilise rules applied: one dark surface (the sidebar), navy-50 greeting band, white cards with a
+  hairline border and no shadow, h4 card titles with cyan line icons, h2 KPI numerals, status colours only
+  for status, neutral date chips, Title Case headings on the landing page. Exception: the kicker on the
+  navy-50 band is navy 700 (cyan 700 fails 4.5:1 there).
+- Tests: `apps/api/test/dashboard.e2e-spec.ts` (12), axe on `/`, `/system/landing`, the preview;
+  cases and the browser run in `docs/testing/landing-page-test-cases.md`.

@@ -33,9 +33,13 @@ const P = {
   chevron: 'M6 9l6 6 6-6',
   back: 'M15 6l-6 6 6 6',
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM20 20l-4.5-4.5',
+  link: 'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
 } as const;
 
 export type IconName = keyof typeof P;
+export const ICON_NAMES = Object.keys(P) as IconName[];
+export const isIconName = (v: unknown): v is IconName =>
+  typeof v === 'string' && Object.hasOwn(P, v);
 
 export const SECTION_ICON: Record<string, IconName> = {
   overview: 'home',

@@ -106,6 +106,7 @@ const PAGES = [
   '/fees/fnf/12229',
   '/hostel',
   '/system/landing',
+  '/system/landing/preview?role=accountant',
   '/hostel/allot?student=12307',
   '/hostel/allot?sq=sharma',
   '/hostel/register',

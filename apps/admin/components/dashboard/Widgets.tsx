@@ -17,7 +17,7 @@ const daysBetween = (a: string, b: string) =>
       86400e3,
   );
 
-/** A widget: a navy band with the title (and a link), then the body. */
+/** A widget: a white card, its title with a cyan line icon and a link on the right, then the body. */
 export function Widget({
   title,
   icon,
@@ -148,14 +148,16 @@ function Birthdays({
   people,
   kind,
   canWish,
+  days,
 }: {
   people: { today: Person[]; upcoming: Person[] } | null;
   kind: 'student' | 'employee';
   canWish: boolean;
+  days: number;
 }) {
   if (!people) return <Empty>Not available.</Empty>;
   if (!people.today.length && !people.upcoming.length)
-    return <Empty>No birthdays this week.</Empty>;
+    return <Empty>No birthday in the next {days} days.</Empty>;
   return (
     <>
       {people.today.length ? (
@@ -193,9 +195,9 @@ function Birthdays({
       )}
       {people.upcoming.length ? (
         <>
-          <h3 className="db-sub">This week</h3>
+          <h3 className="db-sub">Next {days} Days</h3>
           <ul className="db-list">
-            {people.upcoming.slice(0, 6).map((p) => (
+            {people.upcoming.slice(0, 8).map((p) => (
               <li key={p.id} className="db-list__row">
                 <span className="db-date db-date--muted">
                   <b>{p.days}</b>
@@ -214,23 +216,16 @@ function Birthdays({
   );
 }
 
-const TONE = [
-  'db-date--blue',
-  'db-date--green',
-  'db-date--amber',
-  'db-date--red',
-  'db-date--violet',
-];
-
 /** The body of one widget from the loaded data; null when the widget has nothing to show for this user. */
 export function renderWidget(
   key: string,
   title: string,
   d: WidgetData,
-  opts: { permissions: string[]; wide?: boolean },
+  opts: { permissions: string[]; wide?: boolean; days?: number; count?: number },
 ): ReactNode {
   const can = (p: string) => opts.permissions.includes(p);
   const wide = opts.wide;
+  const count = opts.count ?? 8;
   switch (key) {
     case 'today': {
       const att = d.desk?.class;
@@ -265,9 +260,9 @@ export function renderWidget(
             {d.punch ? (
               <Stat value={d.punch.present} label="Staff in" href="/attendance/punches" />
             ) : null}
-            {d.principal ? (
+            {d.fees ? (
               <Stat
-                value={money(d.principal.fees.collectedToday)}
+                value={money(d.fees.collectedToday)}
                 label="Fee collected today"
                 href="/fees/mis"
                 tone="good"
@@ -320,9 +315,11 @@ export function renderWidget(
         <Widget title={title} icon="file" href="/academics/notices" hrefLabel="All">
           {d.notices?.length ? (
             <ul className="db-list">
-              {d.notices.map((n, i) => (
+              {d.notices.slice(0, count).map((n) => (
                 <li key={n.id} className="db-list__row">
-                  <span className={`db-date ${TONE[i % TONE.length]!}`}>
+                  <span
+                    className={`db-date${n.publishFrom.slice(0, 10) === d.today ? ' db-date--now' : ''}`}
+                  >
                     <b>{n.publishFrom.slice(8, 10)}</b>
                     <small>{dayOf(n.publishFrom).slice(3)}</small>
                   </span>
@@ -342,7 +339,7 @@ export function renderWidget(
       );
     case 'holidays': {
       const all = (d.calendar ?? []).slice().sort((a, b) => a.startsOn.localeCompare(b.startsOn));
-      const next = all.filter((h) => h.endsOn >= d.today).slice(0, 6);
+      const next = all.filter((h) => h.endsOn >= d.today).slice(0, count);
       const past = all
         .filter((h) => h.endsOn < d.today)
         .slice(-2)
@@ -351,9 +348,9 @@ export function renderWidget(
         <Widget title={title} icon="calendar" href="/academics/calendar" hrefLabel="Calendar">
           {next.length ? (
             <ul className="db-list">
-              {next.map((h, i) => (
+              {next.map((h) => (
                 <li key={h.id} className="db-list__row">
-                  <span className={`db-date ${TONE[i % TONE.length]!}`}>
+                  <span className={`db-date${h.startsOn <= d.today ? ' db-date--now' : ''}`}>
                     <b>{h.startsOn.slice(8, 10)}</b>
                     <small>{dayOf(h.startsOn).slice(3)}</small>
                   </span>
@@ -441,6 +438,7 @@ export function renderWidget(
             people={d.birthdaysStaff}
             kind="employee"
             canWish={can('people.birthday.wish')}
+            days={opts.days ?? 7}
           />
         </Widget>
       );
@@ -451,11 +449,12 @@ export function renderWidget(
             people={d.birthdaysStudents}
             kind="student"
             canWish={can('people.birthday.wish')}
+            days={opts.days ?? 7}
           />
         </Widget>
       );
     case 'fees_today': {
-      const f = d.principal?.fees;
+      const f = d.fees;
       const chequeAmount = (d.cheques ?? []).reduce((a, c) => a + Number(c.amount), 0);
       const change =
         f && Number(f.previous7d)
@@ -522,7 +521,7 @@ export function renderWidget(
       );
     }
     case 'fees_dues': {
-      const f = d.principal?.fees;
+      const f = d.fees;
       return (
         <Widget title={title} icon="wallet" href="/fees/reminders/new" hrefLabel="Send reminders">
           {f ? (
@@ -531,7 +530,7 @@ export function renderWidget(
                 <Stat value={money(f.balance)} label="Balance" tone="warn" />
                 <Stat value={money(f.collectedTillDate)} label="Collected" tone="good" />
               </div>
-              <h3 className="db-sub">Top defaulters</h3>
+              <h3 className="db-sub">Top Defaulters</h3>
               <ul className="db-list">
                 {f.defaulters.slice(0, 5).map((x) => (
                   <li key={x.studentId} className="db-list__row">
@@ -547,7 +546,7 @@ export function renderWidget(
               </ul>
             </>
           ) : (
-            <Empty>Needs the insights right.</Empty>
+            <Empty>Not available.</Empty>
           )}
         </Widget>
       );
@@ -633,7 +632,7 @@ export function renderWidget(
                 />
               </div>
               <ul className="db-list">
-                {d.helpdesk.latest.slice(0, 4).map((q) => (
+                {d.helpdesk.latest.slice(0, opts.count ?? 3).map((q) => (
                   <li key={q.id} className="db-list__row">
                     <a className="db-list__main" href={`/engagement/helpdesk/${q.desk}/${q.id}`}>
                       <strong>{q.subject}</strong>

@@ -66,24 +66,91 @@ export async function wishBirthday(fd: FormData) {
   );
 }
 
+/** System → Landing pages: the widgets (ticked, numbered), their settings, the quick menu and the lock. */
 export async function saveRoleLanding(fd: FormData) {
   const role = str(fd, 'role');
   const to = `/system/landing?role=${encodeURIComponent(role)}`;
+  const keys = [...fd.keys()].filter((k) => k.startsWith('w-')).map((k) => k.slice(2));
+  const all = [...new Set([...fd.keys()].filter((k) => k.startsWith('t-')).map((k) => k.slice(2)))];
+  const num = (k: string) => {
+    const v = str(fd, k);
+    return v === '' ? undefined : Number(v);
+  };
+  const settings = Object.fromEntries(
+    all.map((k) => [
+      k,
+      {
+        title: str(fd, `t-${k}`) || undefined,
+        size: (str(fd, `s-${k}`) || undefined) as 'normal' | 'wide' | undefined,
+        days: num(`d-${k}`),
+        count: num(`c-${k}`),
+      },
+    ]),
+  );
+  let quick: unknown = [];
+  try {
+    quick = JSON.parse(str(fd, 'quick') || '[]');
+  } catch {
+    quick = [];
+  }
   try {
     await apiFetch(`/dashboard/defaults/${encodeURIComponent(role)}`, {
       method: 'PUT',
       body: JSON.stringify({
         // ticked widgets (w-<key>) in the order of their numbers (o-<key>)
-        widgets: [...fd.keys()]
-          .filter((k) => k.startsWith('w-'))
-          .map((k) => k.slice(2))
-          .sort((a, b) => Number(str(fd, `o-${a}`) || 99) - Number(str(fd, `o-${b}`) || 99)),
-        quickActions: fd.getAll('qa').map(String),
+        widgets: keys.sort(
+          (a, b) => Number(str(fd, `o-${a}`) || 99) - Number(str(fd, `o-${b}`) || 99),
+        ),
+        quickActions: quick,
+        settings,
+        locked: fd.get('locked') === 'on',
       }),
     });
   } catch (error) {
     fail(to, error);
   }
   revalidatePath('/system/landing');
-  redirect(`${to}&ok=1`);
+  redirect(`${to}&ok=saved`);
+}
+
+export async function copyRoleLanding(fd: FormData) {
+  const role = str(fd, 'role');
+  const to = `/system/landing?role=${encodeURIComponent(role)}`;
+  try {
+    await apiFetch(`/dashboard/defaults/${encodeURIComponent(role)}/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ from: str(fd, 'from') }),
+    });
+  } catch (error) {
+    fail(to, error);
+  }
+  revalidatePath('/system/landing');
+  redirect(`${to}&ok=copied`);
+}
+
+export async function applyRoleLanding(fd: FormData) {
+  const role = str(fd, 'role');
+  const to = `/system/landing?role=${encodeURIComponent(role)}`;
+  let out: { cleared?: number } = {};
+  try {
+    out = await apiFetch(`/dashboard/defaults/${encodeURIComponent(role)}/apply`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    fail(to, error);
+  }
+  revalidatePath('/system/landing');
+  redirect(`${to}&ok=applied&n=${String(out.cleared ?? 0)}`);
+}
+
+export async function removeRoleLanding(fd: FormData) {
+  const role = str(fd, 'role');
+  const to = `/system/landing?role=${encodeURIComponent(role)}`;
+  try {
+    await apiFetch(`/dashboard/defaults/${encodeURIComponent(role)}`, { method: 'DELETE' });
+  } catch (error) {
+    fail(to, error);
+  }
+  revalidatePath('/system/landing');
+  redirect(`${to}&ok=removed`);
 }
