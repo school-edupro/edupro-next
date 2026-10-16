@@ -164,6 +164,7 @@ export async function saveDiet(fd: FormData) {
       body: JSON.stringify({
         diet: str(fd, 'diet') || 'veg',
         noOnionGarlic: fd.get('noOnionGarlic') === 'on',
+        allergies: fd.getAll('allergy').map(String),
         notes: str(fd, 'notes') || undefined,
       }),
     });

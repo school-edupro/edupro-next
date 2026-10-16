@@ -5,7 +5,7 @@ import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { addVisitor, raiseComplaint, removeVisitor } from './actions';
+import { addVisitor, raiseComplaint, rateMeal, removeVisitor } from './actions';
 
 interface Visitors {
   onRecord: Array<{ name: string; relation: string; mobile: string | null }>;
@@ -23,7 +23,13 @@ interface Menu {
   hostel: { id: string; name: string } | null;
   /** the child has left the hostel */
   left?: { on: string; hostel: string; feeUntil: string | null } | null;
-  diet: { diet: string; noOnionGarlic: boolean; notes: string | null } | null;
+  diet: {
+    diet: string;
+    dietName: string | null;
+    noOnionGarlic: boolean;
+    allergies: string[] | null;
+    notes: string | null;
+  } | null;
   week: {
     weekOf: string;
     meals: Array<{ id: string; name: string; atTime: string }>;
@@ -99,12 +105,20 @@ export default async function HostelPage({
   let complaints: Complaint[] = [];
   let heads: Array<{ code: string; name: string }> = [];
   let incidents: Incident[] = [];
+  let rate: Array<{
+    mealId: string;
+    meal: string;
+    atTime: string;
+    onDate: string;
+    rating: number | null;
+    comment: string | null;
+  }> = [];
   try {
     menu = await bff.api.fetch<Menu>(
       `/hostel/mine/menu?studentId=${kid.id}${/^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? '') ? `&weekOf=${sp.week}` : ''}`,
     );
     if (menu.hostel)
-      [visitors, complaints, heads, incidents] = await Promise.all([
+      [visitors, complaints, heads, incidents, rate] = await Promise.all([
         bff.api.fetch<Visitors>(`/hostel/mine/visitors?studentId=${kid.id}`),
         bff.api
           .fetch<{ data: Complaint[] }>(`/hostel/mine/complaints?studentId=${kid.id}`)
@@ -115,6 +129,10 @@ export default async function HostelPage({
         bff.api
           .fetch<{ data: Incident[] }>(`/hostel/mine/incidents?studentId=${kid.id}`)
           .then((r) => r.data),
+        bff.api
+          .fetch<{ data: typeof rate }>(`/hostel/mine/feedback?studentId=${kid.id}`)
+          .then((r) => r.data)
+          .catch(() => [] as typeof rate),
       ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -159,9 +177,11 @@ export default async function HostelPage({
             lang,
             sp.ok === 'removed'
               ? 'Removed from the list.'
-              : sp.ok === 'complaint'
-                ? 'Complaint raised. The warden will look into it.'
-                : 'Added. The warden will approve the visitor.',
+              : sp.ok === 'rated'
+                ? 'Thank you. The warden sees your rating.'
+                : sp.ok === 'complaint'
+                  ? 'Complaint raised. The warden will look into it.'
+                  : 'Added. The warden will approve the visitor.',
           )}
         </div>
       ) : null}
@@ -337,9 +357,14 @@ export default async function HostelPage({
             {menu.diet ? (
               <p>
                 <Badge tone="info">
-                  {t(lang, DIET[menu.diet.diet] ?? menu.diet.diet)}
+                  {menu.diet.dietName ?? t(lang, DIET[menu.diet.diet] ?? menu.diet.diet)}
                   {menu.diet.noOnionGarlic ? ` · ${t(lang, 'no onion or garlic')}` : ''}
                 </Badge>{' '}
+                {(menu.diet.allergies ?? []).map((a) => (
+                  <span key={a} style={{ marginRight: 'var(--sp-1)' }}>
+                    <Badge tone="danger">{a}</Badge>
+                  </span>
+                ))}
                 {menu.diet.notes ? <span className="ep-field__help">{menu.diet.notes}</span> : null}
               </p>
             ) : null}
@@ -383,6 +408,80 @@ export default async function HostelPage({
               </div>
             )}
           </Card>
+          {rate.length ? (
+            <Card title={t(lang, 'Rate the meals')} style={{ marginTop: 'var(--sp-4)' }}>
+              <p className="ep-field__help">
+                {t(
+                  lang,
+                  'How was the food? Rate the meals of the last three days (1 poor, 5 very good).',
+                )}
+              </p>
+              <ul className="fp-rcpts">
+                {rate.map((m) => (
+                  <li key={`${m.mealId}-${m.onDate}`}>
+                    <span>
+                      <strong>{t(lang, m.meal)}</strong>{' '}
+                      <span className="ep-field__help">
+                        {dayName(m.onDate)} · {m.atTime}
+                      </span>
+                      {m.rating ? (
+                        <span style={{ display: 'block' }}>
+                          <Badge
+                            tone={m.rating >= 4 ? 'success' : m.rating >= 3 ? 'warning' : 'danger'}
+                          >
+                            {'★'.repeat(m.rating)}
+                          </Badge>{' '}
+                          {m.comment ? <span className="ep-field__help">{m.comment}</span> : null}
+                        </span>
+                      ) : null}
+                    </span>
+                    <form
+                      action={rateMeal}
+                      style={{
+                        display: 'flex',
+                        gap: 'var(--sp-2)',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <input type="hidden" name="studentId" value={kid.id} />
+                      <input type="hidden" name="mealId" value={m.mealId} />
+                      <input type="hidden" name="onDate" value={m.onDate} />
+                      <label className="ep-sr-only" htmlFor={`rt-${m.mealId}-${m.onDate}`}>
+                        {t(lang, 'Rating')} · {m.meal} · {m.onDate}
+                      </label>
+                      <select
+                        id={`rt-${m.mealId}-${m.onDate}`}
+                        name="rating"
+                        className="ep-select"
+                        defaultValue={String(m.rating ?? 4)}
+                      >
+                        {[5, 4, 3, 2, 1].map((n) => (
+                          <option key={n} value={n}>
+                            {'★'.repeat(n)} {n}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="ep-sr-only" htmlFor={`rc-${m.mealId}-${m.onDate}`}>
+                        {t(lang, 'Comment')} · {m.meal}
+                      </label>
+                      <input
+                        id={`rc-${m.mealId}-${m.onDate}`}
+                        name="comment"
+                        className="ep-input"
+                        maxLength={500}
+                        placeholder={t(lang, 'Comment (optional)')}
+                        defaultValue={m.comment ?? ''}
+                      />
+                      <Button type="submit" size="sm" variant="secondary">
+                        {m.rating ? t(lang, 'Change') : t(lang, 'Rate')}
+                      </Button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
           <Card title={t(lang, 'Complaints')} style={{ marginTop: 'var(--sp-4)' }}>
             <p className="ep-field__help">
               {t(

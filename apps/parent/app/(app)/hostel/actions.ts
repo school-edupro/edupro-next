@@ -82,3 +82,24 @@ export async function raiseComplaint(fd: FormData) {
   }
   redirect(`${back}&ok=complaint`);
 }
+
+/** The family rates a meal the child had (1 to 5, with a comment); a later rating replaces it. */
+export async function rateMeal(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/hostel?student=${encodeURIComponent(studentId)}`;
+  try {
+    await bff.api.fetch('/hostel/mine/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        mealId: str(fd, 'mealId'),
+        onDate: str(fd, 'onDate'),
+        rating: Number(str(fd, 'rating')),
+        comment: str(fd, 'comment'),
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=rated`);
+}

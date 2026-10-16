@@ -100,23 +100,27 @@ Communication → Templates.
   approve). The office adds people directly (Hostel → Visitors → Approved lists), approved at once.
 - **Visiting hours**: Set-up → Roll-call and leave rules → Visiting hours, one slot a day per hostel. No
   slots at all = visits any time.
-- **At the gate** (Hostel → Hostel visitor at the gate; Gate / Security and Front Desk): find the boarder,
-  see the approved list and whether visiting hours are on, enter the visitor (name, mobile, relation, a
-  live photo). On the list and in hours → let in, the parent is told. Otherwise the visitor **waits**: the
-  wardens get a message and allow or refuse from the staff app; the parent is told either way. The visit
-  is an entry of the visitor register, so it leaves through the same exit step.
+- **At the gate** — one visitor register for the school: Visitors → Register a visitor → **Hostel visit
+  (boarder)** (Gate / Security and Front Desk). Find the boarder, see the approved list and whether visiting
+  hours are on, enter the visitor (name, mobile, relation, a live photo). On the list and in hours → let
+  in, the parent is told. Otherwise the visitor **waits**: the wardens get a message and allow or refuse
+  (staff app, or Hostel → Visitors → Waiting at the gate); the parent is told either way. In the visitor
+  register the visit shows as _Hostel visitor_ with the boarder's hostel; while it waits it reads
+  "Waiting for the warden" and the gate cannot let it in there. It leaves through the same Exit step as
+  every visitor. Hostel → Visitors keeps the warden's work and links to the register.
 
 ## 8. Mess (Hostel → Mess)
 
-- **Meals** of each hostel with their time (Breakfast 07:30, Lunch 13:00 …).
-- **Weekly menu**: a grid of day × meal that repeats every week. **This week** shows the week with any
-  **change for a day** (a festival lunch); an empty change goes back to the weekly menu. Parents see
-  the week in the portal (Hostel → Mess menu).
-- **Meal attendance** (staff app → Hostel desk → Mess today → Who skipped): tick who skipped; everyone
-  else holding a bed and not away on leave had the meal.
-- **Diet list** for the kitchen: the warden sets each boarder's diet (vegetarian, with egg, non-veg, Jain,
-  vegan; no onion-garlic; a note); the allergy shown is the _Medical condition / allergy_ on the
-  student record.
+| Tab                    | What it does                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **This week**          | The week of a hostel (its week of the menu cycle) with any **change for a day** (a festival lunch; empty = back to the cycle's menu). **Excel / PDF** of the week for the notice board.                                                                                                                                                                                      |
+| **Menu cycle**         | The menu repeats every **1, 2, 3 or 4 weeks** from a Monday. Edit each week of the cycle; **copy a day** to other days (any week); **copy a week** to other weeks; **copy to other hostels** (replace their menu, or fill only empty meals).                                                                                                                                 |
+| **Meal attendance**    | Pick the day and meal; everyone holding a bed had it — tick who **skipped** and why. Pupils out on hostel leave at the meal's time are left out by themselves. (Also in the staff app.)                                                                                                                                                                                      |
+| **Meal register**      | The month of a hostel: each pupil, each meal of each day — **P** had, **X** skipped, **LV** away, **–** not marked. Totals; Excel / PDF.                                                                                                                                                                                                                                     |
+| **Kitchen head count** | For a day: each hostel's meals with **how many to cook**, split by diet, no onion-garlic and allergies; pupils away (or with approved home leave due to go) are left out. Excel / PDF for the cook.                                                                                                                                                                          |
+| **Diet list**          | Every boarder's diet (the school's default when none is set), no onion-garlic, allergies and the allergy on the student record. Filter by hostel, diet, allergy, set / default, pupil; pages; **Edit**, **Back to default**; **Excel upload** (download the format with the boarders, change, upload — every row is checked and nothing is saved on a mistake); Excel / PDF. |
+| **Feedback**           | Parents rate the meals of the last three days in the portal (1–5 with a comment, up to a week later). Each meal's average and spread, and the comments.                                                                                                                                                                                                                      |
+| **Set-up**             | **Meals** of the school (name, time, order) ticked for the hostels that serve them; a hostel may keep its own time. Delete only a meal never served — else switch it off. **Diet types** (one default) and **allergies** of the school.                                                                                                                                      |
 
 Messages (SMS / WhatsApp when ready under Communication → Templates): `hostel_visit_waiting` to the
 wardens, `hostel_visit_parent` to the parent.

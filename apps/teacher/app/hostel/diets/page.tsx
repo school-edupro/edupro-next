@@ -11,19 +11,21 @@ interface Row {
   admissionNo: string;
   room: string;
   diet: string;
+  dietName: string;
   noOnionGarlic: boolean;
+  allergies: string[];
   notes: string | null;
   allergy: string | null;
 }
-const DIETS = [
-  ['veg', 'Vegetarian'],
-  ['eggetarian', 'Vegetarian with egg'],
-  ['non_veg', 'Non-vegetarian'],
-  ['jain', 'Jain'],
-  ['vegan', 'Vegan'],
-] as const;
+interface Lists {
+  types: Array<{ code: string; name: string; active: boolean }>;
+  allergies: Array<{ id: string; name: string; active: boolean }>;
+}
 
-/** The kitchen's diet list of a hostel; the warden keeps each boarder's diet. Allergy comes from the student record. */
+/**
+ * The kitchen's diet list of a hostel; the warden keeps each boarder's diet and allergies (the school's
+ * diet types and allergy list, 0161). The allergy on the student record is shown too.
+ */
 export default async function DietsPage({
   searchParams,
 }: {
@@ -33,21 +35,28 @@ export default async function DietsPage({
   const lang = await currentLang();
   if (!/^\d{1,18}$/.test(sp.hostelId ?? '')) redirect('/hostel');
   let rows: Row[];
+  let lists: Lists;
   try {
-    rows = (await bff.api.fetch<{ data: Row[] }>(`/hostel/diets?hostelId=${sp.hostelId}`)).data;
+    [rows, lists] = await Promise.all([
+      bff.api
+        .fetch<{ data: Row[] }>(`/hostel/diets?hostelId=${sp.hostelId}&size=200`)
+        .then((r) => r.data),
+      bff.api.fetch<Lists>('/hostel/mess/diet-types'),
+    ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403) redirect('/hostel');
     throw error;
   }
   const count = (d: string) => rows.filter((r) => r.diet === d).length;
+  const DIETS = lists.types.map((x) => [x.code, x.name] as const);
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
         kicker={t(lang, 'Hostel')}
         title={t(lang, 'Diet list for the kitchen')}
         description={DIETS.filter(([d]) => count(d))
-          .map(([d, label]) => `${t(lang, label)}: ${String(count(d))}`)
+          .map(([d, label]) => `${label}: ${String(count(d))}`)
           .join(' · ')}
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/hostel">
@@ -82,11 +91,11 @@ export default async function DietsPage({
                 <span className="ep-field__help">
                   {r.admissionNo} · {t(lang, 'Room')} {r.room}
                 </span>
-                {r.allergy ? (
-                  <span style={{ display: 'block' }}>
-                    <Badge tone="danger">{r.allergy}</Badge>
+                {[...r.allergies, ...(r.allergy ? [r.allergy] : [])].map((a) => (
+                  <span key={a} style={{ display: 'block' }}>
+                    <Badge tone="danger">{a}</Badge>
                   </span>
-                ) : null}
+                ))}
               </span>
               <form
                 action={saveDiet}
@@ -108,16 +117,34 @@ export default async function DietsPage({
                   className="ep-select"
                   defaultValue={r.diet}
                 >
-                  {DIETS.map(([d, label]) => (
-                    <option key={d} value={d}>
-                      {t(lang, label)}
-                    </option>
-                  ))}
+                  {lists.types
+                    .filter((x) => x.active || x.code === r.diet)
+                    .map((x) => (
+                      <option key={x.code} value={x.code}>
+                        {x.name}
+                      </option>
+                    ))}
                 </select>
                 <label style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
                   <input type="checkbox" name="noOnionGarlic" defaultChecked={r.noOnionGarlic} />
                   {t(lang, 'No onion-garlic')}
                 </label>
+                {lists.allergies
+                  .filter((a) => a.active || r.allergies.includes(a.name))
+                  .map((a) => (
+                    <label
+                      key={a.id}
+                      style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}
+                    >
+                      <input
+                        type="checkbox"
+                        name="allergy"
+                        value={a.name}
+                        defaultChecked={r.allergies.includes(a.name)}
+                      />
+                      {a.name}
+                    </label>
+                  ))}
                 <label className="ep-sr-only" htmlFor={`n-${r.studentId}`}>
                   {t(lang, 'Note')} · {r.name}
                 </label>

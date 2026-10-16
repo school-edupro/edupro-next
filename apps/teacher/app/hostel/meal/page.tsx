@@ -18,17 +18,12 @@ interface Roll {
     skipped: boolean;
     reason: string | null;
     diet: string;
+    dietName: string;
     noOnionGarlic: boolean;
+    allergies: string[];
     allergy: string | null;
   }>;
 }
-const DIET: Record<string, string> = {
-  veg: 'Veg',
-  non_veg: 'Non-veg',
-  eggetarian: 'Egg',
-  jain: 'Jain',
-  vegan: 'Vegan',
-};
 
 /** Who skipped a meal: tick them; everyone else holding a bed and not away on leave had it. */
 export default async function MealPage({
@@ -116,11 +111,15 @@ export default async function MealPage({
                   <span className="ep-field__help">
                     {p.admissionNo} · {t(lang, 'Room')} {p.room}
                   </span>
-                  {p.allergy ? <span className="ep-field__error">{p.allergy}</span> : null}
+                  {[...p.allergies, ...(p.allergy ? [p.allergy] : [])].map((a) => (
+                    <span key={a} className="ep-field__error">
+                      {a}
+                    </span>
+                  ))}
                 </label>
                 <span className="fp-pay__amt">
                   <Badge tone="info">
-                    {DIET[p.diet] ?? p.diet}
+                    {p.dietName}
                     {p.noOnionGarlic ? ' · no onion-garlic' : ''}
                   </Badge>
                   {p.away ? <Badge tone="neutral">{t(lang, 'On leave')}</Badge> : null}

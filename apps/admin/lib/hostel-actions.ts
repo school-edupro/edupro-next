@@ -398,44 +398,6 @@ export async function saveVisitHours(fd: FormData) {
   done(to, hours.length ? 'Visiting hours saved.' : 'Visiting hours cleared: visits any time.');
 }
 
-export async function saveMeal(fd: FormData) {
-  const to = here(fd, `${BASE}/mess`);
-  const id = str(fd, 'id');
-  try {
-    await apiFetch(id ? `/hostel/meals/${id}` : '/hostel/meals', {
-      method: id ? 'PUT' : 'POST',
-      body: JSON.stringify({
-        hostelId: str(fd, 'hostelId'),
-        name: str(fd, 'name'),
-        atTime: str(fd, 'atTime'),
-        active: id ? fd.get('active') === 'on' : true,
-      }),
-    });
-  } catch (error) {
-    back(to, error);
-  }
-  done(to, id ? 'Meal saved.' : 'Meal added.');
-}
-
-/** The weekly menu grid: a cell per meal and weekday (m-<mealId>-<weekday>). */
-export async function saveMenuWeek(fd: FormData) {
-  const to = here(fd, `${BASE}/mess`);
-  const entries: Array<{ mealId: string; weekday: number; items: string }> = [];
-  for (const [k, v] of fd.entries()) {
-    const m = /^m-(\d{1,18})-([0-6])$/.exec(k);
-    if (m) entries.push({ mealId: m[1]!, weekday: Number(m[2]), items: String(v).trim() });
-  }
-  try {
-    await apiFetch('/hostel/menu', {
-      method: 'PUT',
-      body: JSON.stringify({ hostelId: str(fd, 'hostelId'), entries }),
-    });
-  } catch (error) {
-    back(to, error);
-  }
-  done(to, 'Weekly menu saved.');
-}
-
 export async function saveMenuChange(fd: FormData) {
   const to = here(fd, `${BASE}/mess`);
   try {
