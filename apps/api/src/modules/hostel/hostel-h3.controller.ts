@@ -246,15 +246,6 @@ export class HostelH3Controller {
     return this.mess.saveMealRoll(ctx, dto);
   }
 
-  @Get('diets')
-  @ApiOperation({
-    summary: "The kitchen's diet list of a hostel: diet, no onion-garlic, allergy on record",
-  })
-  @RequirePermission(HOSTEL_H3.mess)
-  async diets(@ReqCtx() ctx: RequestContext, @Query('hostelId') hostelId: string) {
-    return { data: await this.mess.diets(ctx, hostelId) };
-  }
-
   @Put('diets/:studentId')
   @RequirePermission(HOSTEL_H3.mess)
   saveDiet(

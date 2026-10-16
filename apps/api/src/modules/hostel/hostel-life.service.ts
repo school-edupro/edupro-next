@@ -27,7 +27,7 @@ export const ROLL_CODE: Record<string, string> = {
 };
 
 /** A short, distinct column head for each session: M, N; Mo, Mi when two start alike. */
-function shortNames(names: string[]): string[] {
+export function shortNames(names: string[]): string[] {
   const out: string[] = [];
   for (const n of names) {
     const clean = n.replace(/[^A-Za-z0-9]/g, '') || 'S';

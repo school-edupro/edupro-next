@@ -2,8 +2,11 @@
  * Hostel module H3 (0149): the approved-visitor list (parent adds, warden approves, office adds directly,
  * parents on record count), visiting hours, hostel visits at the gate (in when listed and in hours, else
  * waiting for the warden), and the mess (meals, weekly menu with a dated change, meal attendance with the
- * away pupils left out, diets with the allergy on record, the family's menu).
+ * away pupils left out, diets with the allergy on record, the family's menu). The mess rebuilt (0161):
+ * school meals ticked per hostel, the rotating menu with copy, clone and export, the school's diet types and
+ * allergies, the diet list (filters, pages, upload, export), the meal register, the head count, feedback.
  */
+import ExcelJS from 'exceljs';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
   createApp,
@@ -378,5 +381,349 @@ describe('hostel module H3 (e2e)', () => {
       (await inject({ method: 'GET', url: `/hostel/diets?hostelId=${ids.bh}`, headers: h(other) }))
         .statusCode,
     ).toBe(403);
+  });
+
+  // ---- the mess rebuilt (0161) -----------------------------------------------------------------------------
+  const del = (url: string, u: SeededUser) => inject({ method: 'DELETE', url, headers: h(u) });
+  const addDays = (d: string, n: number) => {
+    const x = new Date(`${d}T00:00:00Z`);
+    x.setUTCDate(x.getUTCDate() + n);
+    return x.toISOString().slice(0, 10);
+  };
+  const monday = (() => {
+    const d = new Date(`${today}T00:00:00Z`);
+    return addDays(today, -((d.getUTCDay() + 6) % 7));
+  })();
+  type MessMeal = {
+    id: string;
+    name: string;
+    hostels: Array<{ hostelId: string; atTime: string; mealId: string; used: boolean }>;
+  };
+
+  it('school meals: one meal for many hostels (own time), office only; delete only when never served', async () => {
+    const list = (await get('/hostel/mess/meals')) as { meals: MessMeal[] };
+    const lunch = list.meals.find((m) => m.name === 'Lunch')!;
+    expect(lunch.hostels.map((x) => x.hostelId)).toEqual([ids.bh]);
+    ids.lunchDef = lunch.id;
+    const both = await put(`/hostel/mess/meals/${lunch.id}`, admin, {
+      name: 'Lunch',
+      atTime: '13:00',
+      hostels: [{ hostelId: ids.bh }, { hostelId: ids.oh, atTime: '13:30' }],
+    });
+    expect(both.statusCode).toBe(200);
+    const after = ((await get('/hostel/mess/meals')) as { meals: MessMeal[] }).meals.find(
+      (m) => m.id === lunch.id,
+    )!;
+    expect(after.hostels.find((x) => x.hostelId === ids.oh)).toMatchObject({ atTime: '13:30' });
+    expect(after.hostels.find((x) => x.hostelId === ids.bh)).toMatchObject({ used: true });
+    // the old per-hostel meal list still shows it (staff app)
+    expect(
+      (await get(`/hostel/meals?hostelId=${ids.oh}`)).data.map((m: { name: string }) => m.name),
+    ).toEqual(['Lunch']);
+    const snacks = await post('/hostel/mess/meals', admin, {
+      name: 'Snacks',
+      atTime: '17:00',
+      hostels: [{ hostelId: ids.oh }],
+    });
+    expect(snacks.statusCode).toBe(201);
+    expect(
+      (await post('/hostel/mess/meals', admin, { name: 'snacks', atTime: '17:00', hostels: [] }))
+        .statusCode,
+    ).toBe(409);
+    expect(
+      (await post('/hostel/mess/meals', warden, { name: 'Tea', atTime: '06:00', hostels: [] }))
+        .statusCode,
+    ).toBe(403);
+    expect((await del(`/hostel/mess/meals/${snacks.json().id as string}`, admin)).statusCode).toBe(
+      200,
+    );
+    expect((await del(`/hostel/mess/meals/${lunch.id}`, admin)).json()).toMatchObject({
+      type: expect.stringContaining('hostel.meal_used'),
+    });
+  });
+
+  it('the menu: a 2-week cycle, copy a day and a week, clone to another hostel, Excel and PDF', async () => {
+    const cy = await put('/hostel/menu/cycle', warden, {
+      hostelId: ids.bh,
+      weeks: 2,
+      start: monday,
+    });
+    expect(cy.json()).toMatchObject({ cycleWeeks: 2, thisWeek: 1 });
+    expect(
+      (
+        await put('/hostel/menu/cycle', warden, {
+          hostelId: ids.bh,
+          weeks: 2,
+          start: addDays(monday, 1),
+        })
+      ).statusCode,
+    ).toBe(400);
+    const w2 = await put('/hostel/menu', warden, {
+      hostelId: ids.bh,
+      cycleWeek: 2,
+      entries: [{ mealId: ids.lunch, weekday: 1, items: 'Week 2 Monday lunch' }],
+    });
+    expect(w2.json().days[0]).toMatchObject({ day: 'Monday' });
+    expect(w2.json().days[0].items[0]).toBe('Week 2 Monday lunch');
+    // next week is week 2 of the cycle; this week still shows week 1
+    const next = await get(`/hostel/menu?hostelId=${ids.bh}&weekOf=${addDays(monday, 7)}`, warden);
+    expect(next).toMatchObject({ cycleWeek: 2, cycleWeeks: 2 });
+    expect(next.days[0].meals.find((m: { meal: string }) => m.meal === 'Lunch').items).toBe(
+      'Week 2 Monday lunch',
+    );
+    expect((await get(`/hostel/menu?hostelId=${ids.bh}&weekOf=${monday}`, warden)).cycleWeek).toBe(
+      1,
+    );
+    // Monday of week 2 to Wednesday of week 2
+    const day = await post('/hostel/menu/copy', warden, {
+      hostelId: ids.bh,
+      fromWeek: 2,
+      fromWeekday: 1,
+      to: [{ week: 2, weekday: 3 }],
+    });
+    expect(day.json().copied).toBeGreaterThan(0);
+    const t2 = await get(`/hostel/menu/template?hostelId=${ids.bh}&week=2`, warden);
+    expect(t2.days.find((d: { weekday: number }) => d.weekday === 3).items[0]).toBe(
+      'Week 2 Monday lunch',
+    );
+    // a day cannot go to a whole week; a week 3 does not exist in a 2-week cycle
+    expect(
+      (
+        await post('/hostel/menu/copy', warden, {
+          hostelId: ids.bh,
+          fromWeek: 1,
+          fromWeekday: 1,
+          to: [{ week: 2 }],
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await post('/hostel/menu/copy', warden, {
+          hostelId: ids.bh,
+          fromWeek: 1,
+          to: [{ week: 3 }],
+        })
+      ).statusCode,
+    ).toBe(400);
+    // the whole of week 1 to week 2
+    await post('/hostel/menu/copy', warden, { hostelId: ids.bh, fromWeek: 1, to: [{ week: 2 }] });
+    expect(
+      (await get(`/hostel/menu/template?hostelId=${ids.bh}&week=2`, warden)).days[0].items[0],
+    ).toBe('Dal, rice, roti (1)');
+    // clone to the other hostel: Lunch is served there, Dinner is not
+    expect(
+      (
+        await post('/hostel/menu/clone', warden, {
+          fromHostelId: ids.bh,
+          toHostelIds: [ids.oh],
+          mode: 'replace',
+        })
+      ).statusCode,
+    ).toBe(403);
+    const cl = await post('/hostel/menu/clone', admin, {
+      fromHostelId: ids.bh,
+      toHostelIds: [ids.oh],
+      mode: 'replace',
+    });
+    expect(cl.json().copied).toBe(14);
+    expect(cl.json().missing).toEqual(['Other Hostel: Dinner']);
+    const oh = await get(`/hostel/menu/template?hostelId=${ids.oh}&week=1`);
+    expect(oh).toMatchObject({ cycleWeeks: 2 });
+    expect(oh.days[0].items[0]).toBe('Dal, rice, roti (1)');
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await get(
+        `/hostel/menu/file?hostelId=${ids.bh}&weekOf=${today}&format=${format}`,
+        warden,
+      );
+      expect(f.filename).toBe(`mess-menu-${monday}.${format}`);
+      expect(f.base64.length).toBeGreaterThan(100);
+    }
+  });
+
+  it('diet types and allergies of the school; the diet list filtered, paged, uploaded, cleared, exported', async () => {
+    type Lists = {
+      types: Array<{ id: string; code: string; name: string; isDefault: boolean; active: boolean }>;
+      allergies: Array<{ id: string; name: string; active: boolean }>;
+    };
+    const lists = (await get('/hostel/mess/diet-types', warden)) as Lists;
+    expect(lists.types.map((t) => t.code)).toEqual([
+      'veg',
+      'non_veg',
+      'eggetarian',
+      'jain',
+      'vegan',
+    ]);
+    expect(lists.types.find((t) => t.isDefault)!.code).toBe('veg');
+    expect(lists.allergies.length).toBe(8);
+    const keep = (codes: string[]) => lists.types.filter((t) => codes.includes(t.code));
+    // kabir is jain (the earlier case): jain cannot go; vegan can
+    expect(
+      (
+        await put('/hostel/mess/diet-types', admin, {
+          types: keep(['veg', 'non_veg', 'eggetarian']),
+          allergies: lists.allergies,
+        })
+      ).json(),
+    ).toMatchObject({ type: expect.stringContaining('hostel.diet_used') });
+    const saved = await put('/hostel/mess/diet-types', admin, {
+      types: [
+        ...keep(['veg', 'non_veg', 'eggetarian', 'jain']),
+        { code: 'sattvic', name: 'Sattvic', active: true, isDefault: false },
+      ],
+      allergies: [...lists.allergies, { name: 'Mustard', active: true }],
+    });
+    expect(saved.statusCode).toBe(200);
+    expect((saved.json() as Lists).types.map((t) => t.code)).toContain('sattvic');
+    expect((await put('/hostel/mess/diet-types', warden, saved.json())).statusCode).toBe(403);
+    const d = await put(`/hostel/diets/${ids.kabir}`, warden, {
+      diet: 'sattvic',
+      noOnionGarlic: true,
+      allergies: ['mustard', 'Peanuts'],
+    });
+    expect(d.json()).toMatchObject({ diet: 'sattvic', allergies: ['Mustard', 'Peanuts'] });
+    expect(
+      (await put(`/hostel/diets/${ids.kabir}`, warden, { diet: 'keto' })).json(),
+    ).toMatchObject({ type: expect.stringContaining('hostel.diet_unknown') });
+    expect(
+      (
+        await put(`/hostel/diets/${ids.kabir}`, warden, { diet: 'veg', allergies: ['Pollen'] })
+      ).json(),
+    ).toMatchObject({ type: expect.stringContaining('hostel.allergy_unknown') });
+    const byDiet = await get('/hostel/diets?diet=sattvic', warden);
+    expect(byDiet).toMatchObject({ total: 1, page: 1 });
+    expect(byDiet.data[0]).toMatchObject({
+      name: 'Kabir Boarder',
+      dietName: 'Sattvic',
+      hostel: 'Boys Hostel',
+    });
+    expect(byDiet.counts).toEqual([{ diet: 'sattvic', name: 'Sattvic', n: 1 }]);
+    expect((await get('/hostel/diets?allergy=Mustard', warden)).total).toBe(1);
+    expect((await get('/hostel/diets?allergy=_record', warden)).total).toBe(1);
+    expect((await get('/hostel/diets?set=unset', warden)).total).toBe(0);
+    expect((await get('/hostel/diets?q=nobody', warden)).total).toBe(0);
+    // the other hostel's warden sees no boarder of this hostel
+    expect((await get('/hostel/diets', other)).total).toBe(0);
+    // upload: the format comes with the boarders; a wrong row saves nothing
+    const tpl = await get(`/hostel/diets/template?hostelId=${ids.bh}`, warden);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(tpl.base64 as string, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    expect(ws.getRow(2).getCell(3).value).toBe('Sattvic');
+    ws.getRow(2).getCell(3).value = 'Non-vegetarian';
+    ws.getRow(2).getCell(5).value = 'Gluten';
+    ['NOPE-1', 'Ghost', 'Vegetarian', 'No'].forEach((v, i) => {
+      ws.getRow(3).getCell(i + 1).value = v;
+    });
+    const bad = await post('/hostel/diets/upload', warden, {
+      fileBase64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+    });
+    expect(bad.json()).toMatchObject({
+      saved: 0,
+      errors: [{ row: 3, message: 'No pupil with admission no. NOPE-1' }],
+    });
+    [1, 2, 3, 4].forEach((i) => {
+      ws.getRow(3).getCell(i).value = null;
+    });
+    const good = await post('/hostel/diets/upload', warden, {
+      fileBase64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+    });
+    expect(good.json()).toMatchObject({ saved: 1, errors: [] });
+    expect((await get('/hostel/diets', warden)).data[0]).toMatchObject({
+      diet: 'non_veg',
+      allergies: ['Gluten'],
+    });
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await get(`/hostel/diets/file?format=${format}`, warden);
+      expect(f.filename).toBe(`hostel-diet-list.${format}`);
+    }
+    expect((await del(`/hostel/diets/${ids.kabir}`, warden)).statusCode).toBe(200);
+    expect((await get('/hostel/diets', warden)).data[0]).toMatchObject({ diet: 'veg', set: false });
+    expect((await del(`/hostel/diets/${ids.kabir}`, warden)).statusCode).toBe(404);
+  });
+
+  it('the meal register, the kitchen head count, and the family rates a meal', async () => {
+    const month = today.slice(0, 7);
+    const reg = await get(`/hostel/meal-register?month=${month}&hostelId=${ids.bh}`, warden);
+    expect(reg.meals.map((m: { short: string }) => m.short)).toEqual(['L', 'D']);
+    const kabir = reg.rows[0];
+    const at = (reg.days.length - 1) * 2;
+    // lunch today was marked with Kabir skipping; dinner not marked
+    expect(kabir.cells.slice(at)).toEqual(['X', '-']);
+    expect(kabir).toMatchObject({ skipped: 1, had: 0 });
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/hostel/meal-register?month=${month}&hostelId=${ids.bh}`,
+          headers: h(other),
+        })
+      ).statusCode,
+    ).toBe(403);
+    for (const format of ['xlsx', 'pdf'])
+      expect(
+        (await get(`/hostel/meal-register/file?month=${month}&format=${format}`, warden)).filename,
+      ).toBe(`hostel-meal-register-${month}.${format}`);
+    const hc = await get(`/hostel/headcount?on=${today}`, warden);
+    const lunch = hc.rows.find((r: { meal: string }) => r.meal === 'Lunch');
+    expect(lunch).toMatchObject({
+      hostel: 'Boys Hostel',
+      boarders: 1,
+      away: 0,
+      toCook: 1,
+      onRecord: 1,
+    });
+    expect(lunch.byDiet.find((x: { diet: string }) => x.diet === 'veg').n).toBe(1);
+    expect(lunch.marked).toMatchObject({ had: 0, skipped: 1 });
+    expect((await get(`/hostel/headcount/file?on=${today}&format=pdf`, warden)).filename).toBe(
+      `kitchen-head-count-${today}.pdf`,
+    );
+    // feedback on a meal already served today (an early tea at 00:01)
+    const tea = await post('/hostel/mess/meals', admin, {
+      name: 'Early tea',
+      atTime: '00:01',
+      hostels: [{ hostelId: ids.bh }],
+    });
+    const teaMeal = ((await get('/hostel/mess/meals')) as { meals: MessMeal[] }).meals.find(
+      (m) => m.id === tea.json().id,
+    )!.hostels[0]!.mealId;
+    const mine = await get(`/hostel/mine/feedback?studentId=${ids.kabir}`, parent);
+    expect(mine.data.map((x: { mealId: string }) => x.mealId)).toContain(teaMeal);
+    const rate = await post('/hostel/mine/feedback', parent, {
+      studentId: ids.kabir,
+      mealId: teaMeal,
+      onDate: today,
+      rating: 4,
+      comment: 'Tea was cold',
+    });
+    expect(rate.statusCode).toBe(201);
+    await post('/hostel/mine/feedback', parent, {
+      studentId: ids.kabir,
+      mealId: teaMeal,
+      onDate: today,
+      rating: 2,
+      comment: 'Tea was cold again',
+    });
+    expect(
+      (
+        await post('/hostel/mine/feedback', parent, {
+          studentId: ids.kabir,
+          mealId: teaMeal,
+          onDate: addDays(today, 1),
+          rating: 5,
+        })
+      ).json(),
+    ).toMatchObject({ type: expect.stringContaining('hostel.feedback_window') });
+    const fb = await get(`/hostel/feedback?hostelId=${ids.bh}`, warden);
+    expect(fb.meals).toEqual([
+      expect.objectContaining({
+        meal: 'Early tea',
+        ratings: 1,
+        average: 2,
+        spread: [0, 1, 0, 0, 0],
+      }),
+    ]);
+    expect(fb.comments[0]).toMatchObject({ pupil: 'Kabir Boarder', comment: 'Tea was cold again' });
+    expect((await get('/hostel/feedback', other)).meals).toEqual([]);
   });
 });

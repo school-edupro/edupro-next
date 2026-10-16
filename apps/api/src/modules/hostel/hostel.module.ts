@@ -5,6 +5,9 @@ import { HostelLifeController } from './hostel-life.controller';
 import { HostelLifeService } from './hostel-life.service';
 import { HostelH3Controller } from './hostel-h3.controller';
 import { HostelMessService } from './hostel-mess.service';
+import { HostelMessController } from './hostel-mess.controller';
+import { HostelDietsService } from './hostel-diets.service';
+import { HostelMealReportsService } from './hostel-meal-reports.service';
 import { HostelVisitsService } from './hostel-visits.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
 import { EngagementModule } from '../engagement/engagement.module';
@@ -29,6 +32,7 @@ import { HW_FLOW } from './hostel-withdrawals.service';
     HostelController,
     HostelLifeController,
     HostelH3Controller,
+    HostelMessController,
     HostelCareController,
     HostelWithdrawalController,
     HostelReportsController,
@@ -39,6 +43,8 @@ import { HW_FLOW } from './hostel-withdrawals.service';
     HostelLifeService,
     HostelVisitsService,
     HostelMessService,
+    HostelDietsService,
+    HostelMealReportsService,
     HostelCareService,
     HostelWithdrawalsService,
     HostelReportsService,

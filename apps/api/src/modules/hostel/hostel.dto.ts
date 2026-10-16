@@ -287,6 +287,8 @@ export class MealDto extends createZodDto(MealSchema) {}
 
 export const MenuWeekSchema = z.object({
   hostelId: IdSchema,
+  /** The week of the rotating cycle (0161); 1 for a menu that repeats every week. */
+  cycleWeek: z.number().int().min(1).max(4).default(1),
   entries: z
     .array(
       z.object({
@@ -322,8 +324,14 @@ export const MealRollSaveSchema = z.object({
 export class MealRollSaveDto extends createZodDto(MealRollSaveSchema) {}
 
 export const DietSchema = z.object({
-  diet: z.enum(['veg', 'non_veg', 'eggetarian', 'jain', 'vegan']),
+  /** One of the school's diet types (0161; veg, non_veg, eggetarian, jain, vegan to begin with). */
+  diet: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{0,29}$/),
   noOnionGarlic: z.boolean().default(false),
+  /** Names from the school's allergy list. */
+  allergies: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   notes: Optional(200),
 });
 export class DietDto extends createZodDto(DietSchema) {}
