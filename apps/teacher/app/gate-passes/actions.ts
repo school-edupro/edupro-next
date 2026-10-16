@@ -78,3 +78,13 @@ export async function cancelGatePass(fd: FormData) {
   }
   redirect('/gate-passes?ok=cancelled');
 }
+
+/** One action per button: a button's own name/value does not reach a server action. */
+export async function approveGatePass(fd: FormData) {
+  fd.set('outcome', 'approved');
+  return decideGatePass(fd);
+}
+export async function rejectGatePass(fd: FormData) {
+  fd.set('outcome', 'rejected');
+  return decideGatePass(fd);
+}

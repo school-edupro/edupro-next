@@ -226,3 +226,21 @@ export async function saveIncident(fd: FormData) {
     )}`,
   );
 }
+
+/** One action per button: a button's own name/value does not reach a server action. */
+export async function allowVisit(fd: FormData) {
+  fd.set('outcome', 'allowed');
+  return decideVisit(fd);
+}
+export async function refuseVisit(fd: FormData) {
+  fd.set('outcome', 'refused');
+  return decideVisit(fd);
+}
+export async function approveVisitor(fd: FormData) {
+  fd.set('outcome', 'approved');
+  return decideVisitor(fd);
+}
+export async function rejectVisitor(fd: FormData) {
+  fd.set('outcome', 'rejected');
+  return decideVisitor(fd);
+}

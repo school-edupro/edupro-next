@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { cancelGatePass, decideGatePass } from './actions';
+import { approveGatePass, cancelGatePass, decideGatePass, rejectGatePass } from './actions';
 
 interface Pass {
   id: string;
@@ -179,10 +179,10 @@ export default async function GatePassesPage({
               <input id={`n-${p.id}`} name="note" className="ep-input" maxLength={300} />
             </label>
             <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-              <Button type="submit" name="outcome" value="approved" size="sm">
+              <Button type="submit" formAction={approveGatePass} size="sm">
                 {t(lang, 'Approve')}
               </Button>
-              <Button type="submit" name="outcome" value="rejected" size="sm" variant="secondary">
+              <Button type="submit" formAction={rejectGatePass} size="sm" variant="secondary">
                 {t(lang, 'Reject')}
               </Button>
             </div>

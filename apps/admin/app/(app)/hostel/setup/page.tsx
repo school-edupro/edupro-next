@@ -457,34 +457,30 @@ export default async function HostelSetupPage({
                           className={`hs-bed${b.status === 'active' ? '' : ' hs-bed--blocked'}`}
                         >
                           <span className="hs-bed__label">{b.label}</span>
-                          <form
-                            action={setBed}
-                            style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}
-                          >
+                          {/* one form per button: a button's own name/value does not reach a server action */}
+                          <form action={setBed} style={{ display: 'inline-flex' }}>
                             <input type="hidden" name="id" value={b.id} />
                             <input type="hidden" name="label" value={b.label} />
-                            <input type="hidden" name="returnTo" value={back()} />
-                            <Button
-                              type="submit"
+                            <input
+                              type="hidden"
                               name="status"
                               value={b.status === 'active' ? 'blocked' : 'active'}
-                              variant="ghost"
-                              size="sm"
-                            >
+                            />
+                            <input type="hidden" name="returnTo" value={back()} />
+                            <Button type="submit" variant="ghost" size="sm">
                               {b.status === 'active' ? 'Block' : 'Unblock'}
                             </Button>
-                            {b.used ? null : (
-                              <Button
-                                type="submit"
-                                name="do"
-                                value="delete"
-                                variant="ghost"
-                                size="sm"
-                              >
+                          </form>
+                          {b.used ? null : (
+                            <form action={setBed} style={{ display: 'inline-flex' }}>
+                              <input type="hidden" name="id" value={b.id} />
+                              <input type="hidden" name="do" value="delete" />
+                              <input type="hidden" name="returnTo" value={back()} />
+                              <Button type="submit" variant="ghost" size="sm">
                                 Remove
                               </Button>
-                            )}
-                          </form>
+                            </form>
+                          )}
                         </li>
                       ))}
                     </ul>

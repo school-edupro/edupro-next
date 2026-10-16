@@ -172,25 +172,25 @@ export default async function HostelVisitorsPage({
                     </span>
                   </span>
                   {v.state === 'waiting' && may('hostel.visit.decide') ? (
-                    <form
-                      action={decideHostelVisit}
-                      style={{ display: 'flex', gap: 'var(--sp-2)' }}
-                    >
-                      <input type="hidden" name="id" value={v.id} />
-                      <input type="hidden" name="returnTo" value={here} />
-                      <Button type="submit" name="outcome" value="allowed" size="sm">
-                        Allow in
-                      </Button>
-                      <Button
-                        type="submit"
-                        name="outcome"
-                        value="refused"
-                        size="sm"
-                        variant="secondary"
-                      >
-                        Refuse
-                      </Button>
-                    </form>
+                    <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                      {/* one form per choice: a button's own name/value does not reach a server action */}
+                      <form action={decideHostelVisit}>
+                        <input type="hidden" name="id" value={v.id} />
+                        <input type="hidden" name="returnTo" value={here} />
+                        <input type="hidden" name="outcome" value="allowed" />
+                        <Button type="submit" size="sm">
+                          Allow in
+                        </Button>
+                      </form>
+                      <form action={decideHostelVisit}>
+                        <input type="hidden" name="id" value={v.id} />
+                        <input type="hidden" name="returnTo" value={here} />
+                        <input type="hidden" name="outcome" value="refused" />
+                        <Button type="submit" size="sm" variant="secondary">
+                          Refuse
+                        </Button>
+                      </form>
+                    </span>
                   ) : null}
                 </li>
               ))}
@@ -225,25 +225,25 @@ export default async function HostelVisitorsPage({
                     </span>
                   </span>
                   {may('hostel.visit.decide') ? (
-                    <form
-                      action={decideHostelVisitor}
-                      style={{ display: 'flex', gap: 'var(--sp-2)' }}
-                    >
-                      <input type="hidden" name="id" value={v.id} />
-                      <input type="hidden" name="returnTo" value={here} />
-                      <Button type="submit" name="outcome" value="approved" size="sm">
-                        Approve
-                      </Button>
-                      <Button
-                        type="submit"
-                        name="outcome"
-                        value="rejected"
-                        size="sm"
-                        variant="secondary"
-                      >
-                        Reject
-                      </Button>
-                    </form>
+                    <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                      {/* one form per choice: a button's own name/value does not reach a server action */}
+                      <form action={decideHostelVisitor}>
+                        <input type="hidden" name="id" value={v.id} />
+                        <input type="hidden" name="returnTo" value={here} />
+                        <input type="hidden" name="outcome" value="approved" />
+                        <Button type="submit" size="sm">
+                          Approve
+                        </Button>
+                      </form>
+                      <form action={decideHostelVisitor}>
+                        <input type="hidden" name="id" value={v.id} />
+                        <input type="hidden" name="returnTo" value={here} />
+                        <input type="hidden" name="outcome" value="rejected" />
+                        <Button type="submit" size="sm" variant="secondary">
+                          Reject
+                        </Button>
+                      </form>
+                    </span>
                   ) : null}
                 </li>
               ))}

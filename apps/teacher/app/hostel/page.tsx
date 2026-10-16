@@ -3,7 +3,14 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { decideVisit, decideVisitor } from './actions';
+import {
+  allowVisit,
+  approveVisitor,
+  decideVisit,
+  decideVisitor,
+  refuseVisit,
+  rejectVisitor,
+} from './actions';
 
 interface Today {
   boarders: number;
@@ -225,16 +232,14 @@ export default async function HostelDeskPage({
                   <input type="hidden" name="id" value={v.id} />
                   <button
                     type="submit"
-                    name="outcome"
-                    value="allowed"
+                    formAction={allowVisit}
                     className="ep-btn ep-btn--primary ep-btn--sm"
                   >
                     {t(lang, 'Allow in')}
                   </button>
                   <button
                     type="submit"
-                    name="outcome"
-                    value="refused"
+                    formAction={refuseVisit}
                     className="ep-btn ep-btn--secondary ep-btn--sm"
                   >
                     {t(lang, 'Refuse')}
@@ -464,16 +469,14 @@ export default async function HostelDeskPage({
                   <input type="hidden" name="id" value={v.id} />
                   <button
                     type="submit"
-                    name="outcome"
-                    value="approved"
+                    formAction={approveVisitor}
                     className="ep-btn ep-btn--primary ep-btn--sm"
                   >
                     {t(lang, 'Approve')}
                   </button>
                   <button
                     type="submit"
-                    name="outcome"
-                    value="rejected"
+                    formAction={rejectVisitor}
                     className="ep-btn ep-btn--secondary ep-btn--sm"
                   >
                     {t(lang, 'Reject')}
