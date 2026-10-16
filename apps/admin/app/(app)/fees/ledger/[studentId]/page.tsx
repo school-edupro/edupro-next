@@ -139,9 +139,11 @@ export default async function FeeLedgerPage({
   const ledger = await apiFetch<FeeLedger>(
     `/fees/students/${studentId}/ledger${sp.asOf ? `?asOf=${sp.asOf}` : ''}`,
   );
-  // All fee, Regular (school fee) or Hosteller (hostel fee): every tab shows the fee chosen
+  // All fee, Regular (school fee) or Hosteller (hostel fee): every tab shows the fee chosen. A pupil with
+  // no hostel fee this session (a day scholar) has no fee choice: everything is school fee.
+  const hasHostelFee = ledger.instalments.some((i) => i.ledger === 'hostel');
   const fee: 'all' | 'school' | 'hostel' =
-    sp.fee === 'school' || sp.fee === 'hostel' ? sp.fee : 'all';
+    hasHostelFee && (sp.fee === 'school' || sp.fee === 'hostel') ? sp.fee : 'all';
   const onFee = (l: string) => fee === 'all' || l === fee;
   const inst = ledger.instalments.filter((i) => onFee(i.ledger));
   const pays = ledger.payments.filter((p) => onFee(p.ledger));
@@ -382,27 +384,28 @@ export default async function FeeLedgerPage({
           </a>
         ))}
       </nav>
-      <nav
-        aria-label="Fee type"
-        className="ep-tabs-links ep-noprint"
-        style={{ marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}
-      >
-        {(
-          [
-            ['all', 'All'],
-            ['school', 'Regular (school fee)'],
-            ['hostel', 'Hosteller (hostel fee)'],
-          ] as const
-        ).map(([f, label]) => (
-          <a key={f} href={link(tab, f)} aria-current={f === fee ? 'page' : undefined}>
-            {label}
-          </a>
-        ))}
-      </nav>
-      {fee === 'hostel' && inst.length === 0 ? (
-        <p className="ep-alert ep-alert--info" role="status">
-          No hostel fee this session: the pupil is{' '}
-          {ledger.fee.hosteller ? 'a hosteller with no hostel lines yet' : 'a day scholar'}.
+      {hasHostelFee ? (
+        <nav
+          aria-label="Fee type"
+          className="ep-tabs-links ep-noprint"
+          style={{ marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}
+        >
+          {(
+            [
+              ['all', 'All'],
+              ['school', 'Regular (school fee)'],
+              ['hostel', 'Hosteller (hostel fee)'],
+            ] as const
+          ).map(([f, label]) => (
+            <a key={f} href={link(tab, f)} aria-current={f === fee ? 'page' : undefined}>
+              {label}
+            </a>
+          ))}
+        </nav>
+      ) : ledger.fee.hosteller ? (
+        <p className="ep-alert ep-alert--info ep-noprint" role="status">
+          A hosteller with no hostel fee lines this session yet: make the fee again after the hostel
+          fee is set.
         </p>
       ) : null}
 
