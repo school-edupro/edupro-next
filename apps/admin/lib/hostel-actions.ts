@@ -585,3 +585,35 @@ export async function recordIncident(fd: FormData) {
     `Incident recorded.${out.parentTold ? ' The parent has been told.' : ''}${out.principalTold ? ' The principal and school admins have been told.' : ''}`,
   );
 }
+
+// ---- roll-call (also taken from the admin app) ------------------------------------------------------------
+/** Saves the roll of a session: everyone present unless marked; away on leave is kept by the system. */
+export async function saveHostelRollcall(fd: FormData) {
+  const sessionId = str(fd, 'sessionId');
+  const on = str(fd, 'on');
+  const to = `${BASE}/rollcall/take?sessionId=${encodeURIComponent(sessionId)}&on=${encodeURIComponent(on)}`;
+  const marks = fd
+    .getAll('studentId')
+    .map(String)
+    .map((id) => ({
+      studentId: id,
+      status: ['present', 'absent', 'sick', 'on_leave'].includes(str(fd, `s-${id}`))
+        ? str(fd, `s-${id}`)
+        : 'present',
+      note: str(fd, `n-${id}`) || undefined,
+    }));
+  let out: { counts: Record<string, number>; alerted: number } = { counts: {}, alerted: 0 };
+  try {
+    out = await apiFetch('/hostel/rollcall', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, on, marks }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  const c = out.counts;
+  done(
+    to,
+    `Saved: ${String(c.present ?? 0)} present, ${String(c.absent ?? 0)} absent, ${String(c.on_leave ?? 0)} on leave, ${String(c.sick ?? 0)} sick.${out.alerted ? ` ${String(out.alerted)} absence(s) reported to the head warden and the parents.` : ''}`,
+  );
+}

@@ -47,12 +47,13 @@ export default async function HostelRollcallPage({
     ).then((r) => r.data.filter((s) => s.active)),
   ]);
   const pending = sessions.filter((s) => !s.takenToday);
+  const canMark = me.permissions.includes('hostel.rollcall.mark');
   return (
     <>
       <PageHeader
         kicker="Hostel"
         title="Roll-call"
-        description="The wardens take the roll of each session in the staff app. Pupils away on leave are marked by the system; an absence tells the head warden and, by the school's rule, the parent."
+        description="The wardens take the roll of each session, here or in the staff app. Pupils away on leave are marked by the system; an absence tells the head warden and, by the school's rule, the parent."
       />
       <HostelNav current="/hostel/rollcall" permissions={me.permissions} />
       {pending.length ? (
@@ -64,6 +65,42 @@ export default async function HostelRollcallPage({
           Not taken yet today:{' '}
           {pending.map((s) => `${s.hostel} · ${s.name} (${s.atTime})`).join(', ')}
         </div>
+      ) : null}
+      {canMark && sessions.length ? (
+        <Card title="Take the roll today" style={{ marginBottom: 'var(--sp-4)' }}>
+          <ul className="hs-approval">
+            {sessions.map((s) => (
+              <li
+                key={s.id}
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-3)',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>
+                  <strong>
+                    {s.name} · {s.atTime}
+                  </strong>{' '}
+                  <span className="ep-field__help">{s.hostel}</span>
+                </span>
+                <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                  <Badge tone={s.takenToday ? 'success' : 'warning'}>
+                    {s.takenToday ? 'Taken' : 'Not taken'}
+                  </Badge>
+                  <a
+                    className={`ep-btn ep-btn--sm ${s.takenToday ? 'ep-btn--secondary' : 'ep-btn--primary'}`}
+                    href={`/hostel/rollcall/take?sessionId=${s.id}`}
+                  >
+                    {s.takenToday ? 'Open the roll' : 'Take the roll'}
+                  </a>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       ) : null}
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form method="get" className="ep-hd__row">
