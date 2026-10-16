@@ -112,6 +112,8 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
           Exit
         </Button>
       </form>
+    ) : v.wardenDecides ? (
+      <Badge tone="warning">Waiting for the warden</Badge>
     ) : v.state === 'waiting' ? (
       <div className="ep-gate__act">
         <form action={admitVisitor} className="ep-gate__act">
@@ -136,7 +138,7 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         kicker="Visitors"
         title="Visitor register"
-        description={`${String(list.counts.inside)} visitor passes inside now (${String(list.counts.peopleInside)} people). Appointment visitors checked in at the gate are listed here too.`}
+        description={`${String(list.counts.inside)} visitor passes inside now (${String(list.counts.peopleInside)} people). Appointment visitors checked in at the gate and hostel visitors are listed here too.`}
         actions={
           <a className="ep-btn ep-btn--primary ep-btn--sm" href="/engagement/visitors/new">
             Register a visitor
@@ -206,6 +208,9 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
             options={[
               { value: '', label: 'All' },
               ...options.types.map((x) => ({ value: x, label: x })),
+              ...(options.hostelVisits && !options.types.includes('Hostel visitor')
+                ? [{ value: 'Hostel visitor', label: 'Hostel visitor' }]
+                : []),
             ]}
           />
           <label className="ep-field ep-dlog__search" htmlFor="vr-q">
@@ -313,6 +318,7 @@ export default async function VisitorsPage({ searchParams }: { searchParams: Pro
                     </td>
                     <td>
                       {v.toMeet ?? '—'}
+                      {v.hostel ? <div className="ep-field__help">Boarder · {v.hostel}</div> : null}
                       <div className="ep-field__help">{v.purpose}</div>
                     </td>
                     <td>

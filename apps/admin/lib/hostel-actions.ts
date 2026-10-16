@@ -510,7 +510,11 @@ export async function addHostelVisitor(fd: FormData) {
 
 /** The gate registers a hostel visitor (live photo optional). */
 export async function registerHostelVisit(fd: FormData) {
-  const to = here(fd, `${BASE}/visit`);
+  const asked = str(fd, 'returnTo');
+  const to =
+    asked.startsWith('/engagement/visitors/new?kind=hostel') && !asked.includes('//')
+      ? asked
+      : '/engagement/visitors/new?kind=hostel';
   let out: { number?: string; state?: string; why?: string | null } = {};
   try {
     out = await apiFetch('/hostel/visits', {
@@ -530,7 +534,7 @@ export async function registerHostelVisit(fd: FormData) {
     back(to, error);
   }
   done(
-    `${BASE}/visit`,
+    '/engagement/visitors/new?kind=hostel',
     out.state === 'inside'
       ? `${out.number ?? ''}: let the visitor in. The parent has been told.`
       : `${out.number ?? ''}: ask the visitor to wait — ${out.why ?? ''}. The warden has been asked to allow or refuse.`,

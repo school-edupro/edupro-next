@@ -389,7 +389,11 @@ export const NAV: Array<{
       { href: '/hostel/leave', label: 'hostelLeave', permission: 'hostel.leave.view' },
       { href: '/hostel/rollcall', label: 'hostelRollcall', permission: 'hostel.room.view' },
       { href: '/hostel/visitors', label: 'hostelVisitors', permission: 'hostel.visit.view' },
-      { href: '/hostel/visit', label: 'hostelGate', permission: 'hostel.visit.gate' },
+      {
+        href: '/engagement/visitors/new?kind=hostel',
+        label: 'hostelGate',
+        permission: 'hostel.visit.gate',
+      },
       { href: '/hostel/mess', label: 'hostelMess', permission: 'hostel.room.view' },
       { href: '/hostel/complaints', label: 'hostelComplaints', permission: 'hostel.room.view' },
       { href: '/hostel/incidents', label: 'hostelIncidents', permission: 'hostel.incident.view' },

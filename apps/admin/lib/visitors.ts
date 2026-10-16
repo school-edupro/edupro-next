@@ -29,6 +29,9 @@ export interface Visitor {
   appointmentId: string | null;
   loggedBy: string | null;
   hasPhoto: boolean;
+  /** A hostel visit: the boarder's hostel; while waiting, the warden lets in or refuses. */
+  hostel: string | null;
+  wardenDecides: boolean;
 }
 export interface VisitorList {
   data: Visitor[];
@@ -41,6 +44,8 @@ export interface VisitorOptions {
   idProofKinds: string[];
   purposes: string[];
   selfEnabled: boolean;
+  /** The school runs a hostel: a visit to a boarder can be registered. */
+  hostelVisits: boolean;
   hosts: Array<{ id: string; name: string; person: string | null }>;
 }
 export interface VisitorLookup {

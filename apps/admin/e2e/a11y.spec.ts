@@ -127,7 +127,7 @@ const PAGES = [
   '/hostel/visitors?tab=today',
   '/hostel/visitors?tab=approve',
   '/hostel/visitors?tab=lists&q=sharma&student=12307',
-  '/hostel/visit?q=sharma&student=12307',
+  '/engagement/visitors/new?kind=hostel&q=sharma&student=12307',
   '/hostel/mess?hostel=14',
   '/hostel/mess?tab=menu&hostel=14',
   '/hostel/mess?tab=diets&hostel=14',

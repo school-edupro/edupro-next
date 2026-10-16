@@ -108,13 +108,26 @@ export default async function HostelVisitorsPage({
       <PageHeader
         kicker="Hostel"
         title="Visitors"
-        description="Who may visit each boarder, and the visits at the gate. A visitor not on the list, or outside visiting hours, waits for a warden; the parent is told either way."
+        description="Who may visit each boarder, and the warden's part of the visits. The gate registers hostel visitors in the one visitor register (Visitors → Register a visitor → Hostel visit); a visitor not on the list, or outside visiting hours, waits here for a warden, and the parent is told either way."
         actions={
-          may('hostel.visit.gate') ? (
-            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/hostel/visit">
-              Register a visitor at the gate
-            </a>
-          ) : null
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            {may('engagement.visitor.manage') ? (
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/engagement/visitors?state=all&type=${encodeURIComponent('Hostel visitor')}`}
+              >
+                In the visitor register
+              </a>
+            ) : null}
+            {may('hostel.visit.gate') ? (
+              <a
+                className="ep-btn ep-btn--primary ep-btn--sm"
+                href="/engagement/visitors/new?kind=hostel"
+              >
+                Register a visitor at the gate
+              </a>
+            ) : null}
+          </span>
         }
       />
       <HostelNav current="/hostel/visitors" permissions={me.permissions} />

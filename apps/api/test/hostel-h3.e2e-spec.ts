@@ -240,6 +240,18 @@ describe('hostel module H3 (e2e)', () => {
       .sort();
     expect(waiting).toEqual([stranger.json().id, late.json().id].sort());
     expect((await get('/hostel/visits?show=waiting', other)).data).toEqual([]);
+    // one visitor register: the visit is in the school's register, marked for the warden; the gate
+    // cannot let in or refuse it there
+    const register = await get('/visitors?state=waiting', admin);
+    expect(register.data.find((x: { id: string }) => x.id === stranger.json().id)).toMatchObject({
+      hostel: 'Boys Hostel',
+      wardenDecides: true,
+      visitorType: 'Hostel visitor',
+    });
+    for (const act of ['admit', 'refuse'])
+      expect(
+        (await post(`/visitors/${stranger.json().id as string}/${act}`, admin, {})).json(),
+      ).toMatchObject({ type: expect.stringContaining('visitor.warden_decides') });
     expect(
       (
         await post(`/hostel/visits/${stranger.json().id as string}/decide`, other, {

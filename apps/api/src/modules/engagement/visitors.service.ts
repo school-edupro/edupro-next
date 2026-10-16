@@ -31,6 +31,7 @@ const SELECT = `SELECT v.id::text, v.number, v.pass_code, v.source, v.state, v.v
        v.party_size, v.id_proof_kind, v.id_proof_last4, v.vehicle_no, v.equipment, v.purpose, v.host_id::text, h.name AS host_name,
        COALESCE(e.display_name, he.display_name) AS with_name, v.to_meet, COALESCE(h.location, NULL) AS place,
        v.gate, v.exit_gate, v.exit_note, v.badge_no, v.in_at, v.out_at, v.created_at, v.appointment_id::text,
+       v.hostel_id::text, (SELECT hs.name FROM hostels hs WHERE hs.id = v.hostel_id) AS hostel, v.warden_decision,
        COALESCE((SELECT le.display_name FROM employees le WHERE le.user_id = v.logged_by LIMIT 1), lu.display_name) AS logged_by,
        EXISTS (SELECT 1 FROM visitor_photos p WHERE p.visitor_log_id = v.id)
          OR EXISTS (SELECT 1 FROM appointment_photos ap WHERE ap.appointment_id = v.appointment_id) AS has_photo
@@ -71,6 +72,9 @@ export interface VisitorRow {
   appointmentId: string | null;
   loggedBy: string | null;
   hasPhoto: boolean;
+  /** A hostel visit (0149): the boarder's hostel; while waiting, the warden lets in or refuses. */
+  hostel: string | null;
+  wardenDecides: boolean;
 }
 
 const toRow = (x: Row): VisitorRow => ({
@@ -104,6 +108,8 @@ const toRow = (x: Row): VisitorRow => ({
   appointmentId: text(x.appointment_id),
   loggedBy: text(x.logged_by),
   hasPhoto: Boolean(x.has_photo),
+  hostel: text(x.hostel),
+  wardenDecides: !!x.hostel_id && x.state === 'waiting' && !x.warden_decision,
 });
 
 const ist = (v: string | null) =>
@@ -160,8 +166,13 @@ export class VisitorsService {
         WHERE h.status = 'active' AND h.kind <> 'class_teacher' ORDER BY h.sort_order, h.name`,
     );
     const x = s.rows[0]!;
+    const hostels = await c.query<{ any: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM hostels WHERE status = 'active') AS any`,
+    );
     return {
       types: x.visitor_types as string[],
+      /** The school runs a hostel: the gate may register a visit to a boarder (type "Hostel visitor"). */
+      hostelVisits: hostels.rows[0]!.any,
       gates: x.gates as string[],
       idProofKinds: x.id_proof_kinds as string[],
       purposes: x.purposes as string[],
@@ -488,6 +499,20 @@ export class VisitorsService {
     });
   }
 
+  /** A hostel visitor waiting at the gate is the warden's to let in or refuse (Hostel → Visitors). */
+  private async notWardens(c: PoolClient, id: string) {
+    const r = await c.query<{ hostel: boolean }>(
+      `SELECT hostel_id IS NOT NULL AND warden_decision IS NULL AS hostel FROM visitor_log WHERE id = $1`,
+      [id],
+    );
+    if (r.rows[0]?.hostel)
+      throw new DomainError(
+        'visitor.warden_decides',
+        'This hostel visitor waits for the warden, who lets them in or refuses (Hostel → Visitors)',
+        { status: 409 },
+      );
+  }
+
   private async locked(c: PoolClient, id: string): Promise<State> {
     const r = await c.query<{ state: State }>(
       `SELECT state FROM visitor_log WHERE id = $1 FOR UPDATE`,
@@ -500,6 +525,7 @@ export class VisitorsService {
   /** The guard lets in a visitor who registered on their own phone (after checking the ID). */
   async admit(ctx: RequestContext, id: string, dto: AdmitVisitorDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.notWardens(c, id);
       if ((await this.locked(c, id)) !== 'waiting')
         throw new DomainError('visitor.wrong_state', 'This visitor is not waiting at the gate', {
           status: 409,
@@ -522,6 +548,7 @@ export class VisitorsService {
   /** The guard turns away a visitor who registered on their own phone. */
   async refuse(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.notWardens(c, id);
       if ((await this.locked(c, id)) !== 'waiting')
         throw new DomainError('visitor.wrong_state', 'This visitor is not waiting at the gate', {
           status: 409,
