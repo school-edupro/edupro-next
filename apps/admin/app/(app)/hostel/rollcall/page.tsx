@@ -1,5 +1,6 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
 import { HostelNav } from '@/components/hostel/HostelNav';
+import { RollcallTabs } from '@/components/hostel/RollcallTabs';
 import { apiFetch, getMe } from '@/lib/api';
 
 interface Roll {
@@ -56,6 +57,7 @@ export default async function HostelRollcallPage({
         description="The wardens take the roll of each session, here or in the staff app. Pupils away on leave are marked by the system; an absence tells the head warden and, by the school's rule, the parent."
       />
       <HostelNav current="/hostel/rollcall" permissions={me.permissions} />
+      <RollcallTabs current="rolls" />
       {pending.length ? (
         <div
           className="ep-alert ep-alert--warning"

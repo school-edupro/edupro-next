@@ -121,6 +121,8 @@ const PAGES = [
   '/hostel/leave?show=all',
   '/hostel/rollcall',
   '/hostel/setup?tab=rules',
+  '/hostel/setup?tab=approval',
+  '/hostel/rollcall/register?hostel=14&month=2026-10',
   '/hostel/visitors',
   '/hostel/visitors?tab=today',
   '/hostel/visitors?tab=approve',

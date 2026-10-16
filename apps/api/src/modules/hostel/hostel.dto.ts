@@ -188,6 +188,17 @@ export const RollcallReportSchema = z.object({
 });
 export class RollcallReportDto extends createZodDto(RollcallReportSchema) {}
 
+/** The roll-call register: one hostel, one month (YYYY-MM); the first hostel the person sees when none. */
+export const RollcallRegisterSchema = z.object({
+  hostelId: IdSchema.optional(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'must be YYYY-MM'),
+});
+export class RollcallRegisterDto extends createZodDto(RollcallRegisterSchema) {}
+export const RollcallRegisterFileSchema = RollcallRegisterSchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class RollcallRegisterFileDto extends createZodDto(RollcallRegisterFileSchema) {}
+
 // ---- H3: visitors and the mess --------------------------------------------------------------------------
 export const HOSTEL_H3 = {
   visitView: 'hostel.visit.view',

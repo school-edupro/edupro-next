@@ -8,11 +8,39 @@ import type {
   HostelSettingsDto,
   LeavesQueryDto,
   RollcallQueryDto,
+  RollcallRegisterDto,
   RollcallReportDto,
   RollcallSaveDto,
   SessionDto,
 } from './hostel.dto';
 import { HostelService } from './hostel.service';
+import { generatedOn, monthName, registerFile, schoolHead } from '../attendance/register-file';
+
+type Row = Record<string, unknown>;
+
+/** The register's mark of each status; '-' not marked, blank: not in the hostel that day. */
+export const ROLL_CODE: Record<string, string> = {
+  present: 'P',
+  absent: 'A',
+  on_leave: 'LV',
+  sick: 'S',
+};
+
+/** A short, distinct column head for each session: M, N; Mo, Mi when two start alike. */
+function shortNames(names: string[]): string[] {
+  const out: string[] = [];
+  for (const n of names) {
+    const clean = n.replace(/[^A-Za-z0-9]/g, '') || 'S';
+    let len = 1;
+    let pick = clean.slice(0, len).toUpperCase();
+    while (out.includes(pick) && len < clean.length) {
+      len += 1;
+      pick = clean.charAt(0).toUpperCase() + clean.slice(1, len).toLowerCase();
+    }
+    out.push(out.includes(pick) ? `${pick}${String(out.length + 1)}` : pick);
+  }
+  return out;
+}
 
 /**
  * Hostel module H2: the school's hostel rules, roll-call sessions and the roll of a session on a day
@@ -380,6 +408,203 @@ export class HostelLifeService {
       );
       return r.rows;
     });
+  }
+
+  /**
+   * The roll-call register of one hostel for a month: the pupils down, each day with a column per session
+   * (M morning, N night ...), the mark of each roll (P, A, LV, S; '-' not marked; blank when the pupil did
+   * not hold a bed in the hostel that day), and each pupil's totals and present per cent (leave left out).
+   * A warden sees their own hostels only.
+   */
+  async rollcallRegister(ctx: RequestContext, q: RollcallRegisterDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const only = await this.hostel.scope(ctx, c);
+      const hostels = await c.query<{ id: string; name: string }>(
+        `SELECT id::text, name FROM hostels WHERE ($1::bigint[] IS NULL OR id = ANY ($1::bigint[])) ORDER BY name`,
+        [only],
+      );
+      const hostel = q.hostelId ? hostels.rows.find((h) => h.id === q.hostelId) : hostels.rows[0];
+      if (!hostel)
+        throw new DomainError(
+          q.hostelId ? 'permission-denied' : 'not-found',
+          q.hostelId ? 'You see the register of your own hostel only' : 'No hostel is set up',
+          { status: q.hostelId ? 403 : 404 },
+        );
+      const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+      const first = `${q.month}-01`;
+      const end = new Date(Date.UTC(Number(q.month.slice(0, 4)), Number(q.month.slice(5, 7)), 0))
+        .toISOString()
+        .slice(0, 10);
+      const last = end < today ? end : today;
+      const days: string[] = [];
+      for (let d = first; d <= last;) {
+        days.push(d);
+        const n = new Date(`${d}T00:00:00Z`);
+        n.setUTCDate(n.getUTCDate() + 1);
+        d = n.toISOString().slice(0, 10);
+      }
+      const sessions = await c.query<{ id: string; name: string; at: string }>(
+        `SELECT s.id::text, s.name, to_char(s.at_time, 'HH24:MI') AS at FROM hostel_rollcall_sessions s
+          WHERE s.hostel_id = $1 AND (s.active OR EXISTS (
+                SELECT 1 FROM hostel_rollcalls r WHERE r.session_id = s.id AND r.on_date BETWEEN $2::date AND $3::date))
+          ORDER BY s.at_time, s.id`,
+        [hostel.id, first, end],
+      );
+      const short = shortNames(sessions.rows.map((s) => s.name));
+      const pupils = days.length
+        ? await c.query<Row>(
+            `WITH pupils AS (
+               SELECT DISTINCT a.student_id FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id
+                WHERE r.hostel_id = $1 AND a.from_date <= $3::date AND (a.to_date IS NULL OR a.to_date >= $2::date))
+             SELECT s.id::text, s.display_name AS name, s.admission_no AS "admissionNo",
+                    (SELECT k.code || '-' || cs.name FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id
+                       JOIN classes k ON k.id = cs.class_id WHERE en.student_id = s.id AND en.status = 'active'
+                      ORDER BY en.academic_year_id DESC LIMIT 1) AS section,
+                    (SELECT r.room_no || '/' || b.label FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id
+                       JOIN hostel_rooms r ON r.id = b.room_id
+                      WHERE a.student_id = s.id AND r.hostel_id = $1 AND a.from_date <= $3::date ORDER BY a.from_date DESC LIMIT 1) AS bed,
+                    ARRAY(SELECT d::date::text FROM generate_series($2::date, $3::date, '1 day') d
+                           WHERE app.hostel_of(s.id, d::date) = $1) AS stay
+               FROM pupils p JOIN students s ON s.id = p.student_id
+              ORDER BY s.display_name, s.id`,
+            [hostel.id, first, last],
+          )
+        : { rows: [] as Row[] };
+      const marks = await c.query<{ sid: string; on: string; session: string; status: string }>(
+        `SELECT m.student_id::text AS sid, r.on_date::text AS "on", r.session_id::text AS session, m.status
+           FROM hostel_rollcalls r JOIN hostel_rollcall_sessions s ON s.id = r.session_id JOIN hostel_rollcall_marks m ON m.rollcall_id = r.id
+          WHERE s.hostel_id = $1 AND r.on_date BETWEEN $2::date AND $3::date`,
+        [hostel.id, first, last],
+      );
+      const taken = await c.query<{ on: string; session: string }>(
+        `SELECT r.on_date::text AS "on", r.session_id::text AS session FROM hostel_rollcalls r
+           JOIN hostel_rollcall_sessions s ON s.id = r.session_id
+          WHERE s.hostel_id = $1 AND r.on_date BETWEEN $2::date AND $3::date`,
+        [hostel.id, first, last],
+      );
+      const mark = new Map(marks.rows.map((m) => [`${m.sid}|${m.on}|${m.session}`, m.status]));
+      const keys = days.flatMap((d) => sessions.rows.map((s) => ({ day: d, session: s.id })));
+      const rows = pupils.rows.map((p) => {
+        const stay = new Set(p.stay as string[]);
+        const count = { present: 0, absent: 0, on_leave: 0, sick: 0 };
+        const cells = keys.map((k) => {
+          if (!stay.has(k.day)) return '';
+          const st = mark.get(`${String(p.id)}|${k.day}|${k.session}`);
+          if (!st) return '-';
+          count[st as keyof typeof count] += 1;
+          return ROLL_CODE[st] ?? '-';
+        });
+        const counted = count.present + count.absent + count.sick;
+        return {
+          studentId: String(p.id),
+          name: String(p.name),
+          admissionNo: (p.admissionNo as string | null) ?? '',
+          section: (p.section as string | null) ?? '',
+          bed: (p.bed as string | null) ?? '',
+          cells,
+          present: count.present,
+          absent: count.absent,
+          leave: count.on_leave,
+          sick: count.sick,
+          percent: counted ? Math.round((count.present * 1000) / counted) / 10 : null,
+        };
+      });
+      const head = await schoolHead(c);
+      return {
+        school: head.name,
+        address: head.address,
+        hostel: { id: hostel.id, name: hostel.name },
+        hostels: hostels.rows,
+        month: q.month,
+        days,
+        sessions: sessions.rows.map((s, i) => ({ ...s, short: short[i]! })),
+        /** Per column: was the roll taken, and how many were present. */
+        columns: keys.map((k, i) => ({
+          day: k.day,
+          session: k.session,
+          taken: taken.rows.some((t) => t.on === k.day && t.session === k.session),
+          present: rows.filter((r) => r.cells[i] === 'P').length,
+        })),
+        rows,
+      };
+    });
+  }
+
+  async rollcallRegisterFile(ctx: RequestContext, q: RollcallRegisterDto, format: 'xlsx' | 'pdf') {
+    const reg = await this.rollcallRegister(ctx, q);
+    const many = reg.sessions.length > 1;
+    const legend = [
+      many ? reg.sessions.map((s) => `${s.short} ${s.name} (${s.at})`).join(' · ') : '',
+      'P present · A absent · LV on leave · S sick · - not marked · blank: no bed in the hostel that day · % present leaves leave out',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    return registerFile(
+      {
+        school: reg.school,
+        address: reg.address,
+        report: 'Hostel roll-call register',
+        details: [
+          reg.hostel.name,
+          many ? '' : (reg.sessions[0]?.name ?? ''),
+          monthName(reg.month),
+          generatedOn(),
+        ].filter(Boolean),
+        legend,
+        columns: [
+          { label: 'Sl.', width: 3, right: true },
+          { label: 'Pupil', width: 16 },
+          { label: 'Adm. no.', width: 7 },
+          { label: 'Class', width: 5 },
+          { label: 'Room/bed', width: 8 },
+          ...reg.columns.map((col, i) => {
+            const s = reg.sessions[i % Math.max(1, reg.sessions.length)]!;
+            return {
+              label: many ? s.short : col.day.slice(8),
+              width: 2.6,
+              center: true,
+              group: many ? col.day.slice(8) : undefined,
+            };
+          }),
+          { label: 'P', width: 4, right: true },
+          { label: 'A', width: 4, right: true },
+          { label: 'LV', width: 4, right: true },
+          { label: 'S', width: 4, right: true },
+          { label: '% present', width: 6, right: true },
+        ],
+        rows: [
+          ...reg.rows.map((r, i) => [
+            i + 1,
+            r.name,
+            r.admissionNo,
+            r.section,
+            r.bed,
+            ...r.cells,
+            r.present,
+            r.absent,
+            r.leave,
+            r.sick,
+            r.percent === null ? '' : `${r.percent.toFixed(1)}`,
+          ]),
+          [
+            '',
+            'Present',
+            '',
+            '',
+            '',
+            ...reg.columns.map((col) => (col.taken ? col.present : '-')),
+            reg.rows.reduce((n, r) => n + r.present, 0),
+            reg.rows.reduce((n, r) => n + r.absent, 0),
+            reg.rows.reduce((n, r) => n + r.leave, 0),
+            reg.rows.reduce((n, r) => n + r.sick, 0),
+            '',
+          ],
+        ],
+        strong: [reg.rows.length],
+        filename: `hostel-roll-register-${reg.month}`,
+      },
+      format,
+    );
   }
 
   // ---- hostel leave, seen from the hostel ---------------------------------------------------------------

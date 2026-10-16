@@ -257,6 +257,73 @@ describe('hostel module H2 (e2e)', () => {
     expect(report.data[0]).toMatchObject({ session: 'Night', present: 1, absent: 1 });
   });
 
+  it('the month register: a column per session each day, the marks, totals; Excel and PDF', async () => {
+    const morning = await post('/hostel/sessions', admin, {
+      hostelId: ids.bh,
+      name: 'Morning',
+      atTime: '06:30',
+    });
+    expect(morning.statusCode).toBe(201);
+    await post('/hostel/rollcall', warden, {
+      sessionId: morning.json().id,
+      on: today,
+      marks: [
+        { studentId: ids.ravi, status: 'present' },
+        { studentId: ids.amit, status: 'sick' },
+      ],
+    });
+    const month = today.slice(0, 7);
+    type Reg = {
+      hostel: { name: string };
+      days: string[];
+      sessions: Array<{ name: string; short: string }>;
+      columns: Array<{ day: string; taken: boolean; present: number }>;
+      rows: Array<{
+        name: string;
+        cells: string[];
+        present: number;
+        absent: number;
+        sick: number;
+        percent: number | null;
+      }>;
+    };
+    const reg = (await get(`/hostel/rollcall/register?month=${month}`, warden)) as Reg;
+    expect(reg.hostel.name).toBe('Boys Hostel');
+    expect(reg.days[reg.days.length - 1]).toBe(today);
+    // in the order of the day: Morning, then Night
+    expect(reg.sessions.map((x) => x.short)).toEqual(['M', 'N']);
+    expect(reg.columns).toHaveLength(reg.days.length * 2);
+    const at = reg.days.length * 2 - 2;
+    const ravi = reg.rows.find((r) => r.name === 'ravi Boarder')!;
+    const amit = reg.rows.find((r) => r.name === 'amit Boarder')!;
+    expect(ravi.cells.slice(at)).toEqual(['P', 'P']);
+    expect(amit.cells.slice(at)).toEqual(['S', 'A']);
+    expect(ravi).toMatchObject({ present: 2, percent: 100 });
+    expect(amit).toMatchObject({ present: 0, absent: 1, sick: 1, percent: 0 });
+    expect(reg.columns.slice(at).map((x) => [x.taken, x.present])).toEqual([
+      [true, 1],
+      [true, 1],
+    ]);
+    // the day scholar is not on it; a day before the bed shows blank, a day without a roll '-'
+    expect(reg.rows).toHaveLength(2);
+    if (reg.days.length > 1) expect(ravi.cells[0]).toMatch(/^(-|)$/);
+    // the other hostel's warden cannot open this hostel's register
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/hostel/rollcall/register?month=${month}&hostelId=${ids.bh}`,
+          headers: h(other),
+        })
+      ).statusCode,
+    ).toBe(403);
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await get(`/hostel/rollcall/register/file?month=${month}&format=${format}`, warden);
+      expect(f.filename).toBe(`hostel-roll-register-${month}.${format}`);
+      expect(f.base64.length).toBeGreaterThan(100);
+    }
+  });
+
   it('home leave: only for boarders; the warden approves, hands over, the gate lets out and back in', async () => {
     const day = await post('/gate-passes/mine', parent, {
       studentId: ids.ravi,
@@ -335,7 +402,8 @@ describe('hostel module H2 (e2e)', () => {
       hostel: 'Boys Hostel',
     });
     const today2 = await get('/hostel/today', warden);
-    expect(today2).toMatchObject({ boarders: 2, away: 1, overdue: 0, sessions: 1, rollsTaken: 1 });
+    // Night and the register test's Morning, both taken today
+    expect(today2).toMatchObject({ boarders: 2, away: 1, overdue: 0, sessions: 2, rollsTaken: 2 });
   });
 
   it('late back: the tick flags it once and escalates past the hours; back in records the late minutes', async () => {

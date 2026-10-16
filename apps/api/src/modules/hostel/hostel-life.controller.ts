@@ -8,6 +8,8 @@ import {
   HostelSettingsDto,
   LeavesQueryDto,
   RollcallQueryDto,
+  RollcallRegisterDto,
+  RollcallRegisterFileDto,
   RollcallReportDto,
   RollcallSaveDto,
   SessionDto,
@@ -90,6 +92,24 @@ export class HostelLifeController {
   @RequirePermission(HOSTEL.view)
   async rollcallReport(@ReqCtx() ctx: RequestContext, @Query() q: RollcallReportDto) {
     return { data: await this.life.rollcallReport(ctx, q) };
+  }
+
+  @Get('rollcall/register')
+  @ApiOperation({
+    summary:
+      'The roll-call register of a hostel for a month: pupils down, each day a column per session, totals',
+  })
+  @RequirePermission(HOSTEL.view)
+  rollcallRegister(@ReqCtx() ctx: RequestContext, @Query() q: RollcallRegisterDto) {
+    return this.life.rollcallRegister(ctx, q);
+  }
+
+  @Get('rollcall/register/file')
+  @ApiOperation({ summary: 'The roll-call register as Excel or PDF' })
+  @RequirePermission(HOSTEL.view)
+  async rollcallRegisterFile(@ReqCtx() ctx: RequestContext, @Query() q: RollcallRegisterFileDto) {
+    const f = await this.life.rollcallRegisterFile(ctx, q, q.format);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get('leaves')

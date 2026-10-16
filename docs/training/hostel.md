@@ -62,6 +62,12 @@ gate, not back yet) are marked **on leave** by the system. A new absence goes to
 and, when the rule is on, to the parent (once per roll). The roll can be corrected and saved again.
 Hostel → Roll-call lists every roll of a period with the absentees, and the sessions not taken today.
 
+**Register** (Hostel → Roll-call → Register): one hostel, one month. The boarders down; each day has a
+column per session (M morning, N night ... in the order of the day) with **P** present, **A** absent,
+**LV** on leave, **S** sick, **–** not marked, blank when the pupil had no bed in that hostel that day.
+Each pupil's P / A / LV / S and the present per cent (leave is left out), and a "Present" line per
+roll. **Excel** and **PDF** at the top. A warden sees their own hostel only.
+
 ## 6. Hostel leave and outings (parent portal, staff app, gate)
 
 |            | Home leave                                                                                                                                 | Outing                                            |
@@ -69,9 +75,15 @@ Hostel → Roll-call lists every roll of a period with the absentees, and the se
 | Who asks   | Parent: Gate passes → Request → _Home leave (hostel)_                                                                                      | Parent: _Outing (hostel)_                         |
 | When back  | the day and time given                                                                                                                     | the same day, by the school's latest time (rules) |
 | Collected  | by the father, mother, guardian on record or someone named (one-time code to the parent)                                                   | goes alone                                        |
-| Approves   | a warden of the pupil's hostel (staff app → Gate passes)                                                                                   | the same                                          |
+| Approves   | the levels set for home leave (to begin with: any warden of the pupil's hostel; staff app → Gate passes)                                   | the levels set for outings                        |
 | Leaves     | warden **hands over** (staff app → Hostel desk → Hand over: live photo; code and remark for someone not on record), then the gate lets out | straight to the gate                              |
 | Comes back | the gate marks **back in**; minutes late are kept                                                                                          | the same                                          |
+
+**Who approves** is set under Hostel → Set-up → **Leave approval** (the same levels show under Gate
+passes → Set-up), separately for home leave and outings, like pupil passes: one after another or any
+N at once, a level may be **Must approve**. Who approves a level: any warden of the pupil's hostel,
+its head warden, the class teacher, everyone with a role or a designation, or one employee. For
+example home leave: Warden → Head warden; outings: Warden alone. Leave already asked keeps its levels.
 
 Only boarders (holding a bed on the day) can ask. A pupil not back by the return time plus the grace:
 the parent and the head warden are told once (workers, every 10 minutes); past the hours set the
