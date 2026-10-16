@@ -1,10 +1,28 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { saveGatePassSetup } from '@/lib/gate-pass-actions';
-import type { GatePassLevel, GatePassSetup } from '@/lib/gate-passes';
+import type { GatePassLevel, GatePassLevelSet, GatePassSetup } from '@/lib/gate-passes';
 
-type Audience = 'student' | 'staff';
+type Audience = GatePassLevelSet;
+type Settings = GatePassSetup['settings'];
+/** Each set's mode and "how many" in the settings, and its name in messages. */
+const SET: Record<
+  Audience,
+  {
+    mode: 'studentMode' | 'staffMode' | 'hostelHomeMode' | 'hostelOutingMode';
+    need: keyof Settings;
+    name: string;
+  }
+> = {
+  student: { mode: 'studentMode', need: 'studentNeed', name: 'pupil passes' },
+  staff: { mode: 'staffMode', need: 'staffNeed', name: 'staff passes' },
+  hostel_home: { mode: 'hostelHomeMode', need: 'hostelHomeNeed', name: 'hostel home leave' },
+  hostel_outing: { mode: 'hostelOutingMode', need: 'hostelOutingNeed', name: 'hostel outings' },
+};
+const hostelSet = (a: Audience) => a === 'hostel_home' || a === 'hostel_outing';
 const KINDS: Array<[GatePassLevel['kind'], string]> = [
+  ['hostel_warden', 'Any warden of the pupil’s hostel'],
+  ['head_warden', 'The head warden of the pupil’s hostel'],
   ['class_teacher', 'The pupil’s class teacher'],
   ['role', 'Everyone with a role'],
   ['designation', 'Everyone with a designation'],
@@ -12,10 +30,11 @@ const KINDS: Array<[GatePassLevel['kind'], string]> = [
 ];
 
 /**
- * Gate pass set-up: for pupil passes and for staff passes, who approves and in which order, whether the
- * levels go one after another or any N of them are enough, and the parent's one-time code at hand-over.
+ * Gate pass set-up: for pupil passes, staff passes, hostel home leave and hostel outings, who approves and
+ * in which order, whether the levels go one after another or any N of them are enough, and the parent's
+ * one-time code at hand-over. `only="hostel"` shows the two hostel sets alone (Hostel → Set-up).
  */
-export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
+export function GatePassSetupForm({ setup, only }: { setup: GatePassSetup; only?: 'hostel' }) {
   const [s, setS] = useState(setup.settings);
   const [levels, setLevels] = useState<GatePassLevel[]>(setup.levels);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -40,19 +59,19 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
   const save = () =>
     start(async () => {
       setMsg(null);
-      for (const a of ['student', 'staff'] as const) {
+      for (const a of ['student', 'staff', 'hostel_home', 'hostel_outing'] as const) {
         const active = of(a).filter((l) => l.active);
         if (!active.length)
           return setMsg({
             ok: false,
-            text: `Keep at least one approval level for ${a === 'student' ? 'pupil' : 'staff'} passes.`,
+            text: `Keep at least one approval level for ${SET[a].name}.`,
           });
-        const mode = a === 'student' ? s.studentMode : s.staffMode;
-        const need = a === 'student' ? s.studentNeed : s.staffNeed;
+        const mode = s[SET[a].mode];
+        const need = Number(s[SET[a].need]);
         if (mode === 'any' && need > active.length)
           return setMsg({
             ok: false,
-            text: `${a === 'student' ? 'Pupil' : 'Staff'} passes: ${String(need)} approvals are asked but only ${String(active.length)} levels are in use.`,
+            text: `${SET[a].name.replace(/^./, (c) => c.toUpperCase())}: ${String(need)} approvals are asked but only ${String(active.length)} levels are in use.`,
           });
         const bad = active.find(
           (l) =>
@@ -66,7 +85,7 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
       }
       const r = await saveGatePassSetup({
         settings: s,
-        levels: [...of('student'), ...of('staff')],
+        levels: [...of('student'), ...of('staff'), ...of('hostel_home'), ...of('hostel_outing')],
       });
       setMsg(
         r.ok
@@ -76,8 +95,8 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
     });
 
   const block = (a: Audience, title: string) => {
-    const mode = a === 'student' ? s.studentMode : s.staffMode;
-    const need = a === 'student' ? s.studentNeed : s.staffNeed;
+    const mode = s[SET[a].mode];
+    const need = Number(s[SET[a].need]);
     const list = of(a);
     return (
       <section className="ep-hd__form" aria-label={title}>
@@ -89,13 +108,7 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
               id={`gs-mode-${a}`}
               className="ep-select"
               value={mode}
-              onChange={(e) =>
-                setS({
-                  ...s,
-                  [a === 'student' ? 'studentMode' : 'staffMode']: e.target.value as
-                    'sequence' | 'any',
-                })
-              }
+              onChange={(e) => setS({ ...s, [SET[a].mode]: e.target.value as 'sequence' | 'any' })}
             >
               <option value="sequence">One after another, in this order (all must approve)</option>
               <option value="any">Any of them, at the same time</option>
@@ -114,10 +127,7 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
                 onChange={(e) =>
                   setS({
                     ...s,
-                    [a === 'student' ? 'studentNeed' : 'staffNeed']: Math.min(
-                      6,
-                      Math.max(1, Number(e.target.value) || 1),
-                    ),
+                    [SET[a].need]: Math.min(6, Math.max(1, Number(e.target.value) || 1)),
                   })
                 }
               />
@@ -127,8 +137,9 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
         {mode === 'any' ? (
           <p className="ep-field__help" style={{ margin: 0 }}>
             Tick <strong>Must approve</strong> on a level (for example the Principal) to make it
-            compulsory: the pass is approved only when {need} have approved <em>and</em> every
-            ticked level has. If a ticked level rejects, the pass is rejected at once.
+            compulsory: the {hostelSet(a) ? 'leave' : 'pass'} is approved only when {need} have
+            approved <em>and</em> every ticked level has. If a ticked level rejects, the{' '}
+            {hostelSet(a) ? 'leave' : 'pass'} is rejected at once.
           </p>
         ) : (
           <p className="ep-field__help" style={{ margin: 0 }}>
@@ -155,13 +166,15 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
                 value={l.kind}
                 onChange={(e) => patch(a, i, { kind: e.target.value as GatePassLevel['kind'] })}
               >
-                {KINDS.filter(([k]) => a === 'student' || k !== 'class_teacher').map(
-                  ([k, label]) => (
-                    <option key={k} value={k}>
-                      {label}
-                    </option>
-                  ),
-                )}
+                {KINDS.filter(
+                  ([k]) =>
+                    (a !== 'staff' || k !== 'class_teacher') &&
+                    (hostelSet(a) || (k !== 'hostel_warden' && k !== 'head_warden')),
+                ).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
             {l.kind === 'role' ? (
@@ -278,10 +291,10 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
                 ...list,
                 {
                   audience: a,
-                  label: '',
-                  kind: 'designation',
+                  label: hostelSet(a) ? 'Head warden' : '',
+                  kind: hostelSet(a) ? 'head_warden' : 'designation',
                   roleCode: null,
-                  designation: '',
+                  designation: hostelSet(a) ? null : '',
                   employeeId: null,
                   active: true,
                   mandatory: false,
@@ -303,31 +316,43 @@ export function GatePassSetupForm({ setup }: { setup: GatePassSetup }) {
           <option key={d} value={d} />
         ))}
       </datalist>
-      {block('student', 'Pupil passes (parent or front desk asks)')}
-      {block('staff', 'Staff passes (RGP / NRGP)')}
-      <section className="ep-hd__form" aria-label="Rules">
-        <h3 className="ep-cdash__h3">Rules</h3>
-        <label className="ep-check" htmlFor="gs-otp">
-          <input
-            id="gs-otp"
-            type="checkbox"
-            checked={s.handoverOtp}
-            onChange={(e) => setS({ ...s, handoverOtp: e.target.checked })}
-          />{' '}
-          When someone not on the pupil’s record collects the child, the parent confirms with a
-          one-time code at the front desk
-        </label>
-        <label className="ep-check" htmlFor="gs-mail">
-          <input
-            id="gs-mail"
-            type="checkbox"
-            checked={s.notifyEmail}
-            onChange={(e) => setS({ ...s, notifyEmail: e.target.checked })}
-          />{' '}
-          Email the approvers when a pass waits on them, and the family or employee when it is
-          decided (with the pass as PDF)
-        </label>
-      </section>
+      {only === 'hostel' ? null : (
+        <>
+          {block('student', 'Pupil passes (parent or front desk asks)')}
+          {block('staff', 'Staff passes (RGP / NRGP)')}
+        </>
+      )}
+      {block('hostel_home', 'Hostel home leave (a boarder goes home)')}
+      {block('hostel_outing', 'Hostel outings (a boarder goes out and is back the same day)')}
+      <p className="ep-field__help" style={{ margin: 0 }}>
+        The wardens of the pupil’s hostel are the wardens named under Hostel → Set-up → Wardens.
+        When no warden is head, “the head warden” means any warden of that hostel.
+      </p>
+      {only === 'hostel' ? null : (
+        <section className="ep-hd__form" aria-label="Rules">
+          <h3 className="ep-cdash__h3">Rules</h3>
+          <label className="ep-check" htmlFor="gs-otp">
+            <input
+              id="gs-otp"
+              type="checkbox"
+              checked={s.handoverOtp}
+              onChange={(e) => setS({ ...s, handoverOtp: e.target.checked })}
+            />{' '}
+            When someone not on the pupil’s record collects the child, the parent confirms with a
+            one-time code at the front desk
+          </label>
+          <label className="ep-check" htmlFor="gs-mail">
+            <input
+              id="gs-mail"
+              type="checkbox"
+              checked={s.notifyEmail}
+              onChange={(e) => setS({ ...s, notifyEmail: e.target.checked })}
+            />{' '}
+            Email the approvers when a pass waits on them, and the family or employee when it is
+            decided (with the pass as PDF)
+          </label>
+        </section>
+      )}
       <p className="ep-field__help">
         A level that nobody holds is skipped. An employee never approves their own pass. Passes
         already asked keep the levels they were given.

@@ -98,10 +98,12 @@ export interface PassCounts {
   out: number;
   today: number;
 }
+/** The level sets: pupil passes, staff passes, and the hostel's home leave and outings. */
+export type GatePassLevelSet = 'student' | 'staff' | 'hostel_home' | 'hostel_outing';
 export interface GatePassLevel {
-  audience: 'student' | 'staff';
+  audience: GatePassLevelSet;
   label: string;
-  kind: 'class_teacher' | 'role' | 'designation' | 'employee';
+  kind: 'class_teacher' | 'role' | 'designation' | 'employee' | 'hostel_warden' | 'head_warden';
   roleCode: string | null;
   designation: string | null;
   employeeId: string | null;
@@ -115,6 +117,10 @@ export interface GatePassSetup {
     studentNeed: number;
     staffMode: 'sequence' | 'any';
     staffNeed: number;
+    hostelHomeMode: 'sequence' | 'any';
+    hostelHomeNeed: number;
+    hostelOutingMode: 'sequence' | 'any';
+    hostelOutingNeed: number;
     handoverOtp: boolean;
     notifyEmail: boolean;
   };

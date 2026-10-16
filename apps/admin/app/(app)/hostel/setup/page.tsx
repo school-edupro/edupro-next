@@ -1,7 +1,9 @@
 import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { GatePassSetupForm } from '@/components/gate-passes/GatePassSetupForm';
 import { HostelNav } from '@/components/hostel/HostelNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
+import type { GatePassSetup } from '@/lib/gate-passes';
 import {
   addBed,
   createRoom,
@@ -79,7 +81,10 @@ const TABS = [
   { id: 'types', label: 'Room types and fee' },
   { id: 'rooms', label: 'Rooms and beds' },
   { id: 'rules', label: 'Roll-call and leave rules' },
+  { id: 'approval', label: 'Leave approval' },
 ] as const;
+/** The gate pass set-up right: the hostel's leave approval levels are kept with the gate pass levels. */
+const GATE_PASS_SETUP = 'engagement.gate_pass_setup.manage';
 const GENDER = { boys: 'Boys', girls: 'Girls', mixed: 'Boys and girls' } as const;
 
 /** Hostel set-up: hostels with blocks and wardens, room types (seater, AC, fee group), rooms and beds. */
@@ -131,6 +136,10 @@ export default async function HostelSetupPage({
           .catch(() => [] as Employee[])
       : Promise.resolve([] as Employee[]),
   ]);
+  const approval =
+    tab === 'approval' && me.permissions.includes(GATE_PASS_SETUP)
+      ? await apiFetch<GatePassSetup>('/gate-passes/setup')
+      : null;
   const back = (extra = '') =>
     `/hostel/setup?tab=${tab}${hostel ? `&hostel=${hostel.id}` : ''}${extra}`;
   return (
@@ -604,6 +613,23 @@ export default async function HostelSetupPage({
           </>
         )
       ) : null}
+      {tab === 'approval' ? (
+        <Card title="Who approves hostel home leave and outings">
+          <p className="ep-field__help">
+            A parent asks for leave in the parent app, or the warden or front desk makes it under
+            Gate passes. It then goes to these levels. The same levels show under Gate passes →
+            Set-up.
+          </p>
+          {approval ? (
+            <GatePassSetupForm setup={approval} only="hostel" />
+          ) : (
+            <p>
+              Changing the approval levels needs the gate pass set-up right. Ask the school admin.
+            </p>
+          )}
+        </Card>
+      ) : null}
+
       {tab === 'rules' && rules ? (
         <>
           <Card title="Leave and roll-call rules" style={{ marginBottom: 'var(--sp-4)' }}>

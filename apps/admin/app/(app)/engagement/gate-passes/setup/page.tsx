@@ -5,7 +5,7 @@ import { MessageTemplates } from '@/components/MessageTemplates';
 import { apiFetch, getMe } from '@/lib/api';
 import type { GatePassSetup } from '@/lib/gate-passes';
 
-/** Gate pass set-up (admin): approval levels for pupil and staff passes, and the hand-over rules. */
+/** Gate pass set-up (admin): approval levels for pupil and staff passes and hostel leave, and the hand-over rules. */
 export default async function GatePassSetupPage() {
   const [me, setup] = await Promise.all([getMe(), apiFetch<GatePassSetup>('/gate-passes/setup')]);
   return (
@@ -13,7 +13,7 @@ export default async function GatePassSetupPage() {
       <PageHeader
         kicker="Gate passes"
         title="Set-up"
-        description="Who approves a gate pass and in which order. Front Desk and Gate / Security are roles you give under Access."
+        description="Who approves a gate pass and in which order: pupil passes, staff passes, and hostel home leave and outings. Front Desk and Gate / Security are roles you give under Access."
       />
       <GatePassNav current="/engagement/gate-passes/setup" permissions={me.permissions} />
       <Card>

@@ -416,6 +416,104 @@ describe('hostel module H2 (e2e)', () => {
     expect(back.json()).toMatchObject({ state: 'returned' });
   });
 
+  it('hostel leave follows its own levels: warden by default, then as the school sets them', async () => {
+    type Setup = {
+      settings: Record<string, unknown>;
+      levels: Array<{ audience: string; kind: string; label: string }>;
+    };
+    const setup = (await get('/gate-passes/setup')) as Setup;
+    // the first read gives each of home leave and outings one level: any warden of the pupil's hostel
+    for (const a of ['hostel_home', 'hostel_outing'])
+      expect(setup.levels.filter((l) => l.audience === a)).toEqual([
+        expect.objectContaining({ kind: 'hostel_warden', label: 'Warden' }),
+      ]);
+    const put = (json: unknown) =>
+      inject({ method: 'PUT', url: '/gate-passes/setup', headers: h(admin), json });
+    const base = { ...setup.settings };
+    const keep = setup.levels.filter((l) => !l.audience.startsWith('hostel_'));
+    // a warden level belongs to hostel leave only
+    expect(
+      (
+        await put({
+          ...base,
+          levels: [...keep, { audience: 'student', label: 'Warden', kind: 'hostel_warden' }],
+        })
+      ).statusCode,
+    ).toBe(400);
+    // home leave: the warden, then the school admin; outings left out of the form stay as they were
+    const saved = await put({
+      ...base,
+      hostelHomeMode: 'sequence',
+      levels: [
+        ...keep,
+        { audience: 'hostel_home', label: 'Warden', kind: 'hostel_warden' },
+        {
+          audience: 'hostel_home',
+          label: 'Head of school',
+          kind: 'role',
+          roleCode: 'school_admin',
+        },
+      ],
+    });
+    expect(saved.statusCode).toBe(200);
+    const after = saved.json() as Setup;
+    expect(after.levels.filter((l) => l.audience === 'hostel_home').map((l) => l.kind)).toEqual([
+      'hostel_warden',
+      'role',
+    ]);
+    expect(after.levels.filter((l) => l.audience === 'hostel_outing')).toHaveLength(1);
+    // an empty home leave set is refused
+    expect(
+      (
+        await put({
+          ...base,
+          levels: [
+            ...keep,
+            { audience: 'hostel_home', label: 'Warden', kind: 'hostel_warden', active: false },
+          ],
+        })
+      ).statusCode,
+    ).toBe(400);
+    await withMigrator((c) =>
+      c.query(`UPDATE guardians SET user_id = $1 WHERE mobile = '9876500072' AND school_id = $2`, [
+        parent.id,
+        school.id,
+      ]),
+    );
+    const req = await post('/gate-passes/mine', parent, {
+      studentId: ids.amit,
+      kind: 'hostel_home',
+      onDate: plusDays(today, 5),
+      atTime: '10:00',
+      returnOn: plusDays(today, 7),
+      returnAt: '17:00',
+      reason: 'Family function',
+      escortKind: 'father',
+    });
+    expect(req.statusCode).toBe(201);
+    const id = req.json().id as string;
+    // the other hostel's warden holds no level; the admin waits for the warden
+    expect(JSON.stringify(await get('/gate-passes/inbox', other))).not.toContain(`"id":"${id}"`);
+    expect(JSON.stringify(await get('/gate-passes/inbox', admin))).not.toContain(`"id":"${id}"`);
+    const first = await post(`/gate-passes/${id}/decide`, warden, { outcome: 'approved' });
+    expect(first.json()).toMatchObject({ state: 'pending' });
+    const second = await post(`/gate-passes/${id}/decide`, admin, { outcome: 'approved' });
+    expect(second.json()).toMatchObject({ state: 'approved' });
+    // an outing still needs the warden alone
+    const outing = await post('/gate-passes/mine', parent, {
+      studentId: ids.amit,
+      kind: 'hostel_outing',
+      onDate: plusDays(today, 1),
+      atTime: '10:00',
+      reason: 'Market',
+    });
+    expect(outing.statusCode).toBe(201);
+    const o = await post(`/gate-passes/${outing.json().id as string}/decide`, warden, {
+      outcome: 'approved',
+    });
+    expect(o.json()).toMatchObject({ state: 'approved' });
+  });
+
   it('a day scholar cannot ask for hostel leave', async () => {
     await withMigrator((c) =>
       c.query(`UPDATE guardians SET user_id = $1 WHERE mobile = '9876500073' AND school_id = $2`, [

@@ -33,6 +33,15 @@ import { qrPng, visitorCardPdf } from './visitor-card';
 
 type Row = Record<string, unknown>;
 type Audience = 'student' | 'staff';
+/** The level sets: pupil passes, staff passes, and the hostel's home leave and outings. */
+type LevelSet = Audience | 'hostel_home' | 'hostel_outing';
+const SETS: LevelSet[] = ['student', 'staff', 'hostel_home', 'hostel_outing'];
+const SET_NAME: Record<LevelSet, string> = {
+  student: 'pupil passes',
+  staff: 'staff passes',
+  hostel_home: 'hostel home leave',
+  hostel_outing: 'hostel outings',
+};
 type Party = 'student' | 'father' | 'mother' | 'guardian';
 
 const iso = (d: unknown): string | null => (d instanceof Date ? d.toISOString() : null);
@@ -76,7 +85,7 @@ const FROM = `FROM gate_passes p LEFT JOIN students s ON s.id = p.student_id LEF
 
 /** Kinds that go out and must come back in at the gate. */
 const RETURNING = new Set(['rgp', 'hostel_home', 'hostel_outing']);
-/** Hostel leave: the pupil's hostel wardens approve; out and back at the gate. */
+/** Hostel leave: approved by its own levels (0160; any warden of the pupil's hostel to begin with); out and back at the gate. */
 export const HOSTEL_KINDS = new Set(['hostel_home', 'hostel_outing']);
 
 /** Where a pass stands for the people who work it. */
@@ -236,15 +245,19 @@ export interface Settings {
   studentNeed: number;
   staffMode: 'sequence' | 'any';
   staffNeed: number;
+  hostelHomeMode: 'sequence' | 'any';
+  hostelHomeNeed: number;
+  hostelOutingMode: 'sequence' | 'any';
+  hostelOutingNeed: number;
   handoverOtp: boolean;
   notifyEmail: boolean;
 }
 export interface Level {
   id: string;
-  audience: Audience;
+  audience: LevelSet;
   seq: number;
   label: string;
-  kind: 'class_teacher' | 'role' | 'designation' | 'employee';
+  kind: 'class_teacher' | 'role' | 'designation' | 'employee' | 'hostel_warden' | 'head_warden';
   roleCode: string | null;
   designation: string | null;
   employeeId: string | null;
@@ -295,8 +308,15 @@ export class GatePassService {
          ) AS x(audience, seq, label, kind, role_code, designation)
           WHERE NOT EXISTS (SELECT 1 FROM gate_pass_levels)`,
       );
+    // hostel leave (0160): any warden of the pupil's hostel, as it was before the levels could be set
+    await c.query(
+      `INSERT INTO gate_pass_levels (school_id, audience, seq, label, kind)
+       SELECT app.current_school_id(), a, 1, 'Warden', 'hostel_warden' FROM unnest(ARRAY['hostel_home', 'hostel_outing']) a
+        WHERE NOT EXISTS (SELECT 1 FROM gate_pass_levels l WHERE l.audience = a)`,
+    );
     const r = await c.query<Row>(
-      `SELECT student_mode, student_need, staff_mode, staff_need, handover_otp, notify_email FROM gate_pass_settings WHERE school_id = app.current_school_id()`,
+      `SELECT student_mode, student_need, staff_mode, staff_need, hostel_home_mode, hostel_home_need, hostel_outing_mode,
+              hostel_outing_need, handover_otp, notify_email FROM gate_pass_settings WHERE school_id = app.current_school_id()`,
     );
     const x = r.rows[0]!;
     return {
@@ -304,12 +324,16 @@ export class GatePassService {
       studentNeed: Number(x.student_need),
       staffMode: x.staff_mode as Settings['staffMode'],
       staffNeed: Number(x.staff_need),
+      hostelHomeMode: x.hostel_home_mode as Settings['hostelHomeMode'],
+      hostelHomeNeed: Number(x.hostel_home_need),
+      hostelOutingMode: x.hostel_outing_mode as Settings['hostelOutingMode'],
+      hostelOutingNeed: Number(x.hostel_outing_need),
       handoverOtp: Boolean(x.handover_otp),
       notifyEmail: Boolean(x.notify_email),
     };
   }
 
-  private async levels(c: PoolClient, audience?: Audience): Promise<Level[]> {
+  private async levels(c: PoolClient, audience?: LevelSet): Promise<Level[]> {
     const r = await c.query<Row>(
       `SELECT l.id::text, l.audience, l.seq, l.label, l.kind, l.role_code, l.designation, l.employee_id::text, e.display_name AS employee_name, l.active, l.mandatory
          FROM gate_pass_levels l LEFT JOIN employees e ON e.id = l.employee_id
@@ -318,7 +342,7 @@ export class GatePassService {
     );
     return r.rows.map((x) => ({
       id: String(x.id),
-      audience: x.audience as Audience,
+      audience: x.audience as LevelSet,
       seq: Number(x.seq),
       label: String(x.label),
       kind: x.kind as Level['kind'],
@@ -358,19 +382,24 @@ export class GatePassService {
 
   async saveSetup(ctx: RequestContext, dto: GatePassSetupDto) {
     await this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.settings(c);
-      for (const audience of ['student', 'staff'] as const) {
+      const before = await this.settings(c);
+      // the hostel sets are left as they are when the form does not send them
+      const sets = SETS.filter(
+        (a) => !a.startsWith('hostel_') || dto.levels.some((l) => l.audience === a),
+      );
+      for (const audience of sets) {
         const active = dto.levels.filter((l) => l.audience === audience && l.active).length;
         if (!active)
           throw new DomainError(
             'validation-failed',
-            `Keep at least one approval level for ${audience === 'student' ? 'pupil' : 'staff'} passes`,
+            `Keep at least one approval level for ${SET_NAME[audience]}`,
             { status: 400 },
           );
       }
       await c.query(
         `UPDATE gate_pass_settings SET student_mode = $1, student_need = $2, staff_mode = $3, staff_need = $4, handover_otp = $5,
-                notify_email = $6, updated_at = now(), updated_by = app.current_user_id() WHERE school_id = app.current_school_id()`,
+                notify_email = $6, hostel_home_mode = $7, hostel_home_need = $8, hostel_outing_mode = $9, hostel_outing_need = $10,
+                updated_at = now(), updated_by = app.current_user_id() WHERE school_id = app.current_school_id()`,
         [
           dto.studentMode,
           dto.studentNeed,
@@ -378,13 +407,17 @@ export class GatePassService {
           dto.staffNeed,
           dto.handoverOtp,
           dto.notifyEmail,
+          dto.hostelHomeMode ?? before.hostelHomeMode,
+          dto.hostelHomeNeed ?? before.hostelHomeNeed,
+          dto.hostelOutingMode ?? before.hostelOutingMode,
+          dto.hostelOutingNeed ?? before.hostelOutingNeed,
         ],
       );
       // passes already asked keep the levels they were given; the new levels apply from the next request
-      await c.query(`DELETE FROM gate_pass_levels`);
-      const seq = { student: 0, staff: 0 };
+      await c.query(`DELETE FROM gate_pass_levels WHERE audience = ANY ($1::text[])`, [sets]);
+      const seq: Record<string, number> = {};
       for (const l of dto.levels) {
-        seq[l.audience] += 1;
+        seq[l.audience] = (seq[l.audience] ?? 0) + 1;
         await c.query(
           `INSERT INTO gate_pass_levels (school_id, audience, seq, label, kind, role_code, designation, employee_id, active, mandatory)
            VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -413,7 +446,21 @@ export class GatePassService {
 
   // ---- approvals ------------------------------------------------------------------------------------
   /** The users who hold one level for one pass. */
-  private async approversOf(c: PoolClient, l: Level, studentId: string | null): Promise<string[]> {
+  private async approversOf(
+    c: PoolClient,
+    l: Level,
+    studentId: string | null,
+    onDate: string | null = null,
+  ): Promise<string[]> {
+    if (l.kind === 'hostel_warden' || l.kind === 'head_warden') {
+      // the wardens of the hostel the pupil stays in on the day (the head wardens; all when none is head)
+      if (!studentId) return [];
+      const w = await c.query<{ ids: string[] }>(
+        `SELECT app.hostel_warden_users(app.hostel_of($1, COALESCE($2::date, (now() AT TIME ZONE 'Asia/Kolkata')::date)), $3)::text[] AS ids`,
+        [studentId, onDate, l.kind === 'head_warden'],
+      );
+      return w.rows[0]?.ids ?? [];
+    }
     if (l.kind === 'class_teacher') {
       if (!studentId) return [];
       const r = await c.query<{ id: string }>(
@@ -458,28 +505,23 @@ export class GatePassService {
   private async startApprovals(c: PoolClient, id: string): Promise<void> {
     const s = await this.settings(c);
     const p = await this.find(c, id);
-    const mode = HOSTEL_KINDS.has(p.kind)
-      ? 'sequence'
-      : p.audience === 'student'
-        ? s.studentMode
-        : s.staffMode;
-    const need = HOSTEL_KINDS.has(p.kind)
-      ? 1
-      : p.audience === 'student'
-        ? s.studentNeed
-        : s.staffNeed;
+    // hostel leave has its own levels (0160); a pupil's or staff pass those of its audience
+    const set: LevelSet = HOSTEL_KINDS.has(p.kind) ? (p.kind as LevelSet) : p.audience;
+    const mode = {
+      student: s.studentMode,
+      staff: s.staffMode,
+      hostel_home: s.hostelHomeMode,
+      hostel_outing: s.hostelOutingMode,
+    }[set];
+    const need = {
+      student: s.studentNeed,
+      staff: s.staffNeed,
+      hostel_home: s.hostelHomeNeed,
+      hostel_outing: s.hostelOutingNeed,
+    }[set];
     const rows: Array<{ label: string; users: string[]; mandatory: boolean }> = [];
-    // hostel leave: the wardens of the pupil's hostel decide (any one of them)
-    const hostel = HOSTEL_KINDS.has(p.kind);
-    if (hostel) {
-      const w = await c.query<{ ids: string[] }>(
-        `SELECT app.hostel_warden_users(app.hostel_of($1, $2::date))::text[] AS ids`,
-        [p.studentId, p.onDate],
-      );
-      rows.push({ label: 'Warden', users: w.rows[0]?.ids ?? [], mandatory: false });
-    }
-    for (const l of hostel ? [] : (await this.levels(c, p.audience)).filter((x) => x.active)) {
-      const users = (await this.approversOf(c, l, p.studentId)).filter(
+    for (const l of (await this.levels(c, set)).filter((x) => x.active)) {
+      const users = (await this.approversOf(c, l, p.studentId, p.onDate)).filter(
         (u) => u !== p.requestedById || p.audience === 'student',
       );
       rows.push({ label: l.label, users, mandatory: l.mandatory });

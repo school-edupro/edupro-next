@@ -166,9 +166,17 @@ export class MyPassesDto extends createZodDto(MyPassesSchema) {}
 
 const LevelSchema = z
   .object({
-    audience: z.enum(['student', 'staff']),
+    /** student / staff passes, or the hostel's home leave and outings (each with its own levels). */
+    audience: z.enum(['student', 'staff', 'hostel_home', 'hostel_outing']),
     label: z.string().trim().min(2).max(60),
-    kind: z.enum(['class_teacher', 'role', 'designation', 'employee']),
+    kind: z.enum([
+      'class_teacher',
+      'role',
+      'designation',
+      'employee',
+      'hostel_warden',
+      'head_warden',
+    ]),
     roleCode: blank(z.string().trim().max(60)),
     designation: blank(z.string().trim().max(80)),
     employeeId: blank(IdSchema),
@@ -176,10 +184,15 @@ const LevelSchema = z
     /** In "any N" mode: this level must approve whatever the others do. */
     mandatory: z.boolean().default(false),
   })
-  .refine((v) => v.kind !== 'class_teacher' || v.audience === 'student', {
+  .refine((v) => v.kind !== 'class_teacher' || v.audience !== 'staff', {
     message: 'The class teacher approves pupil passes only',
     path: ['kind'],
   })
+  .refine(
+    (v) =>
+      !(v.kind === 'hostel_warden' || v.kind === 'head_warden') || v.audience.startsWith('hostel_'),
+    { message: 'The hostel’s wardens approve hostel leave only', path: ['kind'] },
+  )
   .refine((v) => v.kind !== 'role' || v.roleCode, { message: 'Pick the role', path: ['roleCode'] })
   .refine((v) => v.kind !== 'designation' || v.designation, {
     message: 'Give the designation',
@@ -194,9 +207,14 @@ export const GatePassSetupSchema = z.object({
   studentNeed: z.number().int().min(1).max(6),
   staffMode: z.enum(['sequence', 'any']),
   staffNeed: z.number().int().min(1).max(6),
+  /** Hostel home leave and outings; left out, they stay as they are. */
+  hostelHomeMode: z.enum(['sequence', 'any']).optional(),
+  hostelHomeNeed: z.number().int().min(1).max(6).optional(),
+  hostelOutingMode: z.enum(['sequence', 'any']).optional(),
+  hostelOutingNeed: z.number().int().min(1).max(6).optional(),
   handoverOtp: z.boolean(),
   notifyEmail: z.boolean(),
   /** In the order they approve; the levels of each audience keep their own order. */
-  levels: z.array(LevelSchema).max(16),
+  levels: z.array(LevelSchema).max(32),
 });
 export class GatePassSetupDto extends createZodDto(GatePassSetupSchema) {}
