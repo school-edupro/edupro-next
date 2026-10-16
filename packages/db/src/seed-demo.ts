@@ -73,6 +73,16 @@ const DEMO_USERS: DemoUser[] = [
       'Transport In-charge: routes, stoppages, vehicles, transport requests (first approval), applying for a pupil, history',
   },
   {
+    sub: 'dev-warden',
+    name: 'Wasim Warden',
+    mobile: '9999999919',
+    email: 'warden@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['warden'] },
+    description:
+      'Warden: link to an employee and name as (head) warden of a hostel under Hostel -> Set-up; takes the roll-call in the staff app',
+  },
+  {
     sub: 'dev-hostel',
     name: 'Harish Hostel Clerk',
     mobile: '9999999918',
