@@ -1777,6 +1777,11 @@ export class GatePassService {
         // eslint-disable-next-line no-restricted-syntax -- SELECT, the stage fragment and TODAY are constants
         `${SELECT} WHERE ${STAGE_SQL.gate} AND p.on_date = ${TODAY} ORDER BY p.at_time NULLS LAST, p.id LIMIT 200`,
       );
+      // approved for today but not handed over yet (early leave: front desk; home leave: the warden)
+      const waiting = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT, the stage fragment and TODAY are constants
+        `${SELECT} WHERE ${STAGE_SQL.handover} AND p.on_date = ${TODAY} ORDER BY p.at_time NULLS LAST, p.id LIMIT 200`,
+      );
       const out = await c.query<Row>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT and the stage fragment are constants
         `${SELECT} WHERE ${STAGE_SQL.out} ORDER BY p.return_by NULLS LAST, p.id LIMIT 200`,
@@ -1786,6 +1791,7 @@ export class GatePassService {
       );
       return {
         ready: ready.rows.map(toRow),
+        waiting: waiting.rows.map(toRow),
         out: out.rows.map(toRow),
         gates: gates.rows[0]?.gates ?? ['Main gate'],
       };

@@ -18,6 +18,8 @@ import {
 
 interface Board {
   ready: GatePass[];
+  /** Approved for today, not handed over yet: not to be let out. */
+  waiting: GatePass[];
   out: GatePass[];
   gates: string[];
 }
@@ -66,7 +68,7 @@ export default async function GatePassGatePage({
       <PageHeader
         kicker="Gate passes"
         title="Gate"
-        description={`${String(board.ready.length)} may go out or come in today · ${String(board.out.length)} out and due back.`}
+        description={`${String(board.ready.length)} may go out or come in today · ${String((board.waiting ?? []).length)} approved, waiting for hand-over · ${String(board.out.length)} out and due back.`}
       />
       <GatePassNav current={BASE} permissions={me.permissions} ok={sp.ok} />
       <Notice params={{ error: sp.error, detail: sp.detail }} />
@@ -202,7 +204,16 @@ export default async function GatePassGatePage({
       {(
         [
           ['Approved for today', board.ready, 'No approved pass is waiting at the gate.'],
-          ['Out and due back (staff, RGP)', board.out, 'Nobody is out on a returnable pass.'],
+          [
+            'Approved, waiting for hand-over (do not let out yet)',
+            board.waiting ?? [],
+            'No approved pass is waiting for the front desk or the warden.',
+          ],
+          [
+            'Out and due back (staff RGP, hostel leave)',
+            board.out,
+            'Nobody is out on a returnable pass.',
+          ],
         ] as Array<[string, GatePass[], string]>
       ).map(([title, rows, empty]) => (
         <Card key={title} title={title} style={{ marginTop: 'var(--sp-4)' }}>

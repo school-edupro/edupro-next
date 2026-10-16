@@ -359,6 +359,10 @@ describe('hostel module H2 (e2e)', () => {
       state: 'approved',
       stage: 'Approved: the warden hands over',
     });
+    // the gate sees it as approved but waiting for the warden's hand-over, not among those to let out
+    const board = await get('/gate-passes/gate/board', guard);
+    expect(board.waiting.map((x: { id: string }) => x.id)).toContain(ids.home);
+    expect(board.ready.map((x: { id: string }) => x.id)).not.toContain(ids.home);
     // the gate waits for the warden's hand-over; the other hostel's warden cannot hand over
     expect((await post(`/gate-passes/${ids.home}/out`, guard)).json()).toMatchObject({
       type: expect.stringContaining('gate_pass.not_handed_over'),

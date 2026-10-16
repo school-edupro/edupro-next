@@ -34,11 +34,13 @@ export default async function GatePassPage({
   const may = (code: string) => me.permissions.includes(code);
   const here = `/engagement/gate-passes/${p.id}`;
   const student = p.audience === 'student';
+  // home leave is handed over by a warden of the pupil's hostel or the hostel office (the API checks the hostel)
   const canHandover =
     may('engagement.gate_pass.handover') &&
     p.state === 'approved' &&
     student &&
-    p.kind === 'early_leave';
+    (p.kind === 'early_leave' ||
+      (p.kind === 'hostel_home' && (may('hostel.allot.manage') || may('hostel.rollcall.mark'))));
   const canOut =
     may('engagement.gate_pass.gate') &&
     ((student && p.state === 'handed_over') ||
@@ -145,7 +147,12 @@ export default async function GatePassPage({
         </Card>
       ) : null}
       {canHandover ? (
-        <Card title="Hand over at the front desk" style={{ marginBottom: 'var(--sp-4)' }}>
+        <Card
+          title={
+            p.kind === 'hostel_home' ? 'Hand over at the hostel' : 'Hand over at the front desk'
+          }
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
           <HandoverPanel
             id={p.id}
             collector={escortLine(p) ?? 'the person collecting'}
@@ -154,10 +161,14 @@ export default async function GatePassPage({
           />
         </Card>
       ) : null}
-      {p.state === 'approved' && student && p.kind === 'early_leave' && !canHandover ? (
+      {p.state === 'approved' &&
+      student &&
+      (p.kind === 'early_leave' || p.kind === 'hostel_home') &&
+      !canHandover ? (
         <div style={{ marginBottom: 'var(--sp-4)' }}>
           <Alert tone="info">
-            Approved. The front desk hands the child over (photo
+            Approved. The {p.kind === 'hostel_home' ? 'hostel warden' : 'front desk'} hands the
+            child over (photo
             {p.otpNeeded ? ' and the parent’s code' : ''}); the gate can let the child out only
             after that.
           </Alert>
