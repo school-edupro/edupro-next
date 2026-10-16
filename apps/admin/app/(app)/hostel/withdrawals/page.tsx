@@ -1,9 +1,8 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { Button, Card, PageHeader } from '@edupro/ui';
+import { HostelReportView } from '@/components/hostel/HostelReportView';
 import { HostelNav } from '@/components/hostel/HostelNav';
-import { HW_REASON, HW_STATUS, HW_TONE, dmy } from '@/components/hostel/withdrawal-text';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import type { HostelWithdrawal } from '@/lib/types';
 
 const STATUSES = [
   ['open', 'Open'],
@@ -35,21 +34,19 @@ export default async function HostelWithdrawalsPage({
 }) {
   const sp = await searchParams;
   const status = STATUSES.some(([k]) => k === sp.status) ? sp.status! : 'open';
-  const filters = new URLSearchParams({
+  const [me, hostels] = await Promise.all([
+    getMe(),
+    apiFetch<{ data: Array<{ id: string; name: string }> }>('/hostel/hostels').then((r) => r.data),
+  ]);
+  // the report reads the same filters (leaving from/to as from/to)
+  const query = new URLSearchParams({
     status,
     ...(sp.mine === '1' ? { mine: 'true' } : {}),
     ...(sp.hostelId ? { hostelId: sp.hostelId } : {}),
-    ...(sp.leavingFrom ? { leavingFrom: sp.leavingFrom } : {}),
-    ...(sp.leavingTo ? { leavingTo: sp.leavingTo } : {}),
+    ...(sp.leavingFrom ? { from: sp.leavingFrom } : {}),
+    ...(sp.leavingTo ? { to: sp.leavingTo } : {}),
     ...(sp.q ? { q: sp.q } : {}),
   });
-  const [me, list, hostels] = await Promise.all([
-    getMe(),
-    apiFetch<{ data: HostelWithdrawal[]; page: { total: number } }>(
-      `/hostel/withdrawals?${filters.toString()}&size=200`,
-    ),
-    apiFetch<{ data: Array<{ id: string; name: string }> }>('/hostel/hostels').then((r) => r.data),
-  ]);
   const can = (p: string) => me.permissions.includes(p);
   const link = (patch: Record<string, string | null>) => {
     const u = new URLSearchParams({
@@ -66,8 +63,6 @@ export default async function HostelWithdrawalsPage({
     }
     return `/hostel/withdrawals?${u.toString()}`;
   };
-  const fileQuery = new URLSearchParams(filters);
-  fileQuery.delete('mine');
   return (
     <>
       <PageHeader
@@ -165,66 +160,9 @@ export default async function HostelWithdrawalsPage({
           <Button type="submit" variant="secondary">
             Apply
           </Button>
-          <a
-            className="ep-btn ep-btn--ghost ep-btn--sm"
-            href={`/api/hostel/withdrawals-file?${fileQuery.toString()}&format=xlsx`}
-          >
-            Excel
-          </a>
-          <a
-            className="ep-btn ep-btn--ghost ep-btn--sm"
-            href={`/api/hostel/withdrawals-file?${fileQuery.toString()}&format=pdf`}
-          >
-            PDF
-          </a>
         </form>
       </Card>
-      {list.data.length ? (
-        <div className="ep-table-wrap">
-          <table className="ep-table">
-            <caption className="ep-sr-only">Hostel withdrawals</caption>
-            <thead>
-              <tr>
-                <th scope="col">Pupil</th>
-                <th scope="col">Hostel · bed</th>
-                <th scope="col">Asked on</th>
-                <th scope="col">Leaving on</th>
-                <th scope="col">Reason</th>
-                <th scope="col">Waiting with</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.data.map((w) => (
-                <tr key={w.id}>
-                  <td>
-                    <a href={`/hostel/withdrawals/${w.id}`}>{w.studentName}</a>
-                    <div className="ep-field__help">
-                      {w.admissionNo}
-                      {w.section ? ` · ${w.section}` : ''}
-                    </div>
-                  </td>
-                  <td>
-                    {w.hostelName} · {w.place}
-                  </td>
-                  <td>{dmy(w.requestedOn)}</td>
-                  <td>
-                    {dmy(w.leavingOn)}
-                    {w.noticeShort ? <div className="ep-field__help">short notice</div> : null}
-                  </td>
-                  <td>{HW_REASON[w.reason]}</td>
-                  <td>{w.status === 'requested' ? (w.waitingWith ?? 'Hostel office') : '—'}</td>
-                  <td>
-                    <Badge tone={HW_TONE[w.status] ?? 'neutral'}>{HW_STATUS[w.status]}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="ep-muted">No hostel withdrawal here.</p>
-      )}
+      <HostelReportView report="withdrawals" query={query} back={link({})} />
     </>
   );
 }

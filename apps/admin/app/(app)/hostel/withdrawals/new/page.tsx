@@ -122,8 +122,10 @@ export default async function NewHostelWithdrawalPage({
                   min={pupil.current.fromDate}
                 />
                 <span className="ep-field__help">
-                  The hostel fee is charged up to this month. If it is sooner than the school’s
-                  notice period after the request, the next month is charged too.
+                  Any day from {dmy(pupil.current.fromDate)}, the day the bed was allotted. The
+                  hostel fee is charged up to this month; if the day is after the request but sooner
+                  than the school’s notice period, the next month is charged too. An earlier day
+                  records a pupil who has already left (no notice month).
                 </span>
               </label>
               <label className="ep-field" htmlFor="nw-why">

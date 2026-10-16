@@ -1,4 +1,6 @@
 import { Badge, Button, Card, KpiTile, PageHeader } from '@edupro/ui';
+import { HostelReportView } from '@/components/hostel/HostelReportView';
+import { Notice } from '@/components/Notice';
 import { HostelNav } from '@/components/hostel/HostelNav';
 import { apiFetch, getMe } from '@/lib/api';
 
@@ -63,12 +65,85 @@ const when = (v: string | null) =>
 export default async function HostelLeavePage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string; hostel?: string }>;
+  searchParams: Promise<{
+    show?: string;
+    hostel?: string;
+    view?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   const show = SHOW.some(([k]) => k === sp.show) ? sp.show! : 'out';
   const hostelId = /^\d{1,18}$/.test(sp.hostel ?? '') ? sp.hostel! : '';
+  const views = (current: 'desk' | 'register') => (
+    <nav className="ep-tabs-links" aria-label="View" style={{ marginBottom: 'var(--sp-3)' }}>
+      <a
+        href={`/hostel/leave?show=${show}${hostelId ? `&hostel=${hostelId}` : ''}`}
+        aria-current={current === 'desk' ? 'page' : undefined}
+      >
+        Leave desk
+      </a>
+      <a
+        href={`/hostel/leave?view=register&show=${show}${hostelId ? `&hostel=${hostelId}` : ''}`}
+        aria-current={current === 'register' ? 'page' : undefined}
+      >
+        Register with parents (Excel / PDF)
+      </a>
+    </nav>
+  );
+  if (sp.view === 'register') {
+    const hostelsList = (
+      await apiFetch<{ data: Array<{ id: string; name: string }> }>('/hostel/hostels')
+    ).data;
+    const query = new URLSearchParams({ show, ...(hostelId ? { hostelId } : {}) });
+    return (
+      <>
+        <PageHeader
+          kicker="Hostel"
+          title="Leave and outings"
+          description="The passes as a register with the parents to reach. Choose the columns; Excel and PDF follow them."
+        />
+        <HostelNav current="/hostel/leave" permissions={me.permissions} />
+        <Notice params={sp} />
+        {views('register')}
+        <form method="get" className="ep-hd__row" style={{ marginBottom: 'var(--sp-4)' }}>
+          <input type="hidden" name="view" value="register" />
+          <label className="ep-field" htmlFor="hlr-show">
+            <span className="ep-field__label">Show</span>
+            <select id="hlr-show" name="show" className="ep-select" defaultValue={show}>
+              {SHOW.map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ep-field" htmlFor="hlr-hostel">
+            <span className="ep-field__label">Hostel</span>
+            <select id="hlr-hostel" name="hostel" className="ep-select" defaultValue={hostelId}>
+              <option value="">All hostels</option>
+              {hostelsList.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button type="submit" variant="secondary">
+            Show
+          </Button>
+        </form>
+        <HostelReportView
+          report="leave"
+          query={query}
+          back={`/hostel/leave?view=register&show=${show}${hostelId ? `&hostel=${hostelId}` : ''}`}
+        />
+      </>
+    );
+  }
   const [today, hostels, rows] = await Promise.all([
     apiFetch<Today>('/hostel/today'),
     apiFetch<{ data: Array<{ id: string; name: string }> }>('/hostel/hostels').then((r) => r.data),
@@ -84,6 +159,7 @@ export default async function HostelLeavePage({
         description="Home leave and outings asked by parents and approved by the wardens: who is away now, who is late back, who is to be handed over today. The gate checks pupils out and back in against the pass."
       />
       <HostelNav current="/hostel/leave" permissions={me.permissions} />
+      {views('desk')}
       <div className="ep-kpis" style={{ marginBottom: 'var(--sp-4)' }}>
         <KpiTile label="Boarders" value={String(today.boarders)} />
         <KpiTile label="Away now" value={String(today.away)} />

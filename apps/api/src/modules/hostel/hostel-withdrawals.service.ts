@@ -508,12 +508,8 @@ export class HostelWithdrawalsService {
       const { noticeDays, noticeCharge } = await this.setting(c);
       const requestedOn =
         dto.requestedOn ?? new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
-      if (Date.parse(requestedOn) - Date.parse(dto.leavingOn) > 31 * 86400e3)
-        throw new DomainError(
-          'hostel.leaving_too_old',
-          'The leaving date may be at most 31 days before the request',
-          { status: 422 },
-        );
+      // a leaving date on or after the request: the notice period applies; an earlier one records a
+      // pupil who has already left, and no notice month is charged
       const days = Math.round((Date.parse(dto.leavingOn) - Date.parse(requestedOn)) / 86400e3);
       let id: string;
       try {
@@ -533,7 +529,7 @@ export class HostelWithdrawalsService {
             dto.remarks ?? null,
             JSON.stringify(files),
             noticeDays,
-            noticeCharge && days < noticeDays,
+            noticeCharge && days >= 0 && days < noticeDays,
             dto.damageCharge.toFixed(2),
             dto.messCharge.toFixed(2),
             dto.chargeRemarks ?? null,
@@ -579,7 +575,7 @@ export class HostelWithdrawalsService {
           requestedOn,
           leavingOn: dto.leavingOn,
           reason: dto.reason,
-          noticeShort: noticeCharge && days < noticeDays,
+          noticeShort: noticeCharge && days >= 0 && days < noticeDays,
           damageCharge: dto.damageCharge,
           messCharge: dto.messCharge,
           approval: instanceId,

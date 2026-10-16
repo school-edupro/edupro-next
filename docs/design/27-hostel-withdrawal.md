@@ -131,3 +131,14 @@ Changed by the user after the first build:
   - `GET /hostel/withdrawal-approval`, which makes the levels the first time;
   - `POST /hostel/withdrawals/:id/complete {feeChoice}` when the levels are off.
   - The approval completion is hooked with `WorkflowService.onComplete('hostel_withdrawal')`.
+
+## Part 3 (17 Oct 2026, migration 0159)
+
+- **The last day in the hostel** may be any day from the start of the stay. The 31-day limit is gone,
+  so a pupil who left months ago and was never recorded can be recorded now.
+  - A day before the request date charges no notice month.
+- **Hostel reports with a column choice** (`/hostel/reports/:report`, `:report/file`,
+  `:report/columns`): register, occupancy, withdrawals, leave.
+  - Each report offers the father, mother and guardian contacts and the address.
+  - The user's own columns are stored in `user_preferences` (`hostel.report.<id>`).
+  - The school default is the setting `hostel.report_columns` (needs the set-up right).

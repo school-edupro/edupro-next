@@ -246,6 +246,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'on: a late-fee waiver by the accounts desk waits for the approver; off: anyone with fees.late_fee.manage sets it directly',
     module: 'fees',
   },
+  'hostel.report_columns': {
+    schema: z.record(z.string(), z.array(z.string())),
+    default: {},
+    description:
+      'Hostel reports: the columns left out by default, per report (register, occupancy, withdrawals, leave)',
+    module: 'hostel',
+  },
   'hostel.withdrawal_notice_days': {
     schema: z.number().int().min(0).max(120),
     default: 30,

@@ -13,6 +13,8 @@ import { HostelCareService } from './hostel-care.service';
 import { HostelImportService } from './hostel-import.service';
 import { HostelService } from './hostel.service';
 import { HostelWithdrawalController } from './hostel-withdrawal.controller';
+import { HostelReportsController } from './hostel-reports.controller';
+import { HostelReportsService } from './hostel-reports.service';
 import { HostelWithdrawalsService } from './hostel-withdrawals.service';
 import { FeesModule } from '../fees/fees.module';
 import { LifecycleModule } from '../people/lifecycle/lifecycle.module';
@@ -29,6 +31,7 @@ import { HW_FLOW } from './hostel-withdrawals.service';
     HostelH3Controller,
     HostelCareController,
     HostelWithdrawalController,
+    HostelReportsController,
   ],
   providers: [
     HostelService,
@@ -38,6 +41,7 @@ import { HW_FLOW } from './hostel-withdrawals.service';
     HostelMessService,
     HostelCareService,
     HostelWithdrawalsService,
+    HostelReportsService,
     AuditService,
   ],
   exports: [HostelService],

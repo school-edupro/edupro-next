@@ -164,3 +164,19 @@ boarders (fee, paid, due now, % collected).
   - the notice period;
   - the hostel steps (Warden, Mess) used when a hosteller **leaves the school** (People →
     Withdrawals).
+
+## Reports with the parents (Excel / PDF)
+
+- **The four reports:**
+  - **Allotment register:** Hostel → Register.
+  - **Occupancy:** Hostel → Occupancy → _List with parents_.
+  - **Withdrawals:** Hostel → Withdrawals.
+  - **Leave and outings:** Hostel → Leave and outings → _Register with parents_.
+- **Contact columns on each:** father, mother and guardian (name, mobile, email, and the guardian's
+  relation), and the address. The pupil's address is used, or the main guardian's if the pupil has
+  none.
+- **Columns:**
+  - Untick what you do not need, then **Save for me**.
+  - The hostel office (set-up right) can **Save as the school default**.
+  - **Back to the school default** drops your own choice.
+  - Excel and PDF carry exactly the columns on the screen.

@@ -1,4 +1,5 @@
 import { Card, KpiTile, PageHeader } from '@edupro/ui';
+import { HostelReportView } from '@/components/hostel/HostelReportView';
 import { HostelNav } from '@/components/hostel/HostelNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
@@ -48,6 +49,7 @@ export default async function HostelBoardPage({
   searchParams: Promise<{
     hostel?: string;
     on?: string;
+    view?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -56,6 +58,60 @@ export default async function HostelBoardPage({
   const sp = await searchParams;
   const me = await getMe();
   const hostels = (await apiFetch<{ data: Hostel[] }>('/hostel/hostels')).data;
+  const views = (current: 'map' | 'list') => (
+    <nav className="ep-tabs-links" aria-label="View" style={{ marginBottom: 'var(--sp-3)' }}>
+      <a
+        href={`/hostel${sp.hostel ? `?hostel=${sp.hostel}` : ''}`}
+        aria-current={current === 'map' ? 'page' : undefined}
+      >
+        Bed map
+      </a>
+      <a
+        href={`/hostel?view=list${sp.hostel ? `&hostel=${sp.hostel}` : ''}`}
+        aria-current={current === 'list' ? 'page' : undefined}
+      >
+        List with parents (Excel / PDF)
+      </a>
+    </nav>
+  );
+  if (sp.view === 'list') {
+    const hostelId = /^\d{1,18}$/.test(sp.hostel ?? '') ? sp.hostel! : '';
+    const query = new URLSearchParams(hostelId ? { hostelId } : {});
+    return (
+      <>
+        <PageHeader
+          kicker="Hostel"
+          title="Occupancy"
+          description="Who stays where today, with the parents to reach. Choose the columns; Excel and PDF follow them."
+        />
+        <HostelNav current="/hostel" permissions={me.permissions} />
+        <Notice params={sp} />
+        {views('list')}
+        <form method="get" className="ep-hd__row" style={{ marginBottom: 'var(--sp-4)' }}>
+          <input type="hidden" name="view" value="list" />
+          <label className="ep-field" htmlFor="ho-hostel">
+            <span className="ep-field__label">Hostel</span>
+            <select id="ho-hostel" name="hostel" className="ep-select" defaultValue={hostelId}>
+              <option value="">All hostels</option>
+              {hostels.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="ep-btn ep-btn--secondary">
+            Show
+          </button>
+        </form>
+        <HostelReportView
+          report="occupancy"
+          query={query}
+          back={`/hostel?view=list${hostelId ? `&hostel=${hostelId}` : ''}`}
+        />
+      </>
+    );
+  }
   const hostel = hostels.find((h) => h.id === sp.hostel) ?? hostels[0];
   const on = /^\d{4}-\d{2}-\d{2}$/.test(sp.on ?? '') ? sp.on! : '';
   const board = hostel
@@ -79,6 +135,7 @@ export default async function HostelBoardPage({
       />
       <HostelNav current="/hostel" permissions={me.permissions} />
       <Notice params={sp} />
+      {views('map')}
       {!hostel ? (
         <Card>
           No hostel is set up yet.{' '}

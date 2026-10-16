@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
 
-const KEYS = ['status', 'hostelId', 'leavingFrom', 'leavingTo', 'q'];
+const REPORTS = new Set(['register', 'occupancy', 'withdrawals', 'leave']);
+const KEYS = ['hostelId', 'from', 'to', 'open', 'status', 'show', 'q', 'mine'];
 
-/** The hostel withdrawal register as filtered on the screen, as Excel or PDF, made at once by the API. */
+/** A hostel report as filtered on the screen, with the chosen columns, as Excel or PDF. */
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
+  const report = sp.get('report') ?? '';
+  if (!REPORTS.has(report)) return NextResponse.json({ type: 'not-found' }, { status: 404 });
   const qs = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
   for (const k of KEYS) {
     const v = sp.get(k);
@@ -13,7 +16,7 @@ export async function GET(req: Request) {
   }
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
-      `/hostel/withdrawals/file?${qs.toString()}`,
+      `/hostel/reports/${report}/file?${qs.toString()}`,
     );
     return new NextResponse(Buffer.from(f.base64, 'base64'), {
       headers: {
