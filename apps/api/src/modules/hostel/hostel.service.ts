@@ -298,8 +298,8 @@ export class HostelService {
     floor: number,
   ) {
     if (!blockId) return;
-    const b = await c.query<{ floors: number }>(
-      `SELECT floors FROM hostel_blocks WHERE id = $1 AND hostel_id = $2`,
+    const b = await c.query<{ floors: number; name: string }>(
+      `SELECT floors, name FROM hostel_blocks WHERE id = $1 AND hostel_id = $2`,
       [blockId, hostelId],
     );
     if (!b.rows[0])
@@ -309,7 +309,9 @@ export class HostelService {
     if (floor >= b.rows[0].floors)
       throw new DomainError(
         'hostel.floor_out_of_range',
-        `The block has ${String(b.rows[0].floors)} floor(s): 0 (ground) to ${String(b.rows[0].floors - 1)}`,
+        b.rows[0].floors <= 1
+          ? `Block ${b.rows[0].name} has only the ground floor: choose floor 0, or first raise the block's floors under Hostels and wardens`
+          : `Block ${b.rows[0].name} has floors 0 (ground) to ${String(b.rows[0].floors - 1)}: choose one of these, or first raise the block's floors under Hostels and wardens`,
         { status: 422 },
       );
   }

@@ -40,6 +40,8 @@ const MESSAGES: Record<string, string> = {
   'enrolment.section_year_mismatch': 'That section belongs to another academic year.',
   'enrolment.student_not_active': 'The student is not active.',
   'file.not_ready': 'Upload the file before attaching it.',
+  'hostel.floor_out_of_range': 'That floor is not in the block.',
+  'hostel.block_mismatch': 'That block is not in this hostel.',
   'scope-denied': 'That section is outside your assigned scope.',
   'year.not_selected': 'Select an academic year in the header first.',
   'academics.subject.in_use':

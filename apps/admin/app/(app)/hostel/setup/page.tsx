@@ -272,7 +272,7 @@ export default async function HostelSetupPage({
                           />
                         </label>
                         <label className="ep-field" htmlFor={`b-f-${b.id}`}>
-                          <span className="ep-field__label">Floors</span>
+                          <span className="ep-field__label">Floors, with the ground</span>
                           <input
                             id={`b-f-${b.id}`}
                             name="floors"
@@ -313,7 +313,7 @@ export default async function HostelSetupPage({
                       />
                     </label>
                     <label className="ep-field" htmlFor={`b-newf-${h.id}`}>
-                      <span className="ep-field__label">Floors</span>
+                      <span className="ep-field__label">Floors, with the ground</span>
                       <input
                         id={`b-newf-${h.id}`}
                         name="floors"
@@ -323,6 +323,9 @@ export default async function HostelSetupPage({
                         className="ep-input"
                         defaultValue={1}
                       />
+                      <span className="ep-field__help">
+                        1 = ground only; 3 = ground, 1st and 2nd
+                      </span>
                     </label>
                     <Button type="submit" variant="secondary" size="sm">
                       Add
@@ -537,13 +540,20 @@ export default async function HostelSetupPage({
                       <option value="">—</option>
                       {hostel.blocks.map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.name}
+                          {b.name} —{' '}
+                          {b.floors <= 1
+                            ? 'ground floor only'
+                            : `floors 0 to ${String(b.floors - 1)}`}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="ep-field" htmlFor="nr-floor">
                     <span className="ep-field__label">Floor (0 = ground)</span>
+                    <span className="ep-field__help">
+                      Within the block’s floors. A block with more floors: raise it under Hostels
+                      and wardens.
+                    </span>
                     <input
                       id="nr-floor"
                       name="floor"
