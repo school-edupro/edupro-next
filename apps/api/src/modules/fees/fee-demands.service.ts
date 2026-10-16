@@ -58,6 +58,8 @@ export interface DemandRow {
   source: string;
   /** school or hostel */
   ledger: string;
+  /** a bounce charge line: the bounced receipts it carries, e.g. "TF/FY2026-27/000151 ₹500 (16-10-2026)" */
+  note: string | null;
 }
 
 export interface DemandSummary {
@@ -301,7 +303,12 @@ export class FeeDemandsService {
       const r = await c.query<DemandRow>(
         // eslint-disable-next-line no-restricted-syntax -- where is built from fixed fragments; values are bound parameters
         `SELECT d.id::text, d.period_id::text AS "periodId", p.name AS "periodName", p.sequence, p.instalment, d.head_id::text AS "headId", h.code AS "headCode", h.name AS "headName",
-                d.gross::text, d.discount::text, d.net::text, d.paid::text, d.status::text, d.due_on::text AS "dueOn", d.source, d.ledger::text AS ledger
+                d.gross::text, d.discount::text, d.net::text, d.paid::text, d.status::text, d.due_on::text AS "dueOn", d.source, d.ledger::text AS ledger,
+                CASE WHEN d.source = 'bounce_charge' THEN
+                  (SELECT string_agg(COALESCE(fp2.receipt_no, 'receipt ' || fp2.id::text) || ' ₹' || trim(to_char(a.charge, 'FM99999990.##'))
+                                     || ' (' || to_char(a.decided_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY') || ')', ', ' ORDER BY a.id)
+                     FROM fee_adjustments a JOIN fee_payments fp2 ON fp2.id = a.payment_id
+                    WHERE a.charge_demand_id = d.id AND a.kind = 'bounce' AND a.status = 'approved') END AS note
            FROM fee_demands d JOIN fee_periods p ON p.id = d.period_id JOIN fee_heads h ON h.id = d.head_id
           WHERE ${where} ORDER BY p.sequence, h.sort_order, h.code`,
         params,

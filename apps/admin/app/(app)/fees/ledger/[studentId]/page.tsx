@@ -608,9 +608,10 @@ export default async function FeeLedgerPage({
             <p>
               <a
                 className="ep-btn ep-btn--secondary ep-btn--sm"
-                href={`/fees/refund-pupil/${studentId}`}
+                href={`/fees/refund-pupil/${studentId}${fee === 'hostel' ? '?fee=hostel' : ''}`}
               >
-                Refund for the pupil (many receipts, one voucher)
+                {fee === 'hostel' ? 'Hostel fee refund' : 'Refund'} for the pupil (many receipts,
+                one voucher)
               </a>
             </p>
           ) : null}
@@ -1015,7 +1016,20 @@ function Matrix({ rows }: { rows: FeeDemandSummary['rows'] }) {
               const mine = live.filter((r) => r.headId === headId);
               return (
                 <tr key={headId}>
-                  <th scope="row">{headName}</th>
+                  <th scope="row">
+                    {headName}
+                    {mine
+                      .filter((r) => r.note)
+                      .map((r) => (
+                        <div
+                          key={r.id}
+                          className="ep-field__help"
+                          style={{ fontWeight: 'normal', textTransform: 'none' }}
+                        >
+                          {r.periodName.split(' ')[0]}: {r.note}
+                        </div>
+                      ))}
+                  </th>
                   {months.map(([seq]) => {
                     const r = cell.get(`${headId}:${seq}`);
                     if (!r)

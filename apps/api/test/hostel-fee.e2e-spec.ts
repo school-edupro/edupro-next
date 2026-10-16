@@ -569,4 +569,122 @@ describe('hostel fee (e2e)', () => {
     await set('fees.receipt_copies', 'parent_school');
     await set('fees.bill_layout', 'annual');
   });
+  it('bounce charges go to the month of the bounce; two of a month share a line naming both receipts', async () => {
+    const bounce = async (amount: number, no: string) => {
+      const chq = await inject({
+        method: 'POST',
+        url: '/payments/receipts',
+        headers: h(accountant),
+        json: {
+          studentId: pupils.joins,
+          amount,
+          mode: 'cheque',
+          instrumentNo: no,
+          instrumentDate: '2026-10-02',
+          bankName: 'SBI',
+          receivedOn: '2026-10-02',
+          ledger: 'hostel',
+        },
+      });
+      expect(chq.statusCode).toBe(201);
+      const req = await inject({
+        method: 'POST',
+        url: '/fees/adjustments',
+        headers: h(accountant),
+        json: { kind: 'bounce', paymentId: chq.json().paymentId, reason: 'Returned', charge: 250 },
+      });
+      await inject({
+        method: 'POST',
+        url: `/fees/adjustments/${req.json().id as string}/decide`,
+        headers: h(),
+        json: { outcome: 'approved', note: 'ok' },
+      });
+      return chq.json().receiptNo as string;
+    };
+    const no = await bounce(1000, '901133');
+    const lines = (
+      await inject({ method: 'GET', url: `/fees/students/${pupils.joins}/demands`, headers: h() })
+    ).json().rows as Array<{
+      source: string;
+      ledger: string;
+      net: string;
+      periodName: string;
+      note: string | null;
+    }>;
+    const charge = lines.filter((l) => l.source === 'bounce_charge');
+    // the earlier bounce (400) and this one (250) are of this month and of the hostel fee: one line
+    expect(charge).toHaveLength(1);
+    const month = new Date(Date.now() + 5.5 * 3600e3).toLocaleDateString('en-GB', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    expect(charge[0]).toMatchObject({ ledger: 'hostel', net: '650.00', periodName: month });
+    expect(charge[0]!.note).toContain(no);
+    expect(charge[0]!.note).toContain('₹400');
+    expect(charge[0]!.note).toContain('₹250');
+  });
+
+  it('a pupil refund is of one fee type: its receipts only, other lines refused, its own voucher series', async () => {
+    const get = async (ledger: string) =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/payments/refunds/student/${pupils.whole}/refundable?ledger=${ledger}`,
+          headers: h(accountant),
+        })
+      ).json() as {
+        ledger: string;
+        receiptsByLedger: { school: number; hostel: number };
+        receipts: Array<{ paymentId: string }>;
+        lines: Array<{ demandId: string; paid: string }>;
+      };
+    const hostel = await get('hostel');
+    const school = await get('school');
+    expect(hostel.ledger).toBe('hostel');
+    expect(hostel.receiptsByLedger.hostel).toBeGreaterThan(0);
+    const kinds = await withMigrator((c) =>
+      c.query<{ ledger: string }>(
+        `SELECT DISTINCT ledger::text FROM fee_payments WHERE id = ANY($1::bigint[])`,
+        [hostel.receipts.map((r) => r.paymentId)],
+      ),
+    );
+    expect(kinds.rows).toEqual([{ ledger: 'hostel' }]);
+    const hostelLine = hostel.lines.find((l) => Number(l.paid) > 0)!;
+    expect(school.lines.map((l) => l.demandId)).not.toContain(hostelLine.demandId);
+    // a hostel line in a school refund is refused
+    const wrong = await inject({
+      method: 'POST',
+      url: `/payments/refunds/student/${pupils.whole}`,
+      headers: h(accountant),
+      json: {
+        ledger: 'school',
+        lines: [{ demandId: hostelLine.demandId, amount: 100 }],
+        reason: 'Overpaid',
+        mode: 'bank',
+      },
+    });
+    expect(wrong.statusCode).toBe(422);
+    expect(wrong.json().type).toContain('fees.refund_wrong_fee');
+    const ok = await inject({
+      method: 'POST',
+      url: `/payments/refunds/student/${pupils.whole}`,
+      headers: h(accountant),
+      json: {
+        ledger: 'hostel',
+        lines: [{ demandId: hostelLine.demandId, amount: 100 }],
+        reason: 'Overpaid',
+        mode: 'bank',
+      },
+    });
+    expect(ok.statusCode).toBe(201);
+    const approved = await inject({
+      method: 'POST',
+      url: `/payments/refunds/${ok.json().id as string}/decide`,
+      headers: h(),
+      json: { outcome: 'approved', reference: 'UTR-H1' },
+    });
+    expect(approved.statusCode).toBe(201);
+    expect(approved.json().voucherNo).toMatch(/^HR\//);
+  });
 });

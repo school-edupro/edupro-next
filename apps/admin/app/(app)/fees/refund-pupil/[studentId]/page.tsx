@@ -5,6 +5,8 @@ import { apiFetch } from '@/lib/api';
 import { requestPupilRefund, savePupilRefundDraft } from '@/lib/fee-request-actions';
 
 interface PupilRefundable {
+  ledger: 'school' | 'hostel';
+  receiptsByLedger: { school: number; hostel: number };
   studentId: string;
   studentName: string;
   admissionNo: string;
@@ -44,11 +46,23 @@ export default async function PupilRefundPage({
   searchParams,
 }: {
   params: Promise<{ studentId: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; after?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    after?: string;
+    fee?: string;
+  }>;
 }) {
   const { studentId } = await params;
   const sp = await searchParams;
-  const r = await apiFetch<PupilRefundable>(`/payments/refunds/student/${studentId}/refundable`);
+  // one refund is of one fee type: school fee or hostel fee, over that fee's receipts only
+  const fee = sp.fee === 'hostel' ? 'hostel' : 'school';
+  const r = await apiFetch<PupilRefundable>(
+    `/payments/refunds/student/${studentId}/refundable?ledger=${fee}`,
+  );
+  const both = r.receiptsByLedger.hostel > 0;
+  const feeName = fee === 'hostel' ? 'hostel fee' : 'school fee';
   const usable = r.receipts.filter((x) => !x.waiting);
   const waiting = r.receipts.filter((x) => x.waiting);
   // opened from the provisional bill: the fee paid for the months after the chosen month is filled in
@@ -72,7 +86,7 @@ export default async function PupilRefundPage({
       <PageHeader
         kicker="Fees · Refund"
         title={`Refund for ${r.studentName}`}
-        description={`${r.admissionNo} · one refund over ${String(usable.length)} receipt${usable.length === 1 ? '' : 's'} of this session: one approval, one voucher`}
+        description={`${r.admissionNo} · one ${feeName} refund over ${String(usable.length)} ${feeName} receipt${usable.length === 1 ? '' : 's'} of this session: one approval, one voucher`}
         actions={
           <a
             className="ep-btn ep-btn--ghost ep-btn--sm"
@@ -83,6 +97,34 @@ export default async function PupilRefundPage({
         }
       />
       <Notice params={sp} />
+      {both ? (
+        <nav
+          className="ep-tabs-links"
+          aria-label="Fee type"
+          style={{ marginBottom: 'var(--sp-2)' }}
+        >
+          {(
+            [
+              ['school', 'Regular (school fee)'],
+              ['hostel', 'Hosteller (hostel fee)'],
+            ] as const
+          ).map(([k, label]) => (
+            <a
+              key={k}
+              href={`/fees/refund-pupil/${r.studentId}?fee=${k}${after !== null ? `&after=${String(after)}` : ''}`}
+              aria-current={k === fee ? 'page' : undefined}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      ) : null}
+      {both ? (
+        <p className="ep-field__help">
+          School fee and hostel fee are refunded apart: each over its own receipts, with its own
+          refund voucher series (RF/ for school, HR/ for hostel).
+        </p>
+      ) : null}
       {r.draft ? (
         <p className="ep-alert ep-alert--info" role="status">
           A draft of {money(r.draft.amount)} over {r.draft.receipts} receipt
@@ -165,6 +207,7 @@ export default async function PupilRefundPage({
             action={requestPupilRefund}
             draftAction={savePupilRefundDraft}
             draft={r.draft ?? prefill}
+            ledger={fee}
           />
         </Card>
       ) : null}

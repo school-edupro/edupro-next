@@ -914,6 +914,8 @@ export interface FeeDemandRow {
   source: string;
   /** school or hostel */
   ledger: string;
+  /** a bounce charge line: the bounced receipts it carries */
+  note?: string | null;
 }
 export interface FeeDemandSummary {
   rows: FeeDemandRow[];

@@ -29,6 +29,12 @@
   (one per pupil per day at most).
 - **Head-wise tally** for the month and the **Tally XML** export for the accounts system.
 - **Adjustments**: request a waiver, reversal or bounce with the reason; the school admin approves.
+  A bounce charge goes to the fee month in which the cheque bounced, on the fee the cheque was for
+  (school or hostel). Two bounces of the same month and fee share one line, which names each bounced
+  receipt and its charge (Head and month); waive part of it for one cheque.
+- **Refund for the pupil** (many receipts, one voucher): choose Regular (school fee) or Hosteller
+  (hostel fee) first; only that fee's receipts and heads are shown, and a refund cannot mix them.
+  Vouchers: RF/ for school fee, HR/ for hostel fee.
 - **Year lock**: after the audit, the admin locks the fees stage; nothing can be posted after that.
 
 ## Five common questions

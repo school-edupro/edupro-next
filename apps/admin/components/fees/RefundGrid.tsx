@@ -27,6 +27,7 @@ export function RefundGrid({
   draftAction,
   draft,
   pupil = false,
+  ledger,
 }: {
   /** One refund over all the pupil's receipts: the boxes show what was paid over every receipt. */
   pupil?: boolean;
@@ -40,6 +41,8 @@ export function RefundGrid({
   action: (fd: FormData) => Promise<void>;
   /** Keeps it as a draft, to print the provisional refund bill first. */
   draftAction: (fd: FormData) => Promise<void>;
+  /** pupil refund: the fee type it is of (school or hostel) */
+  ledger?: 'school' | 'hostel';
   /** The draft saved for this receipt: the form opens with it. */
   draft?: {
     lines: Array<{ part: string; demandId?: string; amount: string }>;
@@ -100,6 +103,7 @@ export function RefundGrid({
     <form action={action}>
       <input type="hidden" name="paymentId" value={paymentId} />
       <input type="hidden" name="studentId" value={studentId} />
+      {ledger ? <input type="hidden" name="ledger" value={ledger} /> : null}
       <input type="hidden" name="lines" value={JSON.stringify(payload)} />
       <p className="ep-field__help">
         {pupil

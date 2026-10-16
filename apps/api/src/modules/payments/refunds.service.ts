@@ -249,7 +249,11 @@ export class RefundsService {
    * what was paid on it (and from which receipts), the late fee and the advance held on the receipts.
    * A receipt with a refund already waiting is left out until that refund is decided.
    */
-  async studentRefundable(ctx: RequestContext, studentId: string) {
+  async studentRefundable(
+    ctx: RequestContext,
+    studentId: string,
+    ledger: 'school' | 'hostel' = 'school',
+  ) {
     const yearId = this.yearOf(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const s = await c.query<{ name: string; admission_no: string }>(
@@ -257,7 +261,13 @@ export class RefundsService {
         [studentId],
       );
       if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
-      const pool = await this.studentPool(c, studentId, yearId);
+      const pool = await this.studentPool(c, studentId, yearId, ledger);
+      // which fee types have receipts this session (the screen offers only those)
+      const kinds = await c.query<{ ledger: string; n: number }>(
+        `SELECT ledger::text, count(*)::int AS n FROM fee_payments
+          WHERE student_id = $1 AND academic_year_id = $2 AND status IN ('posted', 'partly_refunded') GROUP BY ledger`,
+        [studentId, yearId],
+      );
       const byDemand = new Map<
         string,
         {
@@ -277,8 +287,13 @@ export class RefundsService {
           d.receipts.push(r.receiptNo ?? r.paymentId);
           byDemand.set(l.demandId, d);
         }
-      const draft = await this.studentDraft(c, studentId, yearId);
+      const draft = await this.studentDraft(c, studentId, yearId, ledger);
       return {
+        ledger,
+        receiptsByLedger: {
+          school: kinds.rows.find((k) => k.ledger === 'school')?.n ?? 0,
+          hostel: kinds.rows.find((k) => k.ledger === 'hostel')?.n ?? 0,
+        },
         studentId,
         studentName: s.rows[0].name,
         admissionNo: s.rows[0].admission_no,
@@ -308,15 +323,24 @@ export class RefundsService {
     return y;
   }
 
-  /** The pupil's live receipts of the year, newest first, each with what it can still give back. */
-  private async studentPool(c: PoolClient, studentId: string, yearId: string) {
+  /**
+   * The pupil's live receipts of the year of one fee type (school or hostel), newest first, each with
+   * what it can still give back.
+   */
+  private async studentPool(
+    c: PoolClient,
+    studentId: string,
+    yearId: string,
+    ledger: 'school' | 'hostel',
+  ) {
     const p = await c.query<{ id: string; waiting: boolean }>(
       `SELECT p.id::text,
               EXISTS (SELECT 1 FROM fee_refunds r WHERE r.payment_id = p.id AND r.status IN ('requested', 'approved')) AS waiting
          FROM fee_payments p
         WHERE p.student_id = $1 AND p.academic_year_id = $2 AND p.status IN ('posted', 'partly_refunded')
+          AND p.ledger = $3::ledger_type
         ORDER BY p.received_on DESC, p.id DESC`,
-      [studentId, yearId],
+      [studentId, yearId, ledger],
     );
     const all = [];
     for (const r of p.rows) all.push({ ...(await this.refundableIn(c, r.id)), waiting: r.waiting });
@@ -324,12 +348,17 @@ export class RefundsService {
   }
 
   /** The pupil refund kept as a draft (its rows share a batch), added up line by line. */
-  private async studentDraft(c: PoolClient, studentId: string, yearId: string) {
+  private async studentDraft(
+    c: PoolClient,
+    studentId: string,
+    yearId: string,
+    ledger: 'school' | 'hostel',
+  ) {
     const r = await c.query<Record<string, unknown>>(
       // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values are bound parameters
       `${SELECT} WHERE r.status = 'draft' AND r.batch_id IS NOT NULL AND r.withdrawal_id IS NULL
-          AND p.student_id = $1 AND p.academic_year_id = $2 ORDER BY r.id`,
-      [studentId, yearId],
+          AND p.student_id = $1 AND p.academic_year_id = $2 AND p.ledger = $3::ledger_type ORDER BY r.id`,
+      [studentId, yearId, ledger],
     );
     const rows = r.rows.map(toRow);
     if (rows.length === 0) return null;
@@ -370,7 +399,23 @@ export class RefundsService {
         `SELECT 1 FROM fee_payments WHERE student_id = $1 AND academic_year_id = $2 ORDER BY id FOR UPDATE`,
         [studentId, yearId],
       );
-      const pool = await this.studentPool(c, studentId, yearId);
+      const pool = await this.studentPool(c, studentId, yearId, dto.ledger);
+      // every fee line asked for must be of the chosen fee type
+      const asked = [...new Set(dto.lines.filter((l) => l.amount > 0).map((l) => l.demandId))];
+      if (asked.length) {
+        const other = await c.query<{ head: string; period: string; ledger: string }>(
+          `SELECT h.name AS head, fp.name AS period, d.ledger::text AS ledger
+             FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id JOIN fee_periods fp ON fp.id = d.period_id
+            WHERE d.id = ANY($1::bigint[]) AND (d.ledger::text <> $2 OR d.student_id <> $3)`,
+          [asked, dto.ledger, studentId],
+        );
+        if (other.rows[0])
+          throw new DomainError(
+            'fees.refund_wrong_fee',
+            `${other.rows[0].head} · ${other.rows[0].period} is ${other.rows[0].ledger === 'hostel' ? 'hostel' : 'school'} fee: a ${dto.ledger === 'hostel' ? 'hostel' : 'school'} fee refund cannot include it`,
+            { status: 422 },
+          );
+      }
       const name = await c.query<{ name: string }>(
         `SELECT display_name AS name FROM students WHERE id = $1 AND deleted_at IS NULL`,
         [studentId],
@@ -436,8 +481,9 @@ export class RefundsService {
       await c.query(
         `DELETE FROM fee_refunds r USING fee_payments p
           WHERE p.id = r.payment_id AND r.status = 'draft' AND r.withdrawal_id IS NULL AND p.student_id = $1 AND p.academic_year_id = $2
+            AND p.ledger = $4::ledger_type
             AND (r.batch_id IS NOT NULL OR r.payment_id = ANY($3::bigint[]))`,
-        [studentId, yearId, [...per.keys()]],
+        [studentId, yearId, [...per.keys()], dto.ledger],
       );
       const wd = await c.query(
         `SELECT 1 FROM fee_refunds WHERE payment_id = ANY($1::bigint[]) AND status = 'draft' AND withdrawal_id IS NOT NULL`,

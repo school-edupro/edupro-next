@@ -10,6 +10,8 @@ export interface WaiverLine {
   periodName: string;
   net: string;
   paid: string;
+  /** a bounce charge line: the bounced receipts it carries */
+  note?: string | null;
 }
 
 /**
@@ -103,6 +105,13 @@ export function WaiverGrid({
                 <tr key={headId}>
                   <td>
                     <strong>{headName}</strong>
+                    {row
+                      .filter((l) => l.note)
+                      .map((l) => (
+                        <div key={l.id} className="ep-field__help">
+                          {l.periodName.split(' ')[0]}: {l.note}
+                        </div>
+                      ))}
                   </td>
                   {months.map(([seq, name]) => {
                     const l = cell.get(`${headId}:${seq}`);

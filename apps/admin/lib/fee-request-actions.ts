@@ -261,7 +261,8 @@ async function headRefund(fd: FormData, draft: boolean) {
 /** One refund for a pupil over many receipts: fee lines by head and month, late fee and advance. */
 async function pupilRefund(fd: FormData, draft: boolean) {
   const studentId = str(fd, 'studentId');
-  const path = `/fees/refund-pupil/${studentId}?x=1`;
+  const ledger = str(fd, 'ledger') === 'hostel' ? 'hostel' : 'school';
+  const path = `/fees/refund-pupil/${studentId}?fee=${ledger}`;
   let raw: Array<{ part?: string; demandId?: string; amount?: number }> = [];
   try {
     raw = JSON.parse(str(fd, 'lines') || '[]') as typeof raw;
@@ -275,6 +276,7 @@ async function pupilRefund(fd: FormData, draft: boolean) {
     const r = await apiFetch<{ id: string }>(`/payments/refunds/student/${studentId}`, {
       method: 'POST',
       body: JSON.stringify({
+        ledger,
         lines: raw
           .filter((l) => l.part === 'fee' && l.demandId)
           .map((l) => ({ demandId: l.demandId, amount: Number(l.amount ?? 0) })),

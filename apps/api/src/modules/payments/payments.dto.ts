@@ -200,6 +200,8 @@ export const RequestAdvanceRefundSchema = z.object({
 export class RequestAdvanceRefundDto extends createZodDto(RequestAdvanceRefundSchema) {}
 /** One refund for a pupil over every receipt of the year: the system splits it over the receipts. */
 export const RequestStudentRefundSchema = z.object({
+  /** School fee or hostel fee: one refund (and one voucher) is of one fee type, over its receipts only. */
+  ledger: z.enum(['school', 'hostel']).default('school'),
   lines: z
     .array(z.object({ demandId: IdSchema, amount: Amount }))
     .max(400)

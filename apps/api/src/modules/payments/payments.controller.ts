@@ -260,8 +260,16 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'What a pupil can still be given back over every receipt of the year' })
   @RequirePermission(PAYMENTS.refundRequest)
-  studentRefundable(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
-    return this.refunds.studentRefundable(ctx, studentId);
+  studentRefundable(
+    @ReqCtx() ctx: RequestContext,
+    @Param('studentId') studentId: string,
+    @Query('ledger') ledger?: string,
+  ) {
+    return this.refunds.studentRefundable(
+      ctx,
+      studentId,
+      ledger === 'hostel' ? 'hostel' : 'school',
+    );
   }
 
   @Post('refunds/student/:studentId')
