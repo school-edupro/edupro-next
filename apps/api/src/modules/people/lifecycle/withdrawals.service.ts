@@ -11,6 +11,7 @@ import { AccessService } from '../../access/access.service';
 import { generatedOn, registerFile, schoolHead } from '../../attendance/register-file';
 import { WorkflowService, type InstanceRow } from '../../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from '../../fees/fee-approval';
+import { raiseHostelCharge } from '../../hostel/hostel-charge';
 import {
   LIFECYCLE,
   type BulkClearanceDto,
@@ -26,14 +27,24 @@ import {
 } from './lifecycle.dto';
 import { TcService } from './tc.service';
 
+/** Who may clear a department: the shared approvers, or the warden of the pupil's hostel. */
+export type WithdrawalApprover = Approver | { kind: 'hostel_warden' };
+export type WithdrawalProcess = 'school' | 'hostel';
+export const approverName = (a: WithdrawalApprover): string =>
+  a.kind === 'hostel_warden' ? "Warden of the pupil's hostel" : approverLabel(a);
+
 export interface DepartmentRow {
   id: string;
   code: string;
   name: string;
   step: number;
-  approvers: Approver[];
+  approvers: WithdrawalApprover[];
   approverLabels: string[];
-  autoCheck: 'none' | 'fees' | 'library';
+  autoCheck: 'none' | 'fees' | 'library' | 'hostel_fees';
+  /** the department may raise a charge on the pupil (misc fee): damages or mess dues */
+  chargeKind: 'damage' | 'mess' | null;
+  /** a hostel department that also clears a hosteller leaving the school */
+  inSchoolExit: boolean;
   autoClear: boolean;
   bypassAllowed: boolean;
   documentRequired: boolean;
@@ -57,6 +68,9 @@ export interface ClearanceRow {
   bypassAllowed: boolean;
   documentRequired: boolean;
   gatesTc: boolean;
+  chargeKind: 'damage' | 'mess' | null;
+  charge: string;
+  chargeMiscFeeId: string | null;
   actedBy: string | null;
   actedAt: string | null;
   /** Filled per viewer: the department waits at the current step and this user may act on it. */
@@ -118,15 +132,19 @@ interface Db {
   refund_state: WithdrawalRow['refundState'];
   refund_amount: string;
   class_id: string | null;
+  hostel_id: string | null;
+  year_id: string;
   revoked_at: Date | null;
   tc: WithdrawalRow['tc'];
-  clearances: Array<Omit<ClearanceRow, 'approvers'> & { approverList: Approver[] }>;
+  clearances: Array<Omit<ClearanceRow, 'approvers'> & { approverList: WithdrawalApprover[] }>;
 }
 
 interface Actor {
   userId: string;
   roleIds: Set<string>;
   sections: Set<string>;
+  /** the hostels whose warden the user is */
+  hostels: Set<string>;
   /** Holds people.withdrawal.manage: the office, and may act on (or bypass) any department. */
   manage: boolean;
 }
@@ -134,6 +152,9 @@ interface Actor {
 // eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed SQL fragment over a column name written here
 const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student_name, s.admission_no,
         sec.label AS section, sec.class_section_id, sec.class_id, rf.state AS refund_state, rf.amount::text AS refund_amount,
+        w.academic_year_id::text AS year_id,
+        (SELECT rm.hostel_id::text FROM hostel_allotments ha JOIN hostel_beds hb ON hb.id = ha.bed_id JOIN hostel_rooms rm ON rm.id = hb.room_id
+          WHERE ha.student_id = w.student_id ORDER BY (ha.to_date IS NULL) DESC, ha.from_date DESC LIMIT 1) AS hostel_id,
         COALESCE(w.initiated_on, w.requested_on)::text AS initiated_on, w.requested_on::text, w.leaving_on::text, w.reason, w.remarks, w.documents,
         w.status, w.current_step, u.display_name AS requested_by, w.completed_at, w.cancel_reason,
         w.revoke_status, w.revoke_reason, w.revoked_at, ${WAITING_WITH('w.revoke_workflow_instance_id')} AS revoke_waiting_with,
@@ -143,7 +164,8 @@ const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student
                     'status', x.status, 'dues', x.dues::text, 'remarks', x.remarks, 'bypassed', x.bypassed, 'auto', x.auto, 'check', x.check_result,
                     'documents', x.documents, 'approverList', COALESCE(d.approvers, '[{"kind":"office"}]'::jsonb),
                     'bypassAllowed', COALESCE(d.bypass_allowed, false), 'documentRequired', COALESCE(d.document_required, false),
-                    'gatesTc', COALESCE(d.gates_tc, false),
+                    'gatesTc', COALESCE(d.gates_tc, false), 'chargeKind', d.charge_kind, 'charge', x.charge::text,
+                    'chargeMiscFeeId', x.charge_misc_fee_id::text,
                     'actedBy', (SELECT display_name FROM users WHERE id = x.acted_by), 'actedAt', x.acted_at) ORDER BY x.step, COALESCE(d.sort_order, 0), x.id)
                     FROM withdrawal_clearances x LEFT JOIN withdrawal_departments d ON d.id = x.department_id
                    WHERE x.withdrawal_id = w.id), '[]'::jsonb) AS clearances
@@ -162,11 +184,12 @@ const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student
                            OR (COALESCE(r.student_id, p.student_id) = w.student_id AND r.created_at >= w.created_at)) rf`;
 
 /** The departments a school starts with; it may rename, re-order, add or switch them off. */
-const DEFAULTS: Array<
-  Omit<DepartmentInput, 'approvers'> & {
-    approvers: Array<Approver | { kind: 'role_code'; code: string }>;
-  }
-> = [
+type DefaultDepartment = Omit<DepartmentInput, 'approvers' | 'chargeKind' | 'inSchoolExit'> & {
+  approvers: Array<WithdrawalApprover | { kind: 'role_code'; code: string }>;
+  chargeKind?: 'damage' | 'mess' | null;
+  inSchoolExit?: boolean;
+};
+const DEFAULTS: DefaultDepartment[] = [
   {
     code: 'fees',
     name: 'Fees and accounts',
@@ -229,6 +252,66 @@ const DEFAULTS: Array<
   },
 ];
 
+/**
+ * The hostel withdrawal's departments a school starts with (docs/design/27-hostel-withdrawal.md): the
+ * warden checks the room and its inventory (damages), the mess its dues, the hostel fee is checked by
+ * itself, then Accounts settles. Warden and Mess also clear a hosteller who leaves the school.
+ */
+const HOSTEL_DEFAULTS: DefaultDepartment[] = [
+  {
+    code: 'hostel_warden',
+    name: 'Warden: room and inventory',
+    step: 1,
+    approvers: [{ kind: 'hostel_warden' }, { kind: 'office' }],
+    autoCheck: 'none',
+    autoClear: false,
+    bypassAllowed: false,
+    documentRequired: false,
+    gatesTc: false,
+    active: true,
+    chargeKind: 'damage',
+    inSchoolExit: true,
+  },
+  {
+    code: 'hostel_mess',
+    name: 'Mess',
+    step: 1,
+    approvers: [{ kind: 'office' }],
+    autoCheck: 'none',
+    autoClear: false,
+    bypassAllowed: true,
+    documentRequired: false,
+    gatesTc: false,
+    active: true,
+    chargeKind: 'mess',
+    inSchoolExit: true,
+  },
+  {
+    code: 'hostel_fees',
+    name: 'Hostel fee dues',
+    step: 1,
+    approvers: [{ kind: 'role_code', code: 'accountant' }, { kind: 'office' }],
+    autoCheck: 'hostel_fees',
+    autoClear: true,
+    bypassAllowed: false,
+    documentRequired: false,
+    gatesTc: false,
+    active: true,
+  },
+  {
+    code: 'hostel_accounts',
+    name: 'Accounts settlement',
+    step: 2,
+    approvers: [{ kind: 'role_code', code: 'accountant' }, { kind: 'office' }],
+    autoCheck: 'none',
+    autoClear: false,
+    bypassAllowed: false,
+    documentRequired: false,
+    gatesTc: false,
+    active: true,
+  },
+];
+
 const money = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 /**
@@ -252,24 +335,27 @@ export class WithdrawalsService {
   ) {}
 
   // ---- settings ------------------------------------------------------------------------------------
-  private async ensureDepartments(c: PoolClient) {
-    const has = await c.query(`SELECT 1 FROM withdrawal_departments LIMIT 1`);
+  private async ensureDepartments(c: PoolClient, process: WithdrawalProcess = 'school') {
+    const has = await c.query(`SELECT 1 FROM withdrawal_departments WHERE process = $1 LIMIT 1`, [
+      process,
+    ]);
     if (has.rowCount) return;
     const roles = await c.query<{ id: string; code: string; name: string }>(
       `SELECT id::text, code, name FROM roles WHERE school_id IS NULL AND code IN ('accountant', 'school_admin')`,
     );
     const byCode = new Map(roles.rows.map((r) => [r.code, r]));
     let order = 0;
-    for (const d of DEFAULTS) {
-      const approvers = d.approvers.flatMap((a): Approver[] => {
+    for (const d of process === 'hostel' ? HOSTEL_DEFAULTS : DEFAULTS) {
+      const approvers = d.approvers.flatMap((a): WithdrawalApprover[] => {
         if (a.kind !== 'role_code') return [a];
         const r = byCode.get(a.code);
         return r ? [{ kind: 'role', roleId: r.id, name: r.name }] : [];
       });
       await c.query(
-        `INSERT INTO withdrawal_departments (school_id, code, name, step, approvers, auto_check, auto_clear, bypass_allowed, document_required, gates_tc, sort_order, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, app.current_user_id(), app.current_user_id())
-         ON CONFLICT (school_id, code) DO NOTHING`,
+        `INSERT INTO withdrawal_departments (school_id, code, name, step, approvers, auto_check, auto_clear, bypass_allowed, document_required, gates_tc, sort_order,
+                                             process, charge_kind, in_school_exit, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, app.current_user_id(), app.current_user_id())
+         ON CONFLICT (school_id, process, code) DO NOTHING`,
         [
           d.code,
           d.name,
@@ -281,19 +367,28 @@ export class WithdrawalsService {
           d.documentRequired,
           d.gatesTc,
           (order += 1),
+          process,
+          d.chargeKind ?? null,
+          d.inSchoolExit ?? false,
         ],
       );
     }
   }
 
-  private async departmentsIn(c: PoolClient, activeOnly: boolean): Promise<DepartmentRow[]> {
-    await this.ensureDepartments(c);
+  async departmentsIn(
+    c: PoolClient,
+    activeOnly: boolean,
+    process: WithdrawalProcess = 'school',
+  ): Promise<DepartmentRow[]> {
+    await this.ensureDepartments(c, process);
     const r = await c.query<{
       id: string;
       code: string;
       name: string;
       step: number;
-      approvers: Approver[];
+      approvers: WithdrawalApprover[];
+      charge_kind: DepartmentRow['chargeKind'];
+      in_school_exit: boolean;
       auto_check: DepartmentRow['autoCheck'];
       auto_clear: boolean;
       bypass_allowed: boolean;
@@ -301,9 +396,10 @@ export class WithdrawalsService {
       gates_tc: boolean;
       status: string;
     }>(
-      `SELECT id::text, code, name, step, approvers, auto_check, auto_clear, bypass_allowed, document_required, gates_tc, status::text
-         FROM withdrawal_departments WHERE ($1 = false OR status = 'active') ORDER BY step, sort_order, id`,
-      [activeOnly],
+      `SELECT id::text, code, name, step, approvers, auto_check, auto_clear, bypass_allowed, document_required, gates_tc, status::text,
+              charge_kind, in_school_exit
+         FROM withdrawal_departments WHERE ($1 = false OR status = 'active') AND process = $2 ORDER BY step, sort_order, id`,
+      [activeOnly, process],
     );
     return r.rows.map((d) => ({
       id: d.id,
@@ -311,8 +407,10 @@ export class WithdrawalsService {
       name: d.name,
       step: d.step,
       approvers: d.approvers,
-      approverLabels: d.approvers.map(approverLabel),
+      approverLabels: d.approvers.map(approverName),
       autoCheck: d.auto_check,
+      chargeKind: d.charge_kind,
+      inSchoolExit: d.in_school_exit,
       autoClear: d.auto_clear,
       bypassAllowed: d.bypass_allowed,
       documentRequired: d.document_required,
@@ -321,7 +419,7 @@ export class WithdrawalsService {
     }));
   }
 
-  async departments(ctx: RequestContext) {
+  async departments(ctx: RequestContext, process: WithdrawalProcess = 'school') {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const roles = await c.query<{ id: string; name: string }>(
         `SELECT id::text, name FROM roles WHERE (school_id IS NULL OR school_id = app.current_school_id())
@@ -332,7 +430,7 @@ export class WithdrawalsService {
           WHERE e.user_id IS NOT NULL AND e.deleted_at IS NULL ORDER BY e.display_name`,
       );
       return {
-        departments: await this.departmentsIn(c, false),
+        departments: await this.departmentsIn(c, false, process),
         roles: roles.rows,
         staff: staff.rows.map((x) => ({
           userId: x.user_id,
@@ -343,7 +441,11 @@ export class WithdrawalsService {
     });
   }
 
-  async saveDepartments(ctx: RequestContext, dto: SaveDepartmentsDto) {
+  async saveDepartments(
+    ctx: RequestContext,
+    dto: SaveDepartmentsDto,
+    process: WithdrawalProcess = 'school',
+  ) {
     const codes = dto.departments.map((d) => d.code);
     if (new Set(codes).size !== codes.length)
       throw new DomainError('validation-failed', 'Each department needs its own code', {
@@ -354,7 +456,7 @@ export class WithdrawalsService {
         status: 400,
       });
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.ensureDepartments(c);
+      await this.ensureDepartments(c, process);
       const approvers = dto.departments.flatMap((d) => d.approvers);
       const roleIds = approvers.flatMap((a) => (a.kind === 'role' ? [a.roleId] : []));
       const userIds = approvers.flatMap((a) => (a.kind === 'user' ? [a.userId] : []));
@@ -380,16 +482,30 @@ export class WithdrawalsService {
             { status: 400 },
           );
       }
-      const before = await this.departmentsIn(c, false);
+      const hostel = process === 'hostel';
+      const wrongCheck = dto.departments.find((d) =>
+        hostel
+          ? d.autoCheck === 'fees' || d.autoCheck === 'library'
+          : d.autoCheck === 'hostel_fees',
+      );
+      if (wrongCheck)
+        throw new DomainError(
+          'validation-failed',
+          `${wrongCheck.name}: that automatic check belongs to the other withdrawal`,
+          { status: 400 },
+        );
+      const before = await this.departmentsIn(c, false, process);
       let order = 0;
       for (const d of dto.departments)
         await c.query(
-          `INSERT INTO withdrawal_departments (school_id, code, name, step, approvers, auto_check, auto_clear, bypass_allowed, document_required, gates_tc, sort_order, status, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11::row_status, app.current_user_id(), app.current_user_id())
-           ON CONFLICT (school_id, code) DO UPDATE SET name = EXCLUDED.name, step = EXCLUDED.step, approvers = EXCLUDED.approvers,
+          `INSERT INTO withdrawal_departments (school_id, code, name, step, approvers, auto_check, auto_clear, bypass_allowed, document_required, gates_tc, sort_order, status,
+                                               process, charge_kind, in_school_exit, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11::row_status, $12, $13, $14, app.current_user_id(), app.current_user_id())
+           ON CONFLICT (school_id, process, code) DO UPDATE SET name = EXCLUDED.name, step = EXCLUDED.step, approvers = EXCLUDED.approvers,
              auto_check = EXCLUDED.auto_check, auto_clear = EXCLUDED.auto_clear, bypass_allowed = EXCLUDED.bypass_allowed,
              document_required = EXCLUDED.document_required, gates_tc = EXCLUDED.gates_tc, sort_order = EXCLUDED.sort_order,
-             status = EXCLUDED.status, updated_at = now(), updated_by = EXCLUDED.updated_by`,
+             status = EXCLUDED.status, charge_kind = EXCLUDED.charge_kind, in_school_exit = EXCLUDED.in_school_exit,
+             updated_at = now(), updated_by = EXCLUDED.updated_by`,
           [
             d.code,
             d.name,
@@ -399,19 +515,25 @@ export class WithdrawalsService {
             d.autoCheck !== 'none' && d.autoClear,
             d.bypassAllowed,
             d.documentRequired,
-            d.gatesTc,
+            !hostel && d.gatesTc,
             (order += 1),
             d.active ? 'active' : 'inactive',
+            process,
+            hostel ? d.chargeKind : null,
+            hostel && d.inSchoolExit,
           ],
         );
       // departments left out of the list are switched off (their past clearances stay)
       await c.query(
-        `UPDATE withdrawal_departments SET status = 'inactive', updated_at = now(), updated_by = app.current_user_id() WHERE code <> ALL($1::text[])`,
-        [codes],
+        `UPDATE withdrawal_departments SET status = 'inactive', updated_at = now(), updated_by = app.current_user_id()
+          WHERE process = $2 AND code <> ALL($1::text[])`,
+        [codes, process],
       );
-      const after = await this.departmentsIn(c, false);
+      const after = await this.departmentsIn(c, false, process);
       await this.audit.stage(ctx, c, {
-        action: 'people.withdrawal.departments_save',
+        action: hostel
+          ? 'hostel.withdrawal.departments_save'
+          : 'people.withdrawal.departments_save',
         entityType: 'withdrawal_departments',
         entityId: requireTenant(ctx).schoolId,
         before: before.map((d) => ({ code: d.code, step: d.step, active: d.active })),
@@ -431,18 +553,29 @@ export class WithdrawalsService {
       `SELECT ta.class_section_id::text AS id FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
         WHERE e.user_id = app.current_user_id() AND ta.kind = 'class_teacher' AND ta.valid_to IS NULL`,
     );
+    const hostels = await c.query<{ id: string }>(
+      `SELECT hw.hostel_id::text AS id FROM hostel_wardens hw JOIN employees e ON e.id = hw.employee_id
+        WHERE e.user_id = app.current_user_id()`,
+    );
     return {
       userId: ctx.user.id,
       roleIds: new Set(roles.rows.map((x) => x.role_id)),
       sections: new Set(sections.rows.map((x) => x.id)),
+      hostels: new Set(hostels.rows.map((x) => x.id)),
       manage: ctx.permissions?.has(LIFECYCLE.withdrawalManage) ?? false,
     };
   }
 
-  private named(a: Approver, actor: Actor, classSectionId: string | null): boolean {
+  private named(
+    a: WithdrawalApprover,
+    actor: Actor,
+    classSectionId: string | null,
+    hostelId: string | null = null,
+  ): boolean {
     if (a.kind === 'office') return actor.manage;
     if (a.kind === 'class_teacher')
       return classSectionId !== null && actor.sections.has(classSectionId);
+    if (a.kind === 'hostel_warden') return hostelId !== null && actor.hostels.has(hostelId);
     if (a.kind === 'role') return actor.roleIds.has(a.roleId);
     return a.userId === actor.userId;
   }
@@ -451,12 +584,13 @@ export class WithdrawalsService {
     const open = r.status === 'requested' || r.status === 'cleared';
     const clearances: ClearanceRow[] = r.clearances.map(({ approverList, ...x }) => ({
       ...x,
-      approvers: approverList.map(approverLabel),
+      approvers: approverList.map(approverName),
       canAct: actor
         ? open &&
           x.status !== 'cleared' &&
           x.step === r.current_step &&
-          (actor.manage || approverList.some((a) => this.named(a, actor, r.class_section_id)))
+          (actor.manage ||
+            approverList.some((a) => this.named(a, actor, r.class_section_id, r.hostel_id)))
         : undefined,
     }));
     const gates = clearances.filter((x) => x.gatesTc);
@@ -557,9 +691,10 @@ export class WithdrawalsService {
               (x) =>
                 x.status !== 'cleared' &&
                 x.step === w.currentStep &&
-                x.approverList.some((a) =>
-                  this.named(a, actor, r.rows.find((y) => y.id === w.id)!.class_section_id),
-                ),
+                x.approverList.some((a) => {
+                  const row = r.rows.find((y) => y.id === w.id)!;
+                  return this.named(a, actor, row.class_section_id, row.hostel_id);
+                }),
             ),
         );
       const total = rows.length;
@@ -747,6 +882,22 @@ export class WithdrawalsService {
         `INSERT INTO withdrawal_clearances (school_id, withdrawal_id, department, department_id, step) VALUES (app.current_school_id(), $1, $2, $3, $4)`,
         [id, d.code, d.id, d.step],
       );
+    // a hosteller (a bed held on the leaving date or after) is also cleared by the hostel departments
+    // marked "also when leaving the school" (docs/design/27-hostel-withdrawal.md)
+    const boarder = await c.query(
+      `SELECT 1 FROM hostel_allotments WHERE student_id = $1 AND (to_date IS NULL OR to_date >= $2::date)`,
+      [studentId, dto.leavingOn],
+    );
+    if (boarder.rowCount)
+      for (const d of (await this.departmentsIn(c, true, 'hostel')).filter((x) => x.inSchoolExit)) {
+        if (departments.some((x) => x.code === d.code)) continue;
+        departments.push(d);
+        await c.query(
+          `INSERT INTO withdrawal_clearances (school_id, withdrawal_id, department, department_id, step) VALUES (app.current_school_id(), $1, $2, $3, $4)`,
+          [id, d.code, d.id, d.step],
+        );
+      }
+    if (boarder.rowCount) await this.advance(c, id);
     await this.audit.stage(ctx, c, {
       action: 'people.withdrawal.request',
       entityType: 'student_withdrawals',
@@ -809,24 +960,34 @@ export class WithdrawalsService {
   }
 
   // ---- automatic checks and steps ----------------------------------------------------------------------
-  /** Fee dues up to the leaving date (balance and late fee outstanding), from the live ledger. */
-  private async feeDues(ctx: RequestContext, studentId: string, leavingOn: string) {
+  /**
+   * Fee dues up to the leaving date (balance and late fee outstanding), from the live ledger; the hostel
+   * check counts the hostel fee only.
+   */
+  async feeDues(
+    ctx: RequestContext,
+    studentId: string,
+    leavingOn: string,
+    only: 'all' | 'hostel' = 'all',
+  ) {
+    const kind = only === 'hostel' ? 'hostel_fees' : 'fees';
+    const what = only === 'hostel' ? 'hostel fee' : 'fees';
     try {
       const l = await this.ledger.ledger(ctx, studentId);
       const due = l.instalments
-        .filter((i) => i.dueOn <= leavingOn)
+        .filter((i) => i.dueOn <= leavingOn && (only === 'all' || i.ledger === 'hostel'))
         .reduce((n, i) => n + Number(i.balance) + Number(i.lateFee.outstanding), 0);
       return {
-        kind: 'fees',
+        kind,
         due: Math.max(Math.round(due * 100) / 100, 0),
         detail:
           due > 0
-            ? `${money(due)} due up to the leaving date`
-            : 'No fees due up to the leaving date',
+            ? `${money(due)} ${what} due up to the leaving date`
+            : `No ${what} due up to the leaving date`,
       };
     } catch (error) {
       if (error instanceof DomainError && error.status === 404)
-        return { kind: 'fees', due: 0, detail: 'No fee ledger for this student' };
+        return { kind, due: 0, detail: 'No fee ledger for this student' };
       throw error;
     }
   }
@@ -887,8 +1048,13 @@ export class WithdrawalsService {
           const kind = dep.rows[0]?.auto_check ?? 'none';
           if (kind === 'none') return null;
           const result =
-            kind === 'fees'
-              ? await this.feeDues(ctx, w.student_id, w.leaving_on)
+            kind === 'fees' || kind === 'hostel_fees'
+              ? await this.feeDues(
+                  ctx,
+                  w.student_id,
+                  w.leaving_on,
+                  kind === 'hostel_fees' ? 'hostel' : 'all',
+                )
               : await this.db.tenant(tenant, (c) => this.libraryDues(c, w.student_id));
           return { clearanceId: x.id, result, autoClear: dep.rows[0]!.auto_clear };
         }),
@@ -901,7 +1067,7 @@ export class WithdrawalsService {
           const clear = ch.autoClear && ch.result.due === 0;
           await c.query(
             `UPDATE withdrawal_clearances SET check_result = $2::jsonb,
-                    dues = CASE WHEN $4 = 'fees' THEN $5 ELSE dues END,
+                    dues = CASE WHEN $4 IN ('fees', 'hostel_fees') THEN $5 ELSE dues END,
                     status = CASE WHEN $3 THEN 'cleared'::clearance_status ELSE status END,
                     auto = $3, remarks = CASE WHEN $3 THEN 'Cleared automatically: ' || $6 ELSE remarks END,
                     acted_at = CASE WHEN $3 THEN now() ELSE acted_at END
@@ -911,7 +1077,7 @@ export class WithdrawalsService {
               JSON.stringify(ch.result),
               clear,
               ch.result.kind,
-              ch.result.kind === 'fees' ? ch.result.due : 0,
+              ch.result.kind === 'library' ? 0 : ch.result.due,
               ch.result.detail,
             ],
           );
@@ -956,10 +1122,13 @@ export class WithdrawalsService {
           { status: 409 },
         );
       const actor = await this.actor(c, ctx);
-      if (!actor.manage && !x.approverList.some((a) => this.named(a, actor, w.class_section_id)))
+      if (
+        !actor.manage &&
+        !x.approverList.some((a) => this.named(a, actor, w.class_section_id, w.hostel_id))
+      )
         throw new DomainError(
           'withdrawal.not_assigned',
-          `${x.departmentName} is cleared by ${x.approverList.map(approverLabel).join(' or ')}`,
+          `${x.departmentName} is cleared by ${x.approverList.map(approverName).join(' or ')}`,
           { status: 403 },
         );
       const after = await apply(c, x, w);
@@ -981,7 +1150,7 @@ export class WithdrawalsService {
       ctx,
       id,
       department,
-      async (c, x) => {
+      async (c, x, w) => {
         const added = await this.checkFiles(c, dto.documents ?? []);
         const documents = [...(x.documents ?? []), ...added];
         if (dto.status === 'cleared' && x.documentRequired && !documents.length)
@@ -990,16 +1159,34 @@ export class WithdrawalsService {
             `${x.departmentName} needs a document attached to clear`,
             { status: 400 },
           );
+        // a hostel department of a hosteller's withdrawal: damages or mess dues become a misc fee
+        const charge = await raiseHostelCharge(c, {
+          department: x,
+          amount: dto.charge ?? 0,
+          studentId: w.student_id,
+          yearId: w.year_id,
+          what: `leaving the school on ${w.leaving_on.split('-').reverse().join('-')}`,
+        });
         await c.query(
           `UPDATE withdrawal_clearances SET status = $2::clearance_status, dues = $3, remarks = $4, documents = $5::jsonb,
-                  bypassed = false, auto = false, acted_by = app.current_user_id(), acted_at = now() WHERE id = $1`,
-          [x.id, dto.status, dto.dues, dto.remarks ?? null, JSON.stringify(documents)],
+                  bypassed = false, auto = false, acted_by = app.current_user_id(), acted_at = now(),
+                  charge = COALESCE($6, charge), charge_misc_fee_id = COALESCE($7, charge_misc_fee_id) WHERE id = $1`,
+          [
+            x.id,
+            dto.status,
+            dto.dues,
+            dto.remarks ?? null,
+            JSON.stringify(documents),
+            charge?.amount ?? null,
+            charge?.miscFeeId ?? null,
+          ],
         );
         return {
           status: dto.status,
           dues: dto.dues,
           remarks: dto.remarks ?? null,
           documents: added.length,
+          charge: charge?.amount ?? null,
         };
       },
       'people.withdrawal.clear',
@@ -1038,6 +1225,7 @@ export class WithdrawalsService {
           dues: 0,
           remarks: dto.remarks,
           documents: dto.documents ?? [],
+          charge: 0,
         });
         results.push({ id, ok: true });
       } catch (error) {
@@ -1130,6 +1318,27 @@ export class WithdrawalsService {
       const before = await this.findDb(c, id);
       if (!before) throw new DomainError('not-found', 'Withdrawal not found');
       await c.query(`SELECT app.complete_withdrawal($1)`, [id]);
+      // a hosteller: the bed is given up on the leaving date and the hostel fee ends with that month (the
+      // later months are cut below with the school fee); an open hostel withdrawal is closed
+      const bed = await c.query<{ id: string }>(
+        `UPDATE hostel_allotments SET to_date = GREATEST(from_date, $2::date), end_reason = 'withdrawn',
+                end_remarks = 'Left the school', ended_at = now(), ended_by = app.current_user_id()
+          WHERE student_id = $1 AND (to_date IS NULL OR to_date > $2::date)
+        RETURNING id::text`,
+        [before.student_id, before.leaving_on],
+      );
+      if (bed.rowCount) {
+        await c.query(
+          `UPDATE student_fee_profiles SET hostel_to = date_trunc('month', $3::date)::date, updated_at = now(), updated_by = app.current_user_id()
+            WHERE student_id = $1 AND academic_year_id = $2 AND hosteller`,
+          [before.student_id, before.year_id, before.leaving_on],
+        );
+        await c.query(
+          `UPDATE hostel_withdrawals SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'Left the school', updated_at = now()
+            WHERE student_id = $1 AND status IN ('requested', 'cleared')`,
+          [before.student_id],
+        );
+      }
       // fee: later months are not charged. The refund is not raised here: the accounts office prints
       // the provisional bill, meets the parent, and then sends the refund for approval (resettleFees)
       const year = await c.query<{ id: string | null }>(
@@ -1185,6 +1394,7 @@ export class WithdrawalsService {
           studentId: before.student_id,
           leavingOn: before.leaving_on,
           parentLoginsRevoked: parents.rows.length,
+          bedsGivenUp: bed.rowCount ?? 0,
           fee,
         },
       });

@@ -626,6 +626,10 @@ export interface Clearance {
   bypassAllowed: boolean;
   documentRequired: boolean;
   gatesTc: boolean;
+  /** a hostel department of a hosteller's withdrawal: damages or mess dues raised as a misc fee */
+  chargeKind?: 'damage' | 'mess' | null;
+  charge?: string;
+  chargeMiscFeeId?: string | null;
   actedBy: string | null;
   actedAt: string | null;
   canAct?: boolean;
@@ -663,7 +667,8 @@ export type WithdrawalApprover =
   | { kind: 'office' }
   | { kind: 'class_teacher' }
   | { kind: 'role'; roleId: string; name?: string }
-  | { kind: 'user'; userId: string; name?: string };
+  | { kind: 'user'; userId: string; name?: string }
+  | { kind: 'hostel_warden' };
 
 export interface WithdrawalDepartment {
   id: string;
@@ -672,12 +677,16 @@ export interface WithdrawalDepartment {
   step: number;
   approvers: WithdrawalApprover[];
   approverLabels: string[];
-  autoCheck: 'none' | 'fees' | 'library';
+  autoCheck: 'none' | 'fees' | 'library' | 'hostel_fees';
   autoClear: boolean;
   bypassAllowed: boolean;
   documentRequired: boolean;
   gatesTc: boolean;
   active: boolean;
+  /** hostel steps: the department may raise a charge on the pupil (misc fee) */
+  chargeKind?: 'damage' | 'mess' | null;
+  /** hostel steps: also clears a hosteller who leaves the school */
+  inSchoolExit?: boolean;
 }
 
 export interface PromotionRow {
@@ -1508,6 +1517,8 @@ export interface FeeLedger {
     studentType: 'new' | 'old';
     payPlan: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
     hosteller: boolean;
+    /** first day of the last month in the hostel, when the stay ends within the session */
+    hostelTo?: string | null;
     transport: string | null;
     discounts: string[];
     optionalHeads: string[];
@@ -2413,4 +2424,40 @@ export interface SchoolTransfer {
     mobile: string | null;
     address: string | null;
   } | null;
+}
+
+/** Hostel withdrawal (docs/design/27-hostel-withdrawal.md). */
+export interface HostelClearance extends Omit<Clearance, 'gatesTc'> {
+  charge: string;
+  chargeMiscFeeId: string | null;
+  chargeKind: 'damage' | 'mess' | null;
+  /** the last step (Accounts): chooses carry-forward or refund */
+  settles: boolean;
+}
+export interface HostelWithdrawal {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  section: string | null;
+  hostelId: string;
+  hostelName: string;
+  place: string;
+  requestedOn: string;
+  leavingOn: string;
+  reason: 'parent_request' | 'discipline' | 'health' | 'other';
+  remarks: string | null;
+  documents: Array<{ fileId: string; name: string | null }>;
+  status: 'requested' | 'cleared' | 'completed' | 'cancelled';
+  currentStep: number | null;
+  feeChoice: 'carry' | 'refund';
+  noticeDays: number | null;
+  noticeShort: boolean;
+  feeUntil: string | null;
+  feeNote: string | null;
+  requestedBy: string | null;
+  completedAt: string | null;
+  cancelReason: string | null;
+  clearances: HostelClearance[];
+  canComplete?: boolean;
 }

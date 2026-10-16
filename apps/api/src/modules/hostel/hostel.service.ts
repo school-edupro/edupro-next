@@ -970,10 +970,12 @@ export class HostelService {
    * the bed held that month, app.hostel_fee_group_on). A
    * school without the fee set-up for the session still gets the allotment (synced = false, with why).
    */
-  private async syncFee(
+  async syncFee(
     c: PoolClient,
     studentId: string,
     yearId: string,
+    /** the hostel fee runs to this month at least (a hostel withdrawal with short notice keeps one more) */
+    feeUntil?: string,
   ): Promise<{ synced: boolean; note?: string }> {
     const y = (
       await c.query<{ start_date: string; end_date: string }>(
@@ -998,8 +1000,9 @@ export class HostelService {
     const month = (d: string) => `${d.slice(0, 7)}-01`;
     const hosteller = span.any;
     const from = hosteller && span.first && span.first > y.start_date ? month(span.first) : null;
+    const last = feeUntil && span.last && feeUntil > span.last ? feeUntil : span.last;
     const to =
-      hosteller && !span.open && span.last && span.last < y.end_date ? month(span.last) : null;
+      hosteller && !span.open && last && month(last) < month(y.end_date) ? month(last) : null;
     await c.query('SAVEPOINT hostel_fee');
     try {
       await c.query(

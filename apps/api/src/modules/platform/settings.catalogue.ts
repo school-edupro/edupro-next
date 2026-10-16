@@ -84,7 +84,8 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
   'auth.otp_remember': {
     schema: z.boolean(),
     default: false,
-    description: 'Allow "remember this device" (30 days without the code); off = the code at every sign-in',
+    description:
+      'Allow "remember this device" (30 days without the code); off = the code at every sign-in',
     module: 'platform',
   },
   'auth.otp_channels': {
@@ -108,19 +109,22 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
   'fees.receipt_copies': {
     schema: z.enum(['parent', 'parent_school', 'parent_school_office']),
     default: 'parent_school',
-    description: 'Copies of a receipt printed: parent; parent and school; parent, school and office',
+    description:
+      'Copies of a receipt printed: parent; parent and school; parent, school and office',
     module: 'fees',
   },
   'auth.otp_sms_template': {
     schema: z.union([z.string().regex(/^\d{1,18}$/), z.literal('')]),
     default: '',
-    description: 'SMS template (DLT) for the sign-in code; empty = the active OTP template with a DLT id',
+    description:
+      'SMS template (DLT) for the sign-in code; empty = the active OTP template with a DLT id',
     module: 'platform',
   },
   'auth.otp_whatsapp_template': {
     schema: z.union([z.string().regex(/^\d{1,18}$/), z.literal('')]),
     default: '',
-    description: 'WhatsApp template (Meta approved) for the sign-in code; empty = the active OTP template',
+    description:
+      'WhatsApp template (Meta approved) for the sign-in code; empty = the active OTP template',
     module: 'platform',
   },
   'security.session_hours': {
@@ -241,6 +245,19 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description:
       'on: a late-fee waiver by the accounts desk waits for the approver; off: anyone with fees.late_fee.manage sets it directly',
     module: 'fees',
+  },
+  'hostel.withdrawal_notice_days': {
+    schema: z.number().int().min(0).max(120),
+    default: 30,
+    description:
+      'Hostel withdrawal: a leaving date fewer days than this after the request keeps the next month of hostel fee',
+    module: 'hostel',
+  },
+  'hostel.withdrawal_notice_charge': {
+    schema: z.boolean(),
+    default: true,
+    description: 'Hostel withdrawal: charge the next month of hostel fee when the notice is short',
+    module: 'hostel',
   },
   'people.former_portal_days': {
     schema: z.number().int().min(0).max(730),

@@ -69,6 +69,12 @@ function Department({ w, x }: { w: Withdrawal; x: Clearance }) {
       ) : null}
       {x.remarks ? <div>{x.remarks}</div> : null}
       {Number(x.dues) > 0 ? <div>Dues ₹{Number(x.dues).toLocaleString('en-IN')}</div> : null}
+      {Number(x.charge ?? 0) > 0 ? (
+        <div>
+          {x.chargeKind === 'mess' ? 'Mess dues' : 'Damages'} ₹
+          {Number(x.charge).toLocaleString('en-IN')} raised as a misc fee
+        </div>
+      ) : null}
       <Docs docs={x.documents} />
       {x.actedBy || x.actedAt ? (
         <div className="ep-field__help">
@@ -99,6 +105,20 @@ function Department({ w, x }: { w: Withdrawal; x: Clearance }) {
                 defaultValue={Number(x.dues) > 0 ? x.dues : ''}
               />
             </label>
+            {x.chargeKind && !x.chargeMiscFeeId ? (
+              <label className="ep-field" htmlFor={`ch-${x.id}`}>
+                <span className="ep-field__label">
+                  {x.chargeKind === 'mess' ? 'Mess dues to charge (₹)' : 'Damages to charge (₹)'}
+                </span>
+                <input
+                  id={`ch-${x.id}`}
+                  name="charge"
+                  className="ep-input"
+                  inputMode="decimal"
+                  placeholder="0"
+                />
+              </label>
+            ) : null}
             <label className="ep-field ep-wd__wide" htmlFor={`re-${x.id}`}>
               <span className="ep-field__label">Remarks</span>
               <input

@@ -230,7 +230,21 @@ export class HostelMessService {
           [studentId],
         )
       ).rows[0];
-      if (!h?.id) return { hostel: null, week: null, diet: null };
+      if (!h?.id) {
+        // a child who has left the hostel: when, and up to which month the hostel fee runs
+        const left = (
+          await c.query<{ on: string; hostel: string; feeUntil: string | null }>(
+            `SELECT a.to_date::text AS on, h.name AS hostel, hw.fee_until::text AS "feeUntil"
+               FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id
+               JOIN hostels h ON h.id = r.hostel_id
+               LEFT JOIN hostel_withdrawals hw ON hw.allotment_id = a.id AND hw.status = 'completed'
+              WHERE a.student_id = $1 AND a.to_date IS NOT NULL AND a.end_reason IN ('vacate', 'withdrawn')
+              ORDER BY a.to_date DESC LIMIT 1`,
+            [studentId],
+          )
+        ).rows[0];
+        return { hostel: null, week: null, diet: null, left: left ?? null };
+      }
       const diet = (
         await c.query(
           `SELECT diet, no_onion_garlic AS "noOnionGarlic", notes FROM hostel_diets WHERE student_id = $1`,

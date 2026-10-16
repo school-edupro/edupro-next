@@ -165,6 +165,14 @@ export default async function FeeLedgerPage({
   const canPost = can('fees.receipt.post') && yearOpen;
   const tab: Tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : canPost ? 'pay' : 'dues';
   const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  // a pupil who left the hostel this session: a day scholar from the month after the last hostel month
+  const leftHostel = (() => {
+    const to = ledger.fee.hostelTo;
+    if (!ledger.fee.hosteller || !to || to.slice(0, 7) >= today.slice(0, 7)) return null;
+    const d = new Date(`${to.slice(0, 7)}-15T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  })();
   // what is open on school fee and on hostel fee, each paid on its own
   const openOn = (l: string) =>
     ledger.instalments
@@ -313,7 +321,13 @@ export default async function FeeLedgerPage({
                 {ledger.fee.studentType === 'new' ? 'New student' : 'Old student'}
               </Badge>
               <Badge tone="info">Pays {PAY_PLAN[ledger.fee.payPlan]}</Badge>
-              <Badge tone="neutral">{ledger.fee.hosteller ? 'Hosteller' : 'Day scholar'}</Badge>
+              <Badge tone="neutral">
+                {ledger.fee.hosteller
+                  ? leftHostel
+                    ? `Day scholar since ${leftHostel} (left the hostel)`
+                    : 'Hosteller'
+                  : 'Day scholar'}
+              </Badge>
               <Badge tone="neutral">Transport: {ledger.fee.transport ?? 'none'}</Badge>
               <Badge tone="neutral">
                 Discount: {ledger.fee.discounts.length ? ledger.fee.discounts.join(', ') : 'none'}

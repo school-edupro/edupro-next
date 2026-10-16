@@ -68,6 +68,10 @@ export const ClearanceSchema = z.object({
   dues: z.number().min(0).max(10_000_000).default(0),
   remarks: z.string().trim().max(500).optional(),
   documents: z.array(FileRef).max(5).default([]),
+  /** A department that raises a charge (damages, mess dues): the amount put on the pupil as a misc fee. */
+  charge: z.number().min(0).max(1_000_000).default(0),
+  /** Hostel withdrawal, the Accounts step: paid hostel months after the fee stops are carried or refunded. */
+  feeChoice: z.enum(['carry', 'refund']).optional(),
 });
 export class ClearanceDto extends createZodDto(ClearanceSchema) {}
 
@@ -102,6 +106,7 @@ const Approver = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('class_teacher') }),
   z.object({ kind: z.literal('role'), roleId: IdSchema, name: z.string().max(80).optional() }),
   z.object({ kind: z.literal('user'), userId: IdSchema, name: z.string().max(80).optional() }),
+  z.object({ kind: z.literal('hostel_warden') }),
 ]);
 export const DepartmentSchema = z.object({
   id: IdSchema.optional(),
@@ -112,12 +117,16 @@ export const DepartmentSchema = z.object({
   name: z.string().trim().min(2).max(80),
   step: z.number().int().min(1).max(9),
   approvers: z.array(Approver).min(1).max(4),
-  autoCheck: z.enum(['none', 'fees', 'library']).default('none'),
+  autoCheck: z.enum(['none', 'fees', 'library', 'hostel_fees']).default('none'),
   autoClear: z.boolean().default(false),
   bypassAllowed: z.boolean().default(false),
   documentRequired: z.boolean().default(false),
   gatesTc: z.boolean().default(false),
   active: z.boolean().default(true),
+  /** the department may raise a charge on the pupil (a misc fee): damages or mess dues */
+  chargeKind: z.enum(['damage', 'mess']).nullable().default(null),
+  /** a hostel department that also clears a hosteller leaving the school */
+  inSchoolExit: z.boolean().default(false),
 });
 export const SaveDepartmentsSchema = z.object({
   departments: z.array(DepartmentSchema).min(1).max(15),

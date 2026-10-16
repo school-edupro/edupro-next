@@ -194,7 +194,8 @@
     "hostelDashboard": "Hostel dashboard",
     "hostelComplaints": "Hostel complaints",
     "hostelIncidents": "Incidents",
-    "landingPages": "Landing pages"
+    "landingPages": "Landing pages",
+    "hostelWithdrawals": "Hostel withdrawals"
   },
   "shell": {
     "primaryNavigation": "Primary",

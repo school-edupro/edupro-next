@@ -231,6 +231,14 @@ export default async function HostelAllotPage({
                   </form>
                   <form action={vacateBed} className="hs-form">
                     <h3 className="hs-h">End the stay</h3>
+                    <p className="ep-field__help" style={{ margin: 0 }}>
+                      A pupil leaving the hostel goes through a{' '}
+                      <a href={`/hostel/withdrawals/new?student=${pupil.pupil.id}`}>
+                        hostel withdrawal
+                      </a>{' '}
+                      (warden, mess and accounts clear, damages and the fee settled). End the stay
+                      here only to correct a record.
+                    </p>
                     <input type="hidden" name="studentId" value={pupil.pupil.id} />
                     <input type="hidden" name="returnTo" value={here} />
                     <label className="ep-field" htmlFor="ha-von">

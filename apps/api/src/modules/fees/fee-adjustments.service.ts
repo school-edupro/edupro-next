@@ -1323,7 +1323,7 @@ export class FeeAdjustmentsService {
    * hosteller): the line comes down to nothing and what was paid is carried forward to the pupil's next
    * unpaid fee (what finds no due stays on the receipt as advance), as for transport.
    */
-  private async carryHostelOutsideStay(
+  async carryHostelOutsideStay(
     c: PoolClient,
     studentId: string,
     yearId: string,

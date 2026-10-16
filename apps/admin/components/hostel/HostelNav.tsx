@@ -9,6 +9,7 @@ const TABS: Array<{ href: string; label: string; permission: string }> = [
   { href: '/hostel/mess', label: 'Mess', permission: 'hostel.room.view' },
   { href: '/hostel/complaints', label: 'Complaints', permission: 'hostel.room.view' },
   { href: '/hostel/incidents', label: 'Incidents', permission: 'hostel.incident.view' },
+  { href: '/hostel/withdrawals', label: 'Withdrawals', permission: 'hostel.withdrawal.view' },
   { href: '/hostel/register', label: 'Register', permission: 'hostel.room.view' },
   { href: '/hostel/setup', label: 'Set-up', permission: 'hostel.setup.manage' },
   { href: '/hostel/upload', label: 'Upload (Excel)', permission: 'hostel.allot.manage' },

@@ -12,11 +12,22 @@ import { HostelCareController } from './hostel-care.controller';
 import { HostelCareService } from './hostel-care.service';
 import { HostelImportService } from './hostel-import.service';
 import { HostelService } from './hostel.service';
+import { HostelWithdrawalController } from './hostel-withdrawal.controller';
+import { HostelWithdrawalsService } from './hostel-withdrawals.service';
+import { FeesModule } from '../fees/fees.module';
+import { LifecycleModule } from '../people/lifecycle/lifecycle.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 /** Hostel module (docs/design/25-hostel-module.md): set-up, wardens, bed allotment and occupancy. */
 @Module({
-  imports: [DailyAcademicsModule, EngagementModule],
-  controllers: [HostelController, HostelLifeController, HostelH3Controller, HostelCareController],
+  imports: [DailyAcademicsModule, EngagementModule, FeesModule, LifecycleModule, WorkflowModule],
+  controllers: [
+    HostelController,
+    HostelLifeController,
+    HostelH3Controller,
+    HostelCareController,
+    HostelWithdrawalController,
+  ],
   providers: [
     HostelService,
     HostelImportService,
@@ -24,6 +35,7 @@ import { HostelService } from './hostel.service';
     HostelVisitsService,
     HostelMessService,
     HostelCareService,
+    HostelWithdrawalsService,
     AuditService,
   ],
   exports: [HostelService],

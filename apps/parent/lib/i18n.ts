@@ -989,6 +989,8 @@ const DICT: Record<string, string> = {
   'Removed from the list.': 'सूची से हटाया गया।',
   'Added. The warden will approve the visitor.': 'जोड़ा गया। वार्डन आगंतुक को स्वीकृत करेंगे।',
   'Your child does not board in the hostel.': 'आपका बच्चा छात्रावास में नहीं रहता।',
+  'Your child left the hostel on': 'आपका बच्चा छात्रावास से गया:',
+  'The hostel fee is charged up to': 'छात्रावास शुल्क इस महीने तक लिया जाएगा:',
   'Approved visitors': 'स्वीकृत आगंतुक',
   'Only people on this list may visit your child, in the hostel\u2019s visiting hours. Anyone else waits at the gate for the warden, and you are told.':
     'केवल इस सूची के लोग छात्रावास के मिलने के समय में आपके बच्चे से मिल सकते हैं। अन्य लोग गेट पर वार्डन की प्रतीक्षा करते हैं, और आपको सूचना दी जाती है।',

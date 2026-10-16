@@ -10,23 +10,29 @@ const approverText = (a: WithdrawalApprover) =>
     ? 'School office'
     : a.kind === 'class_teacher'
       ? 'Class teacher'
-      : a.kind === 'role'
-        ? `Role: ${a.name ?? a.roleId}`
-        : (a.name ?? `Employee ${a.userId}`);
+      : a.kind === 'hostel_warden'
+        ? "Warden of the pupil's hostel"
+        : a.kind === 'role'
+          ? `Role: ${a.name ?? a.roleId}`
+          : (a.name ?? `Employee ${a.userId}`);
 
 /**
- * Withdrawal settings: the departments that clear a leaving student. Same step = in parallel; the
- * next step opens once all of the current one has cleared. Each department names who may clear it.
+ * Withdrawal settings: the departments that clear a leaving student (or, for the hostel, a pupil
+ * leaving the hostel). Same step = in parallel; the next step opens once all of the current one has
+ * cleared. Each department names who may clear it.
  */
 export function WithdrawalDepartmentsEditor({
   departments,
   roles,
   staff,
+  process = 'school',
 }: {
   departments: WithdrawalDepartment[];
   roles: Array<{ id: string; name: string }>;
   staff: Array<{ userId: string; name: string; designation: string | null }>;
+  process?: 'school' | 'hostel';
 }) {
+  const hostel = process === 'hostel';
   const [rows, setRows] = useState<Row[]>(
     departments.map((d) => ({
       key: d.code,
@@ -40,13 +46,17 @@ export function WithdrawalDepartmentsEditor({
       documentRequired: d.documentRequired,
       gatesTc: d.gatesTc,
       active: d.active,
+      chargeKind: d.chargeKind ?? null,
+      inSchoolExit: d.inSchoolExit ?? false,
     })),
   );
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
   const options: Array<{ label: string; value: WithdrawalApprover }> = [
     { label: 'School office', value: { kind: 'office' } },
-    { label: 'Class teacher', value: { kind: 'class_teacher' } },
+    hostel
+      ? { label: "Warden of the pupil's hostel", value: { kind: 'hostel_warden' } }
+      : { label: 'Class teacher', value: { kind: 'class_teacher' } },
     ...roles.map((r) => ({
       label: `Role: ${r.name}`,
       value: { kind: 'role' as const, roleId: r.id, name: r.name },
@@ -67,6 +77,7 @@ export function WithdrawalDepartmentsEditor({
       setMessage(null);
       const r = await saveWithdrawalDepartments(
         rows.map(({ key: _key, isNew: _isNew, ...d }) => d),
+        process,
       );
       setMessage(r.ok ? { ok: true, text: 'Saved.' } : { ok: false, text: r.error });
     });
@@ -89,7 +100,9 @@ export function WithdrawalDepartmentsEditor({
       </p>
       <div className="ep-table-wrap">
         <table className="ep-table ep-wdset__table">
-          <caption className="ep-sr-only">Withdrawal departments</caption>
+          <caption className="ep-sr-only">
+            {hostel ? 'Hostel withdrawal steps' : 'Withdrawal departments'}
+          </caption>
           <thead>
             <tr>
               <th scope="col">Department</th>
@@ -181,7 +194,11 @@ export function WithdrawalDepartmentsEditor({
                         id={`a-${r.key}`}
                         className="ep-input"
                         list="wd-approvers"
-                        placeholder="Add: office, class teacher, role or name"
+                        placeholder={
+                          hostel
+                            ? 'Add: office, warden, role or name'
+                            : 'Add: office, class teacher, role or name'
+                        }
                         onChange={(e) => {
                           const hit = options.find((o) => o.label === e.target.value);
                           if (!hit) return;
@@ -206,8 +223,14 @@ export function WithdrawalDepartmentsEditor({
                     }
                   >
                     <option value="none">None</option>
-                    <option value="fees">Fee dues</option>
-                    <option value="library">Library books and fines</option>
+                    {hostel ? (
+                      <option value="hostel_fees">Hostel fee dues</option>
+                    ) : (
+                      <>
+                        <option value="fees">Fee dues</option>
+                        <option value="library">Library books and fines</option>
+                      </>
+                    )}
                   </select>
                   {r.autoCheck !== 'none' ? (
                     <label className="ep-roles__tick" htmlFor={`ac-${r.key}`}>
@@ -222,12 +245,17 @@ export function WithdrawalDepartmentsEditor({
                   ) : null}
                 </td>
                 <td>
-                  {(
-                    [
-                      ['bypassAllowed', 'May be bypassed'],
-                      ['documentRequired', 'Document required'],
-                      ['gatesTc', 'TC after this clears'],
-                    ] as const
+                  {(hostel
+                    ? ([
+                        ['bypassAllowed', 'May be bypassed'],
+                        ['documentRequired', 'Document required'],
+                        ['inSchoolExit', 'Also when leaving the school'],
+                      ] as const)
+                    : ([
+                        ['bypassAllowed', 'May be bypassed'],
+                        ['documentRequired', 'Document required'],
+                        ['gatesTc', 'TC after this clears'],
+                      ] as const)
                   ).map(([k, label]) => (
                     <label
                       key={k}
@@ -237,12 +265,31 @@ export function WithdrawalDepartmentsEditor({
                       <input
                         id={`${k}-${r.key}`}
                         type="checkbox"
-                        checked={r[k]}
+                        checked={!!r[k]}
                         onChange={(e) => update(r.key, { [k]: e.target.checked })}
                       />{' '}
                       {label}
                     </label>
                   ))}
+                  {hostel ? (
+                    <label className="ep-field ep-wdset__rule" htmlFor={`ch-${r.key}`}>
+                      <span className="ep-field__help">Raises a charge on the pupil</span>
+                      <select
+                        id={`ch-${r.key}`}
+                        className="ep-select"
+                        value={r.chargeKind ?? ''}
+                        onChange={(e) =>
+                          update(r.key, {
+                            chargeKind: (e.target.value || null) as Row['chargeKind'],
+                          })
+                        }
+                      >
+                        <option value="">No charge</option>
+                        <option value="damage">Damages (misc fee)</option>
+                        <option value="mess">Mess dues (misc fee)</option>
+                      </select>
+                    </label>
+                  ) : null}
                 </td>
                 <td>
                   <label className="ep-roles__tick" htmlFor={`on-${r.key}`}>
@@ -285,6 +332,8 @@ export function WithdrawalDepartmentsEditor({
                 documentRequired: false,
                 gatesTc: false,
                 active: true,
+                chargeKind: null,
+                inSchoolExit: false,
               },
             ])
           }

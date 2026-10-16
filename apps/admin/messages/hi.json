@@ -194,7 +194,8 @@
     "hostelDashboard": "छात्रावास डैशबोर्ड",
     "hostelComplaints": "छात्रावास शिकायतें",
     "hostelIncidents": "घटनाएँ",
-    "landingPages": "लैंडिंग पेज"
+    "landingPages": "लैंडिंग पेज",
+    "hostelWithdrawals": "छात्रावास छोड़ना"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

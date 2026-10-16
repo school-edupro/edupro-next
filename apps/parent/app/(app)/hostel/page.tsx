@@ -21,6 +21,8 @@ interface Visitors {
 }
 interface Menu {
   hostel: { id: string; name: string } | null;
+  /** the child has left the hostel */
+  left?: { on: string; hostel: string; feeUntil: string | null } | null;
   diet: { diet: string; noOnionGarlic: boolean; notes: string | null } | null;
   week: {
     weekOf: string;
@@ -173,7 +175,25 @@ export default async function HostelPage({
         </div>
       ) : null}
       {!menu.hostel ? (
-        <Card>{t(lang, 'Your child does not board in the hostel.')}</Card>
+        <Card>
+          {menu.left ? (
+            <>
+              {t(lang, 'Your child left the hostel on')}{' '}
+              <strong>{when(`${menu.left.on}T12:00:00+05:30`)}</strong> ({menu.left.hostel}).
+              {menu.left.feeUntil
+                ? ` ${t(lang, 'The hostel fee is charged up to')} ${new Date(
+                    `${menu.left.feeUntil}T00:00:00Z`,
+                  ).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
+                    month: 'long',
+                    year: 'numeric',
+                    timeZone: 'UTC',
+                  })}.`
+                : ''}
+            </>
+          ) : (
+            t(lang, 'Your child does not board in the hostel.')
+          )}
+        </Card>
       ) : (
         <>
           <Card title={t(lang, 'Approved visitors')} style={{ marginBottom: 'var(--sp-4)' }}>

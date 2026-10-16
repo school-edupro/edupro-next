@@ -1472,6 +1472,7 @@ export async function recordClearance(fd: FormData) {
           dues: Number(str(fd, 'dues') || '0'),
           remarks: opt(fd, 'remarks'),
           documents: files.map((fileId) => ({ fileId })),
+          charge: Number(str(fd, 'charge') || '0'),
         }),
       },
     );
@@ -1537,13 +1538,18 @@ export async function cancelWithdrawal(fd: FormData) {
 /** Saves the withdrawal departments (the settings editor sends the whole list as JSON). */
 export async function saveWithdrawalDepartments(
   departments: unknown[],
+  process: 'school' | 'hostel' = 'school',
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    await apiFetch('/people/withdrawal-departments', {
-      method: 'PUT',
-      body: JSON.stringify({ departments }),
-    });
-    revalidatePath('/people/withdrawals/settings');
+    await apiFetch(
+      process === 'hostel'
+        ? '/hostel/withdrawal-settings/departments'
+        : '/people/withdrawal-departments',
+      { method: 'PUT', body: JSON.stringify({ departments }) },
+    );
+    revalidatePath(
+      process === 'hostel' ? '/hostel/withdrawals/settings' : '/people/withdrawals/settings',
+    );
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError)
