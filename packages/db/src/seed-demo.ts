@@ -73,6 +73,16 @@ const DEMO_USERS: DemoUser[] = [
       'Transport In-charge: routes, stoppages, vehicles, transport requests (first approval), applying for a pupil, history',
   },
   {
+    sub: 'dev-hostel',
+    name: 'Harish Hostel Clerk',
+    mobile: '9999999918',
+    email: 'hostel@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['hostel_clerk'] },
+    description:
+      'Hostel Clerk: hostel set-up, allot / transfer / vacate, registers, hostel withdrawals (start, complete, cancel)',
+  },
+  {
     sub: 'dev-group',
     name: 'Gita Group Admin',
     mobile: '9999999901',
