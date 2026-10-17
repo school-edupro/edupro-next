@@ -12,6 +12,7 @@ import {
   HOSTEL_WD,
 } from './hostel-withdrawal.dto';
 import { HostelExitService } from './hostel-exit.service';
+import { HostelFamilyService } from './hostel-family.service';
 
 const json = (f: { filename: string; contentType: string; bytes: Buffer }) => ({
   filename: f.filename,
@@ -24,7 +25,20 @@ const json = (f: { filename: string; contentType: string; bytes: Buffer }) => ({
 @ApiBearerAuth()
 @Controller('hostel')
 export class HostelExitController {
-  constructor(private readonly exit: HostelExitService) {}
+  constructor(
+    private readonly exit: HostelExitService,
+    private readonly family: HostelFamilyService,
+  ) {}
+
+  @Get('mine/summary')
+  @ApiOperation({
+    summary:
+      "The parent app's hostel summary: room, wardens, where the child is now, last roll-call, today's meals",
+  })
+  @RequirePermission(HOSTEL_H3.family)
+  summary(@ReqCtx() ctx: RequestContext, @Query('studentId') studentId: string) {
+    return this.family.summary(ctx, studentId);
+  }
 
   // ---- the family ---------------------------------------------------------------------------------------
   @Get('mine/exit')

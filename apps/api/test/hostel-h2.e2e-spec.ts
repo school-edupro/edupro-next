@@ -601,4 +601,29 @@ describe('hostel module H2 (e2e)', () => {
     });
     expect(r.json()).toMatchObject({ type: expect.stringContaining('gate_pass.not_hosteller') });
   });
+
+  it("the parent app's summary: room and wardens, where the child is, the last roll-call, the leave", async () => {
+    const sum = await get(`/hostel/mine/summary?studentId=${ids.ravi}`, parent);
+    expect(sum).toMatchObject({
+      boarder: true,
+      stay: { hostel: 'Boys Hostel', room: '11', roomMates: 1 },
+      now: { state: 'in_hostel' },
+    });
+    expect(sum.wardens[0]).toMatchObject({ name: 'W1 Warden', isHead: true });
+    expect(sum.lastRoll).toMatchObject({ label: expect.any(String) });
+    expect(sum.passes.map((p: { kind: string }) => p.kind)).toEqual(
+      expect.arrayContaining(['hostel_home', 'hostel_outing']),
+    );
+    expect(Array.isArray(sum.todayMenu)).toBe(true);
+    // a pupil who is not their child
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: '/hostel/mine/summary?studentId=999999999',
+          headers: h(parent),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
 });
