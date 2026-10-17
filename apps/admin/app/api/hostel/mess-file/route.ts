@@ -11,7 +11,7 @@ const KINDS: Record<string, { path: string; keys: string[] }> = {
   'diet-template': { path: '/hostel/diets/template', keys: ['hostelId'] },
   register: { path: '/hostel/meal-register/file', keys: ['hostelId', 'month'] },
   headcount: { path: '/hostel/headcount/file', keys: ['hostelId', 'on'] },
-  visits: { path: '/hostel/visits/file', keys: ['hostelId', 'from', 'to'] },
+  visits: { path: '/hostel/visits/file', keys: ['hostelId', 'from', 'to', 'show', 'q'] },
   'visitor-list': { path: '/hostel/visitors/file', keys: ['hostelId'] },
   incidents: {
     path: '/hostel/incidents/file',

@@ -3,6 +3,7 @@ import { HostelNav } from '@/components/hostel/HostelNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { addHostelVisitor, decideHostelVisit, decideHostelVisitor } from '@/lib/hostel-actions';
+import { exitVisitor } from '@/lib/visitor-actions';
 
 interface Visit {
   id: string;
@@ -11,9 +12,14 @@ interface Visit {
   visitorName: string;
   mobile: string | null;
   purpose: string;
+  partySize: number;
+  idProofKind: string | null;
+  gate: string | null;
+  exitGate: string | null;
   pupil: string;
   admissionNo: string;
   hostel: string;
+  room: string | null;
   listed: boolean;
   inHours: boolean;
   wardenDecision: string | null;
@@ -42,9 +48,20 @@ interface Hit {
   bed: string | null;
 }
 
+interface VisitPage {
+  data: Visit[];
+  total: number;
+  counts: {
+    waiting: number;
+    inside: number;
+    today: number;
+    left: number;
+    all: number;
+    peopleInside: number;
+  };
+}
 const TABS = [
-  ['waiting', 'Waiting at the gate'],
-  ['today', 'Visits today'],
+  ['register', 'Visitor register'],
   ['approve', 'Visitors to approve'],
   ['lists', 'Approved lists'],
   ['download', 'Download (Excel / PDF)'],
@@ -56,6 +73,22 @@ const when = (v: string | null) =>
         timeZone: 'Asia/Kolkata',
         day: '2-digit',
         month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—';
+const SHOWS = [
+  ['inside', 'Inside now'],
+  ['waiting', 'Waiting for the warden'],
+  ['today', 'Today'],
+  ['left', 'Left'],
+  ['all', 'Everything'],
+] as const;
+const SIZES = [10, 25, 50, 100];
+const time = (v: string | null) =>
+  v
+    ? new Date(v).toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
         hour: '2-digit',
         minute: '2-digit',
       })
@@ -73,6 +106,13 @@ export default async function HostelVisitorsPage({
 }: {
   searchParams: Promise<{
     tab?: string;
+    show?: string;
+    hostel?: string;
+    from?: string;
+    to?: string;
+    find?: string;
+    page?: string;
+    size?: string;
     q?: string;
     student?: string;
     ok?: string;
@@ -82,14 +122,52 @@ export default async function HostelVisitorsPage({
 }) {
   const sp = await searchParams;
   const me = await getMe();
-  const tab = TABS.some(([k]) => k === sp.tab) ? sp.tab! : 'waiting';
+  // the old tabs open the register on that state
+  const oldTab = sp.tab === 'waiting' || sp.tab === 'today' ? sp.tab : '';
+  const tab = TABS.some(([k]) => k === sp.tab) ? sp.tab! : 'register';
+  const isDay = (v?: string) => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+  const r = {
+    show: SHOWS.some(([k]) => k === sp.show) ? sp.show! : oldTab || 'inside',
+    hostel: /^\d{1,18}$/.test(sp.hostel ?? '') ? sp.hostel! : '',
+    from: isDay(sp.from) ? sp.from! : '',
+    to: isDay(sp.to) ? sp.to! : '',
+    find: (sp.find ?? '').trim().slice(0, 80),
+  };
+  const rSize = SIZES.includes(Number(sp.size)) ? Number(sp.size) : 25;
+  const rPage = Math.max(1, Number(sp.page) || 1);
+  const rQs = (extra: Record<string, string> = {}) =>
+    new URLSearchParams(
+      Object.fromEntries(
+        Object.entries({
+          tab: 'register',
+          ...r,
+          size: String(rSize),
+          page: String(rPage),
+          ...extra,
+        }).filter(([, v]) => v),
+      ),
+    ).toString();
   const may = (p: string) => me.permissions.includes(p);
   const q = (sp.q ?? '').trim().slice(0, 60);
   const studentId = /^\d{1,18}$/.test(sp.student ?? '') ? sp.student! : '';
-  const [visits, pending, hits, list, hostels] = await Promise.all([
-    tab === 'waiting' || tab === 'today'
-      ? apiFetch<{ data: Visit[] }>(`/hostel/visits?show=${tab}`).then((r) => r.data)
-      : Promise.resolve([] as Visit[]),
+  const [reg, pending, hits, list, hostels] = await Promise.all([
+    tab === 'register'
+      ? apiFetch<VisitPage>(
+          `/hostel/visits?${new URLSearchParams(
+            Object.fromEntries(
+              Object.entries({
+                show: r.show,
+                hostelId: r.hostel,
+                from: r.from,
+                to: r.to,
+                q: r.find,
+                page: String(rPage),
+                size: String(rSize),
+              }).filter(([, v]) => v),
+            ),
+          ).toString()}`,
+        )
+      : Promise.resolve(null),
     tab === 'approve'
       ? apiFetch<{ data: Visitor[] }>('/hostel/visitors?status=pending').then((r) => r.data)
       : Promise.resolve([] as Visitor[]),
@@ -109,7 +187,23 @@ export default async function HostelVisitorsPage({
         )
       : Promise.resolve([] as Array<{ id: string; name: string }>),
   ]);
-  const here = `/hostel/visitors?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}${studentId ? `&student=${studentId}` : ''}`;
+  const here =
+    tab === 'register'
+      ? `/hostel/visitors?${rQs()}`
+      : `/hostel/visitors?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}${studentId ? `&student=${studentId}` : ''}`;
+  const rPages = reg ? Math.max(1, Math.ceil(reg.total / rSize)) : 1;
+  const fileQs = new URLSearchParams(
+    Object.fromEntries(
+      Object.entries({
+        kind: 'visits',
+        hostelId: r.hostel,
+        from: r.from,
+        to: r.to,
+        show: r.show,
+        q: r.find,
+      }).filter(([, v]) => v),
+    ),
+  ).toString();
   return (
     <>
       <PageHeader
@@ -151,72 +245,270 @@ export default async function HostelVisitorsPage({
         ))}
       </nav>
 
-      {tab === 'waiting' || tab === 'today' ? (
-        <Card title={`${String(visits.length)} visit(s)`}>
-          {visits.length === 0 ? (
-            <p className="ep-field__help">
-              {tab === 'waiting' ? 'Nobody is waiting.' : 'No hostel visitor today.'}
-            </p>
-          ) : (
-            <ul className="fp-rcpts">
-              {visits.map((v) => (
-                <li key={v.id}>
-                  <span style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
-                    {v.hasPhoto ? (
-                      <img
-                        src={`/api/hostel/photo/visit/${v.id}`}
-                        alt={v.visitorName}
-                        width={56}
-                        height={56}
-                        style={{ objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
-                      />
-                    ) : null}
-                    <span>
-                      <strong>{v.visitorName}</strong> → {v.pupil}{' '}
-                      <small className="ep-field__help">{v.admissionNo}</small>
-                      <span className="ep-field__help" style={{ display: 'block' }}>
-                        {v.number} · {v.hostel} · {v.purpose} · {v.mobile ?? '—'} ·{' '}
-                        {when(v.createdAt)}
-                        {v.outAt ? ` · left ${when(v.outAt)}` : ''}
-                      </span>
-                      <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
-                        <Badge tone={STATE[v.state]?.[1] ?? 'neutral'}>
-                          {STATE[v.state]?.[0] ?? v.state}
-                        </Badge>
-                        {v.listed ? null : <Badge tone="danger">Not on the list</Badge>}
-                        {v.inHours ? null : <Badge tone="warning">Outside hours</Badge>}
-                        {v.wardenDecision ? (
-                          <Badge tone="neutral">Warden: {v.wardenDecision}</Badge>
-                        ) : null}
-                      </span>
-                    </span>
-                  </span>
-                  {v.state === 'waiting' && may('hostel.visit.decide') ? (
-                    <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                      {/* one form per choice: a button's own name/value does not reach a server action */}
-                      <form action={decideHostelVisit}>
-                        <input type="hidden" name="id" value={v.id} />
-                        <input type="hidden" name="returnTo" value={here} />
-                        <input type="hidden" name="outcome" value="allowed" />
-                        <Button type="submit" size="sm">
-                          Allow in
-                        </Button>
-                      </form>
-                      <form action={decideHostelVisit}>
-                        <input type="hidden" name="id" value={v.id} />
-                        <input type="hidden" name="returnTo" value={here} />
-                        <input type="hidden" name="outcome" value="refused" />
-                        <Button type="submit" size="sm" variant="secondary">
-                          Refuse
-                        </Button>
-                      </form>
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+      {tab === 'register' && reg ? (
+        <>
+          <nav
+            className="ep-tabs-links"
+            aria-label="Which visitors"
+            style={{ marginBottom: 'var(--sp-3)' }}
+          >
+            {SHOWS.map(([k, label]) => (
+              <a
+                key={k}
+                href={`/hostel/visitors?${rQs({ show: k, page: '1' })}`}
+                aria-current={k === r.show ? 'page' : undefined}
+              >
+                {label} · {reg.counts[k]}
+              </a>
+            ))}
+          </nav>
+          <div className="ep-filter-band" style={{ marginBottom: 'var(--sp-4)' }}>
+            <form method="get" className="ep-dlog__filters">
+              <input type="hidden" name="tab" value="register" />
+              <input type="hidden" name="show" value={r.show} />
+              <label className="ep-field" htmlFor="vr-hostel">
+                <span className="ep-field__label">Hostel</span>
+                <select id="vr-hostel" name="hostel" className="ep-select" defaultValue={r.hostel}>
+                  <option value="">All hostels</option>
+                  {hostels.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ep-field" htmlFor="vr-from">
+                <span className="ep-field__label">From</span>
+                <input
+                  id="vr-from"
+                  name="from"
+                  type="date"
+                  className="ep-input"
+                  defaultValue={r.from}
+                />
+              </label>
+              <label className="ep-field" htmlFor="vr-to">
+                <span className="ep-field__label">To</span>
+                <input id="vr-to" name="to" type="date" className="ep-input" defaultValue={r.to} />
+              </label>
+              <label className="ep-field" htmlFor="vr-find">
+                <span className="ep-field__label">Search</span>
+                <input
+                  id="vr-find"
+                  name="find"
+                  type="search"
+                  className="ep-input"
+                  defaultValue={r.find}
+                  placeholder="Pass no., visitor, mobile or boarder"
+                />
+              </label>
+              <label className="ep-field" htmlFor="vr-size">
+                <span className="ep-field__label">Rows per page</span>
+                <select id="vr-size" name="size" className="ep-select" defaultValue={String(rSize)}>
+                  {SIZES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" className="ep-btn ep-btn--secondary">
+                Show
+              </button>
+            </form>
+          </div>
+          <Card
+            title={`${String(reg.total)} hostel visitor(s)${r.show === 'inside' ? ` · ${String(reg.counts.peopleInside)} people inside` : ''} · latest first`}
+            actions={
+              <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/hostel/mess-file?${fileQs}&format=xlsx`}
+                >
+                  Excel
+                </a>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/hostel/mess-file?${fileQs}&format=pdf`}
+                >
+                  PDF
+                </a>
+              </span>
+            }
+          >
+            {reg.data.length === 0 ? (
+              <p className="ep-field__help">No hostel visitor matches.</p>
+            ) : (
+              <div
+                className="ep-table-wrap"
+                tabIndex={0}
+                role="region"
+                aria-label="Hostel visitors"
+              >
+                <table className="ep-table ep-table--dense">
+                  <caption className="ep-sr-only">Hostel visitor register</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Pass</th>
+                      <th scope="col">Visitor</th>
+                      <th scope="col">To meet</th>
+                      <th scope="col">In</th>
+                      <th scope="col">Out</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reg.data.map((v) => (
+                      <tr key={v.id}>
+                        <td>
+                          <a href={`/engagement/visitors/${v.id}`}>{v.number}</a>
+                          <div className="ep-field__help">{when(v.createdAt)}</div>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              display: 'flex',
+                              gap: 'var(--sp-2)',
+                              alignItems: 'flex-start',
+                            }}
+                          >
+                            {v.hasPhoto ? (
+                              <img
+                                src={`/api/hostel/photo/visit/${v.id}`}
+                                alt={v.visitorName}
+                                width={44}
+                                height={44}
+                                style={{ objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                              />
+                            ) : null}
+                            <span>
+                              <strong>{v.visitorName}</strong>
+                              <div className="ep-field__help">
+                                {[
+                                  v.mobile,
+                                  v.idProofKind,
+                                  v.partySize > 1 ? `${String(v.partySize)} people` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
+                            </span>
+                          </span>
+                        </td>
+                        <td>
+                          {v.pupil} <small className="ep-field__help">{v.admissionNo}</small>
+                          <div className="ep-field__help">
+                            {v.hostel}
+                            {v.room ? ` · Room ${v.room}` : ''} · {v.purpose}
+                          </div>
+                        </td>
+                        <td>
+                          {time(v.inAt)}
+                          {v.gate ? <div className="ep-field__help">{v.gate}</div> : null}
+                        </td>
+                        <td>
+                          {time(v.outAt)}
+                          {v.exitGate ? <div className="ep-field__help">{v.exitGate}</div> : null}
+                        </td>
+                        <td>
+                          <span style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+                            <Badge tone={STATE[v.state]?.[1] ?? 'neutral'}>
+                              {STATE[v.state]?.[0] ?? v.state}
+                            </Badge>
+                            {v.listed ? null : <Badge tone="danger">Not on the list</Badge>}
+                            {v.inHours ? null : <Badge tone="warning">Outside hours</Badge>}
+                            {v.wardenDecision ? (
+                              <Badge tone="neutral">Warden: {v.wardenDecision}</Badge>
+                            ) : null}
+                          </span>
+                        </td>
+                        <td>
+                          {v.state === 'waiting' && may('hostel.visit.decide') ? (
+                            <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                              {/* one form per choice: a button's own name/value does not reach a server action */}
+                              <form action={decideHostelVisit}>
+                                <input type="hidden" name="id" value={v.id} />
+                                <input type="hidden" name="returnTo" value={here} />
+                                <input type="hidden" name="outcome" value="allowed" />
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  aria-label={`Allow ${v.visitorName} in`}
+                                >
+                                  Allow in
+                                </Button>
+                              </form>
+                              <form action={decideHostelVisit}>
+                                <input type="hidden" name="id" value={v.id} />
+                                <input type="hidden" name="returnTo" value={here} />
+                                <input type="hidden" name="outcome" value="refused" />
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  variant="secondary"
+                                  aria-label={`Refuse ${v.visitorName}`}
+                                >
+                                  Refuse
+                                </Button>
+                              </form>
+                            </span>
+                          ) : v.state === 'inside' && may('engagement.visitor.manage') ? (
+                            <form action={exitVisitor} className="ep-gate__act">
+                              <input type="hidden" name="id" value={v.id} />
+                              <input type="hidden" name="returnTo" value={here} />
+                              <input type="hidden" name="exitGate" value={v.gate ?? ''} />
+                              <Button
+                                type="submit"
+                                size="sm"
+                                aria-label={`Record exit of ${v.number}`}
+                              >
+                                Exit
+                              </Button>
+                            </form>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {rPages > 1 ? (
+              <nav
+                aria-label="Pages"
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-2)',
+                  alignItems: 'center',
+                  marginTop: 'var(--sp-3)',
+                }}
+              >
+                {rPage > 1 ? (
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`/hostel/visitors?${rQs({ page: String(rPage - 1) })}`}
+                  >
+                    Previous
+                  </a>
+                ) : null}
+                <span className="ep-field__help">
+                  Page {rPage} of {rPages}
+                </span>
+                {rPage < rPages ? (
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`/hostel/visitors?${rQs({ page: String(rPage + 1) })}`}
+                  >
+                    Next
+                  </a>
+                ) : null}
+              </nav>
+            ) : null}
+          </Card>
+        </>
       ) : null}
 
       {tab === 'approve' ? (

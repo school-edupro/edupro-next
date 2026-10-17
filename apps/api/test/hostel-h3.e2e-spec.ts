@@ -767,5 +767,19 @@ describe('hostel module H3 (e2e)', () => {
         })
       ).statusCode,
     ).toBe(403);
+    // the register as the screen reads it: counts by state, a search, pages
+    const all = await get(`/hostel/visits?show=all&size=5`, warden);
+    expect(all.counts.all).toBeGreaterThanOrEqual(3);
+    expect(all.data.length).toBeLessThanOrEqual(5);
+    expect(all.total).toBe(all.counts.all);
+    const found = await get(`/hostel/visits?show=all&q=${encodeURIComponent('Uncle Raj')}`, warden);
+    expect(found.data.every((x: { visitorName: string }) => x.visitorName === 'Uncle Raj')).toBe(
+      true,
+    );
+    expect(found.data[0]).toMatchObject({ hostel: 'Boys Hostel', pupil: 'Kabir Boarder' });
+    expect((await get(`/hostel/visits?show=all&q=nobody-at-all`, warden)).total).toBe(0);
+    expect((await get(`/hostel/visits?show=all`, other)).total).toBe(0);
+    const file = await get(`/hostel/visits/file?format=xlsx&show=all&q=Uncle`, warden);
+    expect(file.filename).toBe('hostel-visit-register.xlsx');
   });
 });

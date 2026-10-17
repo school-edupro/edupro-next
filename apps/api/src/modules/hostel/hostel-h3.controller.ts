@@ -184,7 +184,8 @@ export class HostelH3Controller {
   @Get('visits')
   @RequirePermission(HOSTEL_H3.visitView)
   async visitList(@ReqCtx() ctx: RequestContext, @Query() q: VisitsQueryDto) {
-    return { data: await this.visits.visits(ctx, q) };
+    const r = await this.visits.visits(ctx, q);
+    return { data: r.rows, total: r.total, counts: r.counts, page: q.page, size: q.size };
   }
 
   @Post('visits/:id/decide')

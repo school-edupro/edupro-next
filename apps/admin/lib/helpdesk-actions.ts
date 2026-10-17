@@ -77,7 +77,9 @@ async function uploadAll(fd: FormData, key = 'files'): Promise<string[]> {
 const ticketPath = (desk: string, id: string) => `/engagement/helpdesk/${desk}/${id}`;
 
 export async function raiseTicket(fd: FormData) {
-  const desk = str(fd, 'desk') === 'provider' ? 'provider' : 'staff';
+  const asked = str(fd, 'desk');
+  const desk = asked === 'provider' || asked === 'hostel' ? asked : 'staff';
+  const hostelId = str(fd, 'hostelId');
   let id = '';
   try {
     const fileIds = await uploadAll(fd);
@@ -91,12 +93,18 @@ export async function raiseTicket(fd: FormData) {
           body: str(fd, 'body'),
           priority: str(fd, 'priority') || 'normal',
           module: str(fd, 'module') || undefined,
+          // a hostel complaint: the room, and the boarder when it concerns one
+          hostelRoomId: desk === 'hostel' ? str(fd, 'hostelRoomId') || undefined : undefined,
+          studentId: desk === 'hostel' ? str(fd, 'studentId') || undefined : undefined,
           fileIds,
         }),
       })
     ).id;
   } catch (error) {
-    back(`/engagement/helpdesk/${desk}/new`, error);
+    back(
+      `/engagement/helpdesk/${desk}/new${desk === 'hostel' && /^\d{1,18}$/.test(hostelId) ? `?hostel=${hostelId}` : ''}`,
+      error,
+    );
   }
   revalidatePath('/engagement/helpdesk');
   redirect(`${ticketPath(desk, id)}?ok=raised`);

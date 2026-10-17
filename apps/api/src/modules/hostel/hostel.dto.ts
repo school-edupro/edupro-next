@@ -264,8 +264,15 @@ export const VisitDecideSchema = z.object({
 export class VisitDecideDto extends createZodDto(VisitDecideSchema) {}
 
 export const VisitsQuerySchema = z.object({
-  show: z.enum(['waiting', 'inside', 'today', 'all']).default('today'),
+  /** waiting for the warden, inside now, today, left (gone out), all */
+  show: z.enum(['waiting', 'inside', 'today', 'left', 'all']).default('today'),
   hostelId: IdSchema.optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  /** pass no., visitor's name or mobile, the boarder's name or admission no. */
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(500).default(500),
 });
 export class VisitsQueryDto extends createZodDto(VisitsQuerySchema) {}
 
@@ -274,6 +281,8 @@ export const VisitFileSchema = z.object({
   hostelId: IdSchema.optional(),
   from: DateSchema.optional(),
   to: DateSchema.optional(),
+  show: z.enum(['waiting', 'inside', 'today', 'left', 'all']).default('all'),
+  q: z.string().trim().max(80).optional(),
   format: z.enum(['xlsx', 'pdf']).default('xlsx'),
 });
 export class VisitFileDto extends createZodDto(VisitFileSchema) {}

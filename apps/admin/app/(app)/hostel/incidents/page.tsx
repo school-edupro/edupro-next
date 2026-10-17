@@ -341,6 +341,18 @@ export default async function HostelIncidentsPage({
             <Badge tone="warning">Open {list.counts.open}</Badge>
             <Badge tone="info">In follow-up {list.counts.follow_up}</Badge>
             <Badge tone="success">Closed {list.counts.closed}</Badge>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/hostel/mess-file?${fileQs}&format=xlsx`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/hostel/mess-file?${fileQs}&format=pdf`}
+            >
+              PDF
+            </a>
           </span>
         }
       >

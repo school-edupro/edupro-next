@@ -508,29 +508,59 @@ export class HostelVisitsService {
     });
   }
 
+  /**
+   * The hostel visits, as the visitor register shows them: by state (waiting for the warden, inside,
+   * today, left, all), dates, a search, pages, and the count of each state for the other filters.
+   */
   async visits(ctx: RequestContext, q: VisitsQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const only = await this.hostel.scope(ctx, c);
-      const where: Record<VisitsQueryDto['show'], string> = {
+      const show: Record<VisitsQueryDto['show'], string> = {
         waiting: `v.state = 'waiting'`,
         inside: `v.state = 'inside'`,
-        today: `(v.created_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date`,
+        today: `(COALESCE(v.in_at, v.created_at) AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date AND v.state <> 'cancelled'`,
+        left: `v.state IN ('left', 'cancelled')`,
         all: `true`,
       };
+      const params = [q.hostelId ?? null, only, q.from ?? null, q.to ?? null, q.q ?? null];
+      const base = `FROM visitor_log v JOIN students s ON s.id = v.student_id JOIN hostels h ON h.id = v.hostel_id
+          WHERE v.hostel_id IS NOT NULL
+            AND ($1::bigint IS NULL OR v.hostel_id = $1) AND ($2::bigint[] IS NULL OR v.hostel_id = ANY ($2::bigint[]))
+            AND ($3::date IS NULL OR (v.created_at AT TIME ZONE 'Asia/Kolkata')::date >= $3::date)
+            AND ($4::date IS NULL OR (v.created_at AT TIME ZONE 'Asia/Kolkata')::date <= $4::date)
+            AND ($5::text IS NULL OR v.number ILIKE '%' || $5 || '%' OR v.visitor_name ILIKE '%' || $5 || '%'
+                 OR v.mobile LIKE '%' || $5 || '%' OR s.search_text LIKE '%' || app.search_text($5) || '%')`;
+      const counts = await c.query<Record<string, number>>(
+        // eslint-disable-next-line no-restricted-syntax -- the FROM/WHERE and the state fragments are constants; values bound
+        `SELECT count(*) FILTER (WHERE ${show.waiting})::int AS waiting, count(*) FILTER (WHERE ${show.inside})::int AS inside,
+                count(*) FILTER (WHERE ${show.today})::int AS today, count(*) FILTER (WHERE ${show.left})::int AS left,
+                count(*)::int AS all, COALESCE(sum(v.party_size) FILTER (WHERE ${show.inside}), 0)::int AS "peopleInside"
+           ${base}`,
+        params,
+      );
       const r = await c.query(
-        // eslint-disable-next-line no-restricted-syntax -- the filter is one of the fixed strings above; values bound
+        // eslint-disable-next-line no-restricted-syntax -- the FROM/WHERE and the state fragment are constants; LIMIT from numbers; values bound
         `SELECT v.id::text, v.number, v.state, v.visitor_name AS "visitorName", v.mobile, v.purpose, v.party_size AS "partySize",
-                v.student_id::text AS "studentId", s.display_name AS pupil, s.admission_no AS "admissionNo", h.name AS hostel,
+                v.id_proof_kind AS "idProofKind", v.gate, v.exit_gate AS "exitGate", v.exit_note AS "exitNote",
+                v.student_id::text AS "studentId", s.display_name AS pupil, s.admission_no AS "admissionNo", h.id::text AS "hostelId", h.name AS hostel,
+                (SELECT r.room_no || '/' || b.label FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id
+                  WHERE a.student_id = v.student_id AND a.from_date <= (v.created_at AT TIME ZONE 'Asia/Kolkata')::date
+                    AND (a.to_date IS NULL OR a.to_date >= (v.created_at AT TIME ZONE 'Asia/Kolkata')::date)
+                  ORDER BY a.from_date DESC LIMIT 1) AS room,
                 v.hostel_listed AS listed, v.hostel_in_hours AS "inHours", v.warden_decision AS "wardenDecision",
                 v.warden_note AS "wardenNote", v.created_at AS "createdAt", v.in_at AS "inAt", v.out_at AS "outAt",
                 EXISTS (SELECT 1 FROM visitor_photos p WHERE p.visitor_log_id = v.id) AS "hasPhoto"
-           FROM visitor_log v JOIN students s ON s.id = v.student_id JOIN hostels h ON h.id = v.hostel_id
-          WHERE v.hostel_id IS NOT NULL AND ${where[q.show]}
-            AND ($1::bigint IS NULL OR v.hostel_id = $1) AND ($2::bigint[] IS NULL OR v.hostel_id = ANY ($2::bigint[]))
-          ORDER BY v.created_at DESC LIMIT 500`,
-        [q.hostelId ?? null, only],
+           ${base} AND ${show[q.show]}
+          ORDER BY COALESCE(v.in_at, v.created_at) DESC, v.id DESC
+          LIMIT ${String(q.size)} OFFSET ${String((q.page - 1) * q.size)}`,
+        params,
       );
-      return r.rows;
+      const n = counts.rows[0]!;
+      return {
+        rows: r.rows,
+        total: Number(n[q.show === 'all' ? 'all' : q.show] ?? 0),
+        counts: n,
+      };
     });
   }
 
@@ -567,8 +597,15 @@ export class HostelVisitsService {
            FROM visitor_log v JOIN students s ON s.id = v.student_id JOIN hostels h ON h.id = v.hostel_id
           WHERE v.hostel_id IS NOT NULL AND (v.created_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $1::date AND $2::date
             AND ($3::bigint IS NULL OR v.hostel_id = $3) AND ($4::bigint[] IS NULL OR v.hostel_id = ANY ($4::bigint[]))
+            AND CASE $5::text WHEN 'waiting' THEN v.state = 'waiting' WHEN 'inside' THEN v.state = 'inside'
+                  WHEN 'left' THEN v.state IN ('left', 'cancelled')
+                  WHEN 'today' THEN (COALESCE(v.in_at, v.created_at) AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date
+                                    AND v.state <> 'cancelled'
+                  ELSE true END
+            AND ($6::text IS NULL OR v.number ILIKE '%' || $6 || '%' OR v.visitor_name ILIKE '%' || $6 || '%'
+                 OR v.mobile LIKE '%' || $6 || '%' OR s.search_text LIKE '%' || app.search_text($6) || '%')
           ORDER BY v.created_at, v.id LIMIT 5000`,
-        [from, to, q.hostelId ?? null, only],
+        [from, to, q.hostelId ?? null, only, q.show, q.q ?? null],
       );
       const head = await schoolHead(c);
       const state: Record<string, string> = {

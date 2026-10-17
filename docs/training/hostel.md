@@ -108,6 +108,10 @@ Communication → Templates.
   register the visit shows as _Hostel visitor_ with the boarder's hostel; while it waits it reads
   "Waiting for the warden" and the gate cannot let it in there. It leaves through the same Exit step as
   every visitor. Hostel → Visitors keeps the warden's work and links to the register.
+- **Visitor register** (Hostel → Visitors, first tab): the hostel visitors only, laid out like Visitors →
+  register — Inside now / Waiting for the warden / Today / Left / Everything (with counts), hostel, dates,
+  search (pass, visitor, mobile, boarder), rows per page, Excel / PDF of what is shown. Allow / Refuse a
+  visitor waiting for the warden; Exit for one inside (the gate's right).
 - **Download** (Hostel → Visitors → Download): the **visit register** of a period (date, in / out, visitor,
   relation, mobile, boarder, room, on the list, in hours, warden's decision; last 30 days by default) and
   the **approved visitors** of each boarder (parents on record, approved and waiting people, who added
@@ -138,6 +142,9 @@ hours and the escalation matrix like every desk. Parents raise them on the porta
 the child's room; wardens and the office raise them for a room (Hostel → Complaints, or the staff app).
 The warden answers and closes from the staff app (Hostel desk → Open complaints → Answer, the Queries
 screen). Numbers start with `H/`.
+
+**Raising one from the office**: Helpdesk → Hostel complaints → Raise a query: choose the hostel, then
+the room and / or the boarder it concerns, the complaint type, subject, details, attachments.
 
 **Handing a complaint over** (Cannot resolve it? Hand it over): the list shows only staff and roles who
 can **answer** tickets, each role with the people who hold it (e.g. _Role: Accountant (Arjun Bhat)_). A

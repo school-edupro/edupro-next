@@ -24,9 +24,10 @@ function back(path: string, error: unknown): never {
     );
   throw error;
 }
+/** Back to the register, or to the hostel's visitor register (the same visits). */
 function returnTo(fd: FormData): string {
   const v = str(fd, 'returnTo');
-  return v.startsWith(BASE) && !v.includes('//') ? v : BASE;
+  return (v.startsWith(BASE) || v.startsWith('/hostel/visitors')) && !v.includes('//') ? v : BASE;
 }
 
 /** What a mobile number gave on its last visit (the number is posted, never in the address bar). */
