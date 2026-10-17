@@ -141,7 +141,7 @@ export default async function FeeApprovalPage({
       <PageHeader
         kicker="Fee setup"
         title="Approval levels"
-        description="A discount, fee group, pay plan, hostel or optional head of a pupil changes only after approval. The same levels approve a fee waiver, a late-fee waiver, a receipt cancellation, a cheque bounce, a paid charge adjusted in fee and the transfer of a receipt to a brother or sister. A hostel withdrawal has its own levels below. Choose who may ask and who approves at each level."
+        description="A discount, fee group, pay plan, hostel or optional head of a pupil changes only after approval. The same levels approve a fee waiver, a late-fee waiver, a receipt cancellation, a cheque bounce, a paid charge adjusted in fee, the transfer of a receipt to a brother or sister, an opening balance, a misc fee, every refund (a withdrawal's refund too) and the revoke of a school withdrawal. A hostel withdrawal has its own levels below. Choose who may ask and who approves at each level."
       />
       <FeeSetupNav current={HOME} />
       <Notice params={sp} />
@@ -173,6 +173,11 @@ export default async function FeeApprovalPage({
               edit: 'Change the creators and levels',
             })
           )}
+          <p className="ep-field__help">
+            A request takes these levels when it is sent; one already waiting keeps the levels it
+            started with. The clearance steps of a school withdrawal (fees, library, transport,
+            warden, mess, class teacher, principal) are set in People → Withdrawals → Settings.
+          </p>
           <h2
             id="hostel-withdrawal"
             style={{
@@ -187,8 +192,9 @@ export default async function FeeApprovalPage({
           <p className="ep-field__help">
             A pupil leaving the hostel and staying in school (Hostel → Withdrawals). The roles named
             here may start one (the Hostel Clerk and the warden to begin with; a warden only for a
-            pupil of their own hostel). The last approver chooses whether hostel fee paid for later
-            months is carried forward or refunded.
+            pupil of their own hostel). Its revoke uses these levels too; a refund it raises uses
+            the levels above. The last approver chooses whether hostel fee paid for later months is
+            carried forward or refunded.
           </p>
           {hostel ? (
             flow(hostel, {

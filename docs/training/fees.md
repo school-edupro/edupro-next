@@ -276,6 +276,12 @@ Pupils who are not opted in lose the optional heads from their bill the next tim
   ask for a fee change of a pupil and who approves it; it is no longer a card under Approvals →
   Approval set-up. The top card shows the chain in use; the form below it changes the creators and
   the levels, and **Save** returns to the same tab.
+- **What these levels approve** (2026-10-17): a fee change of a pupil; a fee waiver and a late-fee waiver;
+  a receipt cancellation and a cheque bounce; a paid charge adjusted in fee; a receipt moved to a brother
+  or sister; an opening balance; a misc fee; every refund (the refund a withdrawal raises too); the revoke
+  of a school withdrawal (with "back in the hostel"). A request takes the levels when it is sent; one
+  already waiting keeps its levels. A hostel withdrawal and its revoke have their own levels lower on the
+  same tab. The clearance steps of a school withdrawal are set in People → Withdrawals → Settings.
 
 ### Approval set-up screen (rebuilt)
 
@@ -381,13 +387,13 @@ figure opens its tab. The tabs:
 - **Opening balances from Excel** (Fees → Opening balances): choose **Regular (school fee)** or
   **Hosteller (hostel fee)** at the top. The format, the upload, the check ("Now" / "Becomes") and the
   files list follow it. A hostel file writes the pupil's hostel opening balance, billed on the hostel
-  fee under *Previous dues (hostel)*; the school figure is not touched, and the other way round. The
+  fee under _Previous dues (hostel)_; the school figure is not touched, and the other way round. The
   hostel format with a class lists its hostellers; a hostel advance (Cr) is refused for a pupil who is
   not a hosteller (hostel dues of a pupil who left are taken).
-- **Bounce charge of a hostel cheque** is raised on the hostel fee (head *Cheque bounce charge
-  (hostel)*), not the school fee.
-- **Bill and receipt layout** (Fee setup → Receipt numbers, layouts): Fee bill = *School annual bill*
-  or the earlier *Instalment bill*; Fee receipt = *Two-panel* (A4 landscape) or the earlier *Classic*
+- **Bounce charge of a hostel cheque** is raised on the hostel fee (head _Cheque bounce charge
+  (hostel)_), not the school fee.
+- **Bill and receipt layout** (Fee setup → Receipt numbers, layouts): Fee bill = _School annual bill_
+  or the earlier _Instalment bill_; Fee receipt = _Two-panel_ (A4 landscape) or the earlier _Classic_
   (A4 portrait); receipt copies = parent only / parent + school / parent + school + office. One choice
   for school, hostel and misc fee; screen, print and PDF follow it (the parent app gives the parent copy).
 - **Payment gateways** (Fee setup → Payment gateways, school admin only, after a fresh strong sign-in):
@@ -403,12 +409,12 @@ figure opens its tab. The tabs:
 - **Misc fees online**: parents pay an open misc fee in full from the parent app (Other fees → Pay
   online); the MF receipt is written when the gateway confirms, and a limited-seat fee books the seat.
 - **Fee type on the reports** (Fees → Reports centre): every collection, dues and accounts report has
-  *Fee type: All · Regular (school fee) · Hosteller (hostel fee)* (Tally vouchers also *Misc fee*):
+  _Fee type: All · Regular (school fee) · Hosteller (hostel fee)_ (Tally vouchers also _Misc fee_):
   Day book, Day book (grouped), Mode-wise collection, Head-wise tally, Cheque bounce, Defaulters, Period
   fee head-wise, Yearly projection, Forecast, Tally vouchers and Report check. School + hostel add up
   to All. Misc fee dues has no fee-type filter (misc fees are their own).
-- **Fee type on the pupil's fee page**: above the tabs, *All · Regular (school fee) · Hosteller
-  (hostel fee)*. Take payment (the fee type starts on the one chosen), Dues, Head and month, Waive
+- **Fee type on the pupil's fee page**: above the tabs, _All · Regular (school fee) · Hosteller
+  (hostel fee)_. Take payment (the fee type starts on the one chosen), Dues, Head and month, Waive
   fee, Receipts, Late fee and the KPI tiles show only that fee; the choice stays as you move between
   tabs, and the Fee bill button opens the bill for it.
 
@@ -575,6 +581,7 @@ Fees → Reports centre holds every fee report in one bar. Each shows on the scr
 carry it, and the files are made at once (only the Tally file is prepared in the background).
 
 **Collection**
+
 - **Day book**: every receipt, misc receipt and refund of the dates, a Total row, then three summary
   tables: totals by mode, totals by ledger, and other figures (refunds paid, bounced cheques, receipt
   number ranges).
@@ -587,12 +594,14 @@ carry it, and the files are made at once (only the Tally file is prepared in the
 - **Cheque bounce**: receipt date, cheque date, status, bounce charge, and what was paid again.
 
 **Dues and forecast**
+
 - **Defaulters**: who owes, with reminders.
 - **Period fee, head-wise** and **Yearly projection**: one row per pupil, payable and paid by head or by month.
 - **Forecast**: classes (or fee heads) down, months or quarters across, each with Expected, Collected and
   Balance, and a session total with the collected percentage. Expected is the fee billed for the month.
 
 **Accounts**
+
 - **Tally vouchers**.
 - **Report check**: reaches each key figure two ways (from the books, and as a report prints it) and
   shows Agrees or the difference: receipts against fee lines, late fee, refunds, the bills, and every
@@ -620,12 +629,12 @@ and Apply is pressed.
 
 ## Bank deposit slips: limit and same bank / other banks (2026-10-13)
 
-- Choose the school account under **Deposit into**: each cheque is then marked *Same bank* or *Other bank*,
+- Choose the school account under **Deposit into**: each cheque is then marked _Same bank_ or _Other bank_,
   and **Drawn on** filters by it.
 - **Cheques on one slip** (bottom of the page) is the most a slip may hold: 10, 20, 25 … as the bank's slip
   has lines. 0 means no limit.
 - **Make deposit slips** makes as many slips as are needed in one go: cheques of the same bank on
-  *Transfer* slips, cheques of other banks on *Clearing* slips, each holding no more than the limit, numbered
+  _Transfer_ slips, cheques of other banks on _Clearing_ slips, each holding no more than the limit, numbered
   one after the other. The page says how many slips will be made before you confirm.
 - Untick "Separate slips for same bank and other banks" to keep all on one run of slips.
 
@@ -660,21 +669,21 @@ It has its own ledger and its own receipt series (MF/…); it never mixes with t
 
 1. Choose the misc fee head (Fee setup → Fee heads, kind "misc"), give the fee a name, the amount,
    the last date and a remark.
-2. Say what it is for parents: *Optional* (it closes on the last date, nobody can pay after it unless
-   the date is extended) or *Mandatory* (it stays due after the last date).
-3. For a trip with limited places tick *Limited seats* and give the number. A seat is taken by paying
+2. Say what it is for parents: _Optional_ (it closes on the last date, nobody can pay after it unless
+   the date is extended) or _Mandatory_ (it stays due after the last date).
+3. For a trip with limited places tick _Limited seats_ and give the number. A seat is taken by paying
    in full, in the order of payment. When the seats are taken nobody else can pay. A cancelled,
    bounced or refunded receipt gives the seat back.
 4. Choose who it is for. The four ways add up, and a pupil chosen twice is counted once:
    whole classes, sections, pupils found by name, or an Excel sheet (download the format: admission
    number, amount, last date). A row of the sheet with its own amount or date gives that pupil a
    different amount or last date for the same fee.
-5. *Send for approval.* The fee waits under Fee setup → Approval levels (the same levels as a fee
+5. _Send for approval._ The fee waits under Fee setup → Approval levels (the same levels as a fee
    change). Parents see it only after the last level approves.
 
 **After approval** (open the fee from the list)
 
-- *Send the announcement to parents* and *Remind those who have not paid* open the same screen as the
+- _Send the announcement to parents_ and _Remind those who have not paid_ open the same screen as the
   fee defaulter reminder: a template for SMS, WhatsApp and email, a preview with the cost, a test to
   yourself and the seniors on copy, then the send. Template blanks: `{{fee_name}}`, `{{fee_amount}}`,
   `{{fee_due}}`, `{{last_date}}`, `{{student_name}}`, `{{class}}`, `{{admission_no}}`.
@@ -684,20 +693,20 @@ It has its own ledger and its own receipt series (MF/…); it never mixes with t
   and WhatsApp its approved template name entered on the template first; register the wording shown
   there. The email's button opens the parent portal; the fee is paid at the counter.
 - An extension moves every pupil whose own last date is earlier; a pupil given a later date keeps it.
-- *Extend the last date*, *Add more pupils*, *Close the fee*, and on a pupil's row *Change amount or
-  date*: each is a request that goes for approval. A pupil's amount cannot go below what is paid.
+- _Extend the last date_, _Add more pupils_, _Close the fee_, and on a pupil's row _Change amount or
+  date_: each is a request that goes for approval. A pupil's amount cannot go below what is paid.
 
 **Counter collection** (Fees → Misc fees → Counter collection)
 
-Find the pupil, press *Full* (or type a part amount; a fee with seats is always paid in full), choose
-the mode, *Take the payment*. One receipt is made for each fee and opens ready to print (school copy
+Find the pupil, press _Full_ (or type a part amount; a fee with seats is always paid in full), choose
+the mode, _Take the payment_. One receipt is made for each fee and opens ready to print (school copy
 and parent copy).
 
-**Cancel, bounce, refund**: on the pupil's misc receipts, *Cancel, bounce or refund* raises a request
+**Cancel, bounce, refund**: on the pupil's misc receipts, _Cancel, bounce or refund_ raises a request
 that goes for approval. On approval a cancelled or bounced receipt makes the fee unpaid again; a
 refund (all or part) gets a refund voucher number and reduces what is paid.
 
-**Report**: Fees → Reports centre → *Misc fee dues*: filter by fee, payment and class; choose the
+**Report**: Fees → Reports centre → _Misc fee dues_: filter by fee, payment and class; choose the
 columns; Excel and PDF; tick rows and send a reminder.
 
 **Parents** see the announced fees of their child under Fees → Other fees, with the last date, the
@@ -708,20 +717,21 @@ amount, what is paid and the seats. Misc fees are paid at the school counter.
 Hostel fee has its own heads (ledger "hostel"), its own bills and its own receipts (HF/…). School fee
 and hostel fee are always paid apart.
 
-**Who pays hostel, and for which months.** On the pupil's page → Fees → *Request a change*:
-- *Hosteller: Yes* for the whole session, or *Hostel from month* / *Hostel to month* for part of it
+**Who pays hostel, and for which months.** On the pupil's page → Fees → _Request a change_:
+
+- _Hosteller: Yes_ for the whole session, or _Hostel from month_ / _Hostel to month_ for part of it
   (choosing months makes the pupil a hosteller). Months are whole months: joining in July charges July
   onwards; leaving with last month August stops hostel from September.
 - Leaving after paying ahead: what was paid for the months that go is carried forward to the pupil's
   next unpaid fee; what finds no due stays as advance on the receipt. The approval note says how much.
-- *Own hostel pay plan*: one pupil can pay hostel monthly while the hostel goes by quarter.
-All of these go for approval (Fee setup → Approval levels).
+- _Own hostel pay plan_: one pupil can pay hostel monthly while the hostel goes by quarter.
+  All of these go for approval (Fee setup → Approval levels).
 
-**Hostel calendar** (Fee setup → Hostel calendar). *Same as school*: hostel instalments use each
-class's calendar (dates, late fee, Show, Fee pay) and nothing else on the page applies. *Own hostel
-calendar*: a pay plan for hostel (for example quarterly) and late fee by slabs, per day, or none; the
+**Hostel calendar** (Fee setup → Hostel calendar). _Same as school_: hostel instalments use each
+class's calendar (dates, late fee, Show, Fee pay) and nothing else on the page applies. _Own hostel
+calendar_: a pay plan for hostel (for example quarterly) and late fee by slabs, per day, or none; the
 months grid is kept like the class calendar: start date, last date, late fee and slabs (or rate per day),
-challan date, Fee pay and Show. The *Instalment* column shows which months go together (Apr – Jun,
+challan date, Fee pay and Show. The _Instalment_ column shows which months go together (Apr – Jun,
 then "with Apr"); only the first month of an instalment counts, the grey rows serve pupils on an own
 monthly hostel plan. An empty last date takes the class calendar's date of that month. The ↓ copies the
 first month down the column (dates a month later each row). Saving checks the dates as the class
@@ -730,10 +740,10 @@ dates near the session, a date and an amount for each slab, and a rate when late
 hostel bills move to new dates as soon as it is saved. Enter hostel amounts per month in the class fee
 structure; the pay plan groups the months into instalments.
 
-**Paying.** At the counter choose *Fee type: Hostel fee*; the amount shows what is open on hostel only,
+**Paying.** At the counter choose _Fee type: Hostel fee_; the amount shows what is open on hostel only,
 and a part payment is taken (late fee runs on what is left after the last date). In the parent app a
-hosteller's fees show as two blocks, *School fee* and *Hostel fee*, each with its own Pay button, and
+hosteller's fees show as two blocks, _School fee_ and _Hostel fee_, each with its own Pay button, and
 the months in the hostel.
 
-**Defaulters** show *School balance* and *Hostel balance* beside the total; filter *Ledger: Hostel* to
+**Defaulters** show _School balance_ and _Hostel balance_ beside the total; filter _Ledger: Hostel_ to
 list and remind hostel dues only.
