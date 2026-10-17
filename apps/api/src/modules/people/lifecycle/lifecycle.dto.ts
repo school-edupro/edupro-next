@@ -231,7 +231,24 @@ export const ListTransfersQuerySchema = z.object({
 export class ListTransfersQueryDto extends createZodDto(ListTransfersQuerySchema) {}
 
 /** Revoke of a completed withdrawal: the pupil rejoins in the same session. */
-export const RevokeSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export const RevokeSchema = z.object({
+  reason: z.string().trim().min(3).max(300),
+  /** a boarder: also back in the hostel (as if never left, or from a day with the same or another bed) */
+  hostel: z
+    .object({
+      mode: z.enum(['continue', 'from_date']),
+      fromDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+      bedId: z
+        .string()
+        .regex(/^\d{1,18}$/)
+        .optional(),
+    })
+    .nullable()
+    .optional(),
+});
 export class RevokeDto extends createZodDto(RevokeSchema) {}
 
 /** Portal after leaving: 0 closes the login at completion. */

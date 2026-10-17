@@ -448,6 +448,7 @@ describe('hostel withdrawal (e2e)', () => {
     });
     expect(w.statusCode).toBe(201);
     const row = w.json() as { id: string; clearances: Array<{ department: string }> };
+    ids.swLeaver = row.id;
     expect(row.clearances.map((x) => x.department)).toEqual(
       expect.arrayContaining(['hostel_warden', 'hostel_mess']),
     );
@@ -612,5 +613,58 @@ describe('hostel withdrawal (e2e)', () => {
       { from_date: '2026-06-15', to_date: '2026-10-31' },
       { from_date: '2027-01-05', to_date: null },
     ]);
+  });
+
+  it("revoking a boarder's school withdrawal can put the pupil back in the hostel", async () => {
+    const id = ids.swLeaver!;
+    const view = await get<{ hostelStay: { place: string; leftOn: string } | null }>(
+      `/people/withdrawals/${id}`,
+    );
+    expect(view.hostelStay).toMatchObject({ leftOn: '2026-11-15' });
+    // a day back before leaving is refused
+    expect(
+      (
+        await post(`/people/withdrawals/${id}/revoke`, {
+          reason: 'Rejoins after all',
+          hostel: { mode: 'from_date', fromDate: '2026-11-01' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const asked = await post(`/people/withdrawals/${id}/revoke`, {
+      reason: 'Rejoins after all',
+      hostel: { mode: 'continue' },
+    });
+    expect(asked.statusCode).toBe(201);
+    // approve every level the revoke goes through (the fee approval levels of this school)
+    for (let i = 0; i < 5; i += 1) {
+      const pending = await withMigrator((c) =>
+        c.query<{ id: string; users: string[] }>(
+          `SELECT st.id::text, st.assignee_user_ids::text[] AS users FROM student_withdrawals w
+             JOIN workflow_instances wi ON wi.id = w.revoke_workflow_instance_id AND wi.status = 'pending'
+             JOIN workflow_steps st ON st.instance_id = wi.id AND st.level = wi.current_level AND st.status = 'pending'
+            WHERE w.id = $1`,
+          [id],
+        ),
+      );
+      const step = pending.rows[0];
+      if (!step) break;
+      const who = [admin, accountant].find((u) => step.users.includes(u.id)) ?? admin;
+      await post(`/workflow/steps/${step.id}/approve`, {}, who);
+    }
+    const done = await get<{ status: string; revokeHostel: { mode: string; note: string } | null }>(
+      `/people/withdrawals/${id}`,
+    );
+    expect(done.status).toBe('revoked');
+    expect(done.revokeHostel).toMatchObject({ mode: 'continue' });
+    expect(done.revokeHostel!.note).toContain('as if never left');
+    const stay = await withMigrator((c) =>
+      c.query<{ to_date: string | null; end_reason: string | null }>(
+        `SELECT to_date::text, end_reason FROM hostel_allotments WHERE student_id = $1 ORDER BY from_date DESC LIMIT 1`,
+        [ids.leaver],
+      ),
+    );
+    expect(stay.rows[0]).toEqual({ to_date: null, end_reason: null });
+    expect((await ledger(ids.leaver!)).fee.hostelTo).toBeNull();
+    expect(await hostelMonths(ids.leaver!)).toContain('2027-01');
   });
 });

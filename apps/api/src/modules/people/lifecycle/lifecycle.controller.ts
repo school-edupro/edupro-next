@@ -241,7 +241,7 @@ export class LifecycleController {
   })
   @RequirePermission(LIFECYCLE.withdrawalManage)
   revoke(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: RevokeDto) {
-    return this.withdrawals.requestRevoke(ctx, id, body.reason);
+    return this.withdrawals.requestRevoke(ctx, id, body.reason, body.hostel);
   }
 
   @Post('withdrawals/:id/complete')

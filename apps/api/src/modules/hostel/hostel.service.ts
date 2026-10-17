@@ -4,6 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { syncHostelFee } from './hostel-return';
 import {
   HOSTEL,
   type AllotDto,
@@ -994,58 +995,7 @@ export class HostelService {
     /** the hostel fee runs to this month at least (a hostel withdrawal with short notice keeps one more) */
     feeUntil?: string,
   ): Promise<{ synced: boolean; note?: string }> {
-    const y = (
-      await c.query<{ start_date: string; end_date: string }>(
-        `SELECT start_date::text, end_date::text FROM academic_years WHERE id = $1`,
-        [yearId],
-      )
-    ).rows[0];
-    if (!y) return { synced: false, note: 'no session' };
-    const span = (
-      await c.query<{
-        first: string | null;
-        last: string | null;
-        open: boolean;
-        any: boolean;
-      }>(
-        `SELECT min(a.from_date)::text AS first, max(a.to_date)::text AS last, bool_or(a.to_date IS NULL) AS open, count(*) > 0 AS any
-           FROM hostel_allotments a
-          WHERE a.student_id = $1 AND a.from_date <= $3::date AND (a.to_date IS NULL OR a.to_date >= $2::date)`,
-        [studentId, y.start_date, y.end_date],
-      )
-    ).rows[0]!;
-    const month = (d: string) => `${d.slice(0, 7)}-01`;
-    const hosteller = span.any;
-    const from = hosteller && span.first && span.first > y.start_date ? month(span.first) : null;
-    const last = feeUntil && span.last && feeUntil > span.last ? feeUntil : span.last;
-    const to =
-      hosteller && !span.open && last && month(last) < month(y.end_date) ? month(last) : null;
-    await c.query('SAVEPOINT hostel_fee');
-    try {
-      await c.query(
-        `INSERT INTO student_fee_profiles (school_id, student_id, academic_year_id, hosteller, hostel_from, hostel_to, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id(), app.current_user_id())
-         ON CONFLICT (student_id, academic_year_id) DO UPDATE SET hosteller = EXCLUDED.hosteller, hostel_from = EXCLUDED.hostel_from,
-              hostel_to = EXCLUDED.hostel_to, updated_at = now(), updated_by = app.current_user_id()`,
-        [studentId, yearId, hosteller, from, to],
-      );
-      const run = await c.query<{ run_id: string }>(
-        `SELECT o_run_id::text AS run_id FROM app.generate_fee_demand($1, $2)`,
-        [studentId, yearId],
-      );
-      await c.query(`SELECT app.apply_instalment_override($1, $2, $3)`, [
-        studentId,
-        yearId,
-        run.rows[0]!.run_id,
-      ]);
-      await c.query('RELEASE SAVEPOINT hostel_fee');
-      return { synced: true };
-    } catch (e) {
-      await c.query('ROLLBACK TO SAVEPOINT hostel_fee');
-      const err = e as { code?: string; message?: string };
-      if (err.code === 'P0001') return { synced: false, note: err.message ?? 'fee set-up missing' };
-      throw e;
-    }
+    return syncHostelFee(c, studentId, yearId, feeUntil);
   }
 }
 

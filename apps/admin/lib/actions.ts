@@ -1520,7 +1520,20 @@ export async function revokeWithdrawal(fd: FormData) {
   return run(`/people/withdrawals/${id}`, () =>
     apiFetch(`/people/withdrawals/${id}/revoke`, {
       method: 'POST',
-      body: JSON.stringify({ reason: str(fd, 'reason') }),
+      body: JSON.stringify({
+        reason: str(fd, 'reason'),
+        // a boarder: also back in the hostel (none = rejoins as a day scholar)
+        hostel:
+          str(fd, 'hostelMode') === 'continue'
+            ? { mode: 'continue' }
+            : str(fd, 'hostelMode') === 'from_date'
+              ? {
+                  mode: 'from_date',
+                  fromDate: str(fd, 'hostelFrom') || undefined,
+                  bedId: str(fd, 'hostelBed') || undefined,
+                }
+              : null,
+      }),
     }),
   );
 }

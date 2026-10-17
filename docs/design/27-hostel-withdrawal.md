@@ -178,3 +178,17 @@ Changed by the user after the first build:
   are the same in all); the clearance certificate no longer downloads. Status _Revoked_.
 - API: `POST /hostel/withdrawals/:id/revoke {reason, mode, fromDate?, bedId?}`,
   `POST /hostel/withdrawals/:id/revoke/decide {outcome, note}`.
+
+## Part 6 (17 Oct 2026, migration 0165): a boarder's school withdrawal revoked
+
+- The school withdrawal of a boarder ends the stay (_Left the school_). Its **revoke** now asks, for a
+  boarder, about the hostel too: **rejoins as a day scholar** (no hostel, as before), **back in the
+  hostel as if never left** (the same stay goes on, the months away charged), or **back from a day**
+  (a new stay, the same bed or a free one; the months away not charged, what was paid for them goes to
+  the next unpaid fee). The bed is checked when asked and again on approval.
+- It rides the school revoke's own approval (Fee setup → Approval levels); on approval the pupil is
+  back in the school (as before) and in the hostel, and the hostel fee is made again.
+- Shared code: `hostel/hostel-return.ts` (`checkHostelReturn`, `returnToHostel`, `syncHostelFee`), used by
+  the hostel withdrawal revoke too.
+- API: `POST /people/withdrawals/:id/revoke {reason, hostel?: {mode, fromDate?, bedId?}}`; the
+  withdrawal shows `hostelStay` and `revokeHostel`.

@@ -226,6 +226,12 @@ fee), and give the reason. It goes through the same approval levels; on approval
 the hostel fee is made again, refunds not paid yet are dropped, unpaid damage / mess charges are
 cancelled and the clearance certificate is no longer valid.
 
+**A boarder leaving the school** goes through the school withdrawal (People → Withdrawals): the hostel's
+Warden and Mess steps clear it (damages and mess dues as misc fees); completion gives up the bed on the
+last day and ends the hostel fee with that month (no notice month); paid later months are settled in
+the withdrawal's refund. If that school withdrawal is **revoked**, the form also asks about the hostel:
+rejoins as a day scholar, back in the hostel as if never left, or back from a day (same or a free bed).
+
 ## Reports with the parents (Excel / PDF)
 
 - **The four reports:**

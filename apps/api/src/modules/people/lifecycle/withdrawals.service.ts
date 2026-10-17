@@ -12,6 +12,8 @@ import { generatedOn, registerFile, schoolHead } from '../../attendance/register
 import { WorkflowService, type InstanceRow } from '../../workflow/workflow.service';
 import { WAITING_WITH, startFeeApproval } from '../../fees/fee-approval';
 import { raiseHostelCharge } from '../../hostel/hostel-charge';
+import { checkHostelReturn, returnToHostel, type HostelReturn } from '../../hostel/hostel-return';
+import { FeeAdjustmentsService } from '../../fees/fee-adjustments.service';
 import {
   LIFECYCLE,
   type BulkClearanceDto,
@@ -98,6 +100,14 @@ export interface WithdrawalRow {
   refundState: 'none' | 'not_sent' | 'waiting' | 'paid';
   refundAmount: string;
   revokedAt: string | null;
+  /** the hostel stay this withdrawal ended (a boarder): the revoke may put the pupil back (0165) */
+  hostelStay: { allotmentId: string; place: string; leftOn: string } | null;
+  /** what the revoke asks or did for the hostel: back as if never left, or from a day */
+  revokeHostel: {
+    mode: 'continue' | 'from_date';
+    fromDate: string | null;
+    note: string | null;
+  } | null;
   currentStep: number | null;
   requestedBy: string | null;
   completedAt: string | null;
@@ -135,6 +145,10 @@ interface Db {
   hostel_id: string | null;
   year_id: string;
   revoked_at: Date | null;
+  hostel_stay: WithdrawalRow['hostelStay'];
+  revoke_hostel_mode: 'continue' | 'from_date' | null;
+  revoke_hostel_from: string | null;
+  revoke_hostel_note: string | null;
   tc: WithdrawalRow['tc'];
   clearances: Array<Omit<ClearanceRow, 'approvers'> & { approverList: WithdrawalApprover[] }>;
 }
@@ -158,6 +172,13 @@ const SELECT = `SELECT w.id::text, w.student_id::text, s.display_name AS student
         COALESCE(w.initiated_on, w.requested_on)::text AS initiated_on, w.requested_on::text, w.leaving_on::text, w.reason, w.remarks, w.documents,
         w.status, w.current_step, u.display_name AS requested_by, w.completed_at, w.cancel_reason,
         w.revoke_status, w.revoke_reason, w.revoked_at, ${WAITING_WITH('w.revoke_workflow_instance_id')} AS revoke_waiting_with,
+        w.revoke_hostel_mode, w.revoke_hostel_from::text AS revoke_hostel_from, w.revoke_hostel_note,
+        (SELECT jsonb_build_object('allotmentId', ha.id::text, 'leftOn', ha.to_date::text,
+                                   'place', h.name || ' · ' || rm.room_no || ' · bed ' || hb.label)
+           FROM hostel_allotments ha JOIN hostel_beds hb ON hb.id = ha.bed_id JOIN hostel_rooms rm ON rm.id = hb.room_id
+           JOIN hostels h ON h.id = rm.hostel_id
+          WHERE ha.student_id = w.student_id AND ha.end_reason = 'withdrawn' AND ha.end_remarks = 'Left the school'
+          ORDER BY ha.to_date DESC LIMIT 1) AS hostel_stay,
         CASE WHEN t.id IS NULL THEN NULL ELSE jsonb_build_object('id', t.id::text, 'tcNo', t.tc_no, 'exportId', t.export_id::text) END AS tc,
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
                     'id', x.id::text, 'department', x.department, 'departmentName', COALESCE(d.name, initcap(x.department)), 'step', x.step,
@@ -309,6 +330,7 @@ export class WithdrawalsService {
     private readonly tcs: TcService,
     private readonly workflow: WorkflowService,
     private readonly access: AccessService,
+    private readonly adjustments: FeeAdjustmentsService,
   ) {}
 
   // ---- settings ------------------------------------------------------------------------------------
@@ -597,6 +619,10 @@ export class WithdrawalsService {
       refundState: r.refund_state,
       refundAmount: r.refund_amount,
       revokedAt: r.revoked_at ? r.revoked_at.toISOString() : null,
+      hostelStay: r.hostel_stay,
+      revokeHostel: r.revoke_hostel_mode
+        ? { mode: r.revoke_hostel_mode, fromDate: r.revoke_hostel_from, note: r.revoke_hostel_note }
+        : null,
       tc: r.tc,
       clearances,
       canIssueTc: r.status !== 'cancelled' && r.status !== 'revoked' && !r.tc && gateCleared,
@@ -1483,7 +1509,47 @@ export class WithdrawalsService {
    * the logins come back, every month is charged again, a waiting refund of the withdrawal is closed
    * and the fee a paid refund cancelled becomes due again.
    */
-  async requestRevoke(ctx: RequestContext, id: string, reason: string): Promise<WithdrawalRow> {
+  /** The hostel stay this withdrawal ended (to put a boarder back on a revoke). */
+  private async hostelStayOf(c: PoolClient, id: string) {
+    const r = await c.query<{
+      allotment_id: string;
+      student_id: string;
+      year_id: string;
+      left_on: string;
+    }>(
+      `SELECT ha.id::text AS allotment_id, w.student_id::text, w.academic_year_id::text AS year_id, ha.to_date::text AS left_on
+         FROM student_withdrawals w JOIN hostel_allotments ha ON ha.student_id = w.student_id
+        WHERE w.id = $1 AND ha.end_reason = 'withdrawn' AND ha.end_remarks = 'Left the school'
+        ORDER BY ha.to_date DESC LIMIT 1`,
+      [id],
+    );
+    return r.rows[0] ?? null;
+  }
+
+  private hostelReturn(
+    stay: { allotment_id: string; student_id: string; year_id: string; left_on: string },
+    h: { mode: 'continue' | 'from_date'; fromDate?: string; bedId?: string },
+  ): HostelReturn {
+    return {
+      studentId: stay.student_id,
+      yearId: stay.year_id,
+      allotmentId: stay.allotment_id,
+      leftOn: stay.left_on,
+      // the school withdrawal closed the hostel fee with the leaving month
+      feeUntil: `${stay.left_on.slice(0, 7)}-01`,
+      mode: h.mode,
+      fromDate: h.fromDate ?? null,
+      bedId: h.bedId ?? null,
+      remark: 'Back in the hostel: the school withdrawal was revoked',
+    };
+  }
+
+  async requestRevoke(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+    hostel?: { mode: 'continue' | 'from_date'; fromDate?: string; bedId?: string } | null,
+  ): Promise<WithdrawalRow> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const w = await c.query<{
         status: string;
@@ -1525,11 +1591,29 @@ export class WithdrawalsService {
           'A transfer certificate is issued: cancel it first, then revoke the withdrawal',
           { status: 409 },
         );
+      // a boarder may come back to the hostel too: the bed must be free for it now
+      const stay = hostel ? await this.hostelStayOf(c, id) : null;
+      if (hostel && !stay)
+        throw new DomainError(
+          'withdrawal.not_boarder',
+          'This withdrawal did not end a hostel stay',
+          {
+            status: 409,
+          },
+        );
+      if (hostel && stay) await checkHostelReturn(c, this.hostelReturn(stay, hostel));
       await c.query(
         `UPDATE student_withdrawals SET revoke_status = 'pending', revoke_reason = $2, revoke_requested_by = app.current_user_id(),
-                revoke_requested_at = now(), revoke_workflow_instance_id = NULL, updated_at = now(), updated_by = app.current_user_id()
+                revoke_requested_at = now(), revoke_workflow_instance_id = NULL, revoke_hostel_mode = $3, revoke_hostel_from = $4::date,
+                revoke_hostel_bed_id = $5, revoke_hostel_note = NULL, updated_at = now(), updated_by = app.current_user_id()
           WHERE id = $1`,
-        [id, reason],
+        [
+          id,
+          reason,
+          hostel?.mode ?? null,
+          hostel?.mode === 'from_date' ? (hostel.fromDate ?? null) : null,
+          hostel?.mode === 'from_date' ? (hostel.bedId ?? null) : null,
+        ],
       );
       const instanceId = await startFeeApproval(
         this.workflow,
@@ -1537,8 +1621,14 @@ export class WithdrawalsService {
         ctx,
         { code: 'withdrawal_revoke', name: 'Revoke of a withdrawal (pupil rejoins)' },
         id,
-        `Revoke withdrawal: ${row.name} (left ${row.leaving_on.split('-').reverse().join('-')}) rejoins; all months charged again`,
-        { reason },
+        `Revoke withdrawal: ${row.name} (left ${row.leaving_on.split('-').reverse().join('-')}) rejoins; all months charged again${
+          hostel
+            ? hostel.mode === 'continue'
+              ? '; back in the hostel as if never left'
+              : `; back in the hostel from ${(hostel.fromDate ?? '').split('-').reverse().join('-')}`
+            : ''
+        }`,
+        { reason, hostel: hostel ?? null },
       );
       if (instanceId)
         await c.query(
@@ -1677,6 +1767,33 @@ export class WithdrawalsService {
       await c.query(`SELECT app.revoke_withdrawal($1)`, [id]);
       // a refund draft of the withdrawal that was never sent has no meaning any more
       await c.query(`DELETE FROM fee_refunds WHERE withdrawal_id = $1 AND status = 'draft'`, [id]);
+      // a boarder asked back in the hostel: the stay goes on, or a new stay from the day (0165)
+      const want = await c.query<{
+        mode: 'continue' | 'from_date' | null;
+        from: string | null;
+        bed: string | null;
+      }>(
+        `SELECT revoke_hostel_mode AS mode, revoke_hostel_from::text AS "from", revoke_hostel_bed_id::text AS bed
+           FROM student_withdrawals WHERE id = $1`,
+        [id],
+      );
+      const h = want.rows[0];
+      const stay = h?.mode ? await this.hostelStayOf(c, id) : null;
+      if (h?.mode && stay) {
+        const notes = await returnToHostel(
+          c,
+          this.hostelReturn(stay, {
+            mode: h.mode,
+            fromDate: h.from ?? undefined,
+            bedId: h.bed ?? undefined,
+          }),
+          (cc, sid, yid) => this.adjustments.carryHostelOutsideStay(cc, sid, yid),
+        );
+        await c.query(`UPDATE student_withdrawals SET revoke_hostel_note = $2 WHERE id = $1`, [
+          id,
+          notes.join(' '),
+        ]);
+      }
       // the pupil is back: the full roles return and the "former" ones end
       await c.query(
         `UPDATE user_roles SET revoked_at = NULL, revoked_by = NULL, reason = 'restored: withdrawal revoked', updated_at = now(), updated_by = app.current_user_id()

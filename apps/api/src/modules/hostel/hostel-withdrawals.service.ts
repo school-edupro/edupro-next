@@ -10,6 +10,7 @@ import { startFeeApproval } from '../fees/fee-approval';
 import { WithdrawalsService } from '../people/lifecycle/withdrawals.service';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { raiseHostelCharge } from './hostel-charge';
+import { returnToHostel } from './hostel-return';
 import {
   HOSTEL_WD,
   type ListHostelWithdrawalsDto,
@@ -947,42 +948,6 @@ export class HostelWithdrawalsService {
     const mode = w.revokeMode ?? 'continue';
     await this.checkRevoke(c, w, { mode, fromDate: w.revokeFrom, bedId: w.revokeBedId });
     const notes: string[] = [];
-    if (mode === 'continue') {
-      await c.query(
-        `UPDATE hostel_allotments SET to_date = NULL, end_reason = NULL, end_remarks = NULL, ended_at = NULL, ended_by = NULL WHERE id = $1`,
-        [w.allotmentId],
-      );
-      notes.push(
-        'Back as if never left: the stay goes on and the hostel fee of the months away is charged.',
-      );
-    } else {
-      await c.query(
-        `INSERT INTO hostel_allotments (school_id, student_id, bed_id, from_date, kind, remarks, created_by)
-         VALUES (app.current_school_id(), $1, $2, $3::date, 'allot', $4, app.current_user_id())`,
-        [
-          w.studentId,
-          w.revokeBedId ?? w.bedId,
-          w.revokeFrom,
-          'Back in the hostel: the hostel withdrawal was revoked',
-        ],
-      );
-      // the months between the last month charged and the month back are not charged
-      const gapFrom = nextMonth(w.feeUntil ?? monthOf(w.leavingOn));
-      const backMonth = monthOf(w.revokeFrom!);
-      if (gapFrom < backMonth) {
-        const prev = new Date(`${backMonth}T00:00:00Z`);
-        prev.setUTCMonth(prev.getUTCMonth() - 1);
-        const gapTo = prev.toISOString().slice(0, 10);
-        await c.query(
-          `INSERT INTO hostel_fee_gaps (school_id, student_id, academic_year_id, from_month, to_month, withdrawal_id)
-           VALUES (app.current_school_id(), $1, $2, $3::date, $4::date, $5)`,
-          [w.studentId, w.yearId, gapFrom, gapTo, w.id],
-        );
-        notes.push(
-          `Back from ${dmy(w.revokeFrom)}: no hostel fee for ${monthLabel(gapFrom)}${gapFrom === gapTo ? '' : ` to ${monthLabel(gapTo)}`}.`,
-        );
-      } else notes.push(`Back from ${dmy(w.revokeFrom)}.`);
-    }
     // refunds of this withdrawal not paid yet are dropped; one already paid is to settle by hand
     const refunds = await c.query<{
       id: string;
@@ -1007,18 +972,26 @@ export class HostelWithdrawalsService {
       );
       notes.push(`${String(open.length)} refund(s) not paid yet are dropped.`);
     }
-    // the hostel fee again (a carried-forward amount stays where it went: the dues are the same in all);
-    // hostel months paid for the months away now go forward to the next unpaid fee
-    const sync = await this.hostel.syncFee(c, w.studentId, w.yearId);
+    // back in the bed, the hostel fee made again (a carried-forward amount stays where it went: the dues
+    // are the same in all); paid months away go forward to the next unpaid fee
     notes.push(
-      sync.synced
-        ? 'The hostel fee is made again.'
-        : `The hostel fee was not changed: ${sync.note ?? 'no fee set-up'}.`,
+      ...(await returnToHostel(
+        c,
+        {
+          studentId: w.studentId,
+          yearId: w.yearId,
+          allotmentId: w.allotmentId,
+          leftOn: w.leavingOn,
+          feeUntil: w.feeUntil,
+          mode,
+          fromDate: w.revokeFrom,
+          bedId: w.revokeBedId,
+          remark: 'Back in the hostel: the hostel withdrawal was revoked',
+        },
+        (cc, sid, yid) => this.adjustments.carryHostelOutsideStay(cc, sid, yid),
+        w.id,
+      )),
     );
-    if (sync.synced && mode === 'from_date') {
-      const carried = await this.adjustments.carryHostelOutsideStay(c, w.studentId, w.yearId);
-      if (carried) notes.push(carried);
-    }
     const paid = refunds.rows.filter((r) => r.status === 'paid');
     if (paid.length)
       notes.push(

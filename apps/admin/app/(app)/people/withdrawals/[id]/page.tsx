@@ -188,6 +188,15 @@ export default async function WithdrawalPage({
     getMe(),
     apiFetch<Withdrawal>(`/people/withdrawals/${id}`),
   ]);
+  // a boarder's revoke may put the pupil back in the hostel: the beds free now (the allot right)
+  const freeBeds =
+    w.hostelStay && w.status === 'completed' && me.permissions.includes('hostel.allot.manage')
+      ? await apiFetch<{ data: Array<{ id: string; place: string; roomType: string }> }>(
+          '/hostel/free-beds',
+        )
+          .then((r) => r.data)
+          .catch(() => [])
+      : [];
   const canManage = me.permissions.includes('people.withdrawal.manage');
   const canTc = me.permissions.includes('people.tc.issue');
   const canTransfer = me.permissions.includes('people.transfer.manage');
@@ -295,7 +304,10 @@ export default async function WithdrawalPage({
         <Card title="Transfer certificate">
           {w.tc ? (
             <p style={{ margin: 0 }}>
-              TC <strong>{w.tc.tcNo}</strong> issued. <a href="/people/tc">Open the TC register</a>
+              TC <strong>{w.tc.tcNo}</strong> issued.{' '}
+              <a href="/people/tc" style={{ textDecoration: 'underline' }}>
+                Open the TC register
+              </a>
             </p>
           ) : w.canIssueTc && canTc ? (
             <form action={issueWithdrawalTc} className="ep-wd__form">
@@ -451,13 +463,20 @@ export default async function WithdrawalPage({
                 This withdrawal was revoked{w.revokedAt ? ` on ${w.revokedAt.slice(0, 10)}` : ''}
                 {w.revokeReason ? `: ${w.revokeReason}` : ''}. The pupil is active again and every
                 month of the session is charged.
+                {w.revokeHostel?.note ? (
+                  <span className="ep-field__help" style={{ display: 'block' }}>
+                    Hostel: {w.revokeHostel.note}
+                  </span>
+                ) : null}
               </p>
             ) : w.revokeStatus === 'pending' ? (
               <p>
                 <Badge tone="warning">Revoke waiting for approval</Badge>
                 {w.revokeWaitingWith ? ` with ${w.revokeWaitingWith}` : ''}
                 {w.revokeReason ? ` · ${w.revokeReason}` : ''}.{' '}
-                <a href="/workflow/inbox">My approvals</a>
+                <a href="/workflow/inbox" style={{ textDecoration: 'underline' }}>
+                  My approvals
+                </a>
               </p>
             ) : (
               <form action={revokeWithdrawal} className="ep-wd__form">
@@ -478,6 +497,43 @@ export default async function WithdrawalPage({
                     maxLength={300}
                   />
                 </label>
+                {w.hostelStay ? (
+                  <fieldset className="ep-wd__wide" style={{ border: 0, padding: 0, margin: 0 }}>
+                    <legend className="ep-field__label">
+                      Hostel: was in {w.hostelStay.place} until{' '}
+                      {w.hostelStay.leftOn.split('-').reverse().join('-')}
+                    </legend>
+                    <label className="ep-roles__tick">
+                      <input type="radio" name="hostelMode" value="" defaultChecked /> Rejoins as a
+                      day scholar (no hostel)
+                    </label>
+                    <label className="ep-roles__tick">
+                      <input type="radio" name="hostelMode" value="continue" /> Back in the hostel
+                      as if never left: the same bed; the hostel fee of the months away is charged
+                    </label>
+                    <label className="ep-roles__tick">
+                      <input type="radio" name="hostelMode" value="from_date" /> Back in the hostel
+                      from a day: a new stay; the months away are not charged
+                    </label>
+                    <div className="ep-hd__row">
+                      <label className="ep-field" htmlFor="rv-hfrom">
+                        <span className="ep-field__label">Back in the hostel from</span>
+                        <input id="rv-hfrom" name="hostelFrom" type="date" className="ep-input" />
+                      </label>
+                      <label className="ep-field" htmlFor="rv-hbed">
+                        <span className="ep-field__label">Bed</span>
+                        <select id="rv-hbed" name="hostelBed" className="ep-select" defaultValue="">
+                          <option value="">The same bed</option>
+                          {freeBeds.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.place} · {b.roomType}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </fieldset>
+                ) : null}
                 <Button type="submit" size="sm" variant="secondary">
                   Send revoke for approval
                 </Button>

@@ -112,6 +112,7 @@ const PAGES = [
   '/hostel/withdrawals/settings',
   '/hostel/withdrawals/42',
   '/hostel/withdrawals/87',
+  '/people/withdrawals/79',
   '/hostel/allot?student=12307',
   '/hostel/allot?sq=sharma',
   '/hostel/register',

@@ -650,6 +650,14 @@ export interface Withdrawal {
   status: 'requested' | 'cleared' | 'completed' | 'cancelled' | 'revoked';
   revokeStatus?: 'pending' | 'approved' | 'rejected' | null;
   revokeReason?: string | null;
+  /** the hostel stay this withdrawal ended (a boarder) */
+  hostelStay?: { allotmentId: string; place: string; leftOn: string } | null;
+  /** what the revoke asks or did for the hostel */
+  revokeHostel?: {
+    mode: 'continue' | 'from_date';
+    fromDate: string | null;
+    note: string | null;
+  } | null;
   revokeWaitingWith?: string | null;
   refundState: 'none' | 'not_sent' | 'waiting' | 'paid';
   refundAmount: string;
