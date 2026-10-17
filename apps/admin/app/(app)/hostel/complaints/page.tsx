@@ -1,8 +1,8 @@
-import { Badge, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Card, PageHeader } from '@edupro/ui';
 import { HostelNav } from '@/components/hostel/HostelNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { raiseHostelComplaint } from '@/lib/hostel-actions';
+import { HostelComplaintForm } from '@/components/hostel/HostelComplaintForm';
 
 interface Complaint {
   id: string;
@@ -21,12 +21,6 @@ interface Complaint {
   rating: number | null;
   assignedTo: string | null;
   overdue: boolean;
-}
-interface Room {
-  id: string;
-  hostel: string;
-  roomNo: string;
-  block: string | null;
 }
 
 const SHOW = [
@@ -55,18 +49,20 @@ const STATUS: Record<string, [string, 'warning' | 'info' | 'success' | 'neutral'
 export default async function HostelComplaintsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string; ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    show?: string;
+    hostel?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   const show = SHOW.some(([k]) => k === sp.show) ? sp.show! : 'open';
-  const [rows, heads, rooms] = await Promise.all([
-    apiFetch<{ data: Complaint[] }>(`/hostel/complaints?show=${show}`).then((r) => r.data),
-    apiFetch<{ data: Array<{ code: string; name: string }> }>('/hostel/complaint-heads').then(
-      (r) => r.data,
-    ),
-    apiFetch<{ data: Room[] }>('/hostel/rooms').then((r) => r.data),
-  ]);
+  const rows = await apiFetch<{ data: Complaint[] }>(`/hostel/complaints?show=${show}`).then(
+    (r) => r.data,
+  );
   const canRaise = me.permissions.includes('helpdesk.ticket.raise');
   const canAnswer = me.permissions.includes('helpdesk.ticket.respond');
   return (
@@ -74,7 +70,7 @@ export default async function HostelComplaintsPage({
       <PageHeader
         kicker="Hostel"
         title="Complaints"
-        description="Room and maintenance complaints raised by parents, wardens and the office. Each goes to the head warden of the hostel, runs on the helpdesk clock and moves up the escalation matrix when late (Helpdesk set-up → Hostel complaints)."
+        description="Room and maintenance complaints raised by parents, wardens and the office. Each goes to the head warden of the hostel (or the owner set for its type), runs on the helpdesk clock and moves up the escalation matrix when late (Helpdesk set-up → Hostel complaints)."
         actions={
           canAnswer ? (
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/engagement/helpdesk/hostel">
@@ -148,64 +144,12 @@ export default async function HostelComplaintsPage({
         )}
       </Card>
       {canRaise ? (
-        <Card title="Raise a complaint">
-          <form action={raiseHostelComplaint} className="ep-hd__row">
-            <label className="ep-field" htmlFor="hc-room">
-              <span className="ep-field__label">Room</span>
-              <select id="hc-room" name="roomId" className="ep-select" required defaultValue="">
-                <option value="" disabled>
-                  Choose
-                </option>
-                {rooms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.hostel} · {r.block ? `${r.block} · ` : ''}Room {r.roomNo}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="ep-field" htmlFor="hc-head">
-              <span className="ep-field__label">About</span>
-              <select id="hc-head" name="categoryCode" className="ep-select" required>
-                {heads.map((x) => (
-                  <option key={x.code} value={x.code}>
-                    {x.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="ep-field" htmlFor="hc-prio">
-              <span className="ep-field__label">Priority</span>
-              <select id="hc-prio" name="priority" className="ep-select" defaultValue="normal">
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </label>
-            <label className="ep-field" htmlFor="hc-subj">
-              <span className="ep-field__label">Subject</span>
-              <input
-                id="hc-subj"
-                name="subject"
-                className="ep-input"
-                required
-                minLength={3}
-                maxLength={200}
-              />
-            </label>
-            <label className="ep-field" htmlFor="hc-body">
-              <span className="ep-field__label">Details</span>
-              <input
-                id="hc-body"
-                name="body"
-                className="ep-input"
-                required
-                minLength={3}
-                maxLength={2000}
-              />
-            </label>
-            <Button type="submit">Raise</Button>
-          </form>
+        <Card title="Raise a complaint" id="raise">
+          <HostelComplaintForm
+            hostelId={sp.hostel}
+            pickerPath="/hostel/complaints"
+            keep={{ show }}
+          />
         </Card>
       ) : null}
     </>

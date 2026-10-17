@@ -101,12 +101,17 @@ export async function raiseTicket(fd: FormData) {
       })
     ).id;
   } catch (error) {
+    // the shared hostel form may sit on Hostel → Complaints: a mistake goes back there
+    const asked = str(fd, 'returnTo');
     back(
-      `/engagement/helpdesk/${desk}/new${desk === 'hostel' && /^\d{1,18}$/.test(hostelId) ? `?hostel=${hostelId}` : ''}`,
+      desk === 'hostel' && asked.startsWith('/hostel/complaints') && !asked.includes('//')
+        ? asked
+        : `/engagement/helpdesk/${desk}/new${desk === 'hostel' && /^\d{1,18}$/.test(hostelId) ? `?hostel=${hostelId}` : ''}`,
       error,
     );
   }
   revalidatePath('/engagement/helpdesk');
+  if (desk === 'hostel') revalidatePath('/hostel/complaints');
   redirect(`${ticketPath(desk, id)}?ok=raised`);
 }
 

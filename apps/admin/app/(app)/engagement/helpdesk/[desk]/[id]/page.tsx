@@ -179,7 +179,11 @@ export default async function TicketPage({
       <PageHeader kicker={`${t.number} · ${DESK_ONE[t.desk]} · ${t.head}`} title={t.subject} />
       {sp.ok ? (
         <div style={{ marginBottom: 'var(--sp-4)' }}>
-          <Alert tone="success">{OK[sp.ok] ?? 'Done.'}</Alert>
+          <Alert tone="success">
+            {sp.ok === 'raised'
+              ? `Raised (${t.number}). It is with ${t.assignedTo ?? t.assignedRoleName ?? 'its owner'}, who has been told.`
+              : (OK[sp.ok] ?? 'Done.')}
+          </Alert>
         </div>
       ) : (
         <Notice params={sp} />

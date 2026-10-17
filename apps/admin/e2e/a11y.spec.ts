@@ -126,6 +126,7 @@ const PAGES = [
   '/hostel/visitors',
   '/hostel/visitors?show=all',
   '/engagement/helpdesk/hostel/new?hostel=14',
+  '/hostel/complaints?hostel=14',
   '/hostel/visitors?tab=approve',
   '/hostel/visitors?tab=download',
   '/hostel/visitors?tab=lists&q=sharma&student=12307',

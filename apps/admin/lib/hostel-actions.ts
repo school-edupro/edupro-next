@@ -504,28 +504,6 @@ export async function registerHostelVisit(fd: FormData) {
 }
 
 // ---- H4: complaints and incidents -------------------------------------------------------------------------
-/** A complaint about a room, raised by the office on the helpdesk's hostel desk. */
-export async function raiseHostelComplaint(fd: FormData) {
-  const to = `${BASE}/complaints`;
-  let out: { id?: string; number?: string } = {};
-  try {
-    out = await apiFetch('/helpdesk/tickets', {
-      method: 'POST',
-      body: JSON.stringify({
-        desk: 'hostel',
-        categoryCode: str(fd, 'categoryCode'),
-        subject: str(fd, 'subject'),
-        body: str(fd, 'body'),
-        priority: str(fd, 'priority') || 'normal',
-        hostelRoomId: str(fd, 'roomId'),
-        fileIds: [],
-      }),
-    });
-  } catch (error) {
-    back(to, error);
-  }
-  done(to, `Complaint ${out.number ?? ''} raised. It is with the head warden of the hostel.`);
-}
 
 /** Photos and PDFs of a form field, uploaded through the file service; their ids. */
 async function uploadFiles(fd: FormData, field: string): Promise<string[]> {
