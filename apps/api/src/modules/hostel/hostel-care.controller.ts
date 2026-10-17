@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -11,6 +11,8 @@ import {
   HOSTEL_H3,
   HOSTEL_H4,
   IncidentDto,
+  IncidentNoteDto,
+  IncidentsFileDto,
   IncidentsQueryDto,
   SickbayDto,
 } from './hostel.dto';
@@ -67,9 +69,38 @@ export class HostelCareController {
   }
 
   @Get('incidents')
+  @ApiOperation({ summary: 'The incident register: filtered, paged, with the count by status' })
   @RequirePermission(HOSTEL_H4.incidentView)
-  async incidents(@ReqCtx() ctx: RequestContext, @Query() q: IncidentsQueryDto) {
-    return { data: await this.care.incidents(ctx, q) };
+  incidents(@ReqCtx() ctx: RequestContext, @Query() q: IncidentsQueryDto) {
+    return this.care.incidents(ctx, q);
+  }
+
+  @Get('incidents/file')
+  @ApiOperation({ summary: 'The incident register as Excel or PDF' })
+  @RequirePermission(HOSTEL_H4.incidentView)
+  async incidentsFile(@ReqCtx() ctx: RequestContext, @Query() q: IncidentsFileDto) {
+    const f = await this.care.incidentsFile(ctx, q);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
+  }
+
+  @Get('incidents/:id')
+  @ApiOperation({ summary: 'One incident with its follow-up notes and files' })
+  @RequirePermission(HOSTEL_H4.incidentView)
+  incident(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.care.incident(ctx, id);
+  }
+
+  @Post('incidents/:id/notes')
+  @ApiOperation({
+    summary: 'A follow-up note; it may move the incident to follow-up, open or closed',
+  })
+  @RequirePermission(HOSTEL_H4.incident)
+  addIncidentNote(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: IncidentNoteDto,
+  ) {
+    return this.care.addIncidentNote(ctx, id, dto);
   }
 
   @Get('mine/incidents')

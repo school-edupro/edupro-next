@@ -13,10 +13,20 @@ import {
   type ComplaintsQueryDto,
   type DashboardQueryDto,
   type IncidentDto,
+  type IncidentNoteDto,
+  type IncidentsFileDto,
   type IncidentsQueryDto,
   type SickbayDto,
 } from './hostel.dto';
 import { HostelService } from './hostel.service';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
+
+type Row = Record<string, unknown>;
+const STATUS: Record<string, string> = {
+  open: 'Open',
+  follow_up: 'In follow-up',
+  closed: 'Closed',
+};
 
 const CATEGORY: Record<string, string> = {
   discipline: 'Discipline',
@@ -133,9 +143,19 @@ export class HostelCareService {
   async recordIncident(ctx: RequestContext, dto: IncidentDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const h = await this.boardsIn(ctx, c, dto.studentId);
+      if (dto.closeNow && dto.severity === 'serious')
+        throw new DomainError(
+          'hostel.incident_serious_open',
+          'A serious incident stays open until it is closed with a remark',
+          { status: 422 },
+        );
+      await this.helpdesk.checkFiles(c, dto.fileIds);
       const r = await c.query<{ id: string; who: string; school: string; at: string }>(
-        `INSERT INTO hostel_incidents (school_id, student_id, hostel_id, occurred_at, category, severity, what, action, tell_parent, recorded_by)
-         VALUES (app.current_school_id(), $1, $2, COALESCE($3::timestamptz, now()), $4, $5, $6, $7, $8, app.current_user_id())
+        `INSERT INTO hostel_incidents (school_id, student_id, hostel_id, occurred_at, category, severity, what, action, tell_parent, recorded_by,
+                                       file_ids, status, closed_at, closed_by, closing_remark)
+         VALUES (app.current_school_id(), $1, $2, COALESCE($3::timestamptz, now()), $4, $5, $6, $7, $8, app.current_user_id(),
+                 $9::bigint[], CASE WHEN $10 THEN 'closed' ELSE 'open' END, CASE WHEN $10 THEN now() END,
+                 CASE WHEN $10 THEN app.current_user_id() END, CASE WHEN $10 THEN COALESCE($7, 'Dealt with when recorded') END)
          RETURNING id::text, (SELECT display_name FROM students WHERE id = $1) AS who,
                    (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
                    to_char(occurred_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY HH24:MI') AS at`,
@@ -148,6 +168,8 @@ export class HostelCareService {
           dto.what,
           dto.action ?? null,
           dto.tellParent,
+          dto.fileIds,
+          dto.closeNow,
         ],
       );
       const x = r.rows[0]!;
@@ -189,27 +211,215 @@ export class HostelCareService {
         entityId: x.id,
         after: dto,
       });
-      return { id: x.id, parentTold: dto.tellParent, principalTold: dto.severity === 'serious' };
+      return {
+        id: x.id,
+        parentTold: dto.tellParent,
+        principalTold: dto.severity === 'serious',
+        status: dto.closeNow ? 'closed' : 'open',
+      };
     });
   }
 
-  async incidents(ctx: RequestContext, q: IncidentsQueryDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const only = await this.hostel.scope(ctx, c);
-      const r = await c.query(
-        `SELECT i.id::text, i.student_id::text AS "studentId", s.display_name AS name, s.admission_no AS "admissionNo",
-                h.name AS hostel, i.occurred_at AS "occurredAt", i.category, i.severity, i.what, i.action,
-                i.tell_parent AS "tellParent", i.parent_told_at AS "parentToldAt", i.principal_told_at AS "principalToldAt",
-                u.display_name AS "recordedBy"
-           FROM hostel_incidents i JOIN students s ON s.id = i.student_id JOIN hostels h ON h.id = i.hostel_id
-           LEFT JOIN users u ON u.id = i.recorded_by
+  /** The incidents the person sees, filtered (the open ones first when no status is asked). */
+  private async incidentRows(
+    ctx: RequestContext,
+    c: PoolClient,
+    q: Omit<IncidentsQueryDto, 'page' | 'size'>,
+    page?: { page: number; size: number },
+  ) {
+    const only = await this.hostel.scope(ctx, c);
+    const params = [
+      q.hostelId ?? null,
+      q.studentId ?? null,
+      q.category ?? null,
+      q.from ?? null,
+      only,
+      q.severity ?? null,
+      q.status ?? null,
+      q.to ?? null,
+      q.q ?? null,
+    ];
+    const where = `FROM hostel_incidents i JOIN students s ON s.id = i.student_id JOIN hostels h ON h.id = i.hostel_id
           WHERE ($1::bigint IS NULL OR i.hostel_id = $1) AND ($2::bigint IS NULL OR i.student_id = $2)
-            AND ($3::text IS NULL OR i.category = $3) AND ($4::date IS NULL OR i.occurred_at >= $4::date)
+            AND ($3::text IS NULL OR i.category = $3)
+            AND ($4::date IS NULL OR (i.occurred_at AT TIME ZONE 'Asia/Kolkata')::date >= $4::date)
             AND ($5::bigint[] IS NULL OR i.hostel_id = ANY ($5::bigint[]))
-          ORDER BY i.occurred_at DESC LIMIT 500`,
-        [q.hostelId ?? null, q.studentId ?? null, q.category ?? null, q.from ?? null, only],
+            AND ($6::text IS NULL OR i.severity = $6)
+            AND ($7::text IS NULL OR i.status = $7 OR ($7 = 'not_closed' AND i.status <> 'closed'))
+            AND ($8::date IS NULL OR (i.occurred_at AT TIME ZONE 'Asia/Kolkata')::date <= $8::date)
+            AND ($9::text IS NULL OR s.search_text LIKE '%' || app.search_text($9) || '%')`;
+    const counts = await c.query<{ status: string; n: number }>(
+      // eslint-disable-next-line no-restricted-syntax -- the FROM/WHERE is a constant; values bound
+      `SELECT i.status, count(*)::int AS n ${where} GROUP BY i.status`,
+      params,
+    );
+    const limit = page
+      ? // eslint-disable-next-line no-restricted-syntax -- LIMIT/OFFSET from validated numbers
+        `LIMIT ${String(page.size)} OFFSET ${String((page.page - 1) * page.size)}`
+      : 'LIMIT 5000';
+    const r = await c.query<Row>(
+      // eslint-disable-next-line no-restricted-syntax -- the FROM/WHERE is a constant, LIMIT from numbers; values bound
+      `SELECT i.id::text, i.student_id::text AS "studentId", s.display_name AS name, s.admission_no AS "admissionNo",
+              h.id::text AS "hostelId", h.name AS hostel, i.occurred_at AS "occurredAt", i.category, i.severity, i.what, i.action,
+              i.tell_parent AS "tellParent", i.parent_told_at AS "parentToldAt", i.principal_told_at AS "principalToldAt",
+              (SELECT u.display_name FROM users u WHERE u.id = i.recorded_by) AS "recordedBy",
+              i.status, i.closed_at AS "closedAt", i.closing_remark AS "closingRemark",
+              (SELECT u.display_name FROM users u WHERE u.id = i.closed_by) AS "closedBy",
+              cardinality(i.file_ids) + (SELECT COALESCE(sum(cardinality(n.file_ids)), 0)::int FROM hostel_incident_notes n WHERE n.incident_id = i.id) AS files,
+              (SELECT count(*)::int FROM hostel_incident_notes n WHERE n.incident_id = i.id) AS notes
+       ${where}
+       ORDER BY CASE WHEN $7::text IS NULL AND i.status <> 'closed' THEN 0 ELSE 1 END, i.occurred_at DESC, i.id DESC ${limit}`,
+      params,
+    );
+    const by = Object.fromEntries(counts.rows.map((x) => [x.status, x.n]));
+    return {
+      data: r.rows,
+      total: counts.rows.reduce((n, x) => n + x.n, 0),
+      counts: { open: by.open ?? 0, follow_up: by.follow_up ?? 0, closed: by.closed ?? 0 },
+    };
+  }
+
+  async incidents(ctx: RequestContext, q: IncidentsQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => ({
+      ...(await this.incidentRows(ctx, c, q, { page: q.page, size: q.size })),
+      page: q.page,
+      size: q.size,
+    }));
+  }
+
+  /** One incident with its follow-up notes and files (a warden of its hostel, or the office). */
+  private async incidentOf(ctx: RequestContext, c: PoolClient, id: string) {
+    const r = await c.query<Row>(
+      `SELECT i.id::text, i.student_id::text AS "studentId", s.display_name AS name, s.admission_no AS "admissionNo",
+              h.id::text AS "hostelId", h.name AS hostel, i.occurred_at AS "occurredAt", i.category, i.severity, i.what, i.action,
+              i.tell_parent AS "tellParent", i.parent_told_at AS "parentToldAt", i.principal_told_at AS "principalToldAt",
+              (SELECT u.display_name FROM users u WHERE u.id = i.recorded_by) AS "recordedBy", i.created_at AS "recordedAt",
+              i.status, i.closed_at AS "closedAt", i.closing_remark AS "closingRemark",
+              (SELECT u.display_name FROM users u WHERE u.id = i.closed_by) AS "closedBy", i.file_ids::text[] AS "fileIds"
+         FROM hostel_incidents i JOIN students s ON s.id = i.student_id JOIN hostels h ON h.id = i.hostel_id WHERE i.id = $1`,
+      [id],
+    );
+    const x = r.rows[0];
+    const only = await this.hostel.scope(ctx, c);
+    if (!x || (only && !only.includes(String(x.hostelId))))
+      throw new DomainError('not-found', 'Incident not found', { status: 404 });
+    const notes = await c.query<Row>(
+      `SELECT n.id::text, n.body, n.status_to AS "statusTo", n.file_ids::text[] AS "fileIds", n.at,
+              COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = n.by_user LIMIT 1), u.display_name) AS by
+         FROM hostel_incident_notes n LEFT JOIN users u ON u.id = n.by_user WHERE n.incident_id = $1 ORDER BY n.at, n.id`,
+      [id],
+    );
+    return { ...x, status: String(x.status), notes: notes.rows };
+  }
+
+  async incident(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.incidentOf(ctx, c, id));
+  }
+
+  /**
+   * A follow-up note; it may move the incident: to follow-up, back to open, or closed (the note is the
+   * closing remark). A closed incident takes a note only when it is reopened.
+   */
+  async addIncidentNote(ctx: RequestContext, id: string, dto: IncidentNoteDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const i = await this.incidentOf(ctx, c, id);
+      if (i.status === 'closed' && (!dto.statusTo || dto.statusTo === 'closed'))
+        throw new DomainError(
+          'hostel.incident_closed',
+          'This incident is closed: reopen it (open or follow-up) to add a note',
+          { status: 409 },
+        );
+      await this.helpdesk.checkFiles(c, dto.fileIds);
+      const to = dto.statusTo && dto.statusTo !== i.status ? dto.statusTo : null;
+      await c.query(
+        `INSERT INTO hostel_incident_notes (school_id, incident_id, body, status_to, file_ids, by_user)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::bigint[], app.current_user_id())`,
+        [id, dto.body, to, dto.fileIds],
       );
-      return r.rows;
+      if (to)
+        await c.query(
+          `UPDATE hostel_incidents SET status = $2, updated_at = now(),
+                  closed_at = CASE WHEN $2 = 'closed' THEN now() END,
+                  closed_by = CASE WHEN $2 = 'closed' THEN app.current_user_id() END,
+                  closing_remark = CASE WHEN $2 = 'closed' THEN $3 END
+            WHERE id = $1`,
+          [id, to, dto.body],
+        );
+      await this.audit.stage(ctx, c, {
+        action: to === 'closed' ? 'hostel.incident.close' : 'hostel.incident.note',
+        entityType: 'hostel_incident',
+        entityId: id,
+        after: { statusTo: to, files: dto.fileIds.length },
+      });
+      return this.incidentOf(ctx, c, id);
+    });
+  }
+
+  async incidentsFile(ctx: RequestContext, q: IncidentsFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.incidentRows(ctx, c, q);
+      const head = await schoolHead(c);
+      const day = (v: unknown) =>
+        v instanceof Date
+          ? v.toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })
+          : '';
+      const dmy = (d?: string) => (d ? d.split('-').reverse().join('-') : '');
+      return registerFile(
+        {
+          school: head.name,
+          address: head.address,
+          report: 'Hostel incident register',
+          details: [
+            q.hostelId ? String(r.data[0]?.hostel ?? '') : 'All hostels',
+            q.from || q.to ? `${dmy(q.from) || '...'} to ${dmy(q.to) || '...'}` : '',
+            `${String(r.total)} incident(s): ${String(r.counts.open)} open, ${String(r.counts.follow_up)} in follow-up, ${String(r.counts.closed)} closed`,
+            generatedOn(),
+          ].filter(Boolean),
+          legend:
+            'Parent: told by message and shown in the parent app. Principal: a serious incident is sent to the principal and school admins.',
+          columns: [
+            { label: 'Sl.', width: 3, right: true },
+            { label: 'When', width: 9 },
+            { label: 'Pupil', width: 12 },
+            { label: 'Adm. no.', width: 6 },
+            { label: 'Hostel', width: 8 },
+            { label: 'Category', width: 6 },
+            { label: 'Severity', width: 5 },
+            { label: 'What happened', width: 22 },
+            { label: 'Action taken', width: 16 },
+            { label: 'Parent', width: 4 },
+            { label: 'Status', width: 6 },
+            { label: 'Closing remark', width: 14 },
+            { label: 'Recorded by', width: 8 },
+          ],
+          rows: r.data.map((x, i) => [
+            i + 1,
+            day(x.occurredAt),
+            String(x.name),
+            String(x.admissionNo ?? ''),
+            String(x.hostel),
+            CATEGORY[String(x.category)] ?? String(x.category),
+            x.severity === 'serious' ? 'Serious' : 'Minor',
+            String(x.what),
+            String(x.action ?? ''),
+            x.tellParent ? 'Told' : '',
+            STATUS[String(x.status)] ?? String(x.status),
+            String(x.closingRemark ?? ''),
+            String(x.recordedBy ?? ''),
+          ]),
+          fontSize: 7,
+          filename: 'hostel-incident-register',
+        },
+        q.format,
+      );
     });
   }
 
@@ -220,7 +430,7 @@ export class HostelCareService {
       throw new DomainError('not-found', 'Pupil not found', { status: 404 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query(
-        `SELECT i.id::text, i.occurred_at AS "occurredAt", i.category, i.what, i.action, h.name AS hostel
+        `SELECT i.id::text, i.occurred_at AS "occurredAt", i.category, i.what, i.action, h.name AS hostel, i.status
            FROM hostel_incidents i JOIN hostels h ON h.id = i.hostel_id
           WHERE i.student_id = $1 AND i.tell_parent ORDER BY i.occurred_at DESC LIMIT 100`,
         [studentId],

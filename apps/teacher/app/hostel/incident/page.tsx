@@ -86,6 +86,12 @@ export default async function IncidentPage({
               <input id="in-t" name="tellParent" type="checkbox" /> {t(lang, 'Tell the parent')}
             </span>
           </label>
+          <label className="ep-field" htmlFor="in-c">
+            <span>
+              <input id="in-c" name="closeNow" type="checkbox" />{' '}
+              {t(lang, 'Dealt with: close it now (minor only)')}
+            </span>
+          </label>
           <div>
             <Button type="submit">{t(lang, 'Record')}</Button>
           </div>

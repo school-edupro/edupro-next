@@ -527,9 +527,47 @@ export async function raiseHostelComplaint(fd: FormData) {
   done(to, `Complaint ${out.number ?? ''} raised. It is with the head warden of the hostel.`);
 }
 
+/** Photos and PDFs of a form field, uploaded through the file service; their ids. */
+async function uploadFiles(fd: FormData, field: string): Promise<string[]> {
+  const ids: string[] = [];
+  for (const entry of fd.getAll(field)) {
+    if (!(entry instanceof File) || entry.size === 0) continue;
+    if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(entry.type) || entry.size > 5_242_880)
+      throw new ApiError(400, {
+        type: 'validation-failed',
+        detail: `${entry.name}: a PDF or a photo (JPEG, PNG) up to 5 MB`,
+      });
+    const reg = await apiFetch<{
+      file: { id: string };
+      upload: { url: string; method: string; headers?: Record<string, string> };
+    }>('/platform/files', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: entry.name.slice(0, 200),
+        contentType: entry.type,
+        sizeBytes: entry.size,
+        classification: 'internal',
+      }),
+    });
+    const target = reg.upload.url.startsWith('http')
+      ? reg.upload.url
+      : `${process.env.API_BASE_URL ?? 'http://localhost:4000'}${reg.upload.url}`;
+    const headers = new Headers({ 'content-type': entry.type });
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
+    const put = await fetch(target, {
+      method: reg.upload.method || 'PUT',
+      headers,
+      body: Buffer.from(await entry.arrayBuffer()),
+    });
+    if (!put.ok) throw new ApiError(put.status, { type: 'file.upload_failed' });
+    ids.push(reg.file.id);
+  }
+  return ids;
+}
+
 export async function recordIncident(fd: FormData) {
   const to = here(fd, `${BASE}/incidents`);
-  let out: { parentTold?: boolean; principalTold?: boolean } = {};
+  let out: { id?: string; parentTold?: boolean; principalTold?: boolean; status?: string } = {};
   try {
     out = await apiFetch('/hostel/incidents', {
       method: 'POST',
@@ -541,14 +579,45 @@ export async function recordIncident(fd: FormData) {
         what: str(fd, 'what'),
         action: str(fd, 'action'),
         tellParent: fd.get('tellParent') === 'on',
+        closeNow: fd.get('closeNow') === 'on',
+        fileIds: await uploadFiles(fd, 'files'),
       }),
     });
   } catch (error) {
     back(to, error);
   }
   done(
-    `${BASE}/incidents`,
-    `Incident recorded.${out.parentTold ? ' The parent has been told.' : ''}${out.principalTold ? ' The principal and school admins have been told.' : ''}`,
+    out.id ? `${BASE}/incidents/${out.id}` : `${BASE}/incidents`,
+    `Incident recorded${out.status === 'closed' ? ' and closed' : ''}.${out.parentTold ? ' The parent has been told.' : ''}${out.principalTold ? ' The principal and school admins have been told.' : ''}`,
+  );
+}
+
+/** A follow-up note on an incident; it may move it to follow-up, back to open, or close it. */
+export async function addIncidentNote(fd: FormData) {
+  const id = str(fd, 'id');
+  const to = `${BASE}/incidents/${encodeURIComponent(id)}`;
+  const statusTo = str(fd, 'statusTo');
+  try {
+    await apiFetch(`/hostel/incidents/${id}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        body: str(fd, 'body'),
+        statusTo: ['open', 'follow_up', 'closed'].includes(statusTo) ? statusTo : undefined,
+        fileIds: await uploadFiles(fd, 'files'),
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  done(
+    to,
+    statusTo === 'closed'
+      ? 'Incident closed.'
+      : statusTo === 'follow_up'
+        ? 'Note added; the incident is in follow-up.'
+        : statusTo === 'open'
+          ? 'Note added; the incident is open.'
+          : 'Note added.',
   );
 }
 

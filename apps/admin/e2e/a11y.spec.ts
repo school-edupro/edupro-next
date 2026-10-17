@@ -141,6 +141,8 @@ const PAGES = [
   '/hostel/dashboard',
   '/hostel/complaints',
   '/hostel/incidents',
+  '/hostel/incidents?status=not_closed&severity=serious',
+  '/hostel/incidents/20',
   '/hostel/incidents?sq=sharma&student=12307',
   '/engagement/helpdesk/hostel',
   '/fees/reports?report=mode_summary&from=2026-04-01&to=2026-10-08',

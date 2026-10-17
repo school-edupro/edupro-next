@@ -369,6 +369,10 @@ export const IncidentSchema = z.object({
   what: z.string().trim().min(5).max(1000),
   action: Optional(1000),
   tellParent: z.boolean().default(false),
+  /** Photos or documents (file service ids, uploaded by the recorder). */
+  fileIds: z.array(IdSchema).max(10).default([]),
+  /** A minor incident dealt with on the spot is closed as it is recorded (never a serious one). */
+  closeNow: z.boolean().default(false),
 });
 export class IncidentDto extends createZodDto(IncidentSchema) {}
 
@@ -376,9 +380,28 @@ export const IncidentsQuerySchema = z.object({
   hostelId: IdSchema.optional(),
   studentId: IdSchema.optional(),
   category: z.enum(['discipline', 'health', 'safety', 'property', 'other']).optional(),
+  severity: z.enum(['minor', 'serious']).optional(),
+  /** open = open or in follow-up. */
+  status: z.enum(['open', 'follow_up', 'closed', 'not_closed']).optional(),
   from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  q: z.string().trim().max(60).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(5).max(500).default(500),
 });
 export class IncidentsQueryDto extends createZodDto(IncidentsQuerySchema) {}
+export const IncidentsFileSchema = IncidentsQuerySchema.omit({ page: true, size: true }).extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class IncidentsFileDto extends createZodDto(IncidentsFileSchema) {}
+
+/** A follow-up note; it may move the incident on (closing needs the note as the closing remark). */
+export const IncidentNoteSchema = z.object({
+  body: z.string().trim().min(2).max(1000),
+  statusTo: z.enum(['open', 'follow_up', 'closed']).optional(),
+  fileIds: z.array(IdSchema).max(10).default([]),
+});
+export class IncidentNoteDto extends createZodDto(IncidentNoteSchema) {}
 
 export const SickbaySchema = z.object({
   studentId: IdSchema,

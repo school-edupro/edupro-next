@@ -13,6 +13,10 @@ const KINDS: Record<string, { path: string; keys: string[] }> = {
   headcount: { path: '/hostel/headcount/file', keys: ['hostelId', 'on'] },
   visits: { path: '/hostel/visits/file', keys: ['hostelId', 'from', 'to'] },
   'visitor-list': { path: '/hostel/visitors/file', keys: ['hostelId'] },
+  incidents: {
+    path: '/hostel/incidents/file',
+    keys: ['hostelId', 'category', 'severity', 'status', 'from', 'to', 'q'],
+  },
 };
 
 export async function GET(req: Request) {

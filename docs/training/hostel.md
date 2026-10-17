@@ -108,6 +108,10 @@ Communication → Templates.
   register the visit shows as _Hostel visitor_ with the boarder's hostel; while it waits it reads
   "Waiting for the warden" and the gate cannot let it in there. It leaves through the same Exit step as
   every visitor. Hostel → Visitors keeps the warden's work and links to the register.
+- **Download** (Hostel → Visitors → Download): the **visit register** of a period (date, in / out, visitor,
+  relation, mobile, boarder, room, on the list, in hours, warden's decision; last 30 days by default) and
+  the **approved visitors** of each boarder (parents on record, approved and waiting people, who added
+  them), for one hostel or all — Excel or PDF.
 
 ## 8. Mess (Hostel → Mess)
 
@@ -135,12 +139,27 @@ the child's room; wardens and the office raise them for a room (Hostel → Compl
 The warden answers and closes from the staff app (Hostel desk → Open complaints → Answer, the Queries
 screen). Numbers start with `H/`.
 
+**Handing a complaint over** (Cannot resolve it? Hand it over): the list shows only staff and roles who
+can **answer** tickets, each role with the people who hold it (e.g. _Role: Accountant (Arjun Bhat)_). A
+role that can only view tickets (Auditor) is not offered, so a complaint never gets stuck with nobody to
+answer it. The new owner gets an app alert and an e-mail (and SMS / WhatsApp when the template is
+ready). To send a head **straight to a role** — say Furniture and fittings to Accounts — set it in
+Helpdesk set-up → Hostel complaints → the head → Owner: a role.
+
 ## 10. Incidents and the sick bay
 
-- **Incidents** (Hostel → Incidents; staff app → roll-call → Incident): kind (discipline, health, safety,
-  property, other), minor or serious, what happened, action taken. Tick **tell the parent** to send it
-  and show it on the portal's Hostel page ("From the hostel"). A **serious** incident also goes to the
-  principal and the school admins.
+- **Incidents** (Hostel → Incidents; staff app → roll-call → Incident):
+  1. **Record**: find the boarder, then kind (discipline, health, safety, property, other), minor or
+     serious, when, what happened, action taken, **photos or documents** (PDF / JPEG / PNG, 5 MB each).
+     Tick **tell the parent** to send it and show it on the portal's Hostel page. A **serious** incident
+     also goes to the principal and the school admins.
+  2. **Status**: a new incident is **Open**. A minor one dealt with on the spot can be ticked **Dealt
+     with: close it now**; a serious one cannot — it stays open until closed with a remark.
+  3. **Follow-up** (Incidents → Open): add dated notes (meeting the parents, counselling, repair done),
+     each with files, and move it to **In follow-up**, back to **Open**, or **Close** it — the note is
+     the closing remark. A closed incident can be reopened with a note.
+  4. **Register**: filter by hostel, kind, severity, status (open first), dates and pupil; the counts by
+     status show at the top; **Excel / PDF** of what is filtered.
 - **Sick bay** (staff app → roll-call → Sick bay): complaint, temperature, treatment, outcome. It is
   saved as a **clinic visit** of the pupil (marked "Hostel sick bay"), so it is in the clinic record and
   the family is told by the clinic's own rule.

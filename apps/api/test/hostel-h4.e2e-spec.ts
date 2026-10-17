@@ -249,6 +249,101 @@ describe('hostel module H4 (e2e)', () => {
     expect(fam.map((x: { what: string }) => x.what)).toEqual(['Climbed the boundary wall.']);
     expect((await get('/hostel/incidents', warden)).data).toHaveLength(2);
     expect((await get('/hostel/incidents', other)).data).toHaveLength(0);
+    ids.quiet = quiet.json().id as string;
+    ids.serious = told.json().id as string;
+  });
+
+  it('incident follow-up: notes move it on, a photo goes with it, closing needs a remark; Excel and PDF', async () => {
+    // a photo of the damage, uploaded by the warden
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const reg = await post('/platform/files', warden, {
+      fileName: 'wall.png',
+      contentType: 'image/png',
+      sizeBytes: png.length,
+    });
+    const target = reg.json().upload as { url: string; headers?: Record<string, string> };
+    const put = await inject({
+      method: 'PUT',
+      url: target.url,
+      headers: { ...(target.headers ?? {}) },
+      raw: { body: png, contentType: 'image/png' },
+    } as never);
+    expect(put.statusCode).toBe(200);
+    const fileId = reg.json().file.id as string;
+    // a serious incident cannot be closed when recorded
+    expect(
+      (
+        await post('/hostel/incidents', warden, {
+          studentId: ids.vir,
+          category: 'property',
+          severity: 'serious',
+          what: 'Broke the window pane.',
+          closeNow: true,
+        })
+      ).json(),
+    ).toMatchObject({ type: expect.stringContaining('hostel.incident_serious_open') });
+    const minor = await post('/hostel/incidents', warden, {
+      studentId: ids.vir,
+      category: 'property',
+      what: 'Spilt ink on the desk.',
+      action: 'Cleaned it.',
+      closeNow: true,
+      fileIds: [fileId],
+    });
+    expect(minor.json()).toMatchObject({ status: 'closed' });
+    // the list: open ones first, counts by status, filters
+    const list = await get('/hostel/incidents?size=10', warden);
+    expect(list.counts).toEqual({ open: 2, follow_up: 0, closed: 1 });
+    expect(list.data[list.data.length - 1].status).toBe('closed');
+    expect((await get('/hostel/incidents?severity=serious', warden)).total).toBe(1);
+    expect((await get('/hostel/incidents?status=not_closed', warden)).total).toBe(2);
+    // follow-up on the serious one, then closing with the remark
+    const n1 = await post(`/hostel/incidents/${ids.serious}/notes`, warden, {
+      body: 'Met the parents; counselling arranged.',
+      statusTo: 'follow_up',
+    });
+    expect(n1.json()).toMatchObject({ status: 'follow_up' });
+    const closed = await post(`/hostel/incidents/${ids.serious}/notes`, warden, {
+      body: 'Counselling done; no repeat in two weeks.',
+      statusTo: 'closed',
+    });
+    expect(closed.json()).toMatchObject({
+      status: 'closed',
+      closingRemark: 'Counselling done; no repeat in two weeks.',
+    });
+    expect(closed.json().notes.map((x: { statusTo: string | null }) => x.statusTo)).toEqual([
+      'follow_up',
+      'closed',
+    ]);
+    // a closed incident takes a note only when reopened
+    expect(
+      (
+        await post(`/hostel/incidents/${ids.serious}/notes`, warden, { body: 'One more thing.' })
+      ).json(),
+    ).toMatchObject({ type: expect.stringContaining('hostel.incident_closed') });
+    expect(
+      (
+        await post(`/hostel/incidents/${ids.serious}/notes`, warden, {
+          body: 'Seen again near the wall.',
+          statusTo: 'open',
+        })
+      ).json(),
+    ).toMatchObject({ status: 'open', closedAt: null });
+    // the other hostel's warden cannot open it; the family sees the status
+    expect(
+      (await inject({ method: 'GET', url: `/hostel/incidents/${ids.serious}`, headers: h(other) }))
+        .statusCode,
+    ).toBe(404);
+    expect((await get(`/hostel/incidents/${minor.json().id as string}`, warden)).fileIds).toEqual([
+      fileId,
+    ]);
+    for (const format of ['xlsx', 'pdf'])
+      expect((await get(`/hostel/incidents/file?format=${format}`, warden)).filename).toBe(
+        `hostel-incident-register.${format}`,
+      );
   });
 
   it('the warden’s sick-bay note is a clinic visit of the boarder', async () => {
@@ -289,7 +384,7 @@ describe('hostel module H4 (e2e)', () => {
       openComplaints: 2,
     });
     expect(d.trends).toHaveLength(7);
-    expect(d.trends[6]).toMatchObject({ day: today, complaintsRaised: 2, incidents: 2 });
+    expect(d.trends[6]).toMatchObject({ day: today, complaintsRaised: 2, incidents: 3 });
     expect(Array.isArray(d.fee)).toBe(true);
     expect((await get('/hostel/dashboard', admin)).hostels).toHaveLength(2);
   });

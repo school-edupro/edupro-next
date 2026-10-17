@@ -216,6 +216,7 @@ export async function saveIncident(fd: FormData) {
         what: str(fd, 'what'),
         action: str(fd, 'action') || undefined,
         tellParent: fd.get('tellParent') === 'on',
+        closeNow: fd.get('closeNow') === 'on',
       }),
     });
   } catch (error) {
