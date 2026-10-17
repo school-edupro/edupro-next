@@ -9,6 +9,8 @@ import { PaymentsService } from '../payments/payments.service';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WorkflowService } from '../workflow/workflow.service';
+import { ConsentFormsController } from './consent-forms.controller';
+import { ConsentFormsService } from './consent-forms.service';
 import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
 import { EngagementController } from './engagement.controller';
@@ -52,6 +54,7 @@ import { QueriesService } from './queries.service';
   controllers: [
     EngagementController,
     EngagementPlusController,
+    ConsentFormsController,
     DsrController,
     PortalProfileController,
     HelpdeskController,
@@ -75,6 +78,7 @@ import { QueriesService } from './queries.service';
     PortalProfileService,
     PrivacyService,
     EngagementPlusService,
+    ConsentFormsService,
     DsrService,
     AuditService,
   ],
@@ -96,14 +100,6 @@ export class EngagementModule implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    // Sprint 19: a paid consent-form fee marks the response paid (purpose misc, entity consent_form_response)
-    this.payments.onSuccess('misc', async (c, intent) => {
-      if (intent.entityType !== 'consent_form_response') return;
-      await c.query(
-        `UPDATE consent_form_responses SET paid_at = now() WHERE id = $1 AND paid_at IS NULL`,
-        [intent.entityId],
-      );
-    });
     for (const entityType of ['cctv_request', 'employee_query'])
       this.workflow.onComplete(entityType, (c, ctx, instance, outcome) =>
         this.plus.onWorkflowComplete(c, ctx, instance, outcome),

@@ -55,36 +55,6 @@ export async function cancelAppointment(fd: FormData) {
   redirect('/appointments?ok=cancelled#list');
 }
 
-/** Sprint 19: a guardian signs a consent form for one child (a fee opens the pay flow). */
-export async function respondConsent(fd: FormData) {
-  const formId = str(fd, 'formId');
-  const answers: Record<string, string | boolean> = {};
-  for (const [k, v] of fd.entries()) {
-    if (!k.startsWith('a.')) continue;
-    const key = k.slice(2);
-    answers[key] = v === 'on' ? true : String(v);
-  }
-  for (const k of str(fd, 'yesnoKeys').split(',').filter(Boolean))
-    if (!(k in answers)) answers[k] = false;
-  let out: { paymentIntentId: string | null } | undefined;
-  try {
-    out = await bff.api.fetch<{ paymentIntentId: string | null }>(
-      `/engagement/mine/consent-forms/${formId}/responses`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          studentId: str(fd, 'studentId'),
-          answers,
-          signedName: str(fd, 'signedName'),
-        }),
-      },
-    );
-  } catch (error) {
-    fail('/consents', error);
-  }
-  redirect(out?.paymentIntentId ? `/consents?ok=1&pay=${out.paymentIntentId}` : '/consents?ok=1');
-}
-
 /** Sprint 19: a guardian queues the PDF of a child's certificate; the page shows the download. */
 export async function queueMyCertificatePdf(fd: FormData) {
   let exportId = '';

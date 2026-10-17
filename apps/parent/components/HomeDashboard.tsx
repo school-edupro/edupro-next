@@ -123,7 +123,7 @@ export async function HomeDashboard({
 }) {
   const today = istToday();
   const tomorrow = addDays(today, 1);
-  const [att, fees, viewer, notices, cal, birthdays, dayOf] = await Promise.all([
+  const [att, fees, viewer, notices, cal, birthdays, dayOf, consents] = await Promise.all([
     bff.api.fetch<Attendance>(`/attendance/mine?month=${today.slice(0, 7)}`).catch(() => null),
     audience === 'parent' ? bff.api.fetch<Fees>('/fees/mine').catch(() => null) : null,
     bff.api.fetch<Viewer>('/academics/daily-work/viewer').catch(() => null),
@@ -141,6 +141,19 @@ export async function HomeDashboard({
       .fetch<{ children: DayOf[] }>('/attendance/desk/mine/today')
       .then((r) => r.children.find((c) => c.id === childId) ?? null)
       .catch(() => null),
+    // consent forms waiting for an answer for this child (docs/design/28-consent-forms.md)
+    audience === 'parent'
+      ? bff.api
+          .fetch<{
+            forms: Array<{
+              id: string;
+              title: string;
+              people: Array<{ id: string; canAnswer: boolean }>;
+            }>;
+          }>('/engagement/mine/consent-forms')
+          .then((r) => r.forms.filter((x) => x.people.some((p) => p.id === childId && p.canAnswer)))
+          .catch(() => [])
+      : [],
   ]);
   const section = viewer?.students.find((s) => s.id === childId)?.classSectionId ?? null;
   const work = section
@@ -182,6 +195,31 @@ export async function HomeDashboard({
 
   return (
     <>
+      {consents.length ? (
+        <p className="ep-alert ep-alert--warning" role="status">
+          <strong>
+            {consents.length === 1
+              ? t(lang, 'A form waits for your answer')
+              : `${consents.length} ${t(lang, 'forms wait for your answer')}`}
+            :
+          </strong>{' '}
+          {consents
+            .slice(0, 3)
+            .map((x) => x.title)
+            .join(', ')}
+          .{' '}
+          <a
+            href={
+              consents.length === 1
+                ? `/consents/${consents[0]!.id}?student=${childId}`
+                : '/consents'
+            }
+            style={{ textDecoration: 'underline' }}
+          >
+            {t(lang, 'Answer now')}
+          </a>
+        </p>
+      ) : null}
       <section aria-labelledby="glance-title">
         <h2 id="glance-title" className="fp-section-title">
           {t(lang, 'Today at a glance')}

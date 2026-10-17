@@ -46,6 +46,7 @@ export { RichEditor } from './components/RichEditor';
 export { ClassSectionPicker, type ClassSectionOption } from './components/ClassSectionPicker';
 export { FilePick } from './components/FilePick';
 export { FilesPick } from './components/FilesPick';
+export { ConsentFill, consentRuleState, type ConsentField } from './components/ConsentFill';
 export { ActivityDay, activityEntriesFrom, type ActivityDayData } from './components/ActivityDay';
 export { LeaveKindSelect } from './components/LeaveKindSelect';
 export { LessonUploadForm, type LessonOptions } from './components/LessonUploadForm';

@@ -1,6 +1,6 @@
 /**
  * Sprint 19: scheduled reports, MIS centre and group view, the last approvals on the workflow engine
- * (appointments, gate passes, CCTV requests, employee queries), visitors, consent forms with a fee,
+ * (appointments, gate passes, CCTV requests, employee queries), visitors (consent forms: consent-forms.e2e-spec.ts),
  * certificates, the clinic, and the shadow-run closure of the M3 gate.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -266,97 +266,6 @@ describe('engagement plus, scheduled reports, MIS and the shadow close (e2e, Spr
         headers: h(),
       });
       expect(again.statusCode).toBe(404);
-    });
-
-    it('a consent form with a fee: the family signs, gets a payment intent, pays on the mock gateway', async () => {
-      const form = await inject({
-        method: 'POST',
-        url: '/engagement/consent-forms',
-        headers: h(),
-        json: {
-          code: 'trip',
-          title: 'Science City trip',
-          fields: [
-            { key: 'allow', label: 'I allow', type: 'yesno', required: true },
-            {
-              key: 'pickup',
-              label: 'Pick-up',
-              type: 'choice',
-              options: ['Bus', 'Gate'],
-              required: true,
-            },
-          ],
-          feeAmount: 350,
-        },
-      });
-      expect(form.statusCode).toBe(201);
-      const formId = form.json().id as string;
-      // a draft form is not visible to families
-      const hidden = await inject({
-        method: 'GET',
-        url: '/engagement/mine/consent-forms',
-        headers: h(parent),
-      });
-      expect((hidden.json().forms as Array<{ id: string }>).some((f) => f.id === formId)).toBe(
-        false,
-      );
-      await inject({
-        method: 'PUT',
-        url: `/engagement/consent-forms/${formId}/status`,
-        headers: h(),
-        json: { status: 'open' },
-      });
-      const open = await inject({
-        method: 'GET',
-        url: '/engagement/mine/consent-forms',
-        headers: h(parent),
-      });
-      expect((open.json().forms as Array<{ id: string }>).some((f) => f.id === formId)).toBe(true);
-      // a required field missing is a 400
-      const bad = await inject({
-        method: 'POST',
-        url: `/engagement/mine/consent-forms/${formId}/responses`,
-        headers: h(parent),
-        json: { studentId, answers: { allow: true }, signedName: 'Rohit Nineteen' },
-      });
-      expect(bad.statusCode).toBe(400);
-      const resp = await inject({
-        method: 'POST',
-        url: `/engagement/mine/consent-forms/${formId}/responses`,
-        headers: h(parent),
-        json: { studentId, answers: { allow: true, pickup: 'Bus' }, signedName: 'Rohit Nineteen' },
-      });
-      expect(resp.statusCode).toBe(201);
-      const intentId = resp.json().paymentIntentId as string;
-      expect(intentId).toBeTruthy();
-      const checkout = await inject({
-        method: 'POST',
-        url: `/payments/intents/mine/${intentId}/checkout`,
-        headers: h(parent),
-      });
-      expect(checkout.statusCode).toBe(201);
-      expect(checkout.json().intent).toMatchObject({ purpose: 'misc', amount: '350.00' });
-      const paid = await inject({
-        method: 'POST',
-        url: '/payments/payu/mock',
-        headers: {},
-        json: { txnid: checkout.json().intent.txnId, outcome: 'success' },
-      });
-      expect(paid.statusCode).toBe(201);
-      const responses = await inject({
-        method: 'GET',
-        url: `/engagement/consent-forms/${formId}/responses`,
-        headers: h(),
-      });
-      expect((responses.json().data as Array<{ paidAt: string | null }>)[0]?.paidAt).toBeTruthy();
-      // signing twice for the same pupil is a conflict
-      const twice = await inject({
-        method: 'POST',
-        url: `/engagement/mine/consent-forms/${formId}/responses`,
-        headers: h(parent),
-        json: { studentId, answers: { allow: true, pickup: 'Bus' }, signedName: 'Rohit Nineteen' },
-      });
-      expect(twice.statusCode).toBe(409);
     });
 
     it('issues certificates from a certificate template to a section; each family can queue its own PDF', async () => {

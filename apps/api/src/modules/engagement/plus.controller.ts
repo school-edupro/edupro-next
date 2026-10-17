@@ -1,13 +1,10 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   CctvRequestDto,
   ClinicVisitDto,
-  ConsentFormDto,
-  ConsentFormStatusDto,
-  ConsentResponseDto,
   DecideDto,
   EmployeeQueryDto,
   ENGAGEMENT_PLUS as P,
@@ -53,60 +50,6 @@ export class EngagementPlusController {
   @RequirePermission(P.visitorManage)
   visitorOut(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.visitorOut(ctx, id);
-  }
-
-  // ---- consent forms ----
-  @Get('consent-forms')
-  @RequirePermission(P.consentFormManage, { description: 'Build consent forms and read responses' })
-  async forms(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.svc.forms(ctx) };
-  }
-
-  @Post('consent-forms')
-  @RequirePermission(P.consentFormManage)
-  createForm(@ReqCtx() ctx: RequestContext, @Body() body: ConsentFormDto) {
-    return this.svc.saveForm(ctx, body);
-  }
-
-  @Put('consent-forms/:id')
-  @RequirePermission(P.consentFormManage)
-  updateForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentFormDto) {
-    return this.svc.saveForm(ctx, body, id);
-  }
-
-  @Put('consent-forms/:id/status')
-  @RequirePermission(P.consentFormManage)
-  formStatus(
-    @ReqCtx() ctx: RequestContext,
-    @Param('id') id: string,
-    @Body() body: ConsentFormStatusDto,
-  ) {
-    return this.svc.setFormStatus(ctx, id, body);
-  }
-
-  @Get('consent-forms/:id/responses')
-  @RequirePermission(P.consentFormManage)
-  async responses(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return { data: await this.svc.formResponses(ctx, id) };
-  }
-
-  @Get('mine/consent-forms')
-  @RequirePermission(P.familyView)
-  myForms(@ReqCtx() ctx: RequestContext) {
-    return this.svc.myForms(ctx);
-  }
-
-  @Post('mine/consent-forms/:id/responses')
-  @ApiOperation({
-    summary: 'A family signs a form; a fee creates a payment intent for the pay flow',
-  })
-  @RequirePermission(P.familyView)
-  respond(
-    @ReqCtx() ctx: RequestContext,
-    @Param('id') id: string,
-    @Body() body: ConsentResponseDto,
-  ) {
-    return this.svc.respond(ctx, id, body);
   }
 
   // ---- certificates ----

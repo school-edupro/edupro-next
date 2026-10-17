@@ -25,6 +25,12 @@ export default async function HomePage() {
       '/messages',
     ],
     [
+      t(lang, 'Forms and declarations'),
+      t(lang, 'Consent forms, surveys and declarations to answer'),
+      true,
+      '/consents',
+    ],
+    [
       t(lang, 'My classes'),
       t(lang, 'Your sections, subjects and this week’s timetable'),
       can('academics.timetable.view'),

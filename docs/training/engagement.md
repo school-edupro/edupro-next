@@ -101,8 +101,29 @@
 
 ## Periodic routine
 
-- **Consent forms**: build the form (yes/no, choice, text, date, signature), set a fee if any, open it
-  to the classes concerned, close it on the date; read responses and payment status per pupil.
+- **Consent forms** (Parent engagement → Consent forms; rebuilt 17 Oct 2026, docs/design/28-consent-forms.md):
+  - **New form**: title and text; who answers (families about a pupil, staff, or both); who is asked
+    (every pupil, a filter of classes / sections / houses / transport routes / boarders, or pupils by
+    admission number; every staff member, departments / designations, or staff by code).
+  - **Questions**: short or long answer, number, email, phone, date, time, one choice (buttons or
+    drop-down), several choices, yes / no, file, a **signature drawn on screen**, "I agree", section
+    headings and page breaks (steps). Choices may come from a school list (classes, sections, houses,
+    routes, departments). **Depends on another answer**: show, hide or require a question when the
+    answers to others hold (all or any).
+  - **When and how often**: opens / closes date and time; once per pupil / staff member or several (one
+    per guest); close after a number of answers (seats); the message after answering; the office may
+    fill on behalf.
+  - **Publish and tell them in the app** (or publish quietly). Families see it under Consent forms and
+    on the home screen; staff under Forms and declarations in the staff app. For SMS, WhatsApp or email
+    use Communication → Compose with the school's templates. **Remind those pending (app)** tells again
+    those who have not answered.
+  - **Register**: Answered and Not yet answered, by section or search, Excel and PDF; each response
+    has a number CF/<session>/000001 and a PDF copy with the signature. **Fill on behalf** types in a
+    paper form (marked "entered by the office").
+  - A form with answers can get new questions and new wording; an answered question cannot be removed
+    or change its type (hide it with a rule). A draft without answers can be deleted; otherwise close
+    and archive. **Copy as new** starts next year's form from this one.
+  - Fees on a form, approval of answers and edit after submit come in part 2.
 - **Certificates**: keep one template per certificate kind under **System → Templates**; issue to a
   section or a list of pupils; the batch PDF is in the Export centre, each family downloads its own.
 - **Privacy** (admin): work data-principal requests within the due date; run the breach runbook if
@@ -114,8 +135,8 @@
    message and its delivery status; the family's WhatsApp consent is not needed for safety messages.
 2. _The class teacher is away; what happens to the appointment?_ The front desk opens it and gives a
    new time (another day or another person); the parent is told at once.
-3. _A consent form needs a change after opening._ Close it, edit, reopen; responses already given stay
-   attached to the pupil.
+3. _A consent form needs a change after opening._ Change it while open: add or reword questions;
+   answered questions keep their type (hide one with a rule). Answers already given stay.
 4. _Can we issue one certificate to one pupil?_ Yes: enter the pupil id instead of a section.
 5. _A family asks what data we hold._ Point them to **Profile → Your data** in the parent app or
    record the request in **System → Privacy**; the access report is generated for them.

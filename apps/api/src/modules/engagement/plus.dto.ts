@@ -61,44 +61,6 @@ export const GatePassDecideSchema = z.object({
 });
 export class GatePassDecideDto extends createZodDto(GatePassDecideSchema) {}
 
-// ---- consent forms ----
-const FieldSchema = z.object({
-  key: z
-    .string()
-    .trim()
-    .regex(/^[a-z][a-z0-9_]{0,40}$/),
-  label: z.string().trim().min(1).max(200),
-  type: z.enum(['text', 'choice', 'yesno', 'date', 'signature']),
-  required: z.boolean().default(false),
-  options: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
-});
-export const ConsentFormSchema = z.object({
-  code: z
-    .string()
-    .trim()
-    .regex(/^[a-z0-9_]{2,40}$/),
-  title: z.string().trim().min(2).max(200),
-  description: z.string().trim().max(2000).optional(),
-  fields: z.array(FieldSchema).min(1).max(30),
-  audience: z
-    .object({ classIds: z.array(IdSchema).default([]), sectionIds: z.array(IdSchema).default([]) })
-    .default({ classIds: [], sectionIds: [] }),
-  feeAmount: z.number().min(0).nullable().optional(),
-  opensOn: DateSchema.optional(),
-  closesOn: DateSchema.optional(),
-});
-export class ConsentFormDto extends createZodDto(ConsentFormSchema) {}
-
-export const ConsentFormStatusSchema = z.object({ status: z.enum(['draft', 'open', 'closed']) });
-export class ConsentFormStatusDto extends createZodDto(ConsentFormStatusSchema) {}
-
-export const ConsentResponseSchema = z.object({
-  studentId: IdSchema,
-  answers: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])),
-  signedName: z.string().trim().min(2).max(120),
-});
-export class ConsentResponseDto extends createZodDto(ConsentResponseSchema) {}
-
 // ---- certificates ----
 export const IssueCertificatesSchema = z.object({
   templateId: IdSchema,
