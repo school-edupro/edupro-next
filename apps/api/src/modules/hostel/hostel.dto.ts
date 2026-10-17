@@ -269,6 +269,21 @@ export const VisitsQuerySchema = z.object({
 });
 export class VisitsQueryDto extends createZodDto(VisitsQuerySchema) {}
 
+/** The visit register as Excel or PDF: the visits of a period (the last 30 days by default). */
+export const VisitFileSchema = z.object({
+  hostelId: IdSchema.optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class VisitFileDto extends createZodDto(VisitFileSchema) {}
+/** Who may visit each boarder (parents on record and the approved list) as Excel or PDF. */
+export const VisitorListFileSchema = z.object({
+  hostelId: IdSchema.optional(),
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class VisitorListFileDto extends createZodDto(VisitorListFileSchema) {}
+
 export const VisitHoursSchema = z.object({
   hours: z
     .array(z.object({ weekday: z.number().int().min(0).max(6), from: TimeSchema, to: TimeSchema }))

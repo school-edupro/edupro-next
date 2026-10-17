@@ -47,7 +47,9 @@ const TABS = [
   ['today', 'Visits today'],
   ['approve', 'Visitors to approve'],
   ['lists', 'Approved lists'],
+  ['download', 'Download (Excel / PDF)'],
 ] as const;
+const istToday = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 const when = (v: string | null) =>
   v
     ? new Date(v).toLocaleString('en-IN', {
@@ -84,7 +86,7 @@ export default async function HostelVisitorsPage({
   const may = (p: string) => me.permissions.includes(p);
   const q = (sp.q ?? '').trim().slice(0, 60);
   const studentId = /^\d{1,18}$/.test(sp.student ?? '') ? sp.student! : '';
-  const [visits, pending, hits, list] = await Promise.all([
+  const [visits, pending, hits, list, hostels] = await Promise.all([
     tab === 'waiting' || tab === 'today'
       ? apiFetch<{ data: Visit[] }>(`/hostel/visits?show=${tab}`).then((r) => r.data)
       : Promise.resolve([] as Visit[]),
@@ -101,6 +103,11 @@ export default async function HostelVisitorsPage({
           (r) => r.data,
         )
       : Promise.resolve([] as Visitor[]),
+    tab === 'download'
+      ? apiFetch<{ data: Array<{ id: string; name: string }> }>('/hostel/hostels').then(
+          (r) => r.data,
+        )
+      : Promise.resolve([] as Array<{ id: string; name: string }>),
   ]);
   const here = `/hostel/visitors?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}${studentId ? `&student=${studentId}` : ''}`;
   return (
@@ -385,6 +392,109 @@ export default async function HostelVisitorsPage({
             </Card>
           ) : null}
         </>
+      ) : null}
+      {tab === 'download' ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 'var(--sp-4)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(20rem, 1fr))',
+          }}
+        >
+          <Card title="Visit register">
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              Every hostel visit of a period: the date, in and out times, the visitor and relation,
+              the boarder and room, whether the visitor was on the list and within visiting hours,
+              and the warden’s decision. The last 30 days when no date is given.
+            </p>
+            <form method="get" action="/api/hostel/mess-file" className="ep-hd__form">
+              <input type="hidden" name="kind" value="visits" />
+              <label className="ep-field" htmlFor="vd-hostel">
+                <span className="ep-field__label">Hostel</span>
+                <select id="vd-hostel" name="hostelId" className="ep-select" defaultValue="">
+                  <option value="">All hostels</option>
+                  {hostels.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="ep-hd__row">
+                <label className="ep-field" htmlFor="vd-from">
+                  <span className="ep-field__label">From</span>
+                  <input
+                    id="vd-from"
+                    name="from"
+                    type="date"
+                    className="ep-input"
+                    max={istToday()}
+                  />
+                </label>
+                <label className="ep-field" htmlFor="vd-to">
+                  <span className="ep-field__label">To</span>
+                  <input id="vd-to" name="to" type="date" className="ep-input" max={istToday()} />
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                <button
+                  type="submit"
+                  name="format"
+                  value="xlsx"
+                  className="ep-btn ep-btn--secondary"
+                >
+                  Excel
+                </button>
+                <button
+                  type="submit"
+                  name="format"
+                  value="pdf"
+                  className="ep-btn ep-btn--secondary"
+                >
+                  PDF
+                </button>
+              </div>
+            </form>
+          </Card>
+          <Card title="Approved visitors">
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              Who may visit each boarder today: the parents and guardians on the school record, and
+              the people a warden approved (or who wait for approval), with who added them.
+            </p>
+            <form method="get" action="/api/hostel/mess-file" className="ep-hd__form">
+              <input type="hidden" name="kind" value="visitor-list" />
+              <label className="ep-field" htmlFor="vl-hostel">
+                <span className="ep-field__label">Hostel</span>
+                <select id="vl-hostel" name="hostelId" className="ep-select" defaultValue="">
+                  <option value="">All hostels</option>
+                  {hostels.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                <button
+                  type="submit"
+                  name="format"
+                  value="xlsx"
+                  className="ep-btn ep-btn--secondary"
+                >
+                  Excel
+                </button>
+                <button
+                  type="submit"
+                  name="format"
+                  value="pdf"
+                  className="ep-btn ep-btn--secondary"
+                >
+                  PDF
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
       ) : null}
     </>
   );

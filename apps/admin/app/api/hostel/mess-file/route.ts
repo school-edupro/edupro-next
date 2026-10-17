@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
 
-/** The mess files: the week's menu, the diet list (and its upload format), the meal register, the head count. */
+/**
+ * The hostel files: the mess (the week's menu, the diet list and its upload format, the meal register, the
+ * head count) and the visitors (the visit register, the approved lists).
+ */
 const KINDS: Record<string, { path: string; keys: string[] }> = {
   menu: { path: '/hostel/menu/file', keys: ['hostelId', 'weekOf'] },
   diets: { path: '/hostel/diets/file', keys: ['hostelId', 'diet', 'allergy', 'set', 'q'] },
   'diet-template': { path: '/hostel/diets/template', keys: ['hostelId'] },
   register: { path: '/hostel/meal-register/file', keys: ['hostelId', 'month'] },
   headcount: { path: '/hostel/headcount/file', keys: ['hostelId', 'on'] },
+  visits: { path: '/hostel/visits/file', keys: ['hostelId', 'from', 'to'] },
+  'visitor-list': { path: '/hostel/visitors/file', keys: ['hostelId'] },
 };
 
 export async function GET(req: Request) {

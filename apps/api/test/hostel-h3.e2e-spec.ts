@@ -726,4 +726,46 @@ describe('hostel module H3 (e2e)', () => {
     expect(fb.comments[0]).toMatchObject({ pupil: 'Kabir Boarder', comment: 'Tea was cold again' });
     expect((await get('/hostel/feedback', other)).meals).toEqual([]);
   });
+
+  it('the visit register and the approved visitors as Excel and PDF; a warden of another hostel only theirs', async () => {
+    for (const [path, name] of [
+      ['/hostel/visits/file', 'hostel-visit-register'],
+      ['/hostel/visitors/file', 'hostel-approved-visitors'],
+    ] as const)
+      for (const format of ['xlsx', 'pdf']) {
+        const f = await get(`${path}?format=${format}&hostelId=${ids.bh}`, warden);
+        expect(f.filename).toBe(`${name}.${format}`);
+        expect(f.base64.length).toBeGreaterThan(100);
+      }
+    // the visits of today are in the register (the gate case registered some)
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(
+      Buffer.from(
+        (await get(`/hostel/visits/file?format=xlsx&from=${today}`, warden)).base64 as string,
+        'base64',
+      ) as unknown as ArrayBuffer,
+    );
+    const text = JSON.stringify(wb.worksheets[0]!.getSheetValues());
+    expect(text).toContain('Uncle Raj');
+    expect(text).toContain('Kabir Boarder');
+    const list = new ExcelJS.Workbook();
+    await list.xlsx.load(
+      Buffer.from(
+        (await get(`/hostel/visitors/file?format=xlsx`, warden)).base64 as string,
+        'base64',
+      ) as unknown as ArrayBuffer,
+    );
+    const rows = JSON.stringify(list.worksheets[0]!.getSheetValues());
+    expect(rows).toContain('On the school record');
+    expect(rows).toContain('Aunt Meera');
+    expect(
+      (
+        await inject({
+          method: 'GET',
+          url: `/hostel/visits/file?hostelId=${ids.bh}`,
+          headers: h(other),
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
 });

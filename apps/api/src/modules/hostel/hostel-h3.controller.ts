@@ -17,6 +17,8 @@ import {
   VisitCheckDto,
   VisitDecideDto,
   VisitDto,
+  VisitFileDto,
+  VisitorListFileDto,
   VisitHoursDto,
   VisitorAddDto,
   VisitorsQueryDto,
@@ -159,6 +161,24 @@ export class HostelH3Controller {
   @RequirePermission(HOSTEL_H3.visitGate)
   register(@ReqCtx() ctx: RequestContext, @Body() dto: VisitDto) {
     return this.visits.register(ctx, dto);
+  }
+
+  @Get('visits/file')
+  @ApiOperation({ summary: 'The hostel visit register of a period as Excel or PDF' })
+  @RequirePermission(HOSTEL_H3.visitView)
+  async visitFile(@ReqCtx() ctx: RequestContext, @Query() q: VisitFileDto) {
+    const f = await this.visits.visitFile(ctx, q);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
+  }
+
+  @Get('visitors/file')
+  @ApiOperation({
+    summary: 'Who may visit each boarder (record and approved list) as Excel or PDF',
+  })
+  @RequirePermission(HOSTEL_H3.visitView)
+  async visitorListFile(@ReqCtx() ctx: RequestContext, @Query() q: VisitorListFileDto) {
+    const f = await this.visits.visitorListFile(ctx, q);
+    return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
   @Get('visits')

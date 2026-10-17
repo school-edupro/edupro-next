@@ -17,7 +17,10 @@ import {
   type VisitsQueryDto,
 } from './hostel.dto';
 import { HostelService } from './hostel.service';
+import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
+import type { VisitFileDto, VisitorListFileDto } from './hostel.dto';
 
+type Row = Record<string, unknown>;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** A data URL photo as type and bytes; nothing when absent; refused when it is not a small image. */
@@ -528,6 +531,185 @@ export class HostelVisitsService {
         [q.hostelId ?? null, only],
       );
       return r.rows;
+    });
+  }
+
+  /** The hostels named in a file's head: one, or all the person sees. */
+  private async hostelLine(c: PoolClient, hostelId?: string) {
+    if (!hostelId) return 'All hostels';
+    const r = await c.query<{ name: string }>(`SELECT name FROM hostels WHERE id = $1`, [hostelId]);
+    return r.rows[0]?.name ?? '';
+  }
+
+  /** The visit register of a period: who came to see which boarder, when, and what the gate and warden found. */
+  async visitFile(ctx: RequestContext, q: VisitFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const only = await this.hostel.scope(ctx, c);
+      if (q.hostelId && only && !only.includes(q.hostelId))
+        throw new DomainError('permission-denied', 'You are not a warden of this hostel', {
+          status: 403,
+        });
+      const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+      const to = q.to ?? today;
+      const from =
+        q.from ??
+        new Date(Date.parse(`${to}T00:00:00Z`) - 29 * 86_400_000).toISOString().slice(0, 10);
+      const r = await c.query<Row>(
+        `SELECT v.number, to_char(v.created_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY') AS day,
+                to_char(v.in_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS "in", to_char(v.out_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS "out",
+                v.visitor_name, substring(v.purpose FROM '\\((.*)\\)') AS relation, v.mobile, v.party_size,
+                s.display_name AS pupil, s.admission_no, h.name AS hostel,
+                (SELECT r.room_no || '/' || b.label FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id
+                  WHERE a.student_id = v.student_id AND a.from_date <= (v.created_at AT TIME ZONE 'Asia/Kolkata')::date
+                    AND (a.to_date IS NULL OR a.to_date >= (v.created_at AT TIME ZONE 'Asia/Kolkata')::date)
+                  ORDER BY a.from_date DESC LIMIT 1) AS room,
+                v.hostel_listed, v.hostel_in_hours, v.warden_decision, v.state
+           FROM visitor_log v JOIN students s ON s.id = v.student_id JOIN hostels h ON h.id = v.hostel_id
+          WHERE v.hostel_id IS NOT NULL AND (v.created_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $1::date AND $2::date
+            AND ($3::bigint IS NULL OR v.hostel_id = $3) AND ($4::bigint[] IS NULL OR v.hostel_id = ANY ($4::bigint[]))
+          ORDER BY v.created_at, v.id LIMIT 5000`,
+        [from, to, q.hostelId ?? null, only],
+      );
+      const head = await schoolHead(c);
+      const state: Record<string, string> = {
+        waiting: 'Waiting',
+        inside: 'Inside',
+        left: 'Left',
+        cancelled: 'Not let in',
+      };
+      const yn = (v: unknown) => (v === true ? 'Yes' : v === false ? 'No' : '');
+      const dmy = (d: string) => d.split('-').reverse().join('-');
+      return registerFile(
+        {
+          school: head.name,
+          address: head.address,
+          report: 'Hostel visit register',
+          details: [
+            await this.hostelLine(c, q.hostelId),
+            `${dmy(from)} to ${dmy(to)}`,
+            `${String(r.rows.length)} visit(s)`,
+            generatedOn(),
+          ],
+          legend:
+            "On the list: a parent on record or an approved visitor. In hours: within the hostel's visiting hours. Warden: the decision on a visitor who waited.",
+          columns: [
+            { label: 'Sl.', width: 3, right: true },
+            { label: 'Pass', width: 9 },
+            { label: 'Date', width: 7 },
+            { label: 'In', width: 4 },
+            { label: 'Out', width: 4 },
+            { label: 'Visitor', width: 12 },
+            { label: 'Relation', width: 7 },
+            { label: 'Mobile', width: 8 },
+            { label: 'People', width: 4, right: true },
+            { label: 'Boarder', width: 12 },
+            { label: 'Adm. no.', width: 6 },
+            { label: 'Hostel', width: 8 },
+            { label: 'Room', width: 5 },
+            { label: 'On the list', width: 5 },
+            { label: 'In hours', width: 5 },
+            { label: 'Warden', width: 6 },
+            { label: 'Status', width: 6 },
+          ],
+          rows: r.rows.map((x, i) => [
+            i + 1,
+            String(x.number ?? ''),
+            String(x.day),
+            String(x.in ?? ''),
+            String(x.out ?? ''),
+            String(x.visitor_name),
+            String(x.relation ?? ''),
+            String(x.mobile ?? ''),
+            Number(x.party_size ?? 1),
+            String(x.pupil),
+            String(x.admission_no ?? ''),
+            String(x.hostel),
+            String(x.room ?? ''),
+            yn(x.hostel_listed),
+            yn(x.hostel_in_hours),
+            x.warden_decision === 'allowed'
+              ? 'Allowed'
+              : x.warden_decision === 'refused'
+                ? 'Refused'
+                : '',
+            state[String(x.state)] ?? String(x.state),
+          ]),
+          fontSize: 7,
+          filename: 'hostel-visit-register',
+        },
+        q.format,
+      );
+    });
+  }
+
+  /** Who may visit each boarder today: the parents on the school record and the hostel's own list. */
+  async visitorListFile(ctx: RequestContext, q: VisitorListFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const only = await this.hostel.scope(ctx, c);
+      if (q.hostelId && only && !only.includes(q.hostelId))
+        throw new DomainError('permission-denied', 'You are not a warden of this hostel', {
+          status: 403,
+        });
+      const r = await c.query<Row>(
+        `WITH boarders AS (
+           SELECT a.student_id, h.name AS hostel, r.room_no || '/' || b.label AS room
+             FROM hostel_allotments a JOIN hostel_beds b ON b.id = a.bed_id JOIN hostel_rooms r ON r.id = b.room_id JOIN hostels h ON h.id = r.hostel_id
+            WHERE a.from_date <= (now() AT TIME ZONE 'Asia/Kolkata')::date
+              AND (a.to_date IS NULL OR a.to_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date)
+              AND ($1::bigint IS NULL OR h.id = $1) AND ($2::bigint[] IS NULL OR h.id = ANY ($2::bigint[])))
+         SELECT s.display_name AS pupil, s.admission_no, bd.hostel, bd.room, x.name, x.relation, x.mobile, x.kind, x.added
+           FROM boarders bd JOIN students s ON s.id = bd.student_id
+           JOIN LATERAL (
+             SELECT trim(concat_ws(' ', g.first_name, g.last_name)) AS name, initcap(sg.relation::text) AS relation, g.mobile,
+                    'On the school record' AS kind, NULL::text AS added, 0 AS n
+               FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = bd.student_id
+             UNION ALL
+             SELECT v.name, v.relation, v.mobile,
+                    CASE v.status WHEN 'approved' THEN 'Approved' ELSE 'Waiting for the warden' END,
+                    CASE v.source WHEN 'office' THEN 'Office' ELSE 'Parent' END || ', ' || to_char(v.added_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY'),
+                    1
+               FROM hostel_visitors v WHERE v.student_id = bd.student_id AND v.status IN ('approved', 'pending')
+           ) x ON true
+          ORDER BY bd.hostel, s.display_name, s.id, x.n, x.name LIMIT 10000`,
+        [q.hostelId ?? null, only],
+      );
+      const head = await schoolHead(c);
+      return registerFile(
+        {
+          school: head.name,
+          address: head.address,
+          report: 'Hostel approved visitors',
+          details: [await this.hostelLine(c, q.hostelId), generatedOn()],
+          legend:
+            'Parents and guardians on the school record may visit; others once a warden approves them.',
+          columns: [
+            { label: 'Sl.', width: 3, right: true },
+            { label: 'Boarder', width: 14 },
+            { label: 'Adm. no.', width: 7 },
+            { label: 'Hostel', width: 10 },
+            { label: 'Room', width: 6 },
+            { label: 'Visitor', width: 14 },
+            { label: 'Relation', width: 8 },
+            { label: 'Mobile', width: 9 },
+            { label: 'Status', width: 12 },
+            { label: 'Added by', width: 12 },
+          ],
+          rows: r.rows.map((x, i) => [
+            i + 1,
+            String(x.pupil),
+            String(x.admission_no ?? ''),
+            String(x.hostel),
+            String(x.room ?? ''),
+            String(x.name ?? ''),
+            String(x.relation ?? ''),
+            String(x.mobile ?? ''),
+            String(x.kind),
+            String(x.added ?? ''),
+          ]),
+          filename: 'hostel-approved-visitors',
+        },
+        q.format,
+      );
     });
   }
 

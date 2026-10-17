@@ -290,7 +290,7 @@ export class HostelDietsService {
             r.counts.map((x) => `${x.name} ${String(x.n)}`).join(' · '),
             generatedOn(),
           ].filter(Boolean),
-          legend: 'Allergy on record: the medical condition written on the pupil’s record.',
+          legend: "Allergy on record: the medical condition written on the pupil's record.",
           columns: [
             { label: 'Sl.', width: 3, right: true },
             { label: 'Pupil', width: 16 },

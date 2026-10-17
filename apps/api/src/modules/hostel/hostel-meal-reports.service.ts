@@ -346,7 +346,7 @@ export class HostelMealReportsService {
         report: 'Kitchen head count',
         details: [day, generatedOn()],
         legend:
-          'Away: on hostel leave at the meal’s time (out at the gate, or an approved home leave due to go). On record: pupils with an allergy written on their record.',
+          "Away: on hostel leave at the meal's time (out at the gate, or an approved home leave due to go). On record: pupils with an allergy written on their record.",
         columns: [
           { label: 'Hostel', width: 12 },
           { label: 'Meal', width: 12 },
