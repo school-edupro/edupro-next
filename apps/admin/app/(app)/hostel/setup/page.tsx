@@ -33,6 +33,11 @@ interface Hostel {
   wardens: Array<{ employeeId: string; name: string; mobile: string | null; isHead: boolean }>;
   blocks: Array<{ id: string; name: string; floors: number }>;
 }
+interface FeeGroup {
+  code: string;
+  hostelHeads: boolean;
+  classes: number;
+}
 interface RoomType {
   id: string;
   name: string;
@@ -102,10 +107,12 @@ export default async function HostelSetupPage({
   const sp = await searchParams;
   const tab = TABS.some((t) => t.id === sp.tab) ? sp.tab! : 'hostels';
   const me = await getMe();
-  const [hostels, types] = await Promise.all([
+  const [hostels, typeList] = await Promise.all([
     apiFetch<{ data: Hostel[] }>('/hostel/hostels').then((r) => r.data),
-    apiFetch<{ data: RoomType[] }>('/hostel/room-types').then((r) => r.data),
+    apiFetch<{ data: RoomType[]; feeGroups?: FeeGroup[] }>('/hostel/room-types'),
   ]);
+  const types = typeList.data;
+  const feeGroups = typeList.feeGroups ?? [];
   const hostel = hostels.find((h) => h.id === sp.hostel) ?? hostels[0];
   const hours: Record<string, Array<{ weekday: number; from: string; to: string }>> = tab ===
   'rules'
@@ -360,8 +367,14 @@ export default async function HostelSetupPage({
             <p className="ep-field__help">
               The fee group is a fee group of Fee setup → Fee structures holding the hostel heads
               for this kind of room (for example <code>ac_double</code>). A pupil pays the hostel
-              fee of each month by the room type of the bed held that month. Leave it empty to
-              charge by the pupil&apos;s own fee group.
+              fee of each month by the room type of the bed held that month. Choose{' '}
+              <em>The pupil&apos;s own fee group</em> to charge by the pupil&apos;s fee profile. A
+              room type needs its own rate? Make a fee group (for example <code>ac_triple</code>)
+              with the hostel heads under{' '}
+              <a href="/fees/structures" style={{ textDecoration: 'underline' }}>
+                Fee setup → Class fee structure
+              </a>
+              ; it then appears in the list.
             </p>
             {types.map((t) => (
               <form
@@ -371,7 +384,7 @@ export default async function HostelSetupPage({
                 style={{ marginBottom: 'var(--sp-3)' }}
               >
                 <input type="hidden" name="id" value={t.id} />
-                <TypeFields t={t} prefix={`t${t.id}`} />
+                <TypeFields t={t} prefix={`t${t.id}`} groups={feeGroups} />
                 <Button type="submit" variant="secondary">
                   Save ({t.rooms} rooms)
                 </Button>
@@ -380,7 +393,7 @@ export default async function HostelSetupPage({
           </Card>
           <Card title="Add a room type">
             <form action={saveRoomType} className="ep-hd__row">
-              <TypeFields prefix="tnew" />
+              <TypeFields prefix="tnew" groups={feeGroups} />
               <Button type="submit">Add</Button>
             </form>
           </Card>
@@ -906,7 +919,12 @@ function HostelFields({ h, prefix }: { h?: Hostel; prefix: string }) {
   );
 }
 
-function TypeFields({ t, prefix }: { t?: RoomType; prefix: string }) {
+function TypeFields({ t, prefix, groups }: { t?: RoomType; prefix: string; groups: FeeGroup[] }) {
+  // a group saved earlier that no fee structure has any more still shows, marked so
+  const options =
+    t?.feeGroup && !groups.some((g) => g.code === t.feeGroup)
+      ? [...groups, { code: t.feeGroup, hostelHeads: false, classes: 0 }]
+      : groups;
   return (
     <>
       <label className="ep-field" htmlFor={`${prefix}-name`}>
@@ -935,15 +953,24 @@ function TypeFields({ t, prefix }: { t?: RoomType; prefix: string }) {
       </label>
       <label className="ep-field" htmlFor={`${prefix}-fg`}>
         <span className="ep-field__label">Hostel fee group</span>
-        <input
+        <select
           id={`${prefix}-fg`}
           name="feeGroup"
-          className="ep-input"
-          pattern="[a-z_]{0,30}"
-          maxLength={30}
+          className="ep-select"
           defaultValue={t?.feeGroup ?? ''}
-          placeholder="e.g. ac_double"
-        />
+        >
+          <option value="">The pupil&apos;s own fee group</option>
+          {options.map((g) => (
+            <option key={g.code} value={g.code}>
+              {g.code}
+              {g.classes === 0
+                ? ' (no fee structure)'
+                : g.hostelHeads
+                  ? ' · has hostel fee'
+                  : ' · no hostel heads: charges no hostel fee'}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="ep-field" htmlFor={`${prefix}-ac`} style={{ alignSelf: 'center' }}>
         <span>

@@ -210,6 +210,21 @@ export class HostelService {
   }
 
   // ---- room types ----------------------------------------------------------------------------------------
+  /**
+   * The fee groups a room type can charge by: those of the fee structures (any session), each saying
+   * whether it holds hostel heads (only those charge a hostel fee).
+   */
+  async feeGroups(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ code: string; hostelHeads: boolean; classes: number }>(
+        `SELECT fs.fee_group AS code, bool_or(h.ledger = 'hostel') AS "hostelHeads", count(DISTINCT fs.class_id)::int AS classes
+           FROM fee_structures fs JOIN fee_heads h ON h.id = fs.head_id
+          GROUP BY fs.fee_group ORDER BY bool_or(h.ledger = 'hostel') DESC, fs.fee_group`,
+      );
+      return r.rows;
+    });
+  }
+
   async roomTypes(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query(

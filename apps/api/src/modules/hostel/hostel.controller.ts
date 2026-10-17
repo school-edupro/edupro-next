@@ -96,7 +96,7 @@ export class HostelController {
   @Get('room-types')
   @RequirePermission(HOSTEL.view)
   async roomTypes(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.hostel.roomTypes(ctx) };
+    return { data: await this.hostel.roomTypes(ctx), feeGroups: await this.hostel.feeGroups(ctx) };
   }
 
   @Post('room-types')
