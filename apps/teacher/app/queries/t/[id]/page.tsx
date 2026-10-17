@@ -107,7 +107,7 @@ export default async function TicketPage({
     ? await bff.api
         .fetch<{
           staff: Array<{ id: string; name: string }>;
-          roles: Array<{ code: string; name: string }>;
+          roles: Array<{ code: string; name: string; people?: string }>;
         }>('/helpdesk/assignees')
         .catch(() => ({ staff: [], roles: [] }))
     : { staff: [], roles: [] };
@@ -282,6 +282,7 @@ export default async function TicketPage({
                 {people.roles.map((r) => (
                   <option key={r.code} value={`role:${r.code}`}>
                     {t(lang, 'Role')}: {r.name}
+                    {r.people ? ` (${r.people})` : ''}
                   </option>
                 ))}
                 {people.staff.map((s) => (

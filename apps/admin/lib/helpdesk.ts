@@ -171,7 +171,8 @@ export interface HelpdeskSettings {
 export interface Setup {
   settings: HelpdeskSettings;
   heads: Head[];
-  roles: Array<{ code: string; name: string }>;
+  /** canAnswer: holds the helpdesk answering right; people: who holds it in the school. */
+  roles: Array<{ code: string; name: string; canAnswer?: boolean; people?: string | null }>;
   staff: Array<{ id: string; name: string; email: string | null }>;
 }
 

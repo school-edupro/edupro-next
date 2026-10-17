@@ -91,7 +91,7 @@ export default async function TicketPage({
   const people = t.you.canAssign
     ? await apiFetch<{
         staff: Array<{ id: string; name: string }>;
-        roles: Array<{ code: string; name: string }>;
+        roles: Array<{ code: string; name: string; people?: string }>;
       }>('/helpdesk/assignees').catch(() => ({ staff: [], roles: [] }))
     : { staff: [], roles: [] };
   const hidden = (
@@ -359,7 +359,7 @@ export default async function TicketPage({
                     { value: '', label: 'Choose…' },
                     ...people.roles.map((r) => ({
                       value: `role:${r.code}`,
-                      label: `Role: ${r.name}`,
+                      label: `Role: ${r.name}${r.people ? ` (${r.people})` : ''}`,
                     })),
                     ...people.staff.map((s) => ({ value: `user:${s.id}`, label: s.name })),
                   ]}

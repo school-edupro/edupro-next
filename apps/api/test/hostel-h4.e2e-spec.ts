@@ -27,6 +27,7 @@ describe('hostel module H4 (e2e)', () => {
   let warden: SeededUser;
   let other: SeededUser;
   let parent: SeededUser;
+  let accountant: SeededUser;
   const ids: Record<string, string> = {};
   const today = ist();
   const h = (u: SeededUser) => headersFor(u.sub, school.id);
@@ -45,6 +46,9 @@ describe('hostel module H4 (e2e)', () => {
       warden = await seedUser(c, school, `${s}-warden`, 'warden');
       other = await seedUser(c, school, `${s}-other`, 'warden');
       parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
+      accountant = await seedUser(c, school, `${s}-acc`, 'accountant');
+      // an auditor only views tickets: never a hand-over choice
+      await seedUser(c, school, `${s}-aud`, 'auditor');
     });
     app = await createApp();
     inject = injector(app);
@@ -190,6 +194,29 @@ describe('hostel module H4 (e2e)', () => {
         })
       ).statusCode,
     ).toBe(400);
+  });
+
+  it('a complaint is handed over only to someone who can answer it (an auditor only views)', async () => {
+    const who = await get('/helpdesk/assignees', warden);
+    const codes = who.roles.map((r: { code: string }) => r.code);
+    expect(codes).toContain('accountant');
+    expect(codes).not.toContain('auditor');
+    expect(who.roles.find((r: { code: string }) => r.code === 'accountant').people).toBeTruthy();
+    const toAuditor = await post(`/helpdesk/tickets/${ids.complaint}/assign`, warden, {
+      roleCode: 'auditor',
+    });
+    expect(toAuditor.json()).toMatchObject({
+      type: expect.stringContaining('helpdesk.cannot_answer'),
+    });
+    const toAccounts = await post(`/helpdesk/tickets/${ids.complaint}/assign`, warden, {
+      roleCode: 'accountant',
+      note: 'A broken cupboard: please arrange the carpenter',
+    });
+    expect(toAccounts.statusCode).toBe(200);
+    // the accountant now has it with them
+    expect(
+      JSON.stringify(await get('/helpdesk/tickets?desk=hostel&view=assigned', accountant)),
+    ).toContain(ids.complaint);
   });
 
   it('incidents: the parent sees only what was shared; a serious one goes to the principal', async () => {

@@ -405,11 +405,18 @@ export function HelpdeskSetup({ initial }: { initial: Setup }) {
                       onChange={(e) => setDraft({ ...draft, ownerRole: e.target.value })}
                     >
                       <option value="">Choose…</option>
-                      {setup.roles.map((r) => (
-                        <option key={r.code} value={r.code}>
-                          {r.name}
-                        </option>
-                      ))}
+                      {setup.roles
+                        .filter((r) => r.canAnswer !== false || r.code === draft.ownerRole)
+                        .map((r) => (
+                          <option key={r.code} value={r.code}>
+                            {r.name}
+                            {r.canAnswer === false
+                              ? ' (cannot answer)'
+                              : r.people
+                                ? ` · ${r.people}`
+                                : ' · nobody holds it'}
+                          </option>
+                        ))}
                     </select>
                   </label>
                 ) : null}
@@ -498,11 +505,18 @@ export function HelpdeskSetup({ initial }: { initial: Setup }) {
                         onChange={(e) => setLevel(i, { roleCode: e.target.value })}
                       >
                         <option value="">Choose…</option>
-                        {setup.roles.map((r) => (
-                          <option key={r.code} value={r.code}>
-                            {r.name}
-                          </option>
-                        ))}
+                        {setup.roles
+                          .filter((r) => r.canAnswer !== false || r.code === l.roleCode)
+                          .map((r) => (
+                            <option key={r.code} value={r.code}>
+                              {r.name}
+                              {r.canAnswer === false
+                                ? ' (cannot answer)'
+                                : r.people
+                                  ? ` · ${r.people}`
+                                  : ' · nobody holds it'}
+                            </option>
+                          ))}
                       </select>
                     </label>
                   ) : null}

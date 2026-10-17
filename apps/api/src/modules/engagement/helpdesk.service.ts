@@ -148,6 +148,19 @@ interface Me {
  * (working hours) and escalation matrix move unresolved tickets up; this service is the API for raising,
  * answering, reassigning, closing, reopening and rating, the set-up and the six-month dashboard.
  */
+/** A role that can answer tickets (the respond right): only these take a ticket handed over. */
+const ROLE_ANSWERS = `EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id
+  AND rp.permission_code IN ('helpdesk.ticket.respond', 'engagement.query.respond'))`;
+/** A user who holds, today in this school, a role that can answer tickets. */
+// eslint-disable-next-line no-restricted-syntax -- ROLE_ANSWERS is a fixed SQL fragment
+const USER_ANSWERS = `EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+  WHERE ur.user_id = u.id AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
+    AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE) AND ${ROLE_ANSWERS})`;
+/** Who holds a role today in this school: how many, and their names. */
+const ROLE_PEOPLE = `LATERAL (SELECT count(*)::int AS n, string_agg(COALESCE(e.display_name, u.display_name), ', ' ORDER BY COALESCE(e.display_name, u.display_name)) AS people
+  FROM app.helpdesk_role_people(r.code) p JOIN users u ON u.id = p.user_id
+  LEFT JOIN employees e ON e.user_id = p.user_id AND e.deleted_at IS NULL) h`;
+
 @Injectable()
 export class HelpdeskService {
   constructor(
@@ -678,23 +691,7 @@ export class HelpdeskService {
           'Only the person it is with, or an administrator, can hand it over',
           { status: 403 },
         );
-      if (dto.userId) {
-        const u = await c.query(
-          `SELECT 1 FROM user_school_memberships WHERE user_id = $1 AND school_id = app.current_school_id() AND status = 'active' AND deleted_at IS NULL AND person_type IN ('employee', 'external')`,
-          [dto.userId],
-        );
-        if (!u.rowCount)
-          throw new DomainError('validation-failed', 'Choose a staff member with a login', {
-            status: 400,
-          });
-      } else {
-        const r = await c.query(
-          `SELECT 1 FROM roles WHERE code = $1 AND deleted_at IS NULL AND (school_id IS NULL OR school_id = app.current_school_id())`,
-          [dto.roleCode],
-        );
-        if (!r.rowCount)
-          throw new DomainError('validation-failed', 'Unknown role', { status: 400 });
-      }
+      await this.assertCanAnswer(c, dto.userId, dto.roleCode);
       await c.query(
         `UPDATE parent_queries SET assigned_user_id = $2, assigned_role = $3,
                 status = CASE WHEN status = 'open' THEN 'in_progress'::query_status ELSE status END, updated_at = now()
@@ -1067,22 +1064,75 @@ export class HelpdeskService {
   }
 
   /** Staff (with a login) and roles a ticket may be handed to. */
+  /**
+   * Whom a ticket can be handed over to: staff who can answer tickets, and the roles that can answer and
+   * that someone holds today (with who holds them). A role that can only view (Auditor) is not offered.
+   */
   async assignees(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const staff = await c.query<{ id: string; name: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- USER_ANSWERS is a fixed SQL fragment
         `SELECT u.id::text, COALESCE(e.display_name, u.display_name) || COALESCE(' · ' || e.employee_code, '') AS name
            FROM user_school_memberships m JOIN users u ON u.id = m.user_id
            LEFT JOIN employees e ON e.user_id = u.id AND e.deleted_at IS NULL
           WHERE m.school_id = app.current_school_id() AND m.status = 'active' AND m.deleted_at IS NULL AND m.person_type IN ('employee', 'external') AND u.deleted_at IS NULL
+            AND ${USER_ANSWERS}
           ORDER BY 2 LIMIT 2000`,
       );
-      const roles = await c.query<{ code: string; name: string }>(
-        `SELECT DISTINCT ON (code) code, name FROM roles
-          WHERE deleted_at IS NULL AND status = 'active' AND (school_id IS NULL OR school_id = app.current_school_id())
-            AND code NOT IN ('parent', 'student', 'group_admin', 'class_teacher') ORDER BY code, school_id NULLS LAST`,
+      const roles = await c.query<{ code: string; name: string; people: string; n: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- ROLE_ANSWERS and ROLE_PEOPLE are fixed SQL fragments
+        `SELECT * FROM (
+           SELECT DISTINCT ON (r.code) r.code, r.name, h.people, h.n FROM roles r CROSS JOIN ${ROLE_PEOPLE}
+            WHERE r.deleted_at IS NULL AND r.status = 'active' AND (r.school_id IS NULL OR r.school_id = app.current_school_id())
+              AND r.code NOT IN ('parent', 'student', 'group_admin', 'class_teacher') AND ${ROLE_ANSWERS}
+            ORDER BY r.code, r.school_id NULLS LAST) x
+          WHERE x.n > 0 ORDER BY x.name`,
       );
       return { staff: staff.rows, roles: roles.rows };
     });
+  }
+
+  /** The handed-over person or role must be able to answer (the list above, checked again here). */
+  private async assertCanAnswer(c: PoolClient, userId?: string | null, roleCode?: string | null) {
+    if (userId) {
+      const u = await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- USER_ANSWERS is a fixed SQL fragment; the id is bound
+        `SELECT 1 FROM user_school_memberships m JOIN users u ON u.id = m.user_id
+          WHERE m.user_id = $1 AND m.school_id = app.current_school_id() AND m.status = 'active' AND m.deleted_at IS NULL
+            AND m.person_type IN ('employee', 'external') AND ${USER_ANSWERS}`,
+        [userId],
+      );
+      if (!u.rowCount)
+        throw new DomainError(
+          'helpdesk.cannot_answer',
+          'This person cannot answer tickets: choose someone with the helpdesk answering right',
+          { status: 422 },
+        );
+      return;
+    }
+    const r = await c.query<{ answers: boolean; n: number; name: string }>(
+      // eslint-disable-next-line no-restricted-syntax -- ROLE_ANSWERS and ROLE_PEOPLE are fixed SQL fragments; the code is bound
+      `SELECT r.name, ${ROLE_ANSWERS} AS answers, h.n FROM roles r CROSS JOIN ${ROLE_PEOPLE}
+        WHERE r.code = $1 AND r.deleted_at IS NULL AND (r.school_id IS NULL OR r.school_id = app.current_school_id())
+        ORDER BY r.school_id NULLS LAST LIMIT 1`,
+      [roleCode],
+    );
+    const role = r.rows[0];
+    if (!role) throw new DomainError('validation-failed', 'Unknown role', { status: 400 });
+    if (!role.answers)
+      throw new DomainError(
+        'helpdesk.cannot_answer',
+        `${role.name} cannot answer tickets (it can only view them): choose a role that answers`,
+        { status: 422 },
+      );
+    if (!role.n)
+      throw new DomainError(
+        'helpdesk.nobody_holds',
+        `Nobody holds the role ${role.name} in this school`,
+        {
+          status: 422,
+        },
+      );
   }
 
   // ---- set-up ---------------------------------------------------------------------------------------
@@ -1105,10 +1155,17 @@ export class HelpdeskService {
                                    ORDER BY l.level) FROM helpdesk_levels l WHERE l.head_id = k.id), '[]'::jsonb) AS levels
            FROM query_categories k ORDER BY k.desk, k.sort_order, k.name`,
       );
-      const roles = await c.query<{ code: string; name: string }>(
-        `SELECT DISTINCT ON (code) code, name FROM roles
-          WHERE deleted_at IS NULL AND status = 'active' AND (school_id IS NULL OR school_id = app.current_school_id())
-            AND code NOT IN ('parent', 'student', 'group_admin') ORDER BY code, school_id NULLS LAST`,
+      // every role, with whether it can answer and who holds it (the set-up offers only those that answer)
+      const roles = await c.query<{
+        code: string;
+        name: string;
+        canAnswer: boolean;
+        people: string | null;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- ROLE_ANSWERS and ROLE_PEOPLE are fixed SQL fragments
+        `SELECT DISTINCT ON (r.code) r.code, r.name, ${ROLE_ANSWERS} AS "canAnswer", h.people FROM roles r CROSS JOIN ${ROLE_PEOPLE}
+          WHERE r.deleted_at IS NULL AND r.status = 'active' AND (r.school_id IS NULL OR r.school_id = app.current_school_id())
+            AND r.code NOT IN ('parent', 'student', 'group_admin') ORDER BY r.code, r.school_id NULLS LAST`,
       );
       const staff = await c.query<{ id: string; name: string; email: string | null }>(
         `SELECT u.id::text, COALESCE(e.display_name, u.display_name) || COALESCE(' · ' || e.employee_code, '') AS name, COALESCE(e.email::text, u.email::text) AS email
@@ -1187,6 +1244,27 @@ export class HelpdeskService {
 
   async saveHead(ctx: RequestContext, id: string | null, dto: HeadDto) {
     await this.db.tenant(requireTenant(ctx), async (c) => {
+      // a head or level routed to a role: the role must be able to answer (an Auditor only views)
+      for (const code of new Set(
+        [
+          dto.ownerType === 'role' ? dto.ownerRole : null,
+          ...dto.levels.map((l) => (l.assignType === 'role' ? l.roleCode : null)),
+        ].filter((x): x is string => !!x && x !== 'warden' && x !== 'school_admin'),
+      )) {
+        const r = await c.query<{ answers: boolean; name: string }>(
+          // eslint-disable-next-line no-restricted-syntax -- ROLE_ANSWERS is a fixed SQL fragment; the code is bound
+          `SELECT r.name, ${ROLE_ANSWERS} AS answers FROM roles r
+            WHERE r.code = $1 AND r.deleted_at IS NULL AND (r.school_id IS NULL OR r.school_id = app.current_school_id())
+            ORDER BY r.school_id NULLS LAST LIMIT 1`,
+          [code],
+        );
+        if (r.rows[0] && !r.rows[0].answers)
+          throw new DomainError(
+            'helpdesk.cannot_answer',
+            `${r.rows[0].name} cannot answer tickets: route the query type to a role that answers`,
+            { status: 422 },
+          );
+      }
       if (dto.ownerType === 'employee' || dto.levels.some((l) => l.userId)) {
         const ids = [dto.ownerUserId, ...dto.levels.map((l) => l.userId)].filter(Boolean);
         const ok = await c.query<{ n: number }>(
