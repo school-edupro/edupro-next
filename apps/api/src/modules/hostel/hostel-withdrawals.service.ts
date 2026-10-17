@@ -536,6 +536,24 @@ export class HostelWithdrawalsService {
           ],
         );
         id = r.rows[0]!.id;
+        // started from the parent's request: the request now points at this withdrawal
+        if (dto.exitRequestId) {
+          const ex = await c.query(
+            `UPDATE hostel_exit_requests SET status = 'started', withdrawal_id = $2, decided_by = app.current_user_id(), decided_at = now()
+              WHERE id = $1 AND student_id = $3 AND status = 'pending'`,
+            [dto.exitRequestId, id, studentId],
+          );
+          if (!ex.rowCount)
+            throw new DomainError(
+              'hostel.exit_request_not_pending',
+              "The parent's request is no longer waiting (started, declined or withdrawn)",
+              { status: 409 },
+            );
+          await c.query(`UPDATE hostel_withdrawals SET exit_request_id = $2 WHERE id = $1`, [
+            id,
+            dto.exitRequestId,
+          ]);
+        }
       } catch (error) {
         if ((error as { code?: string }).code === '23505')
           throw new DomainError(

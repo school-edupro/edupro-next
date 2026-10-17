@@ -26,8 +26,54 @@ export const StartHostelWithdrawalSchema = z.object({
   /** mess dues left: a misc fee on the last approval */
   messCharge: z.number().min(0).max(1_000_000).default(0),
   chargeRemarks: z.string().trim().max(500).optional(),
+  /** started from a parent's request in the parent app (0163) */
+  exitRequestId: IdSchema.optional(),
 });
 export class StartHostelWithdrawalDto extends createZodDto(StartHostelWithdrawalSchema) {}
+
+// ---- part 4 (0163): the parent's request, the room check-out list ---------------------------------------
+export const ExitRequestSchema = z.object({
+  studentId: IdSchema,
+  leavingOn: DateSchema,
+  reason: z.enum(['parent_request', 'health', 'other']),
+  note: z.string().trim().max(1000).optional(),
+});
+export class ExitRequestDto extends createZodDto(ExitRequestSchema) {}
+export const DeclineExitSchema = z.object({ note: z.string().trim().min(3).max(500) });
+export class DeclineExitDto extends createZodDto(DeclineExitSchema) {}
+export const ExitRequestsQuerySchema = z.object({
+  status: z.enum(['pending', 'started', 'declined', 'withdrawn', 'all']).default('pending'),
+});
+export class ExitRequestsQueryDto extends createZodDto(ExitRequestsQuerySchema) {}
+
+export const CheckoutItemsSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        id: IdSchema.optional(),
+        name: z.string().trim().min(1).max(60),
+        charge: z.number().min(0).max(1_000_000),
+        active: z.boolean().default(true),
+      }),
+    )
+    .max(60),
+});
+export class CheckoutItemsDto extends createZodDto(CheckoutItemsSchema) {}
+export const CheckoutSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        itemId: IdSchema.optional(),
+        name: z.string().trim().min(1).max(60),
+        condition: z.enum(['ok', 'missing', 'damaged']),
+        charge: z.number().min(0).max(1_000_000).default(0),
+        note: z.string().trim().max(200).optional(),
+      }),
+    )
+    .min(1)
+    .max(60),
+});
+export class CheckoutDto extends createZodDto(CheckoutSchema) {}
 
 export const DecideHostelWithdrawalSchema = z.object({
   outcome: z.enum(['approved', 'rejected']),

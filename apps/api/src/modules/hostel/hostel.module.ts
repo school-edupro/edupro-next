@@ -16,6 +16,8 @@ import { HostelCareService } from './hostel-care.service';
 import { HostelImportService } from './hostel-import.service';
 import { HostelService } from './hostel.service';
 import { HostelWithdrawalController } from './hostel-withdrawal.controller';
+import { HostelExitController } from './hostel-exit.controller';
+import { HostelExitService } from './hostel-exit.service';
 import { HostelReportsController } from './hostel-reports.controller';
 import { HostelReportsService } from './hostel-reports.service';
 import { HostelWithdrawalsService } from './hostel-withdrawals.service';
@@ -35,6 +37,7 @@ import { HW_FLOW } from './hostel-withdrawals.service';
     HostelMessController,
     HostelCareController,
     HostelWithdrawalController,
+    HostelExitController,
     HostelReportsController,
   ],
   providers: [
@@ -47,6 +50,7 @@ import { HW_FLOW } from './hostel-withdrawals.service';
     HostelMealReportsService,
     HostelCareService,
     HostelWithdrawalsService,
+    HostelExitService,
     HostelReportsService,
     AuditService,
   ],
