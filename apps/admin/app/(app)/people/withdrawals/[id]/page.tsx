@@ -7,6 +7,7 @@ import {
   cancelWithdrawal,
   closeSchoolTransfer,
   completeWithdrawal,
+  changeWithdrawalLeavingDate,
   revokeWithdrawal,
   issueWithdrawalTc,
   recordClearance,
@@ -256,6 +257,11 @@ export default async function WithdrawalPage({
         }
       />
       <Notice params={sp} />
+      {w.leavingOn < w.initiatedOn ? (
+        <p className="ep-alert ep-alert--warning" role="status">
+          {`The leaving date ${w.leavingOn} is before the day this withdrawal was started, ${w.initiatedOn}. Check it is right: the fee is charged up to the leaving month.`}
+        </p>
+      ) : null}
       {w.remarks || w.documents.length || w.requestedBy || w.cancelReason ? (
         <Card style={{ marginBottom: 'var(--sp-4)' }}>
           {w.remarks ? <p style={{ marginTop: 0 }}>{w.remarks}</p> : null}
@@ -434,6 +440,32 @@ export default async function WithdrawalPage({
                   : 'Available once every department has cleared.'}
               </p>
             </form>
+            {!w.tc ? (
+              <form
+                action={changeWithdrawalLeavingDate}
+                className="ep-wd__form"
+                style={{ marginTop: 'var(--sp-3)' }}
+              >
+                <input type="hidden" name="id" value={w.id} />
+                <label className="ep-field" htmlFor="new-leaving-on">
+                  <span className="ep-field__label">Leaving date</span>
+                  <input
+                    id="new-leaving-on"
+                    name="leavingOn"
+                    type="date"
+                    className="ep-input"
+                    required
+                    defaultValue={w.leavingOn}
+                  />
+                </label>
+                <Button type="submit" size="sm" variant="secondary">
+                  Change the leaving date
+                </Button>
+                <p className="ep-field__help ep-wd__wide">
+                  The fee departments are opened again to check the dues for the new date.
+                </p>
+              </form>
+            ) : null}
             <form
               action={cancelWithdrawal}
               className="ep-wd__form"

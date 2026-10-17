@@ -530,6 +530,18 @@ A plus figure is dues (Dr: the pupil owes it from before); a minus figure is adv
 - **Approve / Reject**: pressing Enter in the Note box no longer decides anything; a decision is made
   only by pressing Approve or Reject.
 
+## Changing the leaving date of an open withdrawal (2026-10-17)
+
+People → Withdrawals → open the withdrawal → **Finish → Leaving date → Change the leaving date**.
+
+- Allowed until the withdrawal is completed and while no TC is issued (cancel the TC first).
+- The dues depend on the date, so **Fees and accounts** (and any department with the fee check) is opened
+  again and checked afresh; the other departments stay cleared. A pupil who now holds a hostel bed on
+  the new date gets the hostel's steps.
+- A boarder's leaving date cannot be before the present hostel stay began.
+- A leaving date before the day the withdrawal was started is allowed (a pupil who has already left);
+  the withdrawal page shows a warning to check it.
+
 ## Revoking a completed withdrawal (the pupil rejoins)
 
 People → Withdrawals → open the completed withdrawal → **Revoke (the pupil rejoins)** → reason →

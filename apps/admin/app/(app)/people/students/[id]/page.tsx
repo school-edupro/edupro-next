@@ -650,7 +650,7 @@ export default async function StudentPage({
                     label={l('leavingOn')}
                     type="date"
                     required
-                    help="The last day in school; it may be earlier than today. Fee after this month is not charged."
+                    help="The last day in school; it may be earlier than today (the withdrawal then shows a warning). A boarder cannot leave before the present hostel stay began. Fee after this month is not charged."
                   />
                   <InputField
                     id="wReason"

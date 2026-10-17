@@ -848,6 +848,7 @@ export class WithdrawalsService {
           status: 409,
         },
       );
+    await this.checkLeavingDate(c, studentId, dto.leavingOn);
     const documents = await this.checkFiles(c, dto.documents ?? []);
     const firstStep = Math.min(...departments.map((d) => d.step));
     let id: string;
@@ -1316,10 +1317,106 @@ export class WithdrawalsService {
     };
   }
 
+  /**
+   * A boarder cannot leave the school before the hostel stay held now began: the bed and the hostel fee
+   * would end before they start. Correct the leaving date, or end that stay first.
+   */
+  private async checkLeavingDate(c: PoolClient, studentId: string, leavingOn: string) {
+    const stay = (
+      await c.query<{ from: string }>(
+        `SELECT min(from_date)::text AS from FROM hostel_allotments
+          WHERE student_id = $1 AND from_date > $2::date AND (to_date IS NULL OR to_date > $2::date)`,
+        [studentId, leavingOn],
+      )
+    ).rows[0]?.from;
+    if (stay) {
+      const dmy = (d: string) => d.split('-').reverse().join('-');
+      throw new DomainError(
+        'withdrawal.before_hostel',
+        `The pupil stays in the hostel from ${dmy(stay)}, after the leaving date ${dmy(leavingOn)}. Change the leaving date to that day or later, or end the hostel stay first.`,
+        { status: 409 },
+      );
+    }
+  }
+
+  /**
+   * A new leaving date for an open withdrawal. The dues depend on it, so the fee departments (the fee
+   * check) are opened again and checked afresh; a pupil who now holds a bed on the leaving date gets the
+   * hostel's steps. Not once the TC is issued (it carries the date).
+   */
+  async changeLeavingDate(
+    ctx: RequestContext,
+    id: string,
+    leavingOn: string,
+    note?: string,
+  ): Promise<WithdrawalRow> {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const w = await this.findDb(c, id, true);
+      if (!w) throw new DomainError('not-found', 'Withdrawal not found');
+      if (!['requested', 'cleared'].includes(w.status))
+        throw new DomainError(
+          'withdrawal.not_open',
+          'The withdrawal is already completed or cancelled',
+          { status: 409 },
+        );
+      if (w.tc)
+        throw new DomainError(
+          'withdrawal.tc_issued',
+          `TC ${w.tc.tcNo} is issued with the old date: cancel the TC first`,
+          { status: 409 },
+        );
+      if (leavingOn === w.leaving_on) return;
+      await this.checkLeavingDate(c, w.student_id, leavingOn);
+      await c.query(
+        `UPDATE student_withdrawals SET leaving_on = $2::date, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
+        [id, leavingOn],
+      );
+      const reopened = await c.query<{ department: string }>(
+        `UPDATE withdrawal_clearances x SET status = 'pending', auto = false, bypassed = false, check_result = NULL,
+                remarks = 'Opened again: the leaving date changed', acted_by = NULL, acted_at = NULL
+           FROM withdrawal_departments d
+          WHERE d.id = x.department_id AND x.withdrawal_id = $1 AND x.status <> 'pending'
+            AND (d.auto_check IN ('fees', 'hostel_fees') OR x.department = 'fees')
+        RETURNING x.department`,
+        [id],
+      );
+      const added: string[] = [];
+      const boarder = await c.query(
+        `SELECT 1 FROM hostel_allotments WHERE student_id = $1 AND (to_date IS NULL OR to_date >= $2::date)`,
+        [w.student_id, leavingOn],
+      );
+      if (boarder.rowCount)
+        for (const d of await this.departmentsIn(c, true, 'hostel')) {
+          if (w.clearances.some((x) => x.department === d.code)) continue;
+          await c.query(
+            `INSERT INTO withdrawal_clearances (school_id, withdrawal_id, department, department_id, step) VALUES (app.current_school_id(), $1, $2, $3, $4)`,
+            [id, d.code, d.id, d.step],
+          );
+          added.push(d.code);
+        }
+      await this.advance(c, id);
+      await this.audit.stage(ctx, c, {
+        action: 'people.withdrawal.leaving_date',
+        entityType: 'student_withdrawals',
+        entityId: id,
+        before: { leavingOn: w.leaving_on },
+        after: {
+          leavingOn,
+          note: note ?? null,
+          reopened: reopened.rows.map((r) => r.department),
+          added,
+        },
+      });
+    });
+    await this.runChecks(ctx, id);
+    return this.get(ctx, id);
+  }
+
   async complete(ctx: RequestContext, id: string): Promise<WithdrawalRow> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.findDb(c, id);
       if (!before) throw new DomainError('not-found', 'Withdrawal not found');
+      await this.checkLeavingDate(c, before.student_id, before.leaving_on);
       await c.query(`SELECT app.complete_withdrawal($1)`, [id]);
       // a hosteller: the bed is given up on the leaving date and the hostel fee ends with that month (the
       // later months are cut below with the school fee); an open hostel withdrawal is closed

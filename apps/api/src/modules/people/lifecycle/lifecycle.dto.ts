@@ -230,6 +230,13 @@ export const ListTransfersQuerySchema = z.object({
 });
 export class ListTransfersQueryDto extends createZodDto(ListTransfersQuerySchema) {}
 
+/** A new leaving date for an open withdrawal (the fee checks run again). */
+export const LeavingDateSchema = z.object({
+  leavingOn: DateSchema,
+  note: z.string().trim().max(300).optional(),
+});
+export class LeavingDateDto extends createZodDto(LeavingDateSchema) {}
+
 /** Revoke of a completed withdrawal: the pupil rejoins in the same session. */
 export const RevokeSchema = z.object({
   reason: z.string().trim().min(3).max(300),

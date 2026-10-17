@@ -1538,6 +1538,16 @@ export async function revokeWithdrawal(fd: FormData) {
   );
 }
 
+export async function changeWithdrawalLeavingDate(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(`/people/withdrawals/${id}`, () =>
+    apiFetch(`/people/withdrawals/${id}/leaving-date`, {
+      method: 'POST',
+      body: JSON.stringify({ leavingOn: str(fd, 'leavingOn') }),
+    }),
+  );
+}
+
 export async function cancelWithdrawal(fd: FormData) {
   const id = str(fd, 'id');
   return run(str(fd, 'returnTo') || `/people/withdrawals/${id}`, () =>

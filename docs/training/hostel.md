@@ -230,7 +230,8 @@ cancelled and the clearance certificate is no longer valid.
 Warden and Mess steps clear it (damages and mess dues as misc fees); completion gives up the bed on the
 last day and ends the hostel fee with that month (no notice month); paid later months are settled in
 the withdrawal's refund. If that school withdrawal is **revoked**, the form also asks about the hostel:
-rejoins as a day scholar, back in the hostel as if never left, or back from a day (same or a free bed).
+rejoins as a day scholar, back in the hostel as if never left, or back from a day (same or a free bed). A boarder's leaving
+date cannot be before the present hostel stay began (refused when starting and at Complete).
 
 ## Reports with the parents (Excel / PDF)
 

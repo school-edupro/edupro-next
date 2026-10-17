@@ -27,6 +27,7 @@ import {
   PortalAccessDto,
   WithdrawalsFileQueryDto,
   RevokeDto,
+  LeavingDateDto,
 } from './lifecycle.dto';
 import { PromotionsService } from './promotions.service';
 import { TcService } from './tc.service';
@@ -242,6 +243,20 @@ export class LifecycleController {
   @RequirePermission(LIFECYCLE.withdrawalManage)
   revoke(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: RevokeDto) {
     return this.withdrawals.requestRevoke(ctx, id, body.reason, body.hostel);
+  }
+
+  @Post('withdrawals/:id/leaving-date')
+  @ApiOperation({
+    summary:
+      'Change the leaving date of an open withdrawal; the fee departments are opened again for a fresh check',
+  })
+  @RequirePermission(LIFECYCLE.withdrawalManage)
+  leavingDate(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: LeavingDateDto,
+  ) {
+    return this.withdrawals.changeLeavingDate(ctx, id, body.leavingOn, body.note);
   }
 
   @Post('withdrawals/:id/complete')

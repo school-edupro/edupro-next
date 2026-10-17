@@ -442,8 +442,15 @@ describe('hostel withdrawal (e2e)', () => {
   });
 
   it('a hosteller leaving the school gets the hostel steps and gives up the bed on completion', async () => {
+    // a leaving date before the hostel stay began (15-06-2026) is refused
+    const early = await post(`/people/students/${ids.leaver}/withdrawal`, {
+      leavingOn: '2026-06-10',
+      reason: 'Family moving to another city',
+    });
+    expect(early.statusCode).toBe(409);
+    expect(early.json().type).toContain('withdrawal.before_hostel');
     const w = await post(`/people/students/${ids.leaver}/withdrawal`, {
-      leavingOn: '2026-11-15',
+      leavingOn: '2026-11-10',
       reason: 'Family moving to another city',
     });
     expect(w.statusCode).toBe(201);
@@ -477,6 +484,41 @@ describe('hostel withdrawal (e2e)', () => {
         });
         expect(r.statusCode).toBe(200);
       }
+    }
+    // a new leaving date: refused before the stay began, else the fee departments are opened again
+    const back = await post(`/people/withdrawals/${row.id}/leaving-date`, {
+      leavingOn: '2026-06-01',
+    });
+    expect(back.json().type).toContain('withdrawal.before_hostel');
+    const moved = await post(`/people/withdrawals/${row.id}/leaving-date`, {
+      leavingOn: '2026-11-15',
+    });
+    expect(moved.statusCode).toBe(201);
+    const after = moved.json() as {
+      leavingOn: string;
+      status: string;
+      clearances: Array<{ department: string; status: string }>;
+    };
+    expect(after.leavingOn).toBe('2026-11-15');
+    const fees = after.clearances.find((x) => x.department === 'fees');
+    if (fees?.status === 'pending') expect(after.status).toBe('requested');
+    for (let round = 0; round < 6; round += 1) {
+      const cur = await get<{
+        status: string;
+        clearances: Array<{ department: string; status: string; canAct?: boolean }>;
+      }>(`/people/withdrawals/${row.id}`);
+      if (cur.status === 'cleared') break;
+      for (const x of cur.clearances.filter((y) => y.canAct && y.status !== 'cleared'))
+        expect(
+          (
+            await inject({
+              method: 'PUT',
+              url: `/people/withdrawals/${row.id}/clearances/${x.department}`,
+              headers: h(),
+              json: { status: 'cleared', dues: 0 },
+            })
+          ).statusCode,
+        ).toBe(200);
     }
     expect((await post(`/people/withdrawals/${row.id}/complete`, {})).statusCode).toBe(201);
     const stay = await withMigrator((c) =>
