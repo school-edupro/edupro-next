@@ -103,3 +103,38 @@ export async function rateMeal(fd: FormData) {
   }
   redirect(`${back}&ok=rated`);
 }
+
+/** A parent asks for the child to leave the hostel; the hostel office starts it or answers. */
+export async function askHostelExit(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/hostel?student=${encodeURIComponent(studentId)}`;
+  try {
+    await bff.api.fetch('/hostel/mine/exit', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        leavingOn: str(fd, 'leavingOn'),
+        reason: str(fd, 'reason') || 'parent_request',
+        note: str(fd, 'note') || undefined,
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=exit`);
+}
+
+/** The parent takes back a request the office has not acted on. */
+export async function withdrawHostelExit(fd: FormData) {
+  const studentId = str(fd, 'studentId');
+  const back = `/hostel?student=${encodeURIComponent(studentId)}`;
+  try {
+    await bff.api.fetch(`/hostel/mine/exit/${str(fd, 'id')}/withdraw`, {
+      method: 'POST',
+      body: '{}',
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  redirect(`${back}&ok=exit-withdrawn`);
+}

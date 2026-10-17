@@ -3,6 +3,8 @@ import { HostelReportView } from '@/components/hostel/HostelReportView';
 import { HostelNav } from '@/components/hostel/HostelNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
+import { declineExitRequest } from '@/lib/hostel-withdrawal-actions';
+import { dmy } from '@/components/hostel/withdrawal-text';
 
 const STATUSES = [
   ['open', 'Open'],
@@ -48,6 +50,25 @@ export default async function HostelWithdrawalsPage({
     ...(sp.q ? { q: sp.q } : {}),
   });
   const can = (p: string) => me.permissions.includes(p);
+  // parents' requests from the parent app, waiting for the office
+  const requests = can('hostel.withdrawal.view')
+    ? await apiFetch<{
+        data: Array<{
+          id: string;
+          studentId: string;
+          pupil: string;
+          admissionNo: string;
+          hostel: string | null;
+          leavingOn: string;
+          reason: string;
+          note: string | null;
+          requestedOn: string;
+          requestedBy: string | null;
+        }>;
+      }>('/hostel/exit-requests?status=pending')
+        .then((r) => r.data)
+        .catch(() => [])
+    : [];
   const link = (patch: Record<string, string | null>) => {
     const u = new URLSearchParams({
       status,
@@ -88,7 +109,76 @@ export default async function HostelWithdrawalsPage({
         }
       />
       <HostelNav current="/hostel/withdrawals" permissions={me.permissions} />
-      <Notice params={sp} />
+      <Notice
+        params={
+          sp.ok === 'declined'
+            ? { ok: '1', detail: 'Request declined. The parent sees your note in the parent app.' }
+            : sp
+        }
+      />
+      {requests.length ? (
+        <Card
+          title={`Requests from parents · ${String(requests.length)}`}
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          <ul className="fp-rcpts">
+            {requests.map((r) => (
+              <li key={r.id}>
+                <span>
+                  <strong>{r.pupil}</strong>{' '}
+                  <span className="ep-field__help">
+                    {r.admissionNo} · {r.hostel ?? '—'} · last day {dmy(r.leavingOn)} · asked by{' '}
+                    {r.requestedBy ?? 'the parent'} on {dmy(r.requestedOn)}
+                  </span>
+                  {r.note ? (
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      “{r.note}”
+                    </span>
+                  ) : null}
+                </span>
+                {can('hostel.withdrawal.manage') ? (
+                  <span
+                    style={{
+                      display: 'flex',
+                      gap: 'var(--sp-2)',
+                      flexWrap: 'wrap',
+                      alignItems: 'flex-end',
+                    }}
+                  >
+                    <a
+                      className="ep-btn ep-btn--primary ep-btn--sm"
+                      href={`/hostel/withdrawals/new?student=${r.studentId}&request=${r.id}`}
+                    >
+                      Start the withdrawal
+                    </a>
+                    <form
+                      action={declineExitRequest}
+                      style={{ display: 'flex', gap: 'var(--sp-1)' }}
+                    >
+                      <input type="hidden" name="id" value={r.id} />
+                      <label className="ep-sr-only" htmlFor={`dx-${r.id}`}>
+                        Why it is declined ({r.pupil})
+                      </label>
+                      <input
+                        id={`dx-${r.id}`}
+                        name="note"
+                        className="ep-input"
+                        required
+                        minLength={3}
+                        maxLength={500}
+                        placeholder="Why (the parent sees it)"
+                      />
+                      <Button type="submit" size="sm" variant="secondary">
+                        Decline
+                      </Button>
+                    </form>
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       <nav className="ep-tabs-links" aria-label="Status" style={{ marginBottom: 'var(--sp-3)' }}>
         <a
           href={link({ mine: '1', status: 'open' })}

@@ -103,13 +103,15 @@ export async function clearancePdf(s: ClearanceSheet): Promise<Buffer> {
     page.drawText(latin(k), { x: M, y, size: 10, font: bold, color: MUTED });
     for (const [i, line] of lines.entries())
       page.drawText(line, { x: M + labelW, y: y - i * 13, size: 10, font, color: INK });
-    y -= Math.max(1, lines.length) * 13 + 6;
+    // the rule sits under the row's last line
+    const bottom = y - (lines.length - 1) * 13 - 6;
     page.drawLine({
-      start: { x: M, y: y + 3 },
-      end: { x: W - M, y: y + 3 },
+      start: { x: M, y: bottom },
+      end: { x: W - M, y: bottom },
       thickness: 0.5,
       color: LINE,
     });
+    y = bottom - 14;
   }
   if (s.checkout.length) {
     y -= 14;

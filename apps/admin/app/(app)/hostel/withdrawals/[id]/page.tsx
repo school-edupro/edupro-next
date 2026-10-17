@@ -16,6 +16,7 @@ import {
   cancelHostelWithdrawal,
   completeHostelWithdrawal,
   rejectHostelWithdrawal,
+  saveCheckout,
 } from '@/lib/hostel-withdrawal-actions';
 import type { HostelApprovalStep, HostelWithdrawal } from '@/lib/types';
 
@@ -34,7 +35,21 @@ const OK: Record<string, string> = {
   rejected: 'Not approved: the pupil keeps the bed.',
   completed: 'The pupil has left the hostel: the bed is free and the hostel fee is settled.',
   cancelled: 'The hostel withdrawal is cancelled; the pupil keeps the bed.',
+  checkout: 'Room check-out saved: the damage charge is the total of what is missing or damaged.',
 };
+interface Checkout {
+  status: string;
+  checkedOutAt: string | null;
+  charges: Record<string, number>;
+  items: Array<{
+    itemId: string | null;
+    name: string;
+    condition: 'ok' | 'missing' | 'damaged';
+    charge: number;
+    note: string | null;
+  }>;
+  total: number;
+}
 const rupees = (v: string | number) => `₹${Number(v).toLocaleString('en-IN')}`;
 
 function FeeChoice({ current }: { current: 'carry' | 'refund' }) {
@@ -67,9 +82,10 @@ export default async function HostelWithdrawalPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [me, w] = await Promise.all([
+  const [me, w, checkout] = await Promise.all([
     getMe(),
     apiFetch<HostelWithdrawal>(`/hostel/withdrawals/${id}`),
+    apiFetch<Checkout>(`/hostel/withdrawals/${id}/checkout`).catch(() => null),
   ]);
   const canManage = me.permissions.includes('hostel.withdrawal.manage');
   const open = w.status === 'requested' || w.status === 'cleared';
@@ -96,6 +112,16 @@ export default async function HostelWithdrawalPage({
             >
               Hostel fee
             </a>
+            {w.status === 'completed' ? (
+              <a
+                className="ep-btn ep-btn--primary ep-btn--sm"
+                href={`/api/hostel/withdrawal-certificate/${w.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Clearance certificate (PDF)
+              </a>
+            ) : null}
           </span>
         }
       />
@@ -154,6 +180,113 @@ export default async function HostelWithdrawalPage({
         ) : null}
         {w.cancelReason ? <div className="ep-field__help">Cancelled: {w.cancelReason}</div> : null}
       </Card>
+
+      {checkout ? (
+        <Card
+          title="Room check-out"
+          style={{ marginBottom: 'var(--sp-4)' }}
+          actions={
+            checkout.checkedOutAt ? (
+              <Badge tone="success">Checked · {rupees(checkout.total)}</Badge>
+            ) : (
+              <Badge tone="warning">Not checked yet</Badge>
+            )
+          }
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Mark each item of the room. The charge of a missing or damaged item comes from Steps and
+            notice → Check-out items and can be changed here; the total becomes the damage charge.
+          </p>
+          <form action={saveCheckout}>
+            <input type="hidden" name="id" value={w.id} />
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Room check-out">
+              <table className="ep-table ep-table--dense">
+                <caption className="ep-sr-only">Room check-out</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Condition</th>
+                    <th scope="col" className="ep-num">
+                      Charge (₹)
+                    </th>
+                    <th scope="col">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checkout.items.map((x, n) => (
+                    <tr key={x.name}>
+                      <td>
+                        {x.name}
+                        <input type="hidden" name={`c-${String(n)}-name`} value={x.name} />
+                        <input
+                          type="hidden"
+                          name={`c-${String(n)}-itemId`}
+                          value={x.itemId ?? ''}
+                        />
+                      </td>
+                      <td>
+                        <label className="ep-sr-only" htmlFor={`co-${String(n)}`}>
+                          Condition of {x.name}
+                        </label>
+                        <select
+                          id={`co-${String(n)}`}
+                          name={`c-${String(n)}-condition`}
+                          className="ep-select"
+                          defaultValue={x.condition}
+                          disabled={!canManage || !open}
+                        >
+                          <option value="ok">In order</option>
+                          <option value="damaged">Damaged</option>
+                          <option value="missing">Missing</option>
+                        </select>
+                      </td>
+                      <td className="ep-num">
+                        <label className="ep-sr-only" htmlFor={`cc-${String(n)}`}>
+                          Charge for {x.name}
+                        </label>
+                        <input
+                          id={`cc-${String(n)}`}
+                          name={`c-${String(n)}-charge`}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="ep-input"
+                          style={{ maxWidth: '8rem' }}
+                          defaultValue={
+                            x.condition === 'ok' ? (checkout.charges[x.name] ?? 0) : x.charge
+                          }
+                          disabled={!canManage || !open}
+                        />
+                      </td>
+                      <td>
+                        <label className="ep-sr-only" htmlFor={`cn-${String(n)}`}>
+                          Note on {x.name}
+                        </label>
+                        <input
+                          id={`cn-${String(n)}`}
+                          name={`c-${String(n)}-note`}
+                          className="ep-input"
+                          maxLength={200}
+                          defaultValue={x.note ?? ''}
+                          disabled={!canManage || !open}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="ep-field__help">
+              An item in order is charged nothing, whatever the charge box says.
+            </p>
+            {canManage && open ? (
+              <Button type="submit" variant="secondary">
+                Save the check-out
+              </Button>
+            ) : null}
+          </form>
+        </Card>
+      ) : null}
 
       <Card title="Approval" style={{ marginBottom: 'var(--sp-4)' }}>
         {w.approval ? (

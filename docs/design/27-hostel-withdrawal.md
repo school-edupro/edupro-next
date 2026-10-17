@@ -142,3 +142,22 @@ Changed by the user after the first build:
   - Each report offers the father, mother and guardian contacts and the address.
   - The user's own columns are stored in `user_preferences` (`hostel.report.<id>`).
   - The school default is the setting `hostel.report_columns` (needs the set-up right).
+
+## Part 4 (17 Oct 2026, migration 0163): the parent's request, the room check-out, the clearance
+
+- **The parent's request.** On the parent app's Hostel page, _Leaving the hostel_: the last day, the
+  reason and a note. One request waits at a time; the parent may take it back while it waits. It shows
+  on Hostel → Withdrawals → _Requests from parents_; the office **starts the withdrawal** from it (the
+  form opens filled in, and the request points at the withdrawal) or **declines** it with a note the
+  parent sees. API: `GET/POST /hostel/mine/exit`, `POST /hostel/mine/exit/:id/withdraw`,
+  `GET /hostel/exit-requests`, `POST /hostel/exit-requests/:id/decline`, `exitRequestId` on the start.
+- **The room check-out list.** The school's items (bed, mattress, cupboard, keys... made the first
+  time) each with the charge for one missing or damaged, on Withdrawals → Steps and notice. While a
+  withdrawal waits for approval, the warden or office marks each item in order, damaged or missing (the
+  charge can be changed); the total becomes the **damage charge**, and the list goes into the charge
+  remarks, so the approvers see it. API: `GET/PUT /hostel/checkout-items`,
+  `GET/PUT /hostel/withdrawals/:id/checkout`.
+- **The clearance certificate.** Once the withdrawal is completed, an A4 PDF (number `HC/<id>`): the
+  pupil, the hostel and room, the stay, the reason, how the hostel fee was settled, the charges, the
+  check-out, who approved. On the withdrawal page and in the parent app. API:
+  `GET /hostel/withdrawals/:id/certificate`, `GET /hostel/mine/withdrawals/:id/certificate`.

@@ -17,15 +17,41 @@ interface PupilHostel {
   current: { place: string; fromDate: string; roomType: string } | null;
 }
 
+interface ExitRequest {
+  id: string;
+  studentId: string;
+  leavingOn: string;
+  reason: string;
+  note: string | null;
+  requestedOn: string;
+  requestedBy: string | null;
+}
+
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 
 /** Start a hostel withdrawal: find the boarder, then the dates, reason and the parent's letter. */
 export default async function NewHostelWithdrawalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sq?: string; student?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    sq?: string;
+    student?: string;
+    request?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
+  // started from a parent's request (Withdrawals → Requests from parents): its day, reason and note
+  const request = /^\d{1,18}$/.test(sp.request ?? '')
+    ? ((
+        await apiFetch<{ data: ExitRequest[] }>('/hostel/exit-requests?status=pending').catch(
+          () => ({
+            data: [] as ExitRequest[],
+          }),
+        )
+      ).data.find((r) => r.id === sp.request) ?? null)
+    : null;
   const sq = (sp.sq ?? '').trim().slice(0, 60);
   const studentId = /^\d{1,18}$/.test(sp.student ?? '') ? sp.student! : '';
   const [me, hits, pupil] = await Promise.all([
@@ -99,6 +125,15 @@ export default async function NewHostelWithdrawalPage({
             </p>
             <form action={startHostelWithdrawal} className="hs-form" style={{ maxWidth: '40rem' }}>
               <input type="hidden" name="studentId" value={pupil.pupil.id} />
+              {request && request.studentId === pupil.pupil.id ? (
+                <>
+                  <input type="hidden" name="exitRequestId" value={request.id} />
+                  <p className="ep-alert ep-alert--info" style={{ margin: 0 }}>
+                    From the request of {request.requestedBy ?? 'the parent'} on{' '}
+                    {dmy(request.requestedOn)} in the parent app.
+                  </p>
+                </>
+              ) : null}
               <label className="ep-field" htmlFor="nw-req">
                 <span className="ep-field__label">Request received on</span>
                 <input
@@ -106,7 +141,7 @@ export default async function NewHostelWithdrawalPage({
                   name="requestedOn"
                   type="date"
                   className="ep-input"
-                  defaultValue={today()}
+                  defaultValue={request?.requestedOn ?? today()}
                   max={today()}
                 />
                 <span className="ep-field__help">The notice period is counted from this day.</span>
@@ -120,6 +155,7 @@ export default async function NewHostelWithdrawalPage({
                   className="ep-input"
                   required
                   min={pupil.current.fromDate}
+                  defaultValue={request?.leavingOn}
                 />
                 <span className="ep-field__help">
                   Any day from {dmy(pupil.current.fromDate)}, the day the bed was allotted. The
@@ -134,7 +170,7 @@ export default async function NewHostelWithdrawalPage({
                   id="nw-why"
                   name="reason"
                   className="ep-select"
-                  defaultValue="parent_request"
+                  defaultValue={request?.reason ?? 'parent_request'}
                 >
                   <option value="parent_request">Parent’s request</option>
                   <option value="health">Health</option>
@@ -186,6 +222,7 @@ export default async function NewHostelWithdrawalPage({
                   className="ep-input"
                   rows={3}
                   maxLength={1000}
+                  defaultValue={request?.note ?? ''}
                 />
               </label>
               <label className="ep-field" htmlFor="nw-doc">

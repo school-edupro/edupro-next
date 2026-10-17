@@ -74,7 +74,8 @@ async function uploadAll(fd: FormData, key: string): Promise<string[]> {
 
 export async function startHostelWithdrawal(fd: FormData) {
   const studentId = str(fd, 'studentId');
-  const from = `${BASE}/new?student=${studentId}`;
+  const requestId = str(fd, 'exitRequestId');
+  const from = `${BASE}/new?student=${studentId}${requestId ? `&request=${requestId}` : ''}`;
   let id = '';
   try {
     const files = await uploadAll(fd, 'documents');
@@ -89,6 +90,7 @@ export async function startHostelWithdrawal(fd: FormData) {
         damageCharge: Number(str(fd, 'damageCharge') || '0'),
         messCharge: Number(str(fd, 'messCharge') || '0'),
         chargeRemarks: str(fd, 'chargeRemarks') || undefined,
+        exitRequestId: requestId || undefined,
       }),
     });
     id = out.id;
@@ -176,4 +178,67 @@ export async function saveHostelNotice(fd: FormData) {
   }
   revalidatePath(to);
   redirect(`${to}?ok=saved`);
+}
+
+// ---- part 4 (0163): parents' requests, the room check-out list ------------------------------------------
+/** The office declines a parent's request to take the child out of the hostel (the note is shown to them). */
+export async function declineExitRequest(fd: FormData) {
+  try {
+    await apiFetch(`/hostel/exit-requests/${str(fd, 'id')}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ note: str(fd, 'note') }),
+    });
+  } catch (error) {
+    back(BASE, error);
+  }
+  revalidatePath(BASE);
+  redirect(`${BASE}?ok=declined`);
+}
+
+/** The room check-out of a withdrawal: c-<n>-condition / charge / note / name / itemId for each item. */
+export async function saveCheckout(fd: FormData) {
+  const id = str(fd, 'id');
+  const to = `${BASE}/${id}`;
+  const rows = [
+    ...new Set([...fd.keys()].map((k) => /^c-(\d+)-name$/.exec(k)?.[1]).filter(Boolean)),
+  ].map((n) => ({
+    itemId: str(fd, `c-${n!}-itemId`) || undefined,
+    name: str(fd, `c-${n!}-name`),
+    condition: str(fd, `c-${n!}-condition`) || 'ok',
+    charge: Number(str(fd, `c-${n!}-charge`) || '0'),
+    note: str(fd, `c-${n!}-note`) || undefined,
+  }));
+  try {
+    await apiFetch(`/hostel/withdrawals/${id}/checkout`, {
+      method: 'PUT',
+      body: JSON.stringify({ items: rows }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  revalidatePath(to);
+  redirect(`${to}?ok=checkout`);
+}
+
+/** The school's check-out items (i-<n>-id / name / charge / active, remove-<n>; the row "new" adds one). */
+export async function saveCheckoutItems(fd: FormData) {
+  const to = `${BASE}/settings`;
+  const keys = [
+    ...new Set([...fd.keys()].map((k) => /^i-(\d+|new)-name$/.exec(k)?.[1]).filter(Boolean)),
+  ];
+  const items = keys
+    .filter((n) => fd.get(`remove-${n!}`) !== 'on' && str(fd, `i-${n!}-name`))
+    .map((n) => ({
+      id: str(fd, `i-${n!}-id`) || undefined,
+      name: str(fd, `i-${n!}-name`),
+      charge: Number(str(fd, `i-${n!}-charge`) || '0'),
+      active: n === 'new' || fd.get(`i-${n!}-active`) === 'on',
+    }));
+  try {
+    await apiFetch('/hostel/checkout-items', { method: 'PUT', body: JSON.stringify({ items }) });
+  } catch (error) {
+    back(to, error);
+  }
+  revalidatePath(to);
+  redirect(`${to}?ok=1&detail=${encodeURIComponent('Check-out items saved.')}`);
 }

@@ -207,6 +207,18 @@ boarders (fee, paid, due now, % collected).
   - the hostel steps (Warden, Mess) used when a hosteller **leaves the school** (People →
     Withdrawals).
 
+**A parent's request**: the parent asks on the parent app's Hostel page (_Leaving the hostel_: last day,
+reason, note) and can take it back while it waits. It shows on Hostel → Withdrawals → **Requests from
+parents**: _Start the withdrawal_ opens the form filled in from it; _Decline_ needs a note, which the
+parent sees.
+
+**Room check-out**: on the withdrawal page, while it waits for approval, mark each room item in order,
+damaged or missing (charges from Steps and notice → Room check-out items; they can be changed). The
+total becomes the damage charge and the list goes into the remarks for the approvers.
+
+**Clearance certificate**: once completed, _Clearance certificate (PDF)_ on the withdrawal page; the
+parent downloads the same from the parent app.
+
 ## Reports with the parents (Excel / PDF)
 
 - **The four reports:**

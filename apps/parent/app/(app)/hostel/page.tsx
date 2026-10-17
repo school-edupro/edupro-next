@@ -5,7 +5,14 @@ import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { addVisitor, raiseComplaint, rateMeal, removeVisitor } from './actions';
+import {
+  addVisitor,
+  askHostelExit,
+  raiseComplaint,
+  rateMeal,
+  removeVisitor,
+  withdrawHostelExit,
+} from './actions';
 
 interface Visitors {
   onRecord: Array<{ name: string; relation: string; mobile: string | null }>;
@@ -17,6 +24,24 @@ interface Visitors {
     status: 'pending' | 'approved' | 'rejected';
     note: string | null;
     hasPhoto: boolean;
+  }>;
+}
+interface ExitInfo {
+  hostel: string | null;
+  requests: Array<{
+    id: string;
+    leavingOn: string;
+    reason: string;
+    note: string | null;
+    status: 'pending' | 'started' | 'declined' | 'withdrawn';
+    declineNote: string | null;
+    createdAt: string;
+  }>;
+  withdrawals: Array<{
+    id: string;
+    leavingOn: string;
+    status: string;
+    completedAt: string | null;
   }>;
 }
 interface Menu {
@@ -105,6 +130,7 @@ export default async function HostelPage({
   let complaints: Complaint[] = [];
   let heads: Array<{ code: string; name: string }> = [];
   let incidents: Incident[] = [];
+  let exit: ExitInfo | null = null;
   let rate: Array<{
     mealId: string;
     meal: string;
@@ -117,6 +143,7 @@ export default async function HostelPage({
     menu = await bff.api.fetch<Menu>(
       `/hostel/mine/menu?studentId=${kid.id}${/^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? '') ? `&weekOf=${sp.week}` : ''}`,
     );
+    exit = await bff.api.fetch<ExitInfo>(`/hostel/mine/exit?studentId=${kid.id}`).catch(() => null);
     if (menu.hostel)
       [visitors, complaints, heads, incidents, rate] = await Promise.all([
         bff.api.fetch<Visitors>(`/hostel/mine/visitors?studentId=${kid.id}`),
@@ -179,9 +206,13 @@ export default async function HostelPage({
               ? 'Removed from the list.'
               : sp.ok === 'rated'
                 ? 'Thank you. The warden sees your rating.'
-                : sp.ok === 'complaint'
-                  ? 'Complaint raised. The warden will look into it.'
-                  : 'Added. The warden will approve the visitor.',
+                : sp.ok === 'exit'
+                  ? 'Your request is sent. The hostel office will start the withdrawal or reply here.'
+                  : sp.ok === 'exit-withdrawn'
+                    ? 'Your request is taken back.'
+                    : sp.ok === 'complaint'
+                      ? 'Complaint raised. The warden will look into it.'
+                      : 'Added. The warden will approve the visitor.',
           )}
         </div>
       ) : null}
@@ -480,6 +511,152 @@ export default async function HostelPage({
                   </li>
                 ))}
               </ul>
+            </Card>
+          ) : null}
+          {exit ? (
+            <Card title={t(lang, 'Leaving the hostel')} style={{ marginTop: 'var(--sp-4)' }}>
+              {exit.requests.length || exit.withdrawals.length ? (
+                <ul className="fp-rcpts" style={{ marginBottom: 'var(--sp-3)' }}>
+                  {exit.requests.map((r) => (
+                    <li key={`r-${r.id}`}>
+                      <span>
+                        <strong>
+                          {t(lang, 'Request')} · {t(lang, 'last day')} {dayName(r.leavingOn)}
+                        </strong>
+                        {r.note ? <span className="ep-field__help"> · {r.note}</span> : null}
+                        {r.status === 'declined' && r.declineNote ? (
+                          <span className="ep-field__help" style={{ display: 'block' }}>
+                            {t(lang, 'The hostel office replied')}: {r.declineNote}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                        <Badge
+                          tone={
+                            r.status === 'pending'
+                              ? 'warning'
+                              : r.status === 'started'
+                                ? 'success'
+                                : 'neutral'
+                          }
+                        >
+                          {t(
+                            lang,
+                            r.status === 'pending'
+                              ? 'Waiting for the office'
+                              : r.status === 'started'
+                                ? 'Started by the office'
+                                : r.status === 'declined'
+                                  ? 'Not taken up'
+                                  : 'Taken back',
+                          )}
+                        </Badge>
+                        {r.status === 'pending' ? (
+                          <form action={withdrawHostelExit}>
+                            <input type="hidden" name="id" value={r.id} />
+                            <input type="hidden" name="studentId" value={kid.id} />
+                            <Button type="submit" size="sm" variant="ghost">
+                              {t(lang, 'Take back')}
+                            </Button>
+                          </form>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                  {exit.withdrawals.map((w) => (
+                    <li key={`w-${w.id}`}>
+                      <span>
+                        <strong>
+                          {t(lang, 'Hostel withdrawal')} · {t(lang, 'last day')}{' '}
+                          {dayName(w.leavingOn)}
+                        </strong>
+                      </span>
+                      <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                        <Badge
+                          tone={
+                            w.status === 'completed'
+                              ? 'success'
+                              : w.status === 'requested'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {t(
+                            lang,
+                            w.status === 'completed'
+                              ? 'Left the hostel'
+                              : w.status === 'requested'
+                                ? 'Waiting for approval'
+                                : w.status === 'rejected'
+                                  ? 'Not approved'
+                                  : 'Cancelled',
+                          )}
+                        </Badge>
+                        {w.status === 'completed' ? (
+                          <a
+                            className="ep-btn ep-btn--secondary ep-btn--sm"
+                            href={`/hostel/clearance/${w.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {t(lang, 'Clearance certificate')}
+                          </a>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {exit.hostel &&
+              !exit.requests.some((r) => r.status === 'pending') &&
+              !exit.withdrawals.some((w) => w.status === 'requested') ? (
+                <form action={askHostelExit} className="hs-form" style={{ maxWidth: '36rem' }}>
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    {t(
+                      lang,
+                      'Want your child to leave the hostel and stay in school as a day scholar? Ask here; the hostel office checks the room and the dues and starts it.',
+                    )}
+                  </p>
+                  <input type="hidden" name="studentId" value={kid.id} />
+                  <label className="ep-field" htmlFor="hx-day">
+                    <span className="ep-field__label">{t(lang, 'Last day in the hostel')}</span>
+                    <input
+                      id="hx-day"
+                      name="leavingOn"
+                      type="date"
+                      className="ep-input"
+                      required
+                      min={today}
+                    />
+                  </label>
+                  <label className="ep-field" htmlFor="hx-why">
+                    <span className="ep-field__label">{t(lang, 'Reason')}</span>
+                    <select
+                      id="hx-why"
+                      name="reason"
+                      className="ep-select"
+                      defaultValue="parent_request"
+                    >
+                      <option value="parent_request">{t(lang, 'Our own reasons')}</option>
+                      <option value="health">{t(lang, 'Health')}</option>
+                      <option value="other">{t(lang, 'Other')}</option>
+                    </select>
+                  </label>
+                  <label className="ep-field" htmlFor="hx-note">
+                    <span className="ep-field__label">{t(lang, 'Note for the hostel office')}</span>
+                    <textarea
+                      id="hx-note"
+                      name="note"
+                      className="ep-input"
+                      rows={2}
+                      maxLength={1000}
+                    />
+                  </label>
+                  <div>
+                    <Button type="submit">{t(lang, 'Send the request')}</Button>
+                  </div>
+                </form>
+              ) : null}
             </Card>
           ) : null}
           <Card title={t(lang, 'Complaints')} style={{ marginTop: 'var(--sp-4)' }}>
