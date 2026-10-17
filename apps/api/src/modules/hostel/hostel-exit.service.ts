@@ -395,6 +395,12 @@ export class HostelExitService {
     );
     const w = r.rows[0];
     if (!w) throw new DomainError('not-found', 'Hostel withdrawal not found', { status: 404 });
+    if (w.status === 'revoked')
+      throw new DomainError(
+        'hostel.withdrawal_revoked',
+        'This hostel withdrawal was revoked (the pupil is back in the hostel): the clearance certificate is no longer valid',
+        { status: 409 },
+      );
     if (w.status !== 'completed')
       throw new DomainError(
         'hostel.withdrawal_not_completed',

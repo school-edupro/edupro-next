@@ -114,3 +114,24 @@ export const HostelWithdrawalSettingsSchema = z.object({
   noticeCharge: z.boolean(),
 });
 export class HostelWithdrawalSettingsDto extends createZodDto(HostelWithdrawalSettingsSchema) {}
+
+// ---- part 5 (0164): revoking a completed hostel withdrawal ---------------------------------------------
+export const RevokeHostelWithdrawalSchema = z
+  .object({
+    reason: z.string().trim().min(3).max(500),
+    /** continue: as if never left (same bed, the months away charged); from_date: back from a day */
+    mode: z.enum(['continue', 'from_date']),
+    fromDate: DateSchema.optional(),
+    /** from_date: another bed when the old one is taken (the old one when empty) */
+    bedId: IdSchema.optional(),
+  })
+  .refine((v) => v.mode === 'continue' || !!v.fromDate, {
+    message: 'Give the day the pupil is back',
+    path: ['fromDate'],
+  });
+export class RevokeHostelWithdrawalDto extends createZodDto(RevokeHostelWithdrawalSchema) {}
+export const DecideRevokeSchema = z.object({
+  outcome: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(500).optional(),
+});
+export class DecideRevokeDto extends createZodDto(DecideRevokeSchema) {}

@@ -17,7 +17,7 @@ import {
 } from './hostel-withdrawal.dto';
 import { HostelService } from './hostel.service';
 
-type Status = 'requested' | 'cleared' | 'completed' | 'cancelled' | 'rejected';
+type Status = 'requested' | 'cleared' | 'completed' | 'cancelled' | 'rejected' | 'revoked';
 
 /** The approval levels of a hostel withdrawal (Fee setup -> Approval levels, "Hostel withdrawal"). */
 export const HW_FLOW = { code: 'hostel_withdrawal', entityType: 'hostel_withdrawal' } as const;
@@ -88,12 +88,41 @@ export interface HostelWithdrawalRow {
   myStep: { id: string; lastLevel: boolean } | null;
   /** per viewer: no approval levels in force, the office completes it */
   canComplete?: boolean;
+  /** a revoke asked on the completed withdrawal (0164) */
+  revoke: {
+    status: 'pending' | 'approved' | 'rejected';
+    reason: string;
+    mode: 'continue' | 'from_date';
+    fromDate: string | null;
+    requestedBy: string | null;
+    requestedAt: string | null;
+    revokedAt: string | null;
+    note: string | null;
+    approval: HostelWithdrawalRow['approval'];
+    waitingWith: string | null;
+    myStep: { id: string } | null;
+  } | null;
 }
 
-interface Db extends Omit<HostelWithdrawalRow, 'completedAt' | 'approval' | 'myStep'> {
+interface Db extends Omit<HostelWithdrawalRow, 'completedAt' | 'approval' | 'myStep' | 'revoke'> {
   yearId: string;
   instanceId: string | null;
   completedAt: Date | null;
+  allotmentId: string;
+  bedId: string;
+  damageMiscFeeId: string | null;
+  messMiscFeeId: string | null;
+  revokeStatus: 'pending' | 'approved' | 'rejected' | null;
+  revokeReason: string | null;
+  revokeMode: 'continue' | 'from_date' | null;
+  revokeFrom: string | null;
+  revokeBedId: string | null;
+  revokeRequestedBy: string | null;
+  revokeRequestedAt: Date | null;
+  revokeInstanceId: string | null;
+  revokedAt: Date | null;
+  revokeNote: string | null;
+  revokeWaitingWith: string | null;
 }
 
 const SELECT = `SELECT w.id::text, w.student_id::text AS "studentId", s.display_name AS "studentName", s.admission_no AS "admissionNo",
@@ -102,7 +131,14 @@ const SELECT = `SELECT w.id::text, w.student_id::text AS "studentId", s.display_
         w.fee_choice AS "feeChoice", w.notice_days AS "noticeDays", w.notice_short AS "noticeShort",
         w.damage_charge::text AS "damageCharge", w.mess_charge::text AS "messCharge", w.charge_remarks AS "chargeRemarks",
         w.fee_until::text AS "feeUntil", w.fee_note AS "feeNote", w.decided_note AS "decidedNote", w.academic_year_id::text AS "yearId",
-        w.workflow_instance_id::text AS "instanceId",
+        w.workflow_instance_id::text AS "instanceId", w.allotment_id::text AS "allotmentId", a.bed_id::text AS "bedId",
+        w.damage_misc_fee_id::text AS "damageMiscFeeId", w.mess_misc_fee_id::text AS "messMiscFeeId",
+        w.revoke_status AS "revokeStatus", w.revoke_reason AS "revokeReason", w.revoke_mode AS "revokeMode",
+        w.revoke_from::text AS "revokeFrom", w.revoke_bed_id::text AS "revokeBedId", w.revoke_requested_at AS "revokeRequestedAt",
+        (SELECT display_name FROM users WHERE id = w.revoke_requested_by) AS "revokeRequestedBy",
+        w.revoke_workflow_instance_id::text AS "revokeInstanceId", w.revoked_at AS "revokedAt", w.revoke_note AS "revokeNote",
+        (SELECT st.name FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level
+          WHERE i.id = w.revoke_workflow_instance_id AND i.status = 'pending' LIMIT 1) AS "revokeWaitingWith",
         u.display_name AS "requestedBy", w.completed_at AS "completedAt", w.cancel_reason AS "cancelReason",
         (SELECT st.name FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level
           WHERE i.id = w.workflow_instance_id AND i.status = 'pending' LIMIT 1) AS "waitingWith"
@@ -126,6 +162,7 @@ const STATUS: Record<Status, string> = {
   completed: 'Left the hostel',
   cancelled: 'Cancelled',
   rejected: 'Not approved',
+  revoked: 'Revoked: back in the hostel',
 };
 const dmy = (d: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('-') : '');
 const monthOf = (d: string) => `${d.slice(0, 7)}-01`;
@@ -299,8 +336,63 @@ export class HostelWithdrawalsService {
     r: Db,
     only: string[] | null,
   ): Promise<HostelWithdrawalRow> {
-    const { yearId: _y, instanceId, completedAt, ...rest } = r;
+    const {
+      yearId: _y,
+      instanceId,
+      completedAt,
+      allotmentId: _a,
+      bedId: _b,
+      damageMiscFeeId: _d,
+      messMiscFeeId: _m,
+      revokeStatus,
+      revokeReason,
+      revokeMode,
+      revokeFrom,
+      revokeBedId: _rb,
+      revokeRequestedBy,
+      revokeRequestedAt,
+      revokeInstanceId,
+      revokedAt,
+      revokeNote,
+      revokeWaitingWith,
+      ...rest
+    } = r;
     void _y;
+    void _a;
+    void _b;
+    void _d;
+    void _m;
+    void _rb;
+    const ra = await this.approvalOf(c, revokeInstanceId);
+    const rPending =
+      ra && ra.status === 'pending'
+        ? ra.steps.find((s) => s.level === ra.currentLevel && s.status === 'pending')
+        : undefined;
+    const revoke = revokeStatus
+      ? {
+          status: revokeStatus,
+          reason: revokeReason ?? '',
+          mode: revokeMode ?? 'continue',
+          fromDate: revokeFrom,
+          requestedBy: revokeRequestedBy,
+          requestedAt: revokeRequestedAt ? revokeRequestedAt.toISOString() : null,
+          revokedAt: revokedAt ? revokedAt.toISOString() : null,
+          note: revokeNote,
+          approval: ra
+            ? {
+                instanceId: ra.instanceId,
+                status: ra.status,
+                currentLevel: ra.currentLevel,
+                steps: ra.steps,
+              }
+            : null,
+          waitingWith: revokeWaitingWith,
+          myStep:
+            rPending && (ra?.assigneeIds.get(rPending.id) ?? []).includes(ctx.user.id)
+              ? { id: rPending.id }
+              : null,
+        }
+      : null;
     const a = await this.approvalOf(c, instanceId);
     const pending =
       a && a.status === 'pending'
@@ -331,6 +423,7 @@ export class HostelWithdrawalsService {
         manage &&
         (r.status === 'cleared' || (r.status === 'requested' && !instanceId)) &&
         (!only || only.includes(r.hostelId)),
+      revoke,
     };
   }
 
@@ -664,6 +757,22 @@ export class HostelWithdrawalsService {
     outcome: 'approved' | 'rejected',
   ) {
     const w = await this.findDb(c, instance.entityId, true);
+    // the same levels approve a revoke of a completed withdrawal (0164)
+    if (w && w.revokeInstanceId === instance.id) {
+      if (w.revokeStatus !== 'pending') return;
+      if (outcome === 'approved') await this.applyRevoke(c, ctx, w);
+      else
+        await c.query(
+          `UPDATE hostel_withdrawals SET revoke_status = 'rejected', revoke_note = $2, updated_at = now() WHERE id = $1`,
+          [w.id, instance.steps.find((s) => s.status === 'rejected')?.note ?? null],
+        );
+      await this.audit.stage(ctx, c, {
+        action: `hostel.withdrawal.revoke_${outcome}`,
+        entityType: 'hostel_withdrawals',
+        entityId: w.id,
+      });
+      return;
+    }
     if (!w || w.status !== 'requested') return;
     if (outcome === 'rejected') {
       const note = instance.steps.find((s) => s.status === 'rejected')?.note ?? null;
@@ -680,6 +789,269 @@ export class HostelWithdrawalsService {
       return;
     }
     await this.completeIn(c, ctx, w);
+  }
+
+  // ---- revoke (0164) ---------------------------------------------------------------------------------
+  /**
+   * Ask to revoke a completed hostel withdrawal (the pupil comes back): as if never left (the same bed,
+   * the months away charged) or back from a day (the same bed or another; the months away not charged).
+   * It goes through the withdrawal's own approval levels; with them switched off it is done at once.
+   */
+  async requestRevoke(
+    ctx: RequestContext,
+    id: string,
+    dto: { reason: string; mode: 'continue' | 'from_date'; fromDate?: string; bedId?: string },
+  ): Promise<HostelWithdrawalRow> {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const w = await this.findDb(c, id, true);
+      const only = await this.hostel.scope(ctx, c);
+      if (!w || (only && !only.includes(w.hostelId)))
+        throw new DomainError('not-found', 'Hostel withdrawal not found', { status: 404 });
+      if (w.status !== 'completed')
+        throw new DomainError(
+          'withdrawal.not_completed',
+          'Only a completed hostel withdrawal can be revoked',
+          {
+            status: 409,
+          },
+        );
+      if (w.revokeStatus === 'pending')
+        throw new DomainError(
+          'withdrawal.revoke_pending',
+          'A revoke is already waiting for approval',
+          {
+            status: 409,
+          },
+        );
+      await this.checkRevoke(c, w, dto);
+      await c.query(
+        `UPDATE hostel_withdrawals SET revoke_status = 'pending', revoke_reason = $2, revoke_mode = $3, revoke_from = $4::date,
+                revoke_bed_id = $5, revoke_requested_by = app.current_user_id(), revoke_requested_at = now(),
+                revoke_workflow_instance_id = NULL, revoke_note = NULL, updated_at = now(), updated_by = app.current_user_id()
+          WHERE id = $1`,
+        [
+          id,
+          dto.reason,
+          dto.mode,
+          dto.mode === 'from_date' ? dto.fromDate : null,
+          dto.mode === 'from_date' ? (dto.bedId ?? w.bedId) : null,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'hostel.withdrawal.revoke_request',
+        entityType: 'hostel_withdrawals',
+        entityId: id,
+        after: dto,
+      });
+      if (await this.ensureFlow(c)) {
+        const inst = await this.workflow.start(c, ctx, {
+          definitionCode: HW_FLOW.code,
+          entityType: HW_FLOW.entityType,
+          entityId: id,
+          subject: `Revoke the hostel withdrawal of ${w.studentName} (${w.admissionNo}): ${dto.mode === 'continue' ? 'as if never left' : `back from ${dmy(dto.fromDate ?? null)}`}`,
+          payload: { revoke: true, mode: dto.mode, fromDate: dto.fromDate ?? null },
+        });
+        await c.query(
+          `UPDATE hostel_withdrawals SET revoke_workflow_instance_id = $2 WHERE id = $1`,
+          [id, inst.id],
+        );
+      } else {
+        const fresh = (await this.findDb(c, id, true))!;
+        await this.applyRevoke(c, ctx, fresh);
+      }
+    });
+    return this.get(ctx, id);
+  }
+
+  /** The bed must be free for the stay asked (and the pupil hold none now). */
+  private async checkRevoke(
+    c: PoolClient,
+    w: Db,
+    dto: { mode: 'continue' | 'from_date'; fromDate?: string | null; bedId?: string | null },
+  ) {
+    const held = await c.query(
+      // another stay than the one this withdrawal ended (that one may still run to a later last day)
+      `SELECT 1 FROM hostel_allotments WHERE student_id = $1 AND id <> $2
+          AND (to_date IS NULL OR to_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date)`,
+      [w.studentId, w.allotmentId],
+    );
+    if (held.rowCount)
+      throw new DomainError(
+        'hostel.already_allotted',
+        'The pupil holds a bed again: nothing to revoke',
+        {
+          status: 409,
+        },
+      );
+    const yr = await c.query<{ start: string; end: string }>(
+      `SELECT start_date::text AS start, end_date::text AS end FROM academic_years WHERE id = $1`,
+      [w.yearId],
+    );
+    const from = dto.mode === 'continue' ? null : dto.fromDate!;
+    if (from && (from <= w.leavingOn || from > yr.rows[0]!.end))
+      throw new DomainError(
+        'validation-failed',
+        `The day back must be after ${dmy(w.leavingOn)} and in the same session (up to ${dmy(yr.rows[0]!.end)})`,
+        { status: 400 },
+      );
+    const bed = dto.mode === 'continue' ? w.bedId : (dto.bedId ?? w.bedId);
+    const start = from ?? w.leavingOn;
+    const taken = await c.query<{ who: string }>(
+      `SELECT s.display_name AS who FROM hostel_allotments a JOIN students s ON s.id = a.student_id
+        WHERE a.bed_id = $1 AND a.id <> $2 AND (a.to_date IS NULL OR a.to_date > $3::date) LIMIT 1`,
+      [bed, w.allotmentId, start],
+    );
+    if (taken.rows[0])
+      throw new DomainError(
+        'hostel.bed_taken',
+        `The bed is held by ${taken.rows[0].who} since: choose 'back from a day' with another bed`,
+        { status: 409 },
+      );
+    const blocked = await c.query(
+      `SELECT 1 FROM hostel_beds WHERE id = $1 AND status <> 'active'`,
+      [bed],
+    );
+    if (blocked.rowCount)
+      throw new DomainError('hostel.bed_blocked', 'The bed is blocked', { status: 409 });
+  }
+
+  /** The approver of the revoke's current level decides (the levels' last approval puts the pupil back). */
+  async decideRevoke(
+    ctx: RequestContext,
+    id: string,
+    dto: { outcome: 'approved' | 'rejected'; note?: string },
+  ): Promise<HostelWithdrawalRow> {
+    const w = await this.get(ctx, id);
+    if (!w.revoke || w.revoke.status !== 'pending' || !w.revoke.approval)
+      throw new DomainError('withdrawal.not_open', 'No revoke is waiting for approval here', {
+        status: 409,
+      });
+    if (!w.revoke.myStep)
+      throw new DomainError('workflow.not_assignee', 'This level is not assigned to you', {
+        status: 403,
+      });
+    if (dto.outcome === 'rejected' && !dto.note?.trim())
+      throw new DomainError('validation-failed', 'Give the reason for not approving', {
+        status: 400,
+      });
+    await this.workflow.act(ctx, w.revoke.myStep.id, dto.outcome, { note: dto.note });
+    return this.get(ctx, id);
+  }
+
+  /**
+   * The revoke approved: the pupil is back (the stay goes on, or a new stay from the day), the hostel fee
+   * is made again (months away left out when back from a day), refunds still waiting are dropped, unpaid
+   * damage and mess charges are cancelled; the clearance certificate is no longer valid.
+   */
+  private async applyRevoke(c: PoolClient, ctx: RequestContext, w: Db) {
+    const mode = w.revokeMode ?? 'continue';
+    await this.checkRevoke(c, w, { mode, fromDate: w.revokeFrom, bedId: w.revokeBedId });
+    const notes: string[] = [];
+    if (mode === 'continue') {
+      await c.query(
+        `UPDATE hostel_allotments SET to_date = NULL, end_reason = NULL, end_remarks = NULL, ended_at = NULL, ended_by = NULL WHERE id = $1`,
+        [w.allotmentId],
+      );
+      notes.push(
+        'Back as if never left: the stay goes on and the hostel fee of the months away is charged.',
+      );
+    } else {
+      await c.query(
+        `INSERT INTO hostel_allotments (school_id, student_id, bed_id, from_date, kind, remarks, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3::date, 'allot', $4, app.current_user_id())`,
+        [
+          w.studentId,
+          w.revokeBedId ?? w.bedId,
+          w.revokeFrom,
+          'Back in the hostel: the hostel withdrawal was revoked',
+        ],
+      );
+      // the months between the last month charged and the month back are not charged
+      const gapFrom = nextMonth(w.feeUntil ?? monthOf(w.leavingOn));
+      const backMonth = monthOf(w.revokeFrom!);
+      if (gapFrom < backMonth) {
+        const prev = new Date(`${backMonth}T00:00:00Z`);
+        prev.setUTCMonth(prev.getUTCMonth() - 1);
+        const gapTo = prev.toISOString().slice(0, 10);
+        await c.query(
+          `INSERT INTO hostel_fee_gaps (school_id, student_id, academic_year_id, from_month, to_month, withdrawal_id)
+           VALUES (app.current_school_id(), $1, $2, $3::date, $4::date, $5)`,
+          [w.studentId, w.yearId, gapFrom, gapTo, w.id],
+        );
+        notes.push(
+          `Back from ${dmy(w.revokeFrom)}: no hostel fee for ${monthLabel(gapFrom)}${gapFrom === gapTo ? '' : ` to ${monthLabel(gapTo)}`}.`,
+        );
+      } else notes.push(`Back from ${dmy(w.revokeFrom)}.`);
+    }
+    // refunds of this withdrawal not paid yet are dropped; one already paid is to settle by hand
+    const refunds = await c.query<{
+      id: string;
+      status: string;
+      amount: string;
+      instance: string | null;
+    }>(
+      `SELECT id::text, status::text, amount::text, workflow_instance_id::text AS instance FROM fee_refunds WHERE hostel_withdrawal_id = $1`,
+      [w.id],
+    );
+    const open = refunds.rows.filter((r) => ['draft', 'requested', 'approved'].includes(r.status));
+    if (open.length) {
+      await c.query(
+        `UPDATE fee_refunds SET status = 'rejected', decided_by = app.current_user_id(), decided_at = now(),
+                decision_note = 'The hostel withdrawal was revoked' WHERE id = ANY($1::bigint[])`,
+        [open.map((r) => r.id)],
+      );
+      await c.query(
+        `UPDATE workflow_instances SET status = 'cancelled', cancel_reason = 'The hostel withdrawal was revoked', completed_at = now(),
+                completed_by = app.current_user_id(), updated_at = now() WHERE id = ANY($1::bigint[]) AND status = 'pending'`,
+        [open.map((r) => r.instance).filter(Boolean)],
+      );
+      notes.push(`${String(open.length)} refund(s) not paid yet are dropped.`);
+    }
+    // the hostel fee again (a carried-forward amount stays where it went: the dues are the same in all);
+    // hostel months paid for the months away now go forward to the next unpaid fee
+    const sync = await this.hostel.syncFee(c, w.studentId, w.yearId);
+    notes.push(
+      sync.synced
+        ? 'The hostel fee is made again.'
+        : `The hostel fee was not changed: ${sync.note ?? 'no fee set-up'}.`,
+    );
+    if (sync.synced && mode === 'from_date') {
+      const carried = await this.adjustments.carryHostelOutsideStay(c, w.studentId, w.yearId);
+      if (carried) notes.push(carried);
+    }
+    const paid = refunds.rows.filter((r) => r.status === 'paid');
+    if (paid.length)
+      notes.push(
+        `Refund already paid (${paid.map((r) => rs(Number(r.amount))).join(', ')}): settle it with the parent by hand.`,
+      );
+    // unpaid damage / mess charges raised at the withdrawal are cancelled
+    const misc = [w.damageMiscFeeId, w.messMiscFeeId].filter((x): x is string => !!x);
+    if (misc.length) {
+      const cut = await c.query(
+        `UPDATE misc_fee_students SET status = 'cancelled', updated_at = now()
+          WHERE misc_fee_id = ANY($1::bigint[]) AND student_id = $2 AND status = 'open' AND paid = 0`,
+        [misc, w.studentId],
+      );
+      if (cut.rowCount)
+        notes.push(`${String(cut.rowCount)} unpaid damage / mess charge(s) cancelled.`);
+      const kept = await c.query(
+        `SELECT 1 FROM misc_fee_students WHERE misc_fee_id = ANY($1::bigint[]) AND student_id = $2 AND paid > 0`,
+        [misc, w.studentId],
+      );
+      if (kept.rowCount) notes.push('Damage / mess charges already paid stay paid.');
+    }
+    await c.query(
+      `UPDATE hostel_withdrawals SET status = 'revoked', revoke_status = 'approved', revoked_at = now(), revoked_by = app.current_user_id(),
+              revoke_note = $2, updated_at = now(), updated_by = app.current_user_id()
+        WHERE id = $1`,
+      [w.id, notes.join(' ')],
+    );
+    await this.audit.stage(ctx, c, {
+      action: 'hostel.withdrawal.revoked',
+      entityType: 'hostel_withdrawals',
+      entityId: w.id,
+      after: { mode, fromDate: w.revokeFrom, notes },
+    });
   }
 
   /** With the approval levels switched off, the office completes it (choosing carry-forward or refund). */
@@ -827,7 +1199,7 @@ export class HostelWithdrawalsService {
    */
   private async refundOutsideStay(c: PoolClient, ctx: RequestContext, w: Db): Promise<string> {
     const OUTSIDE = `d.student_id = $1 AND d.academic_year_id = $2 AND d.ledger = 'hostel' AND d.source = 'structure'
-          AND NOT (sp.hosteller AND app.fee_in_hostel(sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))`;
+          AND NOT (sp.hosteller AND app.fee_in_hostel_stay(sp.student_id, sp.academic_year_id, sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))`;
     const paid = await c.query<{
       payment_id: string;
       total: string;

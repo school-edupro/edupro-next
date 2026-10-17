@@ -359,6 +359,7 @@ describe('hostel withdrawal (e2e)', () => {
       reason: 'health',
     });
     const id = (w.json() as HW).id;
+    ids.hwRefund = id;
     expect((w.json() as HW).noticeShort).toBe(false);
     await decide(id, { outcome: 'approved' }, accountant);
     const done = (
@@ -484,5 +485,132 @@ describe('hostel withdrawal (e2e)', () => {
       ),
     );
     expect(stay.rows[0]).toEqual({ to_date: '2026-11-15', end_reason: 'withdrawn' });
+  });
+
+  // ---- revoke (0164) ------------------------------------------------------------------------------------
+  type Revoke = {
+    status: string;
+    revoke: { status: string; note: string | null; waitingWith: string | null } | null;
+  };
+  const hostelMonths = async (id: string) =>
+    (await ledger(id)).instalments
+      .filter((i) => i.ledger === 'hostel' && Number(i.net) > 0)
+      .map((i) => i.dueOn.slice(0, 7));
+
+  it('revoke as if never left: same levels, the same bed again, the hostel fee back, damages cancelled', async () => {
+    const id = ids.hwCarry!;
+    const bad = await post(`/hostel/withdrawals/${id}/revoke`, { reason: 'x', mode: 'continue' });
+    expect(bad.statusCode).toBe(400);
+    const asked = await post(`/hostel/withdrawals/${id}/revoke`, {
+      reason: 'The family changed its mind',
+      mode: 'continue',
+    });
+    expect(asked.statusCode).toBe(201);
+    expect(asked.json()).toMatchObject({
+      status: 'completed',
+      revoke: { status: 'pending', waitingWith: expect.any(String) },
+    });
+    expect(
+      (
+        await post(`/hostel/withdrawals/${id}/revoke`, { reason: 'Again please', mode: 'continue' })
+      ).json(),
+    ).toMatchObject({ type: expect.stringContaining('withdrawal.revoke_pending') });
+    // level by level: the accountant, then the principal (school admin)
+    expect(
+      (await post(`/hostel/withdrawals/${id}/revoke/decide`, { outcome: 'approved' }, admin))
+        .statusCode,
+    ).toBe(403);
+    await post(`/hostel/withdrawals/${id}/revoke/decide`, { outcome: 'approved' }, accountant);
+    const done = (
+      await post(`/hostel/withdrawals/${id}/revoke/decide`, { outcome: 'approved' })
+    ).json() as Revoke;
+    expect(done).toMatchObject({ status: 'revoked', revoke: { status: 'approved' } });
+    expect(done.revoke!.note).toContain('as if never left');
+    const stay = await withMigrator((c) =>
+      c.query<{ to_date: string | null }>(
+        `SELECT to_date::text FROM hostel_allotments WHERE student_id = $1`,
+        [ids.carry],
+      ),
+    );
+    expect(stay.rows).toEqual([{ to_date: null }]);
+    expect((await ledger(ids.carry!)).fee.hostelTo).toBeNull();
+    expect(await hostelMonths(ids.carry!)).toContain('2026-12');
+    const misc = await withMigrator((c) =>
+      c.query<{ status: string }>(
+        `SELECT l.status FROM misc_fee_students l WHERE l.student_id = $1 ORDER BY l.amount`,
+        [ids.carry],
+      ),
+    );
+    expect(misc.rows.map((x) => x.status)).toEqual(['cancelled', 'cancelled']);
+    // the certificate is no longer valid; nothing more to revoke
+    expect((await get<{ type: string }>(`/hostel/withdrawals/${id}/certificate`)).type).toContain(
+      'hostel.withdrawal_revoked',
+    );
+    expect(
+      (await post(`/hostel/withdrawals/${id}/revoke`, { reason: 'Once more', mode: 'continue' }))
+        .statusCode,
+    ).toBe(409);
+  });
+
+  it('revoke back from a day: a new stay, the months away not charged, the waiting refund dropped', async () => {
+    const id = ids.hwRefund!;
+    // a day before the leaving day is refused
+    expect(
+      (
+        await post(`/hostel/withdrawals/${id}/revoke`, {
+          reason: 'Back after illness',
+          mode: 'from_date',
+          fromDate: '2026-10-15',
+        })
+      ).statusCode,
+    ).toBe(400);
+    await post(`/hostel/withdrawals/${id}/revoke`, {
+      reason: 'Back after illness',
+      mode: 'from_date',
+      fromDate: '2027-01-05',
+    });
+    // not approved first: nothing changes
+    const no = await post(
+      `/hostel/withdrawals/${id}/revoke/decide`,
+      { outcome: 'rejected', note: 'Ask in January' },
+      accountant,
+    );
+    expect((no.json() as Revoke).revoke).toMatchObject({ status: 'rejected' });
+    expect((no.json() as Revoke).status).toBe('completed');
+    // asked again and approved
+    await post(`/hostel/withdrawals/${id}/revoke`, {
+      reason: 'Back after illness',
+      mode: 'from_date',
+      fromDate: '2027-01-05',
+    });
+    await post(`/hostel/withdrawals/${id}/revoke/decide`, { outcome: 'approved' }, accountant);
+    const done = (
+      await post(`/hostel/withdrawals/${id}/revoke/decide`, { outcome: 'approved' })
+    ).json() as Revoke;
+    expect(done.status).toBe('revoked');
+    expect(done.revoke!.note).toContain('no hostel fee for Nov 2026 to Dec 2026');
+    expect(done.revoke!.note).toContain('refund(s) not paid yet are dropped');
+    const months = await hostelMonths(ids.refund!);
+    expect(months).toContain('2026-10');
+    expect(months).not.toContain('2026-11');
+    expect(months).not.toContain('2026-12');
+    expect(months).toContain('2027-01');
+    const refunds = await withMigrator((c) =>
+      c.query<{ status: string }>(
+        `SELECT status::text FROM fee_refunds WHERE hostel_withdrawal_id = $1`,
+        [id],
+      ),
+    );
+    expect(refunds.rows).toEqual([{ status: 'rejected' }]);
+    const stays = await withMigrator((c) =>
+      c.query<{ from_date: string; to_date: string | null }>(
+        `SELECT from_date::text, to_date::text FROM hostel_allotments WHERE student_id = $1 ORDER BY from_date`,
+        [ids.refund],
+      ),
+    );
+    expect(stays.rows).toEqual([
+      { from_date: '2026-06-15', to_date: '2026-10-31' },
+      { from_date: '2027-01-05', to_date: null },
+    ]);
   });
 });

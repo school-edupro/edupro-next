@@ -1333,7 +1333,7 @@ export class FeeAdjustmentsService {
          FROM fee_demands d JOIN fee_periods fp ON fp.id = d.period_id
          JOIN student_fee_profiles sp ON sp.student_id = d.student_id AND sp.academic_year_id = d.academic_year_id
         WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.ledger = 'hostel' AND d.source = 'structure' AND d.paid > 0
-          AND NOT (sp.hosteller AND app.fee_in_hostel(sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))
+          AND NOT (sp.hosteller AND app.fee_in_hostel_stay(sp.student_id, sp.academic_year_id, sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))
         ORDER BY fp.sequence`,
       [studentId, yearId],
     );
@@ -1362,7 +1362,7 @@ export class FeeAdjustmentsService {
          FROM fee_periods fp, student_fee_profiles sp
         WHERE fp.id = d.period_id AND sp.student_id = d.student_id AND sp.academic_year_id = d.academic_year_id
           AND d.student_id = $1 AND d.academic_year_id = $2 AND d.ledger = 'hostel' AND d.source = 'structure' AND d.paid = 0 AND d.status = 'pending'
-          AND NOT (sp.hosteller AND app.fee_in_hostel(sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))`,
+          AND NOT (sp.hosteller AND app.fee_in_hostel_stay(sp.student_id, sp.academic_year_id, sp.hostel_from, sp.hostel_to, make_date(fp.year, fp.month, 1)))`,
       [studentId, yearId],
     );
     if (!paid.rows.length) return null;

@@ -13,6 +13,8 @@ import {
   HostelWithdrawalsFileDto,
   ListHostelWithdrawalsDto,
   StartHostelWithdrawalDto,
+  DecideRevokeDto,
+  RevokeHostelWithdrawalDto,
 } from './hostel-withdrawal.dto';
 import { HostelWithdrawalsService } from './hostel-withdrawals.service';
 import { HOSTEL } from './hostel.dto';
@@ -105,6 +107,31 @@ export class HostelWithdrawalController {
     @Body() body: DecideHostelWithdrawalDto,
   ) {
     return this.hw.decide(ctx, id, body);
+  }
+
+  @Post('withdrawals/:id/revoke')
+  @ApiOperation({
+    summary:
+      'Ask to revoke a completed hostel withdrawal (as if never left, or back from a day); it goes through the same approval levels',
+  })
+  @RequirePermission(HOSTEL_WD.manage)
+  revoke(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: RevokeHostelWithdrawalDto,
+  ) {
+    return this.hw.requestRevoke(ctx, id, dto);
+  }
+
+  @Post('withdrawals/:id/revoke/decide')
+  @ApiOperation({ summary: "The approver of the revoke's current level approves or rejects" })
+  @AuthenticatedOnly()
+  decideRevoke(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: DecideRevokeDto,
+  ) {
+    return this.hw.decideRevoke(ctx, id, dto);
   }
 
   @Get('withdrawal-approval')
