@@ -17,7 +17,7 @@ import {
   rotateConsentLink,
   setConsentStatus,
 } from '@/lib/consent-actions';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
 
 const OK: Record<string, string> = {
   saved: 'The form is saved.',
@@ -79,6 +79,7 @@ export default async function ConsentFormPage({
       .catch(() => [] as Array<{ id: string; name: string; channel: string }>),
   ]);
   const approval = Boolean(f.settings.approval?.on);
+  const canConnect = (await getMe()).permissions.includes('engagement.consent_form.integrate');
   // the public link (and its QR) when switched on
   const publicUrl = f.publicToken
     ? await apiFetch<{ url: string }>(`/engagement/consent-forms/${id}/qr`)
@@ -197,6 +198,14 @@ export default async function ConsentFormPage({
               href={`/engagement/consent-forms/${id}/analytics`}
             >
               Analytics
+            </a>
+          ) : null}
+          {canConnect ? (
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/engagement/consent-forms/${id}/connect`}
+            >
+              Connect (webhooks, API)
             </a>
           ) : null}
           <form action={copyConsentForm}>

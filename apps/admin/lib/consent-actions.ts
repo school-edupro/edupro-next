@@ -1,6 +1,7 @@
 'use server';
 /** Consent forms (docs/design/28-consent-forms.md): build, publish, close, notify, fill on behalf. */
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 
@@ -226,4 +227,98 @@ export async function rotateConsentLink(fd: FormData) {
     back(`${BASE}/${id}`, error);
   }
   redirect(`${BASE}/${id}?ok=link`);
+}
+
+// ---- webhooks and API keys (part 4) ----
+const integ = (id: string) => `${BASE}/${id}/integrations`;
+/** A secret or key shown once: kept a minute in an HttpOnly cookie for the page, never in the URL. */
+async function flash(id: string, label: string, value: string) {
+  (await cookies()).set('cf_once', JSON.stringify({ label, value }), {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: `/engagement/consent-forms/${id}/connect`,
+    maxAge: 60,
+  });
+}
+
+export async function addConsentWebhook(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    const r = await apiFetch<{ secret: string }>(`${integ(id)}/webhooks`, {
+      method: 'POST',
+      body: JSON.stringify({ url: str(fd, 'url'), events: fd.getAll('events').map(String) }),
+    });
+    await flash(id, 'Signing secret of the new webhook', r.secret);
+  } catch (error) {
+    back(`${BASE}/${id}/connect`, error);
+  }
+  redirect(`${BASE}/${id}/connect?ok=webhook`);
+}
+
+export async function updateConsentWebhook(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`${integ(id)}/webhooks/${str(fd, 'hookId')}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active: str(fd, 'active') === 'true' }),
+    });
+  } catch (error) {
+    back(`${BASE}/${id}/connect`, error);
+  }
+  redirect(`${BASE}/${id}/connect?ok=saved`);
+}
+
+export async function consentWebhookAction(fd: FormData) {
+  const id = str(fd, 'id');
+  const hook = str(fd, 'hookId');
+  const what = str(fd, 'what');
+  try {
+    if (what === 'test')
+      await apiFetch(`${integ(id)}/webhooks/${hook}/test`, { method: 'POST', body: '{}' });
+    else if (what === 'secret') {
+      const r = await apiFetch<{ secret: string }>(`${integ(id)}/webhooks/${hook}/secret`, {
+        method: 'POST',
+        body: '{}',
+      });
+      await flash(id, 'New signing secret', r.secret);
+    } else if (what === 'remove')
+      await apiFetch(`${integ(id)}/webhooks/${hook}`, { method: 'DELETE' });
+    else if (what === 'retry')
+      await apiFetch(`${integ(id)}/deliveries/${str(fd, 'deliveryId')}/retry`, {
+        method: 'POST',
+        body: '{}',
+      });
+  } catch (error) {
+    back(`${BASE}/${id}/connect`, error);
+  }
+  redirect(`${BASE}/${id}/connect?ok=${what}`);
+}
+
+export async function addConsentKey(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    const r = await apiFetch<{ key: string }>(`${integ(id)}/keys`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        scope: str(fd, 'scope') === 'read_approve' ? 'read_approve' : 'read',
+        expiresOn: str(fd, 'expiresOn') || undefined,
+      }),
+    });
+    await flash(id, 'The new API key', r.key);
+  } catch (error) {
+    back(`${BASE}/${id}/connect`, error);
+  }
+  redirect(`${BASE}/${id}/connect?ok=key`);
+}
+
+export async function revokeConsentKey(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`${integ(id)}/keys/${str(fd, 'keyId')}`, { method: 'DELETE' });
+  } catch (error) {
+    back(`${BASE}/${id}/connect`, error);
+  }
+  redirect(`${BASE}/${id}/connect?ok=revoked`);
 }

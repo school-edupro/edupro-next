@@ -151,3 +151,28 @@ file); fees on the link only for families (misc fee, paid online); outsiders pay
 - API: `public/consent-forms/:school/:token` (info, `otp`, `otp/verify`, `me`, `responses`,
   `responses/:rid` (PUT), `responses/:rid/pdf`, `responses/:rid/pay`, `uploads`);
   `engagement/consent-forms/:id/qr`, `/public-link`, `/analytics`.
+
+## Part 4 (17 Oct 2026, migrations 0170-0171)
+
+Decisions (user): a webhook sends submitted, changed, approved, not approved and fee paid; API keys per
+form, read or read+approve, optional end date, shown once and kept hashed, 60 calls a minute; only the
+answers go out (number, the pupil's name / admission no. / class, a staff member's name / code, an
+outsider's name with the contact masked; answers, status, fee; files and signatures as names only); set
+up by the school admin only (new permission `engagement.consent_form.integrate`).
+
+- **Connect** (form page → Connect; school admin): webhooks (address, events, on / off, Send a test,
+  New signing secret, Remove), the last 50 messages with their status and Send again, and API keys
+  (who uses it, read or read and approve, valid until; Revoke). A secret or key is shown once, through a
+  one-minute HttpOnly cookie (never in the address).
+- **Webhook messages** are queued in `consent_webhook_deliveries` when the event happens (same
+  transaction) and delivered by the workers every minute (`consent.webhooks`, only schools with
+  messages due): POST JSON with `X-EduPro-Event`, `X-EduPro-Delivery`, `X-EduPro-Timestamp`,
+  `X-EduPro-Signature: sha256=HMAC(secret, timestamp + "." + body)`; a 2xx within ten seconds
+  delivers; else again after 1, 5, 30 and 120 minutes, then failed. Production calls only https
+  addresses on the internet. The signing secret is kept encrypted (field crypto). "Fee paid" is sent for
+  fees paid online.
+- **API** (`/api/v1/consent-api/v1`, `Authorization: Bearer cfk_…`): `GET responses?since&page&size`,
+  `GET responses/<number or id>`, `POST responses/<ref>/decision {decision, note}` (read_approve: the
+  waiting levels are decided at once in the key's name, the note says "by API key …", then the fee,
+  the family message and the webhook follow as in the school). Keys are looked up by hash through
+  `app.consent_api_key_lookup`; every call counts on the key (last used, calls).

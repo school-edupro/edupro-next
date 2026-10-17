@@ -44,6 +44,7 @@ import {
   type ConsentEditDto,
   type ConsentNotifyDto,
 } from './consent-forms.dto';
+import { emitConsentEvent } from './consent-events';
 import { consentPdf } from './consent-pdf';
 import { qrPng } from './visitor-card';
 import { WAITING_WITH } from '../fees/fee-approval';
@@ -1302,6 +1303,7 @@ export class ConsentFormsService {
         { ...f, fee: f.settings.fee, closesAt: f.settings.closesAt },
         { id: rid, studentId: who.studentId ?? null, amount: fee },
       );
+    await emitConsentEvent(c, rid, 'submitted');
     // the cap reached closes the form
     if (f.settings.cap && f.responses + 1 >= f.settings.cap)
       await c.query(
@@ -1369,6 +1371,7 @@ export class ConsentFormsService {
       [row.id, outcome, note ?? null],
     );
     const f = await this.findDb(c, row.form_id);
+    await emitConsentEvent(c, row.id, outcome);
     if (outcome === 'approved')
       await raiseFee(
         c,
@@ -1560,6 +1563,7 @@ export class ConsentFormsService {
           [rid, key, png],
         );
       if (row.misc_line_id) await syncLine(c, row.misc_line_id);
+      await emitConsentEvent(c, rid, 'changed');
       await this.audit.stage(ctx, c, {
         action: 'engagement.consent_form.edit',
         entityType: 'consent_form_responses',

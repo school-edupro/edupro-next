@@ -130,6 +130,11 @@ async function main(): Promise<void> {
     { name: 'insights.alerts', data: SYSTEM_ENVELOPE('insights.alerts') },
   );
   await maintenance.upsertJobScheduler(
+    'consent.webhooks',
+    { every: 60 * 1000 },
+    { name: 'consent.webhooks', data: SYSTEM_ENVELOPE('consent.webhooks') },
+  );
+  await maintenance.upsertJobScheduler(
     'workflow.sla',
     { every: 60 * 60 * 1000 },
     { name: 'workflow.sla', data: SYSTEM_ENVELOPE('workflow.sla') },

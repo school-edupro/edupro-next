@@ -11,6 +11,12 @@ import { WorkflowModule } from '../workflow/workflow.module';
 import { WorkflowService } from '../workflow/workflow.service';
 import { ConsentFormsController, PublicConsentFormsController } from './consent-forms.controller';
 import { ConsentPublicService } from './consent-public.service';
+import {
+  ConsentApiController,
+  ConsentIntegrationsController,
+} from './consent-integrations.controller';
+import { ConsentIntegrationsService } from './consent-integrations.service';
+import { emitConsentEvent } from './consent-events';
 import { ConsentFormsService } from './consent-forms.service';
 import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
@@ -57,6 +63,8 @@ import { QueriesService } from './queries.service';
     EngagementPlusController,
     ConsentFormsController,
     PublicConsentFormsController,
+    ConsentIntegrationsController,
+    ConsentApiController,
     DsrController,
     PortalProfileController,
     HelpdeskController,
@@ -82,6 +90,7 @@ import { QueriesService } from './queries.service';
     EngagementPlusService,
     ConsentFormsService,
     ConsentPublicService,
+    ConsentIntegrationsService,
     DsrService,
     AuditService,
   ],
@@ -104,6 +113,15 @@ export class EngagementModule implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    // consent forms: a fee paid online is told to the form's webhooks (docs/design/28-consent-forms.md)
+    this.payments.onSuccess('misc', async (c, intent) => {
+      if (intent.entityType !== 'misc_fee_student' || !intent.entityId) return;
+      const r = await c.query<{ id: string }>(
+        `SELECT id::text FROM consent_form_responses WHERE misc_line_id = $1`,
+        [intent.entityId],
+      );
+      for (const x of r.rows) await emitConsentEvent(c, x.id, 'paid');
+    });
     // consent forms: the last level decided (docs/design/28-consent-forms.md)
     this.workflow.onComplete('consent_response', (c, ctx, instance, outcome) =>
       this.consents.onDecision(c, ctx, instance, outcome),

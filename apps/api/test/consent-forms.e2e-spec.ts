@@ -814,4 +814,135 @@ describe('consent forms (e2e)', () => {
     expect(an.fee).toMatchObject({ raised: 200, paid: 0, pupils: 1 });
     expect(an.bySection[0]).toMatchObject({ asked: 2, answered: 1 });
   });
+
+  // ---- part 4: webhooks and API keys --------------------------------------------------------------
+  it('webhooks queue each event as signed-ready JSON without files; API keys read and, with the wider scope, decide', async () => {
+    const f = await post('/engagement/consent-forms', {
+      title: 'Sports day consent',
+      respondents: 'family',
+      fields: [
+        { key: 'ok', label: 'I allow it', type: 'agree', required: true },
+        { key: 'note', label: 'Note', type: 'text' },
+      ],
+      audience: { pupils: 'filter', sectionIds: [ids.secA] },
+      settings: {
+        editUntil: later,
+        approval: {
+          on: true,
+          levels: [{ name: 'Principal', resolver: { kind: 'role', roleCode: 'school_admin' } }],
+        },
+      },
+    });
+    const id = f.json().id as string;
+    await put(`/engagement/consent-forms/${id}/status`, { status: 'published', push: false });
+    const base = `/engagement/consent-forms/${id}/integrations`;
+    expect((await get(base, parent)).statusCode).toBe(403);
+    expect(
+      (await post(`${base}/webhooks`, { url: 'ftp://x.example', events: ['submitted'] }))
+        .statusCode,
+    ).toBe(400);
+    const hook = await post(`${base}/webhooks`, {
+      url: 'http://localhost:9/hook',
+      events: ['submitted', 'changed', 'approved', 'rejected', 'paid'],
+    });
+    expect(hook.statusCode).toBe(201);
+    expect(hook.json().secret).toMatch(/^whsec_/);
+    const a = await post(
+      `/engagement/mine/consent-forms/${id}/responses`,
+      { studentId: ids.ana, answers: { ok: true, note: 'first' } },
+      parent,
+    );
+    await inject({
+      method: 'PUT',
+      url: `/engagement/mine/consent-forms/responses/${a.json().id}`,
+      headers: h(parent),
+      json: { answers: { ok: true, note: 'second' } },
+    });
+    const ov = (await get(base)).json();
+    expect(ov.webhooks[0]).toMatchObject({ url: 'http://localhost:9/hook', pending: 2 });
+    expect(ov.deliveries.map((d: { event: string }) => d.event)).toEqual(['changed', 'submitted']);
+    const payload = (
+      await withMigrator((c) =>
+        c.query<{ payload: { event: string; response: Record<string, unknown> } }>(
+          `SELECT payload FROM consent_webhook_deliveries WHERE response_id = $1 AND event = 'changed'`,
+          [a.json().id],
+        ),
+      )
+    ).rows[0]!.payload;
+    expect(payload.event).toBe('changed');
+    expect(payload.response).toMatchObject({
+      number: a.json().number,
+      status: 'waiting',
+      about: { kind: 'pupil', name: 'ana Pupil', class: 'Class VI-A' },
+      answers: { ok: true, note: 'second' },
+    });
+    expect(JSON.stringify(payload)).not.toContain('mobile');
+    // a test message and a retry
+    expect((await post(`${base}/webhooks/${hook.json().id}/test`, {})).statusCode).toBe(201);
+    const failedId = ov.deliveries[0].id as string;
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE consent_webhook_deliveries SET status = 'failed', attempts = 5 WHERE id = $1`,
+        [failedId],
+      ),
+    );
+    expect((await post(`${base}/deliveries/${failedId}/retry`, {})).statusCode).toBe(201);
+    // API keys
+    const read = await post(`${base}/keys`, { name: 'Trip agency', scope: 'read' });
+    expect(read.json().key).toMatch(/^cfk_/);
+    const approve = await post(`${base}/keys`, {
+      name: 'Head office',
+      scope: 'read_approve',
+      expiresOn: '2099-12-31',
+    });
+    const api = (key: string, method: 'GET' | 'POST', url: string, json?: unknown) =>
+      inject({
+        method,
+        url: `/consent-api/v1${url}`,
+        headers: { authorization: `Bearer ${key}` },
+        json,
+      });
+    expect((await api('cfk_nope', 'GET', '/responses')).statusCode).toBe(401);
+    const list = await api(read.json().key, 'GET', '/responses');
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toMatchObject({
+      form: { title: 'Sports day consent' },
+      data: [{ number: a.json().number }],
+    });
+    const one = await api(
+      read.json().key,
+      'GET',
+      `/responses/${encodeURIComponent(a.json().number)}`,
+    );
+    expect(one.json()).toMatchObject({ status: 'waiting', answers: { note: 'second' } });
+    expect(
+      (
+        await api(read.json().key, 'POST', `/responses/${a.json().id}/decision`, {
+          decision: 'approved',
+        })
+      ).statusCode,
+    ).toBe(403);
+    const dec = await api(approve.json().key, 'POST', `/responses/${a.json().id}/decision`, {
+      decision: 'approved',
+      note: 'OK',
+    });
+    expect(dec.statusCode).toBe(201);
+    expect(dec.json()).toMatchObject({ status: 'approved' });
+    expect(dec.json().decisionNote).toContain('by API key "Head office"');
+    const events = (await get(base)).json().deliveries.map((d: { event: string }) => d.event);
+    expect(events).toContain('approved');
+    expect(
+      (
+        await api(approve.json().key, 'POST', `/responses/${a.json().id}/decision`, {
+          decision: 'rejected',
+        })
+      ).json().type,
+    ).toContain('consent.api_decide');
+    // revoked keys stop at once; keys are listed without the key
+    await inject({ method: 'DELETE', url: `${base}/keys/${read.json().id}`, headers: h() });
+    expect((await api(read.json().key, 'GET', '/responses')).statusCode).toBe(401);
+    const keys = (await get(base)).json().keys;
+    expect(JSON.stringify(keys)).not.toContain(read.json().key);
+    expect(keys.find((k: { id: string }) => k.id === approve.json().id)).toMatchObject({ uses: 2 });
+  });
 });

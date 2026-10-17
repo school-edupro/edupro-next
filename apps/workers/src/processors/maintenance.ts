@@ -10,6 +10,7 @@ import {
 } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
+import { deliverConsentWebhooks } from './consent-webhooks';
 import type { JobLike } from './notifications';
 
 export interface MaintenanceDeps {
@@ -425,6 +426,31 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       } finally {
         await client.end();
       }
+      return;
+    }
+    if (kind === 'consent.webhooks') {
+      // consent form webhooks (docs/design/28-consent-forms.md part 4): only schools with deliveries due
+      const schools = await db.withoutTenant((c) =>
+        c.query<{ id: string }>(
+          'SELECT o_school_id::text AS id FROM app.consent_webhook_schools()',
+        ),
+      );
+      const total = { delivered: 0, retried: 0, failed: 0 };
+      for (const s of schools.rows) {
+        try {
+          const r = await db.withTenant(
+            { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+            (c) => deliverConsentWebhooks(c, { production: process.env.NODE_ENV === 'production' }),
+          );
+          total.delivered += r.delivered;
+          total.retried += r.retried;
+          total.failed += r.failed;
+        } catch (error) {
+          log.error({ err: error, schoolId: s.id }, 'consent webhooks failed for school');
+        }
+      }
+      if (schools.rows.length)
+        log.info({ schools: schools.rows.length, ...total }, 'consent webhooks run');
       return;
     }
     if (kind === 'workflow.sla') {

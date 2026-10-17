@@ -141,6 +141,12 @@
     if it was shared wrongly. Answers from the link show "Link" in the register.
   - **Analytics** (on the form page): response rate overall and by section, answers per day, how people
     answered, approval, fee raised and paid, and each question's answers counted.
+  - **Connect** (school admin, on the form page): a **webhook** sends each answer (submitted, changed,
+    approved, not approved, fee paid) to another system as it happens; copy the signing secret when it
+    is shown, it is not shown again. **Messages sent** shows each one; Send again for a failed one. An
+    **API key** lets another system read the form's answers (or also approve them); copy it when shown,
+    revoke it when no longer needed. Only the answers go out, never files or other pupil details.
+    (The workers must be running for webhooks to go out.)
 - **Certificates**: keep one template per certificate kind under **System → Templates**; issue to a
   section or a list of pupils; the batch PDF is in the Export centre, each family downloads its own.
 - **Privacy** (admin): work data-principal requests within the due date; run the breach runbook if

@@ -6,6 +6,7 @@ import { FieldSchema } from './consent-fields';
 /** Consent forms (docs/design/28-consent-forms.md). */
 export const CONSENT = {
   manage: 'engagement.consent_form.manage',
+  integrate: 'engagement.consent_form.integrate',
   familyView: 'engagement.family.view',
 } as const;
 
@@ -242,3 +243,37 @@ export const PublicRespondSchema = z.object({
   signedName: z.string().trim().min(2).max(120).optional(),
 });
 export class PublicRespondDto extends createZodDto(PublicRespondSchema) {}
+
+// ---- webhooks and API keys (part 4) ----
+const EVENTS = z.enum(['submitted', 'changed', 'approved', 'rejected', 'paid']);
+export const WebhookSchema = z.object({
+  url: z.string().trim().url().max(500),
+  events: z.array(EVENTS).min(1).max(5),
+});
+export class WebhookDto extends createZodDto(WebhookSchema) {}
+export const WebhookPatchSchema = z.object({
+  url: z.string().trim().url().max(500).optional(),
+  events: z.array(EVENTS).min(1).max(5).optional(),
+  active: z.boolean().optional(),
+});
+export class WebhookPatchDto extends createZodDto(WebhookPatchSchema) {}
+export const ApiKeySchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  scope: z.enum(['read', 'read_approve']),
+  expiresOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+export class ApiKeyDto extends createZodDto(ApiKeySchema) {}
+export const ApiListQuerySchema = z.object({
+  since: z.string().datetime({ offset: true }).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(100).default(50),
+});
+export class ApiListQueryDto extends createZodDto(ApiListQuerySchema) {}
+export const ApiDecideSchema = z.object({
+  decision: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(400).optional(),
+});
+export class ApiDecideDto extends createZodDto(ApiDecideSchema) {}

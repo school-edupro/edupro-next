@@ -487,7 +487,12 @@ export class ConsentPublicService {
         requestId: base.requestId,
       });
       return {
-        intent: { id: intent.id, txnId: intent.txnId, amount: intent.amount, provider: intent.provider },
+        intent: {
+          id: intent.id,
+          txnId: intent.txnId,
+          amount: intent.amount,
+          provider: intent.provider,
+        },
         checkout: await this.payments.checkout(intent),
       };
     });
