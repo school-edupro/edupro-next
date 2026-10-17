@@ -96,6 +96,11 @@ export function GatewayEditor({
             <option value="test">Test (sandbox)</option>
             <option value="live">Live (real money)</option>
           </select>
+          <span className="ep-field__help">
+            Live works only from the web address registered with the gateway (e.g. the school&apos;s
+            https site), not from a computer&apos;s localhost. Use Test with the gateway&apos;s test
+            keys to try it first.
+          </span>
         </label>
         {spec.config.map(([k, label]) => (
           <label key={`${provider}-${k}`} className="ep-field" htmlFor={`${p}-c-${k}`}>

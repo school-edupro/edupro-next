@@ -348,6 +348,18 @@ export class PaymentsService {
     const returnEndpoint = (provider: Provider) =>
       `${origin}/api/payments/return?provider=${provider}${account ? `&gw=${account.id}` : ''}`;
     const mode = (fallback: 'mock' | 'test' | 'live') => (account ? account.mode : fallback);
+    // a live gateway takes payments only from the web address registered with it (CCAvenue's access
+    // code, PayU's and the banks' allowed URLs): from this computer it would only show the gateway's own
+    // error page, so say so here
+    if (
+      account?.mode === 'live' &&
+      /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(origin)
+    )
+      throw new DomainError(
+        'payment.live_on_local',
+        `${account.provider === 'ccavenue' ? 'CCAvenue' : 'This gateway'} is set to live: it accepts payments only from the school's registered web address, not from ${origin}. Switch the account to test (with the gateway's test keys) to try it here.`,
+        { status: 409 },
+      );
     if (intent.provider === 'razorpay') {
       if (!intent.providerOrderId)
         throw new DomainError('payments.order_missing', 'The gateway order was not created', {

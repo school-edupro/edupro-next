@@ -320,6 +320,21 @@ describe('payment gateways (e2e)', () => {
       json: { encResp: fake },
     });
     expect(r.json().outcome).toBe('rejected');
+    // a live account from this computer (localhost) would only show the gateway's own error page:
+    // refused here with a clear reason, nothing is recorded
+    await withMigrator((c) =>
+      c.query(`UPDATE payment_gateways SET mode = 'live' WHERE id = $1`, [gw.payu]),
+    );
+    const live = await inject({
+      method: 'POST',
+      url: '/payments/intents/mine',
+      headers: h(parent),
+      json: { studentId: child, amount: 100, ledger: 'school', gatewayId: gw.payu },
+    });
+    await withMigrator((c) =>
+      c.query(`UPDATE payment_gateways SET mode = 'test' WHERE id = $1`, [gw.payu]),
+    );
+    expect(live.json()).toMatchObject({ type: expect.stringContaining('payment.live_on_local') });
   });
 
   it('a misc fee is paid online in full by SBI ePay or Atom and writes its MF receipt', async () => {
