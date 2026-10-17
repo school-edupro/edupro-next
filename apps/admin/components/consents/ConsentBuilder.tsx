@@ -39,6 +39,7 @@ export interface ConsentSettings {
   editUntil?: string;
   fee?: ConsentFee & { lastDate?: string };
   approval?: { on: boolean; levels: Array<{ name: string; resolver: ConsentResolver }> };
+  publicLink?: { on: boolean; families: boolean; outsiders: boolean };
 }
 export interface ConsentDraft {
   title: string;
@@ -911,6 +912,66 @@ export function ConsentBuilder({
         lists={lists}
         onChange={(approval) => st({ approval })}
       />
+
+      <section className="ep-card" aria-labelledby="cfb-link">
+        <h2 id="cfb-link" className="ep-card__title">
+          7. Public link and QR
+        </h2>
+        {(() => {
+          const link = d.settings.publicLink ?? { on: false, families: true, outsiders: false };
+          const setLink = (patch: Partial<typeof link>) =>
+            st({ publicLink: { ...link, ...patch } });
+          return (
+            <div className="ep-cfb">
+              <label className="ep-check">
+                <input
+                  type="checkbox"
+                  className="ep-check__input"
+                  checked={link.on}
+                  onChange={(e) => setLink({ on: e.target.checked })}
+                />
+                <span className="ep-check__box" aria-hidden="true" />
+                <span className="ep-check__text">
+                  Open a public link and QR (no login)
+                  <span className="ep-field__help">
+                    A one-time code proves who answers. Print the QR on a notice or send the link.
+                  </span>
+                </span>
+              </label>
+              {link.on ? (
+                <div className="ep-cf__options">
+                  <label className="ep-check">
+                    <input
+                      type="checkbox"
+                      className="ep-check__input"
+                      checked={link.families}
+                      disabled={d.respondents === 'staff'}
+                      onChange={(e) => setLink({ families: e.target.checked })}
+                    />
+                    <span className="ep-check__box" aria-hidden="true" />
+                    <span className="ep-check__text">
+                      Families without the app (admission no. + code to the mobile on file)
+                    </span>
+                  </label>
+                  <label className="ep-check">
+                    <input
+                      type="checkbox"
+                      className="ep-check__input"
+                      checked={link.outsiders}
+                      onChange={(e) => setLink({ outsiders: e.target.checked })}
+                    />
+                    <span className="ep-check__box" aria-hidden="true" />
+                    <span className="ep-check__text">
+                      Outsiders: guests, alumni, visitors (name + code to their mobile or email; no
+                      fee)
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
+      </section>
 
       <div className="ep-form-actions">
         <button type="submit" className="ep-btn ep-btn--primary">

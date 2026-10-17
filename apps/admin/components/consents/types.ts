@@ -22,6 +22,7 @@ export interface ConsentForm {
   createdAt: string;
   createdBy: string | null;
   lists?: Record<string, string[]>;
+  publicToken?: string | null;
 }
 export interface ConsentAnswered {
   id: string;
@@ -42,6 +43,10 @@ export interface ConsentAnswered {
   enteredBy: string | null;
   fee?: string | null;
   paid?: string | null;
+  viaLink?: boolean;
+  publicName?: string | null;
+  publicMobile?: string | null;
+  publicEmail?: string | null;
   waitingWith?: string | null;
   decidedNote?: string | null;
   edits?: number;

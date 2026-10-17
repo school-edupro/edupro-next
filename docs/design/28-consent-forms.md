@@ -125,3 +125,29 @@ school's templates.
 - API: `PUT /engagement/mine/consent-forms/responses/:rid`, `GET /engagement/mine/consent-approvals`,
   `POST /engagement/mine/consent-approvals/:stepId {decision, note}`, `POST
 /engagement/consent-forms/:id/notify {channels}`, status with `channels`.
+
+## Part 3 (17 Oct 2026, migration 0169)
+
+Decisions (user): the link serves outsiders (name, mobile or email, a one-time code before the answer
+is accepted) and families without the app (admission number, the code to the mobile the school has on
+file); fees on the link only for families (misc fee, paid online); outsiders pay no fee for now.
+
+- **Builder section 7**: Public link and QR, for families and / or outsiders. The link is
+  `<public site>/<school>/consent/<secret>`; **Make a new link** stops the old link and QR.
+- **The link page** (public site, no login): the form's text, then sign-in: a parent gives the admission
+  number (the code goes to up to two family mobiles on file; a pupil not asked by the form is refused);
+  an outsider gives a name and a mobile or email (the code goes there). A proof of work before each code,
+  three live codes, five attempts, ten minutes; the pass is a two-hour HttpOnly cookie for this form
+  only. Signed in: the answers with their status, Print / PDF, Change my answer (until the edit date,
+  before decided), Pay (a family's fee, through the misc ledger's gateway), and the form when one more
+  answer is allowed. Files are uploaded to slots tied to the form; signatures are drawn.
+- Answers on the link are marked "Link" in the register (an outsider by name and mobile / email); a
+  decision is told by SMS / WhatsApp / email (template `consent_decision`); the code goes out with
+  `consent_otp` (both seeded for every school, editable under Communication > Templates).
+- **Analytics** (form → Analytics): asked / answered / pending / responses / fee raised and paid;
+  answers per day; how they answered (parent app, link, staff app, office, outsiders); approval;
+  response rate by section; each choice question counted, numbers totalled (total, average, least,
+  most).
+- API: `public/consent-forms/:school/:token` (info, `otp`, `otp/verify`, `me`, `responses`,
+  `responses/:rid` (PUT), `responses/:rid/pdf`, `responses/:rid/pay`, `uploads`);
+  `engagement/consent-forms/:id/qr`, `/public-link`, `/analytics`.

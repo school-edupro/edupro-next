@@ -14,6 +14,7 @@ import {
   copyConsentForm,
   deleteConsentForm,
   notifyConsentPending,
+  rotateConsentLink,
   setConsentStatus,
 } from '@/lib/consent-actions';
 import { apiFetch } from '@/lib/api';
@@ -25,6 +26,7 @@ const OK: Record<string, string> = {
   draft: 'The form is a draft again.',
   archived: 'The form is archived.',
   notified: 'Those who have not answered were told again in the app.',
+  link: 'A new public link is made: the old link and QR no longer work.',
 };
 const BY = { family: 'Family', staff: 'Staff', office: 'Office', public: 'Public link' } as const;
 
@@ -77,6 +79,12 @@ export default async function ConsentFormPage({
       .catch(() => [] as Array<{ id: string; name: string; channel: string }>),
   ]);
   const approval = Boolean(f.settings.approval?.on);
+  // the public link (and its QR) when switched on
+  const publicUrl = f.publicToken
+    ? await apiFetch<{ url: string }>(`/engagement/consent-forms/${id}/qr`)
+        .then((r) => r.url)
+        .catch(() => null)
+    : null;
   const hasFee = (f.settings.fee?.mode ?? 'none') !== 'none';
   const asked = f.asked ?? 0;
   const pending = Math.max(0, asked - f.answered);
@@ -183,6 +191,14 @@ export default async function ConsentFormPage({
               Fill on behalf
             </a>
           ) : null}
+          {f.status !== 'draft' ? (
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/engagement/consent-forms/${id}/analytics`}
+            >
+              Analytics
+            </a>
+          ) : null}
           <form action={copyConsentForm}>
             <input type="hidden" name="id" value={id} />
             <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
@@ -210,6 +226,54 @@ export default async function ConsentFormPage({
             : ''}
         </p>
       </Card>
+
+      {publicUrl ? (
+        <Card title="Public link and QR" style={{ marginBottom: 'var(--sp-4)' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 'var(--sp-4)',
+              alignItems: 'flex-start',
+            }}
+          >
+            <img
+              src={`/api/consent-forms/file?kind=qr&id=${id}`}
+              alt={`QR code of the public link of ${f.title}`}
+              className="ep-cf__qr"
+            />
+            <div style={{ flex: '1 1 18rem', display: 'grid', gap: 'var(--sp-2)' }}>
+              <label className="ep-field" htmlFor="cf-link">
+                <span className="ep-field__label">Link</span>
+                <input id="cf-link" className="ep-input" readOnly value={publicUrl} />
+              </label>
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                {[
+                  f.settings.publicLink?.families ? 'families without the app (admission no.)' : '',
+                  f.settings.publicLink?.outsiders ? 'outsiders (mobile or email)' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' and ')}
+                {f.status === 'draft' ? ' · works once the form is published.' : '.'}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/consent-forms/file?kind=qr&id=${id}&save=1`}
+                >
+                  Download QR
+                </a>
+                <form action={rotateConsentLink}>
+                  <input type="hidden" name="id" value={id} />
+                  <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                    Make a new link (the old one stops)
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {f.status === 'draft' ? (
         <Card title="Publish" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -386,8 +450,11 @@ export default async function ConsentFormPage({
                         </a>
                       </td>
                       <td>
-                        {r.student ?? r.employee}{' '}
-                        <span className="ep-field__help">{r.admissionNo ?? r.employeeCode}</span>
+                        {r.student ?? r.employee ?? r.publicName}{' '}
+                        {r.viaLink ? <Badge tone="neutral">Link</Badge> : null}{' '}
+                        <span className="ep-field__help">
+                          {r.admissionNo ?? r.employeeCode ?? r.publicMobile ?? r.publicEmail}
+                        </span>
                       </td>
                       <td>{r.section ?? '—'}</td>
                       <td>

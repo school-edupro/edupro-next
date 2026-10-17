@@ -216,3 +216,14 @@ export async function fillConsentForOffice(fd: FormData) {
   revalidatePath(`${BASE}/${id}`);
   redirect(`${BASE}/${id}/responses/${done.id}?ok=filled`);
 }
+
+/** A new public link: the old link and QR stop working. */
+export async function rotateConsentLink(fd: FormData) {
+  const id = str(fd, 'id');
+  try {
+    await apiFetch(`${BASE}/${id}/public-link`, { method: 'POST', body: '{}' });
+  } catch (error) {
+    back(`${BASE}/${id}`, error);
+  }
+  redirect(`${BASE}/${id}?ok=link`);
+}

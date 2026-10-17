@@ -7,6 +7,7 @@
  */
 import { deflateSync } from 'node:zlib';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { PowService } from '../src/modules/admissions/public/pow.service';
 import {
   createApp,
   headersFor,
@@ -116,6 +117,7 @@ describe('consent forms (e2e)', () => {
 
   beforeAll(async () => {
     const s = stamp('CF');
+    ids.s = s;
     await withMigrator(async (c) => {
       school = await seedSchool(c, `${s}A`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
@@ -654,5 +656,162 @@ describe('consent forms (e2e)', () => {
     expect(p.json().message.error).toBeTruthy();
     const n = await post(`/engagement/consent-forms/${f.json().id}/notify`, { channels: [] });
     expect(n.json()).toMatchObject({ message: null });
+  });
+
+  // ---- part 3: the public link, QR, analytics ------------------------------------------------------
+  it('the public link: an outsider proves a mobile and answers; a family answers by admission no.; change, PDF, pay, QR, analytics', async () => {
+    const f = await post('/engagement/consent-forms', {
+      title: 'Annual day passes',
+      respondents: 'family',
+      fields: [
+        { key: 'guests', label: 'Guests', type: 'number', required: true, min: 1, max: 4 },
+        { key: 'sign', label: 'Signature', type: 'signature', required: true },
+      ],
+      audience: { pupils: 'filter', sectionIds: [ids.secA] },
+      settings: {
+        editUntil: later,
+        fee: { mode: 'calc', items: [{ field: 'guests', rate: 100 }] },
+        publicLink: { on: true, families: true, outsiders: true },
+      },
+    });
+    const id = f.json().id as string;
+    await put(`/engagement/consent-forms/${id}/status`, { status: 'published', push: false });
+    const token = (await get(`/engagement/consent-forms/${id}`)).json().publicToken as string;
+    expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    const base = `/public/consent-forms/${school.code}/${token}`;
+    const info = await inject({ method: 'GET', url: base, headers: {} });
+    expect(info.statusCode).toBe(200);
+    expect(info.json()).toMatchObject({
+      title: 'Annual day passes',
+      families: true,
+      outsiders: true,
+      open: true,
+    });
+    const askCode = async (json: Record<string, unknown>) => {
+      const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+      const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+      return inject({
+        method: 'POST',
+        url: `${base}/otp`,
+        headers: {},
+        json: { ...json, challenge: ch.json().challenge, nonce },
+      });
+    };
+    // an outsider
+    const o = await askCode({ mode: 'outsider', mobile: '9123456780' });
+    expect(o.statusCode).toBe(201);
+    expect(o.json().to).toEqual(['91******80']);
+    const wrong = await inject({
+      method: 'POST',
+      url: `${base}/otp/verify`,
+      headers: {},
+      json: {
+        mode: 'outsider',
+        mobile: '9123456780',
+        code: o.json().devCode === '000000' ? '111111' : '000000',
+        name: 'Ravi Guest',
+      },
+    });
+    expect(wrong.json().type).toContain('otp.invalid');
+    const v = await inject({
+      method: 'POST',
+      url: `${base}/otp/verify`,
+      headers: {},
+      json: { mode: 'outsider', mobile: '9123456780', code: o.json().devCode, name: 'Ravi Guest' },
+    });
+    expect(v.statusCode).toBe(201);
+    const ho = { authorization: `Bearer ${v.json().token as string}` };
+    expect((await inject({ method: 'GET', url: `${base}/me`, headers: {} })).statusCode).toBe(401);
+    const a = await inject({
+      method: 'POST',
+      url: `${base}/responses`,
+      headers: ho,
+      json: { answers: { guests: 2, sign: pngDataUrl() } },
+    });
+    expect(a.statusCode).toBe(201);
+    expect(a.json()).toMatchObject({ fee: 0 });
+    const again = await inject({
+      method: 'POST',
+      url: `${base}/responses`,
+      headers: ho,
+      json: { answers: { guests: 1, sign: pngDataUrl() } },
+    });
+    expect(again.json().type).toContain('consent.already');
+    const me = (await inject({ method: 'GET', url: `${base}/me`, headers: ho })).json();
+    expect(me).toMatchObject({ mode: 'outsider', about: { name: 'Ravi Guest' }, canAnswer: false });
+    expect(me.responses[0]).toMatchObject({ canEdit: true });
+    const ed = await inject({
+      method: 'PUT',
+      url: `${base}/responses/${a.json().id}`,
+      headers: ho,
+      json: { answers: { guests: 3, sign: 'keep' } },
+    });
+    expect(ed.statusCode).toBe(200);
+    const pdf = await inject({
+      method: 'GET',
+      url: `${base}/responses/${a.json().id}/pdf`,
+      headers: ho,
+    });
+    expect(Buffer.from(pdf.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+    // a family without the app: the code goes to the mobile on file
+    expect((await askCode({ mode: 'family', admissionNo: 'NOPE-1' })).statusCode).toBe(404);
+    expect((await askCode({ mode: 'family', admissionNo: `${ids.s}-3` })).json().type).toContain(
+      'consent.not_asked',
+    );
+    const fo = await askCode({ mode: 'family', admissionNo: `${ids.s}-2` });
+    expect(fo.json().to).toEqual(['98******20']);
+    const fv = await inject({
+      method: 'POST',
+      url: `${base}/otp/verify`,
+      headers: {},
+      json: { mode: 'family', admissionNo: `${ids.s}-2`, code: fo.json().devCode },
+    });
+    const hf = { authorization: `Bearer ${fv.json().token as string}` };
+    const fa = await inject({
+      method: 'POST',
+      url: `${base}/responses`,
+      headers: hf,
+      json: { answers: { guests: 2, sign: pngDataUrl() }, signedName: 'G bo' },
+    });
+    expect(fa.json()).toMatchObject({ fee: 200, waiting: false });
+    const fme = (await inject({ method: 'GET', url: `${base}/me`, headers: hf })).json();
+    expect(fme).toMatchObject({ mode: 'family', about: { name: 'bo Pupil' } });
+    expect(fme.responses[0]).toMatchObject({ fee: '200.00', lineAmount: '200.00', paid: '0.00' });
+    const pay = await inject({
+      method: 'POST',
+      url: `${base}/responses/${fa.json().id}/pay`,
+      headers: hf,
+    });
+    expect(pay.statusCode).toBeLessThan(500);
+    // the outsider's pass does not open the family's answer
+    expect(
+      (await inject({ method: 'GET', url: `${base}/responses/${fa.json().id}/pdf`, headers: ho }))
+        .statusCode,
+    ).toBe(404);
+    // the register shows both, the office sees who came by the link
+    const reg = (await get(`/engagement/consent-forms/${id}/register?tab=answered`)).json();
+    expect(
+      reg.data
+        .map((r: { publicName: string | null; viaLink: boolean }) => [r.publicName, r.viaLink])
+        .sort(),
+    ).toEqual([
+      ['G bo', true],
+      ['Ravi Guest', true],
+    ]);
+    // QR and a new link
+    const qr = (await get(`/engagement/consent-forms/${id}/qr`)).json();
+    expect(qr.url).toContain(`/consent/${token}`);
+    expect(Buffer.from(qr.base64, 'base64').subarray(1, 4).toString()).toBe('PNG');
+    await post(`/engagement/consent-forms/${id}/public-link`, {});
+    expect((await inject({ method: 'GET', url: base, headers: {} })).statusCode).toBe(404);
+    // analytics
+    const an = (await get(`/engagement/consent-forms/${id}/analytics`)).json();
+    expect(an.byRespondent).toMatchObject({ public: 1, familyLink: 1 });
+    expect(an.questions.find((q: { key: string }) => q.key === 'guests').stats).toMatchObject({
+      total: 5,
+      max: 3,
+    });
+    expect(an.fee).toMatchObject({ raised: 200, paid: 0, pupils: 1 });
+    expect(an.bySection[0]).toMatchObject({ asked: 2, answered: 1 });
   });
 });

@@ -135,6 +135,12 @@
     change that alters the amount is refused (the office handles it).
   - **Publish / Remind**: choose SMS, WhatsApp and email templates as well as the app notification; the
     message goes through message approval.
+  - **Public link and QR** (section 7): families without the app answer with the admission number and a
+    code sent to the mobile the school has; outsiders (guests, alumni) with their name and a code to their
+    mobile or email. The form page shows the link and the QR (Download QR to print); **Make a new link**
+    if it was shared wrongly. Answers from the link show "Link" in the register.
+  - **Analytics** (on the form page): response rate overall and by section, answers per day, how people
+    answered, approval, fee raised and paid, and each question's answers counted.
 - **Certificates**: keep one template per certificate kind under **System → Templates**; issue to a
   section or a list of pupils; the batch PDF is in the Export centre, each family downloads its own.
 - **Privacy** (admin): work data-principal requests within the due date; run the breach runbook if

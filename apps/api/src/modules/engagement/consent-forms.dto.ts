@@ -97,6 +97,14 @@ export const ConsentSettingsSchema = z.object({
   editUntil: DateTime.optional(),
   fee: ConsentFeeSchema.default({ mode: 'none', items: [] }),
   approval: ConsentApprovalSchema.default({ on: false, levels: [] }),
+  /** the public link and QR: families without the app (admission no. + code) and / or outsiders */
+  publicLink: z
+    .object({
+      on: z.boolean().default(false),
+      families: z.boolean().default(true),
+      outsiders: z.boolean().default(false),
+    })
+    .default({ on: false, families: true, outsiders: false }),
 });
 export type ConsentSettings = z.infer<typeof ConsentSettingsSchema>;
 
@@ -188,3 +196,49 @@ export const MineFormQuerySchema = z.object({
   responseId: IdSchema.optional(),
 });
 export class MineFormQueryDto extends createZodDto(MineFormQuerySchema) {}
+
+// ---- the public link (no login) ----
+const Mobile = z
+  .string()
+  .trim()
+  .regex(/^[6-9]\d{9}$/, 'a 10-digit mobile number');
+const Email = z.string().trim().toLowerCase().email().max(200);
+/** A code to an outsider's mobile or email, or to the family mobile of a pupil (admission no.). */
+export const PublicOtpSchema = z
+  .object({
+    mode: z.enum(['outsider', 'family']),
+    mobile: Mobile.optional(),
+    email: Email.optional(),
+    admissionNo: z.string().trim().min(1).max(40).optional(),
+    challenge: z.string().min(10).max(500),
+    nonce: z.string().min(1).max(40),
+  })
+  .refine((v) => (v.mode === 'family' ? Boolean(v.admissionNo) : Boolean(v.mobile || v.email)), {
+    message: 'give the admission number, or a mobile or an email',
+  });
+export class PublicOtpDto extends createZodDto(PublicOtpSchema) {}
+export const PublicVerifySchema = z.object({
+  mode: z.enum(['outsider', 'family']),
+  mobile: Mobile.optional(),
+  email: Email.optional(),
+  admissionNo: z.string().trim().min(1).max(40).optional(),
+  code: z.string().regex(/^\d{6}$/),
+  /** an outsider's name */
+  name: z.string().trim().min(2).max(120).optional(),
+});
+export class PublicVerifyDto extends createZodDto(PublicVerifySchema) {}
+export const PublicUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  contentType: z.enum(['application/pdf', 'image/png', 'image/jpeg', 'image/webp']),
+  sizeBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(5 * 1024 * 1024),
+});
+export class PublicUploadDto extends createZodDto(PublicUploadSchema) {}
+export const PublicRespondSchema = z.object({
+  answers: z.record(z.string(), AnswerSchema),
+  signedName: z.string().trim().min(2).max(120).optional(),
+});
+export class PublicRespondDto extends createZodDto(PublicRespondSchema) {}

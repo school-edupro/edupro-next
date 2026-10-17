@@ -33,6 +33,7 @@ import { PublicThrottleGuard } from './public/public-throttle.guard';
     PublicAdmissionsService,
     DecisionsService,
     OtpService,
+    PowService,
     ApplicantGuard,
     PublicThrottleGuard,
   ],

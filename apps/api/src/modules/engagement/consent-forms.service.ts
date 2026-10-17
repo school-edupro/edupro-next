@@ -45,12 +45,13 @@ import {
   type ConsentNotifyDto,
 } from './consent-forms.dto';
 import { consentPdf } from './consent-pdf';
+import { qrPng } from './visitor-card';
 import { WAITING_WITH } from '../fees/fee-approval';
 
 type Row = Record<string, unknown>;
 type Status = 'draft' | 'published' | 'closed' | 'archived';
 
-interface FormDb {
+export interface FormDb {
   id: string;
   code: string;
   title: string;
@@ -67,10 +68,11 @@ interface FormDb {
   created_by: string | null;
   responses: number;
   misc_fee_id: string | null;
+  public_token: string | null;
 }
 
 const FORM = `SELECT f.id::text, f.code, f.title, f.description, f.respondents, f.fields, f.audience, f.settings, f.status,
-       f.academic_year_id::text AS year_id, f.published_at, f.closed_at, f.created_at, f.misc_fee_id::text,
+       f.academic_year_id::text AS year_id, f.published_at, f.closed_at, f.created_at, f.misc_fee_id::text, f.public_token,
        (SELECT display_name FROM users WHERE id = f.created_by) AS created_by,
        (SELECT count(*) FROM consent_form_responses x WHERE x.form_id = f.id AND x.status <> 'withdrawn')::int AS responses
   FROM consent_forms f`;
@@ -127,6 +129,28 @@ export class ConsentFormsService {
     return f;
   }
 
+  /** The form behind a public link (its secret part), with the link switched on. */
+  async formByToken(c: PoolClient, token: string): Promise<FormDb> {
+    const r = await c.query<{ id: string }>(
+      `SELECT id::text FROM consent_forms WHERE public_token = $1 AND deleted_at IS NULL`,
+      [token],
+    );
+    const f = r.rows[0] ? await this.findDb(c, r.rows[0].id) : null;
+    if (!f || !f.settings.publicLink?.on || f.status === 'draft' || f.status === 'archived')
+      throw new DomainError('not-found', 'This form link is not valid', { status: 404 });
+    return f;
+  }
+
+  /** The pupils a form asks, for the public link (exported for the link's service). */
+  studentsAsked(c: PoolClient, f: FormDb) {
+    return this.audienceStudents(c, f);
+  }
+
+  /** Is the form open, and why not (for the link's service). */
+  stateOf(f: FormDb) {
+    return this.openState(f);
+  }
+
   /** Is the form taking answers now, and why not? */
   private openState(f: FormDb): { open: boolean; why: string | null } {
     if (f.status !== 'published')
@@ -159,6 +183,7 @@ export class ConsentFormsService {
       closedAt: f.closed_at,
       createdAt: f.created_at,
       createdBy: f.created_by,
+      publicToken: f.settings.publicLink?.on ? f.public_token : null,
       ...extra,
     };
   }
@@ -390,6 +415,7 @@ export class ConsentFormsService {
       );
       const id = r.rows[0]!.id;
       await syncFlows(c, { id, title: dto.title, approval: dto.settings.approval });
+      if (dto.settings.publicLink?.on) await this.ensureToken(c, id, false);
       await this.audit.stage(ctx, c, {
         action: 'engagement.consent_form.create',
         entityType: 'consent_forms',
@@ -451,6 +477,7 @@ export class ConsentFormsService {
         ],
       );
       await syncFlows(c, { id, title: dto.title, approval: dto.settings.approval });
+      if (dto.settings.publicLink?.on) await this.ensureToken(c, id, false);
       await this.audit.stage(ctx, c, {
         action: 'engagement.consent_form.update',
         entityType: 'consent_forms',
@@ -459,6 +486,54 @@ export class ConsentFormsService {
         after: { title: dto.title, fields: dto.fields.length },
       });
       return this.view(await this.findDb(c, id));
+    });
+  }
+
+  /** The public link's secret part (a new one makes the old link and QR stop working). */
+  private async ensureToken(c: PoolClient, id: string, rotate: boolean) {
+    await c.query(
+      `UPDATE consent_forms SET public_token = translate(encode(gen_random_bytes(18), 'base64'), '+/=', '-_')
+        WHERE id = $1 AND ($2 OR public_token IS NULL)`,
+      [id, rotate],
+    );
+  }
+
+  /** A new public link: the old link and QR stop working. */
+  async rotateLink(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const f = await this.findDb(c, id, true);
+      if (!f.settings.publicLink?.on)
+        throw new DomainError('consent.no_link', 'The public link is off for this form', {
+          status: 409,
+        });
+      await this.ensureToken(c, id, true);
+      await this.audit.stage(ctx, c, {
+        action: 'engagement.consent_form.link',
+        entityType: 'consent_forms',
+        entityId: id,
+      });
+      return this.view(await this.findDb(c, id));
+    });
+  }
+
+  /** The QR of the public link (PNG, base64), and the link itself. */
+  async qr(ctx: RequestContext, id: string, base: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const f = await this.findDb(c, id);
+      if (!f.settings.publicLink?.on || !f.public_token)
+        throw new DomainError('consent.no_link', 'The public link is off for this form', {
+          status: 409,
+        });
+      const code = await c.query<{ code: string }>(
+        `SELECT lower(code) AS code FROM schools WHERE id = app.current_school_id()`,
+      );
+      const url = `${base}/${code.rows[0]!.code}/consent/${f.public_token}`;
+      return {
+        url,
+        filename: `${f.code}-qr.png`,
+        contentType: 'image/png',
+        base64: (await qrPng(url)).toString('base64'),
+      };
     });
   }
 
@@ -661,7 +736,8 @@ export class ConsentFormsService {
     if (q.q) {
       params.push(`%${q.q}%`);
       where.push(
-        `(s.display_name ILIKE $${params.length} OR s.admission_no ILIKE $${params.length} OR em.display_name ILIKE $${params.length} OR x.number ILIKE $${params.length})`,
+        `(s.display_name ILIKE $${params.length} OR s.admission_no ILIKE $${params.length} OR em.display_name ILIKE $${params.length} OR x.number ILIKE $${params.length}
+          OR x.public_name ILIKE $${params.length} OR x.public_mobile ILIKE $${params.length})`,
       );
     }
     if (q.status === 'waiting')
@@ -695,6 +771,7 @@ export class ConsentFormsService {
               (SELECT display_name FROM users WHERE id = x.signed_by) AS "byUser",
               (SELECT display_name FROM users WHERE id = x.entered_by) AS "enteredBy",
               x.fee_amount::text AS fee, l.paid::text AS paid, x.decided_note AS "decidedNote", x.edits,
+              x.via_link AS "viaLink", x.public_name AS "publicName", x.public_mobile AS "publicMobile", x.public_email AS "publicEmail",
               ${WAITING_WITH('x.instance_id')} AS "waitingWith"
          ${base} ORDER BY x.signed_at DESC, x.id DESC ${limit}`,
       params,
@@ -818,8 +895,8 @@ export class ConsentFormsService {
           rows: r.rows.map((x, i) => [
             i + 1,
             String(x.number ?? ''),
-            String(x.student ?? x.employee ?? ''),
-            String(x.admissionNo ?? x.employeeCode ?? ''),
+            String(x.student ?? x.employee ?? x.publicName ?? ''),
+            String(x.admissionNo ?? x.employeeCode ?? x.publicMobile ?? x.publicEmail ?? ''),
             String(x.section ?? ''),
             `${String(x.byUser ?? x.signedName ?? '')}${x.respondent === 'office' ? ' (office)' : ''}`,
             new Date(x.signedAt as string).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
@@ -839,6 +916,139 @@ export class ConsentFormsService {
     });
   }
 
+  /**
+   * The form at a glance: answers per day, the response rate by section, who answered (family, staff,
+   * office, public link), approval, the fee raised and paid, and each question's answers counted.
+   */
+  async analytics(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const f = await this.findDb(c, id);
+      const pupils = await this.audienceStudents(c, f);
+      const staff = await this.audienceStaff(c, f);
+      const daily = await c.query<{ day: string; n: number }>(
+        `SELECT (signed_at AT TIME ZONE 'Asia/Kolkata')::date::text AS day, count(*)::int AS n
+           FROM consent_form_responses WHERE form_id = $1 AND status <> 'withdrawn' GROUP BY 1 ORDER BY 1`,
+        [id],
+      );
+      const bySection = await c.query<{ section: string; asked: number; answered: number }>(
+        `SELECT k.name || '-' || cs.name AS section, count(*)::int AS asked,
+                count(*) FILTER (WHERE EXISTS (SELECT 1 FROM consent_form_responses x WHERE x.form_id = $3 AND x.student_id = e.student_id AND x.status <> 'withdrawn'))::int AS answered
+           FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+          WHERE e.student_id = ANY($1::bigint[]) AND e.academic_year_id = $2 AND e.status = 'active'
+          GROUP BY k.display_order, k.name, cs.name ORDER BY k.display_order, cs.name`,
+        [pupils, f.year_id, id],
+      );
+      const rows = await c.query<{
+        respondent: string;
+        via_link: boolean;
+        status: string;
+        waiting: boolean;
+        answers: Answers;
+        employee_id: string | null;
+      }>(
+        `SELECT x.respondent, x.via_link, x.status, x.answers, x.employee_id::text,
+                EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = x.instance_id AND wi.status = 'pending') AS waiting
+           FROM consent_form_responses x WHERE x.form_id = $1 AND x.status <> 'withdrawn'`,
+        [id],
+      );
+      const staffAnswered = new Set(rows.rows.map((r) => r.employee_id).filter(Boolean)).size;
+      const by = (fn: (r: (typeof rows.rows)[number]) => boolean) => rows.rows.filter(fn).length;
+      const fee = f.misc_fee_id
+        ? (
+            await c.query<{ raised: string; paid: string; pupils: number }>(
+              `SELECT COALESCE(sum(amount), 0)::text AS raised, COALESCE(sum(paid), 0)::text AS paid, count(*) FILTER (WHERE amount > 0)::int AS pupils
+                 FROM misc_fee_students WHERE misc_fee_id = $1 AND status <> 'cancelled'`,
+              [f.misc_fee_id],
+            )
+          ).rows[0]!
+        : null;
+      const lists = await sourceOptions(c, f.fields);
+      const questions = f.fields
+        .filter((q) => !LAYOUT.includes(q.type))
+        .map((q) => {
+          const given = rows.rows
+            .map((r) => r.answers[q.key])
+            .filter((v) => v !== undefined && v !== null && v !== '');
+          if (['radio', 'select', 'checkbox', 'yesno', 'agree'].includes(q.type)) {
+            const options =
+              q.type === 'yesno'
+                ? ['Yes', 'No']
+                : q.type === 'agree'
+                  ? ['Agreed']
+                  : q.source
+                    ? (lists[q.source] ?? [])
+                    : (q.options ?? []);
+            const counts = new Map(options.map((o) => [o, 0]));
+            for (const v of given) {
+              const picked = Array.isArray(v)
+                ? v
+                : [
+                    q.type === 'yesno'
+                      ? v === true
+                        ? 'Yes'
+                        : 'No'
+                      : q.type === 'agree'
+                        ? 'Agreed'
+                        : String(v),
+                  ];
+              for (const p of picked) counts.set(p, (counts.get(p) ?? 0) + 1);
+            }
+            return {
+              key: q.key,
+              label: q.label,
+              type: q.type,
+              answered: given.length,
+              counts: [...counts.entries()].map(([option, n]) => ({ option, n })),
+            };
+          }
+          if (q.type === 'number') {
+            const nums = given.map(Number).filter((n) => Number.isFinite(n));
+            return {
+              key: q.key,
+              label: q.label,
+              type: q.type,
+              answered: nums.length,
+              stats: nums.length
+                ? {
+                    total: nums.reduce((a, b) => a + b, 0),
+                    avg: Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100,
+                    min: Math.min(...nums),
+                    max: Math.max(...nums),
+                  }
+                : null,
+            };
+          }
+          return { key: q.key, label: q.label, type: q.type, answered: given.length };
+        });
+      return {
+        asked: pupils.length + staff.length,
+        answeredPupils: bySection.rows.reduce((a, b) => a + b.answered, 0),
+        answeredStaff: staffAnswered,
+        responses: rows.rows.length,
+        daily: daily.rows,
+        bySection: bySection.rows,
+        byRespondent: {
+          family: by((r) => r.respondent === 'family' && !r.via_link),
+          familyLink: by((r) => r.respondent === 'family' && r.via_link),
+          staff: by((r) => r.respondent === 'staff'),
+          office: by((r) => r.respondent === 'office'),
+          public: by((r) => r.respondent === 'public'),
+        },
+        approval: f.settings.approval?.on
+          ? {
+              waiting: by((r) => r.waiting),
+              approved: by((r) => r.status === 'approved'),
+              rejected: by((r) => r.status === 'rejected'),
+            }
+          : null,
+        fee: fee
+          ? { raised: Number(fee.raised), paid: Number(fee.paid), pupils: fee.pupils }
+          : null,
+        questions,
+      };
+    });
+  }
+
   // ---- one response -----------------------------------------------------------------------------
   private async responseDb(c: PoolClient, rid: string) {
     const r = await c.query<Row>(
@@ -853,7 +1063,8 @@ export class ConsentFormsService {
               (SELECT array_agg(field_key) FROM consent_form_signatures sg WHERE sg.response_id = x.id) AS signed,
               x.fee_amount::text AS fee, x.misc_line_id::text AS "lineId", l.paid::text AS paid, l.status AS "lineStatus",
               x.instance_id::text AS "instanceId", x.decided_at AS "decidedAt", x.decided_note AS "decidedNote",
-              x.edited_at AS "editedAt", x.edits, ${WAITING_WITH('x.instance_id')} AS "waitingWith"
+              x.edited_at AS "editedAt", x.edits, ${WAITING_WITH('x.instance_id')} AS "waitingWith",
+              x.via_link AS "viaLink", x.public_name AS "publicName", x.public_mobile AS "publicMobile", x.public_email AS "publicEmail"
          FROM consent_form_responses x LEFT JOIN students s ON s.id = x.student_id LEFT JOIN employees em ON em.id = x.employee_id
          LEFT JOIN misc_fee_students l ON l.id = x.misc_line_id
         WHERE x.id = $1`,
@@ -893,7 +1104,7 @@ export class ConsentFormsService {
   }
 
   /** The PDF copy of a response: the form, the answers, the signature, who answered and when. */
-  private async pdfOf(c: PoolClient, rid: string) {
+  async pdfOf(c: PoolClient, rid: string) {
     const row = await this.responseDb(c, rid);
     const f = await this.findDb(c, String(row.formId));
     const head = await schoolHead(c);
@@ -910,8 +1121,10 @@ export class ConsentFormsService {
       number: String(row.number ?? ''),
       about: row.student
         ? `${String(row.student)} (${String(row.admissionNo)}${row.section ? `, ${String(row.section)}` : ''})`
-        : `${String(row.employee ?? '')} (${String(row.employeeCode ?? '')})`,
-      answeredBy: `${String(row.byUser ?? row.signedName ?? '')}${row.respondent === 'office' ? ', entered by the school office' : ''}`,
+        : row.employee
+          ? `${String(row.employee)} (${String(row.employeeCode ?? '')})`
+          : `${String(row.publicName ?? '')} (${String(row.publicMobile ?? row.publicEmail ?? '')})`,
+      answeredBy: `${String(row.byUser ?? row.signedName ?? row.publicName ?? '')}${row.respondent === 'office' ? ', entered by the school office' : row.viaLink ? ', on the public link' : ''}`,
       signedName: (row.signedName as string | null) ?? null,
       on: new Date(row.signedAt as string).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
       items: f.fields
@@ -944,12 +1157,14 @@ export class ConsentFormsService {
   }
 
   // ---- answering --------------------------------------------------------------------------------
-  private async fileRows(c: PoolClient, fileIds: string[]) {
+  /** The files of an answer, uploaded and ready; on the public link only those uploaded for this form. */
+  private async fileRows(c: PoolClient, fileIds: string[], linkFormId: string | null = null) {
     const files: Array<{ fileId: string; name: string | null }> = [];
     for (const fileId of fileIds) {
       const r = await c.query<{ status: string; original_name: string | null }>(
-        `SELECT status, original_name FROM files WHERE id = $1`,
-        [fileId],
+        `SELECT status, original_name FROM files WHERE id = $1
+            AND ($2::bigint IS NULL OR (owner_entity_type = 'consent_form' AND owner_entity_id = $2::bigint))`,
+        [fileId, linkFormId],
       );
       if (!r.rows[0]) throw new DomainError('not-found', 'File not found', { status: 404 });
       if (r.rows[0].status !== 'ready')
@@ -963,12 +1178,18 @@ export class ConsentFormsService {
    * Writes a response after every check: the form open, the person asked, once only when the form says
    * so, the answers against the fields and rules, the files ready; a drawn signature is kept beside it.
    */
-  private async write(
+  async write(
     c: PoolClient,
     ctx: RequestContext,
     formId: string,
-    who: { studentId?: string; employeeId?: string; respondent: 'family' | 'staff' | 'office' },
-    dto: ConsentRespondDto,
+    who: {
+      studentId?: string;
+      employeeId?: string;
+      respondent: 'family' | 'staff' | 'office' | 'public';
+      /** answered on the public link: a family without the app, or an outsider */
+      link?: { name?: string; mobile?: string; email?: string };
+    },
+    dto: Pick<ConsentRespondDto, 'answers' | 'signedName'>,
   ) {
     const f = await this.findDb(c, formId, true);
     const state = this.openState(f);
@@ -976,7 +1197,12 @@ export class ConsentFormsService {
       throw new DomainError('consent.not_open', `The form is ${state.why ?? 'not open'}`, {
         status: 409,
       });
-    if (who.studentId) {
+    if (who.respondent === 'public') {
+      if (!f.settings.publicLink?.on || !f.settings.publicLink.outsiders)
+        throw new DomainError('consent.not_asked', 'This form is not open to the public', {
+          status: 403,
+        });
+    } else if (who.studentId) {
       if (!(await this.audienceStudents(c, f)).includes(who.studentId))
         throw new DomainError('consent.not_asked', 'This form is not for this pupil', {
           status: 403,
@@ -990,8 +1216,15 @@ export class ConsentFormsService {
     if (f.settings.repeat !== 'many') {
       const dup = await c.query(
         `SELECT 1 FROM consent_form_responses WHERE form_id = $1 AND status <> 'withdrawn'
-            AND (student_id = $2::bigint OR employee_id = $3::bigint)`,
-        [formId, who.studentId ?? null, who.employeeId ?? null],
+            AND (student_id = $2::bigint OR employee_id = $3::bigint
+                 OR (respondent = 'public' AND (public_mobile = $4 OR public_email = $5)))`,
+        [
+          formId,
+          who.studentId ?? null,
+          who.employeeId ?? null,
+          who.respondent === 'public' ? (who.link?.mobile ?? null) : null,
+          who.respondent === 'public' ? (who.link?.email ?? null) : null,
+        ],
       );
       if (dup.rowCount)
         throw new DomainError('consent.already', 'This form is already answered', {
@@ -1000,7 +1233,7 @@ export class ConsentFormsService {
     }
     const lists = await sourceOptions(c, f.fields);
     const { answers, fileIds, signatures } = checkAnswers(f.fields, dto.answers, lists);
-    const files = await this.fileRows(c, fileIds);
+    const files = await this.fileRows(c, fileIds, who.link ? formId : null);
     // a fee only on an answer about a pupil
     const fee = who.studentId
       ? feeOf(f.settings.fee ?? { mode: 'none', items: [] }, f.fields, answers)
@@ -1009,9 +1242,10 @@ export class ConsentFormsService {
       await c.query<{ n: string }>(`SELECT app.next_consent_no($1) AS n`, [f.year_id])
     ).rows[0]!.n;
     const r = await c.query<{ id: string }>(
-      `INSERT INTO consent_form_responses (school_id, form_id, student_id, employee_id, answers, files, signed_by, signed_name, number, respondent, entered_by, request_id, fee_amount)
+      `INSERT INTO consent_form_responses (school_id, form_id, student_id, employee_id, answers, files, signed_by, signed_name, number, respondent, entered_by, request_id, fee_amount,
+                                          via_link, public_name, public_mobile, public_email)
        VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::jsonb, app.current_user_id(), $6, $7, $8,
-               CASE WHEN $8 = 'office' THEN app.current_user_id() END, app.current_request_id(), $9)
+               CASE WHEN $8 = 'office' THEN app.current_user_id() END, app.current_request_id(), $9, $10, $11, $12, $13)
        RETURNING id::text`,
       [
         formId,
@@ -1023,6 +1257,10 @@ export class ConsentFormsService {
         number,
         who.respondent,
         fee.toFixed(2),
+        Boolean(who.link),
+        who.link?.name ?? null,
+        who.link?.mobile ?? null,
+        who.link?.email ?? null,
       ],
     );
     const rid = r.rows[0]!.id;
@@ -1033,6 +1271,7 @@ export class ConsentFormsService {
       );
     // approval first (levels set on the form; the fee waits for it), else the fee at once
     let waiting = false;
+    // staff and outsiders: the levels without the class teacher
     const staff = !who.studentId;
     if (needsApproval(f.settings.approval, staff)) {
       await syncFlows(c, { id: f.id, title: f.title, approval: f.settings.approval });
@@ -1040,8 +1279,10 @@ export class ConsentFormsService {
         who.studentId
           ? `SELECT s.display_name AS name, (SELECT e.class_section_id::text FROM enrolments e WHERE e.student_id = s.id AND e.academic_year_id = $2 AND e.status = 'active' LIMIT 1) AS section_id
                FROM students s WHERE s.id = $1`
-          : `SELECT display_name AS name, NULL AS section_id FROM employees WHERE id = $1 AND $2::bigint IS NOT NULL`,
-        [who.studentId ?? who.employeeId, f.year_id],
+          : `SELECT COALESCE((SELECT display_name FROM employees WHERE id = $1), $3) AS name, NULL AS section_id WHERE $2::bigint IS NOT NULL`,
+        who.studentId
+          ? [who.studentId, f.year_id]
+          : [who.employeeId ?? null, f.year_id, who.link?.name ?? 'Public link'],
       );
       const inst = await this.workflow.start(c, ctx, {
         definitionCode: flowCode(f.id, staff),
@@ -1107,9 +1348,11 @@ export class ConsentFormsService {
       student_id: string | null;
       fee_amount: string;
       number: string;
-      signed_by: string;
+      signed_by: string | null;
+      public_mobile: string | null;
+      public_email: string | null;
     }>(
-      `SELECT id::text, form_id::text, student_id::text, fee_amount::text, number, signed_by::text
+      `SELECT id::text, form_id::text, student_id::text, fee_amount::text, number, signed_by::text, public_mobile, public_email
          FROM consent_form_responses WHERE id = $1 FOR UPDATE`,
       [instance.entityId],
     );
@@ -1132,6 +1375,54 @@ export class ConsentFormsService {
         { ...f, fee: f.settings.fee, closesAt: f.settings.closesAt },
         { id: row.id, studentId: row.student_id, amount: Number(row.fee_amount) },
       );
+    if (!row.signed_by) {
+      // answered on the public link: told by SMS / WhatsApp / email with the school's templates
+      await c.query(`SELECT app.consent_seed_templates(app.current_school_id())`);
+      const vars = JSON.stringify({
+        form: f.title,
+        number: row.number,
+        decision: outcome === 'approved' ? 'approved' : 'not approved',
+        note: [
+          note ?? '',
+          outcome === 'approved' && Number(row.fee_amount) > 0
+            ? `Fee Rs ${row.fee_amount} to pay on the form's link.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        school:
+          (
+            await c.query<{ name: string }>(
+              `SELECT name FROM schools WHERE id = app.current_school_id()`,
+            )
+          ).rows[0]?.name ?? '',
+      });
+      // an outsider's own mobile, or the family mobiles of the pupil
+      const mobiles = row.public_mobile
+        ? [row.public_mobile]
+        : row.student_id
+          ? (
+              await c.query<{ mobile: string }>(
+                `SELECT DISTINCT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                  WHERE sg.student_id = $1 AND g.deleted_at IS NULL AND g.mobile IS NOT NULL AND g.mobile <> '' LIMIT 2`,
+                [row.student_id],
+              )
+            ).rows.map((x) => x.mobile)
+          : [];
+      for (const mobile of mobiles)
+        for (const ch of ['sms', 'whatsapp'])
+          await c.query(`SELECT app.send_template('consent_decision', $1, $2, $3::jsonb)`, [
+            ch,
+            mobile,
+            vars,
+          ]);
+      if (row.public_email)
+        await c.query(`SELECT app.send_template('consent_decision', 'email', $1, $2::jsonb)`, [
+          row.public_email,
+          vars,
+        ]);
+      return;
+    }
     await this.push.send(c, ctx, {
       userIds: [row.signed_by],
       title: outcome === 'approved' ? 'Your answer is approved' : 'Your answer is not approved',
@@ -1151,6 +1442,28 @@ export class ConsentFormsService {
    */
   async editMine(ctx: RequestContext, rid: string, dto: ConsentEditDto) {
     const me = await this.whoAmI(ctx);
+    return this.editAs(ctx, rid, dto, (row) =>
+      Boolean(
+        (row.student_id && me.children.some((s) => s.id === row.student_id)) ||
+        (row.employee_id && row.employee_id === me.employeeId),
+      ),
+    );
+  }
+
+  /** Changes an answer the caller owns (see editMine; the public link checks its own token). */
+  async editAs(
+    ctx: RequestContext,
+    rid: string,
+    dto: ConsentEditDto,
+    owns: (row: {
+      student_id: string | null;
+      employee_id: string | null;
+      form_id: string;
+      public_mobile: string | null;
+      public_email: string | null;
+      respondent: string;
+    }) => boolean,
+  ) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{
         id: string;
@@ -1166,19 +1479,21 @@ export class ConsentFormsService {
         written_by: string;
         written_at: Date;
         number: string;
+        public_mobile: string | null;
+        public_email: string | null;
+        respondent: string;
+        via_link: boolean;
       }>(
         `SELECT id::text, form_id::text, student_id::text, employee_id::text, status, answers, files, signed_name, fee_amount::text,
+                public_mobile, public_email, respondent, via_link,
                 misc_line_id::text, number, COALESCE((SELECT replaced_by FROM consent_form_response_versions v WHERE v.response_id = x.id ORDER BY v.replaced_at DESC LIMIT 1), signed_by)::text AS written_by,
                 COALESCE(edited_at, signed_at) AS written_at
            FROM consent_form_responses x WHERE id = $1 FOR UPDATE`,
         [rid],
       );
       const row = r.rows[0];
-      const mine =
-        row &&
-        ((row.student_id && me.children.some((s) => s.id === row.student_id)) ||
-          (row.employee_id && row.employee_id === me.employeeId));
-      if (!row || !mine) throw new DomainError('not-found', 'Response not found', { status: 404 });
+      if (!row || !owns(row))
+        throw new DomainError('not-found', 'Response not found', { status: 404 });
       const f = await this.findDb(c, row.form_id);
       if (row.status !== 'submitted')
         throw new DomainError('consent.decided', 'The answer is already decided: ask the school', {
@@ -1205,7 +1520,7 @@ export class ConsentFormsService {
         signed: new Set(signedBefore.rows.map((x) => x.field_key)),
         files: filesBefore,
       });
-      const files = await this.fileRows(c, fileIds);
+      const files = await this.fileRows(c, fileIds, row.via_link ? row.form_id : null);
       const fee = row.student_id
         ? feeOf(f.settings.fee ?? { mode: 'none', items: [] }, f.fields, answers)
         : 0;

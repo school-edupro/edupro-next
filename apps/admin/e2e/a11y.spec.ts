@@ -275,6 +275,7 @@ const PAGES = [
   '/engagement/consent-forms/6/fill?who=student:12230',
   '/engagement/consent-forms/6/edit',
   '/engagement/consent-forms/1/responses/1',
+  '/engagement/consent-forms/1/analytics',
   '/engagement/certificates',
   '/engagement/cctv',
   '/engagement/employee-queries',

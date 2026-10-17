@@ -9,7 +9,8 @@ import { PaymentsService } from '../payments/payments.service';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WorkflowService } from '../workflow/workflow.service';
-import { ConsentFormsController } from './consent-forms.controller';
+import { ConsentFormsController, PublicConsentFormsController } from './consent-forms.controller';
+import { ConsentPublicService } from './consent-public.service';
 import { ConsentFormsService } from './consent-forms.service';
 import { DsrController } from './dsr.controller';
 import { DsrService } from './dsr.service';
@@ -55,6 +56,7 @@ import { QueriesService } from './queries.service';
     EngagementController,
     EngagementPlusController,
     ConsentFormsController,
+    PublicConsentFormsController,
     DsrController,
     PortalProfileController,
     HelpdeskController,
@@ -79,6 +81,7 @@ import { QueriesService } from './queries.service';
     PrivacyService,
     EngagementPlusService,
     ConsentFormsService,
+    ConsentPublicService,
     DsrService,
     AuditService,
   ],

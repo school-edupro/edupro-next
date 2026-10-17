@@ -1,6 +1,24 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthenticatedOnly } from '../../common/auth/decorators';
+import { AuthenticatedOnly, Public } from '../../common/auth/decorators';
+import { ENV, type Env } from '../../config/env';
+import { PowService } from '../admissions/public/pow.service';
+import { PublicThrottle, PublicThrottleGuard } from '../admissions/public/public-throttle.guard';
+import { ConsentPublicService } from './consent-public.service';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
@@ -15,6 +33,10 @@ import {
   ConsentEditDto,
   ConsentNotifyDto,
   MineFormQueryDto,
+  PublicOtpDto,
+  PublicRespondDto,
+  PublicUploadDto,
+  PublicVerifyDto,
 } from './consent-forms.dto';
 import { ConsentFormsService } from './consent-forms.service';
 
@@ -29,7 +51,29 @@ const file = (f: { bytes: Buffer; filename: string; contentType: string }) => ({
 @ApiBearerAuth()
 @Controller('engagement')
 export class ConsentFormsController {
-  constructor(private readonly svc: ConsentFormsService) {}
+  constructor(
+    private readonly svc: ConsentFormsService,
+    @Inject(ENV) private readonly env: Env,
+  ) {}
+
+  @Post('consent-forms/:id/public-link')
+  @ApiOperation({ summary: 'A new public link (the old link and QR stop working)' })
+  @RequirePermission(CONSENT.manage)
+  rotate(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.rotateLink(ctx, id);
+  }
+
+  @Get('consent-forms/:id/qr')
+  @RequirePermission(CONSENT.manage)
+  qr(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.qr(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Get('consent-forms/:id/analytics')
+  @RequirePermission(CONSENT.manage)
+  analytics(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.analytics(ctx, id);
+  }
 
   @Get('consent-forms')
   @RequirePermission(CONSENT.manage, {
@@ -187,5 +231,148 @@ export class ConsentFormsController {
   @AuthenticatedOnly()
   respond(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentRespondDto) {
     return this.svc.respondMine(ctx, id, body);
+  }
+}
+
+/** A bare request context for the public link (no user, no school until the link is resolved). */
+const baseCtx = (req: { id?: string; ip?: string }): RequestContext =>
+  ({
+    requestId: req.id && /^[0-9a-f-]{36}$/i.test(req.id) ? req.id : randomUUID(),
+    ip: req.ip,
+  }) as RequestContext;
+
+/**
+ * The public link and QR of a consent form (no login; docs/design/28-consent-forms.md, part 3): the
+ * code is asked after a proof of work; the pass ("cf." token) is sent as a Bearer.
+ */
+@ApiTags('public')
+@Controller('public/consent-forms')
+@UseGuards(PublicThrottleGuard)
+export class PublicConsentFormsController {
+  constructor(
+    private readonly svc: ConsentPublicService,
+    private readonly pow: PowService,
+  ) {}
+
+  @Get(':schoolCode/:token')
+  @Public()
+  @PublicThrottle(60)
+  info(@Param('schoolCode') schoolCode: string, @Param('token') token: string) {
+    return this.svc.info(schoolCode, token);
+  }
+
+  @Post(':schoolCode/:token/otp')
+  @Public()
+  @PublicThrottle(10)
+  @ApiOperation({
+    summary: 'A one-time code to a mobile / email, or to the family mobile of a pupil',
+  })
+  async otp(
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Body() body: PublicOtpDto,
+    @Req() req: { ip?: string },
+  ) {
+    await this.pow.consume(body.challenge, body.nonce);
+    return this.svc.otp(schoolCode, token, body, req.ip);
+  }
+
+  @Post(':schoolCode/:token/otp/verify')
+  @Public()
+  @PublicThrottle(20)
+  verify(
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Body() body: PublicVerifyDto,
+  ) {
+    return this.svc.verify(schoolCode, token, body);
+  }
+
+  @Get(':schoolCode/:token/me')
+  @Public()
+  @PublicThrottle(60)
+  me(
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.me(schoolCode, token, auth);
+  }
+
+  @Get(':schoolCode/:token/responses/:rid')
+  @Public()
+  @PublicThrottle(60)
+  answer(
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Param('rid') rid: string,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.answer(schoolCode, token, auth, rid);
+  }
+
+  @Get(':schoolCode/:token/responses/:rid/pdf')
+  @Public()
+  @PublicThrottle(30)
+  pdf(
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Param('rid') rid: string,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.pdf(schoolCode, token, auth, rid);
+  }
+
+  @Post(':schoolCode/:token/uploads')
+  @Public()
+  @PublicThrottle(30)
+  upload(
+    @Req() req: { id?: string; ip?: string },
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Body() body: PublicUploadDto,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.upload(schoolCode, token, auth, body, baseCtx(req));
+  }
+
+  @Post(':schoolCode/:token/responses')
+  @Public()
+  @PublicThrottle(20)
+  respond(
+    @Req() req: { id?: string; ip?: string },
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Body() body: PublicRespondDto,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.respond(schoolCode, token, auth, body, baseCtx(req));
+  }
+
+  @Put(':schoolCode/:token/responses/:rid')
+  @Public()
+  @PublicThrottle(20)
+  edit(
+    @Req() req: { id?: string; ip?: string },
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Param('rid') rid: string,
+    @Body() body: PublicRespondDto,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.edit(schoolCode, token, auth, rid, body, baseCtx(req));
+  }
+
+  @Post(':schoolCode/:token/responses/:rid/pay')
+  @Public()
+  @PublicThrottle(10)
+  pay(
+    @Req() req: { id?: string; ip?: string },
+    @Param('schoolCode') schoolCode: string,
+    @Param('token') token: string,
+    @Param('rid') rid: string,
+    @Headers('authorization') auth?: string,
+  ) {
+    return this.svc.pay(schoolCode, token, auth, rid, baseCtx(req));
   }
 }
