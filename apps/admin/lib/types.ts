@@ -2453,7 +2453,7 @@ export interface HostelWithdrawal {
   reason: 'parent_request' | 'discipline' | 'health' | 'other';
   remarks: string | null;
   documents: Array<{ fileId: string; name: string | null }>;
-  status: 'requested' | 'cleared' | 'completed' | 'cancelled' | 'rejected';
+  status: 'requested' | 'cleared' | 'completed' | 'cancelled' | 'rejected' | 'revoked';
   feeChoice: 'carry' | 'refund';
   noticeDays: number | null;
   noticeShort: boolean;
@@ -2475,4 +2475,18 @@ export interface HostelWithdrawal {
   waitingWith: string | null;
   myStep: { id: string; lastLevel: boolean } | null;
   canComplete?: boolean;
+  /** a revoke asked on the completed withdrawal */
+  revoke: {
+    status: 'pending' | 'approved' | 'rejected';
+    reason: string;
+    mode: 'continue' | 'from_date';
+    fromDate: string | null;
+    requestedBy: string | null;
+    requestedAt: string | null;
+    revokedAt: string | null;
+    note: string | null;
+    approval: HostelWithdrawal['approval'];
+    waitingWith: string | null;
+    myStep: { id: string } | null;
+  } | null;
 }

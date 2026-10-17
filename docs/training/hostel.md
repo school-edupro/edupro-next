@@ -219,6 +219,13 @@ total becomes the damage charge and the list goes into the remarks for the appro
 **Clearance certificate**: once completed, _Clearance certificate (PDF)_ on the withdrawal page; the
 parent downloads the same from the parent app.
 
+**Revoke (the pupil comes back)**: on a completed withdrawal, _Revoke: back in the hostel_ — choose
+**as if never left** (same bed, the months away are charged) or **back from a day** (a new stay, the
+same bed or a free one; the months away are not charged and what was paid for them goes to the next
+fee), and give the reason. It goes through the same approval levels; on approval the pupil is back,
+the hostel fee is made again, refunds not paid yet are dropped, unpaid damage / mess charges are
+cancelled and the clearance certificate is no longer valid.
+
 ## Reports with the parents (Excel / PDF)
 
 - **The four reports:**

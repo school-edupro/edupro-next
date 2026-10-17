@@ -11,6 +11,7 @@ export const HW_STATUS: Record<string, string> = {
   completed: 'Left the hostel',
   cancelled: 'Cancelled',
   rejected: 'Not approved',
+  revoked: 'Revoked: back in the hostel',
 };
 export const HW_TONE: Record<string, 'warning' | 'info' | 'success' | 'neutral' | 'danger'> = {
   requested: 'warning',
@@ -18,6 +19,7 @@ export const HW_TONE: Record<string, 'warning' | 'info' | 'success' | 'neutral' 
   completed: 'success',
   cancelled: 'neutral',
   rejected: 'danger',
+  revoked: 'info',
 };
 export const dmy = (iso: string | null) =>
   iso ? iso.slice(0, 10).split('-').reverse().join('-') : '—';

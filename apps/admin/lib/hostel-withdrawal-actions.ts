@@ -242,3 +242,49 @@ export async function saveCheckoutItems(fd: FormData) {
   revalidatePath(to);
   redirect(`${to}?ok=1&detail=${encodeURIComponent('Check-out items saved.')}`);
 }
+
+// ---- revoke (0164) ---------------------------------------------------------------------------------------
+/** Ask to revoke a completed hostel withdrawal (as if never left, or back from a day with a bed). */
+export async function revokeHostelWithdrawal(fd: FormData) {
+  const id = str(fd, 'id');
+  const to = `${BASE}/${id}`;
+  const mode = str(fd, 'mode') === 'from_date' ? 'from_date' : 'continue';
+  try {
+    await apiFetch(`/hostel/withdrawals/${id}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: str(fd, 'reason'),
+        mode,
+        ...(mode === 'from_date'
+          ? { fromDate: str(fd, 'fromDate'), bedId: str(fd, 'bedId') || undefined }
+          : {}),
+      }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  revalidatePath(BASE);
+  redirect(`${to}?ok=revoke-asked`);
+}
+
+/** The approver of the revoke's current level approves (one form per choice). */
+export async function approveRevoke(fd: FormData) {
+  await decideRevoke(fd, 'approved');
+}
+export async function rejectRevoke(fd: FormData) {
+  await decideRevoke(fd, 'rejected');
+}
+async function decideRevoke(fd: FormData, outcome: 'approved' | 'rejected') {
+  const id = str(fd, 'id');
+  const to = `${BASE}/${id}`;
+  try {
+    await apiFetch(`/hostel/withdrawals/${id}/revoke/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ outcome, note: str(fd, 'note') || str(fd, 'reason') || undefined }),
+    });
+  } catch (error) {
+    back(to, error);
+  }
+  revalidatePath(BASE);
+  redirect(`${to}?ok=revoke-${outcome}`);
+}

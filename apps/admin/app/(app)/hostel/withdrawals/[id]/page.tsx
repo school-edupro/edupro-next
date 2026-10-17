@@ -15,7 +15,10 @@ import {
   approveHostelWithdrawal,
   cancelHostelWithdrawal,
   completeHostelWithdrawal,
+  approveRevoke,
   rejectHostelWithdrawal,
+  rejectRevoke,
+  revokeHostelWithdrawal,
   saveCheckout,
 } from '@/lib/hostel-withdrawal-actions';
 import type { HostelApprovalStep, HostelWithdrawal } from '@/lib/types';
@@ -36,6 +39,9 @@ const OK: Record<string, string> = {
   completed: 'The pupil has left the hostel: the bed is free and the hostel fee is settled.',
   cancelled: 'The hostel withdrawal is cancelled; the pupil keeps the bed.',
   checkout: 'Room check-out saved: the damage charge is the total of what is missing or damaged.',
+  'revoke-asked': 'The revoke is asked; it goes through the approval levels.',
+  'revoke-approved': 'Approved.',
+  'revoke-rejected': 'Not approved: the withdrawal stands.',
 };
 interface Checkout {
   status: string;
@@ -87,6 +93,16 @@ export default async function HostelWithdrawalPage({
     apiFetch<HostelWithdrawal>(`/hostel/withdrawals/${id}`),
     apiFetch<Checkout>(`/hostel/withdrawals/${id}/checkout`).catch(() => null),
   ]);
+  // beds free today, for a revoke 'back from a day' with another bed (the office's allot right)
+  const freeBeds =
+    w.status === 'completed' && me.permissions.includes('hostel.allot.manage')
+      ? await apiFetch<{ data: Array<{ id: string; place: string; roomType: string }> }>(
+          `/hostel/free-beds?hostelId=${w.hostelId}`,
+        )
+          .then((r) => r.data)
+          .catch(() => [])
+      : [];
+  const rv = w.revoke;
   const canManage = me.permissions.includes('hostel.withdrawal.manage');
   const open = w.status === 'requested' || w.status === 'cleared';
   const charges = Number(w.damageCharge) + Number(w.messCharge);
@@ -386,6 +402,162 @@ export default async function HostelWithdrawalPage({
             </p>
           )}
         </Card>
+        {rv ? (
+          <Card
+            title="Revoke"
+            style={{ marginBottom: 'var(--sp-4)' }}
+            actions={
+              <Badge
+                tone={
+                  rv.status === 'approved' ? 'info' : rv.status === 'pending' ? 'warning' : 'danger'
+                }
+              >
+                {rv.status === 'approved'
+                  ? 'Revoked: back in the hostel'
+                  : rv.status === 'pending'
+                    ? `Waiting${rv.waitingWith ? ` · ${rv.waitingWith}` : ''}`
+                    : 'Not approved'}
+              </Badge>
+            }
+          >
+            <p style={{ marginTop: 0 }}>
+              {rv.mode === 'continue' ? 'As if never left' : `Back from ${dmy(rv.fromDate)}`} ·{' '}
+              {rv.reason}
+              <span className="ep-field__help" style={{ display: 'block' }}>
+                Asked by {rv.requestedBy ?? '—'}
+                {rv.requestedAt ? ` on ${dmy(rv.requestedAt)}` : ''}
+                {rv.revokedAt ? ` · revoked on ${dmy(rv.revokedAt)}` : ''}
+              </span>
+            </p>
+            {rv.note ? <p className="ep-field__help">{rv.note}</p> : null}
+            {rv.approval ? (
+              <ol className="hs-approval">
+                {rv.approval.steps.map((st) => (
+                  <li
+                    key={st.id}
+                    data-current={
+                      st.status === 'pending' && st.level === rv.approval!.currentLevel
+                        ? 'true'
+                        : undefined
+                    }
+                  >
+                    <div>
+                      <strong>
+                        Level {st.level} · {st.name}
+                      </strong>{' '}
+                      {st.status === 'pending' && st.level !== rv.approval!.currentLevel ? (
+                        <Badge tone="neutral">later</Badge>
+                      ) : (
+                        <Badge tone={STEP[st.status][0]}>{STEP[st.status][1]}</Badge>
+                      )}
+                    </div>
+                    <div className="ep-field__help">
+                      {st.actedBy
+                        ? `${st.actedBy}${st.actedAt ? ` · ${new Date(st.actedAt).toLocaleString('en-IN')}` : ''}`
+                        : st.assignees.length
+                          ? `With ${st.assignees.slice(0, 4).join(', ')}`
+                          : ''}
+                    </div>
+                    {st.note ? <div>{st.note}</div> : null}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            {rv.status === 'pending' && rv.myStep ? (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-3)',
+                  flexWrap: 'wrap',
+                  marginTop: 'var(--sp-3)',
+                }}
+              >
+                <form
+                  action={approveRevoke}
+                  style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
+                >
+                  <input type="hidden" name="id" value={w.id} />
+                  <label className="ep-field" htmlFor="rv-ok-note">
+                    <span className="ep-field__label">Note (optional)</span>
+                    <input id="rv-ok-note" name="note" className="ep-input" maxLength={500} />
+                  </label>
+                  <Button type="submit">Approve the revoke</Button>
+                </form>
+                <ConfirmAction
+                  action={rejectRevoke}
+                  fields={{ id: w.id }}
+                  label="Not approve"
+                  title="Not approve this revoke?"
+                  confirmLabel="Not approve"
+                  confirmVariant="danger"
+                  reason={{ label: 'Why', placeholder: 'e.g. ask again in January' }}
+                >
+                  The withdrawal stands and the pupil stays out of the hostel.
+                </ConfirmAction>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+        {w.status === 'completed' && canManage && rv?.status !== 'pending' ? (
+          <Card title="Revoke: back in the hostel" style={{ marginBottom: 'var(--sp-4)' }}>
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              The pupil comes back to the hostel. It goes through the same approval levels; the last
+              approval puts the pupil back, makes the hostel fee again, drops refunds not paid yet,
+              cancels unpaid damage and mess charges, and the clearance certificate is no longer
+              valid.
+            </p>
+            <form action={revokeHostelWithdrawal} className="hs-form" style={{ maxWidth: '40rem' }}>
+              <input type="hidden" name="id" value={w.id} />
+              <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+                <legend className="ep-field__label">How the pupil comes back</legend>
+                <label className="ep-roles__tick">
+                  <input type="radio" name="mode" value="continue" defaultChecked /> As if never
+                  left: the same bed, the stay goes on; the hostel fee of the months away is charged
+                </label>
+                <label className="ep-roles__tick">
+                  <input type="radio" name="mode" value="from_date" /> Back from a day: a new stay;
+                  the months away are not charged (what was paid for them goes to the next fee)
+                </label>
+              </fieldset>
+              <div className="ep-hd__row">
+                <label className="ep-field" htmlFor="rv-from">
+                  <span className="ep-field__label">
+                    Back from (for &ldquo;back from a day&rdquo;)
+                  </span>
+                  <input id="rv-from" name="fromDate" type="date" className="ep-input" />
+                </label>
+                <label className="ep-field" htmlFor="rv-bed">
+                  <span className="ep-field__label">Bed</span>
+                  <select id="rv-bed" name="bedId" className="ep-select" defaultValue="">
+                    <option value="">The same bed ({w.place})</option>
+                    {freeBeds.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.place} · {b.roomType}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="ep-field" htmlFor="rv-why">
+                <span className="ep-field__label">Why *</span>
+                <textarea
+                  id="rv-why"
+                  name="reason"
+                  className="ep-input"
+                  rows={2}
+                  required
+                  minLength={3}
+                  maxLength={500}
+                />
+              </label>
+              <div>
+                <Button type="submit" variant="secondary">
+                  Ask to revoke
+                </Button>
+              </div>
+            </form>
+          </Card>
+        ) : null}
         {open && canManage ? (
           <Card title="Cancel">
             <ConfirmAction

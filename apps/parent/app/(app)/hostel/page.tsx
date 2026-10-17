@@ -1015,7 +1015,9 @@ export default async function HostelPage({
                                     ? 'Waiting for approval'
                                     : w.status === 'rejected'
                                       ? 'Not approved'
-                                      : 'Cancelled',
+                                      : w.status === 'revoked'
+                                        ? 'Revoked: back in the hostel'
+                                        : 'Cancelled',
                               )}
                             </Badge>
                             {w.status === 'completed' ? (

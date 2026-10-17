@@ -161,3 +161,20 @@ Changed by the user after the first build:
   pupil, the hostel and room, the stay, the reason, how the hostel fee was settled, the charges, the
   check-out, who approved. On the withdrawal page and in the parent app. API:
   `GET /hostel/withdrawals/:id/certificate`, `GET /hostel/mine/withdrawals/:id/certificate`.
+
+## Part 5 (17 Oct 2026, migration 0164): revoke
+
+- **Ask.** On a completed withdrawal, _Revoke: back in the hostel_: a reason and how the pupil comes
+  back. **As if never left**: the same bed, the stay goes on, the hostel fee of the months away is
+  charged. **Back from a day**: a new stay from that day (the same bed or a free one); the months away
+  are not charged (`hostel_fee_gaps`, read by `generate_fee_demand` through `app.fee_in_hostel_stay`)
+  and what was paid for them goes forward to the next unpaid fee. The bed must be free.
+- **Approve.** The same approval levels as the withdrawal (Fee setup → Approval levels → Hostel
+  withdrawal), from the withdrawal page; done at once when the levels are switched off. Not approved:
+  the withdrawal stands; the office may ask again.
+- **On approval.** The pupil is back in the bed; the hostel fee is made again; refunds of the
+  withdrawal not paid yet are dropped (one already paid is noted, to settle by hand); unpaid damage and
+  mess charges are cancelled (paid ones stay); a carried-forward amount stays where it went (the dues
+  are the same in all); the clearance certificate no longer downloads. Status _Revoked_.
+- API: `POST /hostel/withdrawals/:id/revoke {reason, mode, fromDate?, bedId?}`,
+  `POST /hostel/withdrawals/:id/revoke/decide {outcome, note}`.
