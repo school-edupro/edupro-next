@@ -7,6 +7,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import * as atom from '../src/modules/payments/adapters/atom';
 import * as ccavenue from '../src/modules/payments/adapters/ccavenue';
+import * as razorpay from '../src/modules/payments/adapters/razorpay';
 import * as sbiepay from '../src/modules/payments/adapters/sbiepay';
 import { mockResponse } from '../src/modules/payments/payu';
 import { PaymentsService } from '../src/modules/payments/payments.service';
@@ -482,5 +483,52 @@ describe('payment gateways (e2e)', () => {
       json: { lineId: lines[0] },
     });
     expect(again.statusCode).toBe(409);
+  });
+
+  it('Razorpay is set up without a webhook secret; then no webhook is trusted, the URL is shown for the dashboard', async () => {
+    const r = await inject({
+      method: 'PUT',
+      url: '/payments/gateways',
+      headers: h(),
+      json: {
+        provider: 'razorpay',
+        label: 'Razorpay test',
+        mode: 'test',
+        config: { keyId: 'rzp_test_dummy000001' },
+        secret: { keySecret: 'dummy-key-secret-for-tests' },
+        chargePercent: 0,
+        chargeFlat: 0,
+        active: true,
+      },
+    });
+    expect(r.statusCode).toBe(200);
+    const row = (
+      r.json().data as Array<{
+        id: string;
+        provider: string;
+        secretsSaved: string[];
+        webhookUrl: string;
+      }>
+    ).find((g) => g.provider === 'razorpay')!;
+    expect(row.secretsSaved).toEqual(['keySecret']);
+    expect(row.webhookUrl).toMatch(new RegExp(`/api/v1/payments/razorpay/webhook\\?gw=${row.id}$`));
+    // a "captured" webhook signed with the empty key is refused
+    const body = {
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: { id: 'pay_x1', order_id: 'order_x1', status: 'captured', amount: 100 },
+        },
+      },
+    };
+    const raw = JSON.stringify(body);
+    const hook = await inject({
+      method: 'POST',
+      url: `/payments/razorpay/webhook?gw=${row.id}`,
+      headers: { 'x-razorpay-signature': razorpay.webhookSignature(raw, '') },
+      json: body,
+    });
+    expect(JSON.stringify(hook.json())).not.toContain('"applied"');
+    expect(hook.json().outcome).not.toBe('applied');
   });
 });

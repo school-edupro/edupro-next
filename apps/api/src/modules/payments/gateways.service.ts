@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { decryptField, encryptField, type PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { ENV, type Env } from '../../config/env';
 import { ATOM_URLS } from './adapters/atom';
 import { SBIEPAY_URLS } from './adapters/sbiepay';
 
@@ -17,10 +18,20 @@ export const GATEWAY_PROVIDERS: GatewayProvider[] = [
   'atom',
 ];
 
-/** What each gateway asks for: plain fields (shown again) and keys (kept encrypted, never shown). */
+/**
+ * What each gateway asks for: plain fields (shown again) and keys (kept encrypted, never shown). A key
+ * named in `optional` may be left empty on an active account (Razorpay's webhook secret: the payment is
+ * confirmed when the payer comes back, checked with the key secret; the webhook is the safety net for a
+ * closed browser and for refunds).
+ */
 export const GATEWAY_FIELDS: Record<
   GatewayProvider,
-  { name: string; config: Array<[string, string]>; secret: Array<[string, string]> }
+  {
+    name: string;
+    config: Array<[string, string]>;
+    secret: Array<[string, string]>;
+    optional?: string[];
+  }
 > = {
   payu: {
     name: 'PayU',
@@ -42,6 +53,7 @@ export const GATEWAY_FIELDS: Record<
       ['keySecret', 'Key secret'],
       ['webhookSecret', 'Webhook secret'],
     ],
+    optional: ['webhookSecret'],
   },
   sbiepay: {
     name: 'SBI ePay',
@@ -88,6 +100,8 @@ export interface GatewayRow {
   active: boolean;
   bankAccountId: string | null;
   ledgers: FeeLedger[];
+  /** Razorpay: the address to give its dashboard as the webhook URL of this account. */
+  webhookUrl: string | null;
 }
 export interface GatewayAccount {
   id: string;
@@ -141,6 +155,7 @@ export class GatewaysService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async list(ctx: RequestContext): Promise<GatewayRow[]> {
@@ -178,6 +193,10 @@ export class GatewaysService {
         active: g.active,
         bankAccountId: g.bank_account_id,
         ledgers: g.ledgers ?? [],
+        webhookUrl:
+          g.provider === 'razorpay'
+            ? `${this.env.API_BASE_URL.replace(/\/$/, '')}/api/v1/payments/razorpay/webhook?gw=${g.id}`
+            : null,
       }));
     });
   }
@@ -226,7 +245,7 @@ export class GatewaysService {
       // a live gateway must have every field and key: a half-filled one would fail at the payer's checkout
       const missing = [
         ...spec.config.filter(([k]) => !config[k]).map(([, l]) => l),
-        ...spec.secret.filter(([k]) => !secret[k]).map(([, l]) => l),
+        ...spec.secret.filter(([k]) => !secret[k] && !spec.optional?.includes(k)).map(([, l]) => l),
       ];
       if (dto.active && missing.length)
         throw new DomainError(

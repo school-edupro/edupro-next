@@ -78,7 +78,8 @@ export function verifyWebhook(
   signature: string | undefined,
   webhookSecret: string,
 ): boolean {
-  if (!signature) return false;
+  // no secret set (the account has no webhook): nothing a caller sends can be trusted
+  if (!signature || !webhookSecret) return false;
   return safeEqual(webhookSignature(rawBody, webhookSecret), signature);
 }
 

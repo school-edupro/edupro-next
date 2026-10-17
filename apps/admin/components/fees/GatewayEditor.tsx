@@ -4,7 +4,13 @@ import { useState } from 'react';
 export type GatewayProvider = 'payu' | 'ccavenue' | 'razorpay' | 'sbiepay' | 'atom';
 export type GatewayFields = Record<
   GatewayProvider,
-  { name: string; config: Array<[string, string]>; secret: Array<[string, string]> }
+  {
+    name: string;
+    config: Array<[string, string]>;
+    secret: Array<[string, string]>;
+    /** keys that may stay empty (Razorpay's webhook secret) */
+    optional?: string[];
+  }
 >;
 export interface GatewayRow {
   id: string;
@@ -13,6 +19,8 @@ export interface GatewayRow {
   mode: 'test' | 'live';
   config: Record<string, string>;
   secretsSaved: string[];
+  /** Razorpay: the webhook URL to give its dashboard */
+  webhookUrl?: string | null;
   chargePercent: string;
   chargeFlat: string;
   active: boolean;
@@ -105,11 +113,13 @@ export function GatewayEditor({
         ))}
         {spec.secret.map(([k, label]) => {
           const saved = row?.provider === provider && row.secretsSaved.includes(k);
+          const optional = spec.optional?.includes(k) ?? false;
           return (
             <label key={`${provider}-${k}`} className="ep-field" htmlFor={`${p}-s-${k}`}>
               <span className="ep-field__label">
                 {label}
-                {saved ? '' : ' *'}
+                {saved || optional ? '' : ' *'}
+                {optional && !saved ? ' (optional)' : ''}
               </span>
               <input
                 className="ep-input"
@@ -121,6 +131,23 @@ export function GatewayEditor({
                 autoComplete="new-password"
                 disabled={!canEdit}
               />
+              {provider === 'razorpay' && k === 'webhookSecret' ? (
+                <span className="ep-field__help">
+                  Not needed to take payments: a payment is confirmed when the payer comes back,
+                  checked with the key secret. Add a webhook to also catch a payer who closes the
+                  browser before coming back, and refunds: in the Razorpay dashboard, Settings →
+                  Webhooks → Add, give the URL{' '}
+                  {row?.provider === 'razorpay' && row.webhookUrl ? (
+                    <code>{row.webhookUrl}</code>
+                  ) : (
+                    'shown here once this account is saved'
+                  )}
+                  , choose the events payment.captured, payment.failed and refund.processed, make up
+                  a secret (any long random text), and type the same secret here. Razorpay cannot
+                  reach a localhost address, so the webhook works only once the school is on its web
+                  address.
+                </span>
+              ) : null}
             </label>
           );
         })}

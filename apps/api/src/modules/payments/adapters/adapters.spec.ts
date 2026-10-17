@@ -33,6 +33,8 @@ describe('Razorpay adapter (Sprint 13)', () => {
     expect(razorpay.verifyWebhook(raw, sig, secret)).toBe(true);
     expect(razorpay.verifyWebhook(`${raw} `, sig, secret)).toBe(false);
     expect(razorpay.verifyWebhook(raw, undefined, secret)).toBe(false);
+    // an account without a webhook secret trusts no webhook, even one signed with the empty key
+    expect(razorpay.verifyWebhook(raw, razorpay.webhookSignature(raw, ''), '')).toBe(false);
   });
 
   it('reads payment and refund events into one shape', () => {
