@@ -40,6 +40,11 @@ export interface ConsentAnswered {
   employeeCode: string | null;
   byUser: string | null;
   enteredBy: string | null;
+  fee?: string | null;
+  paid?: string | null;
+  waitingWith?: string | null;
+  decidedNote?: string | null;
+  edits?: number;
 }
 export interface ConsentPending {
   kind: 'student' | 'employee';

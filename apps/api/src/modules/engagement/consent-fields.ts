@@ -163,7 +163,15 @@ export function checkAnswers(
   fields: Field[],
   given: Answers,
   lists: Record<string, string[]>,
-): { answers: Answers; fileIds: string[]; signatures: Record<string, Buffer> } {
+  /** a changed answer: the signatures and files sent before, kept when the answer says "keep" */
+  before?: { signed: Set<string>; files: Record<string, string[]> },
+): {
+  answers: Answers;
+  fileIds: string[];
+  signatures: Record<string, Buffer>;
+  kept: string[];
+} {
+  const kept: string[] = [];
   const answers: Answers = {};
   const fileIds: string[] = [];
   const signatures: Record<string, Buffer> = {};
@@ -176,6 +184,15 @@ export function checkAnswers(
     if (!shown) continue;
     let v = given[f.key];
     if (typeof v === 'string') v = v.trim();
+    if (v === 'keep' && before) {
+      if (f.type === 'signature' && before.signed.has(f.key)) {
+        answers[f.key] = true;
+        kept.push(f.key);
+        continue;
+      }
+      if (f.type === 'file' && before.files[f.key]?.length) v = before.files[f.key]!;
+      else v = null;
+    }
     if (f.type === 'agree' || f.type === 'yesno') {
       if (v === 'true' || v === 'yes' || v === 'on') v = true;
       if (v === 'false' || v === 'no') v = false;
@@ -253,7 +270,7 @@ export function checkAnswers(
     }
     answers[f.key] = v ?? null;
   }
-  return { answers, fileIds, signatures };
+  return { answers, fileIds, signatures, kept };
 }
 
 /** An answer as text for the register, Excel and PDF. */
@@ -265,4 +282,33 @@ export function answerText(f: Field, v: Answer | undefined): string {
   if (f.type === 'file')
     return `${(v as string[]).length} file${(v as string[]).length === 1 ? '' : 's'}`;
   return Array.isArray(v) ? v.join(', ') : String(v);
+}
+
+/** The fee of an answer: fixed, or a base plus a rate per unit or a price per option of the answers. */
+export function feeOf(
+  fee: {
+    mode: 'none' | 'fixed' | 'calc';
+    amount?: number;
+    base?: number;
+    items: Array<{ field: string; rate?: number; prices?: Record<string, number> }>;
+  },
+  fields: Field[],
+  answers: Answers,
+): number {
+  if (fee.mode === 'none') return 0;
+  if (fee.mode === 'fixed') return Math.round((fee.amount ?? 0) * 100) / 100;
+  let total = fee.base ?? 0;
+  for (const it of fee.items) {
+    const f = fields.find((x) => x.key === it.field);
+    const v = answers[it.field];
+    if (!f || v === undefined || v === null || v === '') continue;
+    if (f.type === 'number' && it.rate !== undefined) total += Number(v) * it.rate;
+    else if (it.prices) {
+      const picked = Array.isArray(v)
+        ? v
+        : [f.type === 'yesno' ? (v === true ? 'Yes' : 'No') : String(v)];
+      for (const p of picked) total += it.prices[p] ?? 0;
+    }
+  }
+  return Math.max(0, Math.round(total * 100) / 100);
 }

@@ -17,12 +17,23 @@ export default async function HomePage() {
   }
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
   const can = (p: string) => me.permissions.includes(p);
+  // consent form answers waiting for my decision (class teacher or named approver)
+  const toApprove = await bff.api
+    .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
+    .then((r) => r.data.length)
+    .catch(() => 0);
   const tiles: Array<[string, string, boolean, string?]> = [
     [
       t(lang, 'Messages'),
       t(lang, 'SMS, WhatsApp and email the school sent you'),
       true,
       '/messages',
+    ],
+    [
+      `${t(lang, 'Answers to approve')}${toApprove ? ` (${toApprove})` : ''}`,
+      t(lang, 'Consent form answers from families waiting for your decision'),
+      toApprove > 0,
+      '/consent-approvals',
     ],
     [
       t(lang, 'Forms and declarations'),

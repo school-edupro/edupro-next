@@ -15,7 +15,14 @@ interface Mine {
       kind: 'student' | 'staff';
       id: string;
       canAnswer: boolean;
-      responses: Array<{ id: string; number: string }>;
+      responses: Array<{
+        id: string;
+        number: string;
+        status: string;
+        waiting: boolean;
+        canEdit: boolean;
+        decidedNote: string | null;
+      }>;
     }>;
   }>;
 }
@@ -86,6 +93,23 @@ export default async function StaffConsentsPage({
                       style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}
                     >
                       {r.number}
+                      <span className="ep-field__help">
+                        {r.waiting
+                          ? 'waiting for approval'
+                          : r.status === 'approved'
+                            ? 'approved'
+                            : r.status === 'rejected'
+                              ? `not approved${r.decidedNote ? `: ${r.decidedNote}` : ''}`
+                              : ''}
+                      </span>
+                      {r.canEdit ? (
+                        <a
+                          href={`/consents/${f.id}?response=${r.id}`}
+                          style={{ textDecoration: 'underline' }}
+                        >
+                          Change
+                        </a>
+                      ) : null}
                       <FileLinks
                         url={`/consents/pdf/${r.id}`}
                         saveUrl={`/consents/pdf/${r.id}?save=1`}

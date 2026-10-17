@@ -33,6 +33,58 @@ export const ConsentAudienceSchema = z.object({
 });
 export type ConsentAudience = z.infer<typeof ConsentAudienceSchema>;
 
+const Key = z
+  .string()
+  .trim()
+  .regex(/^[a-z][a-z0-9_]{0,39}$/);
+const Money = z.number().min(0).max(10_000_000);
+/**
+ * The fee of an answer about a pupil, raised as a misc fee (after approval when the form needs it):
+ * none, a fixed amount, or calculated: a base plus, per question, a rate per unit (numbers) or a price
+ * per option (choices, yes / no).
+ */
+export const ConsentFeeSchema = z.object({
+  mode: z.enum(['none', 'fixed', 'calc']).default('none'),
+  amount: Money.optional(),
+  base: Money.optional(),
+  items: z
+    .array(
+      z.object({
+        field: Key,
+        rate: Money.optional(),
+        prices: z.record(z.string().max(120), Money).optional(),
+      }),
+    )
+    .max(20)
+    .default([]),
+  /** the last date to pay (empty: the day the form closes, else two weeks after the answer) */
+  lastDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+export type ConsentFee = z.infer<typeof ConsentFeeSchema>;
+/** Who approves an answer, level by level: the pupil's class teacher, a role, or a named user. */
+export const ConsentLevelSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  resolver: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('class_teacher') }),
+    z.object({
+      kind: z.literal('role'),
+      roleCode: z
+        .string()
+        .trim()
+        .regex(/^[a-z_]{2,40}$/),
+    }),
+    z.object({ kind: z.literal('named_user'), userId: IdSchema }),
+  ]),
+});
+export const ConsentApprovalSchema = z.object({
+  on: z.boolean().default(false),
+  levels: z.array(ConsentLevelSchema).max(5).default([]),
+});
+export type ConsentApproval = z.infer<typeof ConsentApprovalSchema>;
+
 export const ConsentSettingsSchema = z.object({
   success: z.string().trim().max(500).optional(),
   opensAt: DateTime.optional(),
@@ -41,6 +93,10 @@ export const ConsentSettingsSchema = z.object({
   /** the form closes when this many responses are in */
   cap: z.number().int().min(1).max(100_000).optional(),
   officeFill: z.boolean().default(true),
+  /** families and staff may change their answer until then, while it is not yet approved */
+  editUntil: DateTime.optional(),
+  fee: ConsentFeeSchema.default({ mode: 'none', items: [] }),
+  approval: ConsentApprovalSchema.default({ on: false, levels: [] }),
 });
 export type ConsentSettings = z.infer<typeof ConsentSettingsSchema>;
 
@@ -62,11 +118,24 @@ export const ConsentFormSchema = z
   );
 export class ConsentFormDto extends createZodDto(ConsentFormSchema) {}
 
+/** SMS / WhatsApp / email with the school's templates, through the usual message approval. */
+export const ConsentChannelsSchema = z
+  .array(z.object({ channel: z.enum(['sms', 'whatsapp', 'email']), templateId: IdSchema }))
+  .max(3)
+  .default([]);
 export const ConsentStatusSchema = z.object({
   status: z.enum(['published', 'closed', 'archived', 'draft']),
   /** on publish: tell the audience in the app (push, and the card on the home screen) */
   push: z.boolean().default(true),
+  channels: ConsentChannelsSchema,
 });
+export const ConsentNotifySchema = z.object({ channels: ConsentChannelsSchema });
+export class ConsentNotifyDto extends createZodDto(ConsentNotifySchema) {}
+export const ConsentDecideSchema = z.object({
+  decision: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(500).optional(),
+});
+export class ConsentDecideDto extends createZodDto(ConsentDecideSchema) {}
 export class ConsentStatusDto extends createZodDto(ConsentStatusSchema) {}
 
 export const ConsentListQuerySchema = z.object({
@@ -77,6 +146,8 @@ export class ConsentListQueryDto extends createZodDto(ConsentListQuerySchema) {}
 
 export const ConsentRegisterQuerySchema = z.object({
   tab: z.enum(['answered', 'pending']).default('answered'),
+  /** answered: only those waiting for approval, approved or rejected */
+  status: z.enum(['waiting', 'approved', 'rejected']).optional(),
   sectionId: IdSchema.optional(),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -104,5 +175,16 @@ export const ConsentRespondSchema = z.object({
 });
 export class ConsentRespondDto extends createZodDto(ConsentRespondSchema) {}
 
-export const MineFormQuerySchema = z.object({ studentId: IdSchema.optional() });
+/** A changed answer: a file or signature question may say "keep" to keep what was sent before. */
+export const ConsentEditSchema = z.object({
+  answers: z.record(z.string(), AnswerSchema),
+  signedName: z.string().trim().min(2).max(120).optional(),
+});
+export class ConsentEditDto extends createZodDto(ConsentEditSchema) {}
+
+export const MineFormQuerySchema = z.object({
+  studentId: IdSchema.optional(),
+  /** changing an answer already given */
+  responseId: IdSchema.optional(),
+});
 export class MineFormQueryDto extends createZodDto(MineFormQuerySchema) {}

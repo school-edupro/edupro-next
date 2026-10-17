@@ -89,34 +89,78 @@ export async function saveConsentForm(fd: FormData) {
   redirect(`${BASE}/${saved.id}?ok=saved`);
 }
 
-/** Publish (with the app notification), close, reopen or archive. */
+type Message = { id: string; status: string; people: number } | { error: string } | null;
+/** The SMS / WhatsApp / email templates chosen on the form (tpl_sms, tpl_whatsapp, tpl_email). */
+const channelsOf = (fd: FormData) =>
+  (['sms', 'whatsapp', 'email'] as const)
+    .map((channel) => ({ channel, templateId: str(fd, `tpl_${channel}`) }))
+    .filter((x) => /^\d+$/.test(x.templateId));
+/** What became of the message request, for the notice. */
+const messageQs = (m: Message) =>
+  !m
+    ? ''
+    : 'error' in m
+      ? `&msgerr=${encodeURIComponent(m.error.slice(0, 200))}`
+      : `&msg=${encodeURIComponent(m.status)}&msgn=${m.people}`;
+
+/** Publish (with the app notification and the chosen channels), close, reopen or archive. */
 export async function setConsentStatus(fd: FormData) {
   const id = str(fd, 'id');
   let told = 0;
+  let message: Message = null;
   try {
-    const r = await apiFetch<{ told?: number }>(`${BASE}/${id}/status`, {
+    const r = await apiFetch<{ told?: number; message?: Message }>(`${BASE}/${id}/status`, {
       method: 'PUT',
-      body: JSON.stringify({ status: str(fd, 'status'), push: str(fd, 'push') !== 'no' }),
+      body: JSON.stringify({
+        status: str(fd, 'status'),
+        // the publish form says it with a tick; the other buttons with push=no
+        push: fd.has('pushForm') ? fd.has('pushOn') : str(fd, 'push') !== 'no',
+        channels: channelsOf(fd),
+      }),
     });
     told = r.told ?? 0;
+    message = r.message ?? null;
   } catch (error) {
     back(`${BASE}/${id}`, error);
   }
   revalidatePath(BASE);
-  redirect(`${BASE}/${id}?ok=${str(fd, 'status')}&told=${told}`);
+  redirect(`${BASE}/${id}?ok=${str(fd, 'status')}&told=${told}${messageQs(message)}`);
 }
 
 export async function notifyConsentPending(fd: FormData) {
   const id = str(fd, 'id');
   let told = 0;
+  let message: Message = null;
   try {
-    told = (
-      await apiFetch<{ told: number }>(`${BASE}/${id}/notify`, { method: 'POST', body: '{}' })
-    ).told;
+    const r = await apiFetch<{ told: number; message: Message }>(`${BASE}/${id}/notify`, {
+      method: 'POST',
+      body: JSON.stringify({ channels: channelsOf(fd) }),
+    });
+    told = r.told;
+    message = r.message;
   } catch (error) {
     back(`${BASE}/${id}`, error);
   }
-  redirect(`${BASE}/${id}?ok=notified&told=${told}`);
+  redirect(`${BASE}/${id}?ok=notified&told=${told}${messageQs(message)}`);
+}
+
+/** Approve or reject an answer at my level (from the response page). */
+export async function decideConsent(fd: FormData) {
+  const id = str(fd, 'formId');
+  const rid = str(fd, 'responseId');
+  try {
+    await apiFetch(`/engagement/mine/consent-approvals/${str(fd, 'stepId')}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decision: str(fd, 'decision') === 'rejected' ? 'rejected' : 'approved',
+        note: str(fd, 'note') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(`${BASE}/${id}/responses/${rid}`, error);
+  }
+  revalidatePath(`${BASE}/${id}`);
+  redirect(`${BASE}/${id}/responses/${rid}?ok=${str(fd, 'decision')}`);
 }
 
 export async function copyConsentForm(fd: FormData) {

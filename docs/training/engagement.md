@@ -123,7 +123,18 @@
   - A form with answers can get new questions and new wording; an answered question cannot be removed
     or change its type (hide it with a rule). A draft without answers can be deleted; otherwise close
     and archive. **Copy as new** starts next year's form from this one.
-  - Fees on a form, approval of answers and edit after submit come in part 2.
+  - **Fee** (section 5): fixed or worked out from the answers (a base, ₹ per unit of a number, ₹ per
+    option of a choice). It becomes a misc fee on the pupil (head "Consent forms"): after approval when
+    the form needs it, else at once. The parent sees the amount while filling and pays with **Pay** on
+    the form (or at the misc counter).
+  - **Approval** (section 6): levels in order: the pupil's class teacher, a role (e.g. Principal) or a
+    named staff member. Class teachers approve in the staff app (**Answers to approve**); others on the
+    response page or in My approvals. The family is told the decision; a note is required to refuse.
+  - **Answers may be changed until** (section 4): families and staff change their answer until then,
+    only before it is decided; earlier versions are kept on the response page. Once a fee is paid, a
+    change that alters the amount is refused (the office handles it).
+  - **Publish / Remind**: choose SMS, WhatsApp and email templates as well as the app notification; the
+    message goes through message approval.
 - **Certificates**: keep one template per certificate kind under **System → Templates**; issue to a
   section or a list of pupils; the batch PDF is in the Export centre, each family downloads its own.
 - **Privacy** (admin): work data-principal requests within the due date; run the breach runbook if

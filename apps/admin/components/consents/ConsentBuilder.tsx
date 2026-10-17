@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { ConsentField } from '@edupro/ui';
+import type { ConsentFee, ConsentField } from '@edupro/ui';
 
 type FieldType = ConsentField['type'];
 type Rule = NonNullable<ConsentField['rule']>;
@@ -25,6 +25,10 @@ export interface ConsentAudience {
   employeeIds: string[];
   employeeCodes: string[];
 }
+export type ConsentResolver =
+  | { kind: 'class_teacher' }
+  | { kind: 'role'; roleCode: string }
+  | { kind: 'named_user'; userId: string };
 export interface ConsentSettings {
   success?: string;
   opensAt?: string;
@@ -32,6 +36,9 @@ export interface ConsentSettings {
   repeat: 'once' | 'many';
   cap?: number;
   officeFill: boolean;
+  editUntil?: string;
+  fee?: ConsentFee & { lastDate?: string };
+  approval?: { on: boolean; levels: Array<{ name: string; resolver: ConsentResolver }> };
 }
 export interface ConsentDraft {
   title: string;
@@ -48,6 +55,8 @@ export interface BuilderLists {
   routes: Array<{ id: string; name: string }>;
   departments: string[];
   designations: string[];
+  roles: Array<{ code: string; name: string }>;
+  staff: Array<{ userId: string; name: string; designation: string | null }>;
 }
 
 const TYPES: Array<[FieldType, string]> = [
@@ -850,6 +859,19 @@ export function ConsentBuilder({
             />
             <span className="ep-field__help">Empty: no limit (seats, places).</span>
           </label>
+          <label className="ep-field" htmlFor="cfb-edit">
+            <span className="ep-field__label">Answers may be changed until</span>
+            <input
+              id="cfb-edit"
+              className="ep-input"
+              type="datetime-local"
+              value={d.settings.editUntil ?? ''}
+              onChange={(e) => st({ editUntil: e.target.value || undefined })}
+            />
+            <span className="ep-field__help">
+              Empty: an answer cannot be changed. Never after it is approved.
+            </span>
+          </label>
         </div>
         <label className="ep-field" htmlFor="cfb-success" style={{ marginTop: 'var(--sp-3)' }}>
           <span className="ep-field__label">Message after answering</span>
@@ -875,6 +897,20 @@ export function ConsentBuilder({
           </span>
         </label>
       </section>
+
+      <FeeSection
+        fee={d.settings.fee ?? { mode: 'none', items: [] }}
+        fields={fields}
+        onChange={(fee) => st({ fee })}
+        family={d.respondents !== 'staff'}
+        approval={Boolean(d.settings.approval?.on)}
+      />
+
+      <ApprovalSection
+        approval={d.settings.approval ?? { on: false, levels: [] }}
+        lists={lists}
+        onChange={(approval) => st({ approval })}
+      />
 
       <div className="ep-form-actions">
         <button type="submit" className="ep-btn ep-btn--primary">
@@ -1026,5 +1062,303 @@ function RuleEditor({
         </button>
       </div>
     </div>
+  );
+}
+
+const CHOICEISH: FieldType[] = ['radio', 'select', 'checkbox', 'yesno'];
+
+/** 5. Fee: none, fixed, or a base plus a rate per unit / a price per option of the answers. */
+function FeeSection({
+  fee,
+  fields,
+  onChange,
+  family,
+  approval,
+}: {
+  fee: ConsentFee & { lastDate?: string };
+  fields: BField[];
+  onChange: (f: ConsentFee & { lastDate?: string }) => void;
+  family: boolean;
+  approval: boolean;
+}) {
+  const priced = fields.filter(
+    (f) => f.type === 'number' || (CHOICEISH.includes(f.type) && !f.source),
+  );
+  const optionsOf = (f: BField) => (f.type === 'yesno' ? ['Yes', 'No'] : (f.options ?? []));
+  const item = (key: string) => fee.items.find((x) => x.field === key);
+  const setItem = (key: string, patch: { rate?: number; prices?: Record<string, number> }) => {
+    const rest = fee.items.filter((x) => x.field !== key);
+    const cur = { ...(item(key) ?? { field: key }), ...patch };
+    const used =
+      (cur.rate !== undefined && cur.rate > 0) ||
+      Object.values(cur.prices ?? {}).some((v) => v > 0);
+    onChange({ ...fee, items: used ? [...rest, cur] : rest });
+  };
+  const num = (v: string) => (v === '' ? undefined : Math.max(0, Number(v)));
+  return (
+    <section className="ep-card" aria-labelledby="cfb-fee">
+      <h2 id="cfb-fee" className="ep-card__title">
+        5. Fee
+      </h2>
+      {!family ? (
+        <p className="ep-field__help">A fee applies only to answers about a pupil.</p>
+      ) : (
+        <>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Raised on the pupil as a misc fee (head &quot;Consent forms&quot;):{' '}
+            {approval ? 'after the answer is approved' : 'as soon as the family answers'}. Paid
+            online or at the misc counter like any misc fee.
+          </p>
+          <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="ep-field__label">Amount</legend>
+            <div className="ep-cf__options">
+              {(
+                [
+                  ['none', 'No fee'],
+                  ['fixed', 'A fixed amount'],
+                  ['calc', 'Worked out from the answers'],
+                ] as const
+              ).map(([v, l]) => (
+                <label key={v} className="ep-radio">
+                  <input
+                    type="radio"
+                    className="ep-radio__input"
+                    name="cfb-fee"
+                    checked={fee.mode === v}
+                    onChange={() => onChange({ ...fee, mode: v })}
+                  />
+                  <span className="ep-radio__dot" aria-hidden="true" />
+                  <span className="ep-check__text">{l}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {fee.mode !== 'none' ? (
+            <div className="ep-cfb__grid" style={{ marginTop: 'var(--sp-3)' }}>
+              <label className="ep-field" htmlFor="cfb-fee-amt">
+                <span className="ep-field__label">
+                  {fee.mode === 'fixed' ? 'Amount (₹)' : 'Base amount (₹)'}
+                </span>
+                <input
+                  id="cfb-fee-amt"
+                  className="ep-input"
+                  type="number"
+                  min={0}
+                  value={(fee.mode === 'fixed' ? fee.amount : fee.base) ?? ''}
+                  onChange={(e) =>
+                    onChange(
+                      fee.mode === 'fixed'
+                        ? { ...fee, amount: num(e.target.value) }
+                        : { ...fee, base: num(e.target.value) },
+                    )
+                  }
+                />
+              </label>
+              <label className="ep-field" htmlFor="cfb-fee-last">
+                <span className="ep-field__label">Last date to pay</span>
+                <input
+                  id="cfb-fee-last"
+                  className="ep-input"
+                  type="date"
+                  value={fee.lastDate ?? ''}
+                  onChange={(e) => onChange({ ...fee, lastDate: e.target.value || undefined })}
+                />
+                <span className="ep-field__help">
+                  Empty: the day the form closes, else two weeks after the answer.
+                </span>
+              </label>
+            </div>
+          ) : null}
+          {fee.mode === 'calc' ? (
+            priced.length === 0 ? (
+              <p className="ep-field__help">
+                Add a number or a choice question (with typed options) to price it.
+              </p>
+            ) : (
+              <div className="ep-cfb" style={{ marginTop: 'var(--sp-3)' }}>
+                {priced.map((f) => (
+                  <div key={f.uid} className="ep-cfb__rule">
+                    <strong>{f.label}</strong>
+                    {f.type === 'number' ? (
+                      <label className="ep-field" htmlFor={`fee-${f.uid}`}>
+                        <span className="ep-field__label">₹ per unit answered</span>
+                        <input
+                          id={`fee-${f.uid}`}
+                          className="ep-input"
+                          type="number"
+                          min={0}
+                          value={item(f.key)?.rate ?? ''}
+                          onChange={(e) => setItem(f.key, { rate: num(e.target.value) })}
+                        />
+                      </label>
+                    ) : (
+                      <div className="ep-cfb__grid">
+                        {optionsOf(f).map((o) => (
+                          <label key={o} className="ep-field" htmlFor={`fee-${f.uid}-${o}`}>
+                            <span className="ep-field__label">₹ for &quot;{o}&quot;</span>
+                            <input
+                              id={`fee-${f.uid}-${o}`}
+                              className="ep-input"
+                              type="number"
+                              min={0}
+                              value={item(f.key)?.prices?.[o] ?? ''}
+                              onChange={(e) => {
+                                const prices = { ...(item(f.key)?.prices ?? {}) };
+                                const v = num(e.target.value);
+                                if (v === undefined) delete prices[o];
+                                else prices[o] = v;
+                                setItem(f.key, { prices });
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 6. Approval: off, or levels in order: the pupil's class teacher, a role, or a named staff member. */
+function ApprovalSection({
+  approval,
+  lists,
+  onChange,
+}: {
+  approval: { on: boolean; levels: Array<{ name: string; resolver: ConsentResolver }> };
+  lists: BuilderLists;
+  onChange: (a: {
+    on: boolean;
+    levels: Array<{ name: string; resolver: ConsentResolver }>;
+  }) => void;
+}) {
+  const setLevel = (i: number, patch: Partial<{ name: string; resolver: ConsentResolver }>) =>
+    onChange({
+      ...approval,
+      levels: approval.levels.map((l, j) => (j === i ? { ...l, ...patch } : l)),
+    });
+  const kindValue = (r: ConsentResolver) =>
+    r.kind === 'class_teacher'
+      ? 'ct'
+      : r.kind === 'role'
+        ? `role:${r.roleCode}`
+        : `user:${r.userId}`;
+  return (
+    <section className="ep-card" aria-labelledby="cfb-appr">
+      <h2 id="cfb-appr" className="ep-card__title">
+        6. Approval of answers
+      </h2>
+      <label className="ep-check">
+        <input
+          type="checkbox"
+          className="ep-check__input"
+          checked={approval.on}
+          onChange={(e) =>
+            onChange({
+              on: e.target.checked,
+              levels: approval.levels.length
+                ? approval.levels
+                : [{ name: 'Class teacher', resolver: { kind: 'class_teacher' } }],
+            })
+          }
+        />
+        <span className="ep-check__box" aria-hidden="true" />
+        <span className="ep-check__text">
+          Answers need approval
+          <span className="ep-field__help">
+            Level by level; the fee is raised after the last approval; the family is told the
+            decision. Staff answers skip the class-teacher level.
+          </span>
+        </span>
+      </label>
+      {approval.on ? (
+        <div className="ep-cfb" style={{ marginTop: 'var(--sp-3)' }}>
+          {approval.levels.map((l, i) => (
+            <div key={i} className="ep-cfb__cond" role="group" aria-label={`Level ${i + 1}`}>
+              <label className="ep-field" htmlFor={`lvl-${i}-name`}>
+                <span className="ep-field__label">Level {i + 1} name</span>
+                <input
+                  id={`lvl-${i}-name`}
+                  className="ep-input"
+                  value={l.name}
+                  maxLength={80}
+                  onChange={(e) => setLevel(i, { name: e.target.value })}
+                />
+              </label>
+              <label className="ep-field" htmlFor={`lvl-${i}-who`} style={{ gridColumn: 'span 2' }}>
+                <span className="ep-field__label">Who approves</span>
+                <select
+                  id={`lvl-${i}-who`}
+                  className="ep-select"
+                  value={kindValue(l.resolver)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setLevel(i, {
+                      resolver:
+                        v === 'ct'
+                          ? { kind: 'class_teacher' }
+                          : v.startsWith('role:')
+                            ? { kind: 'role', roleCode: v.slice(5) }
+                            : { kind: 'named_user', userId: v.slice(5) },
+                    });
+                  }}
+                >
+                  <option value="ct">The pupil&apos;s class teacher</option>
+                  <optgroup label="Anyone with the role">
+                    {lists.roles.map((r) => (
+                      <option key={r.code} value={`role:${r.code}`}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="A named staff member">
+                    {lists.staff.map((p) => (
+                      <option key={p.userId} value={`user:${p.userId}`}>
+                        {p.name}
+                        {p.designation ? ` (${p.designation})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                disabled={approval.levels.length === 1}
+                onClick={() =>
+                  onChange({ ...approval, levels: approval.levels.filter((_, j) => j !== i) })
+                }
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div>
+            <button
+              type="button"
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              disabled={approval.levels.length >= 5}
+              onClick={() =>
+                onChange({
+                  ...approval,
+                  levels: [
+                    ...approval.levels,
+                    { name: 'Principal', resolver: { kind: 'role', roleCode: 'school_admin' } },
+                  ],
+                })
+              }
+            >
+              ＋ Another level
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }

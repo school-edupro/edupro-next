@@ -35,6 +35,8 @@ export const ResolverSchema = z.discriminatedUnion('kind', [
       .default([]),
     userIds: z.array(IdSchema).max(50).default([]),
   }),
+  /** The class teacher of the pupil the request is about (payload.sectionId); the school admin when none. */
+  z.object({ kind: z.literal('class_teacher') }),
   /** The requester's reporting line: level n is the n-th manager above the requesting employee. */
   z.object({ kind: z.literal('approver_chain'), depth: z.number().int().min(1).max(5).default(1) }),
 ]);

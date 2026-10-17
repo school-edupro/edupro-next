@@ -2,7 +2,7 @@ import { Card, ConsentFill, PageHeader, type ConsentField } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { notFound, redirect } from 'next/navigation';
 import { bff } from '@/lib/bff';
-import { respondConsent } from '../actions';
+import { editConsent, respondConsent } from '../actions';
 
 interface ToFill {
   id: string;
@@ -14,6 +14,14 @@ interface ToFill {
   closedWhy: string | null;
   responses: Array<{ id: string; number: string }>;
   canAnswer: boolean;
+  editing: {
+    id: string;
+    number: string;
+    answers: Record<string, string | number | boolean | string[] | null>;
+    signedName: string | null;
+    signed: string[] | null;
+  } | null;
+  canEdit: boolean;
 }
 
 /** A staff member answers one form for themself. */
@@ -22,14 +30,16 @@ export default async function StaffConsentFillPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; detail?: string }>;
+  searchParams: Promise<{ response?: string; error?: string; detail?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   if (!/^\d+$/.test(id)) notFound();
   let f: ToFill;
   try {
-    f = await bff.api.fetch<ToFill>(`/engagement/mine/consent-forms/${id}`);
+    f = await bff.api.fetch<ToFill>(
+      `/engagement/mine/consent-forms/${id}${/^\d+$/.test(sp.response ?? '') ? `?responseId=${sp.response}` : ''}`,
+    );
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 404) notFound();
@@ -49,7 +59,34 @@ export default async function StaffConsentFillPage({
           {sp.detail || 'That did not work. Please try again.'}
         </p>
       ) : null}
-      {!f.canAnswer ? (
+      {f.editing ? (
+        f.canEdit ? (
+          <Card title={`Change your answer ${f.editing.number}`}>
+            <ConsentFill
+              fields={f.fields}
+              lists={f.lists}
+              action={editConsent}
+              hidden={{ formId: id, responseId: f.editing.id }}
+              initial={Object.fromEntries(
+                Object.entries(f.editing.answers).filter(
+                  ([k]) =>
+                    !['signature', 'file'].includes(f.fields.find((x) => x.key === k)?.type ?? ''),
+                ),
+              )}
+              keep={{
+                signatures: f.editing.signed ?? [],
+                files: f.fields
+                  .filter((x) => x.type === 'file' && Array.isArray(f.editing!.answers[x.key]))
+                  .map((x) => x.key),
+              }}
+              askName={{ label: 'Your name', defaultValue: f.editing.signedName ?? '' }}
+              submitLabel="Save the change"
+            />
+          </Card>
+        ) : (
+          <Card>This answer can no longer be changed.</Card>
+        )
+      ) : !f.canAnswer ? (
         <Card>
           {f.open
             ? `Already answered: ${f.responses.map((r) => r.number).join(', ')}`

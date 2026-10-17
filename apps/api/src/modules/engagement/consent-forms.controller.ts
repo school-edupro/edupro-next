@@ -11,6 +11,9 @@ import {
   ConsentRegisterQueryDto,
   ConsentRespondDto,
   ConsentStatusDto,
+  ConsentDecideDto,
+  ConsentEditDto,
+  ConsentNotifyDto,
   MineFormQueryDto,
 } from './consent-forms.dto';
 import { ConsentFormsService } from './consent-forms.service';
@@ -78,8 +81,8 @@ export class ConsentFormsController {
   @Post('consent-forms/:id/notify')
   @ApiOperation({ summary: 'An app notification again to those who have not answered' })
   @RequirePermission(CONSENT.manage)
-  notify(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.svc.notifyPending(ctx, id);
+  notify(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentNotifyDto) {
+    return this.svc.notifyPending(ctx, id, body);
   }
 
   @Delete('consent-forms/:id')
@@ -150,7 +153,33 @@ export class ConsentFormsController {
   @Get('mine/consent-forms/:id')
   @AuthenticatedOnly()
   mineForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: MineFormQueryDto) {
-    return this.svc.mineForm(ctx, id, q.studentId);
+    return this.svc.mineForm(ctx, id, q.studentId, q.responseId);
+  }
+
+  @Put('mine/consent-forms/responses/:rid')
+  @ApiOperation({ summary: 'Change my answer until the form’s edit date, while not yet decided' })
+  @AuthenticatedOnly()
+  edit(@ReqCtx() ctx: RequestContext, @Param('rid') rid: string, @Body() body: ConsentEditDto) {
+    return this.svc.editMine(ctx, rid, body);
+  }
+
+  @Get('mine/consent-approvals')
+  @ApiOperation({
+    summary: 'Answers waiting for my approval (class teacher, role or named approver)',
+  })
+  @AuthenticatedOnly()
+  approvals(@ReqCtx() ctx: RequestContext) {
+    return this.svc.myApprovals(ctx);
+  }
+
+  @Post('mine/consent-approvals/:stepId')
+  @AuthenticatedOnly()
+  decide(
+    @ReqCtx() ctx: RequestContext,
+    @Param('stepId') stepId: string,
+    @Body() body: ConsentDecideDto,
+  ) {
+    return this.svc.decide(ctx, stepId, body);
   }
 
   @Post('mine/consent-forms/:id/responses')

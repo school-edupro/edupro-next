@@ -97,9 +97,14 @@ export class EngagementModule implements OnModuleInit {
     private readonly payments: PaymentsService,
     private readonly workflow: WorkflowService,
     private readonly plus: EngagementPlusService,
+    private readonly consents: ConsentFormsService,
   ) {}
 
   onModuleInit(): void {
+    // consent forms: the last level decided (docs/design/28-consent-forms.md)
+    this.workflow.onComplete('consent_response', (c, ctx, instance, outcome) =>
+      this.consents.onDecision(c, ctx, instance, outcome),
+    );
     for (const entityType of ['cctv_request', 'employee_query'])
       this.workflow.onComplete(entityType, (c, ctx, instance, outcome) =>
         this.plus.onWorkflowComplete(c, ctx, instance, outcome),

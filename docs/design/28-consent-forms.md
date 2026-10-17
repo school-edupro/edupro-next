@@ -89,3 +89,39 @@ templates and the usual message approval.
 draft / published / closed / archived. `consent_form_responses` gains: `number`, `employee_id`,
 `respondent` (family / staff / office / public), `entered_by`, `files`, `status`, `updated_at`; the
 one-per-pupil rule moves to the service (several allowed when the form says so).
+
+## Part 2 (17 Oct 2026, migration 0168)
+
+Decisions (user): the fee is raised after approval when the form needs approval, else on submit;
+approval levels are set per form, the pupil's class teacher being a new kind of approver; an answer may
+be changed until the form's edit date and only before it is decided, a change of fee refused once
+something is paid, every edit kept; publish and reminders may also send SMS / WhatsApp / email with the
+school's templates.
+
+- **Fee** (builder section 5): none, fixed, or worked out from the answers (a base, a rate per unit of a
+  number question, a price per option of a choice or yes / no). Raised on the pupil as a misc fee: one
+  misc fee per form (head "Consent forms", code CONSENT, last date: the form's own, else the closing day,
+  else two weeks), one line per pupil carrying the sum of the pupil's live answers' fees. Paid online
+  (parent app: Pay on the form) or at the misc counter; receipts, bounce and refund are the misc fee's.
+  Staff answers never carry a fee.
+- **Approval** (builder section 6): off, or up to five levels: the pupil's class teacher (new workflow
+  resolver `class_teacher`, from `teacher_assignments`; the school admin when the section has none), a
+  role, or a named staff member. Each form has two workflow definitions (`consent_form_<id>` for answers
+  about a pupil, `consent_form_<id>_staff` without class-teacher levels; none left = staff answers need
+  no approval), kept in step with the form and hidden from Approval set-up. Approvers act in the staff
+  app (Answers to approve), on the response page in admin, or in My approvals. The last level approves
+  or rejects: approved raises the fee; the family is told in the app with the note.
+- **Change an answer** (section 4, "Answers may be changed until"): in the parent and staff apps while
+  the form is published, before the date and before the answer is decided. A signature and files stay
+  unless replaced. The fee is worked out again; if anything is paid on the pupil's line a different fee
+  is refused. Every earlier version is kept (`consent_form_response_versions`) and shown on the
+  response page.
+- **Channels**: Publish and "Remind those not yet answered" take a template per channel (SMS,
+  WhatsApp, email); one message request goes to the parents of each pupil and to the staff not yet
+  answered, through the usual message approval. A refusal (channel off, template unusable) is reported
+  and never stops the publish.
+- **Register**: approval status (waiting with whom / approved / not approved) and fee / paid columns,
+  a filter by approval, the same in Excel / PDF.
+- API: `PUT /engagement/mine/consent-forms/responses/:rid`, `GET /engagement/mine/consent-approvals`,
+  `POST /engagement/mine/consent-approvals/:stepId {decision, note}`, `POST
+/engagement/consent-forms/:id/notify {channels}`, status with `channels`.

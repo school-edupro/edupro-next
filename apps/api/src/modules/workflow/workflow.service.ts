@@ -199,7 +199,9 @@ export class WorkflowService {
       open: number;
     }>(
       `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.creator_roles, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
-         FROM workflow_definitions d WHERE d.deleted_at IS NULL AND d.code <> ALL($1::text[]) ORDER BY d.entity_type, d.code`,
+         FROM workflow_definitions d WHERE d.deleted_at IS NULL AND d.code <> ALL($1::text[])
+          -- a consent form's own levels are set on the form (docs/design/28-consent-forms.md)
+          AND d.entity_type <> 'consent_response' ORDER BY d.entity_type, d.code`,
       [[...WorkflowService.MODULE_OWNED, ...WorkflowService.MIRRORS]],
     );
     return r.rows.map((x) => ({
@@ -424,8 +426,21 @@ export class WorkflowService {
     c: PoolClient,
     resolver: Resolver,
     requestedBy: string | null,
+    /** what the request is about: the pupil's section for a class-teacher level */
+    scope: { sectionId?: string | null } = {},
   ): Promise<string[]> {
     if (resolver.kind === 'named_user') return [resolver.userId];
+    if (resolver.kind === 'class_teacher') {
+      const r = await c.query<{ id: string }>(
+        `SELECT DISTINCT e.user_id::text AS id FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+          WHERE ta.class_section_id = $1 AND ta.kind = 'class_teacher' AND ta.valid_from <= CURRENT_DATE
+            AND (ta.valid_to IS NULL OR ta.valid_to >= CURRENT_DATE) AND e.user_id IS NOT NULL AND e.deleted_at IS NULL`,
+        [scope.sectionId ?? null],
+      );
+      if (r.rows.length) return r.rows.map((x) => x.id);
+      // no class teacher for the pupil (or not about a pupil): the school admin decides
+      return this.resolveAssignees(c, { kind: 'role', roleCode: 'school_admin' }, requestedBy);
+    }
     if (resolver.kind === 'any_of') {
       const r = await c.query<{ id: string }>(
         `SELECT DISTINCT ur.user_id::text AS id FROM user_roles ur JOIN roles r ON r.id = ur.role_id
@@ -580,9 +595,12 @@ export class WorkflowService {
       throw error;
     }
     const requester = ctx.user.id;
+    const scope = {
+      sectionId: typeof input.payload?.sectionId === 'string' ? input.payload.sectionId : null,
+    };
     let firstAssignees: string[] = [];
     for (const level of [...def.rows[0].levels].sort((a, b) => a.level - b.level)) {
-      const assignees = await this.resolveAssignees(c, level.resolver, requester);
+      const assignees = await this.resolveAssignees(c, level.resolver, requester, scope);
       if (assignees.length === 0)
         throw new DomainError(
           'workflow.no_assignee',
@@ -614,7 +632,7 @@ export class WorkflowService {
     for (let i = 0; i < ordered.length - 1; i += 1) {
       const level = ordered[i]!;
       if (!level.autoIfRequester) break;
-      const mine = await this.resolveAssignees(c, level.resolver, requester);
+      const mine = await this.resolveAssignees(c, level.resolver, requester, scope);
       if (!mine.includes(requester)) break;
       const next = ordered[i + 1]!;
       const step = await c.query<{ id: string }>(
@@ -634,7 +652,7 @@ export class WorkflowService {
         level: level.level,
         auto: true,
       });
-      waiting = await this.resolveAssignees(c, next.resolver, requester);
+      waiting = await this.resolveAssignees(c, next.resolver, requester, scope);
     }
     for (const l of this.assignListeners) await l(c, ctx, waiting, input.subject);
     await this.audit.stage(ctx, c, {

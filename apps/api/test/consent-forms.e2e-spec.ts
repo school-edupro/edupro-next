@@ -435,4 +435,224 @@ describe('consent forms (e2e)', () => {
       ).json().type,
     ).toContain('consent.not_draft');
   });
+
+  // ---- part 2: fee, approval, edit ----------------------------------------------------------------
+  const later = new Date(Date.now() + 5 * 86400000 + 330 * 60000).toISOString().slice(0, 16);
+  const line = async (rid: string | undefined) =>
+    (
+      await withMigrator((c) =>
+        c.query<{ amount: string; paid: string; status: string }>(
+          `SELECT l.amount::text, l.paid::text, l.status FROM consent_form_responses x JOIN misc_fee_students l ON l.id = x.misc_line_id WHERE x.id = $1`,
+          [rid],
+        ),
+      )
+    ).rows[0] ?? null;
+
+  it('a calculated fee is raised as a misc fee at once without approval; an edit until the date re-prices it, not once paid', async () => {
+    const f = await post('/engagement/consent-forms', {
+      title: 'Olympiad registration',
+      respondents: 'family',
+      fields: [
+        { key: 'seats', label: 'Subjects', type: 'number', required: true, min: 1, max: 3 },
+        { key: 'meal', label: 'Meal', type: 'radio', options: ['Veg', 'None'], required: true },
+        { key: 'sign', label: 'Signature', type: 'signature', required: true },
+      ],
+      audience: { pupils: 'filter', sectionIds: [ids.secA] },
+      settings: {
+        editUntil: later,
+        fee: {
+          mode: 'calc',
+          base: 100,
+          items: [
+            { field: 'seats', rate: 50 },
+            { field: 'meal', prices: { Veg: 30 } },
+          ],
+        },
+      },
+    });
+    expect(f.statusCode).toBe(201);
+    ids.olympiad = f.json().id;
+    await put(`/engagement/consent-forms/${ids.olympiad}/status`, {
+      status: 'published',
+      push: false,
+    });
+    const a = await post(
+      `/engagement/mine/consent-forms/${ids.olympiad}/responses`,
+      { studentId: ids.ana, answers: { seats: 2, meal: 'Veg', sign: pngDataUrl() } },
+      parent,
+    );
+    expect(a.json()).toMatchObject({ fee: 230, waiting: false });
+    ids.oly = a.json().id;
+    expect(await line(ids.oly)).toMatchObject({ amount: '230.00', paid: '0.00', status: 'open' });
+    // the parent sees the fee and may change the answer (keeping the signature)
+    const mine = (await get('/engagement/mine/consent-forms', parent)).json();
+    const resp = mine.forms.find((x: { id: string }) => x.id === ids.olympiad).people[0]
+      .responses[0];
+    expect(resp).toMatchObject({ fee: '230.00', canEdit: true });
+    const toEdit = await get(
+      `/engagement/mine/consent-forms/${ids.olympiad}?studentId=${ids.ana}&responseId=${ids.oly}`,
+      parent,
+    );
+    expect(toEdit.json()).toMatchObject({ canEdit: true, editing: { signed: ['sign'] } });
+    const e1 = await put(
+      `/engagement/mine/consent-forms/responses/${ids.oly}`,
+      { answers: { seats: 1, meal: 'Veg', sign: 'keep' } },
+      parent,
+    );
+    expect(e1.json()).toMatchObject({ fee: 180 });
+    expect(await line(ids.oly)).toMatchObject({ amount: '180.00' });
+    const r = (await get(`/engagement/consent-forms/${ids.olympiad}/responses/${ids.oly}`)).json();
+    expect(r).toMatchObject({ edits: 1, signed: ['sign'], answers: { seats: 1 } });
+    expect(r.versions).toHaveLength(1);
+    expect(r.versions[0].answers.seats).toBe(2);
+    // paid at the counter: a change of amount is refused, the same amount is fine
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE misc_fee_students SET paid = 180, status = 'paid' WHERE id = (SELECT misc_line_id FROM consent_form_responses WHERE id = $1)`,
+        [ids.oly],
+      ),
+    );
+    const e2 = await put(
+      `/engagement/mine/consent-forms/responses/${ids.oly}`,
+      { answers: { seats: 3, meal: 'Veg', sign: 'keep' } },
+      parent,
+    );
+    expect(e2.json().type).toContain('consent.fee_paid');
+    const e3 = await put(
+      `/engagement/mine/consent-forms/responses/${ids.oly}`,
+      { answers: { seats: 1, meal: 'Veg', sign: pngDataUrl() } },
+      parent,
+    );
+    expect(e3.statusCode).toBe(200);
+  });
+
+  it('approval by the class teacher then the school admin: the fee only after approval; a rejected answer raises none; decided answers cannot change', async () => {
+    const ta = await post('/academics/teacher-assignments', {
+      employeeId: ids.emp,
+      classSectionId: ids.secA,
+      kind: 'class_teacher',
+    });
+    expect(ta.statusCode).toBe(201);
+    const f = await post('/engagement/consent-forms', {
+      title: 'Overnight camp',
+      respondents: 'both',
+      fields: [{ key: 'ok', label: 'I allow the camp', type: 'agree', required: true }],
+      audience: {
+        pupils: 'filter',
+        sectionIds: [ids.secA],
+        staff: 'filter',
+        departments: ['Science'],
+      },
+      settings: {
+        editUntil: later,
+        fee: { mode: 'fixed', amount: 1500 },
+        approval: {
+          on: true,
+          levels: [
+            { name: 'Class teacher', resolver: { kind: 'class_teacher' } },
+            { name: 'Principal', resolver: { kind: 'role', roleCode: 'school_admin' } },
+          ],
+        },
+      },
+    });
+    ids.camp = f.json().id;
+    await put(`/engagement/consent-forms/${ids.camp}/status`, { status: 'published', push: false });
+    const a = await post(
+      `/engagement/mine/consent-forms/${ids.camp}/responses`,
+      { studentId: ids.ana, answers: { ok: true } },
+      parent,
+    );
+    expect(a.json()).toMatchObject({ fee: 1500, waiting: true });
+    expect(await line(a.json().id)).toBeNull();
+    // the class teacher sees it in the staff app and approves; then the school admin
+    const mineT = (await get('/engagement/mine/consent-approvals', teacher)).json().data;
+    expect(mineT).toHaveLength(1);
+    expect(mineT[0]).toMatchObject({
+      form: 'Overnight camp',
+      level: 'Class teacher',
+      fee: '1500.00',
+    });
+    expect(
+      (
+        await post(
+          `/engagement/mine/consent-approvals/${mineT[0].stepId}`,
+          { decision: 'approved' },
+          teacher,
+        )
+      ).statusCode,
+    ).toBe(201);
+    const reg = (await get(`/engagement/consent-forms/${ids.camp}/register?status=waiting`)).json();
+    expect(reg.data[0].waitingWith).toContain('Principal');
+    const mineA = (await get('/engagement/mine/consent-approvals')).json().data;
+    await post(`/engagement/mine/consent-approvals/${mineA[0].stepId}`, {
+      decision: 'approved',
+      note: 'See you at 7 am',
+    });
+    const done = (
+      await get(`/engagement/consent-forms/${ids.camp}/responses/${a.json().id}`)
+    ).json();
+    expect(done).toMatchObject({ status: 'approved', decidedNote: 'See you at 7 am' });
+    expect(await line(a.json().id)).toMatchObject({ amount: '1500.00', status: 'open' });
+    const late = await put(
+      `/engagement/mine/consent-forms/responses/${a.json().id}`,
+      { answers: { ok: true } },
+      parent,
+    );
+    expect(late.json().type).toContain('consent.decided');
+    // the office fills for bo; the class teacher rejects: no fee
+    const b = await post(`/engagement/consent-forms/${ids.camp}/responses`, {
+      studentId: ids.bo,
+      answers: { ok: true },
+    });
+    const stepB = (await get('/engagement/mine/consent-approvals', teacher)).json().data[0];
+    await post(
+      `/engagement/mine/consent-approvals/${stepB.stepId}`,
+      { decision: 'rejected', note: 'Medical' },
+      teacher,
+    );
+    expect(
+      (await get(`/engagement/consent-forms/${ids.camp}/responses/${b.json().id}`)).json(),
+    ).toMatchObject({
+      status: 'rejected',
+      decidedNote: 'Medical',
+    });
+    expect(await line(b.json().id)).toBeNull();
+    // staff answers skip the class-teacher level: the principal approves the teacher's own answer
+    const s = await post(
+      `/engagement/mine/consent-forms/${ids.camp}/responses`,
+      { answers: { ok: true } },
+      teacher,
+    );
+    expect(s.json()).toMatchObject({ fee: 0, waiting: true });
+    expect((await get('/engagement/mine/consent-approvals')).json().data[0]).toMatchObject({
+      level: 'Principal',
+    });
+    // somebody else cannot decide a step that is not theirs
+    expect(
+      (
+        await post(
+          `/engagement/mine/consent-approvals/${stepB.stepId}`,
+          { decision: 'approved' },
+          parent,
+        )
+      ).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+  });
+
+  it('publish with a message channel: a template that cannot be used is reported, the form still publishes', async () => {
+    const f = await post('/engagement/consent-forms', {
+      title: 'Photo consent',
+      fields: [{ key: 'ok', label: 'I agree', type: 'agree', required: true }],
+      audience: { pupils: 'filter', sectionIds: [ids.secB] },
+    });
+    const p = await put(`/engagement/consent-forms/${f.json().id}/status`, {
+      status: 'published',
+      channels: [{ channel: 'sms', templateId: '999999999' }],
+    });
+    expect(p.statusCode).toBe(200);
+    expect(p.json().status).toBe('published');
+    expect(p.json().message.error).toBeTruthy();
+    const n = await post(`/engagement/consent-forms/${f.json().id}/notify`, { channels: [] });
+    expect(n.json()).toMatchObject({ message: null });
+  });
 });

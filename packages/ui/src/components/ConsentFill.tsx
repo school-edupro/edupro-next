@@ -39,6 +39,32 @@ export interface ConsentField {
 }
 type Answer = string | number | boolean | string[] | null;
 type Answers = Record<string, Answer>;
+/** The form's fee (apps/api consent-forms.dto ConsentFee). */
+export interface ConsentFee {
+  mode: 'none' | 'fixed' | 'calc';
+  amount?: number;
+  base?: number;
+  items: Array<{ field: string; rate?: number; prices?: Record<string, number> }>;
+}
+/** The same sum as the server (consent-fields.ts feeOf), shown while filling. */
+export function consentFeeOf(fee: ConsentFee, fields: ConsentField[], answers: Answers): number {
+  if (fee.mode === 'none') return 0;
+  if (fee.mode === 'fixed') return fee.amount ?? 0;
+  let total = fee.base ?? 0;
+  for (const it of fee.items) {
+    const f = fields.find((x) => x.key === it.field);
+    const v = answers[it.field];
+    if (!f || empty(v) || !consentRuleState(f, answers).shown) continue;
+    if (f.type === 'number' && it.rate !== undefined) total += Number(v) * it.rate;
+    else if (it.prices) {
+      const picked = Array.isArray(v)
+        ? v
+        : [f.type === 'yesno' ? (v === true ? 'Yes' : 'No') : String(v)];
+      for (const p of picked) total += it.prices[p] ?? 0;
+    }
+  }
+  return Math.max(0, Math.round(total * 100) / 100);
+}
 
 const empty = (v: Answer | undefined) =>
   v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
@@ -86,10 +112,13 @@ function SignaturePad({
   id,
   label,
   onChange,
+  kept,
 }: {
   id: string;
   label: string;
   onChange: (v: string | null) => void;
+  /** changing an answer: the signature given before stays unless signed again */
+  kept?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -143,7 +172,13 @@ function SignaturePad({
         }}
       />
       <div className="ep-cf__signbar">
-        <span className="ep-field__help">{signed ? 'Signed' : 'Sign in the box above'}</span>
+        <span className="ep-field__help">
+          {signed
+            ? 'Signed'
+            : kept
+              ? 'Signed earlier: that signature stays unless you sign again'
+              : 'Sign in the box above'}
+        </span>
         <button
           type="button"
           className="ep-btn ep-btn--ghost ep-btn--sm"
@@ -151,7 +186,7 @@ function SignaturePad({
             const cv = canvas.current;
             if (cv) cv.getContext('2d')?.clearRect(0, 0, cv.width, cv.height);
             setSigned(false);
-            onChange(null);
+            onChange(kept ? 'keep' : null);
           }}
         >
           Clear
@@ -174,6 +209,10 @@ export function ConsentFill({
   askName,
   submitLabel = 'Submit',
   intro,
+  initial,
+  keep,
+  fee,
+  feeNote,
 }: {
   fields: ConsentField[];
   lists?: Record<string, string[]>;
@@ -183,8 +222,21 @@ export function ConsentFill({
   askName?: { label: string; defaultValue?: string };
   submitLabel?: string;
   intro?: ReactNode;
+  /** changing an answer: what was answered before */
+  initial?: Answers;
+  /** changing an answer: the signatures and file questions answered before (kept unless replaced) */
+  keep?: { signatures: string[]; files: string[] };
+  /** the form's fee: the amount is shown as the answers change */
+  fee?: ConsentFee;
+  /** said under the amount, e.g. "to pay after the school approves" */
+  feeNote?: string;
 }) {
-  const [answers, setAnswers] = useState<Answers>({});
+  const [answers, setAnswers] = useState<Answers>(() => {
+    const a: Answers = { ...(initial ?? {}) };
+    for (const k of keep?.signatures ?? []) a[k] = 'keep';
+    for (const k of keep?.files ?? []) a[k] = 'keep';
+    return a;
+  });
   const [step, setStep] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -208,7 +260,7 @@ export function ConsentFill({
       const { shown, required } = consentRuleState(f, answers);
       if (!shown || !required) continue;
       if (f.type === 'file') {
-        if (!fileCount.current[f.key]) return f;
+        if (!fileCount.current[f.key] && answers[f.key] !== 'keep') return f;
         continue;
       }
       if (f.type === 'agree' ? answers[f.key] !== true : empty(answers[f.key])) return f;
@@ -338,12 +390,26 @@ export function ConsentFill({
             accept="application/pdf,image/png,image/jpeg,image/webp"
             onChange={(e) => {
               fileCount.current[f.key] = e.target.files?.length ?? 0;
-              set(f.key, e.target.files?.length ? `${e.target.files.length} file(s)` : null);
+              set(
+                f.key,
+                e.target.files?.length
+                  ? `${e.target.files.length} file(s)`
+                  : keep?.files.includes(f.key)
+                    ? 'keep'
+                    : null,
+              );
             }}
           />
         );
       case 'signature':
-        return <SignaturePad id={id} label={f.label} onChange={(x) => set(f.key, x)} />;
+        return (
+          <SignaturePad
+            id={id}
+            label={f.label}
+            kept={keep?.signatures.includes(f.key)}
+            onChange={(x) => set(f.key, x)}
+          />
+        );
       default:
         return (
           <input
@@ -372,8 +438,11 @@ export function ConsentFill({
   const last = step >= steps.length - 1;
   // the answers sent: file fields are filled by the server action from the uploads
   const payload = Object.fromEntries(
-    Object.entries(answers).filter(([k]) => fields.find((f) => f.key === k)?.type !== 'file'),
+    Object.entries(answers).filter(
+      ([k, v]) => fields.find((f) => f.key === k)?.type !== 'file' || v === 'keep',
+    ),
   );
+  const amount = fee && fee.mode !== 'none' ? consentFeeOf(fee, fields, answers) : null;
 
   return (
     <form
@@ -456,6 +525,12 @@ export function ConsentFill({
           })}
         </div>
       ))}
+      {last && amount !== null ? (
+        <p className="ep-alert ep-alert--info" role="status" aria-live="polite">
+          <strong>Fee: ₹{amount.toLocaleString('en-IN')}</strong>
+          {feeNote ? ` · ${feeNote}` : ''}
+        </p>
+      ) : null}
       {last && askName ? (
         <div className="ep-field ep-cf__field">
           <label className="ep-field__label" htmlFor="cf-signed-name">
