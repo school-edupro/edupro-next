@@ -224,3 +224,6 @@ up by the school admin only (new permission `engagement.consent_form.integrate`)
   (in the current section / search); tick the app and any of SMS / WhatsApp / email with its template.
   Each channel shows how many of those pending it reaches (`reach` on the pending register). Only those
   still pending are reminded; nothing chosen is refused (`consent.nobody`, `consent.no_channel`).
+- **Preview** (form page and Change page): the form as a family or a staff member sees it (both tabs when
+  both answer), with steps, rules and the fee live; "Check the answers" only runs the checks, nothing is
+  saved or sent.

@@ -1,4 +1,5 @@
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
+import { Icon } from '@/components/nav-icons';
 import { Notice } from '@/components/Notice';
 import { ConsentBuilder, type BuilderLists } from '@/components/consents/ConsentBuilder';
 import type { ConsentForm } from '@/components/consents/types';
@@ -33,7 +34,18 @@ export default async function EditConsentFormPage({
           { label: 'Change' },
         ]}
       />
-      <PageHeader kicker="Consent forms" title={`Change: ${f.title}`} />
+      <PageHeader
+        kicker="Consent forms"
+        title={`Change: ${f.title}`}
+        actions={
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/engagement/consent-forms/${f.id}/preview`}
+          >
+            <Icon name="eye" size={16} /> Preview (as saved)
+          </a>
+        }
+      />
       <Notice
         params={{
           ...sp,

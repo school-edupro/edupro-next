@@ -143,6 +143,8 @@
     code sent to the mobile the school has; outsiders (guests, alumni) with their name and a code to their
     mobile or email. The form page shows the link and the QR (Download QR to print); **Make a new link**
     if it was shared wrongly. Answers from the link show "Link" in the register.
+  - **Preview** (on the form page, or while changing it): see the form as families or staff will, try
+    the answers (questions appear by the rules, the fee is worked out); nothing is saved.
   - **Remind**: open **Not yet answered**, tick whom to remind (or Select all, or "All not yet
     answered" for the whole list or the section you filtered), tick App, SMS, WhatsApp or Email (the
     counts say how many have the app, a mobile, an email) and **Send the reminder**.

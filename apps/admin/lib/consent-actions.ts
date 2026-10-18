@@ -449,3 +449,10 @@ export async function changeConsentShare(fd: FormData) {
   revalidatePath(path);
   redirect(`${path}?ok=${op === 'remove' ? 'removed' : 'shared'}`);
 }
+
+/** Preview: the answers passed the form's checks; nothing is saved. */
+export async function previewConsentCheck(fd: FormData) {
+  const id = str(fd, 'formId');
+  const as = str(fd, 'as') === 'staff' ? 'staff' : 'family';
+  redirect(`${BASE}/${id}/preview?as=${as}&ok=checked`);
+}

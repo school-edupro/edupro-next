@@ -293,6 +293,12 @@ export default async function ConsentFormPage({
         <div
           style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }}
         >
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/engagement/consent-forms/${id}/preview`}
+          >
+            <Icon name="eye" size={16} /> Preview
+          </a>
           {canEdit && f.status !== 'archived' ? (
             <a
               className="ep-btn ep-btn--secondary ep-btn--sm"
