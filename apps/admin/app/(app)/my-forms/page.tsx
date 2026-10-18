@@ -41,6 +41,12 @@ export default async function MyFormsPage({
 }) {
   const sp = await searchParams;
   const mine = await apiFetch<Mine>('/engagement/mine/consent-forms').catch(() => ({ forms: [] }));
+  // forms shared with me to view or edit (docs/design/28-consent-forms.md, sharing)
+  const shared = await apiFetch<{
+    data: Array<{ id: string; title: string; status: string; level: 'viewer' | 'editor' }>;
+  }>('/engagement/mine/consent-shared')
+    .then((r) => r.data)
+    .catch(() => []);
   const forms = mine.forms
     .map((f) => ({ f, me: f.people.find((p) => p.kind === 'staff') }))
     .filter((x) => x.me);
@@ -127,6 +133,33 @@ export default async function MyFormsPage({
             Answered and closed
           </h2>
           <div className="ep-cf-list">{rest.map(item)}</div>
+        </>
+      ) : null}
+      {shared.length ? (
+        <>
+          <h2 className="ep-cf-h" style={{ marginTop: 'var(--sp-5)' }}>
+            Shared with me ({shared.length})
+          </h2>
+          <Card>
+            <ul
+              style={{ margin: 0, paddingLeft: 'var(--sp-5)', display: 'grid', gap: 'var(--sp-2)' }}
+            >
+              {shared.map((x) => (
+                <li key={x.id}>
+                  <a
+                    href={`/engagement/consent-forms/${x.id}`}
+                    style={{ textDecoration: 'underline' }}
+                  >
+                    {x.title}
+                  </a>{' '}
+                  <Badge tone={x.level === 'editor' ? 'info' : 'neutral'}>
+                    {x.level === 'editor' ? 'Edit' : 'View'}
+                  </Badge>{' '}
+                  {x.status !== 'published' ? <Badge tone="neutral">{x.status}</Badge> : null}
+                </li>
+              ))}
+            </ul>
+          </Card>
         </>
       ) : null}
     </>

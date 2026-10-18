@@ -3,6 +3,7 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { Icon } from '@/components/nav-icons';
 import { Pager } from '@/components/RegisterTools';
+import { TickAll } from '@/components/consents/TickAll';
 import {
   STATUS_LABEL,
   STATUS_TONE,
@@ -27,7 +28,7 @@ const OK: Record<string, string> = {
   closed: 'The form is closed: no more answers.',
   draft: 'The form is a draft again.',
   archived: 'The form is archived.',
-  notified: 'Those who have not answered were told again in the app.',
+  notified: 'The reminder is sent.',
   link: 'A new public link is made: the old link and QR no longer work.',
 };
 const BY = { family: 'Family', staff: 'Staff', office: 'Office', public: 'Public link' } as const;
@@ -51,6 +52,7 @@ export default async function ConsentFormPage({
     msg?: string;
     msgn?: string;
     msgerr?: string;
+    people?: string;
     status?: string;
     error?: string;
     detail?: string;
@@ -67,11 +69,13 @@ export default async function ConsentFormPage({
     ? sp.status
     : undefined;
   if (status && tab === 'answered') qs.set('status', status);
-  const [f, reg, lists, templates] = await Promise.all([
+  const [f, reg, lists, schoolTemplates] = await Promise.all([
     apiFetch<ConsentForm>(`/engagement/consent-forms/${id}`),
-    apiFetch<{ total: number; data: Array<ConsentAnswered | ConsentPending> }>(
-      `/engagement/consent-forms/${id}/register?${qs}`,
-    ),
+    apiFetch<{
+      total: number;
+      data: Array<ConsentAnswered | ConsentPending>;
+      reach?: { people: number; app: number; mobile: number; email: number };
+    }>(`/engagement/consent-forms/${id}/register?${qs}`),
     apiFetch<{ sections: Array<{ id: string; name: string }> }>('/engagement/consent-forms/lists'),
     // the school's message templates (none shown without the permission to see them)
     apiFetch<{
@@ -97,6 +101,12 @@ export default async function ConsentFormPage({
           }>,
       ),
   ]);
+  // without Message templates (a shared viewer), the consent templates the form page brings
+  const templates = schoolTemplates.length ? schoolTemplates : (f.templates ?? []);
+  // managers keep every form; a share gives view (read, export, remind, analytics) or edit
+  const access = f.access ?? 'manage';
+  const canEdit = access !== 'viewer';
+  const canManage = access === 'manage';
   const approval = Boolean(f.settings.approval?.on);
   const canConnect = (await getMe()).permissions.includes('engagement.consent_form.integrate');
   // the public link (and its QR) when switched on
@@ -121,7 +131,7 @@ export default async function ConsentFormPage({
   if (sp.sectionId) fileQs.set('sectionId', sp.sectionId);
   if (sp.q) fileQs.set('q', sp.q);
   const okText = sp.ok
-    ? `${OK[sp.ok] ?? 'Done.'}${sp.told && Number(sp.told) > 0 ? ` ${sp.told} people were told in the app.` : ''}${sp.msg ? ` Messages: ${sp.msg}.` : ''}`
+    ? `${OK[sp.ok] ?? 'Done.'}${sp.people ? ` ${sp.people} reminded.` : ''}${sp.told && Number(sp.told) > 0 ? ` ${sp.told} people were told in the app.` : ''}${sp.msg ? ` Messages: ${sp.msg}.` : ''}`
     : undefined;
   // the consent templates are chosen by default: publish and remind send by every channel
   const channelPicks = (code: string) =>
@@ -186,6 +196,67 @@ export default async function ConsentFormPage({
         ))}
       </p>
     ) : null;
+  const reach = reg.reach;
+  const remindPicks = (
+    <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 'var(--sp-3)' }}>
+      <legend className="ep-field__label">Send by</legend>
+      <label className="ep-check">
+        <input type="checkbox" className="ep-check__input" name="ch_app" defaultChecked />
+        <span className="ep-check__box" aria-hidden="true" />
+        <span className="ep-check__text">
+          App notification{reach ? ` (${reach.app} of ${reach.people} have the app)` : ''}
+        </span>
+      </label>
+      <div className="ep-cfb__grid">
+        {(
+          [
+            ['sms', 'SMS', reach?.mobile, 'a mobile'],
+            ['whatsapp', 'WhatsApp', reach?.mobile, 'a mobile'],
+            ['email', 'Email', reach?.email, 'an email'],
+          ] as const
+        ).map(([ch, label, n, what]) => {
+          const list = templates.filter(
+            (t) => t.channel === ch && !/_otp$|^consent_decision$/.test(t.code ?? ''),
+          );
+          if (!list.length) return null;
+          return (
+            <div key={ch} style={{ display: 'grid', gap: 'var(--sp-1)' }}>
+              <label className="ep-check">
+                <input
+                  type="checkbox"
+                  className="ep-check__input"
+                  name={`ch_${ch}`}
+                  defaultChecked={ch === 'email'}
+                />
+                <span className="ep-check__box" aria-hidden="true" />
+                <span className="ep-check__text">
+                  {label}
+                  {reach ? ` (${n ?? 0} of ${reach.people} have ${what})` : ''}
+                </span>
+              </label>
+              <label className="ep-field" htmlFor={`rtpl-${ch}`}>
+                <span className="ep-field__label">{label} template</span>
+                <select
+                  id={`rtpl-${ch}`}
+                  name={`tpl_${ch}`}
+                  className="ep-select"
+                  defaultValue={
+                    list.find((t) => t.code === 'consent_form_reminder')?.id ?? list[0]!.id
+                  }
+                >
+                  {list.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
   const statusForm = (status: string, label: string, variant: string, push?: boolean) => (
     <form action={setConsentStatus}>
       <input type="hidden" name="id" value={id} />
@@ -222,7 +293,7 @@ export default async function ConsentFormPage({
         <div
           style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }}
         >
-          {f.status !== 'archived' ? (
+          {canEdit && f.status !== 'archived' ? (
             <a
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/engagement/consent-forms/${id}/edit`}
@@ -230,7 +301,7 @@ export default async function ConsentFormPage({
               <Icon name="pencil" size={16} /> Change
             </a>
           ) : null}
-          {f.open && f.settings.officeFill !== false ? (
+          {canEdit && f.open && f.settings.officeFill !== false ? (
             <a
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/engagement/consent-forms/${id}/fill`}
@@ -254,13 +325,23 @@ export default async function ConsentFormPage({
               <Icon name="plug" size={16} /> Connect
             </a>
           ) : null}
-          <form action={copyConsentForm}>
-            <input type="hidden" name="id" value={id} />
-            <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-              <Icon name="copy" size={16} /> Copy as new
-            </button>
-          </form>
-          {f.status === 'published' ? (
+          {canManage ? (
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/engagement/consent-forms/${id}/share`}
+            >
+              <Icon name="users" size={16} /> Share
+            </a>
+          ) : null}
+          {canManage ? (
+            <form action={copyConsentForm}>
+              <input type="hidden" name="id" value={id} />
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                <Icon name="copy" size={16} /> Copy as new
+              </button>
+            </form>
+          ) : null}
+          {canEdit && f.status === 'published' ? (
             <ConfirmAction
               action={setConsentStatus}
               fields={{ id, status: 'closed' }}
@@ -272,8 +353,10 @@ export default async function ConsentFormPage({
               it.
             </ConfirmAction>
           ) : null}
-          {f.status === 'closed' ? statusForm('published', 'Reopen', 'secondary', false) : null}
-          {f.status === 'closed' ? (
+          {canEdit && f.status === 'closed'
+            ? statusForm('published', 'Reopen', 'secondary', false)
+            : null}
+          {canEdit && f.status === 'closed' ? (
             <ConfirmAction
               action={setConsentStatus}
               fields={{ id, status: 'archived' }}
@@ -285,7 +368,7 @@ export default async function ConsentFormPage({
               change.
             </ConfirmAction>
           ) : null}
-          {f.status === 'draft' && f.responses === 0 ? (
+          {canManage && f.status === 'draft' && f.responses === 0 ? (
             <ConfirmAction
               action={deleteConsentForm}
               fields={{ id }}
@@ -299,6 +382,12 @@ export default async function ConsentFormPage({
             </ConfirmAction>
           ) : null}
         </div>
+        {access !== 'manage' ? (
+          <p className="ep-field__help" style={{ margin: 'var(--sp-3) 0 0' }}>
+            Shared with you{' '}
+            {access === 'editor' ? 'to edit' : 'to view: read the answers, download, remind'}.
+          </p>
+        ) : null}
         <p className="ep-field__help" style={{ margin: 'var(--sp-3) 0 0' }}>
           {f.settings.opensAt ? `Opens ${dt(f.settings.opensAt)}. ` : ''}
           {f.settings.closesAt ? `Closes ${dt(f.settings.closesAt)}. ` : 'No closing date. '}
@@ -348,22 +437,24 @@ export default async function ConsentFormPage({
                 >
                   <Icon name="download" size={16} /> Download QR
                 </a>
-                <ConfirmAction
-                  action={rotateConsentLink}
-                  fields={{ id }}
-                  label="Make a new link"
-                  title="Make a new public link?"
-                  confirmLabel="Make a new link"
-                >
-                  The old link and the printed QR stop working at once. Share the new one.
-                </ConfirmAction>
+                {canEdit ? (
+                  <ConfirmAction
+                    action={rotateConsentLink}
+                    fields={{ id }}
+                    label="Make a new link"
+                    title="Make a new public link?"
+                    confirmLabel="Make a new link"
+                  >
+                    The old link and the printed QR stop working at once. Share the new one.
+                  </ConfirmAction>
+                ) : null}
               </div>
             </div>
           </div>
         </Card>
       ) : null}
 
-      {f.status === 'draft' ? (
+      {f.status === 'draft' && canEdit ? (
         <Card title="Publish" style={{ marginBottom: 'var(--sp-4)' }}>
           <form action={setConsentStatus} className="ep-cfb">
             <input type="hidden" name="id" value={id} />
@@ -389,19 +480,16 @@ export default async function ConsentFormPage({
             </div>
           </form>
         </Card>
-      ) : f.open && pending > 0 ? (
+      ) : f.open && pending > 0 && tab !== 'pending' ? (
         <Card title="Remind those not yet answered" style={{ marginBottom: 'var(--sp-4)' }}>
-          <form action={notifyConsentPending} className="ep-cfb">
-            <input type="hidden" name="id" value={id} />
-            {channelPicks('consent_form_reminder')}
-            {readiness('consent_form_reminder')}
-            <div>
-              <button type="submit" className="ep-btn ep-btn--primary">
-                <Icon name="send" size={16} />
-                Remind {pending} (app{templates.length ? ' and the chosen channels' : ''})
-              </button>
-            </div>
-          </form>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {pending} have not answered. Open the list, tick whom to remind (or all), and choose the
+            app, SMS, WhatsApp or email.
+          </p>
+          <a className="ep-btn ep-btn--primary" href={`${link({ tab: 'pending' })}#remind`}>
+            <Icon name="send" size={16} />
+            Choose whom to remind
+          </a>
         </Card>
       ) : null}
 
@@ -584,42 +672,118 @@ export default async function ConsentFormPage({
               </table>
             </div>
           ) : (
-            <div className="ep-table-wrap">
-              <table className="ep-table ep-table--dense">
-                <caption className="ep-sr-only">Not yet answered</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col">Adm. / code</th>
-                    <th scope="col">Class / department</th>
-                    <th scope="col">Contact</th>
-                    {f.open && f.settings.officeFill !== false ? (
-                      <th scope="col">Paper form</th>
-                    ) : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(reg.data as ConsentPending[]).map((r) => (
-                    <tr key={`${r.kind}${r.id}`}>
-                      <td>{r.name}</td>
-                      <td>{r.code ?? '—'}</td>
-                      <td>{r.section ?? '—'}</td>
-                      <td>{r.contact ?? '—'}</td>
-                      {f.open && f.settings.officeFill !== false ? (
-                        <td>
-                          <a
-                            href={`/engagement/consent-forms/${id}/fill?who=${r.kind}:${r.id}`}
-                            style={{ textDecoration: 'underline' }}
-                          >
-                            Fill for {r.name}
-                          </a>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            (() => {
+              const remind = f.open;
+              const table = (
+                <div className="ep-table-wrap">
+                  <table className="ep-table ep-table--dense">
+                    <caption className="ep-sr-only">Not yet answered</caption>
+                    <thead>
+                      <tr>
+                        {remind ? (
+                          <th scope="col">
+                            <span className="ep-sr-only">Remind</span>
+                          </th>
+                        ) : null}
+                        <th scope="col">Name</th>
+                        <th scope="col">Adm. / code</th>
+                        <th scope="col">Class / department</th>
+                        <th scope="col">Contact</th>
+                        {canEdit && f.open && f.settings.officeFill !== false ? (
+                          <th scope="col">Paper form</th>
+                        ) : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(reg.data as ConsentPending[]).map((r) => (
+                        <tr key={`${r.kind}${r.id}`}>
+                          {remind ? (
+                            <td>
+                              <label className="ep-check" style={{ margin: 0 }}>
+                                <input
+                                  type="checkbox"
+                                  className="ep-check__input"
+                                  name="person"
+                                  value={`${r.kind}:${r.id}`}
+                                />
+                                <span className="ep-check__box" aria-hidden="true" />
+                                <span className="ep-sr-only">Remind {r.name}</span>
+                              </label>
+                            </td>
+                          ) : null}
+                          <td>{r.name}</td>
+                          <td>{r.code ?? '—'}</td>
+                          <td>{r.section ?? '—'}</td>
+                          <td>{r.contact ?? '—'}</td>
+                          {canEdit && f.open && f.settings.officeFill !== false ? (
+                            <td>
+                              <a
+                                href={`/engagement/consent-forms/${id}/fill?who=${r.kind}:${r.id}`}
+                                style={{ textDecoration: 'underline' }}
+                              >
+                                Fill for {r.name}
+                              </a>
+                            </td>
+                          ) : null}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+              if (!remind) return table;
+              const filtered = Boolean(sp.sectionId || sp.q);
+              return (
+                <form action={notifyConsentPending} id="remind" className="ep-cfb">
+                  <input type="hidden" name="id" value={id} />
+                  {sp.sectionId ? (
+                    <input type="hidden" name="sectionId" value={sp.sectionId} />
+                  ) : null}
+                  {sp.q ? <input type="hidden" name="q" value={sp.q} /> : null}
+                  <TickAll name="person" label="Select all on this page" />
+                  {table}
+                  <div className="ep-card" style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+                    <h3 className="ep-card__title" style={{ margin: 0 }}>
+                      Remind
+                    </h3>
+                    <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+                      <legend className="ep-field__label">Whom</legend>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-4)' }}>
+                        <label className="ep-radio">
+                          <input
+                            type="radio"
+                            className="ep-radio__input"
+                            name="who"
+                            value="ticked"
+                            defaultChecked
+                          />
+                          <span className="ep-radio__dot" aria-hidden="true" />
+                          <span className="ep-radio__text">Only those ticked</span>
+                        </label>
+                        <label className="ep-radio">
+                          <input type="radio" className="ep-radio__input" name="who" value="all" />
+                          <span className="ep-radio__dot" aria-hidden="true" />
+                          <span className="ep-radio__text">
+                            All {reg.total} not yet answered{filtered ? ' in this filter' : ''}
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
+                    {remindPicks}
+                    {readiness('consent_form_reminder')}
+                    <p className="ep-field__help" style={{ margin: 0 }}>
+                      Families get it for each pupil; staff for themselves. Messages go at once.
+                    </p>
+                    <div>
+                      <button type="submit" className="ep-btn ep-btn--primary">
+                        <Icon name="send" size={16} />
+                        Send the reminder
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              );
+            })()
           )}
           <Pager
             page={page}

@@ -23,6 +23,17 @@ export interface ConsentForm {
   createdBy: string | null;
   lists?: Record<string, string[]>;
   publicToken?: string | null;
+  /** the caller's access: managers keep every form; others a share to view or edit */
+  access?: 'manage' | 'editor' | 'viewer';
+  /** the consent message templates (for those who cannot open Message templates) */
+  templates?: Array<{
+    id: string;
+    name: string;
+    channel: string;
+    code: string;
+    dltTemplateId: string | null;
+    waTemplateName: string | null;
+  }>;
 }
 export interface ConsentAnswered {
   id: string;

@@ -138,7 +138,20 @@ export const ConsentStatusSchema = z.object({
   push: z.boolean().default(true),
   channels: ConsentChannelsSchema,
 });
-export const ConsentNotifySchema = z.object({ channels: ConsentChannelsSchema });
+/**
+ * Remind those not yet answered: the ticked people (else everyone pending in the section / search given,
+ * else everyone pending), in the app and / or by the chosen channels.
+ */
+export const ConsentNotifySchema = z.object({
+  channels: ConsentChannelsSchema,
+  app: z.boolean().default(true),
+  people: z
+    .array(z.object({ kind: z.enum(['student', 'employee']), id: IdSchema }))
+    .max(5000)
+    .optional(),
+  sectionId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+});
 export class ConsentNotifyDto extends createZodDto(ConsentNotifySchema) {}
 export const ConsentDecideSchema = z.object({
   decision: z.enum(['approved', 'rejected']),
@@ -277,3 +290,19 @@ export const ApiDecideSchema = z.object({
   note: z.string().trim().max(400).optional(),
 });
 export class ApiDecideDto extends createZodDto(ApiDecideSchema) {}
+
+/** Share one form with staff (by login) or roles, to view or to edit. */
+export const ConsentSharesSchema = z.object({
+  shares: z
+    .array(
+      z
+        .object({
+          userId: IdSchema.optional(),
+          roleId: IdSchema.optional(),
+          level: z.enum(['viewer', 'editor']),
+        })
+        .refine((x) => Boolean(x.userId) !== Boolean(x.roleId), 'A person or a role'),
+    )
+    .max(200),
+});
+export class ConsentSharesDto extends createZodDto(ConsentSharesSchema) {}

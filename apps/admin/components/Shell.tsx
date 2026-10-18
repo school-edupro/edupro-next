@@ -87,6 +87,13 @@ export async function Shell({
         .then((r) => r.forms.filter((f) => f.people.some((p) => p.kind === 'staff')))
         .catch(() => [])
     : [];
+  // consent forms shared with me to view or edit (those who manage them see the menu instead)
+  const sharedForms =
+    isStaff && !allowed.has('engagement.consent_form.manage')
+      ? await apiFetch<{ data: unknown[] }>('/engagement/mine/consent-shared')
+          .then((r) => r.data.length)
+          .catch(() => 0)
+      : 0;
   const formsToAnswer = myForms.filter((f) =>
     f.people.some((p) => p.kind === 'staff' && p.canAnswer),
   ).length;
@@ -360,7 +367,7 @@ export async function Shell({
               </div>
             </details>
           ) : null}
-          {myForms.length ? (
+          {myForms.length || sharedForms ? (
             <a
               className="ep-header__icon-btn ep-header__bell"
               href="/my-forms"

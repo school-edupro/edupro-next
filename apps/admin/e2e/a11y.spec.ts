@@ -277,6 +277,7 @@ const PAGES = [
   '/engagement/consent-forms/1/responses/1',
   '/engagement/consent-forms/1/analytics',
   '/engagement/consent-forms/6/connect',
+  '/engagement/consent-forms/6/share',
   '/my-forms',
   '/engagement/certificates',
   '/engagement/cctv',

@@ -1044,4 +1044,105 @@ describe('consent forms (e2e)', () => {
     expect(paid.json().returnUrl).toContain('/consents?student=');
     expect(await line(a.json().id)).toMatchObject({ paid: '50.00', status: 'paid' });
   });
+
+  // ---- sharing one form; reminding the ticked ------------------------------------------------------
+  it('a form shared to view or edit with a staff member or a role; reminders to the ticked people only', async () => {
+    const f = await post('/engagement/consent-forms', {
+      title: 'Sports day',
+      fields: [{ key: 'ok', label: 'I agree', type: 'agree', required: true }],
+      audience: { pupils: 'filter', sectionIds: [ids.secA, ids.secB] },
+    });
+    const id = f.json().id as string;
+    await put(`/engagement/consent-forms/${id}/status`, { status: 'published', push: false });
+    // not shared: the teacher (no consent permission) sees no forms and cannot open this one
+    const none = (await get('/engagement/consent-forms', teacher)).json();
+    expect(none).toMatchObject({ data: [], canCreate: false });
+    expect((await get(`/engagement/consent-forms/${id}`, teacher)).statusCode).toBe(404);
+    expect((await get(`/engagement/consent-forms/${id}/shares`, teacher)).statusCode).toBe(403);
+
+    const opts = (await get(`/engagement/consent-forms/${id}/shares`)).json();
+    expect(opts.staff.map((x: { userId: string }) => x.userId)).toContain(teacher.id);
+    const sh = await put(`/engagement/consent-forms/${id}/shares`, {
+      shares: [{ userId: teacher.id, level: 'viewer' }],
+    });
+    expect(sh.json()).toMatchObject({ shared: 1 });
+    const list = (await get('/engagement/consent-forms', teacher)).json();
+    expect(list.data.map((x: { id: string }) => x.id)).toEqual([id]);
+    expect((await get(`/engagement/consent-forms/${id}`, teacher)).json()).toMatchObject({
+      access: 'viewer',
+      asked: 3,
+    });
+    expect((await get('/engagement/mine/consent-shared', teacher)).json().data).toEqual([
+      expect.objectContaining({ id, level: 'viewer' }),
+    ]);
+    const reg = (await get(`/engagement/consent-forms/${id}/register?tab=pending`, teacher)).json();
+    expect(reg.total).toBe(3);
+    expect(reg.reach).toMatchObject({ people: 3, mobile: 3 });
+    expect(reg.reach.app).toBeGreaterThanOrEqual(1);
+    expect(
+      (await get(`/engagement/consent-forms/${id}/register/file?tab=pending&format=xlsx`, teacher))
+        .statusCode,
+    ).toBe(200);
+    expect((await get(`/engagement/consent-forms/${id}/analytics`, teacher)).statusCode).toBe(200);
+    // a viewer cannot change, close or fill it, nor see another form
+    const closeV = await put(
+      `/engagement/consent-forms/${id}/status`,
+      { status: 'closed' },
+      teacher,
+    );
+    expect(closeV.statusCode).toBe(403);
+    expect(closeV.json().type).toContain('consent.no_access');
+    expect((await get(`/engagement/consent-forms/${ids.form}`, teacher)).statusCode).toBe(404);
+
+    // remind: only the ticked, only if still pending; nothing chosen is refused
+    const one = await post(
+      `/engagement/consent-forms/${id}/notify`,
+      { app: true, channels: [], people: [{ kind: 'student', id: ids.ana }] },
+      teacher,
+    );
+    expect(one.statusCode).toBe(201);
+    expect(one.json()).toMatchObject({ people: 1 });
+    const sec = await post(`/engagement/consent-forms/${id}/notify`, {
+      app: true,
+      sectionId: ids.secB,
+    });
+    expect(sec.json()).toMatchObject({ people: 1 });
+    expect(
+      (await post(`/engagement/consent-forms/${id}/notify`, { app: false, channels: [] })).json()
+        .type,
+    ).toContain('consent.no_channel');
+    await post(`/engagement/consent-forms/${id}/responses`, {
+      studentId: ids.ana,
+      answers: { ok: true },
+    });
+    const gone = await post(`/engagement/consent-forms/${id}/notify`, {
+      people: [{ kind: 'student', id: ids.ana }],
+    });
+    expect(gone.json().type).toContain('consent.nobody');
+
+    // as editor (through a role) the teacher may close it
+    const roles = opts.roles as Array<{ id: string; code: string }>;
+    const role = roles.find((r) => r.code === 'class_teacher') ?? roles[0]!;
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO user_roles (school_id, user_id, role_id, reason) VALUES ($1, $2, $3, 'e2e')`,
+        [school.id, teacher.id, role.id],
+      ),
+    );
+    await put(`/engagement/consent-forms/${id}/shares`, {
+      shares: [
+        { userId: teacher.id, level: 'viewer' },
+        { roleId: role.id, level: 'editor' },
+      ],
+    });
+    expect((await get(`/engagement/consent-forms/${id}`, teacher)).json().access).toBe('editor');
+    expect(
+      (await put(`/engagement/consent-forms/${id}/status`, { status: 'closed' }, teacher))
+        .statusCode,
+    ).toBe(200);
+    // still not deleting nor copying
+    expect((await post(`/engagement/consent-forms/${id}/copy`, {}, teacher)).statusCode).toBe(403);
+    await put(`/engagement/consent-forms/${id}/shares`, { shares: [] });
+    expect((await get(`/engagement/consent-forms/${id}`, teacher)).statusCode).toBe(404);
+  });
 });

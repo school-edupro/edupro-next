@@ -143,6 +143,13 @@
     code sent to the mobile the school has; outsiders (guests, alumni) with their name and a code to their
     mobile or email. The form page shows the link and the QR (Download QR to print); **Make a new link**
     if it was shared wrongly. Answers from the link show "Link" in the register.
+  - **Remind**: open **Not yet answered**, tick whom to remind (or Select all, or "All not yet
+    answered" for the whole list or the section you filtered), tick App, SMS, WhatsApp or Email (the
+    counts say how many have the app, a mobile, an email) and **Send the reminder**.
+  - **Share** (on the form page, for those who manage consent forms): give a staff member or a role
+    **View** (answers, register, Excel / PDF, remind, analytics) or **Edit** (also change, publish,
+    close, fill on behalf) on this form only. They find it under Consent forms (only the shared forms
+    show) or in **My forms → Shared with me**.
   - **Analytics** (on the form page): response rate overall and by section, answers per day, how people
     answered, approval, fee raised and paid, and each question's answers counted.
   - **Connect** (school admin, on the form page): a **webhook** sends each answer (submitted, changed,

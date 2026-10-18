@@ -44,6 +44,7 @@ import {
   type ConsentDecideDto,
   type ConsentEditDto,
   type ConsentNotifyDto,
+  type ConsentSharesDto,
 } from './consent-forms.dto';
 import { emitConsentEvent } from './consent-events';
 import { consentPdf } from './consent-pdf';
@@ -72,6 +73,15 @@ export interface FormDb {
   misc_fee_id: string | null;
   public_token: string | null;
 }
+
+/** Access to one form: managers (the permission), or a share as editor or viewer. */
+type Access = 'manage' | 'editor' | 'viewer';
+const RANK: Record<Access, number> = { viewer: 1, editor: 2, manage: 3 };
+/** A share row reaches the user by name or by a role they hold today; the placeholder binds the user id. */
+const SHARED_TO = (user: string) =>
+  // eslint-disable-next-line no-restricted-syntax -- the placeholder is a fixed "$n"; the user id is bound
+  `(sh.user_id = ${user}::bigint OR sh.role_id IN (SELECT ur.role_id FROM user_roles ur WHERE ur.user_id = ${user}::bigint
+     AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)))`;
 
 const FORM = `SELECT f.id::text, f.code, f.title, f.description, f.respondents, f.fields, f.audience, f.settings, f.status,
        f.academic_year_id::text AS year_id, f.published_at, f.closed_at, f.created_at, f.misc_fee_id::text, f.public_token,
@@ -118,6 +128,115 @@ export class ConsentFormsService {
     private readonly requests: RequestsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
+
+  // ---- who may open a form -----------------------------------------------------------------------
+  /**
+   * The caller's access to one form: those holding engagement.consent_form.manage keep every form;
+   * anyone else only a form shared with them by name or by a role they hold (docs/design/28, sharing).
+   */
+  private async accessOf(
+    c: PoolClient,
+    ctx: RequestContext,
+    formId: string,
+  ): Promise<Access | null> {
+    if (ctx.permissions?.has(CONSENT.manage)) return 'manage';
+    const r = await c.query<{ level: 'viewer' | 'editor' | null }>(
+      // eslint-disable-next-line no-restricted-syntax -- fixed fragment constant; values are bound parameters
+      `SELECT CASE WHEN bool_or(sh.level = 'editor') THEN 'editor' WHEN count(*) > 0 THEN 'viewer' END AS level
+         FROM consent_form_shares sh WHERE sh.form_id = $1 AND ${SHARED_TO('$2')}`,
+      [formId, ctx.user.id],
+    );
+    return r.rows[0]?.level ?? null;
+  }
+
+  /** Refuses unless the caller has at least this access; a form not shared at all is "not found". */
+  private async need(c: PoolClient, ctx: RequestContext, formId: string, min: Access) {
+    const a = await this.accessOf(c, ctx, formId);
+    if (!a) throw new DomainError('not-found', 'Form not found', { status: 404 });
+    if (RANK[a] < RANK[min])
+      throw new DomainError(
+        'consent.no_access',
+        min === 'editor'
+          ? 'This form is shared with you to view only'
+          : 'Only those who manage consent forms may do this',
+        { status: 403 },
+      );
+    return a;
+  }
+
+  /** The people and roles a form is shared with, and whom it could be shared with. */
+  async shares(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.findDb(c, id);
+      const list = await c.query<Row>(
+        `SELECT sh.id::text, sh.level, sh.user_id::text AS "userId", sh.role_id::text AS "roleId",
+                COALESCE(em.display_name, u.display_name) AS "userName", em.designation, r.name AS "roleName"
+           FROM consent_form_shares sh
+           LEFT JOIN users u ON u.id = sh.user_id
+           LEFT JOIN employees em ON em.user_id = sh.user_id AND em.deleted_at IS NULL
+           LEFT JOIN roles r ON r.id = sh.role_id
+          WHERE sh.form_id = $1 ORDER BY sh.role_id IS NULL, r.name, "userName"`,
+        [id],
+      );
+      const staff = await c.query<Row>(
+        `SELECT user_id::text AS "userId", display_name AS name, designation, employee_code AS code FROM employees
+          WHERE user_id IS NOT NULL AND deleted_at IS NULL AND status = 'active' ORDER BY display_name LIMIT 2000`,
+      );
+      const roles = await c.query<Row>(
+        `SELECT DISTINCT ON (code) id::text, code, name FROM roles
+          WHERE (school_id IS NULL OR school_id = app.current_school_id()) AND status = 'active' AND deleted_at IS NULL
+            AND code NOT IN ('parent', 'student', 'guardian') ORDER BY code, school_id NULLS LAST`,
+      );
+      return { data: list.rows, staff: staff.rows, roles: roles.rows };
+    });
+  }
+
+  /** Replaces the form's share list (managers only). */
+  async setShares(ctx: RequestContext, id: string, dto: ConsentSharesDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.findDb(c, id, true);
+      const before = await c.query<Row>(
+        `SELECT user_id::text AS "userId", role_id::text AS "roleId", level FROM consent_form_shares WHERE form_id = $1`,
+        [id],
+      );
+      await c.query(`DELETE FROM consent_form_shares WHERE form_id = $1`, [id]);
+      const seen = new Set<string>();
+      for (const x of dto.shares) {
+        const k = x.userId ? `u${x.userId}` : `r${x.roleId}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        await c.query(
+          `INSERT INTO consent_form_shares (school_id, form_id, user_id, role_id, level, created_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())`,
+          [id, x.userId ?? null, x.roleId ?? null, x.level],
+        );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'engagement.consent_form.share',
+        entityType: 'consent_forms',
+        entityId: id,
+        before: before.rows,
+        after: dto.shares,
+      });
+      return { shared: seen.size };
+    });
+  }
+
+  /** The forms shared with me (for those who do not manage consent forms): to find them from My forms. */
+  async sharedWithMe(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragment constant; values are bound parameters
+        `SELECT f.id::text, f.title, f.status,
+                CASE WHEN bool_or(sh.level = 'editor') THEN 'editor' ELSE 'viewer' END AS level
+           FROM consent_form_shares sh JOIN consent_forms f ON f.id = sh.form_id AND f.deleted_at IS NULL AND f.status <> 'archived'
+          WHERE ${SHARED_TO('$1')}
+          GROUP BY f.id ORDER BY (f.status = 'published') DESC, f.created_at DESC LIMIT 200`,
+        [ctx.user.id],
+      );
+      return { data: r.rows };
+    });
+  }
 
   // ---- reading ----------------------------------------------------------------------------------
   private async findDb(c: PoolClient, id: string, lock = false): Promise<FormDb> {
@@ -258,6 +377,14 @@ export class ConsentFormsService {
         params.push(`%${q.q}%`);
         where.push(`f.title ILIKE $${params.length}`);
       }
+      const manager = Boolean(ctx.permissions?.has(CONSENT.manage));
+      if (!manager) {
+        params.push(ctx.user.id);
+        where.push(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragment constant; values are bound parameters
+          `EXISTS (SELECT 1 FROM consent_form_shares sh WHERE sh.form_id = f.id AND ${SHARED_TO(`$${params.length}`)})`,
+        );
+      }
       const r = await c.query<FormDb>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound parameters
         `${FORM} WHERE ${where.join(' AND ')} ORDER BY (f.status = 'published') DESC, f.created_at DESC LIMIT 300`,
@@ -273,7 +400,7 @@ export class ConsentFormsService {
         const answered = await this.answeredCount(c, f.id);
         data.push(this.view(f, { asked, answered }));
       }
-      return { data };
+      return { data, canCreate: manager };
     });
   }
 
@@ -290,18 +417,40 @@ export class ConsentFormsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       // the school's consent message templates exist before Publish lists them
       await c.query(`SELECT app.consent_seed_templates(app.current_school_id())`);
+      const access = await this.need(c, ctx, id, 'viewer');
       const f = await this.findDb(c, id);
       const pupils = await this.audienceStudents(c, f);
       const staff = await this.audienceStaff(c, f);
       const answered = await this.answeredCount(c, id);
       const lists = await sourceOptions(c, f.fields);
-      return this.view(f, { asked: pupils.length + staff.length, answered, lists });
+      // the consent message templates, for Publish / Remind by those who cannot open Message templates
+      const templates = await c.query<Row>(
+        `SELECT id::text, name, channel, code, dlt_template_id AS "dltTemplateId", wa_template_name AS "waTemplateName"
+           FROM comms_templates
+          WHERE code LIKE 'consent_form_%' AND channel IN ('sms', 'whatsapp', 'email') AND status = 'active' AND deleted_at IS NULL
+          ORDER BY channel, name`,
+      );
+      return this.view(f, {
+        asked: pupils.length + staff.length,
+        answered,
+        lists,
+        access,
+        templates: templates.rows,
+      });
     });
   }
 
   /** The school lists the builder offers: classes, sections, houses, routes, departments, designations. */
   async builderLists(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (!ctx.permissions?.has(CONSENT.manage)) {
+        const r = await c.query(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragment constant; values are bound parameters
+          `SELECT 1 FROM consent_form_shares sh WHERE ${SHARED_TO('$1')} LIMIT 1`,
+          [ctx.user.id],
+        );
+        if (!r.rowCount) throw new DomainError('not-found', 'Not found', { status: 404 });
+      }
       const q = async (sql: string) => (await c.query<Row>(sql)).rows;
       return {
         classes: await q(
@@ -438,6 +587,7 @@ export class ConsentFormsService {
   async update(ctx: RequestContext, id: string, dto: ConsentFormDto) {
     checkFields(dto.fields);
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'editor');
       const f = await this.findDb(c, id, true);
       if (f.status === 'archived')
         throw new DomainError('consent.archived', 'An archived form cannot change', {
@@ -506,6 +656,7 @@ export class ConsentFormsService {
   /** A new public link: the old link and QR stop working. */
   async rotateLink(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'editor');
       const f = await this.findDb(c, id, true);
       if (!f.settings.publicLink?.on)
         throw new DomainError('consent.no_link', 'The public link is off for this form', {
@@ -524,6 +675,7 @@ export class ConsentFormsService {
   /** The QR of the public link (PNG, base64), and the link itself. */
   async qr(ctx: RequestContext, id: string, base: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const f = await this.findDb(c, id);
       if (!f.settings.publicLink?.on || !f.public_token)
         throw new DomainError('consent.no_link', 'The public link is off for this form', {
@@ -561,6 +713,7 @@ export class ConsentFormsService {
    */
   async setStatus(ctx: RequestContext, id: string, dto: ConsentStatusDto) {
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'editor');
       const f = await this.findDb(c, id, true);
       if (dto.status === f.status) return { view: this.view(f), pending: null, f };
       if (dto.status === 'draft' && f.responses > 0)
@@ -722,28 +875,65 @@ export class ConsentFormsService {
     return out;
   }
 
-  /** Tell again those who have not answered: in the app, and by the chosen channels. */
-  async notifyPending(ctx: RequestContext, id: string, dto: ConsentNotifyDto = { channels: [] }) {
+  /**
+   * Tell again those who have not answered: the ticked people (only those still pending), else all
+   * pending in the section / search given, else everyone pending; in the app and / or by the channels.
+   */
+  async notifyPending(ctx: RequestContext, id: string, dto: Partial<ConsentNotifyDto> = {}) {
+    const channels = dto.channels ?? [];
+    const app = dto.app ?? true;
+    if (!app && !channels.length)
+      throw new DomainError('consent.no_channel', 'Choose the app or at least one channel', {
+        status: 400,
+      });
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const f = await this.findDb(c, id);
       if (!this.openState(f).open)
         throw new DomainError('consent.not_open', 'The form is not taking answers', {
           status: 409,
         });
-      const pending = await this.pendingPeople(c, f);
-      const told = await this.tell(c, ctx, f, pending, 'Reminder: a form waits for your answer');
+      const rows = (
+        await this.pendingRows(
+          c,
+          f,
+          { tab: 'pending', sectionId: dto.sectionId, q: dto.q, page: 1, size: 1 },
+          true,
+        )
+      ).rows as Array<{ kind: string; id: string }>;
+      const ticked = dto.people?.length
+        ? new Set(dto.people.map((x) => `${x.kind}:${x.id}`))
+        : null;
+      const chosen = ticked ? rows.filter((x) => ticked.has(`${x.kind}:${x.id}`)) : rows;
+      if (!chosen.length)
+        throw new DomainError('consent.nobody', 'Nobody chosen is still to answer', {
+          status: 409,
+        });
+      const pending = {
+        students: chosen.filter((x) => x.kind === 'student').map((x) => x.id),
+        staff: chosen.filter((x) => x.kind === 'employee').map((x) => x.id),
+      };
+      const told = app
+        ? await this.tell(c, ctx, f, pending, 'Reminder: a form waits for your answer')
+        : 0;
       await this.audit.stage(ctx, c, {
         action: 'engagement.consent_form.notify',
         entityType: 'consent_forms',
         entityId: id,
-        after: { told, channels: dto.channels.map((x) => x.channel) },
+        after: {
+          people: chosen.length,
+          ticked: Boolean(ticked),
+          app,
+          told,
+          channels: channels.map((x) => x.channel),
+        },
       });
-      return { f, pending, told };
+      return { f, pending, told, people: chosen.length };
     });
-    const messages = dto.channels.length
-      ? await this.sendMessages(ctx, out.f, out.pending, dto.channels, true)
+    const messages = channels.length
+      ? await this.sendMessages(ctx, out.f, out.pending, channels, true)
       : [];
-    return { told: out.told, messages };
+    return { people: out.people, told: out.told, messages };
   }
 
   /** A draft with no answers is removed; anything else is archived. */
@@ -866,15 +1056,41 @@ export class ConsentFormsService {
 
   async register(ctx: RequestContext, id: string, q: ConsentRegisterQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const f = await this.findDb(c, id);
       const r =
         q.tab === 'answered' ? await this.answeredRows(c, f, q) : await this.pendingRows(c, f, q);
-      return { total: r.total, page: q.page, size: q.size, data: r.rows };
+      if (q.tab === 'answered') return { total: r.total, page: q.page, size: q.size, data: r.rows };
+      // how many of those pending (all pages, this filter) each way of reminding reaches
+      const all = (await this.pendingRows(c, f, q, true)).rows as Array<{
+        kind: string;
+        id: string;
+      }>;
+      const st = all.filter((x) => x.kind === 'student').map((x) => x.id);
+      const em = all.filter((x) => x.kind === 'employee').map((x) => x.id);
+      const reach = await c.query<{ app: number; mobile: number; email: number }>(
+        `WITH p AS (
+           SELECT sg.student_id AS who, g.user_id, g.mobile, g.email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+            WHERE sg.student_id = ANY($1::bigint[]) AND g.deleted_at IS NULL
+           UNION ALL SELECT -em.id, em.user_id, em.mobile, em.email FROM employees em WHERE em.id = ANY($2::bigint[]))
+         SELECT count(DISTINCT who) FILTER (WHERE user_id IS NOT NULL)::int AS app,
+                count(DISTINCT who) FILTER (WHERE mobile IS NOT NULL AND mobile <> '')::int AS mobile,
+                count(DISTINCT who) FILTER (WHERE email IS NOT NULL AND email <> '')::int AS email FROM p`,
+        [st, em],
+      );
+      return {
+        total: r.total,
+        page: q.page,
+        size: q.size,
+        data: r.rows,
+        reach: { people: all.length, ...reach.rows[0]! },
+      };
     });
   }
 
   async registerFile(ctx: RequestContext, id: string, q: ConsentFileQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const f = await this.findDb(c, id);
       const head = await schoolHead(c);
       const fields = f.fields.filter((x) => !LAYOUT.includes(x.type));
@@ -962,6 +1178,7 @@ export class ConsentFormsService {
    */
   async analytics(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const f = await this.findDb(c, id);
       const pupils = await this.audienceStudents(c, f);
       const staff = await this.audienceStaff(c, f);
@@ -1117,6 +1334,7 @@ export class ConsentFormsService {
 
   async response(ctx: RequestContext, id: string, rid: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const row = await this.responseDb(c, rid);
       if (row.formId !== id)
         throw new DomainError('not-found', 'Response not found', { status: 404 });
@@ -1132,11 +1350,13 @@ export class ConsentFormsService {
   }
 
   /** A drawn signature, as a PNG (base64), for the office. */
-  async signature(ctx: RequestContext, rid: string, key: string) {
+  async signature(ctx: RequestContext, id: string, rid: string, key: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const r = await c.query<{ png: Buffer }>(
-        `SELECT png FROM consent_form_signatures WHERE response_id = $1 AND field_key = $2`,
-        [rid, key],
+        `SELECT g.png FROM consent_form_signatures g JOIN consent_form_responses x ON x.id = g.response_id
+          WHERE g.response_id = $1 AND g.field_key = $2 AND x.form_id = $3`,
+        [rid, key, id],
       );
       if (!r.rows[0]) throw new DomainError('not-found', 'No signature', { status: 404 });
       return { contentType: 'image/png', base64: r.rows[0].png.toString('base64') };
@@ -1189,6 +1409,7 @@ export class ConsentFormsService {
 
   async responsePdf(ctx: RequestContext, id: string, rid: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, id, 'viewer');
       const row = await this.responseDb(c, rid);
       if (row.formId !== id)
         throw new DomainError('not-found', 'Response not found', { status: 404 });
@@ -1704,6 +1925,7 @@ export class ConsentFormsService {
         status: 400,
       });
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.need(c, ctx, formId, 'editor');
       const f = await this.findDb(c, formId);
       if (f.settings.officeFill === false)
         throw new DomainError(

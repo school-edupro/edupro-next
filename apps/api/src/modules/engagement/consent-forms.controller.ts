@@ -32,6 +32,7 @@ import {
   ConsentDecideDto,
   ConsentEditDto,
   ConsentNotifyDto,
+  ConsentSharesDto,
   MineFormQueryDto,
   PublicOtpDto,
   PublicRespondDto,
@@ -58,51 +59,58 @@ export class ConsentFormsController {
 
   @Post('consent-forms/:id/public-link')
   @ApiOperation({ summary: 'A new public link (the old link and QR stop working)' })
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   rotate(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.rotateLink(ctx, id);
   }
 
   @Get('consent-forms/:id/qr')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   qr(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.qr(ctx, id, this.env.PUBLIC_APP_URL);
   }
 
   @Get('consent-forms/:id/analytics')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   analytics(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.analytics(ctx, id);
   }
 
   @Get('consent-forms')
-  @RequirePermission(CONSENT.manage, {
-    description: 'Build consent forms, fill them for families and read the register',
-  })
+  // managers see every form, anyone else the forms shared with them
+  @AuthenticatedOnly()
   list(@ReqCtx() ctx: RequestContext, @Query() q: ConsentListQueryDto) {
     return this.svc.list(ctx, q);
   }
 
   @Get('consent-forms/lists')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   lists(@ReqCtx() ctx: RequestContext) {
     return this.svc.builderLists(ctx);
   }
 
   @Post('consent-forms')
-  @RequirePermission(CONSENT.manage)
+  @RequirePermission(CONSENT.manage, {
+    description: 'Build consent forms, fill them for families and read the register',
+  })
   create(@ReqCtx() ctx: RequestContext, @Body() body: ConsentFormDto) {
     return this.svc.create(ctx, body);
   }
 
   @Get('consent-forms/:id')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.get(ctx, id);
   }
 
   @Put('consent-forms/:id')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   update(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentFormDto) {
     return this.svc.update(ctx, id, body);
   }
@@ -117,14 +125,16 @@ export class ConsentFormsController {
   @ApiOperation({
     summary: 'Publish (tells the audience in the app), close, archive, back to draft',
   })
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   status(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentStatusDto) {
     return this.svc.setStatus(ctx, id, body);
   }
 
   @Post('consent-forms/:id/notify')
   @ApiOperation({ summary: 'An app notification again to those who have not answered' })
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   notify(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentNotifyDto) {
     return this.svc.notifyPending(ctx, id, body);
   }
@@ -136,7 +146,8 @@ export class ConsentFormsController {
   }
 
   @Get('consent-forms/:id/register')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   register(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
@@ -146,7 +157,8 @@ export class ConsentFormsController {
   }
 
   @Get('consent-forms/:id/register/file')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   async registerFile(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
@@ -157,27 +169,60 @@ export class ConsentFormsController {
 
   @Post('consent-forms/:id/responses')
   @ApiOperation({ summary: 'The office fills the form on behalf of a family or a staff member' })
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   fill(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ConsentRespondDto) {
     return this.svc.fillForOffice(ctx, id, body);
   }
 
   @Get('consent-forms/:id/responses/:rid')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   response(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('rid') rid: string) {
     return this.svc.response(ctx, id, rid);
   }
 
   @Get('consent-forms/:id/responses/:rid/pdf')
-  @RequirePermission(CONSENT.manage)
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
   responsePdf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('rid') rid: string) {
     return this.svc.responsePdf(ctx, id, rid);
   }
 
   @Get('consent-forms/:id/responses/:rid/signatures/:key')
+  // a manager, or a share of this form (checked in the service)
+  @AuthenticatedOnly()
+  signature(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('rid') rid: string,
+    @Param('key') key: string,
+  ) {
+    return this.svc.signature(ctx, id, rid, key);
+  }
+
+  @Get('consent-forms/:id/shares')
+  @ApiOperation({ summary: 'Whom the form is shared with (staff or roles, view or edit)' })
   @RequirePermission(CONSENT.manage)
-  signature(@ReqCtx() ctx: RequestContext, @Param('rid') rid: string, @Param('key') key: string) {
-    return this.svc.signature(ctx, rid, key);
+  shares(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.shares(ctx, id);
+  }
+
+  @Put('consent-forms/:id/shares')
+  @RequirePermission(CONSENT.manage)
+  setShares(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: ConsentSharesDto,
+  ) {
+    return this.svc.setShares(ctx, id, body);
+  }
+
+  @Get('mine/consent-shared')
+  @ApiOperation({ summary: 'The consent forms shared with me' })
+  @AuthenticatedOnly()
+  sharedWithMe(@ReqCtx() ctx: RequestContext) {
+    return this.svc.sharedWithMe(ctx);
   }
 
   // ---- families and staff ----

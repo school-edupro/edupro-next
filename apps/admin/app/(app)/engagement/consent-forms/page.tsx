@@ -28,17 +28,25 @@ export default async function ConsentFormsPage({
   const status = TABS.some((t) => t[0] === sp.status) ? sp.status! : 'all';
   const qs = new URLSearchParams({ status });
   if (sp.q) qs.set('q', sp.q.slice(0, 80));
-  const { data } = await apiFetch<{ data: ConsentForm[] }>(`/engagement/consent-forms?${qs}`);
+  const { data, canCreate = true } = await apiFetch<{ data: ConsentForm[]; canCreate?: boolean }>(
+    `/engagement/consent-forms?${qs}`,
+  );
   return (
     <>
       <PageHeader
         kicker="Engagement"
         title="Consent forms"
-        description="Ask families and staff for consent and details: trips, events, photo use, medical, declarations. Build a form, send it, read the answers."
+        description={
+          canCreate
+            ? 'Ask families and staff for consent and details: trips, events, photo use, medical, declarations. Build a form, send it, read the answers.'
+            : 'The consent forms shared with you.'
+        }
         actions={
-          <a className="ep-btn ep-btn--primary ep-btn--sm" href="/engagement/consent-forms/new">
-            <Icon name="plus" size={16} /> New form
-          </a>
+          canCreate ? (
+            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/engagement/consent-forms/new">
+              <Icon name="plus" size={16} /> New form
+            </a>
+          ) : undefined
         }
       />
       <Notice

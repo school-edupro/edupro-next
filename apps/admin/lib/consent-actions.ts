@@ -137,19 +137,46 @@ export async function setConsentStatus(fd: FormData) {
 
 export async function notifyConsentPending(fd: FormData) {
   const id = str(fd, 'id');
-  let told = 0;
-  let messages: Messages = [];
+  const back2 = `${BASE}/${id}?tab=pending`;
+  // the ticked people (only when "only those ticked"), the channels ticked with their templates
+  const people =
+    str(fd, 'who') === 'all'
+      ? undefined
+      : fd
+          .getAll('person')
+          .map(String)
+          .map((v) => /^(student|employee):(\d+)$/.exec(v))
+          .filter((m): m is RegExpExecArray => Boolean(m))
+          .map((m) => ({ kind: m[1] as 'student' | 'employee', id: m[2]! }));
+  if (people && !people.length)
+    redirect(
+      `${back2}&error=consent.nobody&detail=${encodeURIComponent('Tick at least one person, or choose all.')}`,
+    );
+  const channels = channelsOf(fd).filter((x) => fd.get(`ch_${x.channel}`) === 'on');
+  const app = fd.get('ch_app') === 'on';
+  let r: { people: number; told: number; messages: Messages } = {
+    people: 0,
+    told: 0,
+    messages: [],
+  };
   try {
-    const r = await apiFetch<{ told: number; messages: Messages }>(`${BASE}/${id}/notify`, {
-      method: 'POST',
-      body: JSON.stringify({ channels: channelsOf(fd) }),
-    });
-    told = r.told;
-    messages = r.messages;
+    r = await apiFetch<{ people: number; told: number; messages: Messages }>(
+      `${BASE}/${id}/notify`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          channels,
+          app,
+          people,
+          sectionId: str(fd, 'sectionId') || undefined,
+          q: str(fd, 'q') || undefined,
+        }),
+      },
+    );
   } catch (error) {
-    back(`${BASE}/${id}`, error);
+    back(back2, error);
   }
-  redirect(`${BASE}/${id}?ok=notified&told=${told}${messageQs(messages)}`);
+  redirect(`${back2}&ok=notified&people=${r.people}&told=${r.told}${messageQs(r.messages)}`);
 }
 
 /** Approve or reject an answer at my level (from the response page). */
@@ -385,4 +412,40 @@ export async function changeMyForm(fd: FormData) {
   redirect(
     `/my-forms?ok=changed&detail=${encodeURIComponent(`Your answer ${out!.number} is changed.`)}`,
   );
+}
+
+type Share = { userId?: string; roleId?: string; level: 'viewer' | 'editor' };
+/** Add, change or remove one share of a form: the whole list is read and saved again. */
+export async function changeConsentShare(fd: FormData) {
+  const id = str(fd, 'id');
+  const path = `${BASE}/${id}/share`;
+  const op = str(fd, 'op');
+  const level = str(fd, 'level') === 'editor' ? 'editor' : 'viewer';
+  // the one being added or changed: "u:<user id>" or "r:<role id>"
+  const m = /^(u|r):(\d+)$/.exec(str(fd, 'who'));
+  if (!m)
+    redirect(
+      `${path}?error=validation-failed&detail=${encodeURIComponent('Choose a person or a role.')}`,
+    );
+  const key = (x: Share) => (x.userId ? `u:${x.userId}` : `r:${x.roleId}`);
+  const who = `${m[1]}:${m[2]}`;
+  try {
+    const now = await apiFetch<{
+      data: Array<{ userId: string | null; roleId: string | null; level: Share['level'] }>;
+    }>(`${BASE}/${id}/shares`);
+    let list: Share[] = now.data.map((x) =>
+      x.userId ? { userId: x.userId, level: x.level } : { roleId: x.roleId!, level: x.level },
+    );
+    list = list.filter((x) => key(x) !== who);
+    if (op !== 'remove')
+      list.push(m[1] === 'u' ? { userId: m[2]!, level } : { roleId: m[2]!, level });
+    await apiFetch(`${BASE}/${id}/shares`, {
+      method: 'PUT',
+      body: JSON.stringify({ shares: list }),
+    });
+  } catch (error) {
+    back(path, error);
+  }
+  revalidatePath(path);
+  redirect(`${path}?ok=${op === 'remove' ? 'removed' : 'shared'}`);
 }

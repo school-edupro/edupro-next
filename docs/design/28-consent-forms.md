@@ -209,3 +209,18 @@ up by the school admin only (new permission `engagement.consent_form.integrate`)
   secret, Remove webhook and Revoke key.
 - **Staff answer their own forms** in the staff app (Consent forms tile) and in admin (**My forms**,
   the clipboard in the top bar, with a count of forms to answer).
+
+## Sharing and reminding the ticked (18 Oct 2026, migration 0174)
+
+- **Sharing one form** (`consent_form_shares`): those holding `engagement.consent_form.manage` keep every
+  form. Anyone else sees only the forms shared with them, by name (their login) or by a role they hold.
+  **View**: the answers, the register, Excel / PDF, the response PDFs, remind those not yet answered, the
+  analytics. **Edit**: also change, publish, close / reopen / archive, make a new public link and fill on
+  behalf. Deleting, copying, connecting and sharing stay with the managers. A form not shared answers
+  "not found". The per-form routes are authenticated and checked in the service (`need()`); the list
+  returns `canCreate`. `GET /engagement/mine/consent-shared` lists the forms shared with me (admin My
+  forms, and the top-bar clipboard shows for them).
+- **Remind** moved into the Not yet answered list: tick people (Select all on this page) or choose all
+  (in the current section / search); tick the app and any of SMS / WhatsApp / email with its template.
+  Each channel shows how many of those pending it reaches (`reach` on the pending register). Only those
+  still pending are reminded; nothing chosen is refused (`consent.nobody`, `consent.no_channel`).
