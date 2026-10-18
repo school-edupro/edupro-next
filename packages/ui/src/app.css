@@ -8543,3 +8543,14 @@ a.db-list__main:hover strong {
 .ep-field__help a {
   text-decoration: underline;
 }
+/* a group of four figures: two by two, then four in a row (never three and one) */
+@media (min-width: 40rem) {
+  .ep-dash-kpis--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 64rem) {
+  .ep-dash-kpis--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

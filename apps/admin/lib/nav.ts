@@ -7,6 +7,7 @@ export const NAV: Array<{
   {
     section: 'people',
     items: [
+      { href: '/people/dashboard', label: 'studentDashboard', permission: 'people.student.view' },
       { href: '/people/students', label: 'students', permission: 'people.student.view' },
       { href: '/people/search', label: 'peopleSearch', permission: 'people.person.search' },
       { href: '/people/import', label: 'import', permission: 'people.import.run' },
@@ -45,6 +46,11 @@ export const NAV: Array<{
     // staff, apart from the students and families of People
     section: 'employeeManagement',
     items: [
+      {
+        href: '/people/staff-dashboard',
+        label: 'employeeDashboard',
+        permission: 'people.employee.view',
+      },
       { href: '/people/employees', label: 'employees', permission: 'people.employee.view' },
       { href: '/masters/staff', label: 'staffSetup', permission: 'people.employee.view' },
       {

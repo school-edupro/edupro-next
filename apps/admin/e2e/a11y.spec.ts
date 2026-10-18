@@ -328,6 +328,8 @@ const PAGES = [
   '/people/roll-numbers?section=143',
   '/people/school-transfers',
   '/people/staff-transfers',
+  '/people/dashboard',
+  '/people/staff-dashboard',
   '/people/acr',
   '/people/acr/38',
   '/people/acr/print?ids=38',

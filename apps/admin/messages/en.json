@@ -201,7 +201,9 @@
     "landingPages": "Landing pages",
     "hostelWithdrawals": "Hostel withdrawals",
     "acrSetup": "ACR set-up",
-    "employeeAcr": "Employee ACR"
+    "employeeAcr": "Employee ACR",
+    "studentDashboard": "Student dashboard",
+    "employeeDashboard": "Employee dashboard"
   },
   "shell": {
     "primaryNavigation": "Primary",
