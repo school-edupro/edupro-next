@@ -390,3 +390,23 @@ export const EmployeeBulkTemplateQuerySchema = z.object({
     .transform((v) => v === 'true'),
 });
 export class EmployeeBulkTemplateQueryDto extends createZodDto(EmployeeBulkTemplateQuerySchema) {}
+
+export const EmployeeSubjectsSchema = z.object({ subjectIds: z.array(IdSchema).max(40) });
+export class EmployeeSubjectsDto extends createZodDto(EmployeeSubjectsSchema) {}
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const EmployeeDocumentSchema = z
+  .object({
+    typeId: IdSchema,
+    fileId: IdSchema,
+    number: z.string().trim().max(60).optional(),
+    issuedOn: Day.optional(),
+    expiresOn: Day.optional(),
+    remarks: z.string().trim().max(300).optional(),
+  })
+  .refine((v) => !v.issuedOn || !v.expiresOn || v.issuedOn <= v.expiresOn, {
+    message: 'valid till is before the issue date',
+    path: ['expiresOn'],
+  });
+export class EmployeeDocumentDto extends createZodDto(EmployeeDocumentSchema) {}
+export const EmployeeDocumentVerifySchema = z.object({ verified: z.boolean().default(true) });
+export class EmployeeDocumentVerifyDto extends createZodDto(EmployeeDocumentVerifySchema) {}

@@ -16,12 +16,18 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { Icon } from '@/components/nav-icons';
 import { EmployeeProfileEditor } from '@/components/employees/EmployeeProfileEditor';
+import { ChipPickerField } from '@/components/ChipPickerField';
+import { FileLinks } from '@/components/FileLinks';
 import { requestEmployeeIdCard, upsertPosting } from '@/lib/actions';
 import {
   createEmployeeLogin,
+  removeEmployeeDocument,
   removeEmployeeRow,
   saveEmployeeProfile,
   saveEmployeeRow,
+  saveEmployeeSubjects,
+  uploadEmployeeDocument,
+  verifyEmployeeDocument,
 } from '@/lib/employee-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { EmployeeCatalogue, EmployeeProfile } from '@/lib/employee';
@@ -33,15 +39,27 @@ const TABS = [
   ['languages', 'Languages'],
   ['experience', 'Experience'],
   ['history', 'Transfers and remarks'],
-  ['posting', 'Posting and documents'],
+  ['documents', 'Documents'],
+  ['posting', 'Posting'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 const OK: Record<string, string> = {
   saved: 'Saved.',
   removed: 'Removed.',
   login: 'The staff login is made: they sign in with a code sent to their mobile or email.',
+  uploaded: 'The document is uploaded.',
+  verified: 'Marked as checked against the original.',
+  unverified: 'The check is taken back.',
 };
 const dmy = (d: string | null) => (d ? d.split('-').reverse().join('-') : '—');
+/** A master list as options, keeping a value from before the list existed (shown, not lost). */
+const withCurrent = (values: string[], current: string | null | undefined) => [
+  { value: '', label: 'Choose…' },
+  ...(current && !values.includes(current)
+    ? [{ value: current, label: `${current} (not in Staff setup)` }]
+    : []),
+  ...values.map((v) => ({ value: v, label: v })),
+];
 
 /**
  * The employee (docs/design/30-employee-master.md): the full profile by section, education, languages,
@@ -168,17 +186,226 @@ export default async function EmployeePage({
             {k === 'experience' && rows.experience.length
               ? ` (${String(rows.experience.length)})`
               : ''}
+            {k === 'documents' && profile.documents.missing
+              ? ` (${String(profile.documents.missing)} missing)`
+              : ''}
           </a>
         ))}
       </nav>
 
       {tab === 'profile' ? (
-        <EmployeeProfileEditor
-          catalogue={catalogue}
-          profile={profile}
-          canEdit={canEdit}
-          save={saveEmployeeProfile}
-        />
+        <>
+          <Card title="Teaching subjects" style={{ marginBottom: 'var(--sp-4)' }}>
+            {canEdit ? (
+              <form
+                action={saveEmployeeSubjects}
+                style={{ display: 'grid', gap: 'var(--sp-3)', maxWidth: '48rem' }}
+              >
+                <input type="hidden" name="id" value={id} />
+                <ChipPickerField
+                  name="subjects"
+                  label="Subjects this employee teaches"
+                  options={catalogue.subjects.map((x) => ({ value: x.id, label: x.name }))}
+                  initial={profile.subjects.map((x) => x.id)}
+                  help="From Academics → Subjects. Leave empty for staff who do not teach."
+                />
+                <div>
+                  <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                    <Icon name="check" size={16} /> Save subjects
+                  </button>
+                </div>
+              </form>
+            ) : profile.subjects.length ? (
+              <p style={{ margin: 0 }}>{profile.subjects.map((x) => x.name).join(', ')}</p>
+            ) : (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                No teaching subject.
+              </p>
+            )}
+          </Card>
+          <EmployeeProfileEditor
+            catalogue={catalogue}
+            profile={profile}
+            canEdit={canEdit}
+            save={saveEmployeeProfile}
+          />
+        </>
+      ) : null}
+
+      {tab === 'documents' ? (
+        <Card title="Documents for employment">
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {profile.documents.missing
+              ? `${String(profile.documents.missing)} of ${String(profile.documents.required)} required documents missing or expired.`
+              : `All ${String(profile.documents.required)} required documents are on file.`}
+            {profile.documents.unverified
+              ? ` ${String(profile.documents.unverified)} not yet checked against the original.`
+              : ''}{' '}
+            The list is kept in People → Staff setup → Employee document types.
+          </p>
+          <div className="ep-table-wrap">
+            <table className="ep-table ep-table--dense">
+              <caption className="ep-sr-only">Documents for employment</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Document</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">On file</th>
+                  {canEdit ? <th scope="col">Upload</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {profile.documents.types.map((d) => (
+                  <tr key={d.typeId}>
+                    <td>
+                      <strong>{d.name}</strong>
+                      <span className="ep-field__help">
+                        {d.required ? ' · required' : ' · optional'}
+                      </span>
+                    </td>
+                    <td>
+                      {d.done ? (
+                        <Badge tone="success">On file</Badge>
+                      ) : d.files.some((f) => f.expired) ? (
+                        <Badge tone="danger">Expired</Badge>
+                      ) : d.required ? (
+                        <Badge tone="warning">Missing</Badge>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>
+                      {d.files.length ? (
+                        <ul
+                          style={{
+                            listStyle: 'none',
+                            margin: 0,
+                            padding: 0,
+                            display: 'grid',
+                            gap: 'var(--sp-2)',
+                          }}
+                        >
+                          {d.files.map((f) => (
+                            <li
+                              key={f.id}
+                              style={{
+                                display: 'flex',
+                                gap: 'var(--sp-2)',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <FileLinks href={`/api/employee-docs/${id}/${f.id}`} label={d.name} />
+                              {f.number ? <span>{f.number}</span> : null}
+                              {f.expiresOn ? (
+                                <span className="ep-field__help">
+                                  valid till {dmy(f.expiresOn)}
+                                </span>
+                              ) : null}
+                              {f.expired ? <Badge tone="danger">Expired</Badge> : null}
+                              {f.verifiedAt ? (
+                                <Badge tone="success">
+                                  Checked{f.verifiedBy ? ` by ${f.verifiedBy}` : ''}
+                                </Badge>
+                              ) : (
+                                <Badge tone="neutral">Not checked</Badge>
+                              )}
+                              {canEdit ? (
+                                <form action={verifyEmployeeDocument}>
+                                  <input type="hidden" name="id" value={id} />
+                                  <input type="hidden" name="docId" value={f.id} />
+                                  <input
+                                    type="hidden"
+                                    name="verified"
+                                    value={f.verifiedAt ? 'no' : 'yes'}
+                                  />
+                                  <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                                    <Icon name="check" size={16} />{' '}
+                                    {f.verifiedAt ? 'Take the check back' : 'Mark checked'}
+                                  </button>
+                                </form>
+                              ) : null}
+                              {canEdit ? (
+                                <ConfirmAction
+                                  action={removeEmployeeDocument}
+                                  fields={{ id, docId: f.id }}
+                                  label="Remove"
+                                  title={`Remove this ${d.name}?`}
+                                  confirmLabel="Remove"
+                                  variant="danger"
+                                  confirmVariant="danger"
+                                >
+                                  The file is taken off the employee&apos;s documents.
+                                </ConfirmAction>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    {canEdit ? (
+                      <td>
+                        <details>
+                          <summary className="ep-btn ep-btn--secondary ep-btn--sm">
+                            <Icon name="plus" size={16} /> Upload
+                          </summary>
+                          <form
+                            action={uploadEmployeeDocument}
+                            style={{
+                              display: 'grid',
+                              gap: 'var(--sp-2)',
+                              marginTop: 'var(--sp-2)',
+                              minWidth: '16rem',
+                            }}
+                          >
+                            <input type="hidden" name="id" value={id} />
+                            <input type="hidden" name="typeId" value={d.typeId} />
+                            <InputField
+                              id={`dc-f-${d.typeId}`}
+                              name="file"
+                              label="File (PDF or image, up to 5 MB)"
+                              type="file"
+                              accept="application/pdf,image/png,image/jpeg,image/webp"
+                              required
+                            />
+                            <InputField
+                              id={`dc-n-${d.typeId}`}
+                              name="number"
+                              label="Number (if any)"
+                              maxLength={60}
+                            />
+                            <InputField
+                              id={`dc-i-${d.typeId}`}
+                              name="issuedOn"
+                              label="Issued on"
+                              type="date"
+                            />
+                            {d.hasExpiry ? (
+                              <InputField
+                                id={`dc-e-${d.typeId}`}
+                                name="expiresOn"
+                                label="Valid till"
+                                type="date"
+                                required
+                              />
+                            ) : null}
+                            <div>
+                              <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                                Upload
+                              </button>
+                            </div>
+                          </form>
+                        </details>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : null}
 
       {tab === 'education' ? (
@@ -519,17 +746,25 @@ export default async function EmployeePage({
                 <input type="hidden" name="id" value={employee.id} />
                 <FormSection title={t('posting')} description={t('postingHelp')}>
                   <FormRow columns={2}>
-                    <InputField
+                    <SelectField
                       id="p-designation"
                       name="designation"
                       label={t('designation')}
                       defaultValue={employee.posting?.designation ?? employee.designation ?? ''}
+                      options={withCurrent(
+                        list('Designation'),
+                        employee.posting?.designation ?? employee.designation,
+                      )}
                     />
-                    <InputField
+                    <SelectField
                       id="p-department"
                       name="department"
                       label={t('department')}
                       defaultValue={employee.posting?.department ?? employee.department ?? ''}
+                      options={withCurrent(
+                        list('Department'),
+                        employee.posting?.department ?? employee.department,
+                      )}
                     />
                   </FormRow>
                   <FormRow columns={2}>
@@ -595,20 +830,22 @@ export default async function EmployeePage({
               </p>
             ) : null}
           </Card>
-          <Card title={p('students.documents')}>
-            <DataTable<PersonDocument>
-              caption={p('students.documents')}
-              density="dense"
-              columns={[
-                { key: 'kind', header: 'Kind', render: (d) => d.kind },
-                { key: 'file', header: 'File', render: (d) => d.fileName ?? d.fileId },
-                { key: 'expires', header: 'Expires', render: (d) => d.expiresOn ?? '' },
-              ]}
-              rows={employee.documents}
-              rowKey={(d) => d.id}
-              emptyTitle={p('students.noDocuments')}
-            />
-          </Card>
+          {employee.documents.length ? (
+            <Card title="Earlier files">
+              <DataTable<PersonDocument>
+                caption={p('students.documents')}
+                density="dense"
+                columns={[
+                  { key: 'kind', header: 'Kind', render: (d) => d.kind },
+                  { key: 'file', header: 'File', render: (d) => d.fileName ?? d.fileId },
+                  { key: 'expires', header: 'Expires', render: (d) => d.expiresOn ?? '' },
+                ]}
+                rows={employee.documents}
+                rowKey={(d) => d.id}
+                emptyTitle={p('students.noDocuments')}
+              />
+            </Card>
+          ) : null}
         </div>
       ) : null}
     </>

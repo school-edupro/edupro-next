@@ -32,6 +32,14 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 - A **date of leaving** makes the employee inactive.
 - **Make a staff login** for someone who has none.
 
+## Documents for employment (open an employee → Documents)
+
+- The tab lists the documents your school asks for (People → Staff setup → Employee document types):
+  required ones first, each Missing, On file or Expired; the tab says how many are missing.
+- **Upload** a PDF or a photo of the document (with its number, and the valid-till date for those that
+  expire). View or download it with the icons; **Mark checked** once you have seen the original.
+- **Teaching subjects** are on the Profile tab: pick from the school's subjects.
+
 ## The list (People → Employees)
 
 - Status, quick filters (staff group, type, department, designation, gender, staff login) and the

@@ -9,6 +9,7 @@ import type { EmployeeListQuery, EmployeeListResult, EmployeeListView } from './
 import type { ReportSpec, Result } from './report-builder';
 
 const BASE = '/people/staff';
+const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:4000';
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 
@@ -219,4 +220,107 @@ export async function employeeBulkCommit(fd: FormData) {
   }
   revalidatePath('/people/employees');
   redirect(`${page}&ok=applied`);
+}
+
+// ---- teaching subjects and employment documents ----
+export async function saveEmployeeSubjects(fd: FormData) {
+  const id = str(fd, 'id');
+  if (!okId(id)) redirect('/people/employees');
+  const subjectIds = fd.getAll('subjects').map(String).filter(okId);
+  try {
+    await apiFetch(`${BASE}/${id}/subjects`, {
+      method: 'PUT',
+      body: JSON.stringify({ subjectIds }),
+    });
+  } catch (error) {
+    back(`/people/employees/${id}`, error);
+  }
+  revalidatePath(`/people/employees/${id}`);
+  redirect(`/people/employees/${id}?ok=saved`);
+}
+
+/** Uploads one PDF or image (up to 5 MB) and attaches it as a document of a type. */
+export async function uploadEmployeeDocument(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `/people/employees/${id}?tab=documents`;
+  if (!okId(id)) redirect('/people/employees');
+  const file = fd.get('file');
+  const fail = (detail: string): never =>
+    redirect(`${page}&error=validation-failed&detail=${encodeURIComponent(detail)}`);
+  if (!(file instanceof File) || file.size === 0) fail('Choose the file to upload');
+  const f = file as File;
+  if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(f.type))
+    fail(`${f.name}: attach a PDF or an image (PNG, JPEG, WebP)`);
+  if (f.size > 5 * 1024 * 1024) fail(`${f.name}: larger than 5 MB`);
+  try {
+    const reg = await apiFetch<{
+      file: { id: string };
+      upload: { url: string; method: string; headers?: Record<string, string> };
+    }>('/platform/files', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: f.name.slice(0, 200),
+        contentType: f.type,
+        sizeBytes: f.size,
+        classification: 'personal',
+      }),
+    });
+    const target = reg.upload.url.startsWith('http')
+      ? reg.upload.url
+      : `${API_BASE}${reg.upload.url}`;
+    const headers = new Headers({ 'content-type': f.type });
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
+    const put = await fetch(target, {
+      method: reg.upload.method || 'PUT',
+      headers,
+      body: Buffer.from(await f.arrayBuffer()),
+    });
+    if (!put.ok) fail(`${f.name} did not upload`);
+    await apiFetch(`${BASE}/${id}/documents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        typeId: str(fd, 'typeId'),
+        fileId: reg.file.id,
+        number: str(fd, 'number') || undefined,
+        issuedOn: str(fd, 'issuedOn') || undefined,
+        expiresOn: str(fd, 'expiresOn') || undefined,
+        remarks: str(fd, 'remarks') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(`/people/employees/${id}`);
+  redirect(`${page}&ok=uploaded`);
+}
+
+export async function verifyEmployeeDocument(fd: FormData) {
+  const id = str(fd, 'id');
+  const docId = str(fd, 'docId');
+  const page = `/people/employees/${id}?tab=documents`;
+  if (!okId(id) || !okId(docId)) redirect('/people/employees');
+  try {
+    await apiFetch(`${BASE}/${id}/documents/${docId}/verify`, {
+      method: 'PUT',
+      body: JSON.stringify({ verified: str(fd, 'verified') !== 'no' }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(`/people/employees/${id}`);
+  redirect(`${page}&ok=${str(fd, 'verified') === 'no' ? 'unverified' : 'verified'}`);
+}
+
+export async function removeEmployeeDocument(fd: FormData) {
+  const id = str(fd, 'id');
+  const docId = str(fd, 'docId');
+  const page = `/people/employees/${id}?tab=documents`;
+  if (!okId(id) || !okId(docId)) redirect('/people/employees');
+  try {
+    await apiFetch(`${BASE}/${id}/documents/${docId}`, { method: 'DELETE' });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(`/people/employees/${id}`);
+  redirect(`${page}&ok=removed`);
 }

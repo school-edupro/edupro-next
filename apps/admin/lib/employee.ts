@@ -4,7 +4,31 @@ import type { ProfileCatalogue, ProfileValues } from './profile';
 export type EmployeeCatalogue = ProfileCatalogue & {
   lists: Record<string, string[]>;
   nextCode: string;
+  subjects: Array<{ id: string; name: string; code: string }>;
 };
+
+export interface EmployeeDocType {
+  typeId: string;
+  code: string;
+  name: string;
+  hasExpiry: boolean;
+  required: boolean;
+  done: boolean;
+  files: Array<{
+    id: string;
+    fileId: string;
+    fileName: string | null;
+    contentType: string;
+    number: string | null;
+    issuedOn: string | null;
+    expiresOn: string | null;
+    expired: boolean;
+    remarks: string | null;
+    verifiedAt: string | null;
+    verifiedBy: string | null;
+    uploadedAt: string;
+  }>;
+}
 
 export interface EmployeeRows {
   education: Array<{
@@ -62,6 +86,8 @@ export interface EmployeeProfile {
   missing: string[];
   sensitiveShown: boolean;
   rows: EmployeeRows;
+  subjects: Array<{ id: string; name: string }>;
+  documents: { types: EmployeeDocType[]; required: number; missing: number; unverified: number };
 }
 
 export type SaveEmployeeResult =

@@ -101,3 +101,23 @@ experience, remarks and transfers). Built in three parts.
   masters Countries, States and Cities (the forms read them first; a school without them falls back to
   the built-in country and state lists in code). The old rows are removed and the list codes are no
   longer offered.
+
+## Teaching subjects, documents, posting lists (18 Oct 2026, migrations 0180–0181)
+
+- **Teaching subjects**: several per employee from Academics → Subjects (`employee_subjects`; the free
+  text field is retired, its values matched to subjects by name or code). Profile tab card; list column
+  and filter "Teaching subjects".
+- **Employee document types** (Staff setup): the school's list, each required for all / teaching /
+  non_teaching staff or none, and whether it expires; seeded with 20 usual types (photo, Aadhaar, PAN,
+  resume, 10th, 12th, graduation, B.Ed./D.El.Ed., TET, experience, relieving, appointment, joining,
+  police verification, medical fitness, bank proof, address proof …). Teaching or not comes from the
+  department's staff group, else the employee type's (`app.employee_staff_side`);
+  `app.employee_documents_due` gives each type with required / on file / valid (not expired).
+- **Documents tab**: every type with Missing / On file / Expired, the files with View / Download icons,
+  number and validity, "Mark checked" against the original (by whom), Remove; Upload a PDF or image
+  (5 MB) per type, the validity date needed when the type expires. The file becomes the employee's
+  (`files.owner_entity`), served only through its employee (`GET people/staff/:id/documents/:doc/file`,
+  `people.document.view`). List columns "Required documents missing" and "Documents" (Complete /
+  Pending).
+- **Posting**: department and designation are the Staff setup lists (a value from before stays shown).
+

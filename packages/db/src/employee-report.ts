@@ -34,6 +34,14 @@ const RECORD: ReportFieldDef[] = [
     section: 'rows',
     type: 'number',
   },
+  { key: 'teaching_subjects', label: 'Teaching subjects', section: 'employment', type: 'text' },
+  {
+    key: 'documents_missing',
+    label: 'Required documents missing',
+    section: 'record',
+    type: 'number',
+  },
+  { key: 'documents_status', label: 'Documents', section: 'record', type: 'text' },
 ];
 
 export const EMPLOYEE_REPORT_SECTIONS: ReadonlyArray<{ id: string; title: string }> = [
@@ -129,6 +137,8 @@ export async function loadEmployeeReportRows(
     quals: Array<{ q: string; y: number | null }> | null;
     langs: string | null;
     exp_days: number | null;
+    subjects: string | null;
+    docs_missing: number;
   }>(
     `SELECT e.id::text, e.employee_code, e.first_name, e.last_name, e.display_name, e.gender::text, e.dob::text,
             e.designation, e.department, e.joined_on::text, e.left_on::text, e.mobile, e.email::text, e.biometric_id,
@@ -140,7 +150,10 @@ export async function loadEmployeeReportRows(
                FROM employee_education ed WHERE ed.employee_id = e.id) AS quals,
             (SELECT string_agg(l.language, ', ' ORDER BY l.language) FROM employee_languages l WHERE l.employee_id = e.id) AS langs,
             (SELECT sum(x.to_on - x.from_on)::int FROM employee_experience x
-              WHERE x.employee_id = e.id AND x.from_on IS NOT NULL AND x.to_on IS NOT NULL) AS exp_days
+              WHERE x.employee_id = e.id AND x.from_on IS NOT NULL AND x.to_on IS NOT NULL) AS exp_days,
+            (SELECT string_agg(sb.name, ', ' ORDER BY sb.display_order, sb.name) FROM employee_subjects es
+               JOIN subjects sb ON sb.id = es.subject_id WHERE es.employee_id = e.id) AS subjects,
+            (SELECT count(*) FILTER (WHERE d.required AND d.valid = 0)::int FROM app.employee_documents_due(e.id) d) AS docs_missing
        FROM employees e
       WHERE e.deleted_at IS NULL AND ($1::boolean OR e.status = 'active')
       ORDER BY e.display_name
@@ -199,6 +212,9 @@ export async function loadEmployeeReportRows(
       qualifications: quals.map((q) => q.q).join(', ') || null,
       languages: x.langs,
       experience_years: x.exp_days ? Math.round((x.exp_days / 365.25) * 10) / 10 : null,
+      teaching_subjects: x.subjects,
+      documents_missing: x.docs_missing,
+      documents_status: x.docs_missing ? 'Pending' : 'Complete',
       __id: x.id,
       __photo: x.photo_file_id,
     };

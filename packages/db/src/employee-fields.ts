@@ -395,13 +395,7 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
     list: 'StaffRole',
     store: { t: 'json', key: 'staff_role' },
   },
-  {
-    key: 'teaching_subject',
-    section: 'employment',
-    label: 'Teaching subject',
-    type: 'text',
-    store: { t: 'json', key: 'teaching_subject' },
-  },
+  // teaching subjects: several, from Academics → Subjects (employee_subjects), not a field here
   {
     key: 'joined_on',
     section: 'employment',

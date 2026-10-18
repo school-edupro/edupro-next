@@ -22,7 +22,10 @@ import { EmployeeProfileService } from './employee-profile.service';
 import {
   BulkUploadDto,
   EmployeeBulkTemplateQueryDto,
+  EmployeeDocumentDto,
+  EmployeeDocumentVerifyDto,
   EmployeeGridDto,
+  EmployeeSubjectsDto,
   EmployeeGridExportDto,
   EmployeeOnboardDto,
   EmployeeProfileDto,
@@ -164,6 +167,60 @@ export class EmployeeProfileController {
   @RequirePermission(PEOPLE.employeeEdit)
   login(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.svc.createLogin(ctx, id);
+  }
+
+  @Put(':id/subjects')
+  @ApiOperation({ summary: 'Teaching subjects (from Academics → Subjects)' })
+  @RequirePermission(PEOPLE.employeeEdit)
+  subjects(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: EmployeeSubjectsDto,
+  ) {
+    return this.svc.setSubjects(ctx, id, body.subjectIds);
+  }
+
+  @Post(':id/documents')
+  @ApiOperation({ summary: 'Attach an uploaded file as a document of a type' })
+  @RequirePermission(PEOPLE.employeeEdit)
+  addDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: EmployeeDocumentDto,
+  ) {
+    return this.svc.addDocument(ctx, id, body);
+  }
+
+  @Put(':id/documents/:docId/verify')
+  @RequirePermission(PEOPLE.employeeEdit)
+  verifyDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: EmployeeDocumentVerifyDto,
+  ) {
+    return this.svc.verifyDocument(ctx, id, docId, body.verified);
+  }
+
+  @Delete(':id/documents/:docId')
+  @RequirePermission(PEOPLE.employeeEdit)
+  removeDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+  ) {
+    return this.svc.removeDocument(ctx, id, docId);
+  }
+
+  @Get(':id/documents/:docId/file')
+  @ApiOperation({ summary: "A short-lived link to one document's file" })
+  @RequirePermission(PEOPLE.documentView)
+  documentFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+  ) {
+    return this.svc.documentFile(ctx, id, docId);
   }
 
   @Post(':id/rows/:kind')

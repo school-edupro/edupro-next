@@ -14,6 +14,7 @@ import {
   type PoolClient,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
+import { FilesService } from '../files/files.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -105,13 +106,14 @@ export class EmployeeProfileService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly files: FilesService,
   ) {}
 
   async catalogue(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       // a school opening the master the first time gets its staff setup lists
       await c.query(
-        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`,
+        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id()), app.employee_document_types_seed(app.current_school_id())`,
       );
       const lists = await loadEmployeeLists(c);
       const geo = await c.query<{
@@ -169,6 +171,12 @@ export class EmployeeProfileService {
         },
         canSeeSensitive: this.full(ctx),
         lists,
+        // teaching subjects come from Academics → Subjects
+        subjects: (
+          await c.query<{ id: string; name: string; code: string }>(
+            `SELECT id::text, name, code FROM subjects WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_order, name`,
+          )
+        ).rows,
         nextCode: await nextEmployeeCode(c),
       };
     });
@@ -226,6 +234,14 @@ export class EmployeeProfileService {
       missing: done.missing,
       sensitiveShown: this.full(ctx),
       rows,
+      subjects: (
+        await c.query<{ id: string; name: string }>(
+          `SELECT s.id::text, s.name FROM employee_subjects es JOIN subjects s ON s.id = es.subject_id
+            WHERE es.employee_id = $1 ORDER BY s.display_order, s.name`,
+          [id],
+        )
+      ).rows,
+      documents: await this.documentsOf(c, id),
     };
   }
 
@@ -289,7 +305,7 @@ export class EmployeeProfileService {
   async onboard(ctx: RequestContext, dto: EmployeeOnboardDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(
-        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`,
+        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id()), app.employee_document_types_seed(app.current_school_id())`,
       );
       const lists = await loadEmployeeLists(c);
       const raw: Record<string, unknown> = { ...dto.values };
@@ -378,6 +394,217 @@ export class EmployeeProfileService {
       });
       return this.view(c, ctx, id);
     });
+  }
+
+  // ---- teaching subjects and documents ----
+  /** The document types with what is on file for one employee: required ones first. */
+  private async documentsOf(c: PoolClient, id: string) {
+    const types = await c.query<{
+      id: string;
+      code: string;
+      name: string;
+      has_expiry: boolean;
+      required: boolean;
+      valid: number;
+    }>(
+      `SELECT t.id::text, t.code, t.name, t.has_expiry, d.required, d.valid
+         FROM app.employee_documents_due($1) d JOIN employee_document_types t ON t.id = d.type_id
+        ORDER BY d.required DESC, t.sort_order, t.name`,
+      [id],
+    );
+    const files = await c.query<{
+      id: string;
+      type_id: string;
+      file_id: string;
+      file_name: string | null;
+      content_type: string;
+      number: string | null;
+      issued_on: string | null;
+      expires_on: string | null;
+      remarks: string | null;
+      verified_at: Date | null;
+      verified_by: string | null;
+      uploaded_at: Date;
+    }>(
+      `SELECT d.id::text, d.type_id::text, d.file_id::text, f.original_name AS file_name, f.content_type,
+              d.number, d.issued_on::text, d.expires_on::text, d.remarks, d.verified_at,
+              (SELECT display_name FROM users WHERE id = d.verified_by) AS verified_by, d.created_at AS uploaded_at
+         FROM employee_documents d JOIN files f ON f.id = d.file_id
+        WHERE d.employee_id = $1 AND d.deleted_at IS NULL ORDER BY d.created_at DESC`,
+      [id],
+    );
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    const list = types.rows.map((t) => ({
+      typeId: t.id,
+      code: t.code,
+      name: t.name,
+      hasExpiry: t.has_expiry,
+      required: t.required,
+      done: t.valid > 0,
+      files: files.rows
+        .filter((f) => f.type_id === t.id)
+        .map((f) => ({
+          id: f.id,
+          fileId: f.file_id,
+          fileName: f.file_name,
+          contentType: f.content_type,
+          number: f.number,
+          issuedOn: f.issued_on,
+          expiresOn: f.expires_on,
+          expired: Boolean(f.expires_on && f.expires_on < today),
+          remarks: f.remarks,
+          verifiedAt: f.verified_at?.toISOString() ?? null,
+          verifiedBy: f.verified_by,
+          uploadedAt: f.uploaded_at.toISOString(),
+        })),
+    }));
+    const required = list.filter((x) => x.required);
+    return {
+      types: list,
+      required: required.length,
+      missing: required.filter((x) => !x.done).length,
+      unverified: files.rows.filter((f) => !f.verified_at).length,
+    };
+  }
+
+  /** Sets the teaching subjects (from Academics → Subjects). */
+  async setSubjects(ctx: RequestContext, id: string, subjectIds: string[]) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ok = await c.query(`SELECT 1 FROM employees WHERE id = $1 AND deleted_at IS NULL`, [
+        id,
+      ]);
+      if (!ok.rowCount) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      const known = await c.query<{ id: string }>(
+        `SELECT id::text FROM subjects WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+        [subjectIds],
+      );
+      if (known.rowCount !== new Set(subjectIds).size)
+        throw new DomainError('validation-failed', 'Unknown subject', { status: 400 });
+      await c.query(`DELETE FROM employee_subjects WHERE employee_id = $1`, [id]);
+      await c.query(
+        `INSERT INTO employee_subjects (school_id, employee_id, subject_id, created_by)
+         SELECT app.current_school_id(), $1, unnest($2::bigint[]), app.current_user_id() ON CONFLICT DO NOTHING`,
+        [id, subjectIds],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.subjects',
+        entityType: 'employees',
+        entityId: id,
+        after: { subjectIds },
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  /** Attaches an uploaded file (PDF or image) as a document of a type. */
+  async addDocument(
+    ctx: RequestContext,
+    id: string,
+    dto: {
+      typeId: string;
+      fileId: string;
+      number?: string;
+      issuedOn?: string;
+      expiresOn?: string;
+      remarks?: string;
+    },
+  ) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ok = await c.query(`SELECT 1 FROM employees WHERE id = $1 AND deleted_at IS NULL`, [
+        id,
+      ]);
+      if (!ok.rowCount) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      const t = await c.query<{ has_expiry: boolean }>(
+        `SELECT has_expiry FROM employee_document_types WHERE id = $1 AND status = 'active'`,
+        [dto.typeId],
+      );
+      if (!t.rows[0])
+        throw new DomainError('validation-failed', 'Unknown document type', { status: 400 });
+      if (t.rows[0].has_expiry && !dto.expiresOn)
+        throw new DomainError('validation-failed', 'This document needs its valid-till date', {
+          status: 400,
+        });
+      const f = await c.query<{ content_type: string; status: string }>(
+        `SELECT content_type, status FROM files WHERE id = $1 AND deleted_at IS NULL`,
+        [dto.fileId],
+      );
+      if (!f.rows[0] || !/^(application\/pdf|image\/(png|jpeg|webp))$/.test(f.rows[0].content_type))
+        throw new DomainError('validation-failed', 'Attach a PDF or an image', { status: 400 });
+      // the file belongs to the employee from now on
+      await c.query(
+        `UPDATE files SET owner_entity_type = 'employee', owner_entity_id = $2::text, classification = 'personal' WHERE id = $1`,
+        [dto.fileId, id],
+      );
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO employee_documents (school_id, employee_id, type_id, file_id, number, issued_on, expires_on, remarks, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, app.current_user_id()) RETURNING id::text`,
+        [
+          id,
+          dto.typeId,
+          dto.fileId,
+          dto.number ?? null,
+          dto.issuedOn ?? null,
+          dto.expiresOn ?? null,
+          dto.remarks ?? null,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.document.add',
+        entityType: 'employees',
+        entityId: id,
+        after: { documentId: r.rows[0]!.id, typeId: dto.typeId },
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  /** HR checks a document against the original (or takes the check back). */
+  async verifyDocument(ctx: RequestContext, id: string, docId: string, verified: boolean) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(
+        `UPDATE employee_documents SET verified_at = CASE WHEN $3 THEN now() END, verified_by = CASE WHEN $3 THEN app.current_user_id() END
+          WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL`,
+        [docId, id, verified],
+      );
+      if (!r.rowCount) throw new DomainError('not-found', 'Document not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: verified ? 'people.employee.document.verify' : 'people.employee.document.unverify',
+        entityType: 'employees',
+        entityId: id,
+        after: { documentId: docId },
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  async removeDocument(ctx: RequestContext, id: string, docId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(
+        `UPDATE employee_documents SET deleted_at = now() WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL`,
+        [docId, id],
+      );
+      if (!r.rowCount) throw new DomainError('not-found', 'Document not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.document.remove',
+        entityType: 'employees',
+        entityId: id,
+        after: { documentId: docId },
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  /** A short-lived link to one document's file (only through its employee). */
+  async documentFile(ctx: RequestContext, id: string, docId: string) {
+    const fileId = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ file_id: string }>(
+        `SELECT file_id::text FROM employee_documents WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL`,
+        [docId, id],
+      );
+      if (!r.rows[0]) throw new DomainError('not-found', 'Document not found', { status: 404 });
+      return r.rows[0].file_id;
+    });
+    return this.files.downloadUrl(ctx, fileId);
   }
 
   // ---- rows ----

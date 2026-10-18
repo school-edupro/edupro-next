@@ -723,4 +723,122 @@ describe('employee master (e2e)', () => {
         .statusCode,
     ).toBe(403);
   });
+
+  // ---- teaching subjects, employment documents ------------------------------------------------
+  it('teaching subjects from Academics → Subjects, several; unknown refused; in the list', async () => {
+    const [maths, phy] = await withMigrator(async (c) => {
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO subjects (school_id, code, name) VALUES ($1, 'MAT', 'Mathematics'), ($1, 'PHY', 'Physics') RETURNING id::text`,
+        [school.id],
+      );
+      return r.rows.map((x) => x.id);
+    });
+    const cat = (await get('/people/staff/catalogue')).json();
+    expect(cat.subjects.map((x: { name: string }) => x.name)).toEqual(['Mathematics', 'Physics']);
+    expect(cat.fields.map((f: { key: string }) => f.key)).not.toContain('teaching_subject');
+    const r = await put(`/people/staff/${ids.asha}/subjects`, { subjectIds: [maths, phy] });
+    expect(r.json().subjects.map((x: { name: string }) => x.name)).toEqual([
+      'Mathematics',
+      'Physics',
+    ]);
+    expect(
+      (await put(`/people/staff/${ids.asha}/subjects`, { subjectIds: ['999999999'] })).statusCode,
+    ).toBe(400);
+    const g = (
+      await post('/people/staff/grid', {
+        columns: [{ key: 'teaching_subjects' }],
+        filters: [{ key: 'teaching_subjects', op: 'contains', values: ['physics'] }],
+      })
+    ).json();
+    expect(g.rows.map((x: { employee_code: string }) => x.employee_code)).toEqual(['KV0042']);
+    expect(g.rows[0].teaching_subjects).toBe('Mathematics, Physics');
+  });
+
+  it('documents: the school list (required for all / teaching / non-teaching), upload, expiry needed, verify, file link, remove; missing counted', async () => {
+    const before = (await get(`/people/staff/${ids.asha}/profile`)).json().documents;
+    // ASHA is teaching (Teaching Junior): the documents for all plus those for teaching
+    const req = before.types
+      .filter((t: { required: boolean }) => t.required)
+      .map((t: { code: string }) => t.code);
+    expect(req).toEqual(
+      expect.arrayContaining(['photo', 'aadhaar', 'graduation', 'teacher_training', 'police']),
+    );
+    expect(before).toMatchObject({ required: req.length, missing: req.length });
+    // the accountant (non-teaching) is not asked for a teaching qualification
+    const bala = (await get(`/people/staff/${ids.bala}/profile`)).json().documents;
+    expect(bala.types.find((t: { code: string }) => t.code === 'teacher_training').required).toBe(
+      false,
+    );
+    const upload = async (name: string) => {
+      const bytes = Buffer.from('%PDF-1.4\n% employee document\n');
+      const slot = await post('/platform/files', {
+        fileName: name,
+        contentType: 'application/pdf',
+        sizeBytes: bytes.length,
+      });
+      expect(slot.statusCode).toBe(201);
+      const putr = await inject({
+        method: 'PUT',
+        url: slot.json().upload.url,
+        headers: {},
+        raw: { body: bytes, contentType: 'application/pdf' },
+      } as never);
+      expect(putr.statusCode).toBe(200);
+      return slot.json().file.id as string;
+    };
+    const typeOf = (code: string) =>
+      before.types.find((t: { code: string }) => t.code === code).typeId;
+    const noExpiry = await post(`/people/staff/${ids.asha}/documents`, {
+      typeId: typeOf('police'),
+      fileId: await upload('police.pdf'),
+    });
+    expect(noExpiry.json().detail).toContain('valid-till');
+    const a = await post(`/people/staff/${ids.asha}/documents`, {
+      typeId: typeOf('aadhaar'),
+      fileId: await upload('aadhaar.pdf'),
+      number: 'XXXX-9012',
+    });
+    expect(a.statusCode).toBe(201);
+    const pol = await post(`/people/staff/${ids.asha}/documents`, {
+      typeId: typeOf('police'),
+      fileId: await upload('police.pdf'),
+      issuedOn: '2024-01-01',
+      expiresOn: '2025-01-01',
+    });
+    const docs = pol.json().documents;
+    // an expired police verification does not count
+    expect(docs.missing).toBe(req.length - 1);
+    const police = docs.types.find((t: { code: string }) => t.code === 'police');
+    expect(police).toMatchObject({ done: false });
+    expect(police.files[0]).toMatchObject({ expired: true, verifiedAt: null });
+    const aad = docs.types.find((t: { code: string }) => t.code === 'aadhaar').files[0];
+    const v = await put(`/people/staff/${ids.asha}/documents/${aad.id}/verify`, { verified: true });
+    expect(
+      v.json().documents.types.find((t: { code: string }) => t.code === 'aadhaar').files[0]
+        .verifiedBy,
+    ).toBeTruthy();
+    const link = await get(`/people/staff/${ids.asha}/documents/${aad.id}/file`);
+    expect(link.statusCode).toBe(200);
+    expect(link.json().download.url).toBeTruthy();
+    // someone else's document id is not found through this employee
+    expect((await get(`/people/staff/${ids.bala}/documents/${aad.id}/file`)).statusCode).toBe(404);
+    const g = (
+      await post('/people/staff/grid', {
+        columns: [{ key: 'documents_missing' }, { key: 'documents_status' }],
+        search: 'KV0042',
+      })
+    ).json();
+    expect(g.rows[0]).toMatchObject({
+      documents_missing: req.length - 1,
+      documents_status: 'Pending',
+    });
+    const rm = await inject({
+      method: 'DELETE',
+      url: `/people/staff/${ids.asha}/documents/${aad.id}`,
+      headers: h(),
+    });
+    expect(rm.json().documents.missing).toBe(req.length);
+    // the school edits the list in Staff setup
+    expect((await get('/masters/employee_document_types/rows')).statusCode).toBe(200);
+  });
 });
