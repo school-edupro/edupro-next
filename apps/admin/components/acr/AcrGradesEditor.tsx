@@ -10,16 +10,19 @@ import type { AcrBand } from '@/lib/acr';
 export function AcrGradesEditor({
   scaleLabels,
   representationDays,
+  staffLateAfter,
   bands,
   canEdit,
 }: {
   scaleLabels: string[];
   representationDays: number;
+  staffLateAfter: string;
   bands: AcrBand[];
   canEdit: boolean;
 }) {
   const [words, setWords] = useState<string[]>(scaleLabels);
   const [days, setDays] = useState(representationDays);
+  const [late, setLate] = useState(staffLateAfter);
   const [rows, setRows] = useState<AcrBand[]>(bands);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
@@ -28,6 +31,7 @@ export function AcrGradesEditor({
       const r = await saveAcrSettings({
         scaleLabels: words.map((w) => w.trim()).filter(Boolean),
         representationDays: days,
+        staffLateAfter: late,
         bands: [...rows].sort((a, b) => b.minPct - a.minPct),
       });
       setMsg(r.ok ? { tone: 'success', text: 'Saved.' } : { tone: 'danger', text: r.error });
@@ -87,6 +91,17 @@ export function AcrGradesEditor({
             value={days}
             disabled={!canEdit}
             onChange={(e) => setDays(Number(e.target.value))}
+          />
+        </label>
+        <label className="ep-field" htmlFor="acr-late">
+          <span className="ep-field__label">A staff punch after this time is a late arrival</span>
+          <input
+            id="acr-late"
+            className="ep-input"
+            type="time"
+            value={late}
+            disabled={!canEdit}
+            onChange={(e) => setLate(e.target.value)}
           />
         </label>
       </section>

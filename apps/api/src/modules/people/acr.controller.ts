@@ -1,8 +1,32 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import { AcrCycleDto, AcrLevelsDto, AcrQuestionDto, AcrSettingsDto } from './acr.dto';
+import {
+  AcrCycleDto,
+  AcrDecideDto,
+  AcrLevelDto,
+  AcrLevelsDto,
+  AcrOfficeFactsDto,
+  AcrQuestionDto,
+  AcrReasonDto,
+  AcrRepresentDto,
+  AcrReviewersDto,
+  AcrSelfDto,
+  AcrSettingsDto,
+} from './acr.dto';
+import { AcrFlowService } from './acr-flow.service';
 import { AcrSetupService } from './acr-setup.service';
 import { PEOPLE } from './people.permissions';
 
@@ -11,7 +35,10 @@ import { PEOPLE } from './people.permissions';
 @ApiBearerAuth()
 @Controller('people/acr')
 export class AcrController {
-  constructor(private readonly setup: AcrSetupService) {}
+  constructor(
+    private readonly setup: AcrSetupService,
+    private readonly flow: AcrFlowService,
+  ) {}
 
   @Get('setup')
   @ApiOperation({ summary: 'ACR set-up: rating words, grade bands, levels, questions, cycles' })
@@ -64,5 +91,143 @@ export class AcrController {
   @RequirePermission(PEOPLE.acrManage)
   editCycle(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrCycleDto) {
     return this.setup.saveCycle(ctx, id, body);
+  }
+
+  // ---- the flow (part 2) ----
+
+  @Post('cycles/:id/start')
+  @ApiOperation({
+    summary: 'Open a cycle: an ACR for every active employee (again for later joiners)',
+  })
+  @RequirePermission(PEOPLE.acrManage)
+  start(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.flow.start(ctx, id);
+  }
+
+  @Post('cycles/:id/close')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Close a cycle' })
+  @RequirePermission(PEOPLE.acrManage)
+  close(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.flow.closeCycle(ctx, id);
+  }
+
+  @Get('board')
+  @ApiOperation({ summary: 'Every ACR of a cycle with where it stands' })
+  @RequirePermission(PEOPLE.acrView)
+  board(@ReqCtx() ctx: RequestContext, @Query('cycle') cycle?: string) {
+    return this.flow.board(ctx, cycle && /^\d{1,18}$/.test(cycle) ? cycle : undefined);
+  }
+
+  @Get('mine')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'My ACRs' })
+  mine(@ReqCtx() ctx: RequestContext) {
+    return this.flow.mine(ctx);
+  }
+
+  @Get('to-assess')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'ACRs waiting on me at a level, and those I filled' })
+  toAssess(@ReqCtx() ctx: RequestContext) {
+    return this.flow.toAssess(ctx);
+  }
+
+  @Get('reports/:id')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'One ACR, as far as the viewer may see it' })
+  report(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.flow.view(ctx, id);
+  }
+
+  @Put('reports/:id/self')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Save my self-appraisal (draft)' })
+  saveSelf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrSelfDto) {
+    return this.flow.saveSelf(ctx, id, body);
+  }
+
+  @Post('reports/:id/self/submit')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Submit my self-appraisal to the first level' })
+  submitSelf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrSelfDto) {
+    return this.flow.submitSelf(ctx, id, body);
+  }
+
+  @Put('reports/:id/levels/:seq')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Save my level (draft)' })
+  saveLevel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('seq', ParseIntPipe) seq: number,
+    @Body() body: AcrLevelDto,
+  ) {
+    return this.flow.saveLevel(ctx, id, seq, body);
+  }
+
+  @Post('reports/:id/levels/:seq/submit')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Submit my level; the last one shows the ACR to the employee' })
+  submitLevel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('seq', ParseIntPipe) seq: number,
+    @Body() body: AcrLevelDto,
+  ) {
+    return this.flow.submitLevel(ctx, id, seq, body);
+  }
+
+  @Post('reports/:id/send-back')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Send it back one step with a reason' })
+  sendBack(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrReasonDto) {
+    return this.flow.sendBack(ctx, id, body);
+  }
+
+  @Put('reports/:id/levels/:seq/people')
+  @ApiOperation({ summary: 'Who fills a level of this ACR' })
+  @RequirePermission(PEOPLE.acrManage)
+  people(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('seq', ParseIntPipe) seq: number,
+    @Body() body: AcrReviewersDto,
+  ) {
+    return this.flow.setReviewers(ctx, id, seq, body);
+  }
+
+  @Put('reports/:id/office')
+  @ApiOperation({ summary: 'The office’s figures for the year (leave taken)' })
+  @RequirePermission(PEOPLE.acrManage)
+  office(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrOfficeFactsDto) {
+    return this.flow.officeFacts(ctx, id, body);
+  }
+
+  @Post('reports/:id/acknowledge')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'I have seen my ACR' })
+  acknowledge(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.flow.acknowledge(ctx, id);
+  }
+
+  @Post('reports/:id/represent')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Object to an adverse grade within the days set' })
+  represent(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrRepresentDto) {
+    return this.flow.represent(ctx, id, body);
+  }
+
+  @Post('reports/:id/decide')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Decide an objection: grade upheld or revised' })
+  @RequirePermission(PEOPLE.acrManage)
+  decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrDecideDto) {
+    return this.flow.decide(ctx, id, body);
   }
 }

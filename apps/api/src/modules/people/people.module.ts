@@ -1,4 +1,5 @@
 import { AcrController } from './acr.controller';
+import { AcrFlowService } from './acr-flow.service';
 import { AcrSetupService } from './acr-setup.service';
 import { EmployeeTransferController } from './employee-transfer.controller';
 import { EmployeeTransferService } from './employee-transfer.service';
@@ -40,6 +41,7 @@ import { StudentsService } from './students.service';
   ],
   providers: [
     AcrSetupService,
+    AcrFlowService,
     EmployeeProfileService,
     EmployeeGridService,
     EmployeeBulkService,

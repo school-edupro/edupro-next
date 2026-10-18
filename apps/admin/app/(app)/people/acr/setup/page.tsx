@@ -87,6 +87,7 @@ export default async function AcrSetupPage({
         <AcrGradesEditor
           scaleLabels={s.settings.scaleLabels}
           representationDays={s.settings.representationDays}
+          staffLateAfter={s.settings.staffLateAfter}
           bands={s.bands}
           canEdit={canEdit}
         />

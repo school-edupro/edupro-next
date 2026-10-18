@@ -43,7 +43,7 @@ export interface AcrCycle {
   closed: number;
 }
 export interface AcrSetup {
-  settings: { scaleLabels: string[]; representationDays: number };
+  settings: { scaleLabels: string[]; representationDays: number; staffLateAfter: string };
   bands: AcrBand[];
   levels: Record<StaffGroup, AcrLevel[]>;
   questions: AcrQuestion[];

@@ -34,6 +34,7 @@ const problem = (e: unknown): { ok: false; error: string } => {
 export async function saveAcrSettings(input: {
   scaleLabels: string[];
   representationDays: number;
+  staffLateAfter: string;
   bands: AcrBand[];
 }): Promise<Out> {
   try {

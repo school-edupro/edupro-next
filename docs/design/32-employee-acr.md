@@ -44,11 +44,30 @@ schools) and HR suites (Darwinbox, Keka).
 - Admin: Employee management → **ACR set-up** with tabs Cycles, Approval levels, Questions, Scale and
   grades. Test: `apps/api/test/acr.e2e-spec.ts`.
 
-## Part 2 — the flow (next)
+## Part 2 — the flow (migration 0185, built)
 
-Start a cycle (an ACR for every active employee, the levels resolved to people), self-appraisal (window
-enforced on the server, auto facts), each level in turn (only its people; send back one step with a reason),
-score and grade, disclosure, acknowledgement, objection and decision, events log.
+- **Start a cycle** (`POST people/acr/cycles/:id/start`): an ACR for every active employee who has none
+  (run again for later joiners); teaching or non-teaching from the department / employee type (contract
+  staff of a mixed department: teaching when they have classes that year); each level's people resolved
+  (ACR HOD / L1–L3 from the record, role, designation, named person; never the employee). Levels left with
+  nobody are listed; the school fills them (`PUT reports/:id/levels/:seq/people`).
+- **Self-appraisal** (`PUT reports/:id/self`, `POST …/self/submit`): only the employee, only inside the
+  window (or after being sent back), every required answer, ratings within the scale. On submit the
+  school's facts are kept with it: days present and late arrivals (staff punches after the "late after"
+  time, set in Scale and grades), results of the sections taught (latest exam: students, average, pass %
+  at 33, distinctions at 75), education / experience / documents, the activity log. The office enters
+  the leave taken (`PUT reports/:id/office`).
+- **Levels** (`PUT/POST reports/:id/levels/:seq[/submit]`): only that level's people, only at its turn.
+  A rating level answers the rating questions (weighted score % → grade); a review level gives a grade
+  (a different one from the level before needs a reason), agree / partly / disagree and remarks.
+  `POST reports/:id/send-back` (with a reason) returns it one step, to the employee from level 1.
+- **After the last level** the ACR is shown to the employee (score of the last rating level, grade of the
+  last level, adverse from the bands, days to object counted). The employee acknowledges (final) or, for
+  an adverse grade within the days, objects; the school decides upheld or revised (`decide`). An ACR not
+  objected to in time becomes final by itself.
+- **Who sees what:** the school's ACR people everything; the employee their own (the levels only once
+  shown to them); a level's people everything up to their level. Every step is in `acr_events`.
+- Lists: `board` (a cycle's ACRs with status, level, who it waits on, score, grade), `mine`, `to-assess`.
 
 ## Part 3 — screens (after)
 

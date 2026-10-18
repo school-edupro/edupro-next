@@ -9,6 +9,11 @@ const Group = z.enum(['teaching', 'non_teaching']);
 export const AcrSettingsSchema = z.object({
   scaleLabels: z.array(z.string().trim().min(1).max(40)).min(3).max(10),
   representationDays: z.number().int().min(0).max(90),
+  /** a staff punch after this time is a late arrival */
+  staffLateAfter: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('08:00'),
   bands: z
     .array(
       z.object({
@@ -74,3 +79,54 @@ export const AcrCycleSchema = z
     path: ['selfTo'],
   });
 export class AcrCycleDto extends createZodDto(AcrCycleSchema) {}
+
+/** The answers of a form: question id → a rating (1 to the scale's top) or written text. */
+const Answers = z.record(
+  z.string().regex(/^\d{1,18}$/),
+  z.union([z.number().int().min(1).max(10), z.string().max(4000)]),
+);
+
+export const AcrSelfSchema = z.object({ answers: Answers });
+export class AcrSelfDto extends createZodDto(AcrSelfSchema) {}
+
+export const AcrLevelSchema = z.object({
+  answers: Answers.default({}),
+  remarks: z.string().trim().max(4000).nullable().optional(),
+  /** review levels: the grade given (a grade name of the bands), why when it differs from the score's */
+  grade: z.string().trim().max(40).nullable().optional(),
+  gradeReason: z.string().trim().max(1000).nullable().optional(),
+  agreement: z.enum(['agree', 'partly', 'disagree']).nullable().optional(),
+});
+export class AcrLevelDto extends createZodDto(AcrLevelSchema) {}
+
+export const AcrReasonSchema = z.object({ reason: z.string().trim().min(5, 'say why').max(1000) });
+export class AcrReasonDto extends createZodDto(AcrReasonSchema) {}
+
+export const AcrRepresentSchema = z.object({
+  text: z.string().trim().min(20, 'write at least a few lines').max(4000),
+});
+export class AcrRepresentDto extends createZodDto(AcrRepresentSchema) {}
+
+export const AcrDecideSchema = z
+  .object({
+    decision: z.enum(['upheld', 'revised']),
+    grade: z.string().trim().max(40).nullable().optional(),
+    note: z.string().trim().min(5).max(2000),
+  })
+  .refine((d) => d.decision === 'upheld' || Boolean(d.grade), {
+    message: 'give the revised grade',
+    path: ['grade'],
+  });
+export class AcrDecideDto extends createZodDto(AcrDecideSchema) {}
+
+export const AcrReviewersSchema = z.object({ employeeIds: z.array(Id).min(1).max(20) });
+export class AcrReviewersDto extends createZodDto(AcrReviewersSchema) {}
+
+export const AcrOfficeFactsSchema = z.object({
+  cl: z.number().min(0).max(366).nullable().optional(),
+  el: z.number().min(0).max(366).nullable().optional(),
+  other: z.number().min(0).max(366).nullable().optional(),
+  absent: z.number().min(0).max(366).nullable().optional(),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+export class AcrOfficeFactsDto extends createZodDto(AcrOfficeFactsSchema) {}
