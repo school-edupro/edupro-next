@@ -87,3 +87,14 @@ experience, remarks and transfers). Built in three parts.
   API is unchanged).
 - Tests: the part 3 cases of `apps/api/test/employee-master.e2e-spec.ts` (templates, create with next
   codes and logins, errors by cell, commit once, update old → new, CLEAR, masked numbers).
+
+## Follow-up (18 Oct 2026, migration 0178)
+
+- The staff drop-downs (MaritalStatus, NatureOfAppointment, StaffRole, PayBand, Language, Qualification,
+  EducationMode) are rows of the profile lists master for every school (`app.staff_profile_lists_seed`,
+  also run when the employee pages first open), so they are seen and edited in System setup → Profile
+  lists (students and staff), `/masters/system?tab=profile_lists&q=<List>`; a list a school already
+  filled is left as it is.
+- Each drop-down on the employee form says where its list is kept (Profile lists, Staff setup,
+  System setup cities / states / countries, Fees setup banks).
+

@@ -78,7 +78,7 @@ export class EmployeeGridService {
   /** Every field that can be a column or a filter, with drop-down values for the filters. */
   async fields(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`);
       const lists = await loadEmployeeLists(c);
       const fixed: Record<string, string[]> = {
         employee_status: ['Active', 'Inactive'],

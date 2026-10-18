@@ -83,6 +83,9 @@ describe('employee master (e2e)', () => {
     const m = await get('/masters/designations/rows');
     expect(m.statusCode).toBe(200);
     expect(JSON.stringify(m.json())).toContain('Sr. Teacher');
+    // the staff drop-downs are rows of the profile lists master, editable there
+    const lists = await get('/masters/profile_lists/rows?q=MaritalStatus&size=50');
+    expect(JSON.stringify(lists.json())).toContain('Married');
   });
 
   it('quick onboarding: the minimum, the next code, a posting, a staff login with a role', async () => {

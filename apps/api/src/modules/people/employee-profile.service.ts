@@ -27,6 +27,17 @@ import { PEOPLE } from './people.permissions';
 
 type Row = Record<string, unknown>;
 
+/** Where the school edits a drop-down (shown under the field). */
+function listPath(list: string): string {
+  if (list === 'Department' || list === 'Designation' || list === 'EmployeeType')
+    return `List: People → Staff setup → ${list === 'EmployeeType' ? 'Employee types' : `${list}s`}`;
+  if (list === 'City' || list === 'State' || list === 'Country')
+    return `List: System setup → ${list === 'City' ? 'Cities' : list === 'Country' ? 'Countries' : 'States'}`;
+  if (list === 'Bank') return 'List: Fees setup → Banks';
+  if (list === 'YesNo') return '';
+  return `List: System setup → Profile lists (${list})`;
+}
+
 /** The row tables: their table, columns (API key → column) and order. */
 const ROWS: Record<
   EmployeeRowKind,
@@ -99,7 +110,9 @@ export class EmployeeProfileService {
   async catalogue(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       // a school opening the master the first time gets its staff setup lists
-      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`,
+      );
       const lists = await loadEmployeeLists(c);
       const geo = await c.query<{
         kind: string;
@@ -136,7 +149,7 @@ export class EmployeeProfileService {
                 ? optionsOf(f as never, lists)
                 : null,
           upper: f.upper ?? false,
-          help: f.help ?? null,
+          help: f.help ?? (f.list ? listPath(f.list) : null),
           when: f.when ?? null,
           sensitive: f.sensitive ?? false,
           readOnly: f.store.t === 'auto',
@@ -275,7 +288,9 @@ export class EmployeeProfileService {
   /** Quick onboarding: the minimum fields (code filled with the next one), and a staff login if asked. */
   async onboard(ctx: RequestContext, dto: EmployeeOnboardDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`,
+      );
       const lists = await loadEmployeeLists(c);
       const raw: Record<string, unknown> = { ...dto.values };
       if (!raw.employee_code) raw.employee_code = await nextEmployeeCode(c);

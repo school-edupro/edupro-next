@@ -120,7 +120,7 @@ export class EmployeeBulkService {
       });
     const cols = this.columns(q.mode, keys);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`);
       const lists = await loadEmployeeLists(c);
       const wb = new ExcelJS.Workbook();
       wb.creator = 'EduPro';
@@ -268,7 +268,7 @@ export class EmployeeBulkService {
     );
 
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id())`);
       const lists = await loadEmployeeLists(c);
       const existing = new Map<string, string>();
       for (const x of (
