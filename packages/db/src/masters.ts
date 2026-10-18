@@ -747,7 +747,11 @@ export const MASTERS: MasterDefinition[] = [
         type: 'select',
         required: true,
         identity: true,
-        options: [...Object.keys(PROFILE_LIST_DEFAULTS), ...Object.keys(EMPLOYEE_LIST_DEFAULTS)],
+        // countries, states and cities are their own System setup masters
+        options: [
+          ...Object.keys(PROFILE_LIST_DEFAULTS),
+          ...Object.keys(EMPLOYEE_LIST_DEFAULTS),
+        ].filter((k) => !['Country', 'State', 'City'].includes(k)),
         width: 16,
         help: 'Which drop-down this value belongs to (Religion, Occupation, Income, Marital status, Pay band, Qualification …)',
       },

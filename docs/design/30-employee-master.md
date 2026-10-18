@@ -97,4 +97,7 @@ experience, remarks and transfers). Built in three parts.
   filled is left as it is.
 - Each drop-down on the employee form says where its list is kept (Profile lists, Staff setup,
   System setup cities / states / countries, Fees setup banks).
-
+- (migration 0179) Profile lists no longer keep Country, State or City: those are the System setup
+  masters Countries, States and Cities (the forms read them first; a school without them falls back to
+  the built-in country and state lists in code). The old rows are removed and the list codes are no
+  longer offered.
