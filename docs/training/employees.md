@@ -51,6 +51,11 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 - **Export Excel / PDF** gives exactly what you see; **Save as report** keeps it in the Report builder
   (Report builder → New employee report also starts one from scratch).
 
+## Filters with several values
+
+- Each filter above the list takes several values: open it, tick (type to search), Done, then Apply.
+  On Students, pick one or more **Class** first; Class-Section then offers only their sections.
+
 ## A saved report for the list on screen
 
 - Filter the list (department, status, search…), press **Download report**, pick a saved report and

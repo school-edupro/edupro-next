@@ -5443,7 +5443,7 @@ a.ep-tabs__tab {
   margin-bottom: var(--sp-3);
 }
 .ep-att__tile {
-  border: 1px solid var(--border-subtle, var(--border-strong));
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md, 8px);
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-subtle);
@@ -8180,3 +8180,78 @@ a.db-list__main:hover strong {
 /* report builder: "Ask when running" under a filter row */
 .ep-rb__ask { margin: calc(-1 * var(--sp-1)) 0 var(--sp-2); }
 .ep-rb__askhelp { margin: 0 0 var(--sp-3); }
+
+/* ---- several values in one drop-down (the lists' quick filters; MultiPick) ------------------------ */
+.ep-mp {
+  position: relative;
+}
+.ep-mp__button {
+  position: relative;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding-right: var(--sp-6);
+}
+/* the drop-down arrow a native select draws */
+.ep-mp__button::after {
+  content: '';
+  position: absolute;
+  right: var(--sp-3);
+  top: 50%;
+  width: 0.45em;
+  height: 0.45em;
+  border-right: 1.5px solid var(--text-body);
+  border-bottom: 1.5px solid var(--text-body);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.ep-mp__summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ep-mp__panel {
+  position: absolute;
+  z-index: 150;
+  top: 100%;
+  left: 0;
+  min-width: 100%;
+  margin-top: var(--sp-1);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-overlay);
+}
+.ep-mp__search {
+  margin: var(--sp-2);
+  width: auto;
+}
+.ep-mp__list {
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-1) 0;
+}
+.ep-mp__option {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) var(--sp-3);
+  white-space: nowrap;
+}
+.ep-mp__empty {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-mp__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-top: 1px solid var(--border-default);
+}

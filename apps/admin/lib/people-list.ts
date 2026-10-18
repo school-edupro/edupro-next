@@ -27,6 +27,7 @@ export interface PeopleListResult<St = Record<string, number>> {
 export interface PeopleListFields {
   sections: Array<{ id: string; title: string }>;
   fields: BuilderField[];
+  sectionClass?: Record<string, string>;
 }
 export type PeopleRow = Record<string, string | number | null>;
 
@@ -35,6 +36,13 @@ export interface PeopleListConfig<V extends PeopleListView, R extends PeopleList
   noun: { one: string; many: string; heading: string };
   defaultView: V;
   quickFilters: string[];
+  /** Narrows one quick filter's options by the others chosen (the students' sections by class). */
+  quickOptions?: (
+    key: string,
+    options: string[],
+    chosen: Record<string, string[]>,
+    fields: PeopleListFields,
+  ) => string[];
   statuses: Array<{ value: V['status']; label: string }>;
   /** The status the list opens on and "Clear" goes back to. */
   defaultStatus: V['status'];

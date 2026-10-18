@@ -26,6 +26,15 @@ const STUDENTS: PeopleListConfig<StudentListView, StudentListResult> = {
   noun: { one: 'student', many: 'students', heading: 'Student' },
   defaultView: DEFAULT_VIEW,
   quickFilters: QUICK_FILTERS,
+  // classes chosen: only their sections are offered (a section already ticked stays)
+  quickOptions(key, options, chosen, fields) {
+    const classes = chosen.class ?? [];
+    if (key !== 'class_section' || !classes.length || !fields.sectionClass) return options;
+    const of = fields.sectionClass;
+    return options.filter(
+      (o) => classes.includes(of[o] ?? '') || (chosen.class_section ?? []).includes(o),
+    );
+  },
   statuses: [
     { value: 'active', label: 'Active' },
     { value: 'inactive', label: 'Inactive' },

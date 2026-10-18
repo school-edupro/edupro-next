@@ -78,6 +78,14 @@ shared by siblings; PDF holds 15 columns on A4 and 25 on A3.
 - Fixed: a report saved before the dataset field existed showed as changed (Save lit, downloads asked
   to save first).
 
+### List quick filters take several values (18 Oct 2026)
+
+- Every quick filter on the Students and Employees lists is a multi-pick (`components/people/MultiPick.tsx`:
+  search from 8 options, ticks, All / Done) and filters with "is one of".
+- Students: a **Class** filter (the class master's classes with sections this year, in display order)
+  before Class-Section; choosing classes narrows the sections offered (`sectionClass` from
+  `people/students/grid/fields`). Sections are listed in class order too.
+
 ## Bulk upload
 
 The template carries an Instructions sheet and a hidden Lists sheet for drop-downs. The check step

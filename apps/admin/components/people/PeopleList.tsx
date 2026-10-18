@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { ExportWatcher } from '../ExportWatcher';
 import { FilterRow } from '../ReportBuilder';
+import { MultiPick } from './MultiPick';
 import {
   runtimeOf,
   type ReportChoice,
@@ -128,13 +129,14 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
 
   const isQuick = (f: V['filters'][number]) =>
     config.quickFilters.includes(f.key) && (f.op === 'eq' || f.op === 'in');
-  const quickOf = (v: V): Record<string, string> =>
-    Object.fromEntries(v.filters.filter(isQuick).map((f) => [f.key, f.values?.[0] ?? '']));
+  const quickOf = (v: V): Record<string, string[]> =>
+    Object.fromEntries(v.filters.filter(isQuick).map((f) => [f.key, f.values ?? []]));
   // the filter row is filled first and used on Apply (as on the withdrawal register)
   const [status, setStatus] = useState<V['status']>(initialView.status);
-  const [quick, setQuickDraft] = useState<Record<string, string>>(() => quickOf(initialView));
-  const quickValue = (key: string) => quick[key] ?? '';
-  const setQuick = (key: string, value: string) => setQuickDraft((q) => ({ ...q, [key]: value }));
+  // each quick filter takes several values (e.g. VI-A and VI-B)
+  const [quick, setQuickDraft] = useState<Record<string, string[]>>(() => quickOf(initialView));
+  const quickValue = (key: string) => quick[key] ?? [];
+  const setQuick = (key: string, value: string[]) => setQuickDraft((q) => ({ ...q, [key]: value }));
   const applyRow = () =>
     apply({
       ...view,
@@ -143,8 +145,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
       filters: [
         ...view.filters.filter((f) => !isQuick(f)),
         ...Object.entries(quick)
-          .filter(([, v]) => v)
-          .map(([key, v]) => ({ key, op: 'eq' as const, values: [v] })),
+          .filter(([, v]) => v.length)
+          .map(([key, v]) => ({ key, op: 'in' as const, values: v })),
       ],
     });
   const clearRow = () => {
@@ -243,26 +245,18 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
             const f = byKey.get(key);
             if (!f) return null;
             return (
-              <label key={key} className="ep-field" htmlFor={`sl-q-${key}`} style={{ margin: 0 }}>
-                <span className="ep-field__label">{f.label}</span>
-                <select
-                  id={`sl-q-${key}`}
-                  className="ep-select"
-                  value={quickValue(key)}
-                  onChange={(e) => setQuick(key, e.target.value)}
-                >
-                  <option value="">All</option>
-                  {/* a value from a saved view that is no longer in the list stays visible */}
-                  {quickValue(key) && !(f.options ?? []).includes(quickValue(key)) ? (
-                    <option value={quickValue(key)}>{quickValue(key)}</option>
-                  ) : null}
-                  {(f.options ?? []).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiPick
+                key={key}
+                id={`sl-q-${key}`}
+                label={f.label}
+                options={
+                  config.quickOptions
+                    ? config.quickOptions(key, f.options ?? [], quick, fields)
+                    : (f.options ?? [])
+                }
+                value={quickValue(key)}
+                onChange={(v) => setQuick(key, v)}
+              />
             );
           })}
           <label className="ep-field" htmlFor="sl-search" style={{ margin: 0 }}>

@@ -96,9 +96,12 @@ export class StudentGridService {
     const showSensitive = ctx.permissions?.has(PEOPLE.sensitiveView) ?? false;
     return this.db.tenant(tenant, async (c) => {
       const lists = await loadProfileLists(c);
-      const sections = await c.query<{ label: string }>(
-        `SELECT c.code || '-' || cs.name AS label FROM class_sections cs JOIN classes c ON c.id = cs.class_id
-          WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL ORDER BY c.code, cs.name`,
+      // in the class master's order (I, II … XII), not alphabetical
+      const sections = await c.query<{ label: string; class_name: string }>(
+        `SELECT c.code || '-' || cs.name AS label, c.name AS class_name
+           FROM class_sections cs JOIN classes c ON c.id = cs.class_id
+          WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND c.deleted_at IS NULL
+          ORDER BY c.display_order, c.code, cs.name`,
         [tenant.academicYearId ?? null],
       );
       const discounts = await c.query<{ name: string }>(
@@ -110,6 +113,8 @@ export class StudentGridService {
       );
       const fixed: Record<string, string[]> = {
         class_section: sections.rows.map((x) => x.label),
+        // the class master's classes that have sections this year
+        class: [...new Set(sections.rows.map((x) => x.class_name))],
         student_status: ['Active', 'Inactive'],
         enrolment_status: ['Active', 'Promoted', 'Transferred', 'Withdrawn', 'Left'],
         fee_discount: discounts.rows.map((x) => x.name),
@@ -118,6 +123,8 @@ export class StudentGridService {
       };
       return {
         sections: REPORT_SECTIONS,
+        // each section's class, so choosing a class narrows the sections offered
+        sectionClass: Object.fromEntries(sections.rows.map((x) => [x.label, x.class_name])),
         fields: STUDENT_REPORT_FIELDS.map((f) => ({
           ...f,
           options: fixed[f.key] ?? (f.list ? (lists[f.list] ?? null) : null),

@@ -31,6 +31,8 @@ export interface StudentListResult {
 export interface StudentListFields {
   sections: Array<{ id: string; title: string }>;
   fields: BuilderField[];
+  /** each section's class ("VI-A" → "Class VI") */
+  sectionClass?: Record<string, string>;
 }
 
 export const DEFAULT_VIEW: StudentListView = {
@@ -54,6 +56,7 @@ export const DEFAULT_VIEW: StudentListView = {
 
 /** Quick filters above the table; everything else goes through "More filters". */
 export const QUICK_FILTERS: string[] = [
+  'class',
   'class_section',
   'category',
   'gender',
