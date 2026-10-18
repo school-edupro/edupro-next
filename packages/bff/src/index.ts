@@ -26,6 +26,8 @@ export interface Session {
   schoolId?: string;
   /** Sprint 12: a previous (closed or locked) year chosen for history views; absent = the active year. */
   academicYearId?: string;
+  /** Opened by the school as this person (0183): the banner shows and "End" closes it. */
+  viewAs?: boolean;
 }
 
 export interface Me {
@@ -48,6 +50,14 @@ export interface Me {
     endDate: string;
   }>;
   permissions: string[];
+  /** Present when the school opened this portal as the person (0183). */
+  impersonation?: {
+    sessionId: string;
+    byDisplayName: string;
+    expiresAt: string;
+    mode: 'full' | 'view' | 'act';
+    app: 'admin' | 'parent' | 'teacher';
+  } | null;
 }
 
 export class ApiError extends Error {
@@ -291,9 +301,65 @@ export function createBff(options: BffOptions) {
     },
     /** POST /api/auth/logout */
     async logout(req: NextRequest) {
+      // a portal the school opened as someone: signing out also ends that session
+      if ((await session.read())?.viewAs) return handlers.endView(req);
       await session.clear();
       // signedOut=1 lets the app shell drop its offline cache of personal pages (Sprint 21)
       return NextResponse.redirect(new URL('/login?signedOut=1', req.url), { status: 303 });
+    },
+    /**
+     * GET /api/auth/handoff?code=… : the school opened this portal as someone (0183). The one-time code
+     * is handed to the API for the session token; any session of this app in this browser is replaced.
+     */
+    async handoff(req: NextRequest) {
+      const code = req.nextUrl.searchParams.get('code') ?? '';
+      if (code.length < 20 || code.length > 200)
+        return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+      try {
+        const r = await fetch(`${env.apiBaseUrl}/api/v1/access/portal-as/handoff`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code, app: appName }),
+          signal: AbortSignal.timeout(5000),
+          cache: 'no-store',
+        });
+        if (!r.ok) return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+        const t = (await r.json()) as {
+          token: string;
+          sub: string;
+          displayName: string;
+          schoolId: string;
+          expiresAt: string;
+        };
+        await session.write({
+          sub: t.sub,
+          accessToken: t.token,
+          expiresAt: Math.floor(new Date(t.expiresAt).getTime() / 1000),
+          displayName: t.displayName,
+          schoolId: t.schoolId,
+          viewAs: true,
+        });
+        return NextResponse.redirect(new URL(home, req.url));
+      } catch {
+        return NextResponse.redirect(new URL('/login?error=handoff', req.url));
+      }
+    },
+    /** POST /api/auth/end-view: ends the session the school opened (at the API too) and signs out here. */
+    async endView(req: NextRequest) {
+      const s = await session.read();
+      if (s?.viewAs) {
+        try {
+          await fetch(`${env.apiBaseUrl}/api/v1/access/portal-as/end`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${s.accessToken}` },
+            signal: AbortSignal.timeout(5000),
+          });
+        } catch {
+          // the session also ends by itself at its time
+        }
+      }
+      await session.clear();
+      return NextResponse.redirect(new URL('/login?viewEnded=1', req.url), { status: 303 });
     },
     /** POST /api/auth/dev (development bypass only) */
     async dev(req: NextRequest) {

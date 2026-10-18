@@ -135,6 +135,28 @@ export const StartImpersonationSchema = z.object({
 });
 export class StartImpersonationDto extends createZodDto(StartImpersonationSchema) {}
 
+/** A portal opened as a student, parent or employee (0183). */
+export const PortalAsSchema = z.object({
+  personType: z.enum(['student', 'guardian', 'employee']),
+  id: IdSchema,
+  mode: z.enum(['view', 'act']).default('view'),
+  reason: z.string().trim().min(5, 'say in a few words why').max(500),
+  minutes: z.number().int().min(5).max(60).default(30),
+});
+export class PortalAsDto extends createZodDto(PortalAsSchema) {}
+
+export const PortalLoginSchema = z.object({
+  personType: z.enum(['student', 'guardian', 'employee']),
+  id: IdSchema,
+});
+export class PortalLoginDto extends createZodDto(PortalLoginSchema) {}
+
+export const PortalHandoffSchema = z.object({
+  code: z.string().trim().min(20).max(200),
+  app: z.enum(['parent', 'teacher']),
+});
+export class PortalHandoffDto extends createZodDto(PortalHandoffSchema) {}
+
 export const BreakGlassSchema = z.object({
   reason: z.string().trim().min(20).max(1000),
   roleCode: z

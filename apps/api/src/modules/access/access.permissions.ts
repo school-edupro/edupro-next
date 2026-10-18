@@ -9,4 +9,6 @@ export const ACCESS = {
   membershipManage: 'access.membership.manage',
   userSearch: 'access.user.search',
   impersonate: 'access.session.impersonate',
+  portalViewAs: 'access.portal.view_as',
+  portalActAs: 'access.portal.act_as',
 } as const;

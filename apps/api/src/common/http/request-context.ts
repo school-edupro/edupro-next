@@ -23,7 +23,15 @@ export interface AuthenticatedUser {
   /** Development bypass token was used */
   dev: boolean;
   /** Present when the request runs under an impersonation session (S5-02). */
-  impersonation?: { sessionId: string; byUserId: string; byDisplayName: string; expiresAt: string };
+  impersonation?: {
+    sessionId: string;
+    byUserId: string;
+    byDisplayName: string;
+    expiresAt: string;
+    /** 'full': the admin app's impersonation; 'view' / 'act': a portal opened as someone (0183) */
+    mode: 'full' | 'view' | 'act';
+    app: 'admin' | 'parent' | 'teacher';
+  };
 }
 
 /** Everything a handler needs about the current request. Built by the guards, read by services. */

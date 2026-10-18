@@ -4,6 +4,7 @@ import { SearchableSelects } from '@edupro/ui';
 import '@edupro/ui/tokens.css';
 import '@edupro/ui/app.css';
 import { RegisterSw } from '@/components/RegisterSw';
+import { ViewAs } from '@/components/ViewAs';
 
 export const metadata: Metadata = {
   title: 'EduPro Teacher',
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body style={{ background: 'var(--surface-page)' }}>
         <SearchableSelects />
         <RegisterSw />
+        <ViewAs />
         {children}
       </body>
     </html>

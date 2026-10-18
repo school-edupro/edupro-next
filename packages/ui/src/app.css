@@ -8255,3 +8255,43 @@ a.db-list__main:hover strong {
   padding: var(--sp-2);
   border-top: 1px solid var(--border-default);
 }
+
+/* ---- a portal opened as someone by the school (ViewAsBar, 0183) ---------------------------------- */
+.ep-viewas {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--status-warning-bg);
+  color: var(--text-heading);
+  border-bottom: 2px solid var(--status-warning);
+  font-size: var(--fs-small);
+}
+.ep-viewas form {
+  margin: 0;
+}
+
+/* ---- "Open portal as…" list (admin, 0183) ---------------------------------------------------------- */
+.ep-portalas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ep-portalas__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-portalas__note {
+  display: block;
+  margin: 0;
+}

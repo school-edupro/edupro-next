@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -13,6 +14,7 @@ import { IdentityService } from '../../modules/identity/identity.service';
 import { OtpService } from '../../modules/identity/otp.service';
 import type { AuthenticatedUser, ContextualRequest } from '../http/request-context';
 import { IS_PUBLIC, OTP_EXEMPT } from './decorators';
+import { impersonationRefusal } from './impersonation-rules';
 
 /**
  * First guard in the chain. Verifies the One Auth JWT (or the development bypass token), resolves the user
@@ -95,7 +97,11 @@ export class JwtAuthGuard implements CanActivate {
         byUserId: session.actorUserId,
         byDisplayName: session.actorName,
         expiresAt: session.expiresAt.toISOString(),
+        mode: session.mode,
+        app: session.app,
       };
+      const refused = impersonationRefusal(session.mode, req.method, req.url);
+      if (refused) throw new ForbiddenException(refused);
       if (!req.headers['x-school-id']) req.headers['x-school-id'] = session.schoolId;
     } else if (token.startsWith('otp.')) {
       // Session token given after the emailed code was checked (0136): the code alone, or One Auth and the code.

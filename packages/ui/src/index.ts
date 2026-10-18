@@ -21,6 +21,7 @@ export { Drawer, type DrawerProps } from './components/Drawer';
 export { ToastProvider, useToast, type ToastMessage, type ToastTone } from './components/Toast';
 export { Breadcrumbs, type Crumb } from './components/Breadcrumbs';
 export { Alert, type AlertProps, type AlertTone } from './components/Alert';
+export { ViewAsBar } from './components/ViewAsBar';
 export { KpiTile, type KpiTileProps } from './components/KpiTile';
 export { DataGrid, type DataGridColumn, type DataGridProps } from './components/DataGrid';
 export {

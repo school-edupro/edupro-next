@@ -25,3 +25,13 @@ and parents sign in. Developer sign-in is not affected.
 - An unknown email or mobile gets the same answer as a known one ("if this account can sign in with a
   code…"), so the page does not tell outsiders who has an account.
 - Production needs **OTP_JWT_SECRET** (32+ characters) set for the API.
+
+## See a parent's, student's or teacher's screen (office staff)
+
+- Open the student (or employee) and press **Open portal as…** (**Open teacher app as…** for staff).
+- Pick the student, father or mother. If it says *No portal login yet*, press **Make login** first (a
+  parent needs a mobile or an email on record).
+- Write why (e.g. "Parent called: fee page is blank"), choose for how long, and **View only** (look
+  around) or **Act for them** (fill and send forms in their name; never payments). Press Open.
+- The portal opens in a new tab with a yellow bar saying whose screen it is. Press **End** when done.
+- Every opening is recorded with your name and reason. Allow pop-ups for the school site if no tab opens.

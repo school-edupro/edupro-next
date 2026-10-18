@@ -67,6 +67,25 @@ export class ImpersonationService {
   ) {}
 
   async start(ctx: RequestContext, dto: StartImpersonationDto) {
+    return this.open(ctx, { ...dto, mode: 'full', app: 'admin' });
+  }
+
+  /**
+   * A session as another member: the admin app's own ('full'), or a portal opened as a student, parent or
+   * employee ('view' / 'act', 0183). Returns the session and its token.
+   */
+  async open(
+    ctx: RequestContext,
+    dto: {
+      userId: string;
+      reason: string;
+      minutes: number;
+      mode: 'full' | 'view' | 'act';
+      app: 'admin' | 'parent' | 'teacher';
+      personType?: 'student' | 'guardian' | 'employee';
+      personRefId?: string;
+    },
+  ) {
     const tenant = requireTenant(ctx);
     if (ctx.user.impersonation)
       throw new DomainError('impersonation.nested', 'Already impersonating', { status: 409 });
@@ -90,9 +109,17 @@ export class ImpersonationService {
           { status: 409 },
         );
       const r = await c.query<{ id: string }>(
-        `INSERT INTO impersonation_sessions (school_id, actor_user_id, target_user_id, reason, expires_at, request_id)
-         VALUES (app.current_school_id(), app.current_user_id(), $1, $2, now() + make_interval(mins => $3), app.current_request_id()) RETURNING id::text`,
-        [dto.userId, dto.reason, minutes],
+        `INSERT INTO impersonation_sessions (school_id, actor_user_id, target_user_id, reason, expires_at, request_id, mode, app, person_type, person_ref_id)
+         VALUES (app.current_school_id(), app.current_user_id(), $1, $2, now() + make_interval(mins => $3), app.current_request_id(), $4, $5, $6, $7) RETURNING id::text`,
+        [
+          dto.userId,
+          dto.reason,
+          minutes,
+          dto.mode,
+          dto.app,
+          dto.personType ?? null,
+          dto.personRefId ?? null,
+        ],
       );
       const session = (await c.query<DbRow>(SELECT + ' WHERE s.id = $1', [r.rows[0]!.id])).rows[0]!;
       await c.query(
@@ -102,7 +129,12 @@ export class ImpersonationService {
           dto.userId,
           ctx.ip ?? null,
           ctx.userAgent ?? null,
-          JSON.stringify({ sessionId: session.id, actorUserId: ctx.user.id }),
+          JSON.stringify({
+            sessionId: session.id,
+            actorUserId: ctx.user.id,
+            mode: dto.mode,
+            app: dto.app,
+          }),
         ],
       );
       await this.audit.stage(ctx, c, {
@@ -114,20 +146,28 @@ export class ImpersonationService {
           targetName: t.display_name,
           reason: dto.reason,
           expiresAt: session.expires_at.toISOString(),
+          mode: dto.mode,
+          app: dto.app,
         },
       });
       return { session, sub: t.oneauth_sub };
     });
-    const token = await new SignJWT({ jti: row.session.id, sid: tenant.schoolId })
+    const token = await this.sign(row.session.id, tenant.schoolId, row.sub, row.session.expires_at);
+    this.security.record('impersonation_start', { schoolId: tenant.schoolId, userId: ctx.user.id });
+    return { session: toRow(row.session), token };
+  }
+
+  /** The session token: the target's subject and the session id; good until the session ends. */
+  async sign(sessionId: string, schoolId: string, sub: string, expiresAt: Date): Promise<string> {
+    const token = await new SignJWT({ jti: sessionId, sid: schoolId })
       .setProtectedHeader({ alg: 'HS256' })
-      .setSubject(row.sub)
+      .setSubject(sub)
       .setIssuer('edupro-impersonation')
       .setAudience('edupro-impersonation')
       .setIssuedAt()
-      .setExpirationTime(`${minutes}m`)
+      .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
       .sign(new TextEncoder().encode(this.env.IMPERSONATION_JWT_SECRET));
-    this.security.record('impersonation_start', { schoolId: tenant.schoolId, userId: ctx.user.id });
-    return { session: toRow(row.session), token: `imp.${token}` };
+    return `imp.${token}`;
   }
 
   async end(ctx: RequestContext, id: string): Promise<ImpersonationRow> {

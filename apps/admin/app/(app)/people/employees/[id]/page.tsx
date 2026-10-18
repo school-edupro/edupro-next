@@ -18,6 +18,7 @@ import { Icon } from '@/components/nav-icons';
 import { EmployeeProfileEditor } from '@/components/employees/EmployeeProfileEditor';
 import { ChipPickerField } from '@/components/ChipPickerField';
 import { FileLinks } from '@/components/FileLinks';
+import { OpenPortalAs } from '@/components/OpenPortalAs';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { requestEmployeeIdCard, upsertPosting } from '@/lib/actions';
 import {
@@ -197,6 +198,9 @@ export default async function EmployeePage({
                 {p('students.requestIdCard')}
               </Button>
             </form>
+            {me.permissions.includes('access.portal.view_as') ? (
+              <OpenPortalAs kind="employee" id={employee.id} canMakeLogin={canEdit} />
+            ) : null}
           </div>
         }
       />

@@ -78,6 +78,8 @@ export class IdentityService {
     actorName: string;
     expiresAt: Date;
     endedAt: Date | null;
+    mode: 'full' | 'view' | 'act';
+    app: 'admin' | 'parent' | 'teacher';
   } | null> {
     if (!/^[0-9]{1,18}$/.test(sessionId)) return null;
     return this.db.global(async (c) => {
@@ -88,8 +90,10 @@ export class IdentityService {
         o_actor_name: string;
         o_expires_at: Date;
         o_ended_at: Date | null;
+        o_mode: 'full' | 'view' | 'act';
+        o_app: 'admin' | 'parent' | 'teacher';
       }>(
-        'SELECT o_school_id::text, o_actor_user_id::text, o_target_user_id::text, o_actor_name, o_expires_at, o_ended_at FROM app.impersonation_check($1)',
+        'SELECT o_school_id::text, o_actor_user_id::text, o_target_user_id::text, o_actor_name, o_expires_at, o_ended_at, o_mode, o_app FROM app.impersonation_check($1)',
         [sessionId],
       );
       const row = r.rows[0];
@@ -101,6 +105,8 @@ export class IdentityService {
             actorName: row.o_actor_name,
             expiresAt: row.o_expires_at,
             endedAt: row.o_ended_at,
+            mode: row.o_mode,
+            app: row.o_app,
           }
         : null;
     });

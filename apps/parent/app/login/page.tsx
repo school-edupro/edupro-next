@@ -4,7 +4,12 @@ import { bff } from '@/lib/bff';
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string; error?: string; otpError?: string }>;
+  searchParams: Promise<{
+    returnTo?: string;
+    error?: string;
+    otpError?: string;
+    viewEnded?: string;
+  }>;
 }) {
   const params = await searchParams;
   const returnTo = params.returnTo && params.returnTo.startsWith('/') ? params.returnTo : '/';
@@ -27,7 +32,25 @@ export default async function LoginPage({
         <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--sp-5)' }}>
           Sign in with the mobile number registered with the school.
         </p>
-        {params.error ? (
+        {params.viewEnded ? (
+          <div
+            className="ep-alert ep-alert--info"
+            role="status"
+            style={{ marginBottom: 'var(--sp-4)' }}
+          >
+            The view opened by the school has ended. You can close this tab.
+          </div>
+        ) : null}
+        {params.error === 'handoff' ? (
+          <div
+            className="ep-alert ep-alert--danger"
+            role="alert"
+            style={{ marginBottom: 'var(--sp-4)' }}
+          >
+            That link has expired or was already used. Open the portal again from the school&apos;s
+            page.
+          </div>
+        ) : params.error ? (
           <div
             className="ep-alert ep-alert--danger"
             role="alert"

@@ -28,6 +28,7 @@ const EnvSchema = z.object({
   PUBLIC_APP_URL: z.string().url().default('http://localhost:3003'),
   ADMIN_APP_URL: z.string().url().default('http://localhost:3000'),
   PARENT_APP_URL: z.string().url().default('http://localhost:3001'),
+  TEACHER_APP_URL: z.string().url().default('http://localhost:3002'),
   /**
    * Sprint 13: the gateway a school uses unless its setting payments.gateway says otherwise. "mock" is the
    * development gateway (every provider's flow is simulated by /payments/payu/mock); refused in production.

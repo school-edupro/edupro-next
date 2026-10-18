@@ -1,4 +1,5 @@
 import { Badge } from '@edupro/ui';
+import { OpenPortalAs } from './OpenPortalAs';
 import { PhotoUploader } from './PhotoUploader';
 import {
   requestStudentIdCard,
@@ -176,6 +177,13 @@ export function StudentHero({
               <a className="ep-btn ep-btn--ghost" href={`/fees/ledger/${student.id}`}>
                 Fee ledger
               </a>
+            ) : null}
+            {can('access.portal.view_as') ? (
+              <OpenPortalAs
+                kind="student"
+                id={student.id}
+                canMakeLogin={can('people.student.edit')}
+              />
             ) : null}
           </div>
         </div>

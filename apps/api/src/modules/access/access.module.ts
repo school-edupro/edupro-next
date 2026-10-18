@@ -6,6 +6,8 @@ import { AccessService } from './access.service';
 import { AssignmentsService } from './assignments.service';
 import { BreakGlassService } from './break-glass.service';
 import { ImpersonationService } from './impersonation.service';
+import { PortalAsController } from './portal-as.controller';
+import { PortalAsService } from './portal-as.service';
 import { AccessSecurityController } from './security.controller';
 import { DelegationsService } from './delegations.service';
 import { MembershipsService } from './memberships.service';
@@ -13,7 +15,7 @@ import { RolesService } from './roles.service';
 
 @Global()
 @Module({
-  controllers: [AccessController, AccessSecurityController],
+  controllers: [AccessController, AccessSecurityController, PortalAsController],
   providers: [
     AccessService,
     ScopePolicy,
@@ -22,6 +24,7 @@ import { RolesService } from './roles.service';
     DelegationsService,
     MembershipsService,
     ImpersonationService,
+    PortalAsService,
     BreakGlassService,
     AuditService,
   ],
