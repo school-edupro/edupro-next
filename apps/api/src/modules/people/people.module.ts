@@ -1,3 +1,4 @@
+import { EmployeeBulkService } from './employee-bulk.service';
 import { EmployeeGridService } from './employee-grid.service';
 import { EmployeeProfileController } from './employee-profile.controller';
 import { EmployeeProfileService } from './employee-profile.service';
@@ -34,6 +35,7 @@ import { StudentsService } from './students.service';
   providers: [
     EmployeeProfileService,
     EmployeeGridService,
+    EmployeeBulkService,
     SectionRollService,
     StudentBulkService,
     StudentGridService,

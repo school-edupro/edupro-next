@@ -5,6 +5,7 @@
  * leaving, and the rows (education, languages, experience, transfers, remarks).
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import {
   createApp,
   headersFor,
@@ -488,5 +489,235 @@ describe('employee master (e2e)', () => {
       limit: 5,
     });
     expect(s.statusCode).toBe(201);
+  });
+
+  // ---- part 3: Excel upload --------------------------------------------------------------------
+  const xlsx = async (header: string[], rows: string[][]) => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Employees');
+    ws.addRow(header);
+    for (const r of rows) ws.addRow(r);
+    return Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+  };
+
+  it('the templates: create (needed columns marked, a login column, lists) and update (pre-filled by code, IDs not)', async () => {
+    const t = await inject({
+      method: 'GET',
+      url: '/people/staff/bulk/template?mode=create',
+      headers: h(),
+    });
+    expect(t.statusCode).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(t.rawPayload as never);
+    const head = (wb.getWorksheet('Employees')!.getRow(1).values as unknown[]).slice(1).map(String);
+    expect(head.slice(0, 4)).toEqual([
+      'Employee Code',
+      'Create staff login (Yes/No)',
+      'First name *',
+      'Last name',
+    ]);
+    expect(head).toContain('Employee type *');
+    expect(head).not.toContain('Age');
+    const u = await inject({
+      method: 'GET',
+      url: '/people/staff/bulk/template?mode=update&fields=mobile,aadhaar,approver_l1',
+      headers: h(),
+    });
+    const wb2 = new ExcelJS.Workbook();
+    await wb2.xlsx.load(u.rawPayload as never);
+    const ws2 = wb2.getWorksheet('Employees')!;
+    expect((ws2.getRow(1).values as unknown[]).slice(1)).toEqual([
+      'Employee Code *',
+      'Employee Name (reference)',
+      'Mobile',
+      'Aadhaar number',
+      'L1 approver',
+    ]);
+    const asha = [2, 3, 4, 5]
+      .map((r) => ws2.getRow(r))
+      .find((r) => r.getCell(1).value === 'KV0042')!;
+    expect(asha.getCell(3).value).toBe('9810012345');
+    expect(asha.getCell(4).value).toBeNull(); // the Aadhaar is never pre-filled
+    expect(asha.getCell(5).value).toBe('KV0043'); // the approver by code
+  });
+
+  it('create from Excel: next codes for blank ones, needed fields and lists checked, a login when asked; commit once', async () => {
+    const file = await xlsx(
+      [
+        'Employee Code',
+        'Create staff login (Yes/No)',
+        'First name *',
+        'Gender *',
+        'Mobile *',
+        'Employee type *',
+        'Department *',
+        'Designation *',
+        'Date of joining *',
+        'Aadhaar number',
+        'L1 approver',
+        'Shoe size',
+      ],
+      [
+        [
+          '',
+          'Yes',
+          'Ravi',
+          'Male',
+          '9811100001',
+          'Teaching Regular',
+          'Teaching Senior',
+          'PGT',
+          '01-08-2026',
+          '1111 2222 3333',
+          'KV0042',
+          '9',
+        ],
+        [
+          '',
+          'No',
+          'Sita',
+          'Female',
+          '9811100002',
+          'Non-Teaching Regular',
+          'Accounts',
+          'Accountant',
+          '2026-08-01',
+          '',
+          '',
+          '',
+        ],
+        [
+          'KV0042',
+          '',
+          'Dup',
+          'Male',
+          '9811100003',
+          'Teaching Regular',
+          'Accounts',
+          'PRT',
+          '01-08-2026',
+          '',
+          '',
+          '',
+        ],
+        [
+          '',
+          '',
+          'Bad',
+          'Robot',
+          '12345',
+          'Teaching Regular',
+          'Nowhere',
+          'PRT',
+          '31-02-2026',
+          '',
+          'NOBODY',
+          '',
+        ],
+        ['', '', 'Short', '', '', '', '', '', '', '', '', ''],
+      ],
+    );
+    const v = await post('/people/staff/bulk/validate', {
+      mode: 'create',
+      fileName: 'new.xlsx',
+      contentBase64: file,
+    });
+    expect(v.statusCode).toBe(201);
+    const s = v.json();
+    expect(s).toMatchObject({ mode: 'create', totalRows: 5, readyRows: 2, rejectedRows: 3 });
+    expect(s.preview.map((p: { code: string; login: boolean }) => [p.code, p.login])).toEqual([
+      ['KV10000', true],
+      ['KV10001', false],
+    ]);
+    const msgs = s.problems.map(
+      (p: { row: number; column: string; message: string }) => `${p.row} ${p.column}: ${p.message}`,
+    );
+    expect(msgs).toEqual(
+      expect.arrayContaining([
+        '1 Shoe size: Column not recognised; ignored',
+        '4 Employee Code: already used; use the update template for existing employees',
+        '5 Department: one of: ' +
+          msgs
+            .find((m: string) => m.startsWith('5 Department: one of: '))!
+            .slice('5 Department: one of: '.length),
+        '5 L1 approver: no employee with the code NOBODY',
+        '6 Mobile: is required',
+      ]),
+    );
+    expect(msgs.some((m: string) => m.startsWith('5 Gender: one of'))).toBe(true);
+    expect(msgs.some((m: string) => m.startsWith('5 Date of joining'))).toBe(true);
+    // the Aadhaar is masked in the preview
+    const ravi = s.preview[0].changes.find((c: { field: string }) => c.field === 'Aadhaar number');
+    expect(ravi.to).toBe('XXXX-XXXX-3333');
+    const c = await post(`/people/staff/bulk/${s.id}/commit`, {});
+    expect(c.json()).toMatchObject({ applied: 2, logins: 1, failed: 0 });
+    expect((await post(`/people/staff/bulk/${s.id}/commit`, {})).statusCode).toBe(409);
+    const grid = (
+      await post('/people/staff/grid', {
+        columns: [{ key: 'aadhaar' }, { key: 'approver_l1' }],
+        search: 'KV1000',
+      })
+    ).json();
+    expect(
+      grid.rows.map((r: { employee_code: string; has_login: string }) => [
+        r.employee_code,
+        r.has_login,
+      ]),
+    ).toEqual([
+      ['KV10000', 'Yes'],
+      ['KV10001', 'No'],
+    ]);
+    expect(grid.rows[0]).toMatchObject({
+      aadhaar: '111122223333',
+      approver_l1: 'ASHA RAO (KV0042)',
+    });
+    const r = await inject({
+      method: 'GET',
+      url: `/people/staff/bulk/${s.id}/result`,
+      headers: h(),
+    });
+    expect(r.statusCode).toBe(200);
+    const list = (await get('/people/staff/bulk')).json().data;
+    expect(list[0]).toMatchObject({ id: s.id, mode: 'create', status: 'committed', applied: 2 });
+  });
+
+  it('update from Excel: by code, only what changed (old → new), CLEAR empties, a masked number leaves it, unknown code refused', async () => {
+    const file = await xlsx(
+      [
+        'Employee Code',
+        'Employee Name (reference)',
+        'Mobile',
+        'Hobbies',
+        'Aadhaar number',
+        'Blood group',
+      ],
+      [
+        ['KV0042', 'x', '9810012345', 'CLEAR', 'XXXX-XXXX-9012', 'O+'],
+        ['KV0043', 'x', '9810012346', '', '', ''],
+        ['ZZ1', 'x', '9810000000', '', '', ''],
+      ],
+    );
+    const v = (
+      await post('/people/staff/bulk/validate', { mode: 'update', contentBase64: file })
+    ).json();
+    expect(v).toMatchObject({ readyRows: 1, rejectedRows: 1, unchangedRows: 1 });
+    expect(v.preview[0]).toMatchObject({ code: 'KV0042' });
+    expect(v.preview[0].changes).toEqual([
+      { field: 'Hobbies', from: 'Music', to: null },
+      { field: 'Blood group', from: 'B+', to: 'O+' },
+    ]);
+    expect(v.problems.find((p: { code: string }) => p.code === 'ZZ1').message).toBe(
+      'no employee with this code',
+    );
+    expect((await post(`/people/staff/bulk/${v.id}/commit`, {})).json()).toMatchObject({
+      applied: 1,
+    });
+    const p = (await get(`/people/staff/${ids.asha}/profile`)).json();
+    expect(p.values).toMatchObject({ hobbies: null, blood_group: 'O+', aadhaar: '123456789012' });
+    // the viewer may not upload
+    expect(
+      (await post('/people/staff/bulk/validate', { mode: 'update', contentBase64: file }, viewer))
+        .statusCode,
+    ).toBe(403);
   });
 });

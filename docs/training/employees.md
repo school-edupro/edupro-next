@@ -41,6 +41,16 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 - **Export Excel / PDF** gives exactly what you see; **Save as report** keeps it in the Report builder
   (Report builder → New employee report also starts one from scratch).
 
+## Many at once (Employees → Excel upload)
+
+1. **Add new employees** or **Update existing employees**; tick the columns you want (or none for all)
+   and **Download template**. The update file comes filled with today's values by employee code.
+2. Fill it: dates as DD-MM-YYYY, the drop-downs for lists, approvers by their employee code. A blank
+   cell changes nothing; type CLEAR to empty a field. New staff: leave Employee Code empty for the next
+   number; Create staff login is Yes unless you type No.
+3. Upload it and **Check the file**: every change shows as old → new, every problem with its row and
+   column. Fix and upload again, or **Apply** the rows that are ready; the result file lists every row.
+
 ## Five common questions
 
 1. _The department I need is not offered._ Add it in Staff setup → Departments.

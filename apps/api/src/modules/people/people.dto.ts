@@ -379,3 +379,14 @@ export const EmployeeGridExportSchema = EmployeeGridSchema.extend({
   title: z.string().trim().max(120).optional(),
 });
 export class EmployeeGridExportDto extends createZodDto(EmployeeGridExportSchema) {}
+
+/** The employee Excel template: update (pre-filled by code) or create; some fields only, if chosen. */
+export const EmployeeBulkTemplateQuerySchema = z.object({
+  mode: z.enum(['update', 'create']).default('update'),
+  fields: z.string().max(4000).optional(),
+  includeInactive: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+});
+export class EmployeeBulkTemplateQueryDto extends createZodDto(EmployeeBulkTemplateQuerySchema) {}

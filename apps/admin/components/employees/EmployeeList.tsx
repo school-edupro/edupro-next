@@ -350,6 +350,11 @@ export function EmployeeList({
               Report builder
             </a>
           ) : null}
+          {can.importRun ? (
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/people/employees/bulk">
+              Excel upload
+            </a>
+          ) : null}
           {can.setup ? (
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/masters/staff">
               Staff setup

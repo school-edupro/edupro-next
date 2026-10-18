@@ -68,7 +68,22 @@ experience, remarks and transfers). Built in three parts.
   More filters (any field), Columns (choose, order, rename; saved per user as `employees.list`), sortable
   headers, pages, Export Excel / PDF, Save as report, Staff setup and Onboard.
 
-## Part 3 (next): Excel upload
+## Part 3 (18 Oct 2026): Excel upload
 
-Template from the catalogue, validate (row errors), commit; create or update by code; replaces the CSV
-import for employees.
+- **API** `people/staff/bulk`: `GET template?mode=update|create&fields=&includeInactive=` (Instructions,
+  hidden Lists for the drop-downs, the Employees sheet; update pre-filled by employee code with the
+  current values and approvers by code, never the Aadhaar / PAN / account; create: the onboarding
+  columns first marked *, a "Create staff login (Yes/No)" column), `POST bulk/validate` (by label or key;
+  the student rules: blank = no change, CLEAR empties, a masked number leaves it; create: a blank code
+  gets the next free number, a used code refused, the onboarding fields needed; every value checked by
+  the catalogue, approvers by code; old → new preview with IDs masked; kept in `master_imports` as
+  `employee_profile_update` / `employee_profile_create`), `GET bulk/:id`, `POST bulk/:id/commit` (once,
+  within a day; each row in a savepoint; new employees get the posting of the year, a remark
+  "Onboarded (Excel upload)" and, when asked, a staff login in its own savepoint; a leaving date makes
+  inactive), `GET bulk` (recent), `GET bulk/:id/result` (every row's outcome as Excel).
+- **Admin** `/people/employees/bulk` (tabs Update existing / Add new; choose columns by section; upload
+  .xlsx or .csv; check; Apply with a confirmation; result file), "Excel upload" on the employee list.
+  The older CSV import (People → Bulk import) now takes students only and points employees here (its
+  API is unchanged).
+- Tests: the part 3 cases of `apps/api/test/employee-master.e2e-spec.ts` (templates, create with next
+  codes and logins, errors by cell, commit once, update old → new, CLEAR, masked numbers).

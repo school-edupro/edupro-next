@@ -1,11 +1,27 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+} from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
+import { IdSchema } from '../academics/classes/classes.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { EmployeeBulkService } from './employee-bulk.service';
 import { EmployeeGridService } from './employee-grid.service';
 import { EmployeeProfileService } from './employee-profile.service';
 import {
+  BulkUploadDto,
+  EmployeeBulkTemplateQueryDto,
   EmployeeGridDto,
   EmployeeGridExportDto,
   EmployeeOnboardDto,
@@ -14,6 +30,11 @@ import {
   type EmployeeRowKind,
 } from './people.dto';
 import { PEOPLE } from './people.permissions';
+
+const uploadOf = (id: string): string => {
+  if (!IdSchema.safeParse(id).success) throw new DomainError('not-found', 'Upload not found');
+  return id;
+};
 
 const kindOf = (k: string): EmployeeRowKind => {
   const r = EmployeeRowKindSchema.safeParse(k);
@@ -29,7 +50,64 @@ export class EmployeeProfileController {
   constructor(
     private readonly svc: EmployeeProfileService,
     private readonly grid: EmployeeGridService,
+    private readonly bulk: EmployeeBulkService,
   ) {}
+
+  private static xlsx(reply: FastifyReply, file: { fileName: string; bytes: Buffer }) {
+    void reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${file.fileName}"`)
+      .send(file.bytes);
+  }
+
+  // ---- Excel upload (part 3) ----
+  @Get('bulk/template')
+  @ApiOperation({ summary: 'Employee Excel template: update (pre-filled by code) or create' })
+  @RequirePermission(PEOPLE.importRun)
+  async bulkTemplate(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: EmployeeBulkTemplateQueryDto,
+    @Res() reply: FastifyReply,
+  ) {
+    EmployeeProfileController.xlsx(reply, await this.bulk.template(ctx, q));
+  }
+
+  @Get('bulk')
+  @ApiOperation({ summary: 'Recent employee uploads' })
+  @RequirePermission(PEOPLE.importRun)
+  async bulkList(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.bulk.list(ctx) };
+  }
+
+  @Post('bulk/validate')
+  @ApiOperation({ summary: 'Check an employee upload: match by code, validate, show old → new' })
+  @RequirePermission(PEOPLE.importRun)
+  bulkValidate(@ReqCtx() ctx: RequestContext, @Body() body: BulkUploadDto) {
+    return this.bulk.validate(ctx, body);
+  }
+
+  @Get('bulk/:uploadId')
+  @RequirePermission(PEOPLE.importRun)
+  bulkSummary(@ReqCtx() ctx: RequestContext, @Param('uploadId') id: string) {
+    return this.bulk.summary(ctx, uploadOf(id));
+  }
+
+  @Post('bulk/:uploadId/commit')
+  @ApiOperation({ summary: 'Apply the valid rows of a checked employee upload' })
+  @RequirePermission(PEOPLE.importRun)
+  bulkCommit(@ReqCtx() ctx: RequestContext, @Param('uploadId') id: string) {
+    return this.bulk.commit(ctx, uploadOf(id));
+  }
+
+  @Get('bulk/:uploadId/result')
+  @RequirePermission(PEOPLE.importRun)
+  async bulkResult(
+    @ReqCtx() ctx: RequestContext,
+    @Param('uploadId') id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    EmployeeProfileController.xlsx(reply, await this.bulk.resultFile(ctx, uploadOf(id)));
+  }
 
   @Get('grid/fields')
   @ApiOperation({ summary: 'Every field that can be a column or a filter of the employee list' })

@@ -45,6 +45,13 @@ export default async function ImportPage({
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
       <Notice params={sp} />
+      <p className="ep-alert ep-alert--info" role="note" style={{ marginBottom: 'var(--sp-4)' }}>
+        Employees are added and updated from Excel on{' '}
+        <a href="/people/employees/bulk" style={{ textDecoration: 'underline' }}>
+          People → Employees → Excel upload
+        </a>{' '}
+        (every profile field, a check before anything is saved).
+      </p>
       <Card title={i('validate')}>
         <form action={validateImport}>
           <FormRow columns={3}>
@@ -52,7 +59,7 @@ export default async function ImportPage({
               id="kind"
               name="kind"
               label={i('kind')}
-              options={(['students', 'employees'] as const).map((k) => ({
+              options={(['students'] as const).map((k) => ({
                 value: k,
                 label: i(`kinds.${k}`),
               }))}
@@ -83,7 +90,7 @@ export default async function ImportPage({
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           }}
         >
-          {(['students', 'employees'] as const).map((k) => (
+          {(['students'] as const).map((k) => (
             <div key={k}>
               <a
                 className="ep-btn ep-btn--secondary ep-btn--sm"

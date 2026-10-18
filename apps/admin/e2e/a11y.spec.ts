@@ -285,6 +285,8 @@ const PAGES = [
   '/fees/dashboard?by=term',
   '/people/employees',
   '/people/employees/new',
+  '/people/employees/bulk',
+  '/people/employees/bulk?mode=create',
   '/reports/builder/new?dataset=employee_profile',
   '/people/employees/37',
   '/people/employees/37?tab=education',

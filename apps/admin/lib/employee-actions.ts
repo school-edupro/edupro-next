@@ -181,3 +181,42 @@ export async function employeeListSaveView(v: EmployeeListView): Promise<void> {
     body: JSON.stringify({ value: v }),
   });
 }
+
+// ---- Excel upload (part 3) ----
+export async function employeeBulkValidate(fd: FormData) {
+  const mode = str(fd, 'mode') === 'create' ? 'create' : 'update';
+  const page = `/people/employees/bulk?mode=${mode}`;
+  const file = fd.get('file');
+  if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || (file as File).size === 0)
+    redirect(
+      `${page}&error=validation-failed&detail=${encodeURIComponent('Choose the filled .xlsx or .csv file')}`,
+    );
+  const f = file as File;
+  const body: Record<string, string> = { mode, fileName: f.name };
+  if (/\.csv$/i.test(f.name)) body.csv = await f.text();
+  else body.contentBase64 = Buffer.from(await f.arrayBuffer()).toString('base64');
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch<{ id: string }>(`${BASE}/bulk/validate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  redirect(`${page}&check=${out!.id}`);
+}
+
+export async function employeeBulkCommit(fd: FormData) {
+  const id = str(fd, 'id');
+  const mode = str(fd, 'mode') === 'create' ? 'create' : 'update';
+  const page = `/people/employees/bulk?mode=${mode}&check=${id}`;
+  if (!okId(id)) redirect(`/people/employees/bulk?mode=${mode}`);
+  try {
+    await apiFetch(`${BASE}/bulk/${id}/commit`, { method: 'POST', body: '{}' });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath('/people/employees');
+  redirect(`${page}&ok=applied`);
+}
