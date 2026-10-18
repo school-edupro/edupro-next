@@ -168,7 +168,7 @@ const PAGES = [
   '/transport/requests/new?sq=diya',
   '/transport/requests/new?sq=diya&student=12387',
   '/transport/requests/approvals',
-  '/transport/requests/92',
+  '/transport/requests/394',
   '/transport/history',
   '/transport/history?when=all&studentId=12307',
   '/transport/setup',
@@ -527,8 +527,11 @@ test.describe('accessibility (axe)', () => {
 
   for (const path of PAGES) {
     test(`no serious or critical violations on ${path}`, async ({ page }) => {
-      await page.goto(path);
+      const res = await page.goto(path);
+      // a page that does not load (404, error) has nothing to check: it fails here instead of passing
+      expect(res?.status() ?? 200, `${path} did not load`).toBeLessThan(400);
       await page.waitForLoadState('networkidle');
+      await expect(page.getByText('This page could not be found')).toHaveCount(0);
       const results = await new AxeBuilder({ page })
         // email previews sit in sandboxed frames (no scripts) the checker cannot enter
         .options({ iframes: false })

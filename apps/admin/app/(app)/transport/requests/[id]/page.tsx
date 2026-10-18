@@ -5,7 +5,8 @@ import { Notice } from '@/components/Notice';
 import { RecordSheet } from '@/components/RecordSheet';
 import { PeriodTable } from '@/components/transport/PeriodTable';
 import { TransportNav } from '@/components/transport/TransportNav';
-import { apiFetch, getMe } from '@/lib/api';
+import { notFound } from 'next/navigation';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { when } from '@/lib/appointments';
 import { decideTransport } from '@/lib/transport-desk-actions';
 import {
@@ -33,7 +34,11 @@ export default async function TransportRequestPage({
   const sp = await searchParams;
   const [me, r] = await Promise.all([
     getMe(),
-    apiFetch<TransportRequestDetail>(`/transport/requests/${id}`),
+    // a request that does not exist (or is not this school's) is a plain "not found"
+    apiFetch<TransportRequestDetail>(`/transport/requests/${id}`).catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 404) notFound();
+      throw e;
+    }),
   ]);
   const here = `/transport/requests/${r.id}`;
   const leave = r.kind === 'leave';
