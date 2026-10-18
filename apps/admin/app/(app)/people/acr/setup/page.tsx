@@ -43,7 +43,7 @@ export default async function AcrSetupPage({
       <Breadcrumbs
         items={[
           { label: 'Employee management', href: '/people/employees' },
-          { label: 'Employee ACR' },
+          { label: 'Employee ACR', href: '/people/acr' },
           { label: 'Set-up' },
         ]}
       />

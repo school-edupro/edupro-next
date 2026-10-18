@@ -69,7 +69,18 @@ schools) and HR suites (Darwinbox, Keka).
   shown to them); a level's people everything up to their level. Every step is in `acr_events`.
 - Lists: `board` (a cycle's ACRs with status, level, who it waits on, score, grade), `mine`, `to-assess`.
 
-## Part 3 — screens (after)
+## Part 3 — screens (built)
 
-Employee ACR board (progress by status, "waiting on me", reminders), ACR tab on the employee page, "My ACR"
-and "ACRs to assess" in the staff app, the printed ACR (PDF, bulk) and the Excel export.
+- **Admin, Employee management → Employee ACR** (`/people/acr`): the cycle, Start the cycle / Add new
+  joiners / Close, figures by status first (and "waiting on nobody"), filters (status, staff, name or
+  reviewer), the list with who each ACR waits on, **Print the shown** (up to 100, one per page, signature
+  lines; Save as PDF from the print dialog) and **Excel** (CSV that Excel opens, same filters).
+- **One ACR** (`/people/acr/:id`): the shared sheet (`AcrSheet` in `packages/ui`): the school's facts,
+  the self-appraisal, each level (filled or the form at its turn, send back), the result, acknowledgement
+  and objection, the steps; below it, for the school: leave taken (office), who fills each open level,
+  and the decision on an objection.
+- **Employee page → ACR tab**: the employee's ACRs by cycle, and where the approvers are set.
+- **Staff app → Office → My ACR** (`/acr`): my ACR (fill the self-appraisal, see the result,
+  acknowledge or object) and **ACRs to assess** (the levels waiting on me) with the same sheet.
+- Tested in the browser on Alpha's test cycle "ACR 2026-27" (started 18 Oct 2026 with the user's
+  agreement): one self-appraisal and one HOD level filled; the Principal level is left for the user.

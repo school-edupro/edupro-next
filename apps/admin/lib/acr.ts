@@ -68,3 +68,33 @@ export const GROUP_LABEL: Record<StaffGroup | 'both', string> = {
   non_teaching: 'Non-teaching',
   both: 'Both',
 };
+
+/** One ACR on the board (people/acr/board, mine, to-assess, employee/:id). */
+export interface AcrRow {
+  id: string;
+  cycleId: string;
+  cycle: string;
+  employee: {
+    id: string;
+    name: string;
+    code: string;
+    department: string | null;
+    designation: string | null;
+  };
+  staffGroup: StaffGroup;
+  status: 'self' | 'review' | 'disclosed' | 'represented' | 'closed';
+  level: { seq: number; label: string | null; waitingOn: string[] } | null;
+  selfPct: number | null;
+  scorePct: number | null;
+  grade: string | null;
+  adverse: boolean;
+  objectBy: string | null;
+  updatedAt: string;
+}
+export const ACR_STATUS: Record<AcrRow['status'], string> = {
+  self: 'Self-appraisal',
+  review: 'With the levels',
+  disclosed: 'Shown to the employee',
+  represented: 'Objection waiting',
+  closed: 'Final',
+};

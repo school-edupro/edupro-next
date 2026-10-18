@@ -35,6 +35,7 @@ import {
   verifyEmployeeDocument,
 } from '@/lib/employee-actions';
 import { apiFetch, getMe } from '@/lib/api';
+import { ACR_STATUS, type AcrRow } from '@/lib/acr';
 import type { EmployeeCatalogue, EmployeeProfile } from '@/lib/employee';
 import type { Employee, Employee360, Page, PersonDocument, Posting, School } from '@/lib/types';
 
@@ -46,6 +47,7 @@ const TABS = [
   ['history', 'Transfers and remarks'],
   ['documents', 'Documents'],
   ['posting', 'Posting'],
+  ['acr', 'ACR'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 const OK: Record<string, string> = {
@@ -109,6 +111,14 @@ export default async function EmployeePage({
       ? await apiFetch<{ data: Array<{ id: string; code: string; name: string }> }>(
           '/people/staff-transfers/targets',
         )
+          .then((r) => r.data)
+          .catch(() => [])
+      : [];
+  // the employee's ACRs, newest cycle first (for those who see ACRs)
+  const canAcr = me.permissions.includes('people.acr.view');
+  const acrs =
+    tab === 'acr' && canAcr
+      ? await apiFetch<{ data: AcrRow[] }>(`/people/acr/employee/${id}`)
           .then((r) => r.data)
           .catch(() => [])
       : [];
@@ -1013,6 +1023,63 @@ export default async function EmployeePage({
             </Card>
           ) : null}
         </div>
+      ) : null}
+      {tab === 'acr' ? (
+        <Card>
+          <h2 className="ep-card__title">Annual confidential reports</h2>
+          {!canAcr ? (
+            <p className="ep-field__help">You do not have the right to see ACRs.</p>
+          ) : acrs.length ? (
+            <div className="ep-table-wrap">
+              <table className="ep-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Cycle</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Waiting on</th>
+                    <th scope="col">Self %</th>
+                    <th scope="col">Score %</th>
+                    <th scope="col">Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acrs.map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        <a href={`/people/acr/${a.id}`}>
+                          <strong>{a.cycle}</strong>
+                        </a>
+                      </td>
+                      <td>{ACR_STATUS[a.status]}</td>
+                      <td>
+                        {a.status === 'self'
+                          ? 'The employee'
+                          : a.level
+                            ? `${a.level.label ?? ''}: ${a.level.waitingOn.join(', ') || 'nobody set'}`
+                            : '—'}
+                      </td>
+                      <td>{a.selfPct ?? '—'}</td>
+                      <td>{a.scorePct ?? '—'}</td>
+                      <td>
+                        {a.grade ?? '—'}
+                        {a.adverse ? <span className="ep-field__help"> (adverse)</span> : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="ep-field__help">
+              No ACR yet. ACRs are started for a year on <a href="/people/acr">Employee ACR</a>.
+            </p>
+          )}
+          <p className="ep-field__help">
+            Who assesses this employee: the ACR HOD and L1–L3 approvers on the Profile tab
+            (Approvers), used by the levels set in{' '}
+            <a href="/people/acr/setup?tab=levels">ACR set-up</a>.
+          </p>
+        </Card>
       ) : null}
     </>
   );

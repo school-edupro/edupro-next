@@ -119,6 +119,13 @@ export class AcrController {
     return this.flow.board(ctx, cycle && /^\d{1,18}$/.test(cycle) ? cycle : undefined);
   }
 
+  @Get('employee/:id')
+  @ApiOperation({ summary: 'One employee’s ACRs' })
+  @RequirePermission(PEOPLE.acrView)
+  ofEmployee(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.flow.ofEmployee(ctx, id);
+  }
+
   @Get('mine')
   @AuthenticatedOnly()
   @ApiOperation({ summary: 'My ACRs' })

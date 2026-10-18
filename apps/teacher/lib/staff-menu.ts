@@ -150,6 +150,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('academics.notice.view'),
       },
       {
+        href: '/acr',
+        label: 'My ACR',
+        help: 'My annual confidential report, and the reports waiting on me',
+        allowed: always,
+      },
+      {
         href: '/activity-log',
         label: 'My day (activity log)',
         help: 'What I did today, in time slots; submit before the cut-off',

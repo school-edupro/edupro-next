@@ -200,7 +200,8 @@
     "hostelIncidents": "घटनाएँ",
     "landingPages": "लैंडिंग पेज",
     "hostelWithdrawals": "छात्रावास छोड़ना",
-    "acrSetup": "ACR सेट-अप"
+    "acrSetup": "ACR सेट-अप",
+    "employeeAcr": "कर्मचारी ACR"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

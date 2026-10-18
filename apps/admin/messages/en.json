@@ -200,7 +200,8 @@
     "hostelIncidents": "Incidents",
     "landingPages": "Landing pages",
     "hostelWithdrawals": "Hostel withdrawals",
-    "acrSetup": "ACR set-up"
+    "acrSetup": "ACR set-up",
+    "employeeAcr": "Employee ACR"
   },
   "shell": {
     "primaryNavigation": "Primary",

@@ -139,3 +139,147 @@ export async function saveAcrCycle(fd: FormData) {
   revalidatePath(SETUP);
   redirect(`${back_}&ok=1&detail=${encodeURIComponent('Cycle saved.')}`);
 }
+
+// ---- the flow (part 3 screens) -------------------------------------------------------------------
+
+const R = (id: string) => `/people/acr/reports/${id}`;
+type Res = { ok: true } | { ok: false; error: string };
+async function call(path: string, method: 'POST' | 'PUT', body?: unknown): Promise<Res> {
+  try {
+    await apiFetch(path, { method, body: JSON.stringify(body ?? {}) });
+  } catch (e) {
+    return problem(e);
+  }
+  revalidatePath('/people/acr');
+  return { ok: true };
+}
+type AnswerMap = Record<string, number | string>;
+interface LevelBody {
+  answers: AnswerMap;
+  remarks: string | null;
+  grade?: string | null;
+  gradeReason?: string | null;
+  agreement?: 'agree' | 'partly' | 'disagree' | null;
+}
+export async function acrSaveSelf(id: string, answers: AnswerMap) {
+  return okId(id)
+    ? call(`${R(id)}/self`, 'PUT', { answers })
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+export async function acrSubmitSelf(id: string, answers: AnswerMap) {
+  return okId(id)
+    ? call(`${R(id)}/self/submit`, 'POST', { answers })
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+export async function acrSaveLevel(id: string, seq: number, body: LevelBody) {
+  return okId(id)
+    ? call(`${R(id)}/levels/${String(seq)}`, 'PUT', body)
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+export async function acrSubmitLevel(id: string, seq: number, body: LevelBody) {
+  return okId(id)
+    ? call(`${R(id)}/levels/${String(seq)}/submit`, 'POST', body)
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+export async function acrSendBack(id: string, reason: string) {
+  return okId(id)
+    ? call(`${R(id)}/send-back`, 'POST', { reason })
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+export async function acrAcknowledge(id: string) {
+  return okId(id)
+    ? call(`${R(id)}/acknowledge`, 'POST')
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+export async function acrRepresent(id: string, text: string) {
+  return okId(id)
+    ? call(`${R(id)}/represent`, 'POST', { text })
+    : { ok: false as const, error: 'Unknown ACR' };
+}
+
+/** Start (or top up) a cycle (form on the board). */
+export async function acrStartCycle(fd: FormData) {
+  const id = str(fd, 'cycleId');
+  const back_ = `/people/acr?cycle=${id}`;
+  let out: { added: number; unassigned: unknown[] } | undefined;
+  try {
+    out = await apiFetch(`/people/acr/cycles/${id}/start`, { method: 'POST', body: '{}' });
+  } catch (error) {
+    back(back_, error);
+  }
+  revalidatePath('/people/acr');
+  const n = out!.unassigned.length;
+  redirect(
+    `${back_}&ok=1&detail=${encodeURIComponent(
+      `${String(out!.added)} ACRs started.${n ? ` ${String(n)} levels have nobody set: open those ACRs to choose who fills them.` : ''}`,
+    )}`,
+  );
+}
+export async function acrCloseCycle(fd: FormData) {
+  const id = str(fd, 'cycleId');
+  const back_ = `/people/acr?cycle=${id}`;
+  try {
+    await apiFetch(`/people/acr/cycles/${id}/close`, { method: 'POST', body: '{}' });
+  } catch (error) {
+    back(back_, error);
+  }
+  revalidatePath('/people/acr');
+  redirect(`${back_}&ok=1&detail=${encodeURIComponent('Cycle closed.')}`);
+}
+
+/** Who fills a level of one ACR (form on the ACR page). */
+export async function acrSetPeople(fd: FormData) {
+  const id = str(fd, 'id');
+  const seq = str(fd, 'seq');
+  const ids = fd.getAll('employeeIds').map(String).filter(okId);
+  try {
+    await apiFetch(`${R(id)}/levels/${seq}/people`, {
+      method: 'PUT',
+      body: JSON.stringify({ employeeIds: ids }),
+    });
+  } catch (error) {
+    back(`/people/acr/${id}`, error);
+  }
+  revalidatePath(`/people/acr/${id}`);
+  redirect(`/people/acr/${id}?ok=1&detail=${encodeURIComponent('People of the level saved.')}`);
+}
+
+/** The office's figures for the year (form on the ACR page). */
+export async function acrOffice(fd: FormData) {
+  const id = str(fd, 'id');
+  const num = (k: string) => (str(fd, k) === '' ? null : Number(str(fd, k)));
+  try {
+    await apiFetch(`${R(id)}/office`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        cl: num('cl'),
+        el: num('el'),
+        other: num('other'),
+        absent: num('absent'),
+        note: str(fd, 'note') || null,
+      }),
+    });
+  } catch (error) {
+    back(`/people/acr/${id}`, error);
+  }
+  revalidatePath(`/people/acr/${id}`);
+  redirect(`/people/acr/${id}?ok=1&detail=${encodeURIComponent('Office figures saved.')}`);
+}
+
+/** Decide an objection (form on the ACR page). */
+export async function acrDecide(fd: FormData) {
+  const id = str(fd, 'id');
+  const decision = str(fd, 'decision') === 'revised' ? 'revised' : 'upheld';
+  try {
+    await apiFetch(`${R(id)}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, grade: str(fd, 'grade') || null, note: str(fd, 'note') }),
+    });
+  } catch (error) {
+    back(`/people/acr/${id}`, error);
+  }
+  revalidatePath(`/people/acr/${id}`);
+  redirect(
+    `/people/acr/${id}?ok=1&detail=${encodeURIComponent('Decision saved; the ACR is final.')}`,
+  );
+}

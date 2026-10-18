@@ -398,7 +398,7 @@ export class AcrFlowService {
          JOIN employees e ON e.id = r.employee_id
          LEFT JOIN acr_reviews v ON v.report_id = r.id AND v.seq = r.current_level
         WHERE ${where}
-        ORDER BY e.display_name`,
+        ORDER BY e.display_name, cy.id`,
       args,
     );
     return r.rows.map((x) => ({
@@ -442,6 +442,15 @@ export class AcrFlowService {
       const counts: Record<string, number> = {};
       for (const r of rows) counts[r.status] = (counts[r.status] ?? 0) + 1;
       return { cycleId: id, rows, counts };
+    });
+  }
+
+  /** One employee's ACRs, newest cycle first (the employee page). */
+  async ofEmployee(ctx: RequestContext, employeeId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.sweep(c);
+      const rows = await this.rows(c, 'r.employee_id = $1', [employeeId]);
+      return { data: rows.reverse() };
     });
   }
 

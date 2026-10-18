@@ -22,6 +22,17 @@ export { ToastProvider, useToast, type ToastMessage, type ToastTone } from './co
 export { Breadcrumbs, type Crumb } from './components/Breadcrumbs';
 export { Alert, type AlertProps, type AlertTone } from './components/Alert';
 export { ViewAsBar } from './components/ViewAsBar';
+export {
+  AcrSheet,
+  type AcrActions,
+  type AcrAnswer,
+  type AcrFacts,
+  type AcrLevelBody,
+  type AcrLevelView,
+  type AcrQuestionView,
+  type AcrReportView,
+  type AcrResult,
+} from './components/AcrSheet';
 export { KpiTile, type KpiTileProps } from './components/KpiTile';
 export { DataGrid, type DataGridColumn, type DataGridProps } from './components/DataGrid';
 export {
