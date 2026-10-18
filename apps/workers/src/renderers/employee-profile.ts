@@ -1,4 +1,5 @@
 import {
+  loadEmployeePolicy,
   EMPLOYEE_FIELDS,
   EMPLOYEE_SECTIONS,
   applies,
@@ -66,8 +67,23 @@ export async function renderEmployeeProfile(
           [envelope.userId],
         )
       : { rowCount: 0 };
-    const p = await readEmployeeProfile(c, employeeId, (perm.rowCount ?? 0) > 0);
+    // the employee's own copy (from the staff app): only their own record, their ID numbers in full,
+    // and only the fields the school shows staff (docs/design/33-people-dashboards.md)
+    const self = params.self === true;
+    if (self) {
+      const own = await c.query(`SELECT 1 FROM employees WHERE id = $1 AND user_id = $2`, [
+        employeeId,
+        envelope.userId,
+      ]);
+      if (!own.rowCount) throw new Error(`employee ${employeeId} is not the requester`);
+    }
+    const p = await readEmployeeProfile(c, employeeId, self || (perm.rowCount ?? 0) > 0);
     if (!p) throw new Error(`employee ${employeeId} not found`);
+    if (self) {
+      const policy = await loadEmployeePolicy(c);
+      for (const [k, level] of Object.entries(policy.fields))
+        if (level === 'hidden') delete p.values[k];
+    }
     const meta = await c.query<{
       display_name: string;
       status: string;

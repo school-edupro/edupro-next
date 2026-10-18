@@ -1,4 +1,6 @@
 import { AcrController } from './acr.controller';
+import { EmployeeSelfController } from './employee-self.controller';
+import { EmployeeSelfService } from './employee-self.service';
 import { PeopleDashboardController } from './people-dashboard.controller';
 import { PeopleDashboardService } from './people-dashboard.service';
 import { AcrFlowService } from './acr-flow.service';
@@ -31,6 +33,7 @@ import { StudentsService } from './students.service';
 @Module({
   imports: [FilesModule, ReportsModule],
   controllers: [
+    EmployeeSelfController,
     PeopleDashboardController,
     AcrController,
     EmployeeProfileController,
@@ -43,6 +46,7 @@ import { StudentsService } from './students.service';
     ImportsController,
   ],
   providers: [
+    EmployeeSelfService,
     PeopleDashboardService,
     AcrSetupService,
     AcrFlowService,
