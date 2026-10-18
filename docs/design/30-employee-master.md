@@ -128,3 +128,22 @@ experience, remarks and transfers). Built in three parts.
   `people.sensitive.view` today (checked by the worker). "Profile PDF" on the employee page waits for it:
   View (to print) and Download. Test: `apps/workers/test/employee-profile.test.ts`.
 
+
+## Staff transfers (18 Oct 2026, migration 0182)
+
+- **Within the school** (`POST people/staff/:id/campus-move`): another campus from a date, optionally a
+  new department / designation; the active year's posting changes, a transfer row (campus → campus) and
+  a remark are added.
+- **To another school of the group** (Alpha → Beta), as for students (0049): the source sends a request
+  (`POST people/staff/:id/transfer`; date, order number, note) to a school from `app.transfer_targets()`;
+  one open request per employee. The request carries a snapshot (profile values with ID numbers
+  encrypted, education, languages, experience, transfers, documents with type code and file, photo,
+  subjects, login). `employee_school_transfers` is seen by both schools (RLS).
+- **The target accepts** (People → Staff transfers, `people.staff_transfer.manage`): its own code (next
+  code offered), department, designation, staff type and campus. The employee is created there keeping
+  the joining date; rows, subjects (by name), documents (by type code, file bytes copied) and photo are
+  copied; values the target's lists do not hold are listed as "left to fill"; the login gets a staff
+  membership at the target. `app.employee_transfer_close_source` (owner's rights) closes the source:
+  left on the date (inactive once the date has passed), leaving reason, transfer row, remark, membership
+  ended. The target may turn it down, the source may cancel, each with a reason. Test:
+  `apps/api/test/employee-transfer.e2e-spec.ts`.

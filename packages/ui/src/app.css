@@ -3795,6 +3795,15 @@ a.ep-tabs__tab {
   border-color: var(--status-danger);
   background: var(--status-danger-bg);
 }
+/* form fields side by side that wrap to one per line when the card is narrow */
+.ep-fit-row {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.ep-fit-row > * {
+  min-width: 0;
+}
 /* dashboards: the figures first, in an even row of cards (6 / 3 / 2 across), then small charts */
 .ep-dash-kpis {
   display: grid;

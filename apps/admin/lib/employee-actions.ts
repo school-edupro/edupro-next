@@ -340,3 +340,88 @@ export async function requestEmployeePrint(fd: FormData) {
   }
   redirect(`/people/employees/${id}?tab=${encodeURIComponent(tab)}&export=${exportId}`);
 }
+
+// ---- staff transfers ----
+export async function moveEmployeeCampus(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `/people/employees/${id}?tab=history`;
+  if (!okId(id)) redirect('/people/employees');
+  try {
+    await apiFetch(`/people/staff/${id}/campus-move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        campusId: str(fd, 'campusId'),
+        onDate: str(fd, 'onDate'),
+        department: str(fd, 'department') || undefined,
+        designation: str(fd, 'designation') || undefined,
+        orderNo: str(fd, 'orderNo') || undefined,
+        remarks: str(fd, 'remarks') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(`/people/employees/${id}`);
+  redirect(`${page}&ok=moved`);
+}
+
+export async function requestEmployeeTransfer(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `/people/employees/${id}?tab=history`;
+  if (!okId(id)) redirect('/people/employees');
+  try {
+    await apiFetch(`/people/staff/${id}/transfer`, {
+      method: 'POST',
+      body: JSON.stringify({
+        toSchoolId: str(fd, 'toSchoolId'),
+        onDate: str(fd, 'onDate'),
+        orderNo: str(fd, 'orderNo') || undefined,
+        note: str(fd, 'note') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(`/people/employees/${id}`);
+  redirect(`${page}&ok=transfer`);
+}
+
+export async function acceptStaffTransfer(fd: FormData) {
+  const tid = str(fd, 'tid');
+  if (!okId(tid)) redirect('/people/staff-transfers');
+  let to = '';
+  try {
+    const r = await apiFetch<{ toEmployeeId: string }>(`/people/staff-transfers/${tid}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({
+        code: str(fd, 'code') || undefined,
+        department: str(fd, 'department'),
+        designation: str(fd, 'designation'),
+        staffType: str(fd, 'staffType'),
+        campusId: str(fd, 'campusId') || undefined,
+        note: str(fd, 'note') || undefined,
+      }),
+    });
+    to = r.toEmployeeId;
+  } catch (error) {
+    back('/people/staff-transfers', error);
+  }
+  revalidatePath('/people/staff-transfers');
+  redirect(`/people/employees/${to}?ok=transferred`);
+}
+
+export async function closeStaffTransfer(fd: FormData) {
+  const tid = str(fd, 'tid');
+  const how = str(fd, 'how') === 'cancel' ? 'cancel' : 'reject';
+  if (!okId(tid)) redirect('/people/staff-transfers');
+  try {
+    await apiFetch(`/people/staff-transfers/${tid}/${how}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    });
+  } catch (error) {
+    back('/people/staff-transfers', error);
+  }
+  revalidatePath('/people/staff-transfers');
+  redirect(`/people/staff-transfers?ok=${how === 'cancel' ? 'cancelled' : 'rejected'}`);
+}

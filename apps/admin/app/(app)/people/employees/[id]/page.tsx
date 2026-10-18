@@ -22,7 +22,9 @@ import { ExportWatcher } from '@/components/ExportWatcher';
 import { requestEmployeeIdCard, upsertPosting } from '@/lib/actions';
 import {
   createEmployeeLogin,
+  moveEmployeeCampus,
   removeEmployeeDocument,
+  requestEmployeeTransfer,
   requestEmployeePrint,
   removeEmployeeRow,
   saveEmployeeProfile,
@@ -50,6 +52,10 @@ const OK: Record<string, string> = {
   removed: 'Removed.',
   login: 'The staff login is made: they sign in with a code sent to their mobile or email.',
   uploaded: 'The document is uploaded.',
+  moved: 'Moved to the other campus: the posting, the transfer history and a remark are updated.',
+  transfer: 'The transfer is sent: the other school accepts it (People → Staff transfers there).',
+  transferred:
+    'Transferred in: the profile, rows, documents and login are carried over. Fill what the remark lists.',
   verified: 'Marked as checked against the original.',
   unverified: 'The check is taken back.',
 };
@@ -95,6 +101,17 @@ export default async function EmployeePage({
     apiFetch<School>('/platform/school').catch(() => null),
   ]);
   const canEdit = me.permissions.includes('people.employee.edit');
+  const canTransfer = me.permissions.includes('people.staff_transfer.manage');
+  // the other schools of the group (a transfer's possible targets)
+  const targets =
+    canTransfer && tab === 'history'
+      ? await apiFetch<{ data: Array<{ id: string; code: string; name: string }> }>(
+          '/people/staff-transfers/targets',
+        )
+          .then((r) => r.data)
+          .catch(() => [])
+      : [];
+  const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   const rows = profile.rows;
   const list = (code: string) => catalogue.lists[code] ?? [];
   const opts = (code: string) => [
@@ -634,6 +651,122 @@ export default async function EmployeePage({
             </form>
           ) : null}
         </Card>
+      ) : null}
+
+      {tab === 'history' && canTransfer && employee.status === 'active' ? (
+        <div className="ep-chart__grid2">
+          <Card title="Move to another campus">
+            <form action={moveEmployeeCampus} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+              <input type="hidden" name="id" value={id} />
+              <div className="ep-fit-row">
+                <SelectField
+                  id="mv-campus"
+                  name="campusId"
+                  label="To campus"
+                  required
+                  defaultValue=""
+                  options={[
+                    { value: '', label: 'Choose…' },
+                    ...(school?.campuses ?? []).map((x) => ({ value: x.id, label: x.name })),
+                  ]}
+                />
+                <InputField
+                  id="mv-on"
+                  name="onDate"
+                  label="From"
+                  type="date"
+                  required
+                  defaultValue={today}
+                />
+              </div>
+              <div className="ep-fit-row">
+                <SelectField
+                  id="mv-dept"
+                  name="department"
+                  label="Department (if it changes)"
+                  defaultValue=""
+                  options={[
+                    { value: '', label: 'No change' },
+                    ...list('Department').map((v) => ({ value: v, label: v })),
+                  ]}
+                />
+                <SelectField
+                  id="mv-desg"
+                  name="designation"
+                  label="Designation (if it changes)"
+                  defaultValue=""
+                  options={[
+                    { value: '', label: 'No change' },
+                    ...list('Designation').map((v) => ({ value: v, label: v })),
+                  ]}
+                />
+              </div>
+              <div className="ep-fit-row">
+                <InputField id="mv-order" name="orderNo" label="Order number" maxLength={60} />
+                <InputField id="mv-rem" name="remarks" label="Remarks" maxLength={300} />
+              </div>
+              <div>
+                <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                  <Icon name="send" size={16} /> Move
+                </button>
+              </div>
+            </form>
+          </Card>
+          <Card title="Transfer to another school of the group">
+            {targets.length ? (
+              <form
+                action={requestEmployeeTransfer}
+                style={{ display: 'grid', gap: 'var(--sp-3)' }}
+              >
+                <input type="hidden" name="id" value={id} />
+                <div className="ep-fit-row">
+                  <SelectField
+                    id="tr-school"
+                    name="toSchoolId"
+                    label="To school"
+                    required
+                    defaultValue=""
+                    options={[
+                      { value: '', label: 'Choose…' },
+                      ...targets.map((x) => ({ value: x.id, label: x.name })),
+                    ]}
+                  />
+                  <InputField
+                    id="tr-date"
+                    name="onDate"
+                    label="From"
+                    type="date"
+                    required
+                    defaultValue={today}
+                  />
+                </div>
+                <div className="ep-fit-row">
+                  <InputField id="tr-ord" name="orderNo" label="Order number" maxLength={60} />
+                  <InputField
+                    id="tr-note"
+                    name="note"
+                    label="Note to the other school"
+                    maxLength={500}
+                  />
+                </div>
+                <p className="ep-field__help" style={{ margin: 0 }}>
+                  The other school accepts it and gives its own code, department and designation.
+                  The profile, education, languages, experience, documents, subjects and the login
+                  go with the employee; here the record closes on the date.
+                </p>
+                <div>
+                  <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                    <Icon name="send" size={16} /> Send the transfer
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                This school has no other school in its group.
+              </p>
+            )}
+          </Card>
+        </div>
       ) : null}
 
       {tab === 'history' ? (

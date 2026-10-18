@@ -327,6 +327,7 @@ const PAGES = [
   '/approvals',
   '/people/roll-numbers?section=143',
   '/people/school-transfers',
+  '/people/staff-transfers',
   '/comms',
   '/comms/groups?new=1',
   '/comms/templates?channel=whatsapp',

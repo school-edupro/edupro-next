@@ -1,3 +1,5 @@
+import { EmployeeTransferController } from './employee-transfer.controller';
+import { EmployeeTransferService } from './employee-transfer.service';
 import { EmployeeBulkService } from './employee-bulk.service';
 import { EmployeeGridService } from './employee-grid.service';
 import { EmployeeProfileController } from './employee-profile.controller';
@@ -25,6 +27,7 @@ import { StudentsService } from './students.service';
   imports: [FilesModule, ReportsModule],
   controllers: [
     EmployeeProfileController,
+    EmployeeTransferController,
     SectionRollController,
     StudentProfileController,
     StudentsController,
@@ -36,6 +39,7 @@ import { StudentsService } from './students.service';
     EmployeeProfileService,
     EmployeeGridService,
     EmployeeBulkService,
+    EmployeeTransferService,
     SectionRollService,
     StudentBulkService,
     StudentGridService,

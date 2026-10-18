@@ -410,3 +410,33 @@ export const EmployeeDocumentSchema = z
 export class EmployeeDocumentDto extends createZodDto(EmployeeDocumentSchema) {}
 export const EmployeeDocumentVerifySchema = z.object({ verified: z.boolean().default(true) });
 export class EmployeeDocumentVerifyDto extends createZodDto(EmployeeDocumentVerifySchema) {}
+
+// ---- staff transfers ----
+const TDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const EmployeeCampusMoveSchema = z.object({
+  campusId: IdSchema,
+  onDate: TDay,
+  department: z.string().trim().max(80).optional(),
+  designation: z.string().trim().max(80).optional(),
+  orderNo: z.string().trim().max(60).optional(),
+  remarks: z.string().trim().max(300).optional(),
+});
+export class EmployeeCampusMoveDto extends createZodDto(EmployeeCampusMoveSchema) {}
+export const EmployeeTransferRequestSchema = z.object({
+  toSchoolId: IdSchema,
+  onDate: TDay,
+  orderNo: z.string().trim().max(60).optional(),
+  note: z.string().trim().max(500).optional(),
+});
+export class EmployeeTransferRequestDto extends createZodDto(EmployeeTransferRequestSchema) {}
+export const EmployeeTransferAcceptSchema = z.object({
+  code: z.string().trim().max(30).optional(),
+  department: z.string().trim().min(1).max(80),
+  designation: z.string().trim().min(1).max(80),
+  staffType: z.string().trim().min(1).max(80),
+  campusId: IdSchema.optional(),
+  note: z.string().trim().max(500).optional(),
+});
+export class EmployeeTransferAcceptDto extends createZodDto(EmployeeTransferAcceptSchema) {}
+export const EmployeeTransferCloseSchema = z.object({ reason: z.string().trim().min(3).max(500) });
+export class EmployeeTransferCloseDto extends createZodDto(EmployeeTransferCloseSchema) {}

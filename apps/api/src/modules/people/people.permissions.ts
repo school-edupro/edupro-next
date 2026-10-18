@@ -15,6 +15,8 @@ export const PEOPLE = {
   documentView: 'people.document.view',
   search: 'people.person.search',
   importRun: 'people.import.run',
+  /** Move staff between campuses and to other schools of the group (0182). */
+  staffTransfer: 'people.staff_transfer.manage',
   /** Full Aadhaar, PAN and bank account numbers (granted through the Sensitive data viewer role). */
   sensitiveView: 'people.sensitive.view',
 } as const;

@@ -61,6 +61,17 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 3. Upload it and **Check the file**: every change shows as old → new, every problem with its row and
    column. Fix and upload again, or **Apply** the rows that are ready; the result file lists every row.
 
+## Moving staff (open an employee → Transfers and remarks)
+
+- **Move to another campus**: pick the campus and the date; change the department or designation if
+  needed. The posting changes and the move is noted in the history.
+- **Transfer to another school of the group** (e.g. Alpha → Beta): pick the school, the date and the
+  order number, and send. Nothing changes here until the other school accepts.
+- **The other school** opens People → Staff transfers, checks the code, department, designation and
+  campus, and presses Accept. The profile, education, languages, experience, documents, subjects and
+  login go with the employee; here the record closes on the transfer date. They can also Turn down
+  (with a reason); you can Cancel your request until then.
+
 ## Five common questions
 
 1. _The department I need is not offered._ Add it in Staff setup → Departments.
