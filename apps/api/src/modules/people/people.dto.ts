@@ -304,3 +304,64 @@ export const ChangeAdmissionNoSchema = z.object({
   reason: z.string().trim().min(3).max(300),
 });
 export class ChangeAdmissionNoDto extends createZodDto(ChangeAdmissionNoSchema) {}
+
+// ---- the employee master (docs/design/30-employee-master.md) ----
+/** Changes to an employee's profile: catalogue key → raw value (validated against the catalogue). */
+export const EmployeeProfileSchema = z.object({
+  changes: z.record(z.string().max(40), z.union([z.string().max(300), z.number(), z.null()])),
+});
+export class EmployeeProfileDto extends createZodDto(EmployeeProfileSchema) {}
+/** Quick onboard: the minimum, optionally a staff login. */
+export const EmployeeOnboardSchema = z.object({
+  values: z.record(z.string().max(40), z.union([z.string().max(300), z.number(), z.null()])),
+  createLogin: z.boolean().default(true),
+});
+export class EmployeeOnboardDto extends createZodDto(EmployeeOnboardSchema) {}
+
+const year = z.coerce.number().int().min(1940).max(2100);
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const txt = (n = 200) => z.string().trim().max(n);
+export const EMPLOYEE_ROW_SCHEMAS = {
+  education: z.object({
+    qualification: txt(80).min(1),
+    specialisation: txt(120).optional(),
+    institution: txt(200).optional(),
+    passingYear: year.optional(),
+    score: txt(20).optional(),
+    mode: txt(30).optional(),
+  }),
+  languages: z.object({
+    language: txt(40).min(1),
+    canRead: z.boolean().default(false),
+    canWrite: z.boolean().default(false),
+    canSpeak: z.boolean().default(false),
+  }),
+  experience: z
+    .object({
+      organisation: txt(200).min(1),
+      designation: txt(120).optional(),
+      fromOn: day.optional(),
+      toOn: day.optional(),
+      reason: txt(300).optional(),
+    })
+    .refine((v) => !v.fromOn || !v.toOn || v.fromOn <= v.toOn, {
+      message: 'the end is before the start',
+      path: ['toOn'],
+    }),
+  transfers: z.object({
+    onDate: day,
+    fromPlace: txt(200).optional(),
+    toPlace: txt(200).min(1),
+    orderNo: txt(60).optional(),
+    remarks: txt(300).optional(),
+  }),
+  remarks: z.object({ onDate: day.optional(), remark: txt(1000).min(1) }),
+} as const;
+export type EmployeeRowKind = keyof typeof EMPLOYEE_ROW_SCHEMAS;
+export const EmployeeRowKindSchema = z.enum([
+  'education',
+  'languages',
+  'experience',
+  'transfers',
+  'remarks',
+]);

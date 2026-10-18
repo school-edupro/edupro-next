@@ -10,6 +10,7 @@
  * Bound parameters only.
  */
 import { PROFILE_LIST_DEFAULTS } from './student-fields';
+import { EMPLOYEE_LIST_DEFAULTS } from './employee-fields';
 import type { DatasetColumn, DatasetDefinition, DatasetQuery } from './datasets';
 
 export type MasterFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'ref';
@@ -76,6 +77,7 @@ export type MasterGroup =
   | 'exams'
   | 'communication'
   | 'library'
+  | 'staff'
   | 'system';
 
 /**
@@ -149,6 +151,7 @@ export const MASTER_GROUPS: Record<MasterGroup, { title: string; kicker: string 
   exams: { title: 'Exams setup', kicker: 'Exams' },
   communication: { title: 'Communication setup', kicker: 'Communication' },
   library: { title: 'Library catalogue', kicker: 'Library' },
+  staff: { title: 'Staff setup', kicker: 'People' },
   system: { title: 'System setup', kicker: 'System' },
 };
 
@@ -731,7 +734,7 @@ export const MASTERS: MasterDefinition[] = [
   // ---- system: student profile drop-down lists ----
   master({
     id: 'profile_lists',
-    title: 'Student profile lists',
+    title: 'Profile lists (students and staff)',
     group: 'system',
     table: 'profile_lists',
     permission: { view: 'people.student.view', manage: 'platform.settings.edit' },
@@ -744,9 +747,9 @@ export const MASTERS: MasterDefinition[] = [
         type: 'select',
         required: true,
         identity: true,
-        options: Object.keys(PROFILE_LIST_DEFAULTS),
+        options: [...Object.keys(PROFILE_LIST_DEFAULTS), ...Object.keys(EMPLOYEE_LIST_DEFAULTS)],
         width: 16,
-        help: 'Which drop-down this value belongs to (Religion, Occupation, Income …)',
+        help: 'Which drop-down this value belongs to (Religion, Occupation, Income, Marital status, Pay band, Qualification …)',
       },
       {
         key: 'value',
@@ -1600,6 +1603,123 @@ export const MASTERS: MasterDefinition[] = [
     status: STATUS,
     search: ['t.code', 't.heading', 't.name', 't.designation'],
     orderBy: 't.sort_order, t.heading, t.name',
+  }),
+  // ---- staff setup (docs/design/30-employee-master.md) ----
+  master({
+    id: 'departments',
+    title: 'Departments',
+    group: 'staff',
+    order: 10,
+    table: 'departments',
+    permission: { view: 'people.employee.view', manage: 'people.employee.edit' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    uploadHelp:
+      'The departments an employee belongs to. A department switched to inactive is no longer offered; employees already in it keep it.',
+    fields: [
+      {
+        key: 'code',
+        header: 'Code',
+        type: 'text',
+        required: true,
+        identity: true,
+        maxLength: 30,
+        width: 12,
+        pattern: '^[a-z][a-z0-9_]{1,29}$',
+        patternHelp: 'small letters, digits and _ (for example teaching_junior)',
+      },
+      name('Department'),
+      {
+        key: 'staff_group',
+        header: 'For',
+        type: 'select',
+        options: ['teaching', 'non_teaching', 'both'],
+        required: true,
+        width: 12,
+        help: 'teaching, non_teaching or both.',
+      },
+      order(),
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name'],
+    orderBy: 't.sort_order, t.name',
+  }),
+  master({
+    id: 'designations',
+    title: 'Designations',
+    group: 'staff',
+    order: 20,
+    table: 'designations',
+    permission: { view: 'people.employee.view', manage: 'people.employee.edit' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    uploadHelp: 'The posts staff hold (PGT, TGT, Accountant …), in the order lists show them.',
+    fields: [
+      {
+        key: 'code',
+        header: 'Code',
+        type: 'text',
+        required: true,
+        identity: true,
+        maxLength: 30,
+        width: 12,
+        pattern: '^[a-z][a-z0-9_]{1,29}$',
+        patternHelp: 'small letters, digits and _ (for example teaching_junior)',
+      },
+      name('Designation'),
+      {
+        key: 'staff_group',
+        header: 'For',
+        type: 'select',
+        options: ['teaching', 'non_teaching', 'both'],
+        required: true,
+        width: 12,
+        help: 'teaching, non_teaching or both.',
+      },
+      order(),
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name'],
+    orderBy: 't.sort_order, t.name',
+  }),
+  master({
+    id: 'employee_types',
+    title: 'Employee types',
+    group: 'staff',
+    order: 30,
+    table: 'employee_types',
+    permission: { view: 'people.employee.view', manage: 'people.employee.edit' },
+    naturalKey: ['code'],
+    conflict: '(school_id, code)',
+    uploadHelp:
+      'Teaching Regular, Teaching Contract, Non-Teaching Regular … Each belongs to a staff group the ERP reads (timetable, attendance, ID cards).',
+    fields: [
+      {
+        key: 'code',
+        header: 'Code',
+        type: 'text',
+        required: true,
+        identity: true,
+        maxLength: 30,
+        width: 12,
+        pattern: '^[a-z][a-z0-9_]{1,29}$',
+        patternHelp: 'small letters, digits and _ (for example teaching_junior)',
+      },
+      name('Employee type'),
+      {
+        key: 'staff_group',
+        header: 'Staff group',
+        type: 'select',
+        options: ['teaching', 'non_teaching', 'contract', 'visiting'],
+        required: true,
+        width: 14,
+        help: 'teaching, non_teaching, contract or visiting.',
+      },
+      order(),
+    ],
+    status: STATUS,
+    search: ['t.code', 't.name'],
+    orderBy: 't.sort_order, t.name',
   }),
   // ---- attendance ----
   master({

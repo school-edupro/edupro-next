@@ -76,6 +76,8 @@ export function applies(f: CatalogueField, values: ProfileValues): boolean {
 export function cascadeOf(key: string): { country: string; state: string; city: string } | null {
   const groups: Array<[string, string, string]> = [
     ['residential_country', 'residential_state', 'residential_city'],
+    // the employee's present address (the permanent one shares the student key names)
+    ['present_country', 'present_state', 'present_city'],
     ['permanent_country', 'permanent_state', 'permanent_city'],
     ['father_office_country', 'father_office_state', 'father_office_city'],
     ['mother_office_country', 'mother_office_state', 'mother_office_city'],

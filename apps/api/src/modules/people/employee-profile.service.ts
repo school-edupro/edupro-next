@@ -1,0 +1,463 @@
+import { Injectable } from '@nestjs/common';
+import {
+  EMPLOYEE_FIELDS,
+  EMPLOYEE_QUICK_KEYS,
+  EMPLOYEE_SECTIONS,
+  EmployeeWriteError,
+  employeeCompleteness,
+  loadEmployeeLists,
+  optionsOf,
+  nextEmployeeCode,
+  readEmployeeProfile,
+  validateEmployeeChanges,
+  writeEmployeeProfile,
+  type PoolClient,
+} from '@edupro/db';
+import { AuditService } from '../../common/audit/audit.service';
+import { DbService } from '../../common/db/db.service';
+import { DomainError } from '../../common/errors/domain-error';
+import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import {
+  EMPLOYEE_ROW_SCHEMAS,
+  type EmployeeOnboardDto,
+  type EmployeeProfileDto,
+  type EmployeeRowKind,
+} from './people.dto';
+import { PEOPLE } from './people.permissions';
+
+type Row = Record<string, unknown>;
+
+/** The row tables: their table, columns (API key → column) and order. */
+const ROWS: Record<
+  EmployeeRowKind,
+  { table: string; cols: Record<string, string>; order: string }
+> = {
+  education: {
+    table: 'employee_education',
+    cols: {
+      qualification: 'qualification',
+      specialisation: 'specialisation',
+      institution: 'institution',
+      passingYear: 'passing_year',
+      score: 'score',
+      mode: 'mode',
+    },
+    order: 'passing_year DESC NULLS LAST, id',
+  },
+  languages: {
+    table: 'employee_languages',
+    cols: {
+      language: 'language',
+      canRead: 'can_read',
+      canWrite: 'can_write',
+      canSpeak: 'can_speak',
+    },
+    order: 'language',
+  },
+  experience: {
+    table: 'employee_experience',
+    cols: {
+      organisation: 'organisation',
+      designation: 'designation',
+      fromOn: 'from_on',
+      toOn: 'to_on',
+      reason: 'reason',
+    },
+    order: 'from_on DESC NULLS LAST, id',
+  },
+  transfers: {
+    table: 'employee_transfers',
+    cols: {
+      onDate: 'on_date',
+      fromPlace: 'from_place',
+      toPlace: 'to_place',
+      orderNo: 'order_no',
+      remarks: 'remarks',
+    },
+    order: 'on_date DESC, id DESC',
+  },
+  remarks: {
+    table: 'employee_remarks',
+    cols: { onDate: 'on_date', remark: 'remark' },
+    order: 'on_date DESC, id DESC',
+  },
+};
+
+/**
+ * The employee master (docs/design/30-employee-master.md): the field catalogue with the school's lists,
+ * an employee's full profile (masked IDs unless the viewer may see them), saving it, quick onboarding
+ * (with the next code and an optional staff login), and the rows: education, languages, experience,
+ * transfers and remarks.
+ */
+@Injectable()
+export class EmployeeProfileService {
+  constructor(
+    private readonly db: DbService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async catalogue(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      // a school opening the master the first time gets its staff setup lists
+      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      const lists = await loadEmployeeLists(c);
+      const geo = await c.query<{
+        kind: string;
+        code: string;
+        name: string;
+        parent: string | null;
+      }>(
+        `SELECT 'country' AS kind, code, name, NULL AS parent FROM countries WHERE status = 'active'
+         UNION ALL
+         SELECT 'state', s.code, s.name, co.name FROM states s LEFT JOIN countries co ON co.id = s.country_id WHERE s.status = 'active'
+         UNION ALL
+         SELECT 'city', COALESCE(ci.pincode, ''), ci.name, st.name FROM cities ci LEFT JOIN states st ON st.id = ci.state_id WHERE ci.status = 'active'
+         ORDER BY 1, 3`,
+      );
+      // approvers are picked from the active staff ("NAME (CODE)")
+      const staff = await c.query<{ label: string }>(
+        `SELECT display_name || ' (' || employee_code || ')' AS label FROM employees
+          WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name LIMIT 3000`,
+      );
+      return {
+        sections: EMPLOYEE_SECTIONS,
+        // the shape of the student catalogue, so the same field boxes serve both
+        fields: EMPLOYEE_FIELDS.map((f) => ({
+          key: f.key,
+          section: f.section,
+          label: f.label,
+          type: f.type,
+          required: f.required ?? false,
+          list: f.list ?? null,
+          options:
+            f.type === 'employee'
+              ? staff.rows.map((x) => x.label)
+              : f.list
+                ? optionsOf(f as never, lists)
+                : null,
+          upper: f.upper ?? false,
+          help: f.help ?? null,
+          when: f.when ?? null,
+          sensitive: f.sensitive ?? false,
+          readOnly: f.store.t === 'auto',
+          excelColumn: '',
+        })),
+        quickAdd: EMPLOYEE_QUICK_KEYS,
+        geography: {
+          countries: geo.rows
+            .filter((g) => g.kind === 'country')
+            .map((g) => ({ code: g.code, name: g.name })),
+          states: geo.rows
+            .filter((g) => g.kind === 'state')
+            .map((g) => ({ code: g.code, name: g.name, country: g.parent })),
+          cities: geo.rows
+            .filter((g) => g.kind === 'city')
+            .map((g) => ({ name: g.name, state: g.parent, pincode: g.code || null })),
+        },
+        canSeeSensitive: this.full(ctx),
+        lists,
+        nextCode: await nextEmployeeCode(c),
+      };
+    });
+  }
+
+  private full(ctx: RequestContext) {
+    return Boolean(ctx.permissions?.has(PEOPLE.sensitiveView));
+  }
+
+  private async view(c: PoolClient, ctx: RequestContext, id: string) {
+    const p = await readEmployeeProfile(c, id, this.full(ctx));
+    if (!p) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+    const meta = await c.query<{
+      status: string;
+      user_id: string | null;
+      photo_file_id: string | null;
+      display_name: string;
+      employee_type: string;
+    }>(
+      `SELECT status::text, user_id::text, photo_file_id::text, display_name, employee_type::text FROM employees WHERE id = $1`,
+      [id],
+    );
+    const rows: Record<string, Row[]> = {};
+    for (const [kind, def] of Object.entries(ROWS)) {
+      const sel = Object.entries(def.cols)
+        .map(
+          ([k, col]) =>
+            `${col}${col.endsWith('_on') || col === 'on_date' ? '::text' : ''} AS "${k}"`,
+        )
+        .join(', ');
+      rows[kind] = (
+        await c.query<Row>(
+          // eslint-disable-next-line no-restricted-syntax -- table and columns from the ROWS constant; values are bound
+          `SELECT id::text, ${sel}${kind === 'remarks' ? ', source, (SELECT display_name FROM users WHERE id = created_by) AS "by"' : ''}
+             FROM ${def.table} WHERE employee_id = $1 ORDER BY ${def.order}`,
+          [id],
+        )
+      ).rows;
+    }
+    const done = employeeCompleteness(p.values);
+    return {
+      id,
+      name: meta.rows[0]!.display_name,
+      status: meta.rows[0]!.status,
+      staffGroup: meta.rows[0]!.employee_type,
+      hasLogin: Boolean(meta.rows[0]!.user_id),
+      photoFileId: meta.rows[0]!.photo_file_id,
+      values: p.values,
+      approvers: p.approvers,
+      // the sensitive values shown masked (the form keeps them unless retyped)
+      masked: this.full(ctx)
+        ? []
+        : EMPLOYEE_FIELDS.filter((f) => f.sensitive && p.values[f.key] !== null).map((f) => f.key),
+      completeness: done.percent,
+      missing: done.missing,
+      sensitiveShown: this.full(ctx),
+      rows,
+    };
+  }
+
+  async profile(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.view(c, ctx, id));
+  }
+
+  private errors(e: Record<string, string>): never {
+    throw new DomainError('validation-failed', Object.values(e).slice(0, 6).join('; '), {
+      status: 400,
+      extra: { errors: Object.entries(e).map(([path, message]) => ({ path, message })) },
+    });
+  }
+
+  async save(ctx: RequestContext, id: string, dto: EmployeeProfileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const lists = await loadEmployeeLists(c);
+      const { values, errors } = await validateEmployeeChanges(c, dto.changes, lists, id);
+      if (Object.keys(errors).length) this.errors(errors);
+      const before = await readEmployeeProfile(c, id, false);
+      if (!before) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      try {
+        await writeEmployeeProfile(c, id, values);
+      } catch (e) {
+        if (e instanceof EmployeeWriteError) this.errors(e.errors);
+        throw e;
+      }
+      // a leaving date makes the employee inactive (and a remark says so)
+      if (values.left_on !== undefined) await this.leaving(c, id, values.left_on as string | null);
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.profile',
+        entityType: 'employees',
+        entityId: id,
+        // the keys changed; values of sensitive fields never go to the audit
+        after: { changed: Object.keys(values) },
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  private async leaving(c: PoolClient, id: string, leftOn: string | null) {
+    const r = await c.query<{ status: string }>(
+      `UPDATE employees SET status = CASE WHEN $2::date IS NOT NULL AND $2::date <= CURRENT_DATE THEN 'inactive'::row_status
+                                          WHEN $2::date IS NULL THEN 'active'::row_status ELSE status END
+        WHERE id = $1 RETURNING status::text`,
+      [id, leftOn],
+    );
+    await c.query(
+      `INSERT INTO employee_remarks (school_id, employee_id, remark, source, created_by)
+       VALUES (app.current_school_id(), $1, $2, 'system', app.current_user_id())`,
+      [
+        id,
+        leftOn
+          ? `Leaving date set to ${leftOn}; status ${r.rows[0]?.status ?? ''}`
+          : 'Leaving date removed; status active',
+      ],
+    );
+  }
+
+  /** Quick onboarding: the minimum fields (code filled with the next one), and a staff login if asked. */
+  async onboard(ctx: RequestContext, dto: EmployeeOnboardDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.staff_masters_seed(app.current_school_id())`);
+      const lists = await loadEmployeeLists(c);
+      const raw: Record<string, unknown> = { ...dto.values };
+      if (!raw.employee_code) raw.employee_code = await nextEmployeeCode(c);
+      const { values, errors } = await validateEmployeeChanges(c, raw, lists, null);
+      for (const k of [
+        'first_name',
+        'gender',
+        'mobile',
+        'staff_type',
+        'department',
+        'designation',
+        'joined_on',
+      ])
+        if (!values[k] && !errors[k])
+          errors[k] = `${EMPLOYEE_FIELDS.find((f) => f.key === k)!.label}: an answer is needed`;
+      if (Object.keys(errors).length) this.errors(errors);
+      let id: string;
+      try {
+        id = await writeEmployeeProfile(c, null, values);
+      } catch (e) {
+        if (e instanceof EmployeeWriteError) this.errors(e.errors);
+        throw e;
+      }
+      // the posting of the year, so the timetable and the department lists know the person
+      await c.query(
+        `INSERT INTO postings (school_id, employee_id, academic_year_id, department, designation, valid_from, created_by)
+         SELECT app.current_school_id(), $1, y.id, $2, $3, COALESCE($4::date, CURRENT_DATE), app.current_user_id()
+           FROM academic_years y WHERE y.status = 'active' ORDER BY y.start_date DESC LIMIT 1
+         ON CONFLICT (employee_id, academic_year_id) DO NOTHING`,
+        [id, values.department, values.designation, values.joined_on],
+      );
+      await c.query(
+        `INSERT INTO employee_remarks (school_id, employee_id, remark, source, created_by)
+         VALUES (app.current_school_id(), $1, 'Onboarded', 'system', app.current_user_id())`,
+        [id],
+      );
+      let login: { made: boolean; reason?: string } = { made: false };
+      if (dto.createLogin) {
+        // a savepoint: a login that cannot be made never undoes the onboarding
+        await c.query('SAVEPOINT login');
+        try {
+          await c.query(`SELECT app.employee_create_login($1)`, [id]);
+          await c.query('RELEASE SAVEPOINT login');
+          login = { made: true };
+        } catch (e) {
+          await c.query('ROLLBACK TO SAVEPOINT login');
+          const msg = e instanceof Error ? e.message : '';
+          login = {
+            made: false,
+            reason: msg.includes('employee.no_contact')
+              ? 'no mobile or email to sign in with'
+              : 'the login could not be made',
+          };
+        }
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.onboard',
+        entityType: 'employees',
+        entityId: id,
+        after: { code: values.employee_code, login: login.made },
+      });
+      return { id, code: values.employee_code, login };
+    });
+  }
+
+  /** A staff login for an employee who has none. */
+  async createLogin(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      try {
+        await c.query(`SELECT app.employee_create_login($1)`, [id]);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg.includes('employee.no_contact'))
+          throw new DomainError('employee.no_contact', 'Add a mobile or an email first', {
+            status: 409,
+          });
+        if (msg.includes('employee.not_found'))
+          throw new DomainError('not-found', 'Employee not found', { status: 404 });
+        throw e;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.login',
+        entityType: 'employees',
+        entityId: id,
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  // ---- rows ----
+  private parse(kind: EmployeeRowKind, body: unknown) {
+    const r = EMPLOYEE_ROW_SCHEMAS[kind].safeParse(body);
+    if (!r.success)
+      throw new DomainError(
+        'validation-failed',
+        r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+        {
+          status: 400,
+        },
+      );
+    return r.data as Record<string, unknown>;
+  }
+
+  async addRow(ctx: RequestContext, id: string, kind: EmployeeRowKind, body: unknown) {
+    const data = this.parse(kind, body);
+    const def = ROWS[kind];
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ok = await c.query(`SELECT 1 FROM employees WHERE id = $1 AND deleted_at IS NULL`, [
+        id,
+      ]);
+      if (!ok.rowCount) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      const keys = Object.keys(def.cols).filter((k) => data[k] !== undefined);
+      const params: unknown[] = [id, ...keys.map((k) => data[k])];
+      try {
+        await c.query(
+          // eslint-disable-next-line no-restricted-syntax -- table and columns from the ROWS constant; values are bound
+          `INSERT INTO ${def.table} (school_id, employee_id, created_by${keys.map((k) => `, ${def.cols[k]}`).join('')})
+           VALUES (app.current_school_id(), $1, app.current_user_id()${keys.map((_, i) => `, $${i + 2}`).join('')})`,
+          params,
+        );
+      } catch (e) {
+        if ((e as { code?: string }).code === '23505')
+          throw new DomainError('employee.row_exists', 'This language is already on the list', {
+            status: 409,
+          });
+        throw e;
+      }
+      await this.audit.stage(ctx, c, {
+        action: `people.employee.${kind}.add`,
+        entityType: 'employees',
+        entityId: id,
+        after: data,
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  async updateRow(
+    ctx: RequestContext,
+    id: string,
+    kind: EmployeeRowKind,
+    rowId: string,
+    body: unknown,
+  ) {
+    const data = this.parse(kind, body);
+    const def = ROWS[kind];
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const keys = Object.keys(def.cols);
+      const params: unknown[] = [rowId, id, ...keys.map((k) => data[k] ?? null)];
+      const r = await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- table and columns from the ROWS constant; values are bound
+        `UPDATE ${def.table} SET ${keys.map((k, i) => `${def.cols[k]} = $${i + 3}`).join(', ')}
+          WHERE id = $1 AND employee_id = $2${kind === 'remarks' ? ` AND source = 'office'` : ''}`,
+        params,
+      );
+      if (!r.rowCount) throw new DomainError('not-found', 'Row not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: `people.employee.${kind}.change`,
+        entityType: 'employees',
+        entityId: id,
+        after: data,
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+
+  async removeRow(ctx: RequestContext, id: string, kind: EmployeeRowKind, rowId: string) {
+    const def = ROWS[kind];
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- the table from the ROWS constant; values are bound
+        `DELETE FROM ${def.table} WHERE id = $1 AND employee_id = $2${kind === 'remarks' ? ` AND source = 'office'` : ''}`,
+        [rowId, id],
+      );
+      if (!r.rowCount) throw new DomainError('not-found', 'Row not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: `people.employee.${kind}.remove`,
+        entityType: 'employees',
+        entityId: id,
+        after: { rowId },
+      });
+      return this.view(c, ctx, id);
+    });
+  }
+}

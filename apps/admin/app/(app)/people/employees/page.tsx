@@ -13,6 +13,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createEmployee } from '@/lib/actions';
+import { Icon } from '@/components/nav-icons';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Employee, Page, School } from '@/lib/types';
 
@@ -47,7 +48,21 @@ export default async function EmployeesPage({
   const canCreate = me.permissions.includes('people.employee.create');
   return (
     <>
-      <PageHeader kicker={p('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker={p('kicker')}
+        title={t('title')}
+        description={t('description')}
+        actions={
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', whiteSpace: 'nowrap' }}>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/masters/staff">
+              <Icon name="settings" size={16} /> Staff setup
+            </a>
+            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/people/employees/new">
+              <Icon name="userPlus" size={16} /> Onboard
+            </a>
+          </span>
+        }
+      />
       <Notice params={sp} />
       <div className="ep-filter-band">
         <form

@@ -1,3 +1,5 @@
+import { EmployeeProfileController } from './employee-profile.controller';
+import { EmployeeProfileService } from './employee-profile.service';
 import { SectionRollController } from './section-roll.controller';
 import { SectionRollService } from './section-roll.service';
 import { Module } from '@nestjs/common';
@@ -20,6 +22,7 @@ import { StudentsService } from './students.service';
 @Module({
   imports: [FilesModule, ReportsModule],
   controllers: [
+    EmployeeProfileController,
     SectionRollController,
     StudentProfileController,
     StudentsController,
@@ -28,6 +31,7 @@ import { StudentsService } from './students.service';
     ImportsController,
   ],
   providers: [
+    EmployeeProfileService,
     SectionRollService,
     StudentBulkService,
     StudentGridService,

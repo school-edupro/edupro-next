@@ -40,8 +40,11 @@ export function parseDate(raw: string): string | null {
   return `${String(y)}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/** What validation needs of a field: shared by the student and the employee catalogues. */
+export type FieldShape = Pick<ProfileField, 'key' | 'type' | 'list' | 'upper'>;
+
 /** Options of a list: the school's master values when it has any, otherwise the defaults. */
-export function optionsOf(field: ProfileField, lists: ProfileLists): string[] {
+export function optionsOf(field: Pick<FieldShape, 'list'>, lists: ProfileLists): string[] {
   if (!field.list) return [];
   const school = lists[field.list];
   return school && school.length > 0 ? school : (PROFILE_LIST_DEFAULTS[field.list] ?? []);
@@ -52,7 +55,7 @@ export function optionsOf(field: ProfileField, lists: ProfileLists): string[] {
  * case-insensitively and come back in the list's own spelling.
  */
 export function normaliseValue(
-  field: ProfileField,
+  field: FieldShape,
   raw: unknown,
   lists: ProfileLists = {},
 ): Normalised {
