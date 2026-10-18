@@ -176,3 +176,16 @@ up by the school admin only (new permission `engagement.consent_form.integrate`)
   waiting levels are decided at once in the key's name, the note says "by API key …", then the fee,
   the family message and the webhook follow as in the school). Keys are looked up by hash through
   `app.consent_api_key_lookup`; every call counts on the key (last used, calls).
+
+## Follow-up (18 Oct 2026, migration 0172)
+
+- Message templates `consent_form_new` and `consent_form_reminder` on SMS, WhatsApp and email for every
+  school (variables school, form_title, closes_on, link: the public link when on, else the parent app).
+  Publish and Remind choose them by default, so publishing tells families on every channel; each channel
+  goes as its own message request (one channel switched off does not stop the others) and the notice
+  says what became of each. One-time-code and decision templates are not offered in the picker.
+- Fix: answering on the public link with a file failed (the file's owner id is text).
+- Parent app Consent forms rebuilt: per child, a summary (to answer, waiting for the school, fee to pay,
+  answered), tabs To answer / Answered / Closed, a card per form with closing badge (red within two
+  days), fee and approval marks, the school's text folded, each answer with status, Pay, Change and the
+  PDF copy.

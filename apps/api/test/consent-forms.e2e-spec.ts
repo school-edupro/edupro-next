@@ -653,9 +653,10 @@ describe('consent forms (e2e)', () => {
     });
     expect(p.statusCode).toBe(200);
     expect(p.json().status).toBe('published');
-    expect(p.json().message.error).toBeTruthy();
+    expect(p.json().messages[0]).toMatchObject({ channel: 'sms' });
+    expect(p.json().messages[0].error).toBeTruthy();
     const n = await post(`/engagement/consent-forms/${f.json().id}/notify`, { channels: [] });
-    expect(n.json()).toMatchObject({ message: null });
+    expect(n.json()).toMatchObject({ messages: [] });
   });
 
   // ---- part 3: the public link, QR, analytics ------------------------------------------------------
@@ -666,6 +667,7 @@ describe('consent forms (e2e)', () => {
       fields: [
         { key: 'guests', label: 'Guests', type: 'number', required: true, min: 1, max: 4 },
         { key: 'sign', label: 'Signature', type: 'signature', required: true },
+        { key: 'photo', label: 'Photo of the pupil', type: 'file' },
       ],
       audience: { pupils: 'filter', sectionIds: [ids.secA] },
       settings: {
@@ -767,12 +769,32 @@ describe('consent forms (e2e)', () => {
       json: { mode: 'family', admissionNo: `${ids.s}-2`, code: fo.json().devCode },
     });
     const hf = { authorization: `Bearer ${fv.json().token as string}` };
+    // a file uploaded on the link (a slot tied to this form)
+    const pdfBytes = Buffer.from('%PDF-1.4\n% consent test\n');
+    const slot = await inject({
+      method: 'POST',
+      url: `${base}/uploads`,
+      headers: hf,
+      json: { fileName: 'photo.pdf', contentType: 'application/pdf', sizeBytes: pdfBytes.length },
+    });
+    expect(slot.statusCode).toBe(201);
+    const putFile = await inject({
+      method: 'PUT',
+      url: slot.json().upload.url,
+      headers: {},
+      raw: { body: pdfBytes, contentType: 'application/pdf' },
+    });
+    expect(putFile.statusCode).toBe(200);
     const fa = await inject({
       method: 'POST',
       url: `${base}/responses`,
       headers: hf,
-      json: { answers: { guests: 2, sign: pngDataUrl() }, signedName: 'G bo' },
+      json: {
+        answers: { guests: 2, sign: pngDataUrl(), photo: [slot.json().file.id] },
+        signedName: 'G bo',
+      },
     });
+    expect(fa.statusCode).toBe(201);
     expect(fa.json()).toMatchObject({ fee: 200, waiting: false });
     const fme = (await inject({ method: 'GET', url: `${base}/me`, headers: hf })).json();
     expect(fme).toMatchObject({ mode: 'family', about: { name: 'bo Pupil' } });

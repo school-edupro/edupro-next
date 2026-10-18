@@ -90,27 +90,34 @@ export async function saveConsentForm(fd: FormData) {
   redirect(`${BASE}/${saved.id}?ok=saved`);
 }
 
-type Message = { id: string; status: string; people: number } | { error: string } | null;
+type Messages = Array<{ channel: string; status?: string; people?: number; error?: string }>;
 /** The SMS / WhatsApp / email templates chosen on the form (tpl_sms, tpl_whatsapp, tpl_email). */
 const channelsOf = (fd: FormData) =>
   (['sms', 'whatsapp', 'email'] as const)
     .map((channel) => ({ channel, templateId: str(fd, `tpl_${channel}`) }))
     .filter((x) => /^\d+$/.test(x.templateId));
-/** What became of the message request, for the notice. */
-const messageQs = (m: Message) =>
-  !m
-    ? ''
-    : 'error' in m
-      ? `&msgerr=${encodeURIComponent(m.error.slice(0, 200))}`
-      : `&msg=${encodeURIComponent(m.status)}&msgn=${m.people}`;
+/** What became of each channel, for the notice: "SMS: waiting for approval; Email: not sent (…)". */
+const messageQs = (m: Messages) =>
+  m.length
+    ? `&msg=${encodeURIComponent(
+        m
+          .map((x) =>
+            x.error
+              ? `${x.channel}: not sent (${x.error.slice(0, 80)})`
+              : `${x.channel} to ${x.people ?? 0}: ${x.status === 'pending_approval' ? 'waiting for message approval' : (x.status ?? 'queued')}`,
+          )
+          .join('; ')
+          .slice(0, 400),
+      )}`
+    : '';
 
 /** Publish (with the app notification and the chosen channels), close, reopen or archive. */
 export async function setConsentStatus(fd: FormData) {
   const id = str(fd, 'id');
   let told = 0;
-  let message: Message = null;
+  let messages: Messages = [];
   try {
-    const r = await apiFetch<{ told?: number; message?: Message }>(`${BASE}/${id}/status`, {
+    const r = await apiFetch<{ told?: number; messages?: Messages }>(`${BASE}/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({
         status: str(fd, 'status'),
@@ -120,29 +127,29 @@ export async function setConsentStatus(fd: FormData) {
       }),
     });
     told = r.told ?? 0;
-    message = r.message ?? null;
+    messages = r.messages ?? [];
   } catch (error) {
     back(`${BASE}/${id}`, error);
   }
   revalidatePath(BASE);
-  redirect(`${BASE}/${id}?ok=${str(fd, 'status')}&told=${told}${messageQs(message)}`);
+  redirect(`${BASE}/${id}?ok=${str(fd, 'status')}&told=${told}${messageQs(messages)}`);
 }
 
 export async function notifyConsentPending(fd: FormData) {
   const id = str(fd, 'id');
   let told = 0;
-  let message: Message = null;
+  let messages: Messages = [];
   try {
-    const r = await apiFetch<{ told: number; message: Message }>(`${BASE}/${id}/notify`, {
+    const r = await apiFetch<{ told: number; messages: Messages }>(`${BASE}/${id}/notify`, {
       method: 'POST',
       body: JSON.stringify({ channels: channelsOf(fd) }),
     });
     told = r.told;
-    message = r.message;
+    messages = r.messages;
   } catch (error) {
     back(`${BASE}/${id}`, error);
   }
-  redirect(`${BASE}/${id}?ok=notified&told=${told}${messageQs(message)}`);
+  redirect(`${BASE}/${id}?ok=notified&told=${told}${messageQs(messages)}`);
 }
 
 /** Approve or reject an answer at my level (from the response page). */

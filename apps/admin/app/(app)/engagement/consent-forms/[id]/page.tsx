@@ -72,11 +72,11 @@ export default async function ConsentFormPage({
     ),
     apiFetch<{ sections: Array<{ id: string; name: string }> }>('/engagement/consent-forms/lists'),
     // the school's message templates (none shown without the permission to see them)
-    apiFetch<{ data: Array<{ id: string; name: string; channel: string }> }>(
+    apiFetch<{ data: Array<{ id: string; name: string; channel: string; code: string }> }>(
       '/comms/templates?status=active',
     )
       .then((r) => r.data)
-      .catch(() => [] as Array<{ id: string; name: string; channel: string }>),
+      .catch(() => [] as Array<{ id: string; name: string; channel: string; code: string }>),
   ]);
   const approval = Boolean(f.settings.approval?.on);
   const canConnect = (await getMe()).permissions.includes('engagement.consent_form.integrate');
@@ -102,42 +102,48 @@ export default async function ConsentFormPage({
   if (sp.sectionId) fileQs.set('sectionId', sp.sectionId);
   if (sp.q) fileQs.set('q', sp.q);
   const okText = sp.ok
-    ? `${OK[sp.ok] ?? 'Done.'}${sp.told && Number(sp.told) > 0 ? ` ${sp.told} people were told in the app.` : ''}${
-        sp.msg
-          ? ` The message to ${sp.msgn ?? ''} people is ${sp.msg === 'pending_approval' ? 'waiting for message approval' : sp.msg}.`
-          : ''
-      }${sp.msgerr ? ` The message was not sent: ${sp.msgerr}` : ''}`
+    ? `${OK[sp.ok] ?? 'Done.'}${sp.told && Number(sp.told) > 0 ? ` ${sp.told} people were told in the app.` : ''}${sp.msg ? ` Messages: ${sp.msg}.` : ''}`
     : undefined;
-  const channelPicks = templates.length ? (
-    <div className="ep-cfb__grid">
-      {(
-        [
-          ['sms', 'SMS'],
-          ['whatsapp', 'WhatsApp'],
-          ['email', 'Email'],
-        ] as const
-      ).map(([ch, label]) => {
-        const list = templates.filter((t) => t.channel === ch);
-        return list.length ? (
-          <label key={ch} className="ep-field" htmlFor={`tpl-${ch}`}>
-            <span className="ep-field__label">{label} template</span>
-            <select id={`tpl-${ch}`} name={`tpl_${ch}`} className="ep-select" defaultValue="">
-              <option value="">Not by {label}</option>
-              {list.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null;
-      })}
-    </div>
-  ) : (
-    <p className="ep-field__help" style={{ margin: 0 }}>
-      No active SMS, WhatsApp or email templates: the app notification only.
-    </p>
-  );
+  // the consent templates are chosen by default: publish and remind send by every channel
+  const channelPicks = (code: string) =>
+    templates.length ? (
+      <div className="ep-cfb__grid">
+        {(
+          [
+            ['sms', 'SMS'],
+            ['whatsapp', 'WhatsApp'],
+            ['email', 'Email'],
+          ] as const
+        ).map(([ch, label]) => {
+          // one-time codes and decisions are sent by the system, never picked here
+          const list = templates.filter(
+            (t) => t.channel === ch && !/_otp$|^consent_decision$/.test(t.code ?? ''),
+          );
+          return list.length ? (
+            <label key={ch} className="ep-field" htmlFor={`tpl-${ch}`}>
+              <span className="ep-field__label">{label} template</span>
+              <select
+                id={`tpl-${ch}`}
+                name={`tpl_${ch}`}
+                className="ep-select"
+                defaultValue={list.find((t) => t.code === code)?.id ?? ''}
+              >
+                <option value="">Not by {label}</option>
+                {list.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null;
+        })}
+      </div>
+    ) : (
+      <p className="ep-field__help" style={{ margin: 0 }}>
+        No active SMS, WhatsApp or email templates: the app notification only.
+      </p>
+    );
   const statusForm = (status: string, label: string, variant: string, push?: boolean) => (
     <form action={setConsentStatus}>
       <input type="hidden" name="id" value={id} />
@@ -297,7 +303,7 @@ export default async function ConsentFormPage({
                 Tell them in the app (notification and home screen)
               </span>
             </label>
-            {channelPicks}
+            {channelPicks('consent_form_new')}
             <p className="ep-field__help" style={{ margin: 0 }}>
               SMS, WhatsApp and email go to the parents of each pupil and to the staff asked,
               through the usual message approval.
@@ -313,7 +319,7 @@ export default async function ConsentFormPage({
         <Card title="Remind those not yet answered" style={{ marginBottom: 'var(--sp-4)' }}>
           <form action={notifyConsentPending} className="ep-cfb">
             <input type="hidden" name="id" value={id} />
-            {channelPicks}
+            {channelPicks('consent_form_reminder')}
             <div>
               <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
                 Remind {pending} (app{templates.length ? ' and the chosen channels' : ''})

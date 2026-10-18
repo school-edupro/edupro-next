@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { ENV, type Env } from '../../config/env';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { employeesByRule, studentsByRule } from '../comms/audience';
@@ -115,6 +116,7 @@ export class ConsentFormsService {
     private readonly push: PushService,
     private readonly workflow: WorkflowService,
     private readonly requests: RequestsService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   // ---- reading ----------------------------------------------------------------------------------
@@ -286,6 +288,8 @@ export class ConsentFormsService {
 
   async get(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      // the school's consent message templates exist before Publish lists them
+      await c.query(`SELECT app.consent_seed_templates(app.current_school_id())`);
       const f = await this.findDb(c, id);
       const pupils = await this.audienceStudents(c, f);
       const staff = await this.audienceStaff(c, f);
@@ -558,7 +562,7 @@ export class ConsentFormsService {
   async setStatus(ctx: RequestContext, id: string, dto: ConsentStatusDto) {
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
       const f = await this.findDb(c, id, true);
-      if (dto.status === f.status) return { view: this.view(f), pending: null };
+      if (dto.status === f.status) return { view: this.view(f), pending: null, f };
       if (dto.status === 'draft' && f.responses > 0)
         throw new DomainError(
           'consent.has_answers',
@@ -593,13 +597,14 @@ export class ConsentFormsService {
         before: { status: f.status },
         after: { status: dto.status, told, channels: dto.channels.map((x) => x.channel) },
       });
-      return { view: this.view(await this.findDb(c, id), { told }), pending };
+      const now = await this.findDb(c, id);
+      return { view: this.view(now, { told }), pending, f: now };
     });
-    const message =
+    const messages =
       out.pending && dto.channels.length
-        ? await this.sendMessages(ctx, out.view, out.pending, dto.channels, false)
-        : null;
-    return { ...out.view, message };
+        ? await this.sendMessages(ctx, out.f, out.pending, dto.channels, false)
+        : [];
+    return { ...out.view, messages };
   }
 
   /** Who is asked and has not answered yet (everyone asked, when several answers are allowed). */
@@ -643,44 +648,73 @@ export class ConsentFormsService {
   }
 
   /**
-   * SMS / WhatsApp / email to the families (the parents of each pupil) and staff not answered yet,
-   * with the school's chosen templates, as one message request (it may wait for message approval).
-   * A refusal (a channel switched off, a template not approved) is reported, never fails the form.
+   * SMS / WhatsApp / email to the families (the parents of each pupil) and staff not answered yet, with
+   * the school's templates (by default consent_form_new / consent_form_reminder): one message request
+   * per channel, so a channel switched off or refused does not stop the others. Each request may wait
+   * for message approval. Returns what became of each channel; never fails the form.
    */
   private async sendMessages(
     ctx: RequestContext,
-    f: { title: string; settings: ConsentSettings },
+    f: { id: string; title: string; settings: ConsentSettings; public_token: string | null },
     people: { students: string[]; staff: string[] },
     channels: Array<{ channel: 'sms' | 'whatsapp' | 'email'; templateId: string }>,
     reminder: boolean,
-  ): Promise<{ id: string; status: string; people: number } | { error: string }> {
+  ): Promise<
+    Array<{ channel: string; id?: string; status?: string; people?: number; error?: string }>
+  > {
     const targets = [
       ...people.students.map((id) => ({ type: 'student' as const, id })),
       ...people.staff.map((id) => ({ type: 'employee' as const, id })),
     ].slice(0, 5000);
-    if (!targets.length) return { error: 'Everyone asked has answered' };
-    const by = f.settings.closesAt
+    if (!targets.length)
+      return channels.map((c) => ({ channel: c.channel, error: 'Everyone asked has answered' }));
+    const school = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ name: string; code: string }>(
+        `SELECT name, lower(code) AS code FROM schools WHERE id = app.current_school_id()`,
+      );
+      return r.rows[0]!;
+    });
+    const link =
+      f.settings.publicLink?.on && f.public_token
+        ? `${this.env.PUBLIC_APP_URL}/${school.code}/consent/${f.public_token}`
+        : `${this.env.PARENT_APP_URL}/consents`;
+    const closes = f.settings.closesAt
       ? ` by ${f.settings.closesAt.slice(8, 10)}-${f.settings.closesAt.slice(5, 7)}-${f.settings.closesAt.slice(0, 4)}`
       : '';
-    try {
-      const r = await this.requests.create(ctx, {
-        title: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 160),
-        category: 'service',
-        channels,
-        body: `${reminder ? 'Reminder: please' : 'Please'} answer the form "${f.title}" in the EduPro app${by}.`,
-        bodyFormat: 'text',
-        subject: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 200),
-        variables: { form_title: f.title.slice(0, 120) },
-        audience: 'individuals',
-        targets,
-        sendTo: 'parents',
-        attachments: [],
-      } as CreateRequestDto);
-      return { id: r.id, status: r.status, people: targets.length };
-    } catch (error) {
-      if (error instanceof DomainError) return { error: error.message };
-      throw error;
+    const out: Array<{
+      channel: string;
+      id?: string;
+      status?: string;
+      people?: number;
+      error?: string;
+    }> = [];
+    for (const ch of channels) {
+      try {
+        const r = await this.requests.create(ctx, {
+          title: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 160),
+          category: 'service',
+          channels: [ch],
+          body: `${reminder ? 'Reminder: please' : 'Please'} answer the form "${f.title}"${closes}: ${link}`,
+          bodyFormat: 'text',
+          subject: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 200),
+          variables: {
+            school: school.name,
+            form_title: f.title.slice(0, 120),
+            closes_on: closes,
+            link,
+          },
+          audience: 'individuals',
+          targets,
+          sendTo: 'parents',
+          attachments: [],
+        } as CreateRequestDto);
+        out.push({ channel: ch.channel, id: r.id, status: r.status, people: targets.length });
+      } catch (error) {
+        if (!(error instanceof DomainError)) throw error;
+        out.push({ channel: ch.channel, error: error.message });
+      }
     }
+    return out;
   }
 
   /** Tell again those who have not answered: in the app, and by the chosen channels. */
@@ -701,10 +735,10 @@ export class ConsentFormsService {
       });
       return { f, pending, told };
     });
-    const message = dto.channels.length
+    const messages = dto.channels.length
       ? await this.sendMessages(ctx, out.f, out.pending, dto.channels, true)
-      : null;
-    return { told: out.told, message };
+      : [];
+    return { told: out.told, messages };
   }
 
   /** A draft with no answers is removed; anything else is archived. */
@@ -1164,7 +1198,7 @@ export class ConsentFormsService {
     for (const fileId of fileIds) {
       const r = await c.query<{ status: string; original_name: string | null }>(
         `SELECT status, original_name FROM files WHERE id = $1
-            AND ($2::bigint IS NULL OR (owner_entity_type = 'consent_form' AND owner_entity_id = $2::bigint))`,
+            AND ($2::text IS NULL OR (owner_entity_type = 'consent_form' AND owner_entity_id = $2::text))`,
         [fileId, linkFormId],
       );
       if (!r.rows[0]) throw new DomainError('not-found', 'File not found', { status: 404 });
@@ -1733,6 +1767,8 @@ export class ConsentFormsService {
           closesAt: f.settings.closesAt ?? null,
           editUntil: f.settings.editUntil ?? null,
           repeat: f.settings.repeat,
+          feeMode: f.settings.fee?.mode ?? 'none',
+          approval: Boolean(f.settings.approval?.on),
           people: rows,
         });
       }
