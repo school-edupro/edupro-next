@@ -59,6 +59,7 @@ export const isIconName = (v: unknown): v is IconName =>
 export const SECTION_ICON: Record<string, IconName> = {
   overview: 'home',
   people: 'users',
+  employeeManagement: 'userPlus',
   admissions: 'userPlus',
   fees: 'wallet',
   attendance: 'check',

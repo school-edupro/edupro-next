@@ -8,14 +8,6 @@ export const NAV: Array<{
     section: 'people',
     items: [
       { href: '/people/students', label: 'students', permission: 'people.student.view' },
-      { href: '/people/employees', label: 'employees', permission: 'people.employee.view' },
-      { href: '/masters/staff', label: 'staffSetup', permission: 'people.employee.view' },
-      {
-        href: '/people/staff-transfers',
-        label: 'staffTransfers',
-        permission: 'people.staff_transfer.manage',
-      },
-      { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
       { href: '/people/search', label: 'peopleSearch', permission: 'people.person.search' },
       { href: '/people/import', label: 'import', permission: 'people.import.run' },
       { href: '/people/tc', label: 'transferCertificates', permission: 'people.tc.view' },
@@ -47,6 +39,20 @@ export const NAV: Array<{
         label: 'portalProfile',
         permission: 'people.portal_profile.manage',
       },
+    ],
+  },
+  {
+    // staff, apart from the students and families of People
+    section: 'employeeManagement',
+    items: [
+      { href: '/people/employees', label: 'employees', permission: 'people.employee.view' },
+      { href: '/masters/staff', label: 'staffSetup', permission: 'people.employee.view' },
+      {
+        href: '/people/staff-transfers',
+        label: 'staffTransfers',
+        permission: 'people.staff_transfer.manage',
+      },
+      { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
     ],
   },
   {

@@ -164,6 +164,8 @@ export async function Shell({
         g.section === 'system' ||
         !features ||
         features.has(g.section) ||
+        // staff screens ride on the people module switch
+        (g.section === 'employeeManagement' && features.has('people')) ||
         // appointments ride on the engagement module switch
         ((g.section === 'appointments' || g.section === 'clinic') && features.has('engagement')) ||
         // the hostel rides on the fee module switch (its fee is on the hostel ledger)
