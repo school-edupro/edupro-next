@@ -8295,3 +8295,35 @@ a.db-list__main:hover strong {
   display: block;
   margin: 0;
 }
+
+/* ---- staff app home: today's figures and the screens this person may open --------------------- */
+.ep-staff-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  text-decoration: none;
+  color: inherit;
+}
+.ep-staff-tiles {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+.ep-staff-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  text-decoration: none;
+  color: inherit;
+}
+.ep-staff-tile__title {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-staff-kpi:hover,
+.ep-staff-tile:hover,
+.ep-staff-kpi:focus-visible,
+.ep-staff-tile:focus-visible {
+  border-color: var(--border-strong);
+}

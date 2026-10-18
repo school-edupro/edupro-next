@@ -40,3 +40,16 @@ sessions of S5-02 (migration 0014), extended in **0183**.
 `apps/api/test/portal-as.e2e-spec.ts`: listing and rights, Make login (parent without contact refused),
 the code once and only for its app, view only refusing changes and push devices, End, acting refusing
 payments while other work passes, administrators never opened.
+
+## Staff app frame and role home (18 Oct 2026)
+
+Opening the teacher app as a warden showed every tile, most greyed out, and "16 permissions". Now:
+
+- Signed-in staff screens sit in `apps/teacher/app/(app)` under `StaffShell` (the parent portal's frame:
+  sidebar, header with school / session / language / messages / sign-out, phone tab bar).
+- `lib/staff-menu.ts` lists every staff screen once with the right it needs; the sidebar, the tab bar
+  and the home show only what the person may open (nothing greyed). "Answers to approve" shows for class
+  teachers and for anyone with answers waiting.
+- Home: designation and roles (`/me/card`), **Today** figures for what the person does (hostel roll-calls,
+  pupils away, to hand over, hostel and student leave to decide, answers to approve, gate passes waiting,
+  new messages), then the screens by group. Notices and Calendar tiles (never built) are gone.
