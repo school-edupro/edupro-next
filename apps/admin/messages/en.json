@@ -199,7 +199,8 @@
     "hostelComplaints": "Hostel complaints",
     "hostelIncidents": "Incidents",
     "landingPages": "Landing pages",
-    "hostelWithdrawals": "Hostel withdrawals"
+    "hostelWithdrawals": "Hostel withdrawals",
+    "acrSetup": "ACR set-up"
   },
   "shell": {
     "primaryNavigation": "Primary",

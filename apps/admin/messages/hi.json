@@ -199,7 +199,8 @@
     "hostelComplaints": "छात्रावास शिकायतें",
     "hostelIncidents": "घटनाएँ",
     "landingPages": "लैंडिंग पेज",
-    "hostelWithdrawals": "छात्रावास छोड़ना"
+    "hostelWithdrawals": "छात्रावास छोड़ना",
+    "acrSetup": "ACR सेट-अप"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

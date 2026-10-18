@@ -1,3 +1,5 @@
+import { AcrController } from './acr.controller';
+import { AcrSetupService } from './acr-setup.service';
 import { EmployeeTransferController } from './employee-transfer.controller';
 import { EmployeeTransferService } from './employee-transfer.service';
 import { EmployeeBulkService } from './employee-bulk.service';
@@ -26,6 +28,7 @@ import { StudentsService } from './students.service';
 @Module({
   imports: [FilesModule, ReportsModule],
   controllers: [
+    AcrController,
     EmployeeProfileController,
     EmployeeTransferController,
     SectionRollController,
@@ -36,6 +39,7 @@ import { StudentsService } from './students.service';
     ImportsController,
   ],
   providers: [
+    AcrSetupService,
     EmployeeProfileService,
     EmployeeGridService,
     EmployeeBulkService,

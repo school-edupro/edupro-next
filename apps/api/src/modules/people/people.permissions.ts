@@ -19,4 +19,8 @@ export const PEOPLE = {
   staffTransfer: 'people.staff_transfer.manage',
   /** Full Aadhaar, PAN and bank account numbers (granted through the Sensitive data viewer role). */
   sensitiveView: 'people.sensitive.view',
+  /** ACR set-up, starting, disclosing and closing (0184). */
+  acrManage: 'people.acr.manage',
+  /** Every employee's ACR and the progress board. */
+  acrView: 'people.acr.view',
 } as const;
