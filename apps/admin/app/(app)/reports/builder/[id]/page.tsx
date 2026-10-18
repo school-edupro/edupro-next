@@ -18,7 +18,7 @@ export default async function ReportPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string; run?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -54,6 +54,7 @@ export default async function ReportPage({
         key={report.updatedAt}
         fields={fields}
         report={report}
+        askFirst={sp.run === '1'}
         initialSpec={{ ...report.spec, dataset }}
         actions={{
           preview: builderPreview,

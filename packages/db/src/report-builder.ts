@@ -61,6 +61,8 @@ export interface ReportFilter {
   key: string;
   op: ReportFilterOp;
   values?: string[];
+  /** Asked each time the report is downloaded; with no value given it is left out. */
+  ask?: boolean;
 }
 export interface ReportSort {
   key: string;
@@ -216,6 +218,7 @@ export function validateReportSpec(spec: ReportSpec, format?: 'xlsx' | 'pdf'): s
     if (!def) errors.push(`Unknown filter field ${f.key}`);
     if (!REPORT_FILTER_OPS.includes(f.op)) errors.push(`Unknown filter operator ${f.op}`);
     const n = f.values?.filter((v) => v.trim() !== '').length ?? 0;
+    if (f.ask && n === 0) continue;
     if (['eq', 'neq', 'contains', 'starts', 'gte', 'lte'].includes(f.op) && n < 1)
       errors.push(`Filter on ${def?.label ?? f.key} needs a value`);
     if (['in', 'not_in'].includes(f.op) && n < 1)
@@ -527,12 +530,54 @@ export function reportGroups(spec: ReportSpec): Array<{ label: string | null; ke
   return out.map(({ label, keys }) => ({ label, keys }));
 }
 
+/** True when a filter has what its condition needs (a value, two for between, none for empty). */
+function filterHasValue(f: ReportFilter): boolean {
+  if (f.op === 'empty' || f.op === 'not_empty') return true;
+  const n = (f.values ?? []).filter((v) => v.trim() !== '').length;
+  return f.op === 'between' ? n >= 2 : n >= 1;
+}
+
+/** The filters that apply to a run: an "ask when running" filter left without a value is skipped. */
+export function activeReportFilters(filters: ReportFilter[]): ReportFilter[] {
+  return filters.filter((f) => !f.ask || filterHasValue(f));
+}
+
+/** Filters, search and status given when a saved report is downloaded (the list's view, or the form). */
+export interface ReportRuntime {
+  filters?: ReportFilter[];
+  search?: string | null;
+  includeInactive?: boolean;
+}
+
+/**
+ * A saved report run with run-time filters: both apply, except that a run-time filter on a field
+ * replaces the report's own filters on that field (so "Class VI-A" chosen now beats the class saved).
+ * The search and the status given now win too. The saved report itself does not change.
+ */
+export function withRuntimeFilters(spec: ReportSpec, runtime?: ReportRuntime | null): ReportSpec {
+  if (!runtime) return { ...spec, filters: activeReportFilters(spec.filters) };
+  const given = (runtime.filters ?? [])
+    .filter(filterHasValue)
+    .map(({ key, op, values }) => ({ key, op, values }));
+  const keys = new Set(given.map((f) => f.key));
+  return {
+    ...spec,
+    filters: [...activeReportFilters(spec.filters).filter((f) => !keys.has(f.key)), ...given],
+    options: {
+      ...spec.options,
+      search: runtime.search?.trim() ? runtime.search.trim() : (spec.options.search ?? null),
+      includeInactive: runtime.includeInactive ?? spec.options.includeInactive,
+    },
+  };
+}
+
 /** Filters, sorts and projects loaded rows onto the chosen columns and headers. */
 export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
   const ds = spec.dataset ?? 'student_profile';
+  const filters = activeReportFilters(spec.filters);
   const byKey = reportDataset(ds).byKey;
   const filtered = sortReportRows(
-    applyReportFilters(applyReportSearch(rows, spec.options.search, ds), spec.filters, ds),
+    applyReportFilters(applyReportSearch(rows, spec.options.search, ds), filters, ds),
     spec.sort,
     ds,
   );
@@ -566,8 +611,8 @@ export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
     rows: projected,
     total: projected.length,
     filtersText: spec.options.search?.trim()
-      ? [`Search "${spec.options.search.trim()}"`, ...describeReportFilters(spec.filters, ds)]
-      : describeReportFilters(spec.filters, ds),
+      ? [`Search "${spec.options.search.trim()}"`, ...describeReportFilters(filters, ds)]
+      : describeReportFilters(filters, ds),
     layout: spec.layout === 'detailed' ? 'detailed' : 'table',
     groups: spec.layout === 'detailed' ? reportGroups(spec) : [],
     excluded: spec.columns.filter((c) => c.hidden).map(headerOf),

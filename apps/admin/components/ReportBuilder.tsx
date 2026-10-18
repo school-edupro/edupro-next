@@ -10,6 +10,7 @@ import {
   type BuilderFields,
   type FilterOp,
   type PreviewResult,
+  type ReportRuntime,
   type ReportSpec,
   type Result,
   type SavedReport,
@@ -29,6 +30,7 @@ export interface ReportBuilderActions {
   exportFile: (
     id: string,
     format: 'xlsx' | 'pdf',
+    runtime?: ReportRuntime,
   ) => Promise<Result<{ exportId: string; format: string }>>;
   shareOptions: (q: string) => Promise<{
     users: Array<{ id: string; name: string; detail: string | null }>;
@@ -49,11 +51,14 @@ export function ReportBuilder({
   fields,
   report,
   initialSpec,
+  askFirst = false,
   actions,
 }: {
   fields: BuilderFields;
   report: SavedReport | null;
   initialSpec: ReportSpec;
+  /** opened to download: show the filters to choose first */
+  askFirst?: boolean;
   actions: ReportBuilderActions;
 }) {
   const router = useRouter();
@@ -76,12 +81,24 @@ export function ReportBuilder({
   } | null>(null);
   const [exporting, setExporting] = useState<{ id: string; format: string } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  // a download with filters given now: the asked ones first, more may be added; not saved
+  const [runFilters, setRunFilters] = useState<ReportSpec['filters'] | null>(() =>
+    askFirst && report
+      ? report.spec.filters
+          .filter((f) => f.ask)
+          .map(({ key, op, values }) => ({ key, op, values: values ?? [] }))
+      : null,
+  );
+  const [runFormat, setRunFormat] = useState<'xlsx' | 'pdf'>('xlsx');
+  const firstKey = spec.dataset === 'employee_profile' ? 'department' : 'class_section';
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [pending, start] = useTransition();
   const canEdit = !saved || saved.canEdit;
   const dirty =
     !saved ||
-    JSON.stringify(saved.spec) !== JSON.stringify(spec) ||
+    // reports saved before the dataset existed are students' (the page adds it; not a change)
+    JSON.stringify({ ...saved.spec, dataset: saved.spec.dataset ?? spec.dataset }) !==
+      JSON.stringify(spec) ||
     saved.name !== name ||
     (saved.description ?? '') !== description;
   const pdfLimit = fields.pdfColumnLimit[spec.options.paper];
@@ -153,7 +170,12 @@ export function ReportBuilder({
       router.refresh();
     });
 
-  const doExport = (format: 'xlsx' | 'pdf') =>
+  const asked = (saved?.spec ?? spec).filters.filter((f) => f.ask);
+  const openRun = (format: 'xlsx' | 'pdf') => {
+    setRunFormat(format);
+    setRunFilters(asked.map(({ key, op, values }) => ({ key, op, values: values ?? [] })));
+  };
+  const doExport = (format: 'xlsx' | 'pdf', runtime?: ReportRuntime) =>
     run(async () => {
       if (!saved || dirty) {
         setNotice({
@@ -162,11 +184,15 @@ export function ReportBuilder({
         });
         return;
       }
-      const r = await actions.exportFile(saved.id, format);
+      const r = await actions.exportFile(saved.id, format, runtime);
       if (!r.ok) return fail(r);
+      setRunFilters(null);
       setExporting({ id: r.data.exportId, format });
       setNotice(null);
     });
+  // a report with "ask when running" filters asks before every download
+  const download = (format: 'xlsx' | 'pdf') =>
+    saved && !dirty && asked.length ? openRun(format) : doExport(format);
 
   return (
     <div className="ep-rb">
@@ -229,7 +255,7 @@ export function ReportBuilder({
           <button
             type="button"
             className="ep-btn ep-btn--secondary"
-            onClick={() => doExport('xlsx')}
+            onClick={() => download('xlsx')}
             disabled={pending || !saved}
           >
             Excel
@@ -237,7 +263,7 @@ export function ReportBuilder({
           <button
             type="button"
             className="ep-btn ep-btn--secondary"
-            onClick={() => doExport('pdf')}
+            onClick={() => download('pdf')}
             disabled={pending || !saved || pdfColumnCount(spec) > pdfLimit}
             title={
               pdfColumnCount(spec) > pdfLimit
@@ -247,6 +273,16 @@ export function ReportBuilder({
           >
             PDF
           </button>
+          {saved ? (
+            <button
+              type="button"
+              className="ep-btn ep-btn--ghost"
+              onClick={() => (dirty ? doExport('xlsx') : openRun('xlsx'))}
+              disabled={pending}
+            >
+              Download with filters
+            </button>
+          ) : null}
           {saved?.canShare ? (
             <button
               type="button"
@@ -514,21 +550,52 @@ export function ReportBuilder({
               ))}
             </datalist>
             {spec.filters.map((flt, i) => (
-              <FilterRow
-                key={`${String(i)}-${flt.key}`}
-                index={i}
-                filter={flt}
-                field={byKey.get(flt.key)}
-                fieldListId={fieldListId}
-                disabled={!canEdit}
-                resolve={(label) => byLabel.get(label.trim().toLowerCase())}
-                onChange={(next) =>
-                  setSpec((s) => ({ ...s, filters: s.filters.map((x, j) => (j === i ? next : x)) }))
-                }
-                onRemove={() =>
-                  setSpec((s) => ({ ...s, filters: s.filters.filter((_, j) => j !== i) }))
-                }
-              />
+              <div key={`${String(i)}-${flt.key}`}>
+                <FilterRow
+                  index={i}
+                  filter={flt}
+                  field={byKey.get(flt.key)}
+                  fieldListId={fieldListId}
+                  disabled={!canEdit}
+                  resolve={(label) => byLabel.get(label.trim().toLowerCase())}
+                  onChange={(next) =>
+                    setSpec((s) => ({
+                      ...s,
+                      filters: s.filters.map((x, j) =>
+                        j === i ? (x.ask ? { ...next, ask: true } : next) : x,
+                      ),
+                    }))
+                  }
+                  onRemove={() =>
+                    setSpec((s) => ({ ...s, filters: s.filters.filter((_, j) => j !== i) }))
+                  }
+                />
+                <label className="ep-check ep-rb__ask">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flt.ask)}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      setSpec((s) => ({
+                        ...s,
+                        filters: s.filters.map((x, j) => {
+                          if (j !== i) return x;
+                          const { key, op, values } = x;
+                          return e.target.checked
+                            ? { key, op, values, ask: true }
+                            : { key, op, values };
+                        }),
+                      }))
+                    }
+                  />{' '}
+                  Ask when running
+                </label>
+                {flt.ask ? (
+                  <p className="ep-field__help ep-rb__askhelp">
+                    Asked before each download; the values above are the defaults, empty means all.
+                  </p>
+                ) : null}
+              </div>
             ))}
             {canEdit ? (
               <button
@@ -537,7 +604,7 @@ export function ReportBuilder({
                 onClick={() =>
                   setSpec((s) => ({
                     ...s,
-                    filters: [...s.filters, { key: 'class_section', op: 'in', values: [] }],
+                    filters: [...s.filters, { key: firstKey, op: 'in', values: [] }],
                   }))
                 }
               >
@@ -819,6 +886,100 @@ export function ReportBuilder({
           ) : null}
         </div>
       </div>
+
+      {runFilters && saved ? (
+        <Dialog
+          open
+
+          size="lg"
+
+          title={`Download "${saved.name}"`}
+
+          onClose={() => setRunFilters(null)}
+
+          primary={{
+            label: 'Download',
+
+            loading: pending,
+
+            onClick: () => doExport(runFormat, { filters: runFilters }),
+          }}
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Filters for this download only; the saved report does not change. The report&apos;s own
+            filters apply too, and a filter here on the same field replaces the report&apos;s. A
+            filter left empty is not applied.
+          </p>
+
+          {runFilters.map((flt, i) => (
+            <FilterRow
+              key={`run-${String(i)}-${flt.key}`}
+
+              index={100 + i}
+
+              filter={flt}
+
+              field={byKey.get(flt.key)}
+
+              fieldListId={fieldListId}
+
+              disabled={false}
+
+              resolve={(label) => byLabel.get(label.trim().toLowerCase())}
+
+              onChange={(next) =>
+                setRunFilters((fs) => (fs ?? []).map((x, j) => (j === i ? next : x)))
+              }
+
+              onRemove={() => setRunFilters((fs) => (fs ?? []).filter((_, j) => j !== i))}
+            />
+          ))}
+
+          <button
+            type="button"
+
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+
+            onClick={() =>
+              setRunFilters((fs) => [...(fs ?? []), { key: firstKey, op: 'in', values: [] }])
+            }
+          >
+            + Add filter
+          </button>
+
+          <fieldset
+            className="ep-field"
+            style={{ border: 0, padding: 0, marginTop: 'var(--sp-3)' }}
+          >
+            <legend className="ep-field__label">File</legend>
+
+            <div style={{ display: 'flex', gap: 'var(--sp-4)' }}>
+              {(
+                [
+                  ['xlsx', 'Excel'],
+
+                  ['pdf', 'PDF'],
+                ] as const
+              ).map(([v, l]) => (
+                <label key={v} className="ep-check">
+                  <input
+                    type="radio"
+
+                    name="rb-run-format"
+
+                    checked={runFormat === v}
+
+                    disabled={v === 'pdf' && pdfColumnCount(saved.spec) > pdfLimit}
+
+                    onChange={() => setRunFormat(v)}
+                  />{' '}
+                  {l}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </Dialog>
+      ) : null}
 
       {shareOpen && saved ? (
         <SharePanel

@@ -8,7 +8,13 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type { ProfileSnapshot, ProfileValues, QuickAddResult, SaveProfileResult } from './profile';
-import type { PreviewResult, ReportSpec, Result, SavedReport } from './report-builder';
+import type {
+  PreviewResult,
+  ReportRuntime,
+  ReportSpec,
+  Result,
+  SavedReport,
+} from './report-builder';
 import type { StudentListQuery, StudentListResult, StudentListView } from './student-list';
 import type { ChangeView, Inbox, PortalPolicy } from './portal-profile';
 import { readContext, readSession, writeContext, writeSession } from './session';
@@ -4147,12 +4153,14 @@ export async function builderCopy(id: string, name: string): Promise<Result<Save
 export async function builderExport(
   id: string,
   format: 'xlsx' | 'pdf',
+  runtime?: ReportRuntime,
 ): Promise<Result<{ exportId: string; format: string }>> {
   if (!idOk(id)) return { ok: false, error: 'Unknown report' };
   try {
+    // run-time filters (the list's view, or the asked filters) apply to this download only
     const data = await apiFetch<{ exportId: string; format: string }>(
       `/reports/builder/${id}/export`,
-      { method: 'POST', body: JSON.stringify({ format }) },
+      { method: 'POST', body: JSON.stringify(runtime ? { format, runtime } : { format }) },
     );
     return { ok: true, data };
   } catch (error) {

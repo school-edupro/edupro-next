@@ -540,6 +540,88 @@ describe('report builder (e2e)', () => {
     });
   });
 
+  it('downloads a saved report with run-time filters; an asked filter left empty is skipped', async () => {
+    const asking = spec({
+      filters: [
+        { key: 'gender', op: 'eq', values: ['Female'] },
+        { key: 'class_section', op: 'in', values: [], ask: true },
+      ],
+    });
+    // the asked class has no value yet: the report saves and previews without it
+    const saved = await inject({
+      method: 'POST',
+      url: '/reports/builder',
+      headers: h(admin),
+      json: { name: 'Girls by class', spec: asking },
+    });
+    expect(saved.statusCode).toBe(201);
+    const id = saved.json().id as string;
+    const pre = await inject({
+      method: 'POST',
+      url: '/reports/builder/preview',
+      headers: h(admin),
+      json: { spec: asking },
+    });
+    expect(pre.json().total).toBe(3);
+    expect(pre.json().filtersText).toEqual(['Gender is Female']);
+    const paramsOf = async (exportId: string) =>
+      (
+        await withMigrator((c) =>
+          c.query<{ params: { spec: { filters: unknown[]; options: Record<string, unknown> } } }>(
+            'SELECT params FROM exports WHERE id = $1',
+            [exportId],
+          ),
+        )
+      ).rows[0]!.params.spec;
+    // the class picked now joins the report's gender filter
+    const one = await inject({
+      method: 'POST',
+      url: `/reports/builder/${id}/export`,
+      headers: h(admin),
+      json: {
+        format: 'xlsx',
+        runtime: { filters: [{ key: 'class_section', op: 'in', values: ['VII-A'] }] },
+      },
+    });
+    expect(one.statusCode).toBe(201);
+    expect((await paramsOf(one.json().exportId)).filters).toEqual([
+      { key: 'gender', op: 'eq', values: ['Female'] },
+      { key: 'class_section', op: 'in', values: ['VII-A'] },
+    ]);
+    // the list's view: a filter on the same field replaces the report's; search and status carried
+    const two = await inject({
+      method: 'POST',
+      url: `/reports/builder/${id}/export`,
+      headers: h(admin),
+      json: {
+        format: 'xlsx',
+        runtime: {
+          filters: [
+            { key: 'gender', op: 'eq', values: ['Male'] },
+            { key: 'religion', op: 'eq', values: [] },
+          ],
+          search: 'arjun',
+          includeInactive: true,
+        },
+      },
+    });
+    expect(two.statusCode).toBe(201);
+    const s2 = await paramsOf(two.json().exportId);
+    expect(s2.filters).toEqual([{ key: 'gender', op: 'eq', values: ['Male'] }]);
+    expect(s2.options).toMatchObject({ search: 'arjun', includeInactive: true });
+    // the saved report is unchanged
+    const again = await inject({ method: 'GET', url: `/reports/builder/${id}`, headers: h(admin) });
+    expect(again.json().spec.filters).toEqual(asking.filters);
+    // an unknown run-time field is refused
+    const bad = await inject({
+      method: 'POST',
+      url: `/reports/builder/${id}/export`,
+      headers: h(admin),
+      json: { format: 'xlsx', runtime: { filters: [{ key: 'nope', op: 'eq', values: ['x'] }] } },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it('the owner deletes; the report disappears for everyone it was shared with', async () => {
     expect(
       (await inject({ method: 'DELETE', url: `/reports/builder/${reportId}`, headers: h(admin) }))

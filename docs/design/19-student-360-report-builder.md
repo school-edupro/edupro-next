@@ -63,6 +63,21 @@ shared by siblings; PDF holds 15 columns on A4 and 25 on A3.
   row, page x of y). An export with full ID numbers opens only for its requester or a sensitive-data
   viewer.
 
+### Run-time filters (18 Oct 2026)
+
+- A saved report downloads with filters given for that download only (`POST reports/builder/:id/export`
+  `runtime: { filters, search, includeInactive }`); the report's own filters apply too, and a run-time
+  filter on the same field replaces the report's (`withRuntimeFilters` in `packages/db`). The saved
+  report does not change.
+- **From the list** (Students / Employees → Download report): pick one of my reports or one shared with
+  me, of the same kind; the filters, search and status on screen are sent.
+- **"Ask when running"** on a builder filter: asked before every download (the saved values are the
+  defaults); left empty it is skipped (`activeReportFilters`; saving does not need a value). The reports
+  list shows "asks" and a "Choose filters" link (`?run=1` opens the dialog). "Download with filters" on a
+  saved report adds any filter before Excel / PDF.
+- Fixed: a report saved before the dataset field existed showed as changed (Save lit, downloads asked
+  to save first).
+
 ## Bulk upload
 
 The template carries an Instructions sheet and a hidden Lists sheet for drop-downs. The check step

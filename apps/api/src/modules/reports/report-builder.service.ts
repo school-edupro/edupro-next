@@ -12,7 +12,9 @@ import {
   reportDataset,
   shapeReport,
   validateReportSpec,
+  withRuntimeFilters,
   type PoolClient,
+  type ReportRuntime,
   type ReportSpec,
   type TenantContext,
 } from '@edupro/db';
@@ -522,14 +524,16 @@ export class ReportBuilderService {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const def = await this.load(c, ctx, id);
-      const errors = validateReportSpec(def.spec, dto.format);
+      // this download's filters join the report's own; the saved report is not changed
+      const spec = withRuntimeFilters(def.spec, dto.runtime as ReportRuntime | undefined);
+      const errors = validateReportSpec(spec, dto.format);
       if (errors.length) throw invalid(errors);
-      const run = await this.context(ctx, c, tenant, def.spec);
+      const run = await this.context(ctx, c, tenant, spec);
       const params = {
         definitionId: id,
         name: def.name,
         description: def.description,
-        spec: def.spec,
+        spec,
         academicYearId: run.academicYearId,
         academicYear: run.academicYear,
         sectionIds: run.sectionIds,
@@ -548,7 +552,13 @@ export class ReportBuilderService {
         action: 'reports.builder.export',
         entityType: 'exports',
         entityId: exportId,
-        after: { report: id, name: def.name, format: dto.format, fullIds: run.showSensitive },
+        after: {
+          report: id,
+          name: def.name,
+          format: dto.format,
+          fullIds: run.showSensitive,
+          runtimeFilters: dto.runtime ? spec.filters.length : undefined,
+        },
       });
       return { exportId, format: dto.format };
     });

@@ -4,7 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { ExportWatcher } from '../ExportWatcher';
 import { FilterRow } from '../ReportBuilder';
-import type { ReportSpec, Result, SavedReport } from '@/lib/report-builder';
+import {
+  runtimeOf,
+  type ReportChoice,
+  type ReportRuntime,
+  type ReportSpec,
+  type Result,
+  type SavedReport,
+} from '@/lib/report-builder';
 import type {
   PeopleListConfig,
   PeopleListFields,
@@ -50,6 +57,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   initial,
   initialView,
   can,
+  reports = [],
   actions,
 }: {
   config: PeopleListConfig<V, R>;
@@ -57,6 +65,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   initial: R;
   initialView: V;
   can: Record<string, boolean>;
+  /** saved reports of this list's kind (mine, then shared with me) to download for the view */
+  reports?: ReportChoice[];
   actions: {
     load: (q: PeopleListQuery<V>) => Promise<Result<R>>;
     saveView: (v: V) => Promise<void>;
@@ -67,6 +77,11 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
       id: null,
       input: { name: string; description: string | null; spec: ReportSpec },
     ) => Promise<Result<SavedReport>>;
+    runReport?: (
+      id: string,
+      format: 'xlsx' | 'pdf',
+      runtime: ReportRuntime,
+    ) => Promise<Result<{ exportId: string; format: string }>>;
   };
 }) {
   const router = useRouter();
@@ -153,9 +168,29 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   const doExport = (format: 'xlsx' | 'pdf') =>
     start(async () => {
       const r = await actions.exportFile({ ...view, page: 1, format });
-      if (r.ok) setExporting({ id: r.data.exportId, format });
-      else setError(r.errors?.join('; ') ?? r.error);
+      if (r.ok) {
+        setRunLabel('');
+        setExporting({ id: r.data.exportId, format });
+      } else setError(r.errors?.join('; ') ?? r.error);
     });
+
+  // a saved report downloaded for what is on screen: its columns, these filters, search and status
+  const [runOpen, setRunOpen] = useState(false);
+  const [runId, setRunId] = useState('');
+  const [runFormat, setRunFormat] = useState<'xlsx' | 'pdf'>('xlsx');
+  const [runLabel, setRunLabel] = useState('');
+  const runReport = () =>
+    start(async () => {
+      const choice = reports.find((r) => r.id === runId);
+      if (!choice || !actions.runReport) return setError('Choose a saved report.');
+      const r = await actions.runReport(choice.id, runFormat, runtimeOf(config.viewToSpec(view)));
+      setRunOpen(false);
+      if (r.ok) {
+        setRunLabel(choice.name);
+        setExporting({ id: r.data.exportId, format: runFormat });
+      } else setError(r.errors?.join('; ') ?? r.error);
+    });
+  const viewFilterCount = config.viewToSpec(view).filters.length;
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState(config.report.name);
@@ -310,6 +345,19 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
           >
             Export PDF
           </button>
+          {can.builder && reports.length && actions.runReport ? (
+            <button
+              type="button"
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              onClick={() => {
+                if (!runId) setRunId(reports[0]!.id);
+                setRunOpen(true);
+              }}
+              disabled={pending}
+            >
+              Download report
+            </button>
+          ) : null}
           {can.builder ? (
             <button
               type="button"
@@ -342,7 +390,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
           id={exporting.id}
           format={exporting.format}
           labels={{
-            queued: `${config.report.name} requested`,
+            queued: `${runLabel || config.report.name} requested`,
             ready: 'Download',
             pending: 'Preparing the file… it downloads automatically',
             failed: 'The file could not be made',
@@ -501,6 +549,67 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
         ))}
       </datalist>
 
+      {runOpen ? (
+        <Dialog
+          open
+          size="sm"
+          title="Download a saved report"
+          onClose={() => setRunOpen(false)}
+          primary={{ label: 'Download', loading: pending, onClick: runReport }}
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The report&apos;s columns and layout, for the {config.noun.many} on screen now
+            {viewFilterCount || view.search?.trim()
+              ? ` (${[
+                  viewFilterCount
+                    ? `${String(viewFilterCount)} filter${viewFilterCount === 1 ? '' : 's'}`
+                    : '',
+                  view.search?.trim() ? `search "${view.search.trim()}"` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ')})`
+              : ''}
+            . The report&apos;s own filters apply too; a filter on the same field here replaces the
+            report&apos;s. The saved report does not change.
+          </p>
+          <label className="ep-field" htmlFor="sl-run-report">
+            <span className="ep-field__label">Report</span>
+            <select
+              id="sl-run-report"
+              className="ep-select"
+              value={runId}
+              onChange={(e) => setRunId(e.target.value)}
+            >
+              {reports.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.sharedBy ? `${r.name} (shared by ${r.sharedBy})` : r.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="ep-field__label">File</legend>
+            <div style={{ display: 'flex', gap: 'var(--sp-4)' }}>
+              {(
+                [
+                  ['xlsx', 'Excel'],
+                  ['pdf', 'PDF'],
+                ] as const
+              ).map(([v, l]) => (
+                <label key={v} className="ep-check">
+                  <input
+                    type="radio"
+                    name="sl-run-format"
+                    checked={runFormat === v}
+                    onChange={() => setRunFormat(v)}
+                  />{' '}
+                  {l}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </Dialog>
+      ) : null}
       {saveOpen ? (
         <Dialog
           open

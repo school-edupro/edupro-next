@@ -1,7 +1,13 @@
 'use client';
 import { PeopleList } from '../people/PeopleList';
 import type { PeopleListConfig } from '@/lib/people-list';
-import type { ReportSpec, Result, SavedReport } from '@/lib/report-builder';
+import type {
+  ReportChoice,
+  ReportRuntime,
+  ReportSpec,
+  Result,
+  SavedReport,
+} from '@/lib/report-builder';
 import {
   DEFAULT_EMPLOYEE_VIEW,
   EMPLOYEE_QUICK_FILTERS,
@@ -138,7 +144,13 @@ export function EmployeeList(props: {
       id: null,
       input: { name: string; description: string | null; spec: ReportSpec },
     ) => Promise<Result<SavedReport>>;
+    runReport?: (
+      id: string,
+      format: 'xlsx' | 'pdf',
+      runtime: ReportRuntime,
+    ) => Promise<Result<{ exportId: string; format: string }>>;
   };
+  reports?: ReportChoice[];
 }) {
   return <PeopleList config={EMPLOYEES} {...props} />;
 }

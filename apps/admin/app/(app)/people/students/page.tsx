@@ -2,12 +2,14 @@ import { PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { StudentList } from '@/components/StudentList';
 import {
+  builderExport,
   builderSave,
   studentListExport,
   studentListLoad,
   studentListSaveView,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
+import { reportChoices, type SavedReport } from '@/lib/report-builder';
 import { sanitizeView, type StudentListFields, type StudentListResult } from '@/lib/student-list';
 
 export default async function StudentsPage({
@@ -18,6 +20,15 @@ export default async function StudentsPage({
   const sp = await searchParams;
   const me = await getMe();
   const can = (p: string) => me.permissions.includes(p);
+  // saved student reports this user may run, to download for the list's filters
+  const reports = can('reports.builder.use')
+    ? reportChoices(
+        await apiFetch<{ mine: SavedReport[]; shared: SavedReport[] }>('/reports/builder').catch(
+          () => ({ mine: [], shared: [] }),
+        ),
+        'student_profile',
+      )
+    : [];
   const [fields, saved] = await Promise.all([
     apiFetch<StudentListFields>('/people/students/grid/fields'),
     // the view this user saved for this school; other users keep their own
@@ -46,10 +57,12 @@ export default async function StudentsPage({
           builder: can('reports.builder.use'),
           edit: can('people.student.edit'),
         }}
+        reports={reports}
         actions={{
           load: studentListLoad,
           exportFile: studentListExport,
           saveReport: builderSave,
+          runReport: builderExport,
           saveView: studentListSaveView,
         }}
       />

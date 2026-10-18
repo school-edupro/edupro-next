@@ -51,6 +51,14 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 - **Export Excel / PDF** gives exactly what you see; **Save as report** keeps it in the Report builder
   (Report builder → New employee report also starts one from scratch).
 
+## A saved report for the list on screen
+
+- Filter the list (department, status, search…), press **Download report**, pick a saved report and
+  Excel or PDF: you get that report's columns for just those people. The same works on People →
+  Students (e.g. one class).
+- In the report builder, tick **Ask when running** on a filter (such as Class or Department): that
+  report then asks for it before every download.
+
 ## Many at once (Employees → Excel upload)
 
 1. **Add new employees** or **Update existing employees**; tick the columns you want (or none for all)

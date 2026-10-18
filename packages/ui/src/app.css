@@ -8177,3 +8177,6 @@ a.db-list__main:hover strong {
   font-size: var(--fs-h4);
   color: var(--text-heading);
 }
+/* report builder: "Ask when running" under a filter row */
+.ep-rb__ask { margin: calc(-1 * var(--sp-1)) 0 var(--sp-2); }
+.ep-rb__askhelp { margin: 0 0 var(--sp-3); }

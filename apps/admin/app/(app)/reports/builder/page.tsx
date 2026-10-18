@@ -44,7 +44,15 @@ function ReportTable({
                   {r.description ? <div className="ep-field__help">{r.description}</div> : null}
                 </td>
                 <td>{r.spec.columns.length}</td>
-                <td>{r.spec.filters.length || '—'}</td>
+                <td>
+                  {r.spec.filters.length || '—'}
+                  {r.spec.filters.some((f) => f.ask) ? (
+                    <>
+                      {' '}
+                      <Badge tone="info">asks</Badge>
+                    </>
+                  ) : null}
+                </td>
                 <td>
                   {showOwner ? (
                     <>
@@ -63,36 +71,47 @@ function ReportTable({
                 </td>
                 <td>{r.lastRunAt ? new Date(r.lastRunAt).toLocaleString('en-IN') : '—'}</td>
                 <td>
-                  <div style={{ display: 'flex', gap: 'var(--sp-1)' }}>
-                    <form action={builderExportForm}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <input type="hidden" name="format" value="xlsx" />
-                      <button
-                        type="submit"
-                        className="ep-btn ep-btn--secondary ep-btn--sm"
-                        aria-label={`Excel of ${r.name}`}
-                      >
-                        Excel
-                      </button>
-                    </form>
-                    <form action={builderExportForm}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <input type="hidden" name="format" value="pdf" />
-                      <button
-                        type="submit"
-                        className="ep-btn ep-btn--secondary ep-btn--sm"
-                        disabled={!pdfOk}
-                        title={
-                          pdfOk
-                            ? undefined
-                            : 'Too many columns for a PDF page; open the report to use A3 or fewer columns'
-                        }
-                        aria-label={`PDF of ${r.name}`}
-                      >
-                        PDF
-                      </button>
-                    </form>
-                  </div>
+                  {r.spec.filters.some((f) => f.ask) ? (
+                    // the report asks for filters (e.g. the class) before each download
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/reports/builder/${r.id}?run=1`}
+                      aria-label={`Choose filters and download ${r.name}`}
+                    >
+                      Choose filters
+                    </a>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 'var(--sp-1)' }}>
+                      <form action={builderExportForm}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <input type="hidden" name="format" value="xlsx" />
+                        <button
+                          type="submit"
+                          className="ep-btn ep-btn--secondary ep-btn--sm"
+                          aria-label={`Excel of ${r.name}`}
+                        >
+                          Excel
+                        </button>
+                      </form>
+                      <form action={builderExportForm}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <input type="hidden" name="format" value="pdf" />
+                        <button
+                          type="submit"
+                          className="ep-btn ep-btn--secondary ep-btn--sm"
+                          disabled={!pdfOk}
+                          title={
+                            pdfOk
+                              ? undefined
+                              : 'Too many columns for a PDF page; open the report to use A3 or fewer columns'
+                          }
+                          aria-label={`PDF of ${r.name}`}
+                        >
+                          PDF
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </td>
                 <td>
                   {r.canShare ? (

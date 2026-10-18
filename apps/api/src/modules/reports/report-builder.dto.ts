@@ -8,6 +8,12 @@ const Key = z
   .trim()
   .regex(/^[a-z0-9_]{2,60}$/, 'unknown field');
 
+const ReportFilterSchema = z.object({
+  key: Key,
+  op: z.enum(REPORT_FILTER_OPS as [string, ...string[]]),
+  values: z.array(z.string().trim().max(120)).max(200).optional(),
+});
+
 export const ReportSpecSchema = z.object({
   /** whose rows: students (the default) or employees */
   dataset: z.enum(['student_profile', 'employee_profile']).default('student_profile'),
@@ -26,10 +32,9 @@ export const ReportSpecSchema = z.object({
     .max(250),
   filters: z
     .array(
-      z.object({
-        key: Key,
-        op: z.enum(REPORT_FILTER_OPS as [string, ...string[]]),
-        values: z.array(z.string().trim().max(120)).max(200).optional(),
+      ReportFilterSchema.extend({
+        /** asked each time the report is downloaded */
+        ask: z.boolean().optional(),
       }),
     )
     .max(30)
@@ -81,7 +86,17 @@ export const PreviewReportSchema = z.object({
 });
 export class PreviewReportDto extends createZodDto(PreviewReportSchema) {}
 
-export const ExportReportSchema = z.object({ format: z.enum(['xlsx', 'pdf']) });
+export const ExportReportSchema = z.object({
+  format: z.enum(['xlsx', 'pdf']),
+  /** run-time filters for this download only (the list's view, or the asked filters); not saved */
+  runtime: z
+    .object({
+      filters: z.array(ReportFilterSchema).max(30).default([]),
+      search: z.string().trim().max(80).nullable().optional(),
+      includeInactive: z.boolean().optional(),
+    })
+    .optional(),
+});
 export class ExportReportDto extends createZodDto(ExportReportSchema) {}
 
 export const ShareOptionsQuerySchema = z.object({ q: z.string().trim().max(60).optional() });

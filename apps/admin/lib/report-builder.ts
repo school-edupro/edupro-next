@@ -48,7 +48,8 @@ export interface ReportSpec {
   }>;
   layout?: 'table' | 'detailed';
   groupLabels?: Record<string, string>;
-  filters: Array<{ key: string; op: FilterOp; values?: string[] }>;
+  /** ask: asked each time the report is downloaded; left out when no value is given */
+  filters: Array<{ key: string; op: FilterOp; values?: string[]; ask?: boolean }>;
   sort: Array<{ key: string; dir: 'asc' | 'desc' }>;
   options: {
     paper: 'A4' | 'A3';
@@ -74,6 +75,44 @@ export interface SavedReport {
   shares: Array<{ userId: string | null; roleId: string | null; name: string; canEdit: boolean }>;
   lastRunAt: string | null;
   updatedAt: string;
+}
+
+/** Filters, search and status given for one download of a saved report. */
+export interface ReportRuntime {
+  filters: Array<{ key: string; op: FilterOp; values?: string[] }>;
+  search?: string | null;
+  includeInactive?: boolean;
+}
+
+/** A saved report offered on a list ("Download report"). */
+export interface ReportChoice {
+  id: string;
+  name: string;
+  /** shared by someone else: their name */
+  sharedBy: string | null;
+}
+
+/** The run-time part of a list's view: its filters, search and status. */
+export function runtimeOf(spec: ReportSpec): ReportRuntime {
+  return {
+    filters: spec.filters.map(({ key, op, values }) => ({ key, op, values })),
+    search: spec.options.search ?? null,
+    includeInactive: spec.options.includeInactive ?? false,
+  };
+}
+
+/** The saved reports of one dataset the user may run: their own, then those shared with them. */
+export function reportChoices(
+  list: { mine: SavedReport[]; shared: SavedReport[] },
+  dataset: 'student_profile' | 'employee_profile',
+): ReportChoice[] {
+  const of = (r: SavedReport) => (r.spec.dataset ?? r.dataset ?? 'student_profile') === dataset;
+  return [
+    ...list.mine.filter(of).map((r) => ({ id: r.id, name: r.name, sharedBy: null })),
+    ...list.shared
+      .filter(of)
+      .map((r) => ({ id: r.id, name: r.name, sharedBy: r.ownerName ?? 'a colleague' })),
+  ];
 }
 
 export interface PreviewResult {

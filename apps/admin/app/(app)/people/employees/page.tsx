@@ -1,8 +1,9 @@
 import { PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { EmployeeList } from '@/components/employees/EmployeeList';
-import { builderSave } from '@/lib/actions';
+import { builderExport, builderSave } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
+import { reportChoices, type SavedReport } from '@/lib/report-builder';
 import { employeeListExport, employeeListLoad, employeeListSaveView } from '@/lib/employee-actions';
 import {
   sanitizeEmployeeView,
@@ -22,6 +23,15 @@ export default async function EmployeesPage({
   const sp = await searchParams;
   const me = await getMe();
   const can = (p: string) => me.permissions.includes(p);
+  // saved employee reports this user may run, to download for the list's filters
+  const reports = can('reports.builder.use')
+    ? reportChoices(
+        await apiFetch<{ mine: SavedReport[]; shared: SavedReport[] }>('/reports/builder').catch(
+          () => ({ mine: [], shared: [] }),
+        ),
+        'employee_profile',
+      )
+    : [];
   const [fields, saved] = await Promise.all([
     apiFetch<EmployeeListFields>('/people/staff/grid/fields'),
     // the view this user saved for this school; other users keep their own
@@ -51,10 +61,12 @@ export default async function EmployeesPage({
           edit: can('people.employee.edit'),
           setup: can('people.employee.view'),
         }}
+        reports={reports}
         actions={{
           load: employeeListLoad,
           exportFile: employeeListExport,
           saveReport: builderSave,
+          runReport: builderExport,
           saveView: employeeListSaveView,
         }}
       />
