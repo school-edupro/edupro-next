@@ -2850,7 +2850,8 @@
       "exams": "Exams",
       "communication": "Communication",
       "system": "System",
-      "library": "Library"
+      "library": "Library",
+      "staff": "People"
     },
     "title": {
       "fees": "Fees setup",
@@ -2860,7 +2861,8 @@
       "exams": "Exams setup",
       "communication": "Communication setup",
       "system": "System setup",
-      "library": "Library catalogue"
+      "library": "Library catalogue",
+      "staff": "Staff setup"
     },
     "description": "Masters of this school. Add or edit a row, upload an Excel sheet to add or update many at once, export the list as Excel or PDF, and update one column on ticked rows in bulk.",
     "perPage": "Records per page",

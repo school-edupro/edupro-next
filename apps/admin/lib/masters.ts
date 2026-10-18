@@ -86,6 +86,7 @@ export const MASTER_GROUP_IDS = [
   'exams',
   'communication',
   'library',
+  'staff',
   'system',
 ] as const;
 
