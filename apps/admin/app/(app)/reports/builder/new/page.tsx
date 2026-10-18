@@ -10,7 +10,7 @@ import {
   builderShareOptions,
 } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import { EMPTY_SPEC, type BuilderFields } from '@/lib/report-builder';
+import { EMPTY_EMPLOYEE_SPEC, EMPTY_SPEC, type BuilderFields } from '@/lib/report-builder';
 
 export default async function NewReportPage({
   searchParams,
@@ -63,7 +63,9 @@ export default async function NewReportPage({
         key={dataset}
         fields={fields}
         report={null}
-        initialSpec={{ ...EMPTY_SPEC, dataset }}
+        initialSpec={
+          dataset === 'employee_profile' ? EMPTY_EMPLOYEE_SPEC : { ...EMPTY_SPEC, dataset }
+        }
         actions={{
           preview: builderPreview,
           save: builderSave,

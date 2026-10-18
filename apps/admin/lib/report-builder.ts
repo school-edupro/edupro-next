@@ -126,6 +126,20 @@ export const EMPTY_SPEC: ReportSpec = {
   options: { paper: 'A4', orientation: 'auto', includeInactive: false },
 };
 
+/** A new employee report starts with code, name, department, designation and mobile. */
+export const EMPTY_EMPLOYEE_SPEC: ReportSpec = {
+  ...EMPTY_SPEC,
+  dataset: 'employee_profile',
+  columns: [
+    { key: 'employee_code' },
+    { key: 'full_name' },
+    { key: 'department' },
+    { key: 'designation' },
+    { key: 'mobile' },
+  ],
+  sort: [{ key: 'employee_code', dir: 'asc' }],
+};
+
 /** The office-register template: class, student, father, mother, address and contacts as stacks. */
 export const DETAILED_TEMPLATE: ReportSpec['columns'] = (
   [

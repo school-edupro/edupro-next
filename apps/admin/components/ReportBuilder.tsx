@@ -66,6 +66,8 @@ export function ReportBuilder({
   const [name, setName] = useState(report?.name ?? '');
   const [description, setDescription] = useState(report?.description ?? '');
   const [spec, setSpec] = useState<ReportSpec>(initialSpec);
+  // whose rows: students, or employees
+  const who = spec.dataset === 'employee_profile' ? 'employee' : 'student';
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [notice, setNotice] = useState<{
@@ -543,7 +545,7 @@ export function ReportBuilder({
               </button>
             ) : null}
             {!spec.filters.length ? (
-              <p className="ep-field__help">No filters: every student of the year.</p>
+              <p className="ep-field__help">No filters: every {who} of the year.</p>
             ) : null}
           </section>
 
@@ -748,7 +750,7 @@ export function ReportBuilder({
                     }))
                   }
                 />
-                Include inactive and left students
+                Include inactive and left {who}s
               </label>
             </div>
           </section>
@@ -757,8 +759,8 @@ export function ReportBuilder({
           {preview ? (
             <section className="ep-card" aria-label="Preview" style={{ padding: 'var(--sp-4)' }}>
               <h2 className="ep-card__title">
-                Preview · {preview.total} student{preview.total === 1 ? '' : 's'} ·{' '}
-                {preview.academicYear}
+                Preview · {preview.total} {who}
+                {preview.total === 1 ? '' : 's'} · {preview.academicYear}
               </h2>
               {preview.excluded?.length || preview.highlighted?.length ? (
                 <p className="ep-field__help" style={{ marginTop: 0 }}>
@@ -1123,7 +1125,7 @@ function SharePanel({
       <p className="ep-field__help" style={{ marginTop: 0 }}>
         People you share with see this report under "Shared with me". View only lets them run and
         download it; can edit lets them change its columns and filters. They still see only the
-        students their own access allows.
+        records their own access allows.
       </p>
       <div
         style={{
