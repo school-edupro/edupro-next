@@ -157,7 +157,7 @@ export default async function FeeDashboardPage({
   });
 
   return (
-    <>
+    <div className="ep-dash-compact">
       <PageHeader
         kicker="Fees"
         title="Fee dashboard"
@@ -180,19 +180,8 @@ export default async function FeeDashboardPage({
         ))}
       </nav>
 
-      <ProjectionPanel
-        title={`Projection vs collection${ledger === 'all' ? '' : ` · ${NAME[ledger]}`}`}
-        periods={d.periods}
-        by={by}
-        hrefFor={(b) => href({ by: b })}
-      />
-
       <h2 className="ep-sr-only">Collected and due</h2>
-      {/* rupee amounts are long: wider tiles than the usual stats row */}
-      <div
-        className="ep-cf-stats"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(12.5rem, 1fr))' }}
-      >
+      <div className="ep-dash-kpis">
         <KpiTile
           label="Collected today"
           value={rupees(t.collectedToday)}
@@ -215,6 +204,13 @@ export default async function FeeDashboardPage({
         />
         <KpiTile label="Overdue" value={rupees(t.overdue)} hint={`${t.defaulters} pupils`} />
       </div>
+
+      <ProjectionPanel
+        title={`Projection vs collection${ledger === 'all' ? '' : ` · ${NAME[ledger]}`}`}
+        periods={d.periods}
+        by={by}
+        hrefFor={(b) => href({ by: b })}
+      />
 
       {ledger === 'all' ? (
         <Card title="By ledger" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -280,16 +276,7 @@ export default async function FeeDashboardPage({
           )}
         </Card>
         <Card title="Dues by age">
-          <BarChart
-            title="Unpaid fee by how long it has been due"
-            stacked
-            series={ledgersShown.map((l) => ({ label: NAME[l] ?? l, tone: TONE[l] ?? 'muted' }))}
-            data={d.ageing.map((a) => ({
-              label: AGE[a.bucket] ?? a.bucket,
-              values: ledgersShown.map((l) => a.byLedger.find((x) => x.ledger === l)?.amount ?? 0),
-            }))}
-          />
-          <table className="ep-table ep-table--dense" style={{ marginTop: 'var(--sp-3)' }}>
+          <table className="ep-table ep-table--dense" style={{ marginBottom: 'var(--sp-3)' }}>
             <caption className="ep-sr-only">Unpaid fee by age</caption>
             <thead>
               <tr>
@@ -308,6 +295,15 @@ export default async function FeeDashboardPage({
               ))}
             </tbody>
           </table>
+          <BarChart
+            title="Unpaid fee by how long it has been due"
+            stacked
+            series={ledgersShown.map((l) => ({ label: NAME[l] ?? l, tone: TONE[l] ?? 'muted' }))}
+            data={d.ageing.map((a) => ({
+              label: AGE[a.bucket] ?? a.bucket,
+              values: ledgersShown.map((l) => a.byLedger.find((x) => x.ledger === l)?.amount ?? 0),
+            }))}
+          />
         </Card>
       </div>
 
@@ -315,17 +311,7 @@ export default async function FeeDashboardPage({
         <Card title="How it was paid (this year)">
           {d.modes.length ? (
             <>
-              <DonutChart
-                title="Collection this year by payment mode"
-                centre={short(modeYear)}
-                caption="this year"
-                parts={d.modes.map((m, i) => ({
-                  label: MODE[m.mode] ?? m.mode,
-                  tone: MODE_TONE[i % MODE_TONE.length]!,
-                  value: m.year,
-                }))}
-              />
-              <table className="ep-table ep-table--dense" style={{ marginTop: 'var(--sp-3)' }}>
+              <table className="ep-table ep-table--dense" style={{ marginBottom: 'var(--sp-3)' }}>
                 <caption className="ep-sr-only">Collection by payment mode</caption>
                 <thead>
                   <tr>
@@ -346,6 +332,16 @@ export default async function FeeDashboardPage({
                   ))}
                 </tbody>
               </table>
+              <DonutChart
+                title="Collection this year by payment mode"
+                centre={short(modeYear)}
+                caption="this year"
+                parts={d.modes.map((m, i) => ({
+                  label: MODE[m.mode] ?? m.mode,
+                  tone: MODE_TONE[i % MODE_TONE.length]!,
+                  value: m.year,
+                }))}
+              />
             </>
           ) : (
             <p className="ep-field__help">No receipts yet this year.</p>
@@ -576,6 +572,6 @@ export default async function FeeDashboardPage({
           </p>
         )}
       </Card>
-    </>
+    </div>
   );
 }

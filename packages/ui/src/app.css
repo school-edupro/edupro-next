@@ -3795,6 +3795,38 @@ a.ep-tabs__tab {
   border-color: var(--status-danger);
   background: var(--status-danger-bg);
 }
+/* dashboards: the figures first, in an even row of cards (6 / 3 / 2 across), then small charts */
+.ep-dash-kpis {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: var(--sp-4);
+}
+@media (min-width: 40rem) {
+  .ep-dash-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 90rem) {
+  .ep-dash-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+.ep-dash-kpis .ep-kpi__value {
+  font-size: var(--fs-h3);
+  overflow-wrap: anywhere;
+}
+.ep-dash-compact .ep-chart:not(.ep-chart--donut) {
+  max-width: 34rem;
+  margin-inline: auto;
+}
+.ep-dash-compact .ep-chart--donut {
+  max-width: 10rem;
+}
+.ep-dash-compact .ep-chart + .ep-chart__legend,
+.ep-dash-compact .ep-chart__legend {
+  justify-content: center;
+}
 .ep-cdash__kpis {
   display: grid;
   gap: var(--sp-4);

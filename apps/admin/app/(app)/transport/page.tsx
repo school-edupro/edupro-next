@@ -248,7 +248,7 @@ export default async function TransportDashboardPage({
     ],
   ];
   return (
-    <>
+    <div className="ep-dash-compact">
       <PageHeader
         kicker="Transport"
         title="Transport dashboard"
@@ -262,6 +262,35 @@ export default async function TransportDashboardPage({
         }
       />
       <TransportNav current="/transport" permissions={me.permissions} />
+      {replaced.length ? (
+        <div style={{ marginBottom: 'var(--sp-4)' }}>
+          <Alert tone="warning">
+            Replacement bus today:{' '}
+            {replaced
+              .map(
+                (x) =>
+                  `${x.vehicle} → ${x.replacement}${x.routes ? ` (route ${x.routes})` : ''} till ${dateLabel(x.toDate)}`,
+              )
+              .join('; ')}
+            .{' '}
+            <a href="/transport/replacements" style={{ textDecoration: 'underline' }}>
+              Open
+            </a>
+          </Alert>
+        </div>
+      ) : null}
+      <div className="ep-dash-kpis">
+        {kpis.map(([title, n, help, href]) => (
+          <Card key={title} title={title}>
+            <div className="ep-cdash__big">
+              <a className="ep-cdash__num" href={href} aria-label={`${title}: ${n}`}>
+                {n}
+              </a>
+            </div>
+            <div className="ep-field__help">{help}</div>
+          </Card>
+        ))}
+      </div>
       {fees ? (
         <>
           <ProjectionPanel
@@ -345,35 +374,6 @@ export default async function TransportDashboardPage({
           </div>
         </>
       ) : null}
-      {replaced.length ? (
-        <div style={{ marginBottom: 'var(--sp-4)' }}>
-          <Alert tone="warning">
-            Replacement bus today:{' '}
-            {replaced
-              .map(
-                (x) =>
-                  `${x.vehicle} → ${x.replacement}${x.routes ? ` (route ${x.routes})` : ''} till ${dateLabel(x.toDate)}`,
-              )
-              .join('; ')}
-            .{' '}
-            <a href="/transport/replacements" style={{ textDecoration: 'underline' }}>
-              Open
-            </a>
-          </Alert>
-        </div>
-      ) : null}
-      <div className="ep-cdash__kpis">
-        {kpis.map(([title, n, help, href]) => (
-          <Card key={title} title={title}>
-            <div className="ep-cdash__big">
-              <a className="ep-cdash__num" href={href} aria-label={`${title}: ${n}`}>
-                {n}
-              </a>
-            </div>
-            <div className="ep-field__help">{help}</div>
-          </Card>
-        ))}
-      </div>
       <Card title="Waiting for approval, by level" style={{ marginTop: 'var(--sp-4)' }}>
         {d.pending.length === 0 ? (
           <p className="ep-field__help" style={{ margin: 0 }}>
@@ -606,6 +606,6 @@ export default async function TransportDashboardPage({
       {me.permissions.some((p) => p === 'transport.fee.view' || p === 'fees.ledger.view') ? (
         <TransportFeePanel />
       ) : null}
-    </>
+    </div>
   );
 }

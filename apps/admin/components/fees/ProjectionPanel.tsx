@@ -84,20 +84,7 @@ export function ProjectionPanel({
           So far: {rupees(paidSoFar)} of {rupees(dueSoFar)} realised ({pct(paidSoFar, dueSoFar)}%)
         </span>
       </div>
-      <BarChart
-        title={`${title}: projection, realised and received in each period`}
-        series={[
-          { label: 'Projection (due)', tone: 'muted' },
-          { label: 'Realised (paid of it)', tone: 'success' },
-          { label: 'Received in the period', tone: 'cyan' },
-          ...(transport ? [{ label: 'Bus list', tone: 'warning' as const }] : []),
-        ]}
-        data={periods.map((p) => ({
-          label: by === 'month' ? p.label : short(p.label),
-          values: [p.projection, p.realised, p.received, ...(transport ? [p.expected ?? 0] : [])],
-        }))}
-      />
-      <div className="ep-table-wrap" style={{ marginTop: 'var(--sp-3)' }}>
+      <div className="ep-table-wrap" style={{ marginBottom: 'var(--sp-3)' }}>
         <table className="ep-table ep-table--dense">
           <caption className="ep-sr-only">{title} by period</caption>
           <thead>
@@ -186,6 +173,19 @@ export function ProjectionPanel({
           </tbody>
         </table>
       </div>
+      <BarChart
+        title={`${title}: projection, realised and received in each period`}
+        series={[
+          { label: 'Projection (due)', tone: 'muted' },
+          { label: 'Realised (paid of it)', tone: 'success' },
+          { label: 'Received in the period', tone: 'cyan' },
+          ...(transport ? [{ label: 'Bus list', tone: 'warning' as const }] : []),
+        ]}
+        data={periods.map((p) => ({
+          label: by === 'month' ? p.label : short(p.label),
+          values: [p.projection, p.realised, p.received, ...(transport ? [p.expected ?? 0] : [])],
+        }))}
+      />
       <p className="ep-field__help" style={{ margin: 'var(--sp-3) 0 0' }}>
         Projection is the fee due in the period after discounts. Realised is how much of it is paid,
         whenever paid. Received is the money that came in during the period, whatever it paid for.
