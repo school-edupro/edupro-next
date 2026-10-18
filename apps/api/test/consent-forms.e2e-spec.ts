@@ -1145,4 +1145,41 @@ describe('consent forms (e2e)', () => {
     await put(`/engagement/consent-forms/${id}/shares`, { shares: [] });
     expect((await get(`/engagement/consent-forms/${id}`, teacher)).statusCode).toBe(404);
   });
+
+  it('the dashboard: every form for a manager, only the shared ones for others; response, fees, classes, trend', async () => {
+    const nf = await post('/engagement/consent-forms', {
+      title: 'Library rules',
+      respondents: 'both',
+      fields: [{ key: 'ok', label: 'I agree', type: 'agree', required: true }],
+      audience: {
+        pupils: 'filter',
+        sectionIds: [ids.secA],
+        staff: 'filter',
+        departments: ['Science'],
+      },
+    });
+    await put(`/engagement/consent-forms/${nf.json().id}/status`, {
+      status: 'published',
+      push: false,
+    });
+    await post(`/engagement/consent-forms/${nf.json().id}/responses`, {
+      studentId: ids.bo,
+      answers: { ok: true },
+    });
+    const d = (await get('/engagement/consent-forms/dashboard')).json();
+    expect(d.canCreate).toBe(true);
+    const lib = d.forms.find((f: { id: string }) => f.id === nf.json().id);
+    expect(lib).toMatchObject({ asked: 3, answered: 1, rate: 33, open: true });
+    expect(d.forms.map((f: { id: string }) => f.id)).toContain(ids.form);
+    expect(d.totals.open).toBeGreaterThanOrEqual(1);
+    expect(d.totals.asked).toBeGreaterThanOrEqual(3);
+    expect(d.byClass.map((x: { name: string }) => x.name)).toContain('Class VI');
+    expect(d.byDepartment.map((x: { name: string }) => x.name)).toContain('Science');
+    expect(d.daily).toHaveLength(30);
+    expect(d.ways.app + d.ways.link + d.ways.office).toBeGreaterThan(0);
+    expect(d.totals.feeRaised).toBeGreaterThan(0);
+    // the teacher manages nothing and has no share: an empty dashboard
+    const t = (await get('/engagement/consent-forms/dashboard', teacher)).json();
+    expect(t).toMatchObject({ canCreate: false, forms: [], totals: { open: 0 } });
+  });
 });

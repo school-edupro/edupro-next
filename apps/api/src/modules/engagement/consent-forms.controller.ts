@@ -86,6 +86,14 @@ export class ConsentFormsController {
     return this.svc.list(ctx, q);
   }
 
+  @Get('consent-forms/dashboard')
+  @ApiOperation({ summary: 'All forms at a glance: response, approvals, fees, classes, trend' })
+  // managers see every form, anyone else the forms shared with them
+  @AuthenticatedOnly()
+  dashboard(@ReqCtx() ctx: RequestContext) {
+    return this.svc.dashboard(ctx);
+  }
+
   @Get('consent-forms/lists')
   // a manager, or a share of this form (checked in the service)
   @AuthenticatedOnly()

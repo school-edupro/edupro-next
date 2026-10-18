@@ -238,6 +238,210 @@ export class ConsentFormsService {
     });
   }
 
+  /**
+   * The consent dashboard: every form the caller may open (managers: all; others: the shared ones),
+   * how far each has got, approvals waiting by approver, fees raised and paid, the classes and
+   * departments answering least on the open forms, and answers per day by way of answering.
+   */
+  async dashboard(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const manager = Boolean(ctx.permissions?.has(CONSENT.manage));
+      const forms = (
+        await c.query<FormDb>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragment constants; values are bound parameters
+          `${FORM} WHERE f.deleted_at IS NULL AND f.status IN ('published', 'closed')
+             AND ($1::boolean OR EXISTS (SELECT 1 FROM consent_form_shares sh WHERE sh.form_id = f.id AND ${SHARED_TO('$2')}))
+           ORDER BY f.created_at DESC LIMIT 200`,
+          [manager, ctx.user.id],
+        )
+      ).rows;
+      const ids = forms.map((f) => f.id);
+      const today = nowLocal().slice(0, 10);
+      const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 864e5)
+        .toISOString()
+        .slice(0, 10);
+
+      // per form: asked, answered, waiting, fee; and who is asked by class / department (open forms)
+      const answeredBy = await c.query<{ form_id: string; s: string | null; e: string | null }>(
+        `SELECT form_id::text, student_id::text AS s, employee_id::text AS e FROM consent_form_responses
+          WHERE form_id = ANY($1::bigint[]) AND status <> 'withdrawn'`,
+        [ids],
+      );
+      const rows = [];
+      const askedS = new Map<string, Set<string>>(); // pupil -> open forms asking
+      const doneS = new Map<string, Set<string>>();
+      const askedE = new Map<string, Set<string>>();
+      const doneE = new Map<string, Set<string>>();
+      for (const f of forms) {
+        f.audience = { ...AUDIENCE_DEFAULT, ...f.audience };
+        const state = this.openState(f);
+        const pupils = await this.audienceStudents(c, f);
+        const staff = await this.audienceStaff(c, f);
+        const mine = answeredBy.rows.filter((x) => x.form_id === f.id);
+        // public-link answers carry no pupil or staff member: each counts once
+        const ans = new Set(mine.map((x, i) => (x.s ? `s${x.s}` : x.e ? `e${x.e}` : `r${i}`)));
+        if (state.open) {
+          for (const id of pupils) (askedS.get(id) ?? askedS.set(id, new Set()).get(id)!).add(f.id);
+          for (const id of staff) (askedE.get(id) ?? askedE.set(id, new Set()).get(id)!).add(f.id);
+          for (const x of mine) {
+            if (x.s) (doneS.get(x.s) ?? doneS.set(x.s, new Set()).get(x.s)!).add(f.id);
+            if (x.e) (doneE.get(x.e) ?? doneE.set(x.e, new Set()).get(x.e)!).add(f.id);
+          }
+        }
+        rows.push({
+          id: f.id,
+          title: f.title,
+          status: f.status,
+          open: state.open,
+          closedWhy: state.why,
+          closesAt: f.settings.closesAt ?? null,
+          closingSoon: Boolean(
+            state.open && f.settings.closesAt && f.settings.closesAt.slice(0, 10) <= soon,
+          ),
+          asked: pupils.length + staff.length,
+          answered: ans.size,
+        });
+      }
+      const extra = await c.query<{
+        form_id: string;
+        waiting: number;
+        approved: number;
+        rejected: number;
+        raised: string;
+        paid: string;
+        via_app: number;
+        via_link: number;
+        via_office: number;
+      }>(
+        `SELECT x.form_id::text,
+                count(*) FILTER (WHERE x.status = 'submitted' AND EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = x.instance_id AND wi.status = 'pending'))::int AS waiting,
+                count(*) FILTER (WHERE x.status = 'approved')::int AS approved,
+                count(*) FILTER (WHERE x.status = 'rejected')::int AS rejected,
+                COALESCE(sum(l.amount), 0)::text AS raised, COALESCE(sum(l.paid), 0)::text AS paid,
+                count(*) FILTER (WHERE NOT x.via_link AND x.respondent IN ('family', 'staff'))::int AS via_app,
+                count(*) FILTER (WHERE x.via_link)::int AS via_link,
+                count(*) FILTER (WHERE x.respondent = 'office')::int AS via_office
+           FROM consent_form_responses x LEFT JOIN misc_fee_students l ON l.id = x.misc_line_id AND l.status <> 'cancelled'
+          WHERE x.form_id = ANY($1::bigint[]) AND x.status <> 'withdrawn' GROUP BY x.form_id`,
+        [ids],
+      );
+      const formRows = rows.map((r) => {
+        const e = extra.rows.find((x) => x.form_id === r.id);
+        return {
+          ...r,
+          rate: r.asked ? Math.round((Math.min(r.answered, r.asked) / r.asked) * 100) : null,
+          waiting: e?.waiting ?? 0,
+          approved: e?.approved ?? 0,
+          rejected: e?.rejected ?? 0,
+          feeRaised: Number(e?.raised ?? 0),
+          feePaid: Number(e?.paid ?? 0),
+        };
+      });
+      const open = formRows.filter((r) => r.open);
+
+      // approvals waiting, by the step and those who hold it
+      const approvers = await c.query<{ who: string; n: number; oldest: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- WAITING_WITH is a fixed expression; values are bound
+        `SELECT ${WAITING_WITH('x.instance_id')} AS who, count(*)::int AS n, min(x.signed_at)::text AS oldest
+           FROM consent_form_responses x
+          WHERE x.form_id = ANY($1::bigint[]) AND x.status = 'submitted'
+            AND EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = x.instance_id AND wi.status = 'pending')
+          GROUP BY 1 ORDER BY 2 DESC`,
+        [ids],
+      );
+
+      // the classes and departments on the open forms: asked (person x form) and answered
+      const byClass = await c.query<{ id: string; name: string; ord: number }>(
+        `SELECT s.id::text, k.name, k.display_order AS ord FROM students s
+           JOIN enrolments e ON e.student_id = s.id AND e.status = 'active'
+            AND e.academic_year_id = (SELECT id FROM academic_years WHERE status = 'active' ORDER BY start_date DESC LIMIT 1)
+           JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+          WHERE s.id = ANY($1::bigint[])`,
+        [[...askedS.keys()]],
+      );
+      const classAgg = new Map<
+        string,
+        { name: string; ord: number; asked: number; answered: number }
+      >();
+      for (const r of byClass.rows) {
+        const a = classAgg.get(r.name) ?? { name: r.name, ord: r.ord, asked: 0, answered: 0 };
+        a.asked += askedS.get(r.id)?.size ?? 0;
+        a.answered += [...(askedS.get(r.id) ?? [])].filter((f) => doneS.get(r.id)?.has(f)).length;
+        classAgg.set(r.name, a);
+      }
+      const byDept = await c.query<{ id: string; dept: string }>(
+        `SELECT id::text, COALESCE(NULLIF(department, ''), 'No department') AS dept FROM employees WHERE id = ANY($1::bigint[])`,
+        [[...askedE.keys()]],
+      );
+      const deptAgg = new Map<string, { name: string; asked: number; answered: number }>();
+      for (const r of byDept.rows) {
+        const a = deptAgg.get(r.dept) ?? { name: r.dept, asked: 0, answered: 0 };
+        a.asked += askedE.get(r.id)?.size ?? 0;
+        a.answered += [...(askedE.get(r.id) ?? [])].filter((f) => doneE.get(r.id)?.has(f)).length;
+        deptAgg.set(r.dept, a);
+      }
+      const withRate = <T extends { asked: number; answered: number }>(x: T) => ({
+        ...x,
+        rate: x.asked ? Math.round((x.answered / x.asked) * 100) : 0,
+      });
+
+      // answers per day, the last 30 days, by way of answering
+      const daily = await c.query<{ date: string; app: number; link: number; office: number }>(
+        `SELECT g.d::date::text AS date,
+                count(x.id) FILTER (WHERE NOT x.via_link AND x.respondent IN ('family', 'staff'))::int AS app,
+                count(x.id) FILTER (WHERE x.via_link)::int AS link,
+                count(x.id) FILTER (WHERE x.respondent = 'office')::int AS office
+           FROM generate_series($2::date - 29, $2::date, interval '1 day') g(d)
+           LEFT JOIN consent_form_responses x ON x.form_id = ANY($1::bigint[]) AND x.status <> 'withdrawn'
+            AND (x.signed_at AT TIME ZONE 'Asia/Kolkata')::date = g.d::date
+          GROUP BY g.d ORDER BY g.d`,
+        [ids, today],
+      );
+      const ways = extra.rows.reduce(
+        (a, x) => ({
+          app: a.app + x.via_app,
+          link: a.link + x.via_link,
+          office: a.office + x.via_office,
+        }),
+        { app: 0, link: 0, office: 0 },
+      );
+
+      const asked = open.reduce((n, r) => n + r.asked, 0);
+      const answered = open.reduce((n, r) => n + Math.min(r.answered, r.asked), 0);
+      return {
+        canCreate: manager,
+        totals: {
+          open: open.length,
+          closingSoon: open.filter((r) => r.closingSoon).length,
+          asked,
+          answered,
+          rate: asked ? Math.round((answered / asked) * 100) : 0,
+          waiting: formRows.reduce((n, r) => n + r.waiting, 0),
+          feeRaised: formRows.reduce((n, r) => n + r.feeRaised, 0),
+          feePaid: formRows.reduce((n, r) => n + r.feePaid, 0),
+        },
+        forms: formRows,
+        lowest: [...open]
+          .filter((r) => r.asked > 0)
+          .sort((a, b) => (a.rate ?? 0) - (b.rate ?? 0))
+          .slice(0, 5),
+        approvers: approvers.rows.map((x) => ({
+          who: x.who ?? 'Not assigned',
+          count: x.n,
+          oldest: x.oldest,
+        })),
+        byClass: [...classAgg.values()]
+          .sort((a, b) => a.ord - b.ord)
+          .map(({ ord: _o, ...x }) => withRate(x)),
+        byDepartment: [...deptAgg.values()]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(withRate),
+        daily: daily.rows,
+        ways,
+      };
+    });
+  }
+
   // ---- reading ----------------------------------------------------------------------------------
   private async findDb(c: PoolClient, id: string, lock = false): Promise<FormDb> {
     const r = await c.query<FormDb>(

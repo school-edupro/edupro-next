@@ -42,11 +42,19 @@ export default async function ConsentFormsPage({
             : 'The consent forms shared with you.'
         }
         actions={
-          canCreate ? (
-            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/engagement/consent-forms/new">
-              <Icon name="plus" size={16} /> New form
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', whiteSpace: 'nowrap' }}>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/engagement/consent-forms/dashboard"
+            >
+              <Icon name="chart" size={16} /> Dashboard
             </a>
-          ) : undefined
+            {canCreate ? (
+              <a className="ep-btn ep-btn--primary ep-btn--sm" href="/engagement/consent-forms/new">
+                <Icon name="plus" size={16} /> New form
+              </a>
+            ) : null}
+          </span>
         }
       />
       <Notice

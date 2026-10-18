@@ -11,6 +11,11 @@
 
 ## Daily routine
 
+- **Fee dashboard** (Fees → Fee dashboard): start the day here. All, or School fee / Hostel fee / Misc.
+  It shows today's and the year's collection, what is due and overdue, how old the dues are, cheques to
+  clear, cash not yet deposited, who owes most (click a name for the ledger, or **Send a fee
+  reminder**), refunds and waivers, online payments, and who collected how much today (for day-end).
+
 1. **Fees → Cashier**: search the pupil, check the ledger, post the receipt (cash, cheque, UPI, card).
    The number is assigned when you save; allocation is oldest-first per ledger (school, hostel).
 2. Cheques: enter the instrument number and bank; the receipt shows **Cleared** once the bank

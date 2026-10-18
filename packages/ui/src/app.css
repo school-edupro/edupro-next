@@ -5681,7 +5681,8 @@ a.ep-tabs__tab {
 }
 .ep-chart__rows li {
   display: grid;
-  grid-template-columns: minmax(6rem, 14rem) 1fr minmax(6rem, auto);
+  /* the bar always keeps room, also in a half-width card */
+  grid-template-columns: minmax(4rem, 12rem) minmax(4rem, 1fr) auto;
   gap: var(--sp-3);
   align-items: center;
   font-size: var(--fs-small);

@@ -62,6 +62,7 @@ export const NAV: Array<{
   {
     section: 'fees',
     items: [
+      { href: '/fees/dashboard', label: 'feeDashboard', permission: 'fees.ledger.view' },
       { href: '/masters/fees', label: 'feesSetup', permission: 'fees.master.view' },
       { href: '/fees/demands', label: 'feeDemands', permission: 'fees.demand.view' },
       { href: '/fees/payments', label: 'payments', permission: 'payments.intent.view' },

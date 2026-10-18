@@ -1,3 +1,5 @@
+import { FeeDashboardController } from './fee-dashboard.controller';
+import { FeeDashboardService } from './fee-dashboard.service';
 import { FilesModule } from '../files/files.module';
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
@@ -45,6 +47,7 @@ import { FeesController } from './fees.controller';
     FilesModule,
   ],
   controllers: [
+    FeeDashboardController,
     FeesController,
     FeeRequestsController,
     FeeGridsController,
@@ -54,6 +57,7 @@ import { FeesController } from './fees.controller';
     MiscFeesController,
   ],
   providers: [
+    FeeDashboardService,
     FeeMastersService,
     FeeDemandsService,
     FeeLedgerService,
