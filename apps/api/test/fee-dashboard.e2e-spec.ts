@@ -96,7 +96,6 @@ describe('fee dashboard (e2e)', () => {
         period?: string,
       ) =>
         c.query(
-           
           `INSERT INTO fee_demands (school_id, student_id, academic_year_id, period_id, head_id, gross, net, paid, status, due_on, ledger)
            VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8::fee_demand_status, ${due}, $9::ledger_type)`,
           [sid, student, y, period ?? per.rows[0]!.id, h, net, paid, status, ledger],
@@ -125,7 +124,6 @@ describe('fee dashboard (e2e)', () => {
         cleared: boolean,
       ) =>
         c.query(
-           
           `INSERT INTO fee_payments (school_id, student_id, academic_year_id, amount, received_on, mode, status, ledger, received_by, cleared_on)
            VALUES ($1, $2, $3, $4, ${today}, $5, $6, $7::ledger_type, $8, CASE WHEN $9 THEN ${today} END)`,
           [sid, student, y, amount, mode, status, ledger, admin.id, cleared],
@@ -136,7 +134,6 @@ describe('fee dashboard (e2e)', () => {
       await pay(ids.bo!, 'hostel', 900, 'upi', 'reversed', true);
       // misc: a fee of 150 due 5 days ago, 50 received in cash today
       const mf = await c.query<{ id: string }>(
-         
         `INSERT INTO misc_fees (school_id, academic_year_id, head_id, title, amount, last_date, status)
          VALUES ($1, $2, $3, 'Trip', 150, ${today} - 5, 'announced') RETURNING id::text`,
         [sid, y, miscHead],
@@ -146,7 +143,6 @@ describe('fee dashboard (e2e)', () => {
         [sid, mf.rows[0]!.id, ids.ana],
       );
       await c.query(
-         
         `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, payer_name, head_id, amount, received_on, mode, received_by)
          VALUES ($1, $2, $3, 'M1', 'student', $4, 'ana', $5, 50, ${today}, 'cash', $6)`,
         [sid, y, school.fyId, ids.ana, miscHead, admin.id],
