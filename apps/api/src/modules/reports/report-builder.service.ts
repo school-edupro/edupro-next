@@ -5,8 +5,11 @@ import {
   REPORT_FILTER_OPS,
   REPORT_SECTIONS,
   STUDENT_REPORT_FIELDS,
+  loadEmployeeLists,
+  loadEmployeeReportRows,
   loadProfileLists,
   loadStudentReportRows,
+  reportDataset,
   shapeReport,
   validateReportSpec,
   type PoolClient,
@@ -30,6 +33,7 @@ export const BUILDER = {
   use: 'reports.builder.use',
   manage: 'reports.builder.manage',
   studentView: 'people.student.view',
+  employeeView: 'people.employee.view',
   sensitiveView: 'people.sensitive.view',
 } as const;
 
@@ -93,9 +97,39 @@ export class ReportBuilderService {
   }
 
   /** Columns and filters the builder offers, with drop-down options for filter values. */
-  async fields(ctx: RequestContext) {
+  async fields(
+    ctx: RequestContext,
+    dataset: 'student_profile' | 'employee_profile' = 'student_profile',
+  ) {
     const tenant = requireTenant(ctx);
     const showSensitive = ctx.permissions?.has(BUILDER.sensitiveView) ?? false;
+    if (dataset === 'employee_profile')
+      return this.db.tenant(tenant, async (c) => {
+        if (!ctx.permissions?.has(BUILDER.employeeView))
+          throw new DomainError('permission-denied', 'Employee reports need people.employee.view', {
+            status: 403,
+          });
+        const lists = await loadEmployeeLists(c);
+        const fixed: Record<string, string[]> = {
+          employee_status: ['Active', 'Inactive'],
+          staff_group: ['Teaching', 'Non-teaching', 'Contract', 'Visiting'],
+          has_login: ['Yes', 'No'],
+        };
+        const d = reportDataset('employee_profile');
+        return {
+          dataset,
+          sections: d.sections,
+          fields: d.fields.map((f) => ({
+            ...f,
+            options: fixed[f.key] ?? (f.list ? (lists[f.list] ?? null) : null),
+            masked: Boolean(f.sensitive) && !showSensitive,
+          })),
+          ops: REPORT_FILTER_OPS,
+          pdfColumnLimit: PDF_COLUMN_LIMIT,
+          years: [],
+          canManage: this.manager(ctx),
+        };
+      });
     return this.db.tenant(tenant, async (c) => {
       const lists = await loadProfileLists(c);
       const sections = await c.query<{ label: string }>(
@@ -107,6 +141,7 @@ export class ReportBuilderService {
         `SELECT id::text, code, status::text FROM academic_years ORDER BY start_date DESC`,
       );
       return {
+        dataset,
         sections: REPORT_SECTIONS,
         fields: STUDENT_REPORT_FIELDS.map((f) => ({
           ...f,
@@ -240,10 +275,10 @@ export class ReportBuilderService {
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO report_definitions (school_id, name, description, spec, owner_id, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3::jsonb, app.current_user_id(), app.current_user_id(), app.current_user_id())
+          `INSERT INTO report_definitions (school_id, name, description, dataset, spec, owner_id, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $4, $3::jsonb, app.current_user_id(), app.current_user_id(), app.current_user_id())
            RETURNING id::text`,
-          [dto.name, dto.description ?? null, JSON.stringify(dto.spec)],
+          [dto.name, dto.description ?? null, JSON.stringify(dto.spec), dto.spec.dataset],
         );
         id = r.rows[0]!.id;
       } catch (error) {
@@ -276,9 +311,9 @@ export class ReportBuilderService {
         });
       try {
         await c.query(
-          `UPDATE report_definitions SET name = $2, description = $3, spec = $4::jsonb, updated_at = now(),
+          `UPDATE report_definitions SET name = $2, description = $3, spec = $4::jsonb, dataset = $5, updated_at = now(),
                   updated_by = app.current_user_id() WHERE id = $1`,
-          [id, dto.name, dto.description ?? null, JSON.stringify(dto.spec)],
+          [id, dto.name, dto.description ?? null, JSON.stringify(dto.spec), dto.spec.dataset],
         );
       } catch (error) {
         if ((error as { code?: string }).code === '23505')
@@ -407,6 +442,26 @@ export class ReportBuilderService {
     tenant: TenantContext,
     spec: ReportSpec,
   ) {
+    if (spec.dataset === 'employee_profile') {
+      if (!ctx.permissions?.has(BUILDER.employeeView))
+        throw new DomainError(
+          'permission-denied',
+          'Running employee reports needs people.employee.view',
+          {
+            status: 403,
+          },
+        );
+      const y = await c.query<{ id: string; code: string }>(
+        'SELECT id::text, code FROM academic_years WHERE id = $1',
+        [tenant.academicYearId ?? null],
+      );
+      return {
+        academicYearId: y.rows[0]?.id ?? tenant.academicYearId ?? '',
+        academicYear: y.rows[0]?.code ?? '',
+        sectionIds: null,
+        showSensitive: ctx.permissions?.has(BUILDER.sensitiveView) ?? false,
+      };
+    }
     if (!ctx.permissions?.has(BUILDER.studentView))
       throw new DomainError(
         'permission-denied',
@@ -435,12 +490,18 @@ export class ReportBuilderService {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const run = await this.context(ctx, c, tenant, spec);
-      const loaded = await loadStudentReportRows(c, {
-        academicYearId: run.academicYearId,
-        sectionIds: run.sectionIds,
-        includeInactive: spec.options.includeInactive ?? false,
-        showSensitive: run.showSensitive,
-      });
+      const loaded =
+        spec.dataset === 'employee_profile'
+          ? await loadEmployeeReportRows(c, {
+              includeInactive: spec.options.includeInactive ?? false,
+              showSensitive: run.showSensitive,
+            })
+          : await loadStudentReportRows(c, {
+              academicYearId: run.academicYearId,
+              sectionIds: run.sectionIds,
+              includeInactive: spec.options.includeInactive ?? false,
+              showSensitive: run.showSensitive,
+            });
       const shaped = shapeReport(loaded, spec);
       return {
         columns: shaped.columns,

@@ -1,10 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { EmployeeGridService } from './employee-grid.service';
 import { EmployeeProfileService } from './employee-profile.service';
 import {
+  EmployeeGridDto,
+  EmployeeGridExportDto,
   EmployeeOnboardDto,
   EmployeeProfileDto,
   EmployeeRowKindSchema,
@@ -23,7 +26,32 @@ const kindOf = (k: string): EmployeeRowKind => {
 @ApiBearerAuth()
 @Controller('people/staff')
 export class EmployeeProfileController {
-  constructor(private readonly svc: EmployeeProfileService) {}
+  constructor(
+    private readonly svc: EmployeeProfileService,
+    private readonly grid: EmployeeGridService,
+  ) {}
+
+  @Get('grid/fields')
+  @ApiOperation({ summary: 'Every field that can be a column or a filter of the employee list' })
+  @RequirePermission(PEOPLE.employeeView)
+  gridFields(@ReqCtx() ctx: RequestContext) {
+    return this.grid.fields(ctx);
+  }
+
+  @Post('grid')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'The employee list: columns, filters, search, status, sort, page' })
+  @RequirePermission(PEOPLE.employeeView)
+  gridRows(@ReqCtx() ctx: RequestContext, @Body() body: EmployeeGridDto) {
+    return this.grid.grid(ctx, body);
+  }
+
+  @Post('grid/export')
+  @ApiOperation({ summary: 'The current employee list view as Excel or PDF (an export job)' })
+  @RequirePermission(PEOPLE.employeeView)
+  gridExport(@ReqCtx() ctx: RequestContext, @Body() body: EmployeeGridExportDto) {
+    return this.grid.export(ctx, body);
+  }
 
   @Get('catalogue')
   @ApiOperation({

@@ -47,11 +47,26 @@ experience, remarks and transfers). Built in three parts.
   staff login; Staff setup in the People menu.
 - Test: `apps/api/test/employee-master.e2e-spec.ts`.
 
-## Part 2 (next): the list like the students list
+## Part 2 (18 Oct 2026, migration 0177): the list like the students list
 
-Status tabs, quick and more filters over the catalogue, column show / hide and order saved per user
-(`/me/preferences/employees.list`), Excel / PDF export, "Save as report" (an `employee_profile` dataset
-in the report builder), pagination.
+- **Engine**: the report builder has two datasets, `student_profile` and `employee_profile`
+  (`ReportSpec.dataset`, default students). Filters, sort, search and shaping take the dataset's fields
+  (`reportDataset()`); `loadEmployeeReportRows` gives one row per employee with every catalogue value plus
+  record columns (name, status, staff group, login, completeness worked out from the values, reports to)
+  and the rows summed up (highest qualification by the usual order, all qualifications, languages, years
+  of experience before joining). Sensitive values masked unless `people.sensitive.view`; approvers by name.
+- **API** `people/staff/grid/fields`, `POST people/staff/grid` (columns, filters, sort, search: in every
+  employee whatever the status, status active / inactive / all, page; counts: total, active, inactive,
+  teaching, non-teaching, no login, profile incomplete), `POST people/staff/grid/export` (an export job on
+  the employee dataset, Excel or PDF, the PDF limited to 25 columns on A3).
+- **Report builder**: `GET reports/builder/fields?dataset=employee_profile` (needs `people.employee.view`),
+  reports saved with their dataset (0177 widens the check), preview and export load the dataset's rows;
+  the worker builds employee files. "New employee report" on the builder; a report opens with its own
+  dataset's fields.
+- **Admin** `/people/employees`: the students list's screen for staff: status, quick filters (staff group,
+  employee type, department, designation, gender, staff login), search by name, code, mobile or email,
+  More filters (any field), Columns (choose, order, rename; saved per user as `employees.list`), sortable
+  headers, pages, Export Excel / PDF, Save as report, Staff setup and Onboard.
 
 ## Part 3 (next): Excel upload
 

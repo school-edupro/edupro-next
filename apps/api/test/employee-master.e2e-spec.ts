@@ -336,4 +336,157 @@ describe('employee master (e2e)', () => {
       'employee.no_contact',
     );
   });
+
+  // ---- part 2: the list, its export and employee reports ----------------------------------------
+  it('the list: fields by section, status counts, search in all, quick and any-field filters, sort, pages; masked IDs', async () => {
+    const f = (await get('/people/staff/grid/fields')).json();
+    expect(f.sections.map((x: { id: string }) => x.id)).toContain('rows');
+    const keys = f.fields.map((x: { key: string }) => x.key);
+    expect(keys).toEqual(
+      expect.arrayContaining(['aadhaar', 'highest_qualification', 'languages', 'has_login']),
+    );
+    expect(f.fields.find((x: { key: string }) => x.key === 'staff_group').options).toContain(
+      'Non-teaching',
+    );
+    const grid = (body: Record<string, unknown>, u: SeededUser = admin) =>
+      post('/people/staff/grid', { columns: [], ...body }, u);
+    const all = (await grid({ status: 'all', size: 10 })).json();
+    expect(all.stats).toMatchObject({ total: 4, active: 3, inactive: 1 });
+    // active by default; the leaver is found by a search whatever the status
+    expect((await grid({})).json().total).toBe(3);
+    const found = (await grid({ search: 'bala' })).json();
+    expect(found).toMatchObject({ total: 1, searchedAll: true });
+    expect(found.rows[0]).toMatchObject({ employee_code: 'KV0043', employee_status: 'Inactive' });
+    // filters on catalogue, record and row fields; sort; columns
+    const t = (
+      await grid({
+        status: 'all',
+        columns: [{ key: 'highest_qualification' }, { key: 'languages' }, { key: 'aadhaar' }],
+        filters: [
+          { key: 'staff_group', op: 'eq', values: ['Teaching'] },
+          { key: 'experience_years', op: 'gte', values: ['5'] },
+        ],
+      })
+    ).json();
+    expect(t.total).toBe(1);
+    expect(t.rows[0]).toMatchObject({
+      employee_code: 'KV0042',
+      highest_qualification: 'B.Ed.',
+      languages: 'Hindi',
+      aadhaar: '123456789012',
+    });
+    expect(t.columns.map((c: { header: string }) => c.header)).toEqual([
+      'Highest qualification',
+      'Languages',
+      'Aadhaar number',
+    ]);
+    const masked = (await grid({ columns: [{ key: 'aadhaar' }], search: 'asha' }, viewer)).json();
+    expect(masked.rows[0].aadhaar).toBe('XXXX-XXXX-9012');
+    const sorted = (
+      await grid({ status: 'all', sort: [{ key: 'employee_code', dir: 'desc' }], size: 10 })
+    ).json();
+    expect(sorted.rows.map((r: { employee_code: string }) => r.employee_code)).toEqual([
+      'KV9999',
+      'KV0043',
+      'KV0042',
+      'KV0041',
+    ]);
+    const paged = (await grid({ status: 'all', size: 10, page: 2 })).json();
+    expect(paged).toMatchObject({ page: 1, pages: 1 });
+    expect((await grid({ columns: [{ key: 'nope' }] })).statusCode).toBe(400);
+    expect((await grid({ filters: [{ key: 'department', op: 'eq' }] })).json().detail).toContain(
+      'needs a value',
+    );
+  });
+
+  it('export: the view as an Excel / PDF job on the employee dataset; too many columns for a PDF refused', async () => {
+    const r = await post('/people/staff/grid/export', {
+      columns: [{ key: 'department' }],
+      filters: [{ key: 'staff_group', op: 'eq', values: ['Teaching'] }],
+      format: 'xlsx',
+    });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().spec).toMatchObject({ dataset: 'employee_profile' });
+    expect(r.json().spec.filters[0]).toEqual({
+      key: 'employee_status',
+      op: 'eq',
+      values: ['Active'],
+    });
+    await withMigrator(async (c) => {
+      const e = await c.query<{ dataset: string; params: { spec: { dataset: string } } }>(
+        `SELECT dataset, params FROM exports WHERE id = $1`,
+        [r.json().exportId],
+      );
+      expect(e.rows[0]).toMatchObject({
+        dataset: 'report_builder',
+        params: { spec: { dataset: 'employee_profile' } },
+      });
+    });
+    const many = Array.from({ length: 26 }, (_, i) => ({
+      key: [
+        'mobile',
+        'email',
+        'dob',
+        'gender',
+        'religion',
+        'category',
+        'blood_group',
+        'marital_status',
+        'department',
+        'designation',
+        'staff_type',
+        'joined_on',
+        'pf_no',
+        'uan',
+        'esi_no',
+        'nps_no',
+        'voter_id',
+        'passport_no',
+        'oasis_no',
+        'bank_name',
+        'bank_ifsc',
+        'bank_branch',
+        'hobbies',
+        'father_name',
+        'emergency_name',
+        'emergency_mobile',
+      ][i]!,
+    }));
+    const pdf = await post('/people/staff/grid/export', { columns: many, format: 'pdf' });
+    expect(pdf.json().detail).toContain('A PDF on A3 holds at most 25 columns');
+  });
+
+  it('the report builder reports on employees: fields, save with the dataset, preview with employee rows', async () => {
+    // the school admin may build reports
+    const f = (await get('/reports/builder/fields?dataset=employee_profile')).json();
+    expect(f.dataset).toBe('employee_profile');
+    expect(f.fields.map((x: { key: string }) => x.key)).toContain('designation');
+    const spec = {
+      dataset: 'employee_profile',
+      columns: [{ key: 'employee_code' }, { key: 'full_name' }, { key: 'highest_qualification' }],
+      filters: [{ key: 'has_login', op: 'eq', values: ['Yes'] }],
+      sort: [{ key: 'employee_code', dir: 'asc' }],
+      options: { paper: 'A4', orientation: 'auto', includeInactive: true },
+    };
+    const p = await post('/reports/builder/preview', { spec, limit: 10 });
+    expect(p.statusCode).toBe(201);
+    expect(p.json().rows.map((r: { employee_code: string }) => r.employee_code)).toEqual([
+      'KV0042',
+      'KV0043',
+    ]);
+    const saved = await post('/reports/builder', { name: 'Staff with a login', spec });
+    expect(saved.statusCode).toBe(201);
+    expect(saved.json()).toMatchObject({ dataset: 'employee_profile' });
+    // a student report is unchanged
+    const s = await post('/reports/builder/preview', {
+      spec: {
+        columns: [{ key: 'admission_no' }],
+        filters: [],
+        sort: [],
+        options: { paper: 'A4', orientation: 'auto' },
+      },
+      limit: 5,
+    });
+    expect(s.statusCode).toBe(201);
+  });
 });

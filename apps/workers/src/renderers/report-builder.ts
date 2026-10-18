@@ -1,4 +1,5 @@
 import {
+  loadEmployeeReportRows,
   loadStudentReportRows,
   shapeReport,
   tenantForJob,
@@ -112,12 +113,17 @@ export async function buildReport(
 ): Promise<BuiltReport> {
   const tenant = tenantForJob(envelope, params.academicYearId);
   const rows = await db.withTenant(tenant, (c) =>
-    loadStudentReportRows(c, {
-      academicYearId: params.academicYearId,
-      sectionIds: params.sectionIds,
-      includeInactive: params.spec.options.includeInactive ?? false,
-      showSensitive: params.showSensitive,
-    }),
+    params.spec.dataset === 'employee_profile'
+      ? loadEmployeeReportRows(c, {
+          includeInactive: params.spec.options.includeInactive ?? false,
+          showSensitive: params.showSensitive,
+        })
+      : loadStudentReportRows(c, {
+          academicYearId: params.academicYearId,
+          sectionIds: params.sectionIds,
+          includeInactive: params.spec.options.includeInactive ?? false,
+          showSensitive: params.showSensitive,
+        }),
   );
   return {
     result: shapeReport(rows, params.spec),

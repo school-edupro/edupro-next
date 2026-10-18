@@ -602,28 +602,30 @@ export function ReportBuilder({
                   </div>
                 );
               })}
-              <label className="ep-field" htmlFor="rb-year">
-                <span className="ep-field__label">Academic year</span>
-                <select
-                  id="rb-year"
-                  className="ep-input"
-                  value={spec.options.academicYearId ?? ''}
-                  disabled={!canEdit}
-                  onChange={(e) =>
-                    setSpec((s) => ({
-                      ...s,
-                      options: { ...s.options, academicYearId: e.target.value || null },
-                    }))
-                  }
-                >
-                  <option value="">Working year</option>
-                  {fields.years.map((y) => (
-                    <option key={y.id} value={y.id}>
-                      {y.code} ({y.status})
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {fields.years.length ? (
+                <label className="ep-field" htmlFor="rb-year">
+                  <span className="ep-field__label">Academic year</span>
+                  <select
+                    id="rb-year"
+                    className="ep-input"
+                    value={spec.options.academicYearId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      setSpec((s) => ({
+                        ...s,
+                        options: { ...s.options, academicYearId: e.target.value || null },
+                      }))
+                    }
+                  >
+                    <option value="">Working year</option>
+                    {fields.years.map((y) => (
+                      <option key={y.id} value={y.id}>
+                        {y.code} ({y.status})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <fieldset className="ep-rb__layoutopt">
                 <legend className="ep-field__label">Layout</legend>
                 <label className="ep-roles__tick" htmlFor="rb-layout-table">

@@ -365,3 +365,17 @@ export const EmployeeRowKindSchema = z.enum([
   'transfers',
   'remarks',
 ]);
+
+/** The employee list (the students list's view: columns, filters, sort, search, status, page). */
+export const EmployeeGridSchema = StudentGridSchema.omit({
+  status: true,
+  academicYearId: true,
+}).extend({
+  status: z.enum(['active', 'inactive', 'all']).default('active'),
+});
+export class EmployeeGridDto extends createZodDto(EmployeeGridSchema) {}
+export const EmployeeGridExportSchema = EmployeeGridSchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+  title: z.string().trim().max(120).optional(),
+});
+export class EmployeeGridExportDto extends createZodDto(EmployeeGridExportSchema) {}

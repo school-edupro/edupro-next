@@ -9,6 +9,8 @@ const Key = z
   .regex(/^[a-z0-9_]{2,60}$/, 'unknown field');
 
 export const ReportSpecSchema = z.object({
+  /** whose rows: students (the default) or employees */
+  dataset: z.enum(['student_profile', 'employee_profile']).default('student_profile'),
   columns: z
     .array(
       z.object({

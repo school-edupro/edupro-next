@@ -12,10 +12,19 @@ import {
 import { apiFetch, getMe } from '@/lib/api';
 import { EMPTY_SPEC, type BuilderFields } from '@/lib/report-builder';
 
-export default async function NewReportPage() {
+export default async function NewReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dataset?: string }>;
+}) {
+  const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('reports.builder.use')) notFound();
-  const fields = await apiFetch<BuilderFields>('/reports/builder/fields');
+  // whose rows: students, or employees (for those who may see employees)
+  const canEmployees = me.permissions.includes('people.employee.view');
+  const dataset =
+    sp.dataset === 'employee_profile' && canEmployees ? 'employee_profile' : 'student_profile';
+  const fields = await apiFetch<BuilderFields>(`/reports/builder/fields?dataset=${dataset}`);
   return (
     <>
       <Breadcrumbs
@@ -30,10 +39,31 @@ export default async function NewReportPage() {
         title="New report"
         description="Tick the fields you need, set the headers and filters, preview, then save."
       />
+      {canEmployees ? (
+        <nav
+          className="ep-tabs-links"
+          aria-label="Report on"
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          <a
+            href="/reports/builder/new"
+            aria-current={dataset === 'student_profile' ? 'page' : undefined}
+          >
+            Students
+          </a>
+          <a
+            href="/reports/builder/new?dataset=employee_profile"
+            aria-current={dataset === 'employee_profile' ? 'page' : undefined}
+          >
+            Employees
+          </a>
+        </nav>
+      ) : null}
       <ReportBuilder
+        key={dataset}
         fields={fields}
         report={null}
-        initialSpec={EMPTY_SPEC}
+        initialSpec={{ ...EMPTY_SPEC, dataset }}
         actions={{
           preview: builderPreview,
           save: builderSave,

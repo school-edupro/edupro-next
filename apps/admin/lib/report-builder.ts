@@ -34,6 +34,8 @@ export interface BuilderFields {
 }
 
 export interface ReportSpec {
+  /** Whose rows: students (the default) or employees. */
+  dataset?: 'student_profile' | 'employee_profile';
   columns: Array<{
     key: string;
     label?: string | null;
@@ -61,6 +63,7 @@ export interface SavedReport {
   id: string;
   name: string;
   description: string | null;
+  dataset?: string;
   spec: ReportSpec;
   ownerId: string;
   ownerName: string | null;

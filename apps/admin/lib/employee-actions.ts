@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type { EmployeeProfile, OnboardResult, SaveEmployeeResult } from './employee';
 import type { ProfileValues } from './profile';
+import type { EmployeeListQuery, EmployeeListResult, EmployeeListView } from './employee-list';
+import type { ReportSpec, Result } from './report-builder';
 
 const BASE = '/people/staff';
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -130,4 +132,52 @@ export async function createEmployeeLogin(fd: FormData) {
   }
   revalidatePath(`/people/employees/${id}`);
   redirect(`/people/employees/${id}?ok=login`);
+}
+
+// ---- the employee list (part 2) ----
+
+function listError(error: unknown): { ok: false; error: string; errors?: string[] } {
+  if (error instanceof ApiError) {
+    const errs = error.problem.errors as unknown;
+    return {
+      ok: false,
+      error: error.problem.detail ?? error.problem.type,
+      errors: Array.isArray(errs) ? errs.map(String) : undefined,
+    };
+  }
+  throw error;
+}
+
+export async function employeeListLoad(q: EmployeeListQuery): Promise<Result<EmployeeListResult>> {
+  try {
+    const data = await apiFetch<EmployeeListResult>(`${BASE}/grid`, {
+      method: 'POST',
+      body: JSON.stringify({ ...q, search: q.search || undefined }),
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return listError(error);
+  }
+}
+
+export async function employeeListExport(
+  q: EmployeeListQuery & { format: 'xlsx' | 'pdf' },
+): Promise<Result<{ exportId: string; format: string; spec: ReportSpec }>> {
+  try {
+    const data = await apiFetch<{ exportId: string; format: string; spec: ReportSpec }>(
+      `${BASE}/grid/export`,
+      { method: 'POST', body: JSON.stringify({ ...q, search: q.search || undefined }) },
+    );
+    return { ok: true, data };
+  } catch (error) {
+    return listError(error);
+  }
+}
+
+/** Saves the employee list view for the signed-in user of this school (never shared). */
+export async function employeeListSaveView(v: EmployeeListView): Promise<void> {
+  await apiFetch('/me/preferences/employees.list', {
+    method: 'PUT',
+    body: JSON.stringify({ value: v }),
+  });
 }

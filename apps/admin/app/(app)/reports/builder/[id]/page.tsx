@@ -25,13 +25,13 @@ export default async function ReportPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('reports.builder.use')) notFound();
-  const [fields, report] = await Promise.all([
-    apiFetch<BuilderFields>('/reports/builder/fields'),
-    apiFetch<SavedReport>(`/reports/builder/${id}`).catch((e: unknown) => {
-      if (e instanceof ApiError && e.status === 404) notFound();
-      throw e;
-    }),
-  ]);
+  const report = await apiFetch<SavedReport>(`/reports/builder/${id}`).catch((e: unknown) => {
+    if (e instanceof ApiError && e.status === 404) notFound();
+    throw e;
+  });
+  // the fields of the report's own dataset (students or employees)
+  const dataset = report.dataset === 'employee_profile' ? 'employee_profile' : 'student_profile';
+  const fields = await apiFetch<BuilderFields>(`/reports/builder/fields?dataset=${dataset}`);
   return (
     <>
       <Breadcrumbs
@@ -54,7 +54,7 @@ export default async function ReportPage({
         key={report.updatedAt}
         fields={fields}
         report={report}
-        initialSpec={report.spec}
+        initialSpec={{ ...report.spec, dataset }}
         actions={{
           preview: builderPreview,
           save: builderSave,

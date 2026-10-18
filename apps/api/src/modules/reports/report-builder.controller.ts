@@ -28,8 +28,11 @@ export class ReportBuilderController {
   @RequirePermission(BUILDER.use, {
     description: 'Build, save, share and download own custom reports',
   })
-  fields(@ReqCtx() ctx: RequestContext) {
-    return this.builder.fields(ctx);
+  fields(@ReqCtx() ctx: RequestContext, @Query('dataset') dataset?: string) {
+    return this.builder.fields(
+      ctx,
+      dataset === 'employee_profile' ? 'employee_profile' : 'student_profile',
+    );
   }
 
   @Get('share-options')

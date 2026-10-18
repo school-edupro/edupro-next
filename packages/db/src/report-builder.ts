@@ -2,6 +2,11 @@ import type { PoolClient } from 'pg';
 import { PROFILE_FIELDS, PROFILE_SECTIONS, type ProfileField } from './student-fields';
 import { parseDate, type ProfileValue } from './student-profile';
 import { readStudentProfiles } from './student-profile-store';
+import {
+  EMPLOYEE_REPORT_FIELDS,
+  EMPLOYEE_REPORT_SECTIONS,
+  EMPLOYEE_SEARCH_KEYS,
+} from './employee-report';
 
 /**
  * Report builder (student 360 profile): a saved report is a list of columns (with the header text the
@@ -10,7 +15,7 @@ import { readStudentProfiles } from './student-profile-store';
  * used, whatever its storage.
  */
 
-export const REPORT_DATASETS = ['student_profile'] as const;
+export const REPORT_DATASETS = ['student_profile', 'employee_profile'] as const;
 export type ReportDataset = (typeof REPORT_DATASETS)[number];
 
 export type ReportFilterOp =
@@ -72,6 +77,8 @@ export interface ReportOptions {
   search?: string | null;
 }
 export interface ReportSpec {
+  /** Whose rows: students (the default) or employees. */
+  dataset?: ReportDataset;
   columns: ReportColumn[];
   filters: ReportFilter[];
   sort: ReportSort[];
@@ -170,21 +177,42 @@ export const STUDENT_REPORT_FIELD_BY_KEY: ReadonlyMap<string, ReportFieldDef> = 
   STUDENT_REPORT_FIELDS.map((f) => [f.key, f]),
 );
 
+const EMPLOYEE_REPORT_FIELD_BY_KEY: ReadonlyMap<string, ReportFieldDef> = new Map(
+  EMPLOYEE_REPORT_FIELDS.map((f) => [f.key, f]),
+);
+/** A dataset's fields, sections and search keys. */
+export function reportDataset(dataset: ReportDataset | undefined = 'student_profile') {
+  return dataset === 'employee_profile'
+    ? {
+        fields: EMPLOYEE_REPORT_FIELDS,
+        byKey: EMPLOYEE_REPORT_FIELD_BY_KEY,
+        sections: EMPLOYEE_REPORT_SECTIONS,
+        search: EMPLOYEE_SEARCH_KEYS,
+      }
+    : {
+        fields: STUDENT_REPORT_FIELDS,
+        byKey: STUDENT_REPORT_FIELD_BY_KEY,
+        sections: REPORT_SECTIONS,
+        search: STUDENT_SEARCH_KEYS,
+      };
+}
+
 /** Structural checks; returns human messages (empty when the spec is usable). */
 export function validateReportSpec(spec: ReportSpec, format?: 'xlsx' | 'pdf'): string[] {
+  const byKey = reportDataset(spec.dataset).byKey;
   const errors: string[] = [];
   if (!spec.columns.length) errors.push('Choose at least one column');
   if (spec.columns.length > 250) errors.push('At most 250 columns');
   const seen = new Set<string>();
   for (const c of spec.columns) {
-    if (!STUDENT_REPORT_FIELD_BY_KEY.has(c.key)) errors.push(`Unknown column ${c.key}`);
+    if (!byKey.has(c.key)) errors.push(`Unknown column ${c.key}`);
     if (seen.has(c.key)) errors.push(`Column ${c.key} is chosen twice`);
     seen.add(c.key);
     if (c.label && c.label.length > 80)
       errors.push(`Header for ${c.key} is longer than 80 characters`);
   }
   for (const f of spec.filters) {
-    const def = STUDENT_REPORT_FIELD_BY_KEY.get(f.key);
+    const def = byKey.get(f.key);
     if (!def) errors.push(`Unknown filter field ${f.key}`);
     if (!REPORT_FILTER_OPS.includes(f.op)) errors.push(`Unknown filter operator ${f.op}`);
     const n = f.values?.filter((v) => v.trim() !== '').length ?? 0;
@@ -195,8 +223,7 @@ export function validateReportSpec(spec: ReportSpec, format?: 'xlsx' | 'pdf'): s
     if (f.op === 'between' && n < 2)
       errors.push(`Filter on ${def?.label ?? f.key} needs a from and a to value`);
   }
-  for (const s of spec.sort)
-    if (!STUDENT_REPORT_FIELD_BY_KEY.has(s.key)) errors.push(`Unknown sort field ${s.key}`);
+  for (const s of spec.sort) if (!byKey.has(s.key)) errors.push(`Unknown sort field ${s.key}`);
   for (const c of spec.columns)
     if (
       c.group !== undefined &&
@@ -323,20 +350,25 @@ const cmpInput = (s: string, type: ReportFieldDef['type']): string | number | nu
 };
 
 /** The search box: admission number, name, or any family mobile containing the text. */
-export function applyReportSearch(rows: ReportRow[], search?: string | null): ReportRow[] {
+const STUDENT_SEARCH_KEYS = [
+  'admission_no',
+  'full_name',
+  'registration_no',
+  'sms_mobile',
+  'father_mobile',
+  'mother_mobile',
+  'guardian_mobile',
+  'father_name',
+  'mother_name',
+];
+export function applyReportSearch(
+  rows: ReportRow[],
+  search?: string | null,
+  dataset: ReportDataset = 'student_profile',
+): ReportRow[] {
   const q = (search ?? '').trim().toLowerCase();
   if (!q) return rows;
-  const keys = [
-    'admission_no',
-    'full_name',
-    'registration_no',
-    'sms_mobile',
-    'father_mobile',
-    'mother_mobile',
-    'guardian_mobile',
-    'father_name',
-    'mother_name',
-  ];
+  const keys = reportDataset(dataset).search;
   return rows.filter((r) =>
     keys.some((k) =>
       String(r[k] ?? '')
@@ -346,11 +378,16 @@ export function applyReportSearch(rows: ReportRow[], search?: string | null): Re
   );
 }
 
-export function applyReportFilters(rows: ReportRow[], filters: ReportFilter[]): ReportRow[] {
+export function applyReportFilters(
+  rows: ReportRow[],
+  filters: ReportFilter[],
+  dataset: ReportDataset = 'student_profile',
+): ReportRow[] {
   if (!filters.length) return rows;
+  const byKey = reportDataset(dataset).byKey;
   return rows.filter((row) =>
     filters.every((f) => {
-      const def = STUDENT_REPORT_FIELD_BY_KEY.get(f.key);
+      const def = byKey.get(f.key);
       if (!def) return true;
       const v = cmpValue(row[f.key] ?? null, def.type);
       const inputs = (f.values ?? []).map((x) => cmpInput(x, def.type)).filter((x) => x !== null);
@@ -384,12 +421,17 @@ export function applyReportFilters(rows: ReportRow[], filters: ReportFilter[]): 
   );
 }
 
-export function sortReportRows(rows: ReportRow[], sort: ReportSort[]): ReportRow[] {
+export function sortReportRows(
+  rows: ReportRow[],
+  sort: ReportSort[],
+  dataset: ReportDataset = 'student_profile',
+): ReportRow[] {
   if (!sort.length) return rows;
+  const byKey = reportDataset(dataset).byKey;
   const collator = new Intl.Collator('en-IN', { numeric: true, sensitivity: 'base' });
   return [...rows].sort((a, b) => {
     for (const s of sort) {
-      const def = STUDENT_REPORT_FIELD_BY_KEY.get(s.key);
+      const def = byKey.get(s.key);
       const va = a[s.key] ?? null;
       const vb = b[s.key] ?? null;
       if (va === vb) continue;
@@ -418,9 +460,13 @@ const OP_WORDS: Record<ReportFilterOp, string> = {
 };
 
 /** Filters in plain words for the report header: "Religion is one of Hindu, Sikh". */
-export function describeReportFilters(filters: ReportFilter[]): string[] {
+export function describeReportFilters(
+  filters: ReportFilter[],
+  dataset: ReportDataset = 'student_profile',
+): string[] {
+  const byKey = reportDataset(dataset).byKey;
   return filters.map((f) => {
-    const def = STUDENT_REPORT_FIELD_BY_KEY.get(f.key);
+    const def = byKey.get(f.key);
     const label = def?.label ?? f.key;
     const vals = (f.values ?? []).filter((v) => v.trim() !== '');
     const show = (v: string) => {
@@ -483,14 +529,17 @@ export function reportGroups(spec: ReportSpec): Array<{ label: string | null; ke
 
 /** Filters, sorts and projects loaded rows onto the chosen columns and headers. */
 export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
+  const ds = spec.dataset ?? 'student_profile';
+  const byKey = reportDataset(ds).byKey;
   const filtered = sortReportRows(
-    applyReportFilters(applyReportSearch(rows, spec.options.search), spec.filters),
+    applyReportFilters(applyReportSearch(rows, spec.options.search, ds), spec.filters, ds),
     spec.sort,
+    ds,
   );
   const columns = spec.columns
     .filter((c) => !c.hidden)
     .map((c) => {
-      const def = STUDENT_REPORT_FIELD_BY_KEY.get(c.key)!;
+      const def = byKey.get(c.key)!;
       const header = c.label?.trim() || def.label;
       return {
         key: c.key,
@@ -500,8 +549,7 @@ export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
         highlight: Boolean(c.highlight),
       };
     });
-  const headerOf = (c: ReportColumn) =>
-    c.label?.trim() || STUDENT_REPORT_FIELD_BY_KEY.get(c.key)?.label || c.key;
+  const headerOf = (c: ReportColumn) => c.label?.trim() || byKey.get(c.key)?.label || c.key;
   const projected = filtered.map((r) => {
     const o: ReportRow = {};
     for (const col of columns) {
@@ -518,8 +566,8 @@ export function shapeReport(rows: ReportRow[], spec: ReportSpec): ReportResult {
     rows: projected,
     total: projected.length,
     filtersText: spec.options.search?.trim()
-      ? [`Search "${spec.options.search.trim()}"`, ...describeReportFilters(spec.filters)]
-      : describeReportFilters(spec.filters),
+      ? [`Search "${spec.options.search.trim()}"`, ...describeReportFilters(spec.filters, ds)]
+      : describeReportFilters(spec.filters, ds),
     layout: spec.layout === 'detailed' ? 'detailed' : 'table',
     groups: spec.layout === 'detailed' ? reportGroups(spec) : [],
     excluded: spec.columns.filter((c) => c.hidden).map(headerOf),

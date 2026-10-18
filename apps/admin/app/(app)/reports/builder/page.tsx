@@ -146,11 +146,21 @@ export default async function ReportBuilderListPage({
       <PageHeader
         kicker="Reports"
         title="Report builder"
-        description="Make your own student reports from every profile field: choose columns, name the headers, filter, sort, save, share with colleagues, and download Excel or PDF on the school letterhead."
+        description="Make your own student and employee reports from every profile field: choose columns, name the headers, filter, sort, save, share with colleagues, and download Excel or PDF on the school letterhead."
         actions={
-          <a className="ep-btn ep-btn--primary" href="/reports/builder/new">
-            New report
-          </a>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', whiteSpace: 'nowrap' }}>
+            {me.permissions.includes('people.employee.view') ? (
+              <a
+                className="ep-btn ep-btn--secondary"
+                href="/reports/builder/new?dataset=employee_profile"
+              >
+                New employee report
+              </a>
+            ) : null}
+            <a className="ep-btn ep-btn--primary" href="/reports/builder/new">
+              New student report
+            </a>
+          </span>
         }
       />
       <Notice params={sp} />
