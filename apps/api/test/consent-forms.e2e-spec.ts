@@ -967,4 +967,81 @@ describe('consent forms (e2e)', () => {
     expect(JSON.stringify(keys)).not.toContain(read.json().key);
     expect(keys.find((k: { id: string }) => k.id === approve.json().id)).toMatchObject({ uses: 2 });
   });
+
+  // ---- follow-up: a test gateway for the misc fee, back to the consent page ------------------------
+  it('a consent fee is paid through a test gateway account on the misc routes and comes back to the consent page', async () => {
+    const gws = await inject({
+      method: 'PUT',
+      url: '/payments/gateways',
+      headers: h(),
+      json: { provider: 'mock', label: 'Test gateway', mode: 'live', config: {}, secret: {} },
+    });
+    expect(gws.statusCode).toBe(200);
+    const gwList = (Array.isArray(gws.json()) ? gws.json() : gws.json().data) as Array<{
+      id: string;
+      provider: string;
+      mode: string;
+    }>;
+    const mock = gwList.find((g) => g.provider === 'mock')!;
+    expect(mock.mode).toBe('test');
+    expect(
+      (
+        await inject({
+          method: 'PUT',
+          url: '/payments/gateways/routes',
+          headers: h(),
+          json: { misc: [mock.id] },
+        })
+      ).statusCode,
+    ).toBeLessThan(300);
+    const f = await post('/engagement/consent-forms', {
+      title: 'Museum visit',
+      respondents: 'family',
+      fields: [{ key: 'ok', label: 'I allow it', type: 'agree', required: true }],
+      audience: { pupils: 'pupils', studentIds: [ids.bo] },
+      settings: { fee: { mode: 'fixed', amount: 50, items: [] } },
+    });
+    await put(`/engagement/consent-forms/${f.json().id}/status`, {
+      status: 'published',
+      push: false,
+    });
+    const a = await post(`/engagement/consent-forms/${f.json().id}/responses`, {
+      studentId: ids.bo,
+      answers: { ok: true },
+    });
+    const lineId = (await line(a.json().id))
+      ? (
+          await withMigrator((c) =>
+            c.query<{ id: string }>(
+              `SELECT misc_line_id::text AS id FROM consent_form_responses WHERE id = $1`,
+              [a.json().id],
+            ),
+          )
+        ).rows[0]!.id
+      : '';
+    expect(lineId).toMatch(/^\d+$/);
+    // the parent of bo: link a parent login to bo for this
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE guardians SET user_id = $1 WHERE id = (SELECT guardian_id FROM student_guardians WHERE student_id = $2 LIMIT 1)`,
+        [parent.id, ids.bo],
+      ),
+    );
+    const intent = await post(
+      '/payments/intents/mine/misc',
+      { lineId, gatewayId: mock.id, returnTo: 'consents' },
+      parent,
+    );
+    expect(intent.statusCode).toBe(201);
+    expect(intent.json().checkout).toMatchObject({ kind: 'form', mode: 'mock' });
+    const paid = await inject({
+      method: 'POST',
+      url: '/payments/payu/mock',
+      headers: {},
+      json: { txnid: intent.json().intent.txnId, outcome: 'success' },
+    });
+    expect(paid.json()).toMatchObject({ status: 'succeeded' });
+    expect(paid.json().returnUrl).toContain('/consents?student=');
+    expect(await line(a.json().id)).toMatchObject({ paid: '50.00', status: 'paid' });
+  });
 });

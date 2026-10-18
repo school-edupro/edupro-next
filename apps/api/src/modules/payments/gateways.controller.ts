@@ -26,7 +26,12 @@ export class GatewaysController {
     mfa: true,
   })
   async list(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.gateways.list(ctx), fields: GATEWAY_FIELDS };
+    // the test gateway is offered only off the live system
+    const fields =
+      process.env.NODE_ENV === 'production'
+        ? Object.fromEntries(Object.entries(GATEWAY_FIELDS).filter(([k]) => k !== 'mock'))
+        : GATEWAY_FIELDS;
+    return { data: await this.gateways.list(ctx), fields };
   }
 
   @Put()

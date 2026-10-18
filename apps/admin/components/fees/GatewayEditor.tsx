@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 
-export type GatewayProvider = 'payu' | 'ccavenue' | 'razorpay' | 'sbiepay' | 'atom';
+export type GatewayProvider = 'payu' | 'ccavenue' | 'razorpay' | 'sbiepay' | 'atom' | 'mock';
 export type GatewayFields = Record<
   GatewayProvider,
   {
@@ -84,24 +84,33 @@ export function GatewayEditor({
             disabled={!canEdit}
           />
         </label>
-        <label className="ep-field" htmlFor={`${p}-mode`}>
-          <span className="ep-field__label">Mode *</span>
-          <select
-            className="ep-select"
-            id={`${p}-mode`}
-            name="mode"
-            defaultValue={row?.mode ?? 'test'}
-            disabled={!canEdit}
-          >
-            <option value="test">Test (sandbox)</option>
-            <option value="live">Live (real money)</option>
-          </select>
-          <span className="ep-field__help">
-            Live works only from the web address registered with the gateway (e.g. the school&apos;s
-            https site), not from a computer&apos;s localhost. Use Test with the gateway&apos;s test
-            keys to try it first.
-          </span>
-        </label>
+        {provider === 'mock' ? (
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            For trying payments on this computer: the payer chooses &quot;success&quot; or
+            &quot;failure&quot; and no money moves. Not available on the live system. Add it to a
+            fee under Routes to offer it to parents.
+            <input type="hidden" name="mode" value="test" />
+          </p>
+        ) : (
+          <label className="ep-field" htmlFor={`${p}-mode`}>
+            <span className="ep-field__label">Mode *</span>
+            <select
+              className="ep-select"
+              id={`${p}-mode`}
+              name="mode"
+              defaultValue={row?.mode ?? 'test'}
+              disabled={!canEdit}
+            >
+              <option value="test">Test (sandbox)</option>
+              <option value="live">Live (real money)</option>
+            </select>
+            <span className="ep-field__help">
+              Live works only from the web address registered with the gateway (e.g. the
+              school&apos;s https site), not from a computer&apos;s localhost. Use Test with the
+              gateway&apos;s test keys to try it first.
+            </span>
+          </label>
+        )}
         {spec.config.map(([k, label]) => (
           <label key={`${provider}-${k}`} className="ep-field" htmlFor={`${p}-c-${k}`}>
             <span className="ep-field__label">{label} *</span>

@@ -329,3 +329,60 @@ export async function revokeConsentKey(fd: FormData) {
   }
   redirect(`${BASE}/${id}/connect?ok=revoked`);
 }
+
+// ---- my own forms (a staff member working in admin) ----
+async function answersWithFiles(fd: FormData) {
+  const answers = JSON.parse(str(fd, 'answers') || '{}') as Record<string, unknown>;
+  for (const key of new Set(
+    [...fd.keys()].filter((k) => k.startsWith('file__')).map((k) => k.slice(6)),
+  )) {
+    if (fd.get(`skip__${key}`)) continue;
+    const ids = await uploadAll(fd, `file__${key}`);
+    if (ids.length) answers[key] = ids;
+  }
+  return answers;
+}
+
+/** A staff member answers a form for themself (as in the staff app). */
+export async function answerMyForm(fd: FormData) {
+  const formId = str(fd, 'formId');
+  let out: { number: string; success: string | null } | undefined;
+  try {
+    out = await apiFetch<{ number: string; success: string | null }>(
+      `/engagement/mine/consent-forms/${formId}/responses`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          answers: await answersWithFiles(fd),
+          signedName: str(fd, 'signedName') || undefined,
+        }),
+      },
+    );
+  } catch (error) {
+    back(`/my-forms/${formId}`, error);
+  }
+  redirect(
+    `/my-forms?ok=answered&detail=${encodeURIComponent(`Saved as ${out!.number}.${out!.success ? ` ${out!.success}` : ''}`)}`,
+  );
+}
+
+/** A staff member changes their answer (until the form's edit date, before it is decided). */
+export async function changeMyForm(fd: FormData) {
+  const formId = str(fd, 'formId');
+  const rid = str(fd, 'responseId');
+  let out: { number: string } | undefined;
+  try {
+    out = await apiFetch<{ number: string }>(`/engagement/mine/consent-forms/responses/${rid}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        answers: await answersWithFiles(fd),
+        signedName: str(fd, 'signedName') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(`/my-forms/${formId}?response=${rid}`, error);
+  }
+  redirect(
+    `/my-forms?ok=changed&detail=${encodeURIComponent(`Your answer ${out!.number} is changed.`)}`,
+  );
+}

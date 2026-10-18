@@ -3,6 +3,7 @@ import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { ChildSwitch } from '@/components/ChildSwitch';
 import { FileLinks } from '@/components/FileLinks';
+import type { PayGateway } from '@/components/PayPanel';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
@@ -67,13 +68,20 @@ export default async function ConsentsPage({
     waiting?: string;
     fee?: string;
     changed?: string;
+    paid?: string;
+    student?: string;
     error?: string;
     detail?: string;
   }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
-  const kid = await chosenChild();
+  const kid = await chosenChild(sp.student);
+  // the gateways the school takes misc fees through (Fees > Payment gateways > Routes)
+  const gateways = await bff.api
+    .fetch<{ data: PayGateway[] }>('/payments/gateways/options?ledger=misc')
+    .then((r) => r.data)
+    .catch(() => [] as PayGateway[]);
   let forms: Form[];
   try {
     forms = (await bff.api.fetch<{ forms: Form[] }>('/engagement/mine/consent-forms')).forms;
@@ -158,13 +166,33 @@ export default async function ConsentsPage({
               ) : null}
               <span className="fp-cf-actions" style={{ marginLeft: 'auto' }}>
                 {r.lineId && d > 0 ? (
-                  <form method="post" action="/fees/pay-misc">
-                    <input type="hidden" name="lineId" value={r.lineId} />
-                    <input type="hidden" name="studentId" value={p.id} />
-                    <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                      {t(lang, 'Pay')} {inr(d)}
-                    </button>
-                  </form>
+                  gateways.length ? (
+                    <form method="post" action="/fees/pay-misc" className="fp-cf-actions">
+                      <input type="hidden" name="lineId" value={r.lineId} />
+                      <input type="hidden" name="studentId" value={p.id} />
+                      <input type="hidden" name="back" value="consents" />
+                      {gateways.length === 1 ? (
+                        <input type="hidden" name="gatewayId" value={gateways[0]!.id} />
+                      ) : (
+                        <select
+                          className="ep-select"
+                          name="gatewayId"
+                          aria-label={`${t(lang, 'Pay through')} · ${f.title}`}
+                        >
+                          {gateways.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                        {t(lang, 'Pay')} {inr(d)}
+                      </button>
+                    </form>
+                  ) : (
+                    <span className="ep-field__help">{t(lang, 'Pay at the school office')}</span>
+                  )
                 ) : null}
                 {r.canEdit ? (
                   <a
@@ -221,9 +249,23 @@ export default async function ConsentsPage({
           {t(lang, 'Your answer')} {sp.changed} {t(lang, 'is changed.')}
         </p>
       ) : null}
+      {sp.paid === '1' ? (
+        <p className="ep-alert ep-alert--success" role="status">
+          {t(lang, 'Payment received. Thank you. The receipt is on the Fees page.')}
+        </p>
+      ) : sp.paid ? (
+        <p className="ep-alert ep-alert--danger" role="alert">
+          {t(lang, 'The payment did not go through. No money was taken; you can try again.')}
+        </p>
+      ) : null}
       {sp.error ? (
         <p className="ep-alert ep-alert--danger" role="alert">
-          {sp.detail || t(lang, 'That did not work. Please try again.')}
+          {sp.error === 'payment.live_on_local'
+            ? t(
+                lang,
+                'Online payment is not available on this test computer. Please pay at the school office, or try from the school website.',
+              )
+            : sp.detail || t(lang, 'That did not work. Please try again.')}
         </p>
       ) : null}
 

@@ -564,7 +564,12 @@ export class RequestsService {
     });
   }
 
-  async create(ctx: RequestContext, dto: CreateRequestDto): Promise<RequestRow> {
+  async create(
+    ctx: RequestContext,
+    dto: CreateRequestDto,
+    /** a module whose own action is the approval (a published consent form) sends at once */
+    opts: { preApproved?: boolean } = {},
+  ): Promise<RequestRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const templates = await this.templates(c, dto);
       const policy = await this.settings.policy(c);
@@ -584,7 +589,9 @@ export class RequestsService {
           status: 409,
           extra: { skippedReasons: countBy(plan.skipped.map((s) => s.reason)) },
         });
-      const needsApproval = await this.needsApproval(c, policy, plan.send.length);
+      const needsApproval = opts.preApproved
+        ? false
+        : await this.needsApproval(c, policy, plan.send.length);
       const body = dto.bodyFormat === 'html' ? sanitizeEmailHtml(dto.body) : dto.body;
       const r = await c.query<{ id: string }>(
         `INSERT INTO message_requests (school_id, title, category, channel, template_id, body, body_format, subject, variables, audience, targets, rule, upload, send_to,

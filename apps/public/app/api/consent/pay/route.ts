@@ -17,13 +17,25 @@ export async function POST(req: Request) {
       school,
       token,
       `/responses/${rid}/pay`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          /^\d{1,18}$/.test(String(fd.get('gatewayId') ?? ''))
+            ? { gatewayId: String(fd.get('gatewayId')) }
+            : {},
+        ),
+      },
     );
     return renderCheckout(out.intent, out.checkout, { cancelHref: back, mockBack: back });
   } catch (error) {
     if (error instanceof PublicApiError) {
       const to = new URL(back, req.url);
-      to.searchParams.set('error', (error.problem.detail ?? error.problem.type).slice(0, 160));
+      to.searchParams.set(
+        'error',
+        error.problem.type === 'payment.live_on_local'
+          ? 'Online payment is not available on this test computer. Please pay at the school office.'
+          : (error.problem.detail ?? error.problem.type).slice(0, 160),
+      );
       return NextResponse.redirect(to, 303);
     }
     throw error;

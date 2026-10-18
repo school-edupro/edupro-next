@@ -8,7 +8,7 @@ import { ENV, type Env } from '../../config/env';
 import { ATOM_URLS } from './adapters/atom';
 import { SBIEPAY_URLS } from './adapters/sbiepay';
 
-export type GatewayProvider = 'payu' | 'ccavenue' | 'razorpay' | 'sbiepay' | 'atom';
+export type GatewayProvider = 'payu' | 'ccavenue' | 'razorpay' | 'sbiepay' | 'atom' | 'mock';
 export type FeeLedger = 'school' | 'hostel' | 'misc' | 'admission';
 export const GATEWAY_PROVIDERS: GatewayProvider[] = [
   'payu',
@@ -16,6 +16,7 @@ export const GATEWAY_PROVIDERS: GatewayProvider[] = [
   'razorpay',
   'sbiepay',
   'atom',
+  'mock',
 ];
 
 /**
@@ -60,6 +61,13 @@ export const GATEWAY_FIELDS: Record<
     config: [['merchantId', 'Merchant id']],
     secret: [['key', 'Encryption key']],
   },
+  // a test gateway for trying payments end to end where no real gateway can be used (this computer):
+  // the payer chooses success or failure, no money moves; refused in production
+  mock: {
+    name: 'Test gateway (no money moves)',
+    config: [],
+    secret: [],
+  },
   atom: {
     name: 'Atom (NTT DATA AIPAY)',
     config: [
@@ -85,6 +93,7 @@ export const GATEWAY_URLS: Record<GatewayProvider, { test: string; live: string 
   razorpay: { test: 'https://api.razorpay.com', live: 'https://api.razorpay.com' },
   sbiepay: SBIEPAY_URLS,
   atom: ATOM_URLS,
+  mock: { test: '/api/v1/payments/payu/mock', live: '/api/v1/payments/payu/mock' },
 };
 
 export interface GatewayRow {
@@ -217,6 +226,14 @@ export class GatewaysService {
       bankAccountId?: string | null;
     },
   ): Promise<GatewayRow[]> {
+    if (dto.provider === 'mock' && this.env.NODE_ENV === 'production')
+      throw new DomainError(
+        'payments.mock_in_production',
+        'The test gateway is not available on the live system',
+        { status: 409 },
+      );
+    // the test gateway is always in test mode
+    if (dto.provider === 'mock') dto = { ...dto, mode: 'test' };
     const spec = GATEWAY_FIELDS[dto.provider];
     const config = Object.fromEntries(spec.config.map(([k]) => [k, (dto.config[k] ?? '').trim()]));
     await this.db.tenant(requireTenant(ctx), async (c) => {

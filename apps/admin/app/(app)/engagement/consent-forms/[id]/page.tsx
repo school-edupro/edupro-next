@@ -1,5 +1,7 @@
 import { Badge, Breadcrumbs, Card, KpiTile, PageHeader } from '@edupro/ui';
+import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
+import { Icon } from '@/components/nav-icons';
 import { Pager } from '@/components/RegisterTools';
 import {
   STATUS_LABEL,
@@ -72,11 +74,28 @@ export default async function ConsentFormPage({
     ),
     apiFetch<{ sections: Array<{ id: string; name: string }> }>('/engagement/consent-forms/lists'),
     // the school's message templates (none shown without the permission to see them)
-    apiFetch<{ data: Array<{ id: string; name: string; channel: string; code: string }> }>(
-      '/comms/templates?status=active',
-    )
+    apiFetch<{
+      data: Array<{
+        id: string;
+        name: string;
+        channel: string;
+        code: string;
+        dltTemplateId: string | null;
+        waTemplateName: string | null;
+      }>;
+    }>('/comms/templates?status=active')
       .then((r) => r.data)
-      .catch(() => [] as Array<{ id: string; name: string; channel: string; code: string }>),
+      .catch(
+        () =>
+          [] as Array<{
+            id: string;
+            name: string;
+            channel: string;
+            code: string;
+            dltTemplateId: string | null;
+            waTemplateName: string | null;
+          }>,
+      ),
   ]);
   const approval = Boolean(f.settings.approval?.on);
   const canConnect = (await getMe()).permissions.includes('engagement.consent_form.integrate');
@@ -144,6 +163,29 @@ export default async function ConsentFormPage({
         No active SMS, WhatsApp or email templates: the app notification only.
       </p>
     );
+  // a chosen SMS template needs a DLT id and a WhatsApp one an approved name, else nothing is sent
+  const notReady = (code: string) =>
+    templates.filter(
+      (t) =>
+        t.code === code &&
+        ((t.channel === 'sms' && !t.dltTemplateId) ||
+          (t.channel === 'whatsapp' && !t.waTemplateName)),
+    );
+  const readiness = (code: string) =>
+    notReady(code).length ? (
+      <p className="ep-alert ep-alert--warning" role="status" style={{ margin: 0 }}>
+        {notReady(code).map((t, i) => (
+          <span key={t.id}>
+            {i ? ' ' : ''}
+            {t.channel === 'sms' ? 'SMS' : 'WhatsApp'} will not be sent: the template{' '}
+            <a href={`/comms/templates/${t.id}`} style={{ textDecoration: 'underline' }}>
+              {t.name}
+            </a>{' '}
+            has no {t.channel === 'sms' ? 'DLT template id' : 'approved WhatsApp template name'}.
+          </span>
+        ))}
+      </p>
+    ) : null;
   const statusForm = (status: string, label: string, variant: string, push?: boolean) => (
     <form action={setConsentStatus}>
       <input type="hidden" name="id" value={id} />
@@ -176,6 +218,7 @@ export default async function ConsentFormPage({
       <Notice params={{ ...sp, detail: okText ?? sp.detail }} />
 
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
+        {/* one row of actions: secondary buttons with an icon; a step that cannot be undone asks first */}
         <div
           style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'center' }}
         >
@@ -184,18 +227,15 @@ export default async function ConsentFormPage({
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/engagement/consent-forms/${id}/edit`}
             >
-              Change
+              <Icon name="pencil" size={16} /> Change
             </a>
           ) : null}
-          {f.status === 'published' ? statusForm('closed', 'Close', 'secondary') : null}
-          {f.status === 'closed' ? statusForm('published', 'Reopen', 'secondary', false) : null}
-          {f.status === 'closed' ? statusForm('archived', 'Archive', 'ghost') : null}
           {f.open && f.settings.officeFill !== false ? (
             <a
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/engagement/consent-forms/${id}/fill`}
             >
-              Fill on behalf
+              <Icon name="clipboard" size={16} /> Fill on behalf
             </a>
           ) : null}
           {f.status !== 'draft' ? (
@@ -203,30 +243,60 @@ export default async function ConsentFormPage({
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/engagement/consent-forms/${id}/analytics`}
             >
-              Analytics
+              <Icon name="chart" size={16} /> Analytics
             </a>
           ) : null}
           {canConnect ? (
             <a
-              className="ep-btn ep-btn--ghost ep-btn--sm"
+              className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/engagement/consent-forms/${id}/connect`}
             >
-              Connect (webhooks, API)
+              <Icon name="plug" size={16} /> Connect
             </a>
           ) : null}
           <form action={copyConsentForm}>
             <input type="hidden" name="id" value={id} />
-            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-              Copy as new
+            <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+              <Icon name="copy" size={16} /> Copy as new
             </button>
           </form>
+          {f.status === 'published' ? (
+            <ConfirmAction
+              action={setConsentStatus}
+              fields={{ id, status: 'closed' }}
+              label="Close"
+              title="Close the form?"
+              confirmLabel="Close the form"
+            >
+              Families and staff can no longer answer. Answers already given stay; you can reopen
+              it.
+            </ConfirmAction>
+          ) : null}
+          {f.status === 'closed' ? statusForm('published', 'Reopen', 'secondary', false) : null}
+          {f.status === 'closed' ? (
+            <ConfirmAction
+              action={setConsentStatus}
+              fields={{ id, status: 'archived' }}
+              label="Archive"
+              title="Archive the form?"
+              confirmLabel="Archive"
+            >
+              The form leaves the list; its answers and register stay. An archived form cannot
+              change.
+            </ConfirmAction>
+          ) : null}
           {f.status === 'draft' && f.responses === 0 ? (
-            <form action={deleteConsentForm}>
-              <input type="hidden" name="id" value={id} />
-              <button type="submit" className="ep-btn ep-btn--danger ep-btn--sm">
-                Delete draft
-              </button>
-            </form>
+            <ConfirmAction
+              action={deleteConsentForm}
+              fields={{ id }}
+              label="Delete draft"
+              title="Delete this draft?"
+              confirmLabel="Delete"
+              variant="danger"
+              confirmVariant="danger"
+            >
+              The draft and its questions are removed. This cannot be undone.
+            </ConfirmAction>
           ) : null}
         </div>
         <p className="ep-field__help" style={{ margin: 'var(--sp-3) 0 0' }}>
@@ -276,14 +346,17 @@ export default async function ConsentFormPage({
                   className="ep-btn ep-btn--secondary ep-btn--sm"
                   href={`/api/consent-forms/file?kind=qr&id=${id}&save=1`}
                 >
-                  Download QR
+                  <Icon name="download" size={16} /> Download QR
                 </a>
-                <form action={rotateConsentLink}>
-                  <input type="hidden" name="id" value={id} />
-                  <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                    Make a new link (the old one stops)
-                  </button>
-                </form>
+                <ConfirmAction
+                  action={rotateConsentLink}
+                  fields={{ id }}
+                  label="Make a new link"
+                  title="Make a new public link?"
+                  confirmLabel="Make a new link"
+                >
+                  The old link and the printed QR stop working at once. Share the new one.
+                </ConfirmAction>
               </div>
             </div>
           </div>
@@ -304,9 +377,10 @@ export default async function ConsentFormPage({
               </span>
             </label>
             {channelPicks('consent_form_new')}
+            {readiness('consent_form_new')}
             <p className="ep-field__help" style={{ margin: 0 }}>
-              SMS, WhatsApp and email go to the parents of each pupil and to the staff asked,
-              through the usual message approval.
+              SMS, WhatsApp and email go at once to the parents of each pupil and to the staff asked
+              (publishing is the approval); email is a letter on the school's letterhead.
             </p>
             <div>
               <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
@@ -320,6 +394,7 @@ export default async function ConsentFormPage({
           <form action={notifyConsentPending} className="ep-cfb">
             <input type="hidden" name="id" value={id} />
             {channelPicks('consent_form_reminder')}
+            {readiness('consent_form_reminder')}
             <div>
               <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
                 Remind {pending} (app{templates.length ? ' and the chosen channels' : ''})

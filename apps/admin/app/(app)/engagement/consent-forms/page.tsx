@@ -1,5 +1,6 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
+import { Icon } from '@/components/nav-icons';
 import { STATUS_LABEL, STATUS_TONE, WHO, dt, type ConsentForm } from '@/components/consents/types';
 import { apiFetch } from '@/lib/api';
 
@@ -36,7 +37,7 @@ export default async function ConsentFormsPage({
         description="Ask families and staff for consent and details: trips, events, photo use, medical, declarations. Build a form, send it, read the answers."
         actions={
           <a className="ep-btn ep-btn--primary ep-btn--sm" href="/engagement/consent-forms/new">
-            ＋ New form
+            <Icon name="plus" size={16} /> New form
           </a>
         }
       />

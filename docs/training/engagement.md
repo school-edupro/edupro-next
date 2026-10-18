@@ -114,7 +114,8 @@
     per guest); close after a number of answers (seats); the message after answering; the office may
     fill on behalf.
   - **Publish and tell them in the app** (or publish quietly). Families see it under Consent forms and
-    on the home screen; staff under Forms and declarations in the staff app. For SMS, WhatsApp or email
+    on the home screen; staff under Forms and declarations in the staff app, or in admin under **My forms** (the clipboard
+    in the top bar). For SMS, WhatsApp or email
     use Communication → Compose with the school's templates. **Remind those pending (app)** tells again
     those who have not answered.
   - **Register**: Answered and Not yet answered, by section or search, Excel and PDF; each response
@@ -126,15 +127,18 @@
   - **Fee** (section 5): fixed or worked out from the answers (a base, ₹ per unit of a number, ₹ per
     option of a choice). It becomes a misc fee on the pupil (head "Consent forms"): after approval when
     the form needs it, else at once. The parent sees the amount while filling and pays with **Pay** on
-    the form (or at the misc counter).
+    the form (or at the misc counter), through a gateway routed to **misc** under Fees → Payment
+    gateways. To try it without money, add the **Test gateway** there and route it to misc.
   - **Approval** (section 6): levels in order: the pupil's class teacher, a role (e.g. Principal) or a
     named staff member. Class teachers approve in the staff app (**Answers to approve**); others on the
     response page or in My approvals. The family is told the decision; a note is required to refuse.
   - **Answers may be changed until** (section 4): families and staff change their answer until then,
     only before it is decided; earlier versions are kept on the response page. Once a fee is paid, a
     change that alters the amount is refused (the office handles it).
-  - **Publish / Remind**: choose SMS, WhatsApp and email templates as well as the app notification; the
-    message goes through message approval.
+  - **Publish / Remind**: the consent templates for SMS, WhatsApp and email are chosen already, along with
+    the app notification; the messages go at once (publishing is the approval). SMS needs the template's
+    DLT id and WhatsApp its approved name (Communication → Message templates); the form page warns when
+    one is missing, and that channel is not sent. Emails go as letters on the school letterhead.
   - **Public link and QR** (section 7): families without the app answer with the admission number and a
     code sent to the mobile the school has; outsiders (guests, alumni) with their name and a code to their
     mobile or email. The form page shows the link and the QR (Download QR to print); **Make a new link**

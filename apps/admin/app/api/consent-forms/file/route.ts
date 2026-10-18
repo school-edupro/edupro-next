@@ -12,6 +12,25 @@ export async function GET(req: Request) {
   const id = sp.get('id') ?? '';
   const rid = sp.get('rid') ?? '';
   const kind = sp.get('kind');
+  // my own answer's PDF (a staff member): only the response id
+  if (kind === 'mine' && ID.test(rid)) {
+    try {
+      const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
+        `/engagement/mine/consent-forms/responses/${rid}/pdf`,
+      );
+      return new NextResponse(Buffer.from(f.base64, 'base64'), {
+        headers: {
+          'content-type': f.contentType,
+          'content-disposition': `${sp.get('save') === '1' ? 'attachment' : 'inline'}; filename="${f.filename}"`,
+          'cache-control': 'private, no-store',
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError)
+        return NextResponse.json(error.problem, { status: error.status });
+      throw error;
+    }
+  }
   if (!ID.test(id) || (kind !== 'register' && kind !== 'qr' && !ID.test(rid)))
     return NextResponse.json({ type: 'not-found' }, { status: 404 });
   let path: string;

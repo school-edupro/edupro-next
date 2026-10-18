@@ -371,8 +371,12 @@ export class PublicConsentFormsController {
     @Param('schoolCode') schoolCode: string,
     @Param('token') token: string,
     @Param('rid') rid: string,
+    @Body() body: { gatewayId?: string } | undefined,
     @Headers('authorization') auth?: string,
   ) {
-    return this.svc.pay(schoolCode, token, auth, rid, baseCtx(req));
+    const gw = /^\d{1,18}$/.test(String(body?.gatewayId ?? ''))
+      ? String(body!.gatewayId)
+      : undefined;
+    return this.svc.pay(schoolCode, token, auth, rid, baseCtx(req), gw);
   }
 }

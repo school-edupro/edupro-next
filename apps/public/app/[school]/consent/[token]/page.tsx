@@ -186,6 +186,15 @@ export default async function PublicConsentPage({
                       <input type="hidden" name="school" value={school} />
                       <input type="hidden" name="token" value={token} />
                       <input type="hidden" name="rid" value={r.id} />
+                      {info.gateways.length > 1 ? (
+                        <select className="ep-select" name="gatewayId" aria-label="Pay through">
+                          {info.gateways.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
                       <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
                         Pay ₹{due.toLocaleString('en-IN')}
                       </button>

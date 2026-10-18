@@ -48,13 +48,15 @@ export class CreateFamilyIntentDto extends createZodDto(CreateFamilyIntentSchema
 export const CreateFamilyMiscIntentSchema = z.object({
   lineId: IdSchema,
   gatewayId: IdSchema.optional(),
+  /** where the payer comes back: the fees page (default) or the consent forms page */
+  returnTo: z.enum(['fees', 'consents']).default('fees'),
 });
 export class CreateFamilyMiscIntentDto extends createZodDto(CreateFamilyMiscIntentSchema) {}
 
 const Key = z.string().trim().max(400);
 export const SaveGatewaySchema = z.object({
   id: IdSchema.optional(),
-  provider: z.enum(['payu', 'ccavenue', 'razorpay', 'sbiepay', 'atom']),
+  provider: z.enum(['payu', 'ccavenue', 'razorpay', 'sbiepay', 'atom', 'mock']),
   label: z.string().trim().min(2).max(60),
   mode: z.enum(['test', 'live']),
   config: z.record(z.string(), Key).default({}),

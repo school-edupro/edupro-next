@@ -122,11 +122,22 @@ export default async function TemplatesPage({
                         <code>{t.code}</code>
                       </td>
                       <td>
-                        {channel === 'sms'
-                          ? (t.dltTemplateId ?? '—')
-                          : channel === 'whatsapp'
-                            ? (t.waTemplateName ?? '—')
-                            : (t.subject ?? '—')}
+                        {channel === 'sms' ? (
+                          t.dltTemplateId ? (
+                            t.dltTemplateId
+                          ) : (
+                            // without a DLT id the SMS provider refuses it: nothing is sent
+                            <Badge tone="danger">No DLT id: not sent</Badge>
+                          )
+                        ) : channel === 'whatsapp' ? (
+                          t.waTemplateName ? (
+                            t.waTemplateName
+                          ) : (
+                            <Badge tone="danger">No approved name: not sent</Badge>
+                          )
+                        ) : (
+                          (t.subject ?? '—')
+                        )}
                       </td>
                       <td className="ep-field__help">
                         {t.variables.map((v) => `{{${v}}}`).join(' ')}

@@ -13,7 +13,12 @@ export async function POST(req: Request) {
   const lineId = String(fd.get('lineId') ?? '');
   const studentId = String(fd.get('studentId') ?? '');
   const gw = String(fd.get('gatewayId') ?? '');
-  const back = new URL(`/fees?student=${encodeURIComponent(studentId)}`, req.url);
+  // a consent form's fee comes back to the consent forms (docs/design/28-consent-forms.md)
+  const consents = String(fd.get('back') ?? '') === 'consents';
+  const back = new URL(
+    `/${consents ? 'consents' : 'fees'}?student=${encodeURIComponent(studentId)}`,
+    req.url,
+  );
   if (!/^\d{1,18}$/.test(lineId)) {
     back.searchParams.set('error', 'validation-failed');
     return NextResponse.redirect(back, 303);
@@ -24,7 +29,11 @@ export async function POST(req: Request) {
       '/payments/intents/mine/misc',
       {
         method: 'POST',
-        body: JSON.stringify({ lineId, ...(/^\d{1,18}$/.test(gw) ? { gatewayId: gw } : {}) }),
+        body: JSON.stringify({
+          lineId,
+          ...(/^\d{1,18}$/.test(gw) ? { gatewayId: gw } : {}),
+          ...(consents ? { returnTo: 'consents' } : {}),
+        }),
       },
     );
   } catch (error) {
@@ -39,8 +48,8 @@ export async function POST(req: Request) {
     throw error;
   }
   return renderCheckout(out.intent, out.checkout, {
-    cancelHref: '/fees',
+    cancelHref: consents ? '/consents' : '/fees',
     mockStudent: studentId,
-    mockBack: '/fees',
+    mockBack: consents ? '/consents' : '/fees',
   });
 }

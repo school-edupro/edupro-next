@@ -1,6 +1,8 @@
 import { Badge, Breadcrumbs, Card, PageHeader } from '@edupro/ui';
 import { cookies } from 'next/headers';
+import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
+import { Icon } from '@/components/nav-icons';
 import type { ConsentForm } from '@/components/consents/types';
 import {
   addConsentKey,
@@ -150,25 +152,39 @@ export default async function ConsentConnectPage({
                         <input type="hidden" name="hookId" value={w.id} />
                         <input type="hidden" name="active" value={w.active ? 'false' : 'true'} />
                         <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                          <Icon name={w.active ? 'lock' : 'unlock'} size={16} />{' '}
                           {w.active ? 'Switch off' : 'Switch on'}
                         </button>
                       </form>
-                      {(
-                        [
-                          ['test', 'Send a test', 'secondary'],
-                          ['secret', 'New signing secret', 'ghost'],
-                          ['remove', 'Remove', 'danger'],
-                        ] as const
-                      ).map(([what, label, variant]) => (
-                        <form key={what} action={consentWebhookAction}>
-                          <input type="hidden" name="id" value={id} />
-                          <input type="hidden" name="hookId" value={w.id} />
-                          <input type="hidden" name="what" value={what} />
-                          <button type="submit" className={`ep-btn ep-btn--${variant} ep-btn--sm`}>
-                            {label}
-                          </button>
-                        </form>
-                      ))}
+                      <form action={consentWebhookAction}>
+                        <input type="hidden" name="id" value={id} />
+                        <input type="hidden" name="hookId" value={w.id} />
+                        <input type="hidden" name="what" value="test" />
+                        <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                          <Icon name="send" size={16} /> Send a test
+                        </button>
+                      </form>
+                      <ConfirmAction
+                        action={consentWebhookAction}
+                        fields={{ id, hookId: w.id, what: 'secret' }}
+                        label="New signing secret"
+                        title="Make a new signing secret?"
+                        confirmLabel="Make a new secret"
+                      >
+                        The old secret stops being used at once: give the new one to the other
+                        system.
+                      </ConfirmAction>
+                      <ConfirmAction
+                        action={consentWebhookAction}
+                        fields={{ id, hookId: w.id, what: 'remove' }}
+                        label="Remove"
+                        title="Remove this webhook?"
+                        confirmLabel="Remove"
+                        variant="danger"
+                        confirmVariant="danger"
+                      >
+                        No more messages go to this address. Messages waiting are dropped.
+                      </ConfirmAction>
                     </div>
                   </article>
                 ))}
@@ -208,7 +224,7 @@ export default async function ConsentConnectPage({
               </fieldset>
               <div>
                 <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                  Add webhook
+                  <Icon name="plus" size={16} /> Add webhook
                 </button>
               </div>
             </form>
@@ -262,7 +278,7 @@ export default async function ConsentConnectPage({
                               <input type="hidden" name="deliveryId" value={d.id} />
                               <input type="hidden" name="what" value="retry" />
                               <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                                Send again
+                                <Icon name="refresh" size={16} /> Send again
                               </button>
                             </form>
                           ) : null}
@@ -306,13 +322,18 @@ export default async function ConsentConnectPage({
                           {k.revokedAt ? (
                             <Badge tone="neutral">Revoked</Badge>
                           ) : (
-                            <form action={revokeConsentKey}>
-                              <input type="hidden" name="id" value={id} />
-                              <input type="hidden" name="keyId" value={k.id} />
-                              <button type="submit" className="ep-btn ep-btn--danger ep-btn--sm">
-                                Revoke
-                              </button>
-                            </form>
+                            <ConfirmAction
+                              action={revokeConsentKey}
+                              fields={{ id, keyId: k.id }}
+                              label="Revoke"
+                              title={`Revoke the key of ${k.name}?`}
+                              confirmLabel="Revoke"
+                              variant="danger"
+                              confirmVariant="danger"
+                            >
+                              The key stops working at once. This cannot be undone; make a new key
+                              if needed.
+                            </ConfirmAction>
                           )}
                         </td>
                       </tr>
@@ -346,7 +367,7 @@ export default async function ConsentConnectPage({
                 <input id="key-until" name="expiresOn" type="date" className="ep-input" />
               </label>
               <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                Make a key
+                <Icon name="key" size={16} /> Make a key
               </button>
             </form>
           </Card>

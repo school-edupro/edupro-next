@@ -1184,7 +1184,10 @@ export class PaymentsService {
    * (an optional one up to its last date), with a seat free when it has seats. The receipt is written when
    * the gateway confirms (MiscFeesService.onlinePaid).
    */
-  async createFamilyMiscIntent(ctx: RequestContext, dto: { lineId: string; gatewayId?: string }) {
+  async createFamilyMiscIntent(
+    ctx: RequestContext,
+    dto: { lineId: string; gatewayId?: string; returnTo?: 'fees' | 'consents' },
+  ) {
     const tenant = requireTenant(ctx);
     const v = await this.viewer.resolve(ctx, 'fees.family.view');
     if (v.kind !== 'family')
@@ -1239,7 +1242,10 @@ export class PaymentsService {
           email: u.email ?? 'unknown@example.invalid',
           mobile: u.mobile ?? '',
         },
-        returnUrl: `${this.env.PARENT_APP_URL}/fees?student=${line.student_id}`,
+        returnUrl:
+          dto.returnTo === 'consents'
+            ? `${this.env.PARENT_APP_URL}/consents?student=${line.student_id}`
+            : `${this.env.PARENT_APP_URL}/fees?student=${line.student_id}`,
         createdByUser: ctx.user.id,
         requestId: ctx.requestId,
       });

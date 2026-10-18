@@ -690,24 +690,29 @@ export class ConsentFormsService {
     }> = [];
     for (const ch of channels) {
       try {
-        const r = await this.requests.create(ctx, {
-          title: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 160),
-          category: 'service',
-          channels: [ch],
-          body: `${reminder ? 'Reminder: please' : 'Please'} answer the form "${f.title}"${closes}: ${link}`,
-          bodyFormat: 'text',
-          subject: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 200),
-          variables: {
-            school: school.name,
-            form_title: f.title.slice(0, 120),
-            closes_on: closes,
-            link,
-          },
-          audience: 'individuals',
-          targets,
-          sendTo: 'parents',
-          attachments: [],
-        } as CreateRequestDto);
+        const r = await this.requests.create(
+          ctx,
+          {
+            title: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 160),
+            category: 'service',
+            channels: [ch],
+            body: `${reminder ? 'Reminder: please' : 'Please'} answer the form "${f.title}"${closes}: ${link}`,
+            bodyFormat: 'text',
+            subject: `${reminder ? 'Reminder: ' : ''}${f.title}`.slice(0, 200),
+            variables: {
+              school: school.name,
+              form_title: f.title.slice(0, 120),
+              closes_on: closes,
+              link,
+            },
+            audience: 'individuals',
+            targets,
+            sendTo: 'parents',
+            attachments: [],
+          } as CreateRequestDto,
+          // publishing (or reminding) the form is the approval: no wait in message requests
+          { preApproved: true },
+        );
         out.push({ channel: ch.channel, id: r.id, status: r.status, people: targets.length });
       } catch (error) {
         if (!(error instanceof DomainError)) throw error;
@@ -1453,13 +1458,47 @@ export class ConsentFormsService {
             mobile,
             vars,
           ]);
-      if (row.public_email)
+      // emails: the outsider's own, or the family's on file
+      const linkMails = row.public_email
+        ? [row.public_email]
+        : row.student_id
+          ? (
+              await c.query<{ email: string }>(
+                `SELECT DISTINCT lower(g.email) AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                  WHERE sg.student_id = $1 AND g.deleted_at IS NULL AND g.email ~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$' LIMIT 2`,
+                [row.student_id],
+              )
+            ).rows.map((x) => x.email)
+          : [];
+      for (const m of linkMails)
         await c.query(`SELECT app.send_template('consent_decision', 'email', $1, $2::jsonb)`, [
-          row.public_email,
+          m,
           vars,
         ]);
       return;
     }
+    // the family (or staff member) also gets the decision as a letter by email
+    await c.query(`SELECT app.consent_seed_templates(app.current_school_id())`);
+    const mails = await c.query<{ email: string }>(
+      `SELECT DISTINCT lower(g.email) AS email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+        WHERE sg.student_id = $1 AND g.deleted_at IS NULL AND g.email ~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'
+       UNION SELECT lower(u.email) FROM users u WHERE u.id = $2 AND $1::bigint IS NULL AND u.email ~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'`,
+      [row.student_id, row.signed_by],
+    );
+    const school = (
+      await c.query<{ name: string }>(`SELECT name FROM schools WHERE id = app.current_school_id()`)
+    ).rows[0]?.name;
+    for (const m of mails.rows.slice(0, 3))
+      await c.query(`SELECT app.send_template('consent_decision', 'email', $1, $2::jsonb)`, [
+        m.email,
+        JSON.stringify({
+          form: f.title,
+          number: row.number,
+          decision: outcome === 'approved' ? 'approved' : 'not approved',
+          note: note ?? '',
+          school: school ?? '',
+        }),
+      ]);
     await this.push.send(c, ctx, {
       userIds: [row.signed_by],
       title: outcome === 'approved' ? 'Your answer is approved' : 'Your answer is not approved',

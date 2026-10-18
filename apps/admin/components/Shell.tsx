@@ -78,6 +78,18 @@ export async function Shell({
     (n, g) => n + g.count,
     0,
   );
+  // consent forms the signed-in staff member has to answer (docs/design/28-consent-forms.md): best effort
+  const isStaff = me.memberships.some((m) => m.personType === 'employee');
+  const myForms = isStaff
+    ? await apiFetch<{
+        forms: Array<{ people: Array<{ kind: string; canAnswer: boolean }> }>;
+      }>('/engagement/mine/consent-forms')
+        .then((r) => r.forms.filter((f) => f.people.some((p) => p.kind === 'staff')))
+        .catch(() => [])
+    : [];
+  const formsToAnswer = myForms.filter((f) =>
+    f.people.some((p) => p.kind === 'staff' && p.canAnswer),
+  ).length;
   const mayApprove =
     ['engagement.change_request.approve', 'workflow.inbox.act', 'people.withdrawal.clear'].some(
       (p) => allowed.has(p),
@@ -347,6 +359,21 @@ export async function Shell({
                 ) : null}
               </div>
             </details>
+          ) : null}
+          {myForms.length ? (
+            <a
+              className="ep-header__icon-btn ep-header__bell"
+              href="/my-forms"
+              aria-label={`My forms: ${String(formsToAnswer)} to answer`}
+              title={`My forms: ${String(formsToAnswer)} to answer`}
+            >
+              <Icon name="clipboard" size={22} />
+              {formsToAnswer > 0 ? (
+                <span className="ep-header__badge">
+                  {formsToAnswer > 99 ? '99+' : formsToAnswer}
+                </span>
+              ) : null}
+            </a>
           ) : null}
           {mayApprove ? (
             <a

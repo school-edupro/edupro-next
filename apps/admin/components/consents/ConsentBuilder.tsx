@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { ConsentFee, ConsentField } from '@edupro/ui';
+import { Icon } from '@/components/nav-icons';
 
 type FieldType = ConsentField['type'];
 type Rule = NonNullable<ConsentField['rule']>;
@@ -473,7 +474,7 @@ export function ConsentBuilder({
                       disabled={i === 0}
                       aria-label={`Move ${f.label} up`}
                     >
-                      ↑
+                      <Icon name="arrowUp" size={16} />
                     </button>
                     <button
                       type="button"
@@ -482,7 +483,7 @@ export function ConsentBuilder({
                       disabled={i === fields.length - 1}
                       aria-label={`Move ${f.label} down`}
                     >
-                      ↓
+                      <Icon name="arrowDown" size={16} />
                     </button>
                     <button
                       type="button"
@@ -493,7 +494,7 @@ export function ConsentBuilder({
                         setFields([...fields.slice(0, i + 1), copy, ...fields.slice(i + 1)]);
                       }}
                     >
-                      Copy
+                      <Icon name="copy" size={16} /> Copy
                     </button>
                     <button
                       type="button"
@@ -502,7 +503,7 @@ export function ConsentBuilder({
                       title={f.fixed ? 'Answered: hide it with a rule instead' : undefined}
                       onClick={() => setFields(fields.filter((x) => x.uid !== f.uid))}
                     >
-                      Remove
+                      <Icon name="trash" size={16} /> Remove
                     </button>
                   </span>
                 </div>
@@ -739,56 +740,56 @@ export function ConsentBuilder({
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => add('text')}
             >
-              ＋ Question
+              <Icon name="plus" size={16} /> Question
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => add('radio')}
             >
-              ＋ Choice
+              <Icon name="plus" size={16} /> Choice
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => add('yesno')}
             >
-              ＋ Yes / No
+              <Icon name="plus" size={16} /> Yes / No
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => add('file')}
             >
-              ＋ File
+              <Icon name="plus" size={16} /> File
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => add('signature')}
             >
-              ＋ Signature
+              <Icon name="plus" size={16} /> Signature
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => add('agree')}
             >
-              ＋ I agree
+              <Icon name="plus" size={16} /> I agree
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--ghost ep-btn--sm"
               onClick={() => add('heading')}
             >
-              ＋ Section heading
+              <Icon name="plus" size={16} /> Section heading
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--ghost ep-btn--sm"
               onClick={() => add('pagebreak')}
             >
-              ＋ Page break
+              <Icon name="plus" size={16} /> Page break
             </button>
           </div>
         </div>
@@ -1119,7 +1120,7 @@ function RuleEditor({
             })
           }
         >
-          ＋ Another condition
+          <Icon name="plus" size={16} /> Another condition
         </button>
       </div>
     </div>
@@ -1415,7 +1416,7 @@ function ApprovalSection({
                 })
               }
             >
-              ＋ Another level
+              <Icon name="plus" size={16} /> Another level
             </button>
           </div>
         </div>

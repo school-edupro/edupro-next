@@ -189,3 +189,23 @@ up by the school admin only (new permission `engagement.consent_form.integrate`)
   answered), tabs To answer / Answered / Closed, a card per form with closing badge (red within two
   days), fee and approval marks, the school's text folded, each answer with status, Pay, Change and the
   PDF copy.
+
+## Follow-up 2 (18 Oct 2026, migration 0173)
+
+- **Fee by gateway.** The fee is paid through the school's gateways routed to **misc** (Fees → Payment
+  gateways). The parent app and the public link offer a choice when there are several, else "Pay at the
+  school office". A **Test gateway** provider (no money moves, always test mode, refused in production)
+  lets a school try the whole flow; live gateways stay refused from localhost (`payment.live_on_local`)
+  and say so. After paying, the parent returns to Consent forms, not Fees.
+- **Messages.** Consent messages skip message approval: publishing (or Remind) is the approval. SMS needs
+  the template's DLT id and WhatsApp its approved name, else that channel is not sent; the form page and
+  Message templates warn about it. Email always goes.
+- **Emails as letters.** One-time code, new form, reminder and decision emails are HTML letters on the
+  school letterhead (migration 0173 converts them only where the school has not changed them). The
+  family one-time code goes to up to two mobiles and two guardian emails. The decision (approved / not
+  approved) is emailed to the family or the staff member, and for public-link answers also by SMS/WhatsApp.
+- **Mobilise buttons.** The form, list, builder and Connect pages use icon buttons from the admin icon set
+  (no text symbols) and ask to confirm before Close, Archive, Delete draft, Make a new link, New signing
+  secret, Remove webhook and Revoke key.
+- **Staff answer their own forms** in the staff app (Consent forms tile) and in admin (**My forms**,
+  the clipboard in the top bar, with a count of forms to answer).

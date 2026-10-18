@@ -107,6 +107,13 @@ export class ConsentPublicService {
         outsiders: link.outsiders,
         fee: f.settings.fee ?? { mode: 'none', items: [] },
         approval: Boolean(f.settings.approval?.on),
+        // the gateways the school takes misc fees through, for the family's Pay
+        gateways: (
+          await c.query<{ id: string; label: string }>(
+            `SELECT g.id::text, g.label FROM payment_gateway_routes r JOIN payment_gateways g ON g.id = r.gateway_id
+              WHERE r.ledger = 'misc' AND g.active ORDER BY r.sort_order, g.id`,
+          )
+        ).rows,
       };
     });
   }
@@ -138,17 +145,29 @@ export class ConsentPublicService {
           throw new DomainError('consent.not_asked', 'This form is not for this admission number', {
             status: 404,
           });
-        const g = await c.query<{ mobile: string }>(
-          `SELECT DISTINCT ON (g.mobile) g.mobile, sg.is_primary FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
-            WHERE sg.student_id = $1 AND g.deleted_at IS NULL AND g.mobile IS NOT NULL AND g.mobile <> ''
-            ORDER BY g.mobile, sg.is_primary DESC`,
+        // the family's mobiles and emails on file (up to two of each): the code goes to all of them
+        const g = await c.query<{ mobile: string | null; email: string | null }>(
+          `SELECT g.mobile, g.email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+            WHERE sg.student_id = $1 AND g.deleted_at IS NULL ORDER BY sg.is_primary DESC, g.id`,
           [studentId],
         );
-        to = g.rows.map((x) => x.mobile).slice(0, 2);
+        const mobiles = [
+          ...new Set(
+            g.rows.map((x) => x.mobile).filter((m): m is string => !!m && m.trim() !== ''),
+          ),
+        ];
+        const emails = [
+          ...new Set(
+            g.rows
+              .map((x) => x.email?.trim().toLowerCase())
+              .filter((m): m is string => !!m && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)),
+          ),
+        ];
+        to = [...mobiles.slice(0, 2), ...emails.slice(0, 2)];
         if (!to.length)
           throw new DomainError(
             'consent.no_mobile',
-            'The school has no mobile number for this pupil: please contact the school office',
+            'The school has no mobile number or email for this pupil: please contact the school office',
             { status: 409 },
           );
         address = address.toUpperCase();
@@ -457,6 +476,7 @@ export class ConsentPublicService {
     header: string | undefined,
     rid: string,
     base: RequestContext,
+    gatewayId?: string,
   ) {
     return this.withUser(schoolCode, token, header, async (c, f, u) => {
       await this.owned(c, f, u, rid);
@@ -485,6 +505,7 @@ export class ConsentPublicService {
         returnUrl: `${this.env.PUBLIC_APP_URL}/${schoolCode.toLowerCase()}/consent/${f.public_token}`,
         createdByUser: null,
         requestId: base.requestId,
+        gatewayId: gatewayId ?? null,
       });
       return {
         intent: {

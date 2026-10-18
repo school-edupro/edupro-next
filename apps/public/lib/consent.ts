@@ -47,6 +47,7 @@ export interface ConsentInfo {
   outsiders: boolean;
   fee: ConsentFee;
   approval: boolean;
+  gateways: Array<{ id: string; label: string }>;
 }
 export interface ConsentMe {
   mode: 'outsider' | 'family';
