@@ -534,6 +534,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-3);
+  /* buttons sit level with the inputs, not stretched to the band's height */
+  align-items: flex-end;
   margin-bottom: var(--sp-5);
 }
 

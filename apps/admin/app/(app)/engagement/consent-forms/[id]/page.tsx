@@ -396,7 +396,8 @@ export default async function ConsentFormPage({
             {channelPicks('consent_form_reminder')}
             {readiness('consent_form_reminder')}
             <div>
-              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+              <button type="submit" className="ep-btn ep-btn--primary">
+                <Icon name="send" size={16} />
                 Remind {pending} (app{templates.length ? ' and the chosen channels' : ''})
               </button>
             </div>
@@ -493,20 +494,23 @@ export default async function ConsentFormPage({
                 maxLength={80}
               />
             </label>
-            <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            <button type="submit" className="ep-btn ep-btn--primary">
+              <Icon name="search" size={16} />
               Show
             </button>
             <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', marginLeft: 'auto' }}>
               <a
-                className="ep-btn ep-btn--secondary ep-btn--sm"
+                className="ep-btn ep-btn--secondary"
                 href={`/api/consent-forms/file?${fileQs}&format=xlsx`}
               >
+                <Icon name="download" size={16} />
                 Excel
               </a>
               <a
-                className="ep-btn ep-btn--secondary ep-btn--sm"
+                className="ep-btn ep-btn--secondary"
                 href={`/api/consent-forms/file?${fileQs}&format=pdf`}
               >
+                <Icon name="download" size={16} />
                 PDF
               </a>
             </span>
