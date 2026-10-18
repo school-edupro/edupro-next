@@ -330,6 +330,8 @@ const PAGES = [
   '/people/staff-transfers',
   '/people/dashboard',
   '/people/staff-dashboard',
+  '/people/staff-profile',
+  '/people/staff-profile-approvals',
   '/people/acr',
   '/people/acr/38',
   '/people/acr/print?ids=38',

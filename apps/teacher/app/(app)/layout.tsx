@@ -19,7 +19,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     throw error;
   }
   // the header badge and what waits on this person; best effort, never blocks the page
-  const [unread, approvals] = await Promise.all([
+  const [unread, approvals, profileChanges] = await Promise.all([
     bff.api
       .fetch<{ unread: number }>('/comms/inbox/unread')
       .then((r) => r.unread)
@@ -28,6 +28,10 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
       .then((r) => r.data.length)
       .catch(() => 0),
+    bff.api
+      .fetch<{ awaitingMe: number }>('/people/staff-profile-approvals')
+      .then((r) => r.awaitingMe)
+      .catch(() => 0),
   ]);
   return (
     <StaffShell
@@ -35,7 +39,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       lang={lang}
       currentPath={currentPath}
       unread={unread}
-      waiting={{ approvals }}
+      waiting={{ approvals, profileChanges }}
     >
       {children}
     </StaffShell>

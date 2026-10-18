@@ -203,7 +203,9 @@
     "acrSetup": "ACR सेट-अप",
     "employeeAcr": "कर्मचारी ACR",
     "studentDashboard": "छात्र डैशबोर्ड",
-    "employeeDashboard": "कर्मचारी डैशबोर्ड"
+    "employeeDashboard": "कर्मचारी डैशबोर्ड",
+    "staffProfileApprovals": "स्टाफ़ प्रोफ़ाइल अनुमोदन",
+    "staffProfileSettings": "स्टाफ़ प्रोफ़ाइल सेटिंग"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

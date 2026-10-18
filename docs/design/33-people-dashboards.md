@@ -28,3 +28,20 @@ health of the records (what is missing, what waits for approval).
   adds the employee self-service tables (`employee_portal_policies`, `employee_change_requests`,
   `employee_change_actions`) and rights (`people.staff_profile.manage`, `people.staff_change.approve`,
   `people.staff_change.override`). Test: `apps/api/test/people-dashboard.e2e-spec.ts`.
+- Part 2 (employee self-service): `packages/db/src/employee-portal.ts` (levels, office-only keys: code,
+  machine id, official email, employment, approvers; defaults: personal / contact / address / IDs / bank
+  change with approval, statutory shown); API `employee-self.service.ts`:
+  - staff: `GET me/employee-profile`, `POST me/employee-profile/changes`,
+    `POST me/employee-change-requests/:id/cancel`, `POST me/employee-profile/print` (own copy, ID numbers
+    in full, hidden fields left out; the worker checks it is the requester's own record), `GET me/exports/:id`;
+  - school: `GET/PUT people/staff-profile/policy` (`people.staff_profile.manage`);
+  - approvers: `GET people/staff-profile-approvals` (mine / all / decided), `POST …/:id/decide` (field by
+    field; a reason when refusing; the last step or an override applies; stale check), `POST …/bulk`,
+    `GET …/:id/proofs/:fileId`. Open to any signed-in user: the HOD / L1 / L2 from the record decide what
+    is routed to them; HR (`people.employee.edit`) and override holders see all. Accepted proofs become
+    the employee's documents.
+- Admin: Employee management → **Staff profile approvals**, **Staff profile settings** (fields and
+  documents, approvers with up to two steps per section, update window).
+- Staff app: Office → **My profile** (sections, update per section with proofs, my requests with
+  withdraw, Download PDF) and **Profile changes to approve** (shown when something waits on me).
+- Test: `apps/api/test/employee-self.e2e-spec.ts`.

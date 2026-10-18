@@ -1,0 +1,50 @@
+/** My employee profile in the staff app (me/employee-profile, docs/design/33-people-dashboards.md). */
+export type Level = 'hidden' | 'view' | 'edit_approval' | 'edit_direct';
+export type Value = string | number | boolean | null;
+export interface MyField {
+  key: string;
+  label: string;
+  type: string;
+  level: Level;
+  value: Value;
+  options: string[] | null;
+  help: string | null;
+  required: boolean;
+  upper: boolean;
+  when: { key: string; in?: string[]; notIn?: string[] } | null;
+  proof: { typeId: string; name: string } | null;
+  pending?: Value;
+}
+export interface MyRequest {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected' | 'partially_approved' | 'cancelled';
+  autoApplied: boolean;
+  createdAt: string;
+  decidedAt: string | null;
+  note: string | null;
+  reason: string | null;
+  step: { at: number; of: number; with: string } | null;
+  fields: Array<{
+    key: string;
+    label: string;
+    from: Value;
+    to: Value;
+    status: string;
+    note: string | null;
+  }>;
+}
+export interface MyProfile {
+  employee: { id: string; name: string; code: string; photo: string | null; status: string };
+  sections: Array<{ id: string; title: string; fields: MyField[] }>;
+  window: { open: boolean; message: string | null; until: string | null };
+  canEdit: boolean;
+  completeness: { percent: number; missing: string[] };
+  requests: MyRequest[];
+}
+export const editable = (f: MyField) => f.level === 'edit_approval' || f.level === 'edit_direct';
+export const shown = (v: Value): string => {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  const s = String(v);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}` : s;
+};

@@ -8554,3 +8554,19 @@ a.db-list__main:hover strong {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* my profile (staff app): label and value pairs in two columns where there is room */
+.ep-myprofile {
+  display: grid;
+  gap: var(--sp-2) var(--sp-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  margin: var(--sp-3) 0 0;
+}
+.ep-myprofile dt {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-myprofile dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

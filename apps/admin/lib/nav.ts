@@ -59,6 +59,16 @@ export const NAV: Array<{
         permission: 'people.staff_transfer.manage',
       },
       { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
+      {
+        href: '/people/staff-profile-approvals',
+        label: 'staffProfileApprovals',
+        permission: 'people.staff_change.approve',
+      },
+      {
+        href: '/people/staff-profile',
+        label: 'staffProfileSettings',
+        permission: 'people.staff_profile.manage',
+      },
       { href: '/people/acr', label: 'employeeAcr', permission: 'people.acr.view' },
       { href: '/people/acr/setup', label: 'acrSetup', permission: 'people.acr.view' },
     ],

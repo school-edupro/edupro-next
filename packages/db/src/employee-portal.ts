@@ -32,6 +32,8 @@ export interface EmployeePortalPolicy {
 export const EMPLOYEE_OFFICE_ONLY: ReadonlySet<string> = new Set([
   'employee_code',
   'biometric_id',
+  // the school-issued address (it may be the login)
+  'email',
   ...EMPLOYEE_FIELDS.filter((f) => f.section === 'employment' || f.section === 'approvers').map(
     (f) => f.key,
   ),

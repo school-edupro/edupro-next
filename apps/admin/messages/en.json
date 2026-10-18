@@ -203,7 +203,9 @@
     "acrSetup": "ACR set-up",
     "employeeAcr": "Employee ACR",
     "studentDashboard": "Student dashboard",
-    "employeeDashboard": "Employee dashboard"
+    "employeeDashboard": "Employee dashboard",
+    "staffProfileApprovals": "Staff profile approvals",
+    "staffProfileSettings": "Staff profile settings"
   },
   "shell": {
     "primaryNavigation": "Primary",

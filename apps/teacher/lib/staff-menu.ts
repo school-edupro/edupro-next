@@ -16,6 +16,8 @@ export interface StaffItem {
 /** What waits on this person (from the home's counts; a screen with work waiting is always shown). */
 export interface StaffWaiting {
   approvals: number;
+  /** staff profile changes routed to me */
+  profileChanges?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -148,6 +150,18 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Office orders',
         help: 'Orders and circulars the school issued for staff',
         allowed: (can) => can('academics.notice.view'),
+      },
+      {
+        href: '/profile',
+        label: 'My profile',
+        help: 'My details as the school has them; update them, download as PDF',
+        allowed: always,
+      },
+      {
+        href: '/profile/approvals',
+        label: 'Profile changes to approve',
+        help: 'Changes colleagues asked for on their profile, routed to you',
+        allowed: (_can, w) => (w.profileChanges ?? 0) > 0,
       },
       {
         href: '/acr',
