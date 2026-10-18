@@ -324,3 +324,19 @@ export async function removeEmployeeDocument(fd: FormData) {
   revalidatePath(`/people/employees/${id}`);
   redirect(`${page}&ok=removed`);
 }
+
+/** Asks for the profile PDF; the page then waits for it (View to print, Download to save). */
+export async function requestEmployeePrint(fd: FormData) {
+  const id = str(fd, 'id');
+  const tab = str(fd, 'tab') || 'profile';
+  if (!okId(id)) redirect('/people/employees');
+  let exportId = '';
+  try {
+    exportId = (
+      await apiFetch<{ id: string }>(`${BASE}/${id}/print`, { method: 'POST', body: '{}' })
+    ).id;
+  } catch (error) {
+    back(`/people/employees/${id}`, error);
+  }
+  redirect(`/people/employees/${id}?tab=${encodeURIComponent(tab)}&export=${exportId}`);
+}

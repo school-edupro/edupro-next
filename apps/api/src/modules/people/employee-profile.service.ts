@@ -15,6 +15,7 @@ import {
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { FilesService } from '../files/files.service';
+import { ReportsService } from '../reports/reports.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -107,7 +108,31 @@ export class EmployeeProfileService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly files: FilesService,
+    private readonly reports: ReportsService,
   ) {}
+
+  /** The employee profile printout (A4 PDF on the letterhead), as an export the screen waits for. */
+  async requestPrint(ctx: RequestContext, id: string) {
+    const code = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ code: string }>(
+        `SELECT employee_code AS code FROM employees WHERE id = $1 AND deleted_at IS NULL`,
+        [id],
+      );
+      if (!r.rows[0]) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      return r.rows[0].code;
+    });
+    return this.reports.create(
+      ctx,
+      {
+        dataset: 'employee_profile',
+        format: 'pdf',
+        // the worker re-checks the requester's permission before printing full ID numbers
+        params: { employeeId: id },
+        title: `Employee profile ${code}`,
+      },
+      'people.employee.profile_print',
+    );
+  }
 
   async catalogue(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {

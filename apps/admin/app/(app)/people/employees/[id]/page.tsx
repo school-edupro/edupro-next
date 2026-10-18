@@ -18,10 +18,12 @@ import { Icon } from '@/components/nav-icons';
 import { EmployeeProfileEditor } from '@/components/employees/EmployeeProfileEditor';
 import { ChipPickerField } from '@/components/ChipPickerField';
 import { FileLinks } from '@/components/FileLinks';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { requestEmployeeIdCard, upsertPosting } from '@/lib/actions';
 import {
   createEmployeeLogin,
   removeEmployeeDocument,
+  requestEmployeePrint,
   removeEmployeeRow,
   saveEmployeeProfile,
   saveEmployeeRow,
@@ -70,7 +72,13 @@ export default async function EmployeePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    ok?: string;
+    error?: string;
+    detail?: string;
+    export?: string;
+  }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -159,6 +167,13 @@ export default async function EmployeePage({
             ) : (
               <Badge tone="neutral">No login</Badge>
             )}
+            <form action={requestEmployeePrint}>
+              <input type="hidden" name="id" value={id} />
+              <input type="hidden" name="tab" value={tab} />
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                <Icon name="file" size={16} /> Profile PDF
+              </button>
+            </form>
             <form action={requestEmployeeIdCard}>
               <input type="hidden" name="id" value={employee.id} />
               <Button type="submit" variant="secondary" size="sm">
@@ -169,6 +184,20 @@ export default async function EmployeePage({
         }
       />
       <Notice params={{ ...sp, detail: sp.ok ? (OK[sp.ok] ?? 'Done.') : sp.detail }} />
+      {sp.export && /^\d{1,18}$/.test(sp.export) ? (
+        <ExportWatcher
+          id={sp.export}
+          format="pdf"
+          labels={{
+            queued: 'Employee profile PDF requested',
+            ready: 'Employee profile PDF',
+            pending: 'Preparing the PDF… open it to print, or download it',
+            failed: 'The PDF could not be made',
+            stuck:
+              'Still waiting after a minute: the workers service prepares files; check that it is running',
+          }}
+        />
+      ) : null}
       <nav className="ep-tabs-links" aria-label="Employee" style={{ marginBottom: 'var(--sp-4)' }}>
         {TABS.map(([k, label]) => (
           <a

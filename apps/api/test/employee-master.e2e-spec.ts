@@ -841,4 +841,15 @@ describe('employee master (e2e)', () => {
     // the school edits the list in Staff setup
     expect((await get('/masters/employee_document_types/rows')).statusCode).toBe(200);
   });
+
+  it('the profile PDF is queued as an export (the workers render it)', async () => {
+    const r = await post(`/people/staff/${ids.asha}/print`, {});
+    expect(r.statusCode).toBe(201);
+    expect(r.json()).toMatchObject({
+      dataset: 'employee_profile',
+      format: 'pdf',
+      status: 'queued',
+    });
+    expect((await post('/people/staff/999999999/print', {})).statusCode).toBe(404);
+  });
 });

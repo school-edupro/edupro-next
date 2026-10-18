@@ -169,6 +169,13 @@ export class EmployeeProfileController {
     return this.svc.createLogin(ctx, id);
   }
 
+  @Post(':id/print')
+  @ApiOperation({ summary: 'The employee profile as an A4 PDF (an export to wait for)' })
+  @RequirePermission(PEOPLE.employeeView)
+  print(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.requestPrint(ctx, id);
+  }
+
   @Put(':id/subjects')
   @ApiOperation({ summary: 'Teaching subjects (from Academics → Subjects)' })
   @RequirePermission(PEOPLE.employeeEdit)

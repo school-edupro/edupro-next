@@ -31,6 +31,8 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
   and Remove. Remarks written by the system (onboarded, leaving) stay.
 - A **date of leaving** makes the employee inactive.
 - **Make a staff login** for someone who has none.
+- **Profile PDF** (top of the page): the whole profile on the school letterhead; open it to print, or
+  download it. ID numbers show in full only for the Sensitive data viewer role.
 
 ## Documents for employment (open an employee → Documents)
 

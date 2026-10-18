@@ -28,6 +28,13 @@ export const RENDERERS: Record<string, RendererDefinition> = {
     page: { width: '210mm', height: '297mm' },
     requiredParams: ['studentId'],
   },
+  employee_profile: {
+    id: 'employee_profile',
+    title: 'Employee profile',
+    permission: 'people.employee.view',
+    page: { width: '210mm', height: '297mm' },
+    requiredParams: ['employeeId'],
+  },
   employee_id_card: {
     id: 'employee_id_card',
     title: 'Employee ID card',

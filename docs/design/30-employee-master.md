@@ -120,4 +120,11 @@ experience, remarks and transfers). Built in three parts.
   `people.document.view`). List columns "Required documents missing" and "Documents" (Complete /
   Pending).
 - **Posting**: department and designation are the Staff setup lists (a value from before stays shown).
+- **Profile PDF** (renderer `employee_profile`, `POST people/staff/:id/print`): A4 on the letterhead —
+  photo and key facts (code, type, designation, department, joining, service, birth, contact, campus,
+  reports to), every section with the filled fields that apply, teaching subjects, education, languages,
+  experience, transfers, the documents for employment (required / on file / checked), declaration and
+  signature lines (employee, HR, Principal); Aadhaar / PAN / account masked unless the requester holds
+  `people.sensitive.view` today (checked by the worker). "Profile PDF" on the employee page waits for it:
+  View (to print) and Download. Test: `apps/workers/test/employee-profile.test.ts`.
 
