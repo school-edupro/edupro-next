@@ -7,6 +7,11 @@ import {
   type ChartTone,
 } from '@/components/charts/Charts';
 import { Icon } from '@/components/nav-icons';
+import {
+  ProjectionPanel,
+  type ProjectionBy,
+  type ProjectionPeriod,
+} from '@/components/fees/ProjectionPanel';
 import { apiFetch } from '@/lib/api';
 
 type Ledger = 'all' | 'school' | 'hostel' | 'misc';
@@ -25,6 +30,8 @@ interface Split {
 }
 interface FeeDashboard {
   year: { id: string; code: string };
+  by: ProjectionBy;
+  periods: ProjectionPeriod[];
   asOf: string;
   totals: Omit<Split, 'ledger'>;
   split: Split[];
@@ -121,11 +128,23 @@ const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 export default async function FeeDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ledger?: string }>;
+  searchParams: Promise<{ ledger?: string; by?: string }>;
 }) {
   const sp = await searchParams;
   const ledger: Ledger = LEDGERS.some(([k]) => k === sp.ledger) ? (sp.ledger as Ledger) : 'all';
-  const d = await apiFetch<FeeDashboard>(`/fees/dashboard?ledger=${ledger}`);
+  const by: ProjectionBy = ['month', 'term'].includes(sp.by ?? '')
+    ? (sp.by as ProjectionBy)
+    : 'quarter';
+  const d = await apiFetch<FeeDashboard>(`/fees/dashboard?ledger=${ledger}&by=${by}`);
+  // the page's own address with the ledger and the cut of the year kept
+  const href = (patch: { ledger?: Ledger; by?: ProjectionBy }) => {
+    const q = new URLSearchParams();
+    const l = patch.ledger ?? ledger;
+    const b = patch.by ?? by;
+    if (l !== 'all') q.set('ledger', l);
+    if (b !== 'quarter') q.set('by', b);
+    return `/fees/dashboard${q.size ? `?${q.toString()}` : ''}`;
+  };
   const t = d.totals;
   const rate = pct(t.paidOfDue, t.dueTillDate);
   const ledgersShown = d.split.map((x) => x.ledger);
@@ -155,15 +174,18 @@ export default async function FeeDashboardPage({
       />
       <nav className="ep-tabs-links" aria-label="Ledger" style={{ marginBottom: 'var(--sp-4)' }}>
         {LEDGERS.map(([k, label]) => (
-          <a
-            key={k}
-            href={k === 'all' ? '/fees/dashboard' : `/fees/dashboard?ledger=${k}`}
-            aria-current={ledger === k ? 'page' : undefined}
-          >
+          <a key={k} href={href({ ledger: k })} aria-current={ledger === k ? 'page' : undefined}>
             {label}
           </a>
         ))}
       </nav>
+
+      <ProjectionPanel
+        title={`Projection vs collection${ledger === 'all' ? '' : ` · ${NAME[ledger]}`}`}
+        periods={d.periods}
+        by={by}
+        hrefFor={(b) => href({ by: b })}
+      />
 
       <h2 className="ep-sr-only">Collected and due</h2>
       {/* rupee amounts are long: wider tiles than the usual stats row */}

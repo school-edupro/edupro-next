@@ -5,6 +5,27 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 
 export type DashLedger = 'all' | 'school' | 'hostel' | 'misc';
+/** how the year is cut for projection vs collection: quarters (default), months or the fee terms */
+export type DashBy = 'quarter' | 'month' | 'term';
+interface Bucket {
+  key: string;
+  label: string;
+  start: string;
+  end: string;
+}
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** first day of the month n months after a YYYY-MM-DD date, as YYYY-MM-DD */
+const addMonths = (d: string, n: number) => {
+  const y = Number(d.slice(0, 4));
+  const m = Number(d.slice(5, 7)) - 1 + n;
+  const yy = y + Math.floor(m / 12);
+  const mm = ((m % 12) + 12) % 12;
+  return `${String(yy)}-${String(mm + 1).padStart(2, '0')}-01`;
+};
+const dayBefore = (d: string) =>
+  new Date(Date.parse(`${d}T00:00:00Z`) - 864e5).toISOString().slice(0, 10);
+const mon = (d: string) => MON[Number(d.slice(5, 7)) - 1]!;
+const yy = (d: string) => d.slice(2, 4);
 type Row = Record<string, unknown>;
 
 /*
@@ -36,7 +57,12 @@ const BUCKET = `CASE WHEN $3::date <= due_on THEN 'current' WHEN $3::date - due_
 export class FeeDashboardService {
   constructor(private readonly db: DbService) {}
 
-  async dashboard(ctx: RequestContext, ledger: DashLedger, yearId?: string) {
+  async dashboard(
+    ctx: RequestContext,
+    ledger: DashLedger,
+    yearId?: string,
+    by: DashBy = 'quarter',
+  ) {
     const t = requireTenant(ctx);
     return this.db.tenant(t, async (c) => {
       const year = await this.year(c, yearId ?? t.academicYearId ?? undefined);
@@ -291,11 +317,40 @@ export class FeeDashboardService {
           GROUP BY coll.received_by, u.display_name, coll.intent_id IS NOT NULL ORDER BY sum(coll.amount) DESC`,
       );
 
+      // ---- projection (demand due) vs realised (paid of it) and received, by period -------------
+      const buckets = await this.buckets(c, year, by);
+      const per = await q<{ k: string; projection: string; realised: string; received: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed CTE constants; values are bound parameters
+        `WITH ${DUES}, ${COLL}, b AS (SELECT * FROM unnest($4::date[], $5::date[], $6::text[]) AS b(s, e, k))
+         SELECT b.k,
+                (SELECT COALESCE(sum(GREATEST(net, 0)), 0) FROM dues WHERE due_on BETWEEN b.s AND b.e)::text AS projection,
+                (SELECT COALESCE(sum(LEAST(GREATEST(paid, 0), GREATEST(net, 0))), 0) FROM dues WHERE due_on BETWEEN b.s AND b.e)::text AS realised,
+                (SELECT COALESCE(sum(amount), 0) FROM coll WHERE ${IN} AND received_on BETWEEN b.s AND b.e AND received_on <= $3::date)::text AS received
+           FROM b`,
+        [...p, buckets.map((x) => x.start), buckets.map((x) => x.end), buckets.map((x) => x.key)],
+      );
+      const periods = buckets.map((b) => {
+        const r = per.find((x) => x.k === b.key);
+        const projection = Number(r?.projection ?? 0);
+        const realised = Number(r?.realised ?? 0);
+        return {
+          ...b,
+          current: b.start <= asOf && asOf <= b.end,
+          past: b.end < asOf,
+          projection,
+          realised,
+          received: Number(r?.received ?? 0),
+          balance: Math.max(0, projection - realised),
+        };
+      });
+
       const num = (s: string) => Number(s);
       return {
         year: { id: year.id, code: year.code },
         asOf,
         ledger,
+        by,
+        periods,
         totals,
         split,
         byClass: byClass.map((x) => ({
@@ -369,6 +424,192 @@ export class FeeDashboardService {
           amount: num(x.amount),
           cash: num(x.cash),
           receipts: x.receipts,
+        })),
+      };
+    });
+  }
+
+  /** The year cut into quarters (from its first month), months, or the fee terms (instalments). */
+  private async buckets(
+    c: PoolClient,
+    year: { id: string; start: string; end: string },
+    by: DashBy,
+  ): Promise<Bucket[]> {
+    const first = `${year.start.slice(0, 7)}-01`;
+    if (by === 'term') {
+      const t = await c.query<{ instalment: number; s: string; e: string }>(
+        `SELECT instalment, min(make_date(year, month, 1))::text AS s, max(make_date(year, month, 1))::text AS e
+           FROM fee_periods WHERE academic_year_id = $1 GROUP BY instalment ORDER BY min(make_date(year, month, 1))`,
+        [year.id],
+      );
+      // a term runs from its first month until the next term begins (the last one: the year's end)
+      if (t.rows.length)
+        return t.rows.map((x, i) => {
+          const next = t.rows[i + 1];
+          const end = next ? dayBefore(next.s) : year.end;
+          return {
+            key: `t${String(x.instalment)}`,
+            label: `Term ${String(x.instalment)} (${mon(x.s)}${x.s.slice(0, 7) === end.slice(0, 7) ? '' : `–${mon(end)}`} ${yy(end)})`,
+            start: i === 0 && x.s > year.start ? year.start : x.s,
+            end,
+          };
+        });
+      // no fee terms set: quarters
+    }
+    const step = by === 'month' ? 1 : 3;
+    const out: Bucket[] = [];
+    for (let i = 0; i < 12; i += step) {
+      const s = addMonths(first, i);
+      const e = dayBefore(addMonths(first, i + step));
+      out.push({
+        key: by === 'month' ? s.slice(0, 7) : `q${String(i / 3 + 1)}`,
+        label:
+          by === 'month'
+            ? `${mon(s)} ${yy(s)}`
+            : `Q${String(i / 3 + 1)} ${mon(s)}–${mon(e)} ${yy(e)}`,
+        start: s,
+        end: e,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The transport fee by period: demand due on the transport heads (projection), paid of it (realised),
+   * money received for it (receipts split onto those demands), and the bus list (monthly fare x months
+   * riding) against what was billed, with riders not billed; the current period by route; who owes most.
+   */
+  async transport(ctx: RequestContext, by: DashBy = 'quarter') {
+    const t = requireTenant(ctx);
+    return this.db.tenant(t, async (c) => {
+      const year = await this.year(c, t.academicYearId ?? undefined);
+      const today = (
+        await c.query<{ d: string }>(`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS d`)
+      ).rows[0]!.d;
+      const asOf = today < year.start ? year.start : today > year.end ? year.end : today;
+      const buckets = await this.buckets(c, year, by);
+      const TD = `tdues AS (
+        SELECT d.id, d.student_id, d.net, d.paid, d.due_on FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id AND h.kind = 'transport'
+         WHERE d.academic_year_id = $1 AND d.status IN ('pending', 'partial', 'paid'))`;
+      // a rider's route and stop this year (pick-up, else drop)
+      const RIDE = `ride AS (
+        SELECT DISTINCT ON (t.student_id) t.student_id, COALESCE(t.pick_route_id, t.drop_route_id) AS route_id,
+               COALESCE(t.pick_stop_id, t.drop_stop_id) AS stop_id
+          FROM student_transport t WHERE t.academic_year_id = $1 AND t.status <> 'cancelled'
+         ORDER BY t.student_id, (t.status = 'active') DESC, t.created_at DESC)`;
+      const per = await c.query<{
+        k: string;
+        projection: string;
+        realised: string;
+        received: string;
+        expected: string;
+        riders: number;
+        unbilled: number;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed CTE constants; values are bound parameters
+        `WITH ${TD}, b AS (SELECT * FROM unnest($2::date[], $3::date[], $4::text[]) AS b(s, e, k))
+         SELECT b.k,
+                (SELECT COALESCE(sum(GREATEST(net, 0)), 0) FROM tdues WHERE due_on BETWEEN b.s AND b.e)::text AS projection,
+                (SELECT COALESCE(sum(LEAST(GREATEST(paid, 0), GREATEST(net, 0))), 0) FROM tdues WHERE due_on BETWEEN b.s AND b.e)::text AS realised,
+                (SELECT COALESCE(sum(a.amount), 0) FROM fee_payment_allocations a JOIN fee_payments p ON p.id = a.payment_id
+                   JOIN tdues d ON d.id = a.demand_id
+                  WHERE p.status::text NOT IN ('reversed', 'bounced') AND p.received_on BETWEEN b.s AND b.e AND p.received_on <= $5::date)::text AS received,
+                (SELECT COALESCE(sum(t.monthly_amount), 0) FROM student_transport t
+                   CROSS JOIN generate_series(date_trunc('month', b.s), date_trunc('month', b.e), interval '1 month') m
+                  WHERE t.academic_year_id = $1 AND t.status <> 'cancelled' AND m::date BETWEEN t.from_month AND t.to_month)::text AS expected,
+                (SELECT count(DISTINCT t.student_id) FROM student_transport t
+                  WHERE t.academic_year_id = $1 AND t.status <> 'cancelled' AND t.from_month <= b.e AND t.to_month >= date_trunc('month', b.s))::int AS riders,
+                (SELECT count(DISTINCT t.student_id) FROM student_transport t
+                  WHERE t.academic_year_id = $1 AND t.status <> 'cancelled' AND t.from_month <= b.e AND t.to_month >= date_trunc('month', b.s)
+                    AND b.s <= $5::date
+                    AND NOT EXISTS (SELECT 1 FROM tdues d WHERE d.student_id = t.student_id AND d.due_on BETWEEN b.s AND b.e))::int AS unbilled
+           FROM b`,
+        [
+          year.id,
+          buckets.map((x) => x.start),
+          buckets.map((x) => x.end),
+          buckets.map((x) => x.key),
+          asOf,
+        ],
+      );
+      const periods = buckets.map((b) => {
+        const r = per.rows.find((x) => x.k === b.key);
+        const projection = Number(r?.projection ?? 0);
+        const realised = Number(r?.realised ?? 0);
+        return {
+          ...b,
+          current: b.start <= asOf && asOf <= b.end,
+          past: b.end < asOf,
+          projection,
+          realised,
+          received: Number(r?.received ?? 0),
+          balance: Math.max(0, projection - realised),
+          expected: Number(r?.expected ?? 0),
+          riders: r?.riders ?? 0,
+          unbilled: r?.unbilled ?? 0,
+        };
+      });
+      const cur = periods.find((x) => x.current) ?? periods.at(-1)!;
+      const routes = await c.query<{
+        route: string;
+        riders: number;
+        projection: string;
+        realised: string;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed CTE constants; values are bound parameters
+        `WITH ${TD}, ${RIDE}
+         SELECT COALESCE(r.code || ' · ' || r.name, 'No route') AS route, count(DISTINCT d.student_id)::int AS riders,
+                sum(GREATEST(d.net, 0))::text AS projection, sum(LEAST(GREATEST(d.paid, 0), GREATEST(d.net, 0)))::text AS realised
+           FROM tdues d LEFT JOIN ride ON ride.student_id = d.student_id LEFT JOIN transport_routes r ON r.id = ride.route_id
+          WHERE d.due_on BETWEEN $2::date AND $3::date
+          GROUP BY r.code, r.name ORDER BY r.code NULLS LAST`,
+        [year.id, cur.start, cur.end],
+      );
+      const defaulters = await c.query<{
+        student_id: string;
+        name: string;
+        admission_no: string;
+        section: string | null;
+        route: string | null;
+        stop: string | null;
+        balance: string;
+        days: number;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed CTE constants; values are bound parameters
+        `WITH ${TD}, ${RIDE}
+         SELECT d.student_id::text, s.display_name AS name, s.admission_no,
+                (SELECT k.name || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                  WHERE e.student_id = d.student_id AND e.academic_year_id = $1 AND e.status = 'active' LIMIT 1) AS section,
+                max(r.code || ' · ' || r.name) AS route, max(st.name) AS stop,
+                sum(d.net - d.paid)::text AS balance, max($2::date - d.due_on)::int AS days
+           FROM tdues d JOIN students s ON s.id = d.student_id
+           LEFT JOIN ride ON ride.student_id = d.student_id LEFT JOIN transport_routes r ON r.id = ride.route_id
+           LEFT JOIN transport_stops st ON st.id = ride.stop_id
+          WHERE d.net > d.paid AND d.due_on < $2::date
+          GROUP BY d.student_id, s.display_name, s.admission_no ORDER BY sum(d.net - d.paid) DESC LIMIT 15`,
+        [year.id, asOf],
+      );
+      return {
+        year: { id: year.id, code: year.code },
+        asOf,
+        by,
+        periods,
+        current: { key: cur.key, label: cur.label },
+        routes: routes.rows.map((x) => ({
+          route: x.route,
+          riders: x.riders,
+          projection: Number(x.projection),
+          realised: Number(x.realised),
+        })),
+        defaulters: defaulters.rows.map((x) => ({
+          studentId: x.student_id,
+          name: x.name,
+          admissionNo: x.admission_no,
+          section: x.section,
+          route: x.route,
+          stop: x.stop,
+          balance: Number(x.balance),
+          days: x.days,
         })),
       };
     });

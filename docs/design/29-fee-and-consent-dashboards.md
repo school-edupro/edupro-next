@@ -24,6 +24,25 @@ India, held inside the year (a past year shows its last day).
   by the person who took it (cash and total).
 - Test: `apps/api/test/fee-dashboard.e2e-spec.ts` (each block against hand-worked figures).
 
+### Projection vs collection (top of the fee dashboard; 18 Oct 2026)
+
+`?by=quarter|month|term` (quarterly by default). Quarters run from the year's first month (Apr–Jun …);
+months are the twelve; fee terms are the instalments of the fee periods, each running from its first
+month until the next term begins (the first from the year's start, the last to its end). Per period:
+**projection** = fee due in it after discounts (positive demands; misc by last date); **realised** = how
+much of that is paid, whenever paid; **received** = money that came in during the period (cash-flow,
+only up to today); balance; and "so far" = realised of the due of the periods begun. The ledger filter
+applies.
+
+### Transport fee (top of `/transport`, `GET /fees/dashboard/transport?by=…`)
+
+Permission `transport.request.view` (as the transport dashboard). Only the fee heads of kind
+`transport`. Received = the parts of receipts allocated to those demands (`fee_payment_allocations`),
+received in the period. **Bus list** = monthly fare × months riding of the pupils on the bus list
+(`student_transport`, not cancelled) against what was billed, and **riding, not billed** = riders with
+no transport fee due in a period begun. With it: the current period by route (realised of due) and the
+pupils owing most transport fee with route and stop.
+
 ## Consent dashboard (`/engagement/consent-forms/dashboard`, `GET /engagement/consent-forms/dashboard`)
 
 Managers see every published or closed form; anyone else only the forms shared with them (doc 28).

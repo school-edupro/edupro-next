@@ -201,4 +201,88 @@ describe('fee dashboard (e2e)', () => {
     expect(school.totals).toMatchObject({ collectedYear: 650, dueTillDate: 1000, paidOfDue: 400 });
     expect((await get('/fees/dashboard?ledger=bus')).statusCode).toBe(400);
   });
+
+  it('projection vs collection by quarter, month or fee term: due, realised of it, received in it', async () => {
+    const q = (await get('/fees/dashboard')).json();
+    expect(q.by).toBe('quarter');
+    expect(q.periods.map((p: { key: string }) => p.key)).toEqual(['q1', 'q2', 'q3', 'q4']);
+    expect(q.periods[0]).toMatchObject({
+      label: 'Q1 Apr–Jun 26',
+      start: '2026-04-01',
+      end: '2026-06-30',
+    });
+    const sum = (k: string, ps: Array<Record<string, number>>) => ps.reduce((n, p) => n + p[k]!, 0);
+    // the whole year: every due (the credit not counted), paid of it, and the 700 received today
+    expect(sum('projection', q.periods)).toBe(3650);
+    expect(sum('realised', q.periods)).toBe(450);
+    expect(sum('received', q.periods)).toBe(700);
+    expect(q.periods.filter((p: { current: boolean }) => p.current)).toHaveLength(1);
+    const m = (await get('/fees/dashboard?by=month&ledger=school')).json();
+    expect(m.periods).toHaveLength(12);
+    expect(m.periods[0].label).toBe('Apr 26');
+    expect(sum('projection', m.periods)).toBe(1500);
+    // two fee terms (April and October): the first runs until October begins
+    const t = (await get('/fees/dashboard?by=term')).json();
+    expect(
+      t.periods.map((p: { label: string; start: string; end: string }) => [
+        p.label,
+        p.start,
+        p.end,
+      ]),
+    ).toEqual([
+      ['Term 1 (Apr–Sep 26)', '2026-04-01', '2026-09-30'],
+      ['Term 2 (Oct–Mar 27)', '2026-10-01', '2026-03-31'.replace('2026', '2027')],
+    ]);
+    expect(sum('projection', t.periods)).toBe(3650);
+    expect((await get('/fees/dashboard?by=week')).statusCode).toBe(400);
+  });
+
+  it('transport: the transport heads only, received through the split of receipts, bus list vs billed', async () => {
+    await withMigrator(async (c) => {
+      const today = `(now() AT TIME ZONE 'Asia/Kolkata')::date`;
+      const h = await c.query<{ id: string }>(
+        `INSERT INTO fee_heads (school_id, code, name, kind) VALUES ($1, 'TRN', 'Transport', 'transport') RETURNING id::text`,
+        [school.id],
+      );
+      const per = await c.query<{ id: string }>(
+        `SELECT id::text FROM fee_periods WHERE academic_year_id = $1 ORDER BY sequence LIMIT 1`,
+        [school.yearId],
+      );
+      // ana: 600 of transport fee due 10 days ago, 250 of it paid through a receipt today
+      const d = await c.query<{ id: string }>(
+        `INSERT INTO fee_demands (school_id, student_id, academic_year_id, period_id, head_id, gross, net, paid, status, due_on)
+         VALUES ($1, $2, $3, $4, $5, 600, 600, 250, 'partial', ${today} - 10) RETURNING id::text`,
+        [school.id, ids.ana, school.yearId, per.rows[0]!.id, h.rows[0]!.id],
+      );
+      const p = await c.query<{ id: string }>(
+        `INSERT INTO fee_payments (school_id, student_id, academic_year_id, amount, received_on, mode, ledger)
+         VALUES ($1, $2, $3, 250, ${today}, 'cash', 'school') RETURNING id::text`,
+        [school.id, ids.ana, school.yearId],
+      );
+      await c.query(
+        `INSERT INTO fee_payment_allocations (school_id, payment_id, demand_id, amount) VALUES ($1, $2, $3, 250)`,
+        [school.id, p.rows[0]!.id, d.rows[0]!.id],
+      );
+      // both ride all year at 100 a month; bo is never billed
+      for (const st of [ids.ana, ids.bo])
+        await c.query(
+          `INSERT INTO student_transport (school_id, student_id, academic_year_id, service, monthly_amount, from_month, to_month, status)
+           VALUES ($1, $2, $3, 'both', 100, '2026-04-01', '2027-03-01', 'active')`,
+          [school.id, st, school.yearId],
+        );
+    });
+    expect((await get('/fees/dashboard/transport', teacher)).statusCode).toBe(403);
+    const r = (await get('/fees/dashboard/transport')).json();
+    const sum = (k: string) =>
+      r.periods.reduce((n: number, p: Record<string, number>) => n + p[k]!, 0);
+    expect(sum('projection')).toBe(600);
+    expect(sum('realised')).toBe(250);
+    expect(sum('received')).toBe(250);
+    expect(sum('expected')).toBe(2 * 12 * 100);
+    const cur = r.periods.find((p: { current: boolean }) => p.current);
+    expect(cur.riders).toBe(2);
+    expect(cur.unbilled).toBeGreaterThanOrEqual(1);
+    expect(r.routes).toEqual([expect.objectContaining({ route: 'No route' })]);
+    expect(r.defaulters).toEqual([expect.objectContaining({ studentId: ids.ana, balance: 350 })]);
+  });
 });

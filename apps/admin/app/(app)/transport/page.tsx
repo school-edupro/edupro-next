@@ -1,6 +1,12 @@
 import { Alert, Badge, Card, PageHeader } from '@edupro/ui';
 import { TransportFeePanel } from '@/components/transport/TransportFeePanel';
 import { TransportNav } from '@/components/transport/TransportNav';
+import { ProgressRows } from '@/components/charts/Charts';
+import {
+  ProjectionPanel,
+  type ProjectionBy,
+  type ProjectionPeriod,
+} from '@/components/fees/ProjectionPanel';
 import { apiFetch, getMe } from '@/lib/api';
 import { dayLabel as dateLabel, monthLabel, rupees, type Replacement } from '@/lib/transport-desk';
 
@@ -165,7 +171,35 @@ const ASKED_NAMES = ['Family (portal)', 'Transport office'];
  * months (joins, changes, withdrawals, riders and the amount billed), requests day by day, how full each
  * route is, the busiest stoppages, slabs and classes, and the vehicle and driver papers running out.
  */
-export default async function TransportDashboardPage() {
+interface TransportFees {
+  periods: ProjectionPeriod[];
+  current: { key: string; label: string };
+  routes: Array<{ route: string; riders: number; projection: number; realised: number }>;
+  defaulters: Array<{
+    studentId: string;
+    name: string;
+    admissionNo: string;
+    section: string | null;
+    route: string | null;
+    stop: string | null;
+    balance: number;
+    days: number;
+  }>;
+}
+
+export default async function TransportDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ by?: string }>;
+}) {
+  const sp = await searchParams;
+  const by: ProjectionBy = ['month', 'term'].includes(sp.by ?? '')
+    ? (sp.by as ProjectionBy)
+    : 'quarter';
+  // the transport fee by period (none without the right to see it)
+  const fees = await apiFetch<TransportFees>(`/fees/dashboard/transport?by=${by}`).catch(
+    () => null,
+  );
   const [me, d, replaced] = await Promise.all([
     getMe(),
     apiFetch<Dashboard>('/transport/desk/dashboard'),
@@ -228,6 +262,89 @@ export default async function TransportDashboardPage() {
         }
       />
       <TransportNav current="/transport" permissions={me.permissions} />
+      {fees ? (
+        <>
+          <ProjectionPanel
+            title="Transport fee: projection vs collection"
+            periods={fees.periods}
+            by={by}
+            hrefFor={(b) => (b === 'quarter' ? '/transport' : `/transport?by=${b}`)}
+            transport
+          />
+          <div className="ep-chart__grid2">
+            <Card title={`By route · ${fees.current.label}`}>
+              {fees.routes.length ? (
+                <ProgressRows
+                  label={`Transport fee realised by route, ${fees.current.label}`}
+                  rows={fees.routes.map((r) => {
+                    const pc = r.projection > 0 ? Math.round((r.realised / r.projection) * 100) : 0;
+                    return {
+                      name: r.route,
+                      value: r.realised,
+                      of: r.projection,
+                      text: `${String(pc)}% · ${String(r.riders)} pupils`,
+                      tone: pc >= 90 ? 'success' : pc >= 70 ? 'warning' : 'danger',
+                    };
+                  })}
+                />
+              ) : (
+                <p className="ep-field__help">No transport fee due in this period.</p>
+              )}
+            </Card>
+            <Card title="Transport fee overdue: who owes most">
+              {fees.defaulters.length ? (
+                <div className="ep-table-wrap">
+                  <table className="ep-table ep-table--dense">
+                    <caption className="ep-sr-only">
+                      Pupils with the largest overdue transport fee
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Pupil</th>
+                        <th scope="col">Route and stop</th>
+                        <th scope="col">Overdue</th>
+                        <th scope="col">Oldest</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fees.defaulters.map((x) => (
+                        <tr key={x.studentId}>
+                          <td>
+                            <a
+                              href={`/fees/ledger/${x.studentId}`}
+                              style={{ textDecoration: 'underline' }}
+                            >
+                              {x.name}
+                            </a>{' '}
+                            <span className="ep-field__help">
+                              {x.admissionNo}
+                              {x.section ? ` · ${x.section}` : ''}
+                            </span>
+                          </td>
+                          <td>
+                            {x.route ?? 'Not on a route now'}
+                            {x.stop ? <div className="ep-field__help">{x.stop}</div> : null}
+                          </td>
+                          <td>{rupees(x.balance)}</td>
+                          <td>
+                            <Badge
+                              tone={x.days > 90 ? 'danger' : x.days > 30 ? 'warning' : 'neutral'}
+                            >
+                              {x.days} days
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="ep-field__help">Nobody owes an overdue transport fee.</p>
+              )}
+            </Card>
+          </div>
+        </>
+      ) : null}
       {replaced.length ? (
         <div style={{ marginBottom: 'var(--sp-4)' }}>
           <Alert tone="warning">

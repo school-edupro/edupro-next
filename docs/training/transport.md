@@ -110,3 +110,10 @@ The fee reports need *See the transport fee* (the transport in-charge, accountan
   **Regular bus is back**.
 - **Fleet papers.** Dashboard → Papers running out → All papers: insurance, fitness, permit, PUC and
   driving licences with the days left; tabs for running out, expired, not recorded and valid; Excel.
+
+## Transport fee on the dashboard
+
+At the top of **Transport**: the transport fee by quarter (or month, or fee term): due, paid of it, and
+received in the period; the **bus list** (fare × months riding) against what was billed, with the pupils
+riding but not billed in each period (bill them from Fees); the current quarter by route; and the pupils
+owing most transport fee with their route and stop.

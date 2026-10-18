@@ -12,7 +12,9 @@
 ## Daily routine
 
 - **Fee dashboard** (Fees → Fee dashboard): start the day here. All, or School fee / Hostel fee / Misc.
-  It shows today's and the year's collection, what is due and overdue, how old the dues are, cheques to
+  At the top, **projection vs collection** by quarter (or month, or fee term): what was due, how much
+  of it is paid, and what came in during the period.
+  Below it: today's and the year's collection, what is due and overdue, how old the dues are, cheques to
   clear, cash not yet deposited, who owes most (click a name for the ledger, or **Send a fee
   reminder**), refunds and waivers, online payments, and who collected how much today (for day-end).
 

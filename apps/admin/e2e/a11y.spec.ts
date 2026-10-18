@@ -282,6 +282,8 @@ const PAGES = [
   '/engagement/consent-forms/dashboard',
   '/fees/dashboard',
   '/fees/dashboard?ledger=misc',
+  '/fees/dashboard?by=term',
+  '/transport?by=month',
   '/my-forms',
   '/engagement/certificates',
   '/engagement/cctv',
