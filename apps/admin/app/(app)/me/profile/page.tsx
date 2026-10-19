@@ -1,11 +1,12 @@
 import { Alert, Button, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { FileLinks } from '@/components/FileLinks';
+import { MyProfileLists } from '@/components/MyProfileLists';
 import { Notice } from '@/components/Notice';
 import { RefreshWhilePending } from '@/components/RefreshWhilePending';
 import { ApiError, apiFetch } from '@/lib/api';
 import { editable, REQUEST_STATUS, shown, type MyProfile } from '@/lib/my-profile';
-import { myProfilePdf, withdrawMyRequest } from '@/lib/my-profile-actions';
+import { myProfilePdf, removeMyRow, withdrawMyRequest } from '@/lib/my-profile-actions';
 
 /**
  * My profile for staff who work in the admin app (docs/design/33-people-dashboards.md): the same
@@ -140,6 +141,13 @@ export default async function MyProfilePage({
           </section>
         );
       })}
+
+      <MyProfileLists
+        lists={p.lists ?? []}
+        canEdit={p.canEdit}
+        editBase="/me/profile/edit"
+        removeAction={removeMyRow}
+      />
 
       <details className="ep-card ep-acr-card" open={waiting > 0}>
         <summary>

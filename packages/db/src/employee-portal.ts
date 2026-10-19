@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { EMPLOYEE_FIELDS, EMPLOYEE_SECTIONS, type EmployeeField } from './employee-fields';
+import { EMPLOYEE_LIST_KINDS, type EmployeeListKind } from './employee-rows';
 import { windowState, type EditWindow, type PortalLevel } from './profile-portal';
 
 /**
@@ -16,10 +17,18 @@ export type EmployeeApprover =
   | { kind: 'employee'; employeeId: string };
 export type EmployeeRoute = EmployeeApprover[];
 
+/** A row list (education, languages, experience, documents): what staff may do and the proof a change needs. */
+export interface EmployeeListPolicy {
+  level: PortalLevel;
+  proof: string | null;
+}
+
 export interface EmployeePortalPolicy {
   fields: Record<string, PortalLevel>;
   /** key → employee_document_types.id */
   proofs: Record<string, string>;
+  /** 0187: the four lists; approvers under approval.sections['list:<kind>'] */
+  lists: Record<EmployeeListKind, EmployeeListPolicy>;
   window: EditWindow;
   approval: {
     default: EmployeeRoute;
@@ -52,7 +61,11 @@ export function employeeDefaultLevel(f: EmployeeField): PortalLevel {
 export const EMPLOYEE_DEFAULT_ROUTE: EmployeeRoute = [{ kind: 'office' }];
 
 const LEVELS = new Set<PortalLevel>(['hidden', 'view', 'edit_approval', 'edit_direct']);
-const SECTION_IDS = new Set<string>(EMPLOYEE_SECTIONS.map((s) => s.id));
+const SECTION_IDS = new Set<string>([
+  ...EMPLOYEE_SECTIONS.map((s) => s.id),
+  ...EMPLOYEE_LIST_KINDS.map((k) => `list:${k}`),
+]);
+export const employeeListSection = (kind: EmployeeListKind) => `list:${kind}`;
 
 function cleanRoute(raw: unknown): EmployeeRoute | null {
   if (!Array.isArray(raw)) return null;
@@ -77,6 +90,7 @@ export function resolveEmployeePolicy(
   row: {
     fields?: unknown;
     proofs?: unknown;
+    lists?: unknown;
     edit_window?: unknown;
     approval?: unknown;
   } | null,
@@ -97,6 +111,18 @@ export function resolveEmployeePolicy(
   for (const [k, v] of Object.entries((row?.proofs ?? {}) as Record<string, unknown>))
     if (EMPLOYEE_FIELDS.some((f) => f.key === k) && /^\d{1,18}$/.test(String(v)))
       proofs[k] = String(v);
+  const storedLists = (row?.lists ?? {}) as Record<string, unknown>;
+  const lists = {} as Record<EmployeeListKind, EmployeeListPolicy>;
+  for (const kind of EMPLOYEE_LIST_KINDS) {
+    const v = (storedLists[kind] ?? {}) as { level?: unknown; proof?: unknown };
+    lists[kind] = {
+      level:
+        typeof v.level === 'string' && LEVELS.has(v.level as PortalLevel)
+          ? (v.level as PortalLevel)
+          : 'edit_approval',
+      proof: /^\d{1,18}$/.test(String(v.proof ?? '')) ? String(v.proof) : null,
+    };
+  }
   const w = (row?.edit_window ?? {}) as Partial<EditWindow>;
   const window: EditWindow = {
     mode: w.mode === 'closed' || w.mode === 'period' ? w.mode : 'open',
@@ -118,6 +144,7 @@ export function resolveEmployeePolicy(
   return {
     fields,
     proofs,
+    lists,
     window,
     approval: {
       default: cleanRoute(a.default) ?? EMPLOYEE_DEFAULT_ROUTE,
@@ -131,9 +158,10 @@ export async function loadEmployeePolicy(c: PoolClient): Promise<EmployeePortalP
   const r = await c.query<{
     fields: unknown;
     proofs: unknown;
+    lists: unknown;
     edit_window: unknown;
     approval: unknown;
-  }>('SELECT fields, proofs, edit_window, approval FROM employee_portal_policies LIMIT 1');
+  }>('SELECT fields, proofs, lists, edit_window, approval FROM employee_portal_policies LIMIT 1');
   return resolveEmployeePolicy(r.rows[0] ?? null);
 }
 
@@ -143,6 +171,13 @@ export function employeeRouteFor(p: EmployeePortalPolicy, key: string): Employee
   return (
     p.approval.fields[key] ?? (f ? p.approval.sections[f.section] : undefined) ?? p.approval.default
   );
+}
+/** The approvers of a row list: its own, else the default. */
+export function employeeListRouteFor(
+  p: EmployeePortalPolicy,
+  kind: EmployeeListKind,
+): EmployeeRoute {
+  return p.approval.sections[employeeListSection(kind)] ?? p.approval.default;
 }
 export const employeeRouteSignature = (r: EmployeeRoute): string => JSON.stringify(r);
 export const employeeWindowState = windowState;

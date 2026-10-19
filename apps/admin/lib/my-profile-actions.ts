@@ -132,3 +132,72 @@ export async function myProfilePdf() {
   }
   redirect(`${BASE}?export=${id}`);
 }
+
+/** Reads the row fields of a list form (`r.<key>`, `bool`/`num` markers) into one row change. */
+function rowDataOf(fd: FormData): Record<string, string | number | boolean | null> {
+  const data: Record<string, string | number | boolean | null> = {};
+  const bools = new Set(fd.getAll('bool').map(String));
+  const nums = new Set(fd.getAll('num').map(String));
+  for (const [k, v] of fd.entries()) {
+    if (!k.startsWith('r.') || v instanceof File) continue;
+    const key = k.slice(2);
+    const val = String(v).trim();
+    if (bools.has(key)) continue;
+    if (val === '') continue;
+    data[key] = nums.has(key) ? Number(val) : val;
+  }
+  for (const key of bools) data[key] = fd.get(`r.${key}`) !== null;
+  return data;
+}
+
+/** Add or change one row of a list (education, languages, experience, documents), with its proof. */
+export async function sendMyRowChange(fd: FormData) {
+  const kind = str(fd, 'kind');
+  const op = str(fd, 'op') === 'edit' ? 'edit' : 'add';
+  const rowId = str(fd, 'rowId') || undefined;
+  const back = `${BASE}/edit?section=${encodeURIComponent(kind)}${rowId ? `&row=${rowId}` : '&add=1'}`;
+  const data = rowDataOf(fd);
+  let out: { applied: string[]; pending: string[] } | undefined;
+  try {
+    const proofs: Array<{ typeId: string; fileId: string }> = [];
+    for (const [k, v] of fd.entries())
+      if (k.startsWith('proof.') && v instanceof File && v.size > 0)
+        proofs.push({ typeId: k.slice(6), fileId: await upload(v) });
+    if (kind === 'documents') {
+      const f = fd.get('doc.file');
+      if (!(f instanceof File) || !f.size)
+        throw new ApiError(400, { type: 'validation-failed', detail: 'Attach the document file.' });
+      data.fileId = await upload(f);
+    }
+    out = await apiFetch('/me/employee-profile/changes', {
+      method: 'POST',
+      body: JSON.stringify({
+        rows: [{ kind, op, rowId, data }],
+        reason: str(fd, 'reason') || null,
+        proofs,
+      }),
+    });
+  } catch (error) {
+    fail(back, error);
+  }
+  done(out!.applied.length ? 'Saved.' : 'Sent for approval.');
+}
+
+/** Ask to remove one row (or a document); it goes the way the list's changes go. */
+export async function removeMyRow(fd: FormData) {
+  const kind = str(fd, 'kind');
+  const rowId = str(fd, 'rowId');
+  let out: { applied: string[]; pending: string[] } | undefined;
+  try {
+    out = await apiFetch('/me/employee-profile/changes', {
+      method: 'POST',
+      body: JSON.stringify({
+        rows: [{ kind, op: 'remove', rowId }],
+        reason: str(fd, 'reason') || null,
+      }),
+    });
+  } catch (error) {
+    fail(BASE, error);
+  }
+  done(out!.applied.length ? 'Removed.' : 'Removal sent for approval.');
+}

@@ -50,3 +50,13 @@ health of the records (what is missing, what waits for approval).
   employee record; the header name opens it. Same API (`me/employee-profile`, changes with proofs, print,
   `me/exports/:id` through `/me/exports/:id/file`), same rules; a login without an employee record sees a
   notice instead. Approvals stay under Employee management → Staff profile approvals.
+- **Lists on My profile (19 Oct 2026, 0187):** education, languages, work experience and documents are
+  sections of My profile in both apps. Staff profile settings → Fields and documents gets "Lists staff may
+  update" (level per list: not shown / shown / change with approval / change at once; the document a change
+  must carry), and Approvers lets each list have its own approvers (`approval.sections['list:<kind>']`).
+  A row change is one key in the same `employee_change_requests` (`list:<kind>:<op>:<row>`, op add / edit /
+  remove, `from` and `to` are the row as a JSON object); the API summarises rows as one line for the
+  approval screens and the request lists, so those screens did not change. Edits and removals of a row
+  already waiting are refused; a document is replaced by removing it and adding the new file. An approved
+  document is filed on the record unverified: HR still ticks it against the original. The profile PDF
+  already prints the four lists. Decisions: add, edit and remove with approval; approval never verifies.

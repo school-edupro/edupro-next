@@ -3,25 +3,39 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
   EMPLOYEE_FIELDS,
+  EMPLOYEE_LIST_KINDS,
+  EMPLOYEE_LISTS,
   EMPLOYEE_SECTIONS,
   decryptField,
+  deleteEmployeeRow,
   employeeApproverLabel,
   employeeCompleteness,
   employeeEditable,
+  employeeListRouteFor,
   employeeRouteFor,
   employeeRouteSignature,
+  employeeRowKey,
   employeeWindowState,
   encryptField,
+  insertEmployeeRow,
   loadEmployeeLists,
   loadEmployeePolicy,
   maskValue,
+  parseEmployeeRowKey,
   readEmployeeProfile,
+  readEmployeeRows,
   refreshEmployeeCompleteness,
+  summariseEmployeeRow,
+  updateEmployeeRow,
   validateEmployeeChanges,
   writeEmployeeProfile,
   type EmployeeApprover,
+  type EmployeeListKind,
+  type EmployeePortalPolicy,
   type EmployeeRoute,
+  type EmployeeRowOp,
   type ProfileValues,
+  type RowData,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -29,22 +43,54 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { FilesService } from '../files/files.service';
 import { ReportsService } from '../reports/reports.service';
-import type {
-  EmployeeChangesDto,
-  EmployeePolicyDto,
-  StaffBulkDto,
-  StaffDecideDto,
-  StaffInboxDto,
+import {
+  EmployeeDocumentRowSchema,
+  type EmployeeChangesDto,
+  type EmployeePolicyDto,
+  type StaffBulkDto,
+  type StaffDecideDto,
+  type StaffInboxDto,
 } from './employee-self.dto';
+import { EMPLOYEE_ROW_SCHEMAS } from './people.dto';
 import { PEOPLE } from './people.permissions';
 
 type Value = ProfileValues[string];
+const FIELD = new Map(EMPLOYEE_FIELDS.map((f) => [f.key, f]));
+/** A field value, or a row of a list (0187) */
+type ItemValue = Value | RowData;
 interface ChangeItem {
-  from: Value;
-  to: Value;
+  from: ItemValue;
+  to: ItemValue;
   status?: 'pending' | 'approved' | 'rejected';
   note?: string | null;
   enc?: true;
+}
+/** A change waiting to be written: a field, or a row operation on a list. */
+interface Entry {
+  key: string;
+  item: ChangeItem;
+  level: 'edit_direct' | 'edit_approval';
+  route: EmployeeRoute;
+  proofType: string | null;
+  label: string;
+  apply?: () => Promise<void>;
+}
+const opWord = (op: EmployeeRowOp) => (op === 'add' ? 'add' : op === 'edit' ? 'change' : 'remove');
+/** Field label, or "<List> · add/change/remove" for a row key. */
+function labelOf(key: string): string {
+  const f = FIELD.get(key);
+  if (f) return f.label;
+  const pk = parseEmployeeRowKey(key);
+  return pk ? `${EMPLOYEE_LISTS[pk.kind].title} · ${opWord(pk.op)}` : key;
+}
+/** From / to of a row change as one line each, for approvals and request lists. */
+function rowView(key: string, v: ChangeItem): { from: Value; to: Value } | null {
+  const pk = parseEmployeeRowKey(key);
+  if (!pk) return null;
+  return {
+    from: pk.op === 'add' ? null : summariseEmployeeRow(pk.kind, v.from as RowData | null),
+    to: pk.op === 'remove' ? '(removed)' : summariseEmployeeRow(pk.kind, v.to as RowData | null),
+  };
 }
 interface RequestRow {
   id: string;
@@ -69,7 +115,6 @@ const SELECT = `SELECT r.id::text, r.employee_id::text, r.changes, r.reason, r.s
        r.proofs, r.auto_applied, r.decided_at, r.decision_note, r.created_at,
        e.display_name AS name, e.employee_code AS code, e.department, e.designation, e.profile
   FROM employee_change_requests r JOIN employees e ON e.id = r.employee_id`;
-const FIELD = new Map(EMPLOYEE_FIELDS.map((f) => [f.key, f]));
 const same = (a: Value, b: Value) => (a ?? '') === (b ?? '') || String(a ?? '') === String(b ?? '');
 
 interface Actor {
@@ -115,8 +160,8 @@ export class EmployeeSelfService {
         loadEmployeePolicy(c),
         readEmployeeProfile(c, id, true),
         loadEmployeeLists(c),
-        c.query<{ id: string; name: string }>(
-          `SELECT id::text, name FROM employee_document_types WHERE status = 'active' ORDER BY sort_order, name`,
+        c.query<{ id: string; name: string; has_expiry: boolean }>(
+          `SELECT id::text, name, has_expiry FROM employee_document_types WHERE status = 'active' ORDER BY sort_order, name`,
         ),
         c.query<{ name: string; code: string; photo: string | null; status: string }>(
           `SELECT display_name AS name, employee_code AS code, photo_file_id::text AS photo, status::text
@@ -131,10 +176,30 @@ export class EmployeeSelfService {
       const values = p!.values;
       const typeName = new Map(docTypes.rows.map((t) => [t.id, t.name]));
       const waiting: Record<string, Value> = {};
+      // 0187: row operations waiting, by list and row (edits and removals) or as pending additions
+      const rowWaiting = new Map<
+        string,
+        { key: string; op: EmployeeRowOp; data: RowData | null }
+      >();
+      const pendingAdds: Partial<Record<EmployeeListKind, Array<{ key: string; data: RowData }>>> =
+        {};
       for (const r of pending.rows)
-        for (const [k, v] of Object.entries(r.changes))
-          if (!v.status || v.status === 'pending')
-            waiting[k] = v.enc && typeof v.to === 'string' ? decryptField(v.to) : v.to;
+        for (const [k, v] of Object.entries(r.changes)) {
+          if (v.status && v.status !== 'pending') continue;
+          const pk = parseEmployeeRowKey(k);
+          if (!pk) {
+            waiting[k] = (v.enc && typeof v.to === 'string' ? decryptField(v.to) : v.to) as Value;
+            continue;
+          }
+          if (pk.op === 'add')
+            (pendingAdds[pk.kind] ??= []).push({ key: k, data: (v.to ?? {}) as RowData });
+          else
+            rowWaiting.set(`${pk.kind}:${pk.rowId}`, {
+              key: k,
+              op: pk.op,
+              data: v.to as RowData | null,
+            });
+        }
       const win = employeeWindowState(policy.window);
       const sections = EMPLOYEE_SECTIONS.map((s) => ({
         id: s.id,
@@ -164,15 +229,49 @@ export class EmployeeSelfService {
           };
         }),
       })).filter((s) => s.fields.length);
+      const rowLists = [];
+      for (const kind of EMPLOYEE_LIST_KINDS) {
+        const lp = policy.lists[kind];
+        if (lp.level === 'hidden') continue;
+        const def = EMPLOYEE_LISTS[kind];
+        const rows = await readEmployeeRows(c, id, kind);
+        rowLists.push({
+          id: kind,
+          title: def.title,
+          level: lp.level,
+          proof: lp.proof ? { typeId: lp.proof, name: typeName.get(lp.proof) ?? 'Document' } : null,
+          columns: def.columns.map((col) => ({
+            ...col,
+            options:
+              col.type === 'select' && col.list
+                ? (lists[col.list] ?? null)
+                : col.type === 'doctype'
+                  ? docTypes.rows.map((t) => ({ id: t.id, name: t.name, hasExpiry: t.has_expiry }))
+                  : null,
+          })),
+          rows: rows.map((r) => ({
+            id: r.id,
+            values: r.values,
+            summary: summariseEmployeeRow(kind, r.values),
+            pending: rowWaiting.get(`${kind}:${r.id}`) ?? null,
+          })),
+          pendingAdds: (pendingAdds[kind] ?? []).map((x) => ({
+            key: x.key,
+            data: x.data,
+            summary: summariseEmployeeRow(kind, x.data),
+          })),
+        });
+      }
+      const editableLevel = (l: string) => l === 'edit_approval' || l === 'edit_direct';
       return {
         employee: { id, ...meta.rows[0]! },
         sections,
+        lists: rowLists,
         window: win,
         canEdit:
           win.open &&
-          sections.some((s) =>
-            s.fields.some((f) => f.level === 'edit_approval' || f.level === 'edit_direct'),
-          ),
+          (sections.some((s) => s.fields.some((f) => editableLevel(f.level))) ||
+            rowLists.some((l) => editableLevel(l.level))),
         completeness: employeeCompleteness(values),
         requests: await this.requestsOf(c, id),
       };
@@ -205,14 +304,17 @@ export class EmployeeSelfService {
               with: employeeApproverLabel(x.route[x.current_level - 1]!, names),
             }
           : null,
-      fields: Object.entries(x.changes).map(([key, v]) => ({
-        key,
-        label: FIELD.get(key)?.label ?? key,
-        from: v.enc && typeof v.from === 'string' ? decryptField(v.from) : v.from,
-        to: v.enc && typeof v.to === 'string' ? decryptField(v.to) : v.to,
-        status: v.status ?? 'pending',
-        note: v.note ?? null,
-      })),
+      fields: Object.entries(x.changes).map(([key, v]) => {
+        const rv = rowView(key, v);
+        return {
+          key,
+          label: labelOf(key),
+          from: rv ? rv.from : v.enc && typeof v.from === 'string' ? decryptField(v.from) : v.from,
+          to: rv ? rv.to : v.enc && typeof v.to === 'string' ? decryptField(v.to) : v.to,
+          status: v.status ?? 'pending',
+          note: v.note ?? null,
+        };
+      }),
     }));
   }
 
@@ -279,11 +381,7 @@ export class EmployeeSelfService {
         });
       const current = (await readEmployeeProfile(c, id, true))!.values;
       const changed = Object.entries(v.values).filter(([k, val]) => !same(current[k] ?? null, val));
-      if (!changed.length)
-        throw new DomainError('people.profile.no_change', 'Nothing differs from what is on file', {
-          status: 400,
-        });
-      // a field already waiting cannot be asked for again
+      // a field (or a row) already waiting cannot be asked for again
       const waiting = await c.query<{ changes: Record<string, ChangeItem> }>(
         `SELECT changes FROM employee_change_requests WHERE employee_id = $1 AND status = 'pending'`,
         [id],
@@ -302,26 +400,15 @@ export class EmployeeSelfService {
           `Already waiting for approval: ${clash.map((k) => FIELD.get(k)?.label ?? k).join(', ')}`,
           { status: 409 },
         );
+      // 0187: row changes on education, languages, experience and documents
+      const rowEntries = await this.rowEntries(c, id, policy, dto.rows ?? [], busy);
+      if (!changed.length && !rowEntries.length)
+        throw new DomainError('people.profile.no_change', 'Nothing differs from what is on file', {
+          status: 400,
+        });
       // proofs: the employee's own ready uploads, every needed document attached
       const proofs = await this.checkProofs(c, dto.proofs);
       const have = new Set(proofs.map((x) => x.typeId));
-      const missing = changed
-        .filter(([k]) => policy.proofs[k] && !have.has(policy.proofs[k]!))
-        .map(([k]) => k);
-      if (missing.length)
-        throw new DomainError(
-          'people.profile.proof_required',
-          'Attach the document each change needs',
-          {
-            status: 400,
-            extra: {
-              errors: missing.map((k) => ({
-                path: k,
-                message: 'Attach the document this change needs',
-              })),
-            },
-          },
-        );
       const item = (k: string, val: Value): ChangeItem => {
         const sensitive = Boolean(FIELD.get(k)?.sensitive);
         const from = current[k] ?? null;
@@ -333,13 +420,45 @@ export class EmployeeSelfService {
             }
           : { from, to: val };
       };
+      const entries: Entry[] = [
+        ...changed.map(([k, val]): Entry => ({
+          key: k,
+          item: item(k, val),
+          level: policy.fields[k] as 'edit_direct' | 'edit_approval',
+          route: employeeRouteFor(policy, k),
+          proofType: policy.proofs[k] ?? null,
+          label: FIELD.get(k)?.label ?? k,
+        })),
+        ...rowEntries,
+      ];
+      const missing = entries.filter((e) => e.proofType && !have.has(e.proofType));
+      if (missing.length)
+        throw new DomainError(
+          'people.profile.proof_required',
+          'Attach the document each change needs',
+          {
+            status: 400,
+            extra: {
+              errors: missing.map((e) => ({
+                path: e.key,
+                message: 'Attach the document this change needs',
+              })),
+            },
+          },
+        );
       const submission = randomUUID();
-      const direct = changed.filter(([k]) => policy.fields[k] === 'edit_direct');
-      const toApprove = changed.filter(([k]) => policy.fields[k] === 'edit_approval');
+      const direct = entries.filter((e) => e.level === 'edit_direct');
+      const toApprove = entries.filter((e) => e.level === 'edit_approval');
       const applied: string[] = [];
       if (direct.length) {
-        await writeEmployeeProfile(c, id, Object.fromEntries(direct));
-        await refreshEmployeeCompleteness(c, id);
+        const fieldValues = Object.fromEntries(
+          changed.filter(([k]) => policy.fields[k] === 'edit_direct'),
+        );
+        if (Object.keys(fieldValues).length) {
+          await writeEmployeeProfile(c, id, fieldValues);
+          await refreshEmployeeCompleteness(c, id);
+        }
+        for (const e of direct) if (e.apply) await e.apply();
         const r = await c.query<{ id: string }>(
           `INSERT INTO employee_change_requests (school_id, employee_id, requested_by_user_id, changes, reason, status,
                   route, auto_applied, submission, decided_at)
@@ -348,9 +467,7 @@ export class EmployeeSelfService {
           [
             id,
             JSON.stringify(
-              Object.fromEntries(
-                direct.map(([k, val]) => [k, { ...item(k, val), status: 'approved' }]),
-              ),
+              Object.fromEntries(direct.map((e) => [e.key, { ...e.item, status: 'approved' }])),
             ),
             dto.reason ?? null,
             submission,
@@ -363,9 +480,9 @@ export class EmployeeSelfService {
         await this.attachProofs(
           c,
           id,
-          proofs.filter((pr) => direct.some(([k]) => policy.proofs[k] === pr.typeId)),
+          proofs.filter((pr) => direct.some((e) => e.proofType === pr.typeId)),
         );
-        applied.push(...direct.map(([k]) => k));
+        applied.push(...direct.map((e) => e.key));
         await this.audit.stage(ctx, c, {
           action: 'people.employee.self_update_direct',
           entityType: 'employees',
@@ -374,31 +491,27 @@ export class EmployeeSelfService {
         });
       }
       // one request per set of approvers
-      const groups = new Map<string, { route: EmployeeRoute; items: Array<[string, Value]> }>();
-      for (const [k, val] of toApprove) {
-        const route = employeeRouteFor(policy, k);
-        const sig = employeeRouteSignature(route);
-        const g = groups.get(sig) ?? { route, items: [] };
-        g.items.push([k, val]);
+      const groups = new Map<string, { route: EmployeeRoute; items: Entry[] }>();
+      for (const e of toApprove) {
+        const sig = employeeRouteSignature(e.route);
+        const g = groups.get(sig) ?? { route: e.route, items: [] };
+        g.items.push(e);
         groups.set(sig, g);
       }
       const requests: string[] = [];
       let first = true;
       for (const g of groups.values()) {
-        const mine = proofs.filter((pr) => g.items.some(([k]) => policy.proofs[k] === pr.typeId));
-        // proofs not asked for by any field travel with the first request
-        const extra = first
-          ? proofs.filter((pr) => !Object.values(policy.proofs).includes(pr.typeId))
-          : [];
+        const mine = proofs.filter((pr) => g.items.some((e) => e.proofType === pr.typeId));
+        // proofs not asked for by any change travel with the first request
+        const asked = new Set(entries.map((e) => e.proofType).filter(Boolean));
+        const extra = first ? proofs.filter((pr) => !asked.has(pr.typeId)) : [];
         const r = await c.query<{ id: string }>(
           `INSERT INTO employee_change_requests (school_id, employee_id, requested_by_user_id, changes, reason, route, proofs, submission)
            VALUES (app.current_school_id(), $1, app.current_user_id(), $2::jsonb, $3, $4::jsonb, $5::jsonb, $6) RETURNING id::text`,
           [
             id,
             JSON.stringify(
-              Object.fromEntries(
-                g.items.map(([k, val]) => [k, { ...item(k, val), status: 'pending' }]),
-              ),
+              Object.fromEntries(g.items.map((e) => [e.key, { ...e.item, status: 'pending' }])),
             ),
             dto.reason ?? null,
             JSON.stringify(g.route),
@@ -414,32 +527,213 @@ export class EmployeeSelfService {
           action: 'people.employee_change_request.create',
           entityType: 'employees',
           entityId: id,
-          after: { requests, fields: toApprove.map(([k]) => k) },
+          after: { requests, fields: toApprove.map((e) => e.key) },
         });
-      return { applied, requests, pending: toApprove.map(([k]) => k) };
+      return { applied, requests, pending: toApprove.map((e) => e.key) };
     });
+  }
+
+  /** The row changes of a submission, checked against the policy and the rows on file (0187). */
+  private async rowEntries(
+    c: PoolClient,
+    employeeId: string,
+    policy: EmployeePortalPolicy,
+    rows: NonNullable<EmployeeChangesDto['rows']>,
+    busy: Set<string>,
+  ): Promise<Entry[]> {
+    const out: Entry[] = [];
+    for (const rc of rows) {
+      const lp = policy.lists[rc.kind];
+      const def = EMPLOYEE_LISTS[rc.kind];
+      if (lp.level !== 'edit_approval' && lp.level !== 'edit_direct')
+        throw new DomainError(
+          'people.profile.field_not_allowed',
+          `${def.title} cannot be changed here`,
+          { status: 422 },
+        );
+      if (rc.kind === 'documents' && rc.op === 'edit')
+        throw new DomainError(
+          'validation-failed',
+          'Replace a document by removing it and adding the new file',
+          { status: 400 },
+        );
+      let from: RowData | null = null;
+      let rowId = rc.rowId ?? randomUUID();
+      if (rc.op !== 'add') {
+        if (!rc.rowId)
+          throw new DomainError('validation-failed', 'Say which row to change', { status: 400 });
+        const cur = (await readEmployeeRows(c, employeeId, rc.kind)).find((x) => x.id === rc.rowId);
+        if (!cur) throw new DomainError('not-found', 'Row not found', { status: 404 });
+        from = cur.values;
+        rowId = cur.id;
+        for (const k of busy) {
+          const pk = parseEmployeeRowKey(k);
+          if (pk && pk.kind === rc.kind && pk.rowId === rowId)
+            throw new DomainError(
+              'people.change.pending',
+              `Already waiting for approval: ${def.title}`,
+              { status: 409 },
+            );
+        }
+      }
+      let to: RowData | null = null;
+      if (rc.op !== 'remove') {
+        to =
+          rc.kind === 'documents'
+            ? await this.documentData(c, rc.data ?? {})
+            : this.rowData(rc.kind, rc.data ?? {});
+        if (rc.op === 'edit' && JSON.stringify(from) === JSON.stringify(to))
+          throw new DomainError(
+            'people.profile.no_change',
+            'Nothing differs from what is on file',
+            {
+              status: 400,
+            },
+          );
+      }
+      const pk = { kind: rc.kind, op: rc.op, rowId };
+      out.push({
+        key: employeeRowKey(rc.kind, rc.op, rowId),
+        item: { from, to },
+        level: lp.level,
+        route: employeeListRouteFor(policy, rc.kind),
+        proofType: rc.op === 'remove' ? null : lp.proof,
+        label: `${def.title} · ${opWord(rc.op)}`,
+        apply: () => this.applyRow(c, employeeId, pk, from, to),
+      });
+    }
+    return out;
+  }
+
+  private rowData(kind: Exclude<EmployeeListKind, 'documents'>, body: unknown): RowData {
+    const r = EMPLOYEE_ROW_SCHEMAS[kind].safeParse(body);
+    if (!r.success)
+      throw new DomainError(
+        'validation-failed',
+        r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+        { status: 400 },
+      );
+    const out: RowData = {};
+    for (const [k, v] of Object.entries(r.data as Record<string, unknown>))
+      if (v !== undefined) out[k] = v as RowData[string];
+    return out;
+  }
+
+  /** A document the employee adds: an active type (valid-till when the type expires) and their own file. */
+  private async documentData(c: PoolClient, body: unknown): Promise<RowData> {
+    const r = EmployeeDocumentRowSchema.safeParse(body);
+    if (!r.success)
+      throw new DomainError(
+        'validation-failed',
+        r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+        { status: 400 },
+      );
+    const d = r.data;
+    const t = await c.query<{ name: string; has_expiry: boolean }>(
+      `SELECT name, has_expiry FROM employee_document_types WHERE id = $1 AND status = 'active'`,
+      [d.typeId],
+    );
+    if (!t.rows[0])
+      throw new DomainError('validation-failed', 'Unknown document type', { status: 400 });
+    if (t.rows[0].has_expiry && !d.expiresOn)
+      throw new DomainError('validation-failed', 'This document needs its valid-till date', {
+        status: 400,
+      });
+    const fileName = await this.ownFile(c, d.fileId);
+    return {
+      typeId: d.typeId,
+      typeName: t.rows[0].name,
+      fileId: d.fileId,
+      fileName,
+      number: d.number ?? null,
+      issuedOn: d.issuedOn ?? null,
+      expiresOn: d.expiresOn ?? null,
+    };
+  }
+
+  /** The employee's own ready PDF or image upload; its name. */
+  private async ownFile(c: PoolClient, fileId: string): Promise<string | null> {
+    const f = await c.query<{ name: string | null }>(
+      `SELECT original_name AS name FROM files
+        WHERE id = $1 AND created_by = app.current_user_id() AND status = 'ready' AND deleted_at IS NULL
+          AND content_type IN ('application/pdf', 'image/png', 'image/jpeg', 'image/webp')`,
+      [fileId],
+    );
+    if (!f.rows[0])
+      throw new DomainError('validation-failed', 'Attach your own PDF or image', { status: 400 });
+    return f.rows[0].name;
+  }
+
+  /** Writes one accepted row change (at once, or when the last approver accepts). */
+  private async applyRow(
+    c: PoolClient,
+    employeeId: string,
+    pk: { kind: EmployeeListKind; op: EmployeeRowOp; rowId: string },
+    from: RowData | null,
+    to: RowData | null,
+  ): Promise<void> {
+    void from;
+    if (pk.kind === 'documents') {
+      if (pk.op === 'add' && to) {
+        await c.query(
+          `UPDATE files SET owner_entity_type = 'employee', owner_entity_id = $2::text, classification = 'personal' WHERE id = $1`,
+          [to.fileId, employeeId],
+        );
+        await c.query(
+          `INSERT INTO employee_documents (school_id, employee_id, type_id, file_id, number, issued_on, expires_on, remarks, created_by)
+           SELECT app.current_school_id(), $1, $2, $3, $4, $5::date, $6::date, 'Added by the employee from My profile', app.current_user_id()
+            WHERE NOT EXISTS (SELECT 1 FROM employee_documents WHERE file_id = $3 AND deleted_at IS NULL)`,
+          [
+            employeeId,
+            to.typeId,
+            to.fileId,
+            to.number ?? null,
+            to.issuedOn ?? null,
+            to.expiresOn ?? null,
+          ],
+        );
+      } else if (pk.op === 'remove') {
+        await c.query(
+          `UPDATE employee_documents SET deleted_at = now() WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL`,
+          [pk.rowId, employeeId],
+        );
+      }
+      return;
+    }
+    const kind = pk.kind;
+    if (pk.op === 'add' && to) {
+      try {
+        await insertEmployeeRow(c, employeeId, kind, to);
+      } catch (e) {
+        if ((e as { code?: string }).code === '23505')
+          throw new DomainError('employee.row_exists', 'This language is already on the list', {
+            status: 409,
+          });
+        throw e;
+      }
+    } else if (pk.op === 'edit' && to) {
+      const ok = await updateEmployeeRow(c, employeeId, kind, pk.rowId, to);
+      if (!ok)
+        throw new DomainError(
+          'people.change.stale',
+          'The row was removed since this request; refuse it',
+          { status: 409 },
+        );
+    } else if (pk.op === 'remove') {
+      await deleteEmployeeRow(c, employeeId, kind, pk.rowId);
+    }
   }
 
   private async checkProofs(c: PoolClient, list: Array<{ typeId: string; fileId: string }>) {
     const out: Array<{ typeId: string; fileId: string; fileName: string | null }> = [];
     for (const p of list) {
-      const f = await c.query<{ name: string | null }>(
-        `SELECT original_name AS name FROM files
-          WHERE id = $1 AND created_by = app.current_user_id() AND status = 'ready' AND deleted_at IS NULL
-            AND content_type IN ('application/pdf', 'image/png', 'image/jpeg', 'image/webp')`,
-        [p.fileId],
-      );
       const t = await c.query(
         `SELECT 1 FROM employee_document_types WHERE id = $1 AND status = 'active'`,
         [p.typeId],
       );
-      if (!f.rows[0] || !t.rowCount)
-        throw new DomainError(
-          'validation-failed',
-          'Attach your own PDF or image for each document',
-          { status: 400 },
-        );
-      out.push({ ...p, fileName: f.rows[0].name });
+      if (!t.rowCount)
+        throw new DomainError('validation-failed', 'Unknown document type', { status: 400 });
+      out.push({ ...p, fileName: await this.ownFile(c, p.fileId) });
     }
     return out;
   }
@@ -547,6 +841,11 @@ export class EmployeeSelfService {
           sensitive: Boolean(f.sensitive),
           editable: employeeEditable(f),
         })),
+        lists: EMPLOYEE_LIST_KINDS.map((k) => ({
+          id: k,
+          title: EMPLOYEE_LISTS[k].title,
+          proofHint: EMPLOYEE_LISTS[k].proofHint,
+        })),
         documentTypes: types.rows,
         roles: roles.rows,
         staff: staff.rows,
@@ -563,19 +862,23 @@ export class EmployeeSelfService {
       if (!FIELD.has(k))
         throw new DomainError('validation-failed', `Unknown field ${k}`, { status: 400 });
     for (const k of Object.keys(dto.approval.sections))
-      if (!EMPLOYEE_SECTIONS.some((s) => s.id === k))
+      if (
+        !EMPLOYEE_SECTIONS.some((s) => s.id === k) &&
+        !EMPLOYEE_LIST_KINDS.some((l) => `list:${l}` === k)
+      )
         throw new DomainError('validation-failed', `Unknown section ${k}`, { status: 400 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(
-        `INSERT INTO employee_portal_policies (school_id, fields, proofs, edit_window, approval, updated_by)
-         VALUES (app.current_school_id(), $1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, app.current_user_id())
-         ON CONFLICT (school_id) DO UPDATE SET fields = EXCLUDED.fields, proofs = EXCLUDED.proofs,
+        `INSERT INTO employee_portal_policies (school_id, fields, proofs, lists, edit_window, approval, updated_by)
+         VALUES (app.current_school_id(), $1::jsonb, $2::jsonb, $5::jsonb, $3::jsonb, $4::jsonb, app.current_user_id())
+         ON CONFLICT (school_id) DO UPDATE SET fields = EXCLUDED.fields, proofs = EXCLUDED.proofs, lists = EXCLUDED.lists,
                 edit_window = EXCLUDED.edit_window, approval = EXCLUDED.approval, updated_at = now(), updated_by = EXCLUDED.updated_by`,
         [
           JSON.stringify(dto.fields),
           JSON.stringify(dto.proofs),
           JSON.stringify(dto.window),
           JSON.stringify(dto.approval),
+          JSON.stringify(dto.lists ?? {}),
         ],
       );
       await this.audit.stage(ctx, c, {
@@ -690,14 +993,17 @@ export class EmployeeSelfService {
       step: r.current_level,
       proofs: r.proofs,
       canAct: this.canAct(r, actor),
-      fields: Object.entries(r.changes).map(([key, v]) => ({
-        key,
-        label: FIELD.get(key)?.label ?? key,
-        from: show(v.from, v.enc),
-        to: show(v.to, v.enc),
-        status: v.status ?? 'pending',
-        note: v.note ?? null,
-      })),
+      fields: Object.entries(r.changes).map(([key, v]) => {
+        const rv = rowView(key, v);
+        return {
+          key,
+          label: labelOf(key),
+          from: rv ? rv.from : show(v.from as Value, v.enc),
+          to: rv ? rv.to : show(v.to as Value, v.enc),
+          status: v.status ?? 'pending',
+          note: v.note ?? null,
+        };
+      }),
     };
   }
 
@@ -750,9 +1056,7 @@ export class EmployeeSelfService {
     for (const k of keys) {
       const d = dto.fields?.[k] ?? dto.approve;
       if (d === undefined)
-        throw new DomainError('validation-failed', `Decide ${FIELD.get(k)?.label ?? k}`, {
-          status: 400,
-        });
+        throw new DomainError('validation-failed', `Decide ${labelOf(k)}`, { status: 400 });
       decision[k] = d;
     }
     const refused = keys.filter((k) => !decision[k]);
@@ -770,22 +1074,38 @@ export class EmployeeSelfService {
       const now = (await readEmployeeProfile(c, r.employee_id, true))!.values;
       const plain = (v: Value, enc?: true) => (enc && typeof v === 'string' ? decryptField(v) : v);
       const values: ProfileValues = {};
-      for (const k of accepted) {
+      for (const k of accepted.filter((x) => !parseEmployeeRowKey(x))) {
         const it = changes[k]!;
-        const from = plain(it.from, it.enc);
-        const to = plain(it.to, it.enc);
+        const from = plain(it.from as Value, it.enc);
+        const to = plain(it.to as Value, it.enc);
         // the record changed since the request: neither what was asked from nor what is asked for
         if (!same(now[k] ?? null, from) && !same(now[k] ?? null, to))
           throw new DomainError(
             'people.change.stale',
-            `${FIELD.get(k)?.label ?? k} changed since this request; refuse it and ask again`,
+            `${labelOf(k)} changed since this request; refuse it and ask again`,
             { status: 409 },
           );
         values[k] = to;
         changes[k] = { ...it, status: 'approved' };
       }
-      await writeEmployeeProfile(c, r.employee_id, values);
-      await refreshEmployeeCompleteness(c, r.employee_id);
+      if (Object.keys(values).length) {
+        await writeEmployeeProfile(c, r.employee_id, values);
+        await refreshEmployeeCompleteness(c, r.employee_id);
+      }
+      // 0187: accepted row changes are written now
+      for (const k of accepted) {
+        const pk = parseEmployeeRowKey(k);
+        if (!pk) continue;
+        const it = changes[k]!;
+        await this.applyRow(
+          c,
+          r.employee_id,
+          pk,
+          it.from as RowData | null,
+          it.to as RowData | null,
+        );
+        changes[k] = { ...it, status: 'approved' };
+      }
       await this.attachProofs(c, r.employee_id, r.proofs);
     }
     const allDone = final || !accepted.length;

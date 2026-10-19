@@ -25,8 +25,11 @@ export interface StaffPolicyView {
       sections: Record<string, Approver[]>;
       fields: Record<string, Approver[]>;
     };
+    /** 0187: education, languages, experience, documents */
+    lists: Record<string, { level: Level; proof: string | null }>;
   };
   sections: Array<{ id: string; title: string }>;
+  lists: Array<{ id: string; title: string; proofHint: string }>;
   fields: Array<{
     key: string;
     section: string;
@@ -156,6 +159,7 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
   const [proofs, setProofs] = useState(data.policy.proofs);
   const [win, setWin] = useState(data.policy.window);
   const [approval, setApproval] = useState(data.policy.approval);
+  const [lists, setLists] = useState(data.policy.lists ?? {});
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
   const counts = useMemo(() => {
@@ -165,7 +169,7 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
   }, [fields]);
   const save = () =>
     start(async () => {
-      const r = await saveStaffPolicy({ fields, proofs, window: win, approval });
+      const r = await saveStaffPolicy({ fields, proofs, lists, window: win, approval });
       setMsg(r.ok ? { tone: 'success', text: 'Saved.' } : { tone: 'danger', text: r.error });
     });
 
@@ -289,6 +293,86 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
           })
         : null}
 
+      {tab === 'fields' ? (
+        <section className="ep-card ep-acr-card" aria-labelledby="sp-lists">
+          <h2 id="sp-lists" className="ep-card__title">
+            Lists staff may update
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Education, languages, work experience and documents: staff add, change or remove rows
+            from My profile. A document a change must carry is attached with the request and filed
+            on the employee&apos;s record when accepted; HR still ticks it against the original.
+          </p>
+          <div className="ep-table-wrap">
+            <table className="ep-table ep-table--dense">
+              <thead>
+                <tr>
+                  <th scope="col">List</th>
+                  <th scope="col">Staff</th>
+                  <th scope="col">Document needed for a change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.lists ?? []).map((l) => {
+                  const lp = lists[l.id] ?? { level: 'edit_approval' as Level, proof: null };
+                  return (
+                    <tr key={l.id}>
+                      <td>
+                        <strong>{l.title}</strong>
+                        <span className="ep-field__help"> · usually {l.proofHint}</span>
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`${l.title}: what staff may do`}
+                          className="ep-select"
+                          value={lp.level}
+                          onChange={(e) =>
+                            setLists((x) => ({
+                              ...x,
+                              [l.id]: { ...lp, level: e.target.value as Level },
+                            }))
+                          }
+                        >
+                          {LEVELS.map(([k, label]) => (
+                            <option key={k} value={k}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        {lp.level === 'edit_approval' || lp.level === 'edit_direct' ? (
+                          <select
+                            aria-label={`${l.title}: document needed`}
+                            className="ep-select"
+                            value={lp.proof ?? ''}
+                            onChange={(e) =>
+                              setLists((x) => ({
+                                ...x,
+                                [l.id]: { ...lp, proof: e.target.value || null },
+                              }))
+                            }
+                          >
+                            <option value="">No document</option>
+                            {data.documentTypes.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="ep-field__help">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       {tab === 'approvers' ? (
         <section className="ep-card ep-acr-card">
           <h2 className="ep-card__title">Who approves</h2>
@@ -304,7 +388,10 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
             staff={data.staff}
             onChange={(r) => setApproval((a) => ({ ...a, default: r }))}
           />
-          {data.sections.map((s) => {
+          {[
+            ...data.sections,
+            ...(data.lists ?? []).map((l) => ({ id: `list:${l.id}`, title: `${l.title} (list)` })),
+          ].map((s) => {
             const own = approval.sections[s.id];
             return (
               <div key={s.id} style={{ marginTop: 'var(--sp-4)' }}>

@@ -1,9 +1,10 @@
 import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { MyProfileRowForm } from '@/components/MyProfileRowForm';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { editable, shown, type MyProfile } from '@/lib/my-profile';
-import { sendChanges } from '../actions';
+import { editable, listEditable, shown, type MyProfile } from '@/lib/my-profile';
+import { sendChanges, sendRowChange } from '../actions';
 
 /**
  * Update one section of my profile: each field says whether it is saved at once or goes for approval; the
@@ -12,11 +13,52 @@ import { sendChanges } from '../actions';
 export default async function EditMyProfile({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    section?: string;
+    row?: string;
+    add?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
   const p = await bff.api.fetch<MyProfile>('/me/employee-profile');
+  // 0187: a row of one of the lists
+  const list = p.lists?.find((l) => l.id === sp.section);
+  if (list) {
+    if (!p.canEdit || !listEditable(list)) notFound();
+    const row = sp.row ? (list.rows.find((r) => r.id === sp.row) ?? null) : null;
+    if (sp.row && !row) notFound();
+    if (row?.pending) notFound();
+    return (
+      <main>
+        <PageHeader
+          kicker={t(lang, 'My profile')}
+          title={`${t(lang, list.title)}: ${t(lang, row ? 'change' : 'add')}`}
+          description={
+            list.level === 'edit_direct'
+              ? t(lang, 'Saved at once.')
+              : t(
+                  lang,
+                  'Goes to the school for approval; you can withdraw it from My profile until it is decided.',
+                )
+          }
+          actions={
+            <a className="ep-btn ep-btn--ghost" href="/profile">
+              {t(lang, 'Back')}
+            </a>
+          }
+        />
+        {sp.error ? (
+          <div className="ep-alert ep-alert--danger" role="alert">
+            {sp.detail || t(lang, 'That did not go through.')}
+          </div>
+        ) : null}
+        <MyProfileRowForm list={list} row={row} action={sendRowChange} backHref="/profile" />
+      </main>
+    );
+  }
   const s = p.sections.find((x) => x.id === sp.section);
   if (!s || !p.canEdit) notFound();
   const fields = s.fields.filter(editable);

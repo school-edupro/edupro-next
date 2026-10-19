@@ -1,10 +1,11 @@
 import { Breadcrumbs, Button, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { MyProfileRowForm } from '@/components/MyProfileRowForm';
 import { Notice } from '@/components/Notice';
 import { apiFetch } from '@/lib/api';
-import { editable, shown, type MyProfile } from '@/lib/my-profile';
-import { sendMyChanges } from '@/lib/my-profile-actions';
+import { editable, listEditable, shown, type MyProfile } from '@/lib/my-profile';
+import { sendMyChanges, sendMyRowChange } from '@/lib/my-profile-actions';
 
 /**
  * Update one section of my profile (admin app twin of the staff app page): each field says whether it is
@@ -14,11 +15,52 @@ import { sendMyChanges } from '@/lib/my-profile-actions';
 export default async function EditMyProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    section?: string;
+    row?: string;
+    add?: string;
+    error?: string;
+    detail?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const t = await getTranslations('pages.me_profile');
   const p = await apiFetch<MyProfile>('/me/employee-profile').catch(() => null);
+  // 0187: a row of one of the lists
+  const list = p?.lists.find((l) => l.id === sp.section);
+  if (p && list) {
+    if (!p.canEdit || !listEditable(list)) notFound();
+    const row = sp.row ? (list.rows.find((r) => r.id === sp.row) ?? null) : null;
+    if (sp.row && !row) notFound();
+    if (row?.pending) notFound();
+    return (
+      <>
+        <Breadcrumbs
+          items={[
+            { label: t('kicker'), href: '/me/profile' },
+            { label: t('title'), href: '/me/profile' },
+            { label: list.title },
+          ]}
+        />
+        <PageHeader
+          kicker={t('kicker')}
+          title={`${list.title}: ${row ? 'change' : 'add'}`}
+          description={
+            list.level === 'edit_direct'
+              ? 'Saved at once.'
+              : 'Goes to the school for approval; you can withdraw it from My profile until it is decided.'
+          }
+          actions={
+            <a className="ep-btn ep-btn--ghost" href="/me/profile">
+              Back
+            </a>
+          }
+        />
+        <Notice params={sp} />
+        <MyProfileRowForm list={list} row={row} action={sendMyRowChange} backHref="/me/profile" />
+      </>
+    );
+  }
   const s = p?.sections.find((x) => x.id === sp.section);
   if (!p || !s || !p.canEdit) notFound();
   const fields = s.fields.filter(editable);

@@ -229,3 +229,4 @@ export * from './report-builder';
 export * from './profile-portal';
 export * from './strength-reports';
 export * from './employee-portal';
+export * from './employee-rows';

@@ -239,4 +239,255 @@ describe('employee self-service profile (e2e)', () => {
       404,
     );
   });
+
+  it('lists (0187): a language at once, education and a document with approval, an experience row changed and a removal refused', async () => {
+    const base = (await call(admin, 'GET', '/people/staff-profile/policy')).json().policy;
+    const put = await call(admin, 'PUT', '/people/staff-profile/policy', {
+      ...base,
+      window: { mode: 'open' },
+      lists: {
+        education: { level: 'edit_approval', proof: panType },
+        languages: { level: 'edit_direct' },
+        experience: { level: 'edit_approval' },
+        documents: { level: 'edit_approval' },
+      },
+      // education and documents go to the L1 approver; experience to the office; the default stays office
+      approval: {
+        ...base.approval,
+        sections: {
+          'list:education': [{ kind: 'l1' }],
+          'list:documents': [{ kind: 'l1' }],
+          'list:experience': [{ kind: 'office' }],
+        },
+      },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().lists.education).toEqual({ level: 'edit_approval', proof: panType });
+    const mine0 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    expect(mine0.lists.map((l: { id: string; level: string }) => [l.id, l.level])).toEqual([
+      ['education', 'edit_approval'],
+      ['languages', 'edit_direct'],
+      ['experience', 'edit_approval'],
+      ['documents', 'edit_approval'],
+    ]);
+    expect(mine0.lists[0].proof).toEqual({ typeId: panType, name: expect.any(String) });
+
+    // a language saves at once
+    const lang = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [
+        {
+          kind: 'languages',
+          op: 'add',
+          data: { language: 'Hindi', canRead: true, canSpeak: true },
+        },
+      ],
+    });
+    expect(lang.statusCode).toBe(201);
+    expect(lang.json().applied[0]).toMatch(/^list:languages:add:/);
+    const mine1 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const langs = mine1.lists.find((l: { id: string }) => l.id === 'languages');
+    expect(langs.rows).toHaveLength(1);
+    expect(langs.rows[0].summary).toBe('Hindi: read, speak');
+    expect(langs.rows[0].values).toMatchObject({
+      language: 'Hindi',
+      canRead: true,
+      canWrite: false,
+    });
+
+    // education needs its proof, then waits for the L1 approver
+    const edu = {
+      qualification: 'B.Ed',
+      institution: 'Pune University',
+      passingYear: 2010,
+      score: '72%',
+    };
+    const noProof = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [{ kind: 'education', op: 'add', data: edu }],
+    });
+    expect(noProof.statusCode).toBe(400);
+    expect(noProof.json().type).toBe('people.profile.proof_required');
+    const eduReq = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [{ kind: 'education', op: 'add', data: edu }],
+      proofs: [{ typeId: panType, fileId }],
+    });
+    expect(eduReq.statusCode).toBe(201);
+    expect(eduReq.json().pending[0]).toMatch(/^list:education:add:/);
+    const mine2 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const edu2 = mine2.lists.find((l: { id: string }) => l.id === 'education');
+    expect(edu2.rows).toHaveLength(0);
+    expect(edu2.pendingAdds).toHaveLength(1);
+    expect(edu2.pendingAdds[0].summary).toBe('B.Ed, Pune University, 2010, 72%');
+    const box = (await call(hod, 'GET', '/people/staff-profile-approvals')).json();
+    const waiting = box.data.find((q: { fields: Array<{ key: string }> }) =>
+      q.fields.some((f) => f.key.startsWith('list:education:add:')),
+    );
+    expect(waiting).toBeDefined();
+    expect(waiting.fields[0]).toMatchObject({
+      label: 'Education · add',
+      from: null,
+      to: 'B.Ed, Pune University, 2010, 72%',
+    });
+    const ok = await call(hod, 'POST', `/people/staff-profile-approvals/${waiting.id}/decide`, {
+      approve: true,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().status).toBe('approved');
+    const mine3 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const edu3 = mine3.lists.find((l: { id: string }) => l.id === 'education');
+    expect(edu3.rows).toHaveLength(1);
+    expect(edu3.rows[0].values).toMatchObject({ qualification: 'B.Ed', passingYear: 2010 });
+    expect(edu3.pendingAdds).toHaveLength(0);
+    // the proof became a document on the record
+    const docs = await withMigrator((c) =>
+      c.query(
+        `SELECT 1 FROM employee_documents WHERE employee_id = $1 AND file_id = $2 AND deleted_at IS NULL`,
+        [teacherEmp, fileId],
+      ),
+    );
+    expect(docs.rowCount).toBe(1);
+
+    // an experience row on file: the employee changes it (office approves), then asks to remove it (office refuses)
+    const expRow = await withMigrator((c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO employee_experience (school_id, employee_id, organisation, designation, from_on, to_on)
+         VALUES ($1, $2, 'Old School', 'PRT', '2015-06-01', '2018-03-31') RETURNING id::text`,
+        [school.id, teacherEmp],
+      ),
+    );
+    const rowId = expRow.rows[0]!.id;
+    const edit = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [
+        {
+          kind: 'experience',
+          op: 'edit',
+          rowId,
+          data: {
+            organisation: 'Old School',
+            designation: 'TGT',
+            fromOn: '2015-06-01',
+            toOn: '2018-03-31',
+          },
+        },
+      ],
+    });
+    expect(edit.statusCode).toBe(201);
+    const again = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [{ kind: 'experience', op: 'remove', rowId }],
+    });
+    expect(again.statusCode).toBe(409);
+    const mine4 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const exp4 = mine4.lists.find((l: { id: string }) => l.id === 'experience');
+    expect(exp4.rows[0].pending).toMatchObject({ op: 'edit' });
+    // routed to the office (the list's own approvers), not to the L1 approver
+    const hodBox = (await call(hod, 'GET', '/people/staff-profile-approvals')).json();
+    expect(
+      hodBox.data.some((q: { fields: Array<{ key: string }> }) =>
+        q.fields.some((f) => f.key.startsWith('list:experience:')),
+      ),
+    ).toBe(false);
+    const officeBox = (await call(admin, 'GET', '/people/staff-profile-approvals')).json();
+    const expReq = officeBox.data.find((q: { fields: Array<{ key: string }> }) =>
+      q.fields.some((f) => f.key.startsWith('list:experience:edit:')),
+    );
+    expect(expReq.fields[0]).toMatchObject({
+      label: 'Work experience · change',
+      from: 'Old School – PRT, 01-06-2015 to 31-03-2018',
+      to: 'Old School – TGT, 01-06-2015 to 31-03-2018',
+    });
+    expect(
+      (
+        await call(admin, 'POST', `/people/staff-profile-approvals/${expReq.id}/decide`, {
+          approve: true,
+        })
+      ).json().status,
+    ).toBe('approved');
+    const mine5 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    expect(
+      mine5.lists.find((l: { id: string }) => l.id === 'experience').rows[0].values.designation,
+    ).toBe('TGT');
+    const removal = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [{ kind: 'experience', op: 'remove', rowId }],
+    });
+    expect(removal.statusCode).toBe(201);
+    const rmReq = (await call(admin, 'GET', '/people/staff-profile-approvals'))
+      .json()
+      .data.find((q: { fields: Array<{ key: string }> }) =>
+        q.fields.some((f) => f.key.startsWith('list:experience:remove:')),
+      );
+    expect(rmReq.fields[0]).toMatchObject({ label: 'Work experience · remove', to: '(removed)' });
+    const refused = await call(
+      admin,
+      'POST',
+      `/people/staff-profile-approvals/${rmReq.id}/decide`,
+      {
+        approve: false,
+        note: 'Keep it; HR holds the relieving letter',
+      },
+    );
+    expect(refused.json().status).toBe('rejected');
+    const mine6 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const exp6 = mine6.lists.find((l: { id: string }) => l.id === 'experience');
+    expect(exp6.rows).toHaveLength(1);
+    expect(exp6.rows[0].pending).toBeNull();
+
+    // a document: the employee's own file, approved by the L1 approver, filed unverified
+    const file2 = await withMigrator((c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, original_name, status, created_by)
+         VALUES ($1, 'test', $2, 'image/jpeg', 2200, 'pan-card.jpg', 'ready', $3) RETURNING id::text`,
+        [school.id, `${stamp('ESS2')}/pan-card.jpg`, teacher.id],
+      ),
+    );
+    const docReq = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [
+        {
+          kind: 'documents',
+          op: 'add',
+          data: {
+            typeId: panType,
+            fileId: file2.rows[0]!.id,
+            number: 'ABCDE1234F',
+            expiresOn: '2032-01-01',
+          },
+        },
+      ],
+    });
+    expect(docReq.statusCode).toBe(201);
+    const docWait = (await call(hod, 'GET', '/people/staff-profile-approvals'))
+      .json()
+      .data.find((q: { fields: Array<{ key: string }> }) =>
+        q.fields.some((f) => f.key.startsWith('list:documents:add:')),
+      );
+    expect(docWait.fields[0].to).toMatch(/ABCDE1234F.*pan-card\.jpg/);
+    await call(hod, 'POST', `/people/staff-profile-approvals/${docWait.id}/decide`, {
+      approve: true,
+    });
+    const mine7 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const docs7 = mine7.lists.find((l: { id: string }) => l.id === 'documents');
+    const added = docs7.rows.find(
+      (r: { values: { fileId: string } }) => r.values.fileId === file2.rows[0]!.id,
+    );
+    expect(added.values).toMatchObject({
+      number: 'ABCDE1234F',
+      verified: false,
+      fileName: 'pan-card.jpg',
+    });
+
+    // a hidden list is neither shown nor changeable
+    await call(admin, 'PUT', '/people/staff-profile/policy', {
+      ...base,
+      window: { mode: 'open' },
+      lists: { languages: { level: 'hidden' } },
+    });
+    const mine8 = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    expect(mine8.lists.map((l: { id: string }) => l.id)).toEqual([
+      'education',
+      'experience',
+      'documents',
+    ]);
+    const hidden = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [{ kind: 'languages', op: 'add', data: { language: 'Marathi' } }],
+    });
+    expect(hidden.statusCode).toBe(422);
+  });
 });

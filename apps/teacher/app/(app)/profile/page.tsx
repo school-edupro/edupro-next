@@ -1,10 +1,11 @@
 import { PageHeader } from '@edupro/ui';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { FileLinks } from '@/components/FileLinks';
+import { MyProfileLists } from '@/components/MyProfileLists';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { editable, shown, type MyProfile } from '@/lib/my-profile';
-import { myProfilePdf, withdrawRequest } from './actions';
+import { myProfilePdf, removeRow, withdrawRequest } from './actions';
 
 const STATUS: Record<string, string> = {
   pending: 'Waiting for approval',
@@ -140,6 +141,13 @@ export default async function MyProfilePage({
           </section>
         );
       })}
+
+      <MyProfileLists
+        lists={p.lists ?? []}
+        canEdit={p.canEdit}
+        editBase="/profile/edit"
+        removeAction={removeRow}
+      />
 
       <details className="ep-card ep-acr-card" open={waiting > 0}>
         <summary>

@@ -13,10 +13,16 @@ const Approver = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('employee'), employeeId: Id }),
 ]);
 const Route = z.array(Approver).min(1).max(2);
+const ListKind = z.enum(['education', 'languages', 'experience', 'documents']);
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const EmployeePolicySchema = z.object({
   fields: z.record(z.string().max(60), Level),
   proofs: z.record(z.string().max(60), Id),
+  /** 0187: the row lists; approvers for a list go under approval.sections['list:<kind>'] */
+  lists: z
+    .record(ListKind, z.object({ level: Level, proof: Id.nullable().optional() }))
+    .default({}),
   window: z.object({
     mode: z.enum(['open', 'closed', 'period']),
     from: z
@@ -39,19 +45,40 @@ export const EmployeePolicySchema = z.object({
 });
 export class EmployeePolicyDto extends createZodDto(EmployeePolicySchema) {}
 
-export const EmployeeChangesSchema = z.object({
-  changes: z
-    .record(z.string().max(60), z.union([z.string().max(300), z.boolean(), z.null()]))
-    .refine(
-      (c) => Object.keys(c).length >= 1 && Object.keys(c).length <= 80,
-      'change one to 80 fields',
-    ),
-  reason: z.string().trim().max(500).nullable().optional(),
-  proofs: z
-    .array(z.object({ typeId: Id, fileId: Id }))
-    .max(10)
-    .default([]),
+/** A document the employee adds from My profile (0187). */
+export const EmployeeDocumentRowSchema = z.object({
+  typeId: Id,
+  fileId: Id,
+  number: z.string().trim().max(80).optional(),
+  issuedOn: day.optional(),
+  expiresOn: day.optional(),
 });
+
+/** One row change on a list: add (data), edit (rowId + data) or remove (rowId). */
+export const EmployeeRowChangeSchema = z.object({
+  kind: ListKind,
+  op: z.enum(['add', 'edit', 'remove']),
+  rowId: Id.optional(),
+  data: z
+    .record(z.string().max(40), z.union([z.string().max(300), z.number(), z.boolean(), z.null()]))
+    .optional(),
+});
+
+export const EmployeeChangesSchema = z
+  .object({
+    changes: z
+      .record(z.string().max(60), z.union([z.string().max(300), z.boolean(), z.null()]))
+      .refine((c) => Object.keys(c).length <= 80, 'change up to 80 fields')
+      .default({}),
+    /** 0187: row changes on education, languages, experience and documents */
+    rows: z.array(EmployeeRowChangeSchema).max(20).default([]),
+    reason: z.string().trim().max(500).nullable().optional(),
+    proofs: z
+      .array(z.object({ typeId: Id, fileId: Id }))
+      .max(10)
+      .default([]),
+  })
+  .refine((d) => Object.keys(d.changes).length + d.rows.length >= 1, 'change at least one thing');
 export class EmployeeChangesDto extends createZodDto(EmployeeChangesSchema) {}
 
 export const StaffInboxSchema = z.object({

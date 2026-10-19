@@ -36,6 +36,8 @@ export interface MyRequest {
 export interface MyProfile {
   employee: { id: string; name: string; code: string; photo: string | null; status: string };
   sections: Array<{ id: string; title: string; fields: MyField[] }>;
+  /** 0187: education, languages, experience and documents */
+  lists: MyList[];
   window: { open: boolean; message: string | null; until: string | null };
   canEdit: boolean;
   completeness: { percent: number; missing: string[] };
@@ -48,3 +50,32 @@ export const shown = (v: Value): string => {
   const s = String(v);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}` : s;
 };
+
+// ---- 0187: the row lists (education, languages, experience, documents) --------------------------
+export type MyListKind = 'education' | 'languages' | 'experience' | 'documents';
+export interface MyListColumn {
+  key: string;
+  label: string;
+  type: 'text' | 'year' | 'date' | 'boolean' | 'select' | 'doctype' | 'file';
+  list?: string;
+  required?: boolean;
+  max?: number;
+  options: string[] | Array<{ id: string; name: string; hasExpiry: boolean }> | null;
+}
+export type MyRowData = Record<string, string | number | boolean | null>;
+export interface MyListRow {
+  id: string;
+  values: MyRowData;
+  summary: string;
+  pending: { key: string; op: 'edit' | 'remove'; data: MyRowData | null } | null;
+}
+export interface MyList {
+  id: MyListKind;
+  title: string;
+  level: Level;
+  proof: { typeId: string; name: string } | null;
+  columns: MyListColumn[];
+  rows: MyListRow[];
+  pendingAdds: Array<{ key: string; data: MyRowData; summary: string }>;
+}
+export const listEditable = (l: MyList) => l.level === 'edit_approval' || l.level === 'edit_direct';
