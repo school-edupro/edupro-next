@@ -1,11 +1,12 @@
 import { PageHeader } from '@edupro/ui';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { FileLinks } from '@/components/FileLinks';
+import { MyPhoto } from '@/components/MyPhoto';
 import { MyProfileLists } from '@/components/MyProfileLists';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { editable, shown, type MyProfile } from '@/lib/my-profile';
-import { myProfilePdf, removeRow, withdrawRequest } from './actions';
+import { myProfilePdf, removeRow, sendPhoto, withdrawRequest } from './actions';
 
 const STATUS: Record<string, string> = {
   pending: 'Waiting for approval',
@@ -90,6 +91,20 @@ export default async function MyProfilePage({
           {p.window.message ?? t(lang, 'Profile updates are closed at the moment.')}
         </div>
       ) : null}
+      <MyPhoto
+        name={p.employee.name}
+        photo={p.photo}
+        canEdit={p.canEdit}
+        src="/api/my-photo"
+        action={sendPhoto}
+        tr={(x) => t(lang, x)}
+        badge={(text) => <span className="ep-badge ep-badge--warning">{text}</span>}
+        button={(label) => (
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            {label}
+          </button>
+        )}
+      />
 
       {p.sections.map((s) => {
         const canUpdate = p.canEdit && s.fields.some(editable);

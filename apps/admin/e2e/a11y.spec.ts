@@ -289,6 +289,7 @@ const PAGES = [
   '/people/employees/bulk?mode=create',
   '/reports/builder/new?dataset=employee_profile',
   '/people/employees/37',
+  '/people/employees/37?tab=profile',
   '/people/employees/37?tab=education',
   '/people/employees/37?tab=history',
   '/people/employees/37?tab=posting',

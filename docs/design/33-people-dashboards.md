@@ -60,3 +60,21 @@ health of the records (what is missing, what waits for approval).
   already waiting are refused; a document is replaced by removing it and adding the new file. An approved
   document is filed on the record unverified: HR still ticks it against the original. The profile PDF
   already prints the four lists. Decisions: add, edit and remove with approval; approval never verifies.
+
+## My photo (19 Oct 2026, 0188)
+
+- **Policy:** `EmployeePortalPolicy.photo` = `view` (the office changes it) | `edit_approval`
+  (default) | `edit_direct`; stored as `fields.photo` in `employee_portal_policies`, approvers under
+  `approval.sections.photo` (else the default route). Staff profile settings → Fields → "Lists staff
+  may update" has the Photo row; Approvers has "Photo".
+- **The employee** (My profile, both apps, `MyPhoto.tsx`): the photo on file, a new one waiting
+  (thumbnail, "Waiting for approval: new photo"), and "Send for approval" / "Change photo" with a
+  JPG, PNG or WebP up to 5 MB. `POST me/employee-profile/changes { photo: fileId }`: the employee's own
+  ready image upload only; one change at a time; `changes.photo = {from, to}` (file ids). Approved (or
+  at once): `employees.photo_file_id` and a `person_documents` row of kind `photo`, as the office's
+  upload would leave. Stale when the office changed the photo meanwhile.
+- **Showing it:** staff hold no file right, so `GET me/employee-profile/photo[?file=]` gives the signed
+  address of the photo on file or of the employee's own waiting upload; the apps pass the bytes through
+  (`/api/me/photo` in admin, `/api/my-photo` in the staff app). Approvers see both pictures on the
+  approval card through the request (`…/proofs/:fileId` accepts the request's photo ids).
+- **Test:** `employee-self.e2e-spec.ts` "photo (0188)".

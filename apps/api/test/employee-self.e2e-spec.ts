@@ -240,6 +240,96 @@ describe('employee self-service profile (e2e)', () => {
     );
   });
 
+  it('photo (0188): the employee asks for a new photo with approval, HR accepts and the record follows; at once when allowed; only own images', async () => {
+    const img = async (name: string) =>
+      (
+        await withMigrator((c) =>
+          c.query<{ id: string }>(
+            `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, original_name, status, created_by)
+             VALUES ($1, 'test', $2, 'image/jpeg', 2400, $3, 'ready', $4) RETURNING id::text`,
+            [school.id, `${stamp('ESSP')}/${name}`, name, teacher.id],
+          ),
+        )
+      ).rows[0]!.id;
+    const photo1 = await img('me.jpg');
+    // the window was closed by the case before: open it; the photo goes with approval by the office
+    const before = (await call(admin, 'GET', '/people/staff-profile/policy')).json().policy;
+    await call(admin, 'PUT', '/people/staff-profile/policy', {
+      ...before,
+      window: { mode: 'open' },
+    });
+    const pol = (await call(admin, 'GET', '/people/staff-profile/policy')).json();
+    expect(pol.policy.photo).toBe('edit_approval');
+    const mine = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    expect(mine.photo).toEqual({ fileId: null, level: 'edit_approval', pending: null });
+    // only an own image: the PDF proof file is refused
+    const pdf = await call(teacher, 'POST', '/me/employee-profile/changes', { photo: fileId });
+    expect(pdf.statusCode).toBe(400);
+    const ask = await call(teacher, 'POST', '/me/employee-profile/changes', { photo: photo1 });
+    expect(ask.statusCode).toBe(201);
+    expect(ask.json().pending).toEqual(['photo']);
+    expect((await call(teacher, 'GET', '/me/employee-profile')).json().photo.pending).toBe(photo1);
+    // the signed address of the one waiting; not a stranger's file
+    expect(
+      (await call(teacher, 'GET', `/me/employee-profile/photo?file=${photo1}`)).statusCode,
+    ).toBe(200);
+    expect((await call(other, 'GET', `/me/employee-profile/photo?file=${photo1}`)).statusCode).toBe(
+      404,
+    );
+    // asked twice: refused while waiting
+    expect(
+      (await call(teacher, 'POST', '/me/employee-profile/changes', { photo: photo1 })).statusCode,
+    ).toBe(409);
+    const inbox = (await call(admin, 'GET', '/people/staff-profile-approvals?box=mine')).json();
+    const req = inbox.data.find((r: { photo: { to: string } | null }) => r.photo?.to === photo1);
+    expect(req).toBeTruthy();
+    expect(req.fields[0]).toMatchObject({
+      key: 'photo',
+      label: 'Photo',
+      from: null,
+      to: 'New photo',
+    });
+    // the approver sees the new photo through the request
+    expect(
+      (await call(admin, 'GET', `/people/staff-profile-approvals/${req.id}/proofs/${photo1}`))
+        .statusCode,
+    ).toBe(200);
+    const ok = await call(admin, 'POST', `/people/staff-profile-approvals/${req.id}/decide`, {
+      approve: true,
+    });
+    expect(ok.statusCode).toBe(200);
+    const onFile = await withMigrator((c) =>
+      c.query<{ photo: string | null; docs: string }>(
+        `SELECT e.photo_file_id::text AS photo,
+                (SELECT count(*) FROM person_documents d WHERE d.person_id = e.id AND d.person_type = 'employee' AND d.kind = 'photo')::text AS docs
+           FROM employees e WHERE e.id = $1`,
+        [teacherEmp],
+      ),
+    );
+    expect(onFile.rows[0]).toEqual({ photo: photo1, docs: '1' });
+    expect((await call(teacher, 'GET', '/me/employee-profile/photo')).statusCode).toBe(200);
+    // at once when the school allows it
+    const put = await call(admin, 'PUT', '/people/staff-profile/policy', {
+      ...pol.policy,
+      fields: { ...pol.policy.fields, photo: 'edit_direct' },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().photo).toBe('edit_direct');
+    const photo2 = await img('me2.jpg');
+    const now = await call(teacher, 'POST', '/me/employee-profile/changes', { photo: photo2 });
+    expect(now.statusCode).toBe(201);
+    expect(now.json().applied).toEqual(['photo']);
+    expect((await call(teacher, 'GET', '/me/employee-profile')).json().photo.fileId).toBe(photo2);
+    // shown only: the office changes it
+    await call(admin, 'PUT', '/people/staff-profile/policy', {
+      ...pol.policy,
+      fields: { ...pol.policy.fields, photo: 'view' },
+    });
+    const no = await call(teacher, 'POST', '/me/employee-profile/changes', { photo: photo1 });
+    expect(no.statusCode).toBe(422);
+    await call(admin, 'PUT', '/people/staff-profile/policy', pol.policy);
+  });
+
   it('lists (0187): a language at once, education and a document with approval, an experience row changed and a removal refused', async () => {
     const base = (await call(admin, 'GET', '/people/staff-profile/policy')).json().policy;
     const put = await call(admin, 'PUT', '/people/staff-profile/policy', {

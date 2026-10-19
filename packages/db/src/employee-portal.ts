@@ -29,6 +29,11 @@ export interface EmployeePortalPolicy {
   proofs: Record<string, string>;
   /** 0187: the four lists; approvers under approval.sections['list:<kind>'] */
   lists: Record<EmployeeListKind, EmployeeListPolicy>;
+  /**
+   * 0188: the employee's photo (shown; or changed by the employee with approval or at once). Stored as
+   * fields.photo; approvers under approval.sections.photo. HR always changes it on the employee's page.
+   */
+  photo: Exclude<PortalLevel, 'hidden'>;
   window: EditWindow;
   approval: {
     default: EmployeeRoute;
@@ -61,11 +66,15 @@ export function employeeDefaultLevel(f: EmployeeField): PortalLevel {
 export const EMPLOYEE_DEFAULT_ROUTE: EmployeeRoute = [{ kind: 'office' }];
 
 const LEVELS = new Set<PortalLevel>(['hidden', 'view', 'edit_approval', 'edit_direct']);
+/** The photo's key in the policy's fields, in change requests and in approval.sections (0188). */
+export const EMPLOYEE_PHOTO_KEY = 'photo';
 const SECTION_IDS = new Set<string>([
   ...EMPLOYEE_SECTIONS.map((s) => s.id),
   ...EMPLOYEE_LIST_KINDS.map((k) => `list:${k}`),
+  EMPLOYEE_PHOTO_KEY,
 ]);
 export const employeeListSection = (kind: EmployeeListKind) => `list:${kind}`;
+export const employeePolicySectionIds = (): ReadonlySet<string> => SECTION_IDS;
 
 function cleanRoute(raw: unknown): EmployeeRoute | null {
   if (!Array.isArray(raw)) return null;
@@ -111,6 +120,9 @@ export function resolveEmployeePolicy(
   for (const [k, v] of Object.entries((row?.proofs ?? {}) as Record<string, unknown>))
     if (EMPLOYEE_FIELDS.some((f) => f.key === k) && /^\d{1,18}$/.test(String(v)))
       proofs[k] = String(v);
+  const pv = stored[EMPLOYEE_PHOTO_KEY];
+  const photo: EmployeePortalPolicy['photo'] =
+    pv === 'view' || pv === 'edit_direct' || pv === 'edit_approval' ? pv : 'edit_approval';
   const storedLists = (row?.lists ?? {}) as Record<string, unknown>;
   const lists = {} as Record<EmployeeListKind, EmployeeListPolicy>;
   for (const kind of EMPLOYEE_LIST_KINDS) {
@@ -145,6 +157,7 @@ export function resolveEmployeePolicy(
     fields,
     proofs,
     lists,
+    photo,
     window,
     approval: {
       default: cleanRoute(a.default) ?? EMPLOYEE_DEFAULT_ROUTE,
@@ -178,6 +191,10 @@ export function employeeListRouteFor(
   kind: EmployeeListKind,
 ): EmployeeRoute {
   return p.approval.sections[employeeListSection(kind)] ?? p.approval.default;
+}
+/** The approvers of a photo change (0188): its own, else the default. */
+export function employeePhotoRouteFor(p: EmployeePortalPolicy): EmployeeRoute {
+  return p.approval.sections[EMPLOYEE_PHOTO_KEY] ?? p.approval.default;
 }
 export const employeeRouteSignature = (r: EmployeeRoute): string => JSON.stringify(r);
 export const employeeWindowState = windowState;

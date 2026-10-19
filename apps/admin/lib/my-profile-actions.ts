@@ -183,6 +183,29 @@ export async function sendMyRowChange(fd: FormData) {
   done(out!.applied.length ? 'Saved.' : 'Sent for approval.');
 }
 
+/** A new photo of mine (0188): uploaded as my own image, then sent the way the school decided. */
+export async function sendMyPhoto(fd: FormData) {
+  const f = fd.get('photo');
+  let out: { applied: string[]; pending: string[] } | undefined;
+  try {
+    if (!(f instanceof File) || !f.size)
+      throw new ApiError(400, { type: 'validation-failed', detail: 'Choose a photo.' });
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type))
+      throw new ApiError(400, {
+        type: 'validation-failed',
+        detail: `${f.name}: a photo (JPG, PNG or WebP).`,
+      });
+    const photo = await upload(f);
+    out = await apiFetch('/me/employee-profile/changes', {
+      method: 'POST',
+      body: JSON.stringify({ photo, reason: str(fd, 'reason') || null }),
+    });
+  } catch (error) {
+    fail(BASE, error);
+  }
+  done(out!.applied.length ? 'Your photo is changed.' : 'Your new photo is sent for approval.');
+}
+
 /** Ask to remove one row (or a document); it goes the way the list's changes go. */
 export async function removeMyRow(fd: FormData) {
   const kind = str(fd, 'kind');

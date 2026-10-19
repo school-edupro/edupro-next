@@ -5,6 +5,7 @@ import {
   EMPLOYEE_FIELDS,
   EMPLOYEE_LIST_KINDS,
   EMPLOYEE_LISTS,
+  EMPLOYEE_PHOTO_KEY,
   EMPLOYEE_SECTIONS,
   decryptField,
   deleteEmployeeRow,
@@ -12,6 +13,7 @@ import {
   employeeCompleteness,
   employeeEditable,
   employeeListRouteFor,
+  employeePhotoRouteFor,
   employeeRouteFor,
   employeeRouteSignature,
   employeeRowKey,
@@ -78,6 +80,7 @@ interface Entry {
 const opWord = (op: EmployeeRowOp) => (op === 'add' ? 'add' : op === 'edit' ? 'change' : 'remove');
 /** Field label, or "<List> · add/change/remove" for a row key. */
 function labelOf(key: string): string {
+  if (key === EMPLOYEE_PHOTO_KEY) return 'Photo';
   const f = FIELD.get(key);
   if (f) return f.label;
   const pk = parseEmployeeRowKey(key);
@@ -92,6 +95,15 @@ function rowView(key: string, v: ChangeItem): { from: Value; to: Value } | null 
     to: pk.op === 'remove' ? '(removed)' : summariseEmployeeRow(pk.kind, v.to as RowData | null),
   };
 }
+/** A photo change (0188) reads as words; the file ids travel beside the fields for thumbnails. */
+const photoView = (v: ChangeItem): { from: Value; to: Value } => ({
+  from: v.from ? 'Photo on file' : null,
+  to: 'New photo',
+});
+const photoOf = (changes: Record<string, ChangeItem>) => {
+  const v = changes[EMPLOYEE_PHOTO_KEY];
+  return v ? { from: (v.from as string | null) ?? null, to: String(v.to) } : null;
+};
 interface RequestRow {
   id: string;
   employee_id: string;
@@ -263,15 +275,23 @@ export class EmployeeSelfService {
         });
       }
       const editableLevel = (l: string) => l === 'edit_approval' || l === 'edit_direct';
+      const waitingPhoto = waiting[EMPLOYEE_PHOTO_KEY];
       return {
         employee: { id, ...meta.rows[0]! },
         sections,
         lists: rowLists,
+        // 0188: the photo, what the employee may do with it, and one waiting for approval
+        photo: {
+          fileId: meta.rows[0]!.photo,
+          level: policy.photo,
+          pending: typeof waitingPhoto === 'string' && waitingPhoto ? waitingPhoto : null,
+        },
         window: win,
         canEdit:
           win.open &&
           (sections.some((s) => s.fields.some((f) => editableLevel(f.level))) ||
-            rowLists.some((l) => editableLevel(l.level))),
+            rowLists.some((l) => editableLevel(l.level)) ||
+            editableLevel(policy.photo)),
         completeness: employeeCompleteness(values),
         requests: await this.requestsOf(c, id),
       };
@@ -304,8 +324,9 @@ export class EmployeeSelfService {
               with: employeeApproverLabel(x.route[x.current_level - 1]!, names),
             }
           : null,
+      photo: photoOf(x.changes),
       fields: Object.entries(x.changes).map(([key, v]) => {
-        const rv = rowView(key, v);
+        const rv = key === EMPLOYEE_PHOTO_KEY ? photoView(v) : rowView(key, v);
         return {
           key,
           label: labelOf(key),
@@ -363,6 +384,8 @@ export class EmployeeSelfService {
         if (!f || !employeeEditable(f) || (level !== 'edit_approval' && level !== 'edit_direct'))
           errors[k] = 'This field cannot be changed here';
       }
+      if (dto.photo && policy.photo !== 'edit_approval' && policy.photo !== 'edit_direct')
+        errors[EMPLOYEE_PHOTO_KEY] = 'The photo is changed by the office';
       if (Object.keys(errors).length)
         throw new DomainError(
           'people.profile.field_not_allowed',
@@ -402,7 +425,28 @@ export class EmployeeSelfService {
         );
       // 0187: row changes on education, languages, experience and documents
       const rowEntries = await this.rowEntries(c, id, policy, dto.rows ?? [], busy);
-      if (!changed.length && !rowEntries.length)
+      // 0188: a new photo (the employee's own image upload)
+      let photoEntry: Entry | null = null;
+      if (dto.photo) {
+        if (busy.has(EMPLOYEE_PHOTO_KEY))
+          throw new DomainError('people.change.pending', 'Already waiting for approval: Photo', {
+            status: 409,
+          });
+        await this.ownImage(c, dto.photo);
+        const cur = await this.photoOf(c, id);
+        const to = dto.photo;
+        if (cur !== to)
+          photoEntry = {
+            key: EMPLOYEE_PHOTO_KEY,
+            item: { from: cur, to },
+            level: policy.photo as 'edit_direct' | 'edit_approval',
+            route: employeePhotoRouteFor(policy),
+            proofType: null,
+            label: 'Photo',
+            apply: () => this.applyPhoto(c, id, to),
+          };
+      }
+      if (!changed.length && !rowEntries.length && !photoEntry)
         throw new DomainError('people.profile.no_change', 'Nothing differs from what is on file', {
           status: 400,
         });
@@ -430,6 +474,7 @@ export class EmployeeSelfService {
           label: FIELD.get(k)?.label ?? k,
         })),
         ...rowEntries,
+        ...(photoEntry ? [photoEntry] : []),
       ];
       const missing = entries.filter((e) => e.proofType && !have.has(e.proofType));
       if (missing.length)
@@ -664,6 +709,51 @@ export class EmployeeSelfService {
     return f.rows[0].name;
   }
 
+  /** The employee's own ready image upload (a new photo, 0188). */
+  private async ownImage(c: PoolClient, fileId: string): Promise<void> {
+    const f = await c.query(
+      `SELECT 1 FROM files
+        WHERE id = $1 AND created_by = app.current_user_id() AND status = 'ready' AND deleted_at IS NULL
+          AND content_type IN ('image/png', 'image/jpeg', 'image/webp')`,
+      [fileId],
+    );
+    if (!f.rows[0])
+      throw new DomainError('validation-failed', 'Attach your own photo (PNG, JPEG or WebP)', {
+        status: 400,
+      });
+  }
+
+  private async photoOf(c: PoolClient, employeeId: string): Promise<string | null> {
+    const r = await c.query<{ photo: string | null }>(
+      `SELECT photo_file_id::text AS photo FROM employees WHERE id = $1`,
+      [employeeId],
+    );
+    return r.rows[0]?.photo ?? null;
+  }
+
+  /** The new photo on the record, filed as the office's own upload would be (0188). */
+  private async applyPhoto(c: PoolClient, employeeId: string, fileId: string): Promise<void> {
+    await c.query(
+      `INSERT INTO person_documents (school_id, person_type, person_id, kind, file_id, created_by)
+       VALUES (app.current_school_id(), 'employee', $1, 'photo', $2, app.current_user_id())`,
+      [employeeId, fileId],
+    );
+    await c.query(
+      `UPDATE employees SET photo_file_id = $2, updated_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
+      [employeeId, fileId],
+    );
+    // and as the "Photograph" document for employment, for HR to tick against the original
+    await c.query(
+      `INSERT INTO employee_documents (school_id, employee_id, type_id, file_id, created_by)
+           SELECT app.current_school_id(), $1, t.id, $2, app.current_user_id()
+             FROM employee_document_types t
+            WHERE t.code = 'photo' AND t.status = 'active'
+              AND NOT EXISTS (SELECT 1 FROM employee_documents d
+                               WHERE d.employee_id = $1 AND d.type_id = t.id AND d.file_id = $2 AND d.deleted_at IS NULL)`,
+      [employeeId, fileId],
+    );
+  }
+
   /** Writes one accepted row change (at once, or when the last approver accepts). */
   private async applyRow(
     c: PoolClient,
@@ -854,17 +944,18 @@ export class EmployeeSelfService {
   }
 
   async savePolicy(ctx: RequestContext, dto: EmployeePolicyDto) {
-    for (const k of [
-      ...Object.keys(dto.fields),
-      ...Object.keys(dto.proofs),
-      ...Object.keys(dto.approval.fields),
-    ])
+    // fields may carry the photo's level (0188); proofs and per-field approvers are for real fields
+    for (const k of Object.keys(dto.fields))
+      if (!FIELD.has(k) && k !== EMPLOYEE_PHOTO_KEY)
+        throw new DomainError('validation-failed', `Unknown field ${k}`, { status: 400 });
+    for (const k of [...Object.keys(dto.proofs), ...Object.keys(dto.approval.fields)])
       if (!FIELD.has(k))
         throw new DomainError('validation-failed', `Unknown field ${k}`, { status: 400 });
     for (const k of Object.keys(dto.approval.sections))
       if (
         !EMPLOYEE_SECTIONS.some((s) => s.id === k) &&
-        !EMPLOYEE_LIST_KINDS.some((l) => `list:${l}` === k)
+        !EMPLOYEE_LIST_KINDS.some((l) => `list:${l}` === k) &&
+        k !== EMPLOYEE_PHOTO_KEY
       )
         throw new DomainError('validation-failed', `Unknown section ${k}`, { status: 400 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -992,9 +1083,10 @@ export class EmployeeSelfService {
       })),
       step: r.current_level,
       proofs: r.proofs,
+      photo: photoOf(r.changes),
       canAct: this.canAct(r, actor),
       fields: Object.entries(r.changes).map(([key, v]) => {
-        const rv = rowView(key, v);
+        const rv = key === EMPLOYEE_PHOTO_KEY ? photoView(v) : rowView(key, v);
         return {
           key,
           label: labelOf(key),
@@ -1074,7 +1166,7 @@ export class EmployeeSelfService {
       const now = (await readEmployeeProfile(c, r.employee_id, true))!.values;
       const plain = (v: Value, enc?: true) => (enc && typeof v === 'string' ? decryptField(v) : v);
       const values: ProfileValues = {};
-      for (const k of accepted.filter((x) => !parseEmployeeRowKey(x))) {
+      for (const k of accepted.filter((x) => !parseEmployeeRowKey(x) && x !== EMPLOYEE_PHOTO_KEY)) {
         const it = changes[k]!;
         const from = plain(it.from as Value, it.enc);
         const to = plain(it.to as Value, it.enc);
@@ -1091,6 +1183,21 @@ export class EmployeeSelfService {
       if (Object.keys(values).length) {
         await writeEmployeeProfile(c, r.employee_id, values);
         await refreshEmployeeCompleteness(c, r.employee_id);
+      }
+      // 0188: the accepted photo goes on the record, unless the office changed it meanwhile
+      if (accepted.includes(EMPLOYEE_PHOTO_KEY)) {
+        const it = changes[EMPLOYEE_PHOTO_KEY]!;
+        const cur = await this.photoOf(c, r.employee_id);
+        const from = (it.from as string | null) ?? null;
+        const to = String(it.to);
+        if (cur !== from && cur !== to)
+          throw new DomainError(
+            'people.change.stale',
+            'The photo changed since this request; refuse it and ask again',
+            { status: 409 },
+          );
+        await this.applyPhoto(c, r.employee_id, to);
+        changes[EMPLOYEE_PHOTO_KEY] = { ...it, status: 'approved' };
       }
       // 0187: accepted row changes are written now
       for (const k of accepted) {
@@ -1157,12 +1264,38 @@ export class EmployeeSelfService {
     return { status, nextStep: status === 'pending' ? r.current_level + 1 : null };
   }
 
-  /** A proof file of a request, for its reviewers (a signed download address). */
+  /**
+   * My own photo (0188): the one on file, or one I uploaded for a change (waiting for approval). The
+   * employee holds no file right, so the address is given here.
+   */
+  async myPhotoUrl(ctx: RequestContext, fileId?: string) {
+    const target = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const id = await this.myEmployee(c);
+      const cur = await this.photoOf(c, id);
+      if (!fileId || fileId === cur) return cur;
+      const own = await c.query(
+        `SELECT 1 FROM files WHERE id = $1 AND created_by = app.current_user_id() AND deleted_at IS NULL`,
+        [fileId],
+      );
+      if (!own.rows[0]) throw new DomainError('not-found', 'Photo not found', { status: 404 });
+      return fileId;
+    });
+    if (!target) throw new DomainError('not-found', 'No photo on file', { status: 404 });
+    return this.files.downloadUrl(ctx, target);
+  }
+
+  /** A proof file of a request, for its reviewers (a signed download address); the photos of a request too. */
   async proofUrl(ctx: RequestContext, id: string, fileId: string) {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       // eslint-disable-next-line no-restricted-syntax -- SELECT is a fixed fragment; the id is bound
       const r = (await c.query<RequestRow>(`${SELECT} WHERE r.id = $1`, [id])).rows[0];
-      if (!r || !r.proofs.some((p) => p.fileId === fileId))
+      const photo = r ? photoOf(r.changes) : null;
+      const ofRequest =
+        r &&
+        (r.proofs.some((p) => p.fileId === fileId) ||
+          photo?.to === fileId ||
+          photo?.from === fileId);
+      if (!r || !ofRequest)
         throw new DomainError('not-found', 'Document not found', { status: 404 });
       const actor = await this.actor(c, ctx);
       if (!actor.office && !actor.override && !this.canAct(r, actor))

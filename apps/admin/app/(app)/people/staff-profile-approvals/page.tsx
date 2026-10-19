@@ -21,6 +21,8 @@ interface Req {
   route: Array<{ label: string; done: boolean }>;
   step: number;
   proofs: Array<{ typeId: string; fileId: string; fileName: string | null }>;
+  /** 0188: a photo change, shown as the two pictures */
+  photo: { from: string | null; to: string } | null;
   canAct: boolean;
   fields: Array<{
     key: string;
@@ -191,6 +193,37 @@ export default async function StaffProfileApprovalsPage({
                 </tbody>
               </table>
             </div>
+            {q.photo ? (
+              <p
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-3)',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span className="ep-kicker">Photo</span>
+                {q.photo.from ? (
+                  <img
+                    src={`/api/staff-proofs/${q.id}/${q.photo.from}`}
+                    alt="Photo on file"
+                    width={72}
+                    height={72}
+                    style={{ objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                  />
+                ) : (
+                  <span className="ep-field__help">none on file</span>
+                )}
+                <span aria-hidden="true">→</span>
+                <img
+                  src={`/api/staff-proofs/${q.id}/${q.photo.to}`}
+                  alt="New photo"
+                  width={72}
+                  height={72}
+                  style={{ objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
+                />
+              </p>
+            ) : null}
             {q.proofs.length ? (
               <p>
                 Documents:{' '}

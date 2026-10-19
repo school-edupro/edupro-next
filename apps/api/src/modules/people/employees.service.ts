@@ -463,11 +463,22 @@ export class EmployeesService {
           dto.expiresOn ?? null,
         ],
       );
-      if (dto.kind === 'photo')
+      if (dto.kind === 'photo') {
         await c.query(
           'UPDATE employees SET photo_file_id = $2, updated_by = app.current_user_id() WHERE id = $1',
           [employeeId, dto.fileId],
         );
+        // the photo also counts as the "Photograph" document for employment (0188); HR still ticks it
+        await c.query(
+          `INSERT INTO employee_documents (school_id, employee_id, type_id, file_id, created_by)
+           SELECT app.current_school_id(), $1, t.id, $2, app.current_user_id()
+             FROM employee_document_types t
+            WHERE t.code = 'photo' AND t.status = 'active'
+              AND NOT EXISTS (SELECT 1 FROM employee_documents d
+                               WHERE d.employee_id = $1 AND d.type_id = t.id AND d.file_id = $2 AND d.deleted_at IS NULL)`,
+          [employeeId, dto.fileId],
+        );
+      }
       await this.audit.stage(ctx, c, {
         action: 'people.document.add',
         entityType: 'person_documents',

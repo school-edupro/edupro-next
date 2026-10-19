@@ -128,7 +128,6 @@ experience, remarks and transfers). Built in three parts.
   `people.sensitive.view` today (checked by the worker). "Profile PDF" on the employee page waits for it:
   View (to print) and Download. Test: `apps/workers/test/employee-profile.test.ts`.
 
-
 ## Staff transfers (18 Oct 2026, migration 0182)
 
 - **Within the school** (`POST people/staff/:id/campus-move`): another campus from a date, optionally a
@@ -147,3 +146,25 @@ experience, remarks and transfers). Built in three parts.
   left on the date (inactive once the date has passed), leaving reason, transfer row, remark, membership
   ended. The target may turn it down, the source may cancel, each with a reason. Test:
   `apps/api/test/employee-transfer.e2e-spec.ts`.
+
+## The employee's page rebuilt like the student's (19 Oct 2026, 0188)
+
+Asked for: the page showed no photo; rebuild it as the student profile, the benchmark being the best
+school ERPs (a hero with the photo, the facts at a glance, completeness, the actions, then tabs).
+
+- **Hero** (`components/employees/EmployeeHero.tsx`): the photo (`/api/files/:id/view`) or initials,
+  **Add / Change photo** for `people.employee.edit` (`uploadEmployeePhoto` → `POST
+people/employees/:id/documents` with kind `photo`, which sets `employees.photo_file_id`), name,
+  status and login badges, code · staff type · designation, department; facts (date of birth and age,
+  gender, blood group, joined on and years of service, nature of appointment, campus, reports to,
+  teaches); who to call (mobile, email, emergency contact, tap-to-call); the completeness meter; the
+  actions: Edit full profile, Profile PDF, ID card, Make a staff login, Open as… (0188).
+- **Tabs** with counts: Overview (new, the default), Profile (the full editor and teaching subjects),
+  Education, Languages, Experience, Transfers and remarks, Documents (missing count), Posting, ACR.
+  The list's row menu: Open, Edit full profile, …, Open an app as them….
+- **Overview** (`EmployeeOverview.tsx`): posting (with direct reports), documents for employment
+  (missing / expired named), education and work in short, then every profile section as a card with
+  the filled fields and the required empty ones named, each with Edit to the Profile tab; approvers
+  for those who may see ACRs.
+- **The employee's own photo** (decision: HR sets it on the page; the employee may ask for a change
+  from My profile with approval): see docs/design/33, "My photo".

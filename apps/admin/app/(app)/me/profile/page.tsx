@@ -1,4 +1,5 @@
-import { Alert, Button, PageHeader } from '@edupro/ui';
+import { Alert, Badge, Button, PageHeader } from '@edupro/ui';
+import { MyPhoto } from '@/components/MyPhoto';
 import { getTranslations } from 'next-intl/server';
 import { FileLinks } from '@/components/FileLinks';
 import { MyProfileLists } from '@/components/MyProfileLists';
@@ -6,7 +7,12 @@ import { Notice } from '@/components/Notice';
 import { RefreshWhilePending } from '@/components/RefreshWhilePending';
 import { ApiError, apiFetch } from '@/lib/api';
 import { editable, REQUEST_STATUS, shown, type MyProfile } from '@/lib/my-profile';
-import { myProfilePdf, removeMyRow, withdrawMyRequest } from '@/lib/my-profile-actions';
+import {
+  myProfilePdf,
+  removeMyRow,
+  sendMyPhoto,
+  withdrawMyRequest,
+} from '@/lib/my-profile-actions';
 
 /**
  * My profile for staff who work in the admin app (docs/design/33-people-dashboards.md): the same
@@ -90,6 +96,19 @@ export default async function MyProfilePage({
           </Alert>
         </div>
       ) : null}
+      <MyPhoto
+        name={p.employee.name}
+        photo={p.photo}
+        canEdit={p.canEdit}
+        src="/api/me/photo"
+        action={sendMyPhoto}
+        badge={(text) => <Badge tone="warning">{text}</Badge>}
+        button={(label) => (
+          <Button type="submit" variant="secondary" size="sm">
+            {label}
+          </Button>
+        )}
+      />
 
       {p.sections.map((s) => {
         const canUpdate = p.canEdit && s.fields.some(editable);

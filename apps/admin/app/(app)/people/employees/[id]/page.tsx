@@ -8,25 +8,23 @@ import {
   FormRow,
   FormSection,
   InputField,
-  PageHeader,
   SelectField,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { Icon } from '@/components/nav-icons';
+import { EmployeeHero, EMPLOYEE_TABS, type EmployeeTab } from '@/components/employees/EmployeeHero';
+import { EmployeeOverview } from '@/components/employees/EmployeeOverview';
 import { EmployeeProfileEditor } from '@/components/employees/EmployeeProfileEditor';
 import { ChipPickerField } from '@/components/ChipPickerField';
 import { FileLinks } from '@/components/FileLinks';
-import { OpenPortalAs } from '@/components/OpenPortalAs';
 import { ExportWatcher } from '@/components/ExportWatcher';
-import { requestEmployeeIdCard, upsertPosting } from '@/lib/actions';
+import { upsertPosting } from '@/lib/actions';
 import {
-  createEmployeeLogin,
   moveEmployeeCampus,
   removeEmployeeDocument,
   requestEmployeeTransfer,
-  requestEmployeePrint,
   removeEmployeeRow,
   saveEmployeeProfile,
   saveEmployeeRow,
@@ -39,19 +37,10 @@ import { ACR_STATUS, type AcrRow } from '@/lib/acr';
 import type { EmployeeCatalogue, EmployeeProfile } from '@/lib/employee';
 import type { Employee, Employee360, Page, PersonDocument, Posting, School } from '@/lib/types';
 
-const TABS = [
-  ['profile', 'Profile'],
-  ['education', 'Education'],
-  ['languages', 'Languages'],
-  ['experience', 'Experience'],
-  ['history', 'Transfers and remarks'],
-  ['documents', 'Documents'],
-  ['posting', 'Posting'],
-  ['acr', 'ACR'],
-] as const;
-type Tab = (typeof TABS)[number][0];
+type Tab = EmployeeTab;
 const OK: Record<string, string> = {
   saved: 'Saved.',
+  photo: 'The photo is updated: it shows on the profile printout and the ID card.',
   view_ended: 'The session as them has ended; you are yourself again.',
   removed: 'Removed.',
   login: 'The staff login is made: they sign in with a code sent to their mobile or email.',
@@ -74,8 +63,9 @@ const withCurrent = (values: string[], current: string | null | undefined) => [
 ];
 
 /**
- * The employee (docs/design/30-employee-master.md): the full profile by section, education, languages,
- * work experience, transfers and remarks, and the posting and documents; the staff login and ID card.
+ * The employee (docs/design/30-employee-master.md): the hero with photo and facts (0188), an overview,
+ * the full profile by section, education, languages, work experience, transfers and remarks, and the
+ * posting and documents; the staff login, the ID card and Open as….
  */
 export default async function EmployeePage({
   params,
@@ -94,7 +84,7 @@ export default async function EmployeePage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const tab: Tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : 'profile';
+  const tab: Tab = EMPLOYEE_TABS.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : 'overview';
   const [t, p, c, me, employee, profile, catalogue, others, school] = await Promise.all([
     getTranslations('people.employees'),
     getTranslations('people'),
@@ -168,60 +158,13 @@ export default async function EmployeePage({
           { label: employee.displayName },
         ]}
       />
-      <PageHeader
-        kicker={p('kicker')}
-        title={employee.displayName}
-        description={
-          <>
-            {t('code')} <strong>{employee.employeeCode}</strong>
-            {profile.values.staff_type ? ` · ${String(profile.values.staff_type)}` : ''}
-            {profile.values.designation ? ` · ${String(profile.values.designation)}` : ''}
-            {profile.values.department ? `, ${String(profile.values.department)}` : ''}
-          </>
-        }
-        actions={
-          <div
-            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap' }}
-          >
-            <Badge tone={employee.status === 'active' ? 'success' : 'danger'}>
-              {employee.status === 'active' ? 'Active' : 'Inactive'}
-            </Badge>
-            {profile.hasLogin ? (
-              <Badge tone="info">Has a login</Badge>
-            ) : canEdit ? (
-              <form action={createEmployeeLogin}>
-                <input type="hidden" name="id" value={id} />
-                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                  <Icon name="key" size={16} /> Make a staff login
-                </button>
-              </form>
-            ) : (
-              <Badge tone="neutral">No login</Badge>
-            )}
-            <form action={requestEmployeePrint}>
-              <input type="hidden" name="id" value={id} />
-              <input type="hidden" name="tab" value={tab} />
-              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                <Icon name="file" size={16} /> Profile PDF
-              </button>
-            </form>
-            <form action={requestEmployeeIdCard}>
-              <input type="hidden" name="id" value={employee.id} />
-              <Button type="submit" variant="secondary" size="sm">
-                {p('students.requestIdCard')}
-              </Button>
-            </form>
-            {me.permissions.includes('access.portal.view_as') && !me.impersonation ? (
-              <OpenPortalAs
-                kind="employee"
-                id={employee.id}
-                canMakeLogin={canEdit}
-                autoOpen={sp.openAs === '1'}
-                returnTo={`/people/employees/${employee.id}`}
-              />
-            ) : null}
-          </div>
-        }
+      <EmployeeHero
+        employee={employee}
+        profile={profile}
+        tab={tab}
+        can={(perm) => me.permissions.includes(perm)}
+        impersonating={Boolean(me.impersonation)}
+        openAs={sp.openAs === '1'}
       />
       <Notice params={{ ...sp, detail: sp.ok ? (OK[sp.ok] ?? 'Done.') : sp.detail }} />
       {sp.export && /^\d{1,18}$/.test(sp.export) ? (
@@ -238,29 +181,14 @@ export default async function EmployeePage({
           }}
         />
       ) : null}
-      <nav className="ep-tabs-links" aria-label="Employee" style={{ marginBottom: 'var(--sp-4)' }}>
-        {TABS.map(([k, label]) => (
-          <a
-            key={k}
-            href={`/people/employees/${id}${k === 'profile' ? '' : `?tab=${k}`}`}
-            aria-current={tab === k ? 'page' : undefined}
-          >
-            {label}
-            {k === 'education' && rows.education.length
-              ? ` (${String(rows.education.length)})`
-              : ''}
-            {k === 'languages' && rows.languages.length
-              ? ` (${String(rows.languages.length)})`
-              : ''}
-            {k === 'experience' && rows.experience.length
-              ? ` (${String(rows.experience.length)})`
-              : ''}
-            {k === 'documents' && profile.documents.missing
-              ? ` (${String(profile.documents.missing)} missing)`
-              : ''}
-          </a>
-        ))}
-      </nav>
+      {tab === 'overview' ? (
+        <EmployeeOverview
+          employee={employee}
+          profile={profile}
+          catalogue={catalogue}
+          canAcr={canAcr}
+        />
+      ) : null}
 
       {tab === 'profile' ? (
         <>

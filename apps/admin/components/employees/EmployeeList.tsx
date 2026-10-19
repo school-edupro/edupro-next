@@ -94,8 +94,13 @@ const EMPLOYEES: PeopleListConfig<EmployeeListView, EmployeeListResult> = {
   menu: (id, _r, can) => (
     <>
       <li>
-        <a href={`/people/employees/${id}`}>{can.edit ? 'Open and edit profile' : 'Open'}</a>
+        <a href={`/people/employees/${id}`}>Open</a>
       </li>
+      {can.edit ? (
+        <li>
+          <a href={`/people/employees/${id}?tab=profile`}>Edit full profile</a>
+        </li>
+      ) : null}
       <li>
         <a href={`/people/employees/${id}?tab=education`}>Education</a>
       </li>

@@ -24,6 +24,8 @@ export interface MyRequest {
   note: string | null;
   reason: string | null;
   step: { at: number; of: number; with: string } | null;
+  /** 0188: the file ids of a photo change (the fields list reads "Photo on file → New photo") */
+  photo: { from: string | null; to: string } | null;
   fields: Array<{
     key: string;
     label: string;
@@ -38,6 +40,8 @@ export interface MyProfile {
   sections: Array<{ id: string; title: string; fields: MyField[] }>;
   /** 0187: education, languages, experience and documents */
   lists: MyList[];
+  /** 0188: my photo, what I may do with it, and a new one waiting for approval */
+  photo: { fileId: string | null; level: Level; pending: string | null };
   window: { open: boolean; message: string | null; until: string | null };
   canEdit: boolean;
   completeness: { percent: number; missing: string[] };

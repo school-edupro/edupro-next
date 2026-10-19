@@ -14,6 +14,8 @@ export interface StaffPolicyView {
   policy: {
     fields: Record<string, Level>;
     proofs: Record<string, string>;
+    /** 0188: the employee's photo (sent back as fields.photo) */
+    photo?: Level;
     window: {
       mode: 'open' | 'closed' | 'period';
       from?: string | null;
@@ -155,7 +157,10 @@ function RouteEditor({
  */
 export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
   const [tab, setTab] = useState<'fields' | 'approvers' | 'window'>('fields');
-  const [fields, setFields] = useState(data.policy.fields);
+  const [fields, setFields] = useState<Record<string, Level>>({
+    ...data.policy.fields,
+    photo: data.policy.photo ?? 'edit_approval',
+  });
   const [proofs, setProofs] = useState(data.policy.proofs);
   const [win, setWin] = useState(data.policy.window);
   const [approval, setApproval] = useState(data.policy.approval);
@@ -299,9 +304,10 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
             Lists staff may update
           </h2>
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            Education, languages, work experience and documents: staff add, change or remove rows
-            from My profile. A document a change must carry is attached with the request and filed
-            on the employee&apos;s record when accepted; HR still ticks it against the original.
+            The photo, and education, languages, work experience and documents: staff ask for a new
+            photo, and add, change or remove rows, from My profile. A document a change must carry
+            is attached with the request and filed on the employee&apos;s record when accepted; HR
+            still ticks it against the original.
           </p>
           <div className="ep-table-wrap">
             <table className="ep-table ep-table--dense">
@@ -313,6 +319,32 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
                 </tr>
               </thead>
               <tbody>
+                <tr>
+                  <td>
+                    <strong>Photo</strong>
+                    <span className="ep-field__help">
+                      {' '}
+                      · the office sets it on the employee&apos;s page; staff may ask for a new one
+                    </span>
+                  </td>
+                  <td>
+                    <select
+                      aria-label="Photo: what staff may do"
+                      className="ep-select"
+                      value={fields.photo ?? 'edit_approval'}
+                      onChange={(e) => setFields((x) => ({ ...x, photo: e.target.value as Level }))}
+                    >
+                      {LEVELS.filter(([k]) => k !== 'hidden').map(([k, label]) => (
+                        <option key={k} value={k}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <span className="ep-field__help">—</span>
+                  </td>
+                </tr>
                 {(data.lists ?? []).map((l) => {
                   const lp = lists[l.id] ?? { level: 'edit_approval' as Level, proof: null };
                   return (
@@ -391,6 +423,7 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
           {[
             ...data.sections,
             ...(data.lists ?? []).map((l) => ({ id: `list:${l.id}`, title: `${l.title} (list)` })),
+            { id: 'photo', title: 'Photo' },
           ].map((s) => {
             const own = approval.sections[s.id];
             return (

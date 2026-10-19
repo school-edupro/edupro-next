@@ -72,13 +72,18 @@ export const EmployeeChangesSchema = z
       .default({}),
     /** 0187: row changes on education, languages, experience and documents */
     rows: z.array(EmployeeRowChangeSchema).max(20).default([]),
+    /** 0188: a new photo (the employee's own image upload), with approval or at once as the policy says */
+    photo: Id.optional(),
     reason: z.string().trim().max(500).nullable().optional(),
     proofs: z
       .array(z.object({ typeId: Id, fileId: Id }))
       .max(10)
       .default([]),
   })
-  .refine((d) => Object.keys(d.changes).length + d.rows.length >= 1, 'change at least one thing');
+  .refine(
+    (d) => Object.keys(d.changes).length + d.rows.length + (d.photo ? 1 : 0) >= 1,
+    'change at least one thing',
+  );
 export class EmployeeChangesDto extends createZodDto(EmployeeChangesSchema) {}
 
 export const StaffInboxSchema = z.object({

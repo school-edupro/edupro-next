@@ -240,6 +240,54 @@ export async function saveEmployeeSubjects(fd: FormData) {
 }
 
 /** Uploads one PDF or image (up to 5 MB) and attaches it as a document of a type. */
+/** The employee's photo, set or changed by the office on their page (0188): an image, filed as a document of kind photo. */
+export async function uploadEmployeePhoto(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `/people/employees/${id}`;
+  if (!okId(id)) redirect('/people/employees');
+  const file = fd.get('file');
+  const fail = (detail: string): never =>
+    redirect(`${page}?error=validation-failed&detail=${encodeURIComponent(detail)}`);
+  if (!(file instanceof File) || file.size === 0) fail('Choose the photo');
+  const f = file as File;
+  if (!/^image\/(png|jpeg|webp)$/.test(f.type)) fail(`${f.name}: a photo (JPG, PNG or WebP)`);
+  if (f.size > 5 * 1024 * 1024) fail(`${f.name}: larger than 5 MB`);
+  try {
+    const reg = await apiFetch<{
+      file: { id: string };
+      upload: { url: string; method: string; headers?: Record<string, string> };
+    }>('/platform/files', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: f.name.slice(0, 200),
+        contentType: f.type,
+        sizeBytes: f.size,
+        classification: 'personal',
+      }),
+    });
+    const target = reg.upload.url.startsWith('http')
+      ? reg.upload.url
+      : `${API_BASE}${reg.upload.url}`;
+    const headers = new Headers({ 'content-type': f.type });
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
+    const put = await fetch(target, {
+      method: reg.upload.method || 'PUT',
+      headers,
+      body: Buffer.from(await f.arrayBuffer()),
+    });
+    if (!put.ok) fail(`${f.name} did not upload`);
+    // the employee record's own documents endpoint (kind photo sets employees.photo_file_id)
+    await apiFetch(`/people/employees/${id}/documents`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'photo', fileId: reg.file.id }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(page);
+  redirect(`${page}?ok=photo`);
+}
+
 export async function uploadEmployeeDocument(fd: FormData) {
   const id = str(fd, 'id');
   const page = `/people/employees/${id}?tab=documents`;

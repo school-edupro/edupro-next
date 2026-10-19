@@ -42,6 +42,13 @@ export class EmployeeSelfController {
     return this.svc.cancel(ctx, id);
   }
 
+  @Get('me/employee-profile/photo')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'My photo (on file, or one I uploaded for a change): a signed address' })
+  myPhoto(@ReqCtx() ctx: RequestContext, @Query('file') file?: string) {
+    return this.svc.myPhotoUrl(ctx, file && /^\d{1,18}$/.test(file) ? file : undefined);
+  }
+
   @Post('me/employee-profile/print')
   @AuthenticatedOnly()
   @ApiOperation({ summary: 'My profile as PDF (my ID numbers in full)' })
