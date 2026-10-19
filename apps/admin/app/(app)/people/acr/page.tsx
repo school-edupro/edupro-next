@@ -1,10 +1,19 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { ACR_STATUS, GROUP_LABEL, type AcrRow, type AcrSetup } from '@/lib/acr';
-import { acrCloseCycle, acrReresolve, acrStartCycle } from '@/lib/acr-actions';
+import {
+  ACR_PDF_LABELS,
+  ACR_STATUS,
+  GROUP_LABEL,
+  LEVEL_TONE,
+  LEVEL_WORD,
+  type AcrRow,
+  type AcrSetup,
+} from '@/lib/acr';
+import { acrCloseCycle, acrReresolve, acrStartCycle, requestAcrPdf } from '@/lib/acr-actions';
 
 const ORDER: AcrRow['status'][] = ['self', 'review', 'disclosed', 'represented', 'closed'];
 const tone = (s: AcrRow['status']) =>
@@ -24,7 +33,9 @@ export default async function AcrBoardPage({
     cycle?: string;
     status?: string;
     group?: string;
+    level?: string;
     q?: string;
+    export?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -47,13 +58,30 @@ export default async function AcrBoardPage({
     (r) =>
       (!sp.status || r.status === sp.status) &&
       (!sp.group || r.staffGroup === sp.group) &&
+      (!sp.level || r.level?.label === sp.level) &&
       (!q ||
-        `${r.employee.name} ${r.employee.code} ${r.employee.department ?? ''} ${r.employee.designation ?? ''} ${r.level?.waitingOn.join(' ') ?? ''}`
+        `${r.employee.name} ${r.employee.code} ${r.employee.department ?? ''} ${r.employee.designation ?? ''} ${(r.levels ?? []).flatMap((l) => l.people).join(' ')}`
           .toLowerCase()
           .includes(q)),
   );
   const total = board.rows.length;
   const noOne = board.rows.filter((r) => r.level && r.level.waitingOn.length === 0).length;
+  // the levels seen on this board, in chain order, for the filter
+  const levelLabels = [
+    ...new Map(
+      board.rows.flatMap((r) => (r.levels ?? []).map((l) => [l.label, l.seq] as const)),
+    ).entries(),
+  ]
+    .sort((a, b) => a[1] - b[1])
+    .map(([label]) => label);
+  const backTo = `/people/acr?${new URLSearchParams({
+    ...(board.cycleId ? { cycle: board.cycleId } : {}),
+    ...(sp.status ? { status: sp.status } : {}),
+    ...(sp.group ? { group: sp.group } : {}),
+    ...(sp.level ? { level: sp.level } : {}),
+    ...(sp.q ? { q: sp.q } : {}),
+  }).toString()}`;
+  const dmyIso = (iso: string) => dmy(iso.slice(0, 10));
 
   return (
     <>
@@ -74,6 +102,9 @@ export default async function AcrBoardPage({
         }
       />
       <Notice params={sp} />
+      {sp.export && /^\d{1,18}$/.test(sp.export) ? (
+        <ExportWatcher id={sp.export} format="pdf" labels={ACR_PDF_LABELS} />
+      ) : null}
       {!setup.cycles.length ? (
         <div className="ep-card" style={{ padding: 'var(--sp-4)' }}>
           <p style={{ marginTop: 0 }}>No ACR cycle yet.</p>
@@ -125,6 +156,17 @@ export default async function AcrBoardPage({
                 <option value="">All</option>
                 <option value="teaching">Teaching</option>
                 <option value="non_teaching">Non-teaching</option>
+              </select>
+            </label>
+            <label className="ep-field" htmlFor="b-level" style={{ margin: 0 }}>
+              <span className="ep-field__label">At level</span>
+              <select id="b-level" name="level" className="ep-select" defaultValue={sp.level ?? ''}>
+                <option value="">Any</option>
+                {levelLabels.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="ep-field" htmlFor="b-q" style={{ margin: 0 }}>
@@ -260,6 +302,20 @@ export default async function AcrBoardPage({
               >
                 Print the {Math.min(rows.length, 100)} shown
               </a>
+              <form action={requestAcrPdf}>
+                <input
+                  type="hidden"
+                  name="ids"
+                  value={rows
+                    .slice(0, 100)
+                    .map((r) => r.id)
+                    .join(',')}
+                />
+                <input type="hidden" name="back" value={backTo} />
+                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                  PDF of the {Math.min(rows.length, 100)} shown
+                </button>
+              </form>
               <a
                 className="ep-btn ep-btn--secondary ep-btn--sm"
                 href={`/api/acr-excel?${new URLSearchParams({
@@ -287,6 +343,7 @@ export default async function AcrBoardPage({
                   <th scope="col">Form</th>
                   <th scope="col">Status</th>
                   <th scope="col">Waiting on</th>
+                  <th scope="col">Levels</th>
                   <th scope="col">Self %</th>
                   <th scope="col">Score %</th>
                   <th scope="col">Grade</th>
@@ -321,6 +378,43 @@ export default async function AcrBoardPage({
                               ? 'The school (objection)'
                               : '—'}
                     </td>
+                    <td>
+                      {r.levels?.length ? (
+                        <details className="ep-acr-levels">
+                          <summary aria-label={`Levels of ${r.employee.name}`}>
+                            {r.levels.map((l) => (
+                              <span
+                                key={l.seq}
+                                className={`ep-badge ep-badge--${LEVEL_TONE[l.status]}`}
+                                title={`${l.label}: ${l.people.join(', ') || 'nobody set'} · ${LEVEL_WORD[l.status]}`}
+                              >
+                                {l.label}
+                                {l.status === 'done'
+                                  ? ' ✓'
+                                  : l.status === 'skipped'
+                                    ? ' –'
+                                    : l.status === 'pending'
+                                      ? ' …'
+                                      : ''}
+                              </span>
+                            ))}
+                          </summary>
+                          <ul className="ep-field__help">
+                            {r.levels.map((l) => (
+                              <li key={l.seq}>
+                                <strong>{l.label}</strong> · {l.people.join(', ') || 'nobody set'} ·{' '}
+                                {LEVEL_WORD[l.status]}
+                                {l.filledAt ? ` on ${dmyIso(l.filledAt)}` : ''}
+                                {l.grade ? ` · grade ${l.grade}` : ''}
+                                {l.skippedNote ? ` · ${l.skippedNote}` : ''}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td>{r.selfPct ?? '—'}</td>
                     <td>{r.scorePct ?? '—'}</td>
                     <td>
@@ -331,7 +425,7 @@ export default async function AcrBoardPage({
                 ))}
                 {!rows.length ? (
                   <tr>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       {total ? 'No ACR matches.' : 'No ACRs yet: start the cycle.'}
                     </td>
                   </tr>

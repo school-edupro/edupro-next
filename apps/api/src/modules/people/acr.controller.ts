@@ -32,6 +32,7 @@ import {
   AcrReviewersDto,
   AcrSelfDto,
   AcrSettingsDto,
+  AcrPdfDto,
 } from './acr.dto';
 import { AcrFlowService } from './acr-flow.service';
 import { AcrSetupService } from './acr-setup.service';
@@ -193,6 +194,13 @@ export class AcrController {
   @RequirePermission(PEOPLE.acrManage)
   start(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.flow.start(ctx, id);
+  }
+
+  @Post('pdf')
+  @ApiOperation({ summary: 'The ACR PDF: one ACR, or the ACRs shown on the board, as an export' })
+  @RequirePermission(PEOPLE.acrView)
+  pdf(@ReqCtx() ctx: RequestContext, @Body() body: AcrPdfDto) {
+    return this.flow.requestPdf(ctx, body.ids);
   }
 
   @Post('cycles/:id/reresolve')

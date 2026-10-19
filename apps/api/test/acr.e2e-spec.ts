@@ -970,4 +970,61 @@ describe('employee ACR flow (e2e)', () => {
     expect(put.statusCode).toBe(200);
     expect(await labels()).toEqual(['HOD', 'Principal', 'Trustee']);
   });
+  it('a person assesses once anywhere in the chain: a later level with the same person is skipped and comes back when the people change; the board shows every level; the PDF is an export', async () => {
+    const set = await call(admin, 'PUT', '/people/acr/setup/assessors', {
+      rows: [{ employee: 'H1', assessors: { acr_hod: 'O1' } }],
+    });
+    expect(set.json().changed).toBe(1);
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const hema = board.rows.find((r: { employee: { code: string } }) => r.employee.code === 'H1');
+    const list = (await call(admin, 'GET', '/people/acr/setup/assessors')).json();
+    const idOf = (code: string) =>
+      list.rows.find((r: { code: string }) => r.code === code).id as string;
+    const levels = async () =>
+      (await call(admin, 'GET', `/people/acr/reports/${hema.id as string}`)).json()
+        .levels as Array<{ label: string; status: string; skippedNote: string | null }>;
+    // HOD Om, Principal Prem (the fallback), Trustee nobody
+    expect((await levels()).map((l) => [l.label, l.status])).toEqual([
+      ['HOD', 'waiting'],
+      ['Principal', 'waiting'],
+      ['Trustee', 'waiting'],
+    ]);
+    const people = (ids: string[]) =>
+      call(admin, 'PUT', `/people/acr/reports/${hema.id as string}/levels/3/people`, {
+        employeeIds: ids,
+      });
+    expect((await people([idOf('O1')])).statusCode).toBe(200);
+    expect((await levels())[2]).toMatchObject({ status: 'skipped' });
+    expect((await levels())[2]!.skippedNote).toMatch(/level 1/);
+    await people([idOf('P1')]);
+    expect((await levels())[2]!.skippedNote).toMatch(/level 2/);
+    await people([idOf('T1')]);
+    expect((await levels())[2]).toMatchObject({ status: 'waiting', skippedNote: null });
+    // the board shows every level with its people and where it stands; never on an employee's own list
+    const b2 = (await call(admin, 'GET', '/people/acr/board')).json();
+    const row = b2.rows.find((r: { employee: { code: string } }) => r.employee.code === 'H1');
+    expect(
+      row.levels.map((l: { label: string; status: string; people: string[] }) => [
+        l.label,
+        l.status,
+        l.people,
+      ]),
+    ).toEqual([
+      ['HOD', 'waiting', ['Om']],
+      ['Principal', 'waiting', ['Prem']],
+      ['Trustee', 'waiting', ['Tara']],
+    ]);
+    expect((await call(hod, 'GET', '/people/acr/mine')).json().data[0].levels).toBeUndefined();
+    // the PDF: an export the workers render, one ACR or many; only those who may see ACRs
+    const pdf = await call(admin, 'POST', '/people/acr/pdf', { ids: [hema.id, reportId] });
+    expect(pdf.statusCode).toBe(201);
+    expect(pdf.json()).toMatchObject({ dataset: 'acr_report', format: 'pdf' });
+    expect(pdf.json().params.reportIds.split(',').sort()).toEqual([hema.id, reportId].sort());
+    expect((await call(teacher, 'POST', '/people/acr/pdf', { ids: [hema.id] })).statusCode).toBe(
+      403,
+    );
+    expect((await call(admin, 'POST', '/people/acr/pdf', { ids: ['999999999'] })).statusCode).toBe(
+      404,
+    );
+  });
 });

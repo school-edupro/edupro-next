@@ -8178,8 +8178,12 @@ a.db-list__main:hover strong {
   color: var(--text-heading);
 }
 /* report builder: "Ask when running" under a filter row */
-.ep-rb__ask { margin: calc(-1 * var(--sp-1)) 0 var(--sp-2); }
-.ep-rb__askhelp { margin: 0 0 var(--sp-3); }
+.ep-rb__ask {
+  margin: calc(-1 * var(--sp-1)) 0 var(--sp-2);
+}
+.ep-rb__askhelp {
+  margin: 0 0 var(--sp-3);
+}
 
 /* ---- several values in one drop-down (the lists' quick filters; MultiPick) ------------------------ */
 .ep-mp {
@@ -8522,6 +8526,24 @@ a.db-list__main:hover strong {
   gap: var(--sp-3);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
   align-items: end;
+}
+/* ACR board (19 Oct 2026): every level of an ACR as chips; the details open under them */
+.ep-acr-levels {
+  margin: 0;
+}
+.ep-acr-levels > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.ep-acr-levels > summary::-webkit-details-marker {
+  display: none;
+}
+.ep-acr-levels > ul {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-4);
 }
 .ep-acr-print__head {
   display: flex;

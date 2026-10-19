@@ -31,6 +31,30 @@ const problem = (e: unknown): { ok: false; error: string } => {
   throw e;
 };
 
+/**
+ * The ACR PDF: one ACR from its page, or the ACRs shown on the board (up to 100). An export the
+ * workers render; the page comes back with ?export= and waits for the file.
+ */
+export async function requestAcrPdf(fd: FormData) {
+  const ids = str(fd, 'ids').split(',').filter(okId).slice(0, 100);
+  const raw = str(fd, 'back');
+  // only the ACR screens, never an outside address
+  const backTo = /^\/people\/acr(\/\d{1,18})?(\?[\w=&%.+-]*)?$/.test(raw) ? raw : '/people/acr';
+  if (!ids.length) redirect(backTo);
+  let exportId = '';
+  try {
+    exportId = (
+      await apiFetch<{ id: string }>('/people/acr/pdf', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      })
+    ).id;
+  } catch (error) {
+    back(backTo, error);
+  }
+  redirect(`${backTo}${backTo.includes('?') ? '&' : '?'}export=${exportId}`);
+}
+
 /** Rating words, days to object and the grade bands (from the client editor). */
 export async function saveAcrSettings(input: {
   scaleLabels: string[];

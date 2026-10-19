@@ -27,6 +27,7 @@ import { renderDocument } from '../renderers/document';
 import { renderDsrAccess } from '../renderers/dsr-access';
 import { renderStudentProfile } from '../renderers/student-profile';
 import { renderEmployeeProfile } from '../renderers/employee-profile';
+import { renderAcrReport } from '../renderers/acr-report';
 import {
   buildReport,
   reportToHtml,
@@ -153,6 +154,10 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
         } else if (renderer.id === 'employee_profile') {
           const doc = await renderEmployeeProfile(db, storage, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'acr_report') {
+          const doc = await renderAcrReport(db, storage, envelope, row.params);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+          log.info({ exportId, count: doc.count }, 'ACRs rendered');
         } else if (renderer.id === 'dsr_access') {
           const doc = await renderDsrAccess(db, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });

@@ -1,10 +1,11 @@
 import { Breadcrumbs, PageHeader, type AcrReportView } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AcrReport } from '@/components/acr/AcrReport';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { AcrSetup } from '@/lib/acr';
-import { acrDecide, acrOffice, acrSetPeople } from '@/lib/acr-actions';
+import { ACR_PDF_LABELS, type AcrSetup } from '@/lib/acr';
+import { acrDecide, acrOffice, acrSetPeople, requestAcrPdf } from '@/lib/acr-actions';
 
 /** One employee ACR (docs/design/32-employee-acr.md): the sheet, and the school's controls. */
 export default async function AcrReportPage({
@@ -12,7 +13,7 @@ export default async function AcrReportPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; detail?: string; export?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -168,13 +169,20 @@ export default async function AcrReportPage({
         description={`Annual confidential report · ${report.employee.code}`}
         actions={
           <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+            <form action={requestAcrPdf}>
+              <input type="hidden" name="ids" value={id} />
+              <input type="hidden" name="back" value={`/people/acr/${id}`} />
+              <button type="submit" className="ep-btn ep-btn--primary">
+                PDF
+              </button>
+            </form>
             <a
               className="ep-btn ep-btn--secondary"
               href={`/people/acr/print?ids=${id}`}
               target="_blank"
               rel="noopener"
             >
-              Print / PDF
+              Print view
             </a>
             <a
               className="ep-btn ep-btn--ghost"
@@ -186,6 +194,9 @@ export default async function AcrReportPage({
         }
       />
       <Notice params={sp} />
+      {sp.export && /^\d{1,18}$/.test(sp.export) ? (
+        <ExportWatcher id={sp.export} format="pdf" labels={ACR_PDF_LABELS} />
+      ) : null}
       <AcrReport report={report} />
       {extra ? <div style={{ marginTop: 'var(--sp-4)' }}>{extra}</div> : null}
     </>

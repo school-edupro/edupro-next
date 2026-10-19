@@ -140,6 +140,10 @@ export const AcrQuestionSchema = z.object({
 });
 export class AcrQuestionDto extends createZodDto(AcrQuestionSchema) {}
 
+/** The ACR PDF: one ACR, or the ACRs shown on the board (up to 100 in one file). */
+export const AcrPdfSchema = z.object({ ids: z.array(Id).min(1).max(100) });
+export class AcrPdfDto extends createZodDto(AcrPdfSchema) {}
+
 export const AcrCycleSchema = z
   .object({
     academicYearId: Id,

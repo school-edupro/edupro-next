@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { AuditService } from '../../common/audit/audit.service';
+import { ReportsService } from '../reports/reports.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -127,6 +128,16 @@ interface LevelRow {
   action: 'rate' | 'review';
   form_id: string | null;
 }
+/** One level of an ACR as the board shows it. */
+export interface BoardLevel {
+  seq: number;
+  label: string;
+  status: 'waiting' | 'pending' | 'done' | 'skipped';
+  people: string[];
+  filledAt: string | null;
+  grade: string | null;
+  skippedNote: string | null;
+}
 /** An ACR of an open cycle not yet with the employee, with the record its levels read. */
 interface OpenReport {
   id: string;
@@ -149,6 +160,7 @@ export class AcrFlowService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly setup: AcrSetupService,
+    private readonly reports: ReportsService,
   ) {}
 
   // ---- helpers -----------------------------------------------------------------------------------
@@ -426,39 +438,41 @@ export class AcrFlowService {
   }
 
   /**
-   * A person on two levels in a row assesses once (0190): a level whose people are exactly those of the
-   * level before it (the last one not skipped) is skipped with a note, and comes back when that changes.
-   * Done levels stay. When the level the ACR waits on gets skipped, the ACR moves on; with nothing left
-   * it is shown to the employee.
+   * A person assesses an ACR once (0190, widened 19 Oct 2026): a level whose people are exactly those
+   * of an earlier level that stands (done, or not skipped) is skipped with a note, whether the two are
+   * in a row or not, and comes back when the people change. A level with nobody set is never skipped:
+   * the ACR waits there. Done levels stay. When the level the ACR waits on gets skipped, the ACR moves
+   * on; with nothing left it is shown to the employee.
    */
   private async applySkips(c: PoolClient, ctx: RequestContext, reportId: string) {
     const rows = (await c.query<ReviewRow>(REVIEWS, [reportId])).rows;
-    let prev: { seq: number; label: string; people: string[] } | null = null;
+    const earlier: Array<{ seq: number; label: string; people: string[] }> = [];
     for (const v of rows) {
       const people = [...v.reviewer_ids].sort();
       if (v.status === 'done') {
-        prev = { seq: v.seq, label: v.label, people };
+        earlier.push({ seq: v.seq, label: v.label, people });
         continue;
       }
-      const same =
-        prev !== null &&
-        people.length > 0 &&
-        people.length === prev.people.length &&
-        people.every((x, i) => x === prev!.people[i]);
+      const same = people.length
+        ? earlier.find(
+            (p) => p.people.length === people.length && p.people.every((x, i) => x === people[i]),
+          )
+        : undefined;
       if (same) {
-        if (v.status !== 'skipped')
-          await c.query(
-            `UPDATE acr_reviews SET status = 'skipped', skipped_note = $2 WHERE id = $1`,
-            [v.id, `Same person as level ${String(prev!.seq)} (${prev!.label}); assessed there`],
-          );
-        continue; // the next level compares with the level before the skipped one
+        // skipped, with the note naming the level that stands now (it may be another than before)
+        await c.query(
+          `UPDATE acr_reviews SET status = 'skipped', skipped_note = $2
+            WHERE id = $1 AND (status <> 'skipped' OR skipped_note IS DISTINCT FROM $2)`,
+          [v.id, `Same person as level ${String(same.seq)} (${same.label}); assessed there`],
+        );
+        continue; // a skipped level is not one the later levels compare with
       }
       if (v.status === 'skipped')
         await c.query(
           `UPDATE acr_reviews SET status = 'waiting', skipped_note = NULL WHERE id = $1`,
           [v.id],
         );
-      prev = { seq: v.seq, label: v.label, people };
+      earlier.push({ seq: v.seq, label: v.label, people });
     }
     const r = (
       await c.query<{ status: string; current_level: number | null }>(
@@ -757,6 +771,38 @@ export class AcrFlowService {
     return changed;
   }
 
+  /**
+   * The ACR PDF (one ACR from its page, or the ACRs shown on the board): an export the workers render
+   * on the letterhead, a page break per ACR; the screen waits for it. Only ids of this school's ACRs.
+   */
+  async requestPdf(ctx: RequestContext, ids: string[]) {
+    const wanted = [...new Set(ids)];
+    const found = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ id: string; code: string; cycle: string }>(
+        `SELECT r.id::text, e.employee_code AS code, cy.name AS cycle
+           FROM acr_reports r JOIN employees e ON e.id = r.employee_id JOIN acr_cycles cy ON cy.id = r.cycle_id
+          WHERE r.id = ANY($1::bigint[]) ORDER BY e.display_name`,
+        [wanted],
+      );
+      if (r.rows.length !== wanted.length)
+        throw new DomainError('not-found', 'ACR not found', { status: 404 });
+      return r.rows;
+    });
+    const one = found.length === 1 ? found[0]! : null;
+    return this.reports.create(
+      ctx,
+      {
+        dataset: 'acr_report',
+        format: 'pdf',
+        params: { reportIds: found.map((x) => x.id).join(',') },
+        title: one
+          ? `ACR ${one.code} · ${one.cycle}`
+          : `ACRs ${found[0]!.cycle} (${String(found.length)})`,
+      },
+      'people.acr.print',
+    );
+  }
+
   async closeCycle(ctx: RequestContext, cycleId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query(
@@ -778,7 +824,7 @@ export class AcrFlowService {
 
   // ---- lists -------------------------------------------------------------------------------------
 
-  private async rows(c: PoolClient, where: string, args: unknown[]) {
+  private async rows(c: PoolClient, where: string, args: unknown[], withLevels = false) {
     const r = await c.query<{
       id: string;
       cycle_id: string;
@@ -817,6 +863,39 @@ export class AcrFlowService {
         ORDER BY e.display_name, cy.id`,
       args,
     );
+    // the board shows every level of each ACR (people, status, when, grade): for ACR managers only,
+    // never on an employee's own list
+    const levels = new Map<string, BoardLevel[]>();
+    if (withLevels && r.rows.length) {
+      const lv = await c.query<{
+        report_id: string;
+        seq: number;
+        label: string;
+        status: BoardLevel['status'];
+        people: string[] | null;
+        filled_at: Date | null;
+        grade: string | null;
+        skipped_note: string | null;
+      }>(
+        `SELECT v.report_id::text, v.seq, v.label, v.status, v.filled_at, v.grade, v.skipped_note,
+                (SELECT array_agg(x.display_name ORDER BY x.display_name) FROM employees x WHERE x.id = ANY(v.reviewer_ids)) AS people
+           FROM acr_reviews v WHERE v.report_id = ANY($1::bigint[]) ORDER BY v.report_id, v.seq`,
+        [r.rows.map((x) => x.id)],
+      );
+      for (const v of lv.rows) {
+        const list = levels.get(v.report_id) ?? [];
+        list.push({
+          seq: v.seq,
+          label: v.label,
+          status: v.status,
+          people: v.people ?? [],
+          filledAt: v.filled_at ? v.filled_at.toISOString() : null,
+          grade: v.grade,
+          skippedNote: v.skipped_note,
+        });
+        levels.set(v.report_id, list);
+      }
+    }
     return r.rows.map((x) => ({
       id: x.id,
       cycleId: x.cycle_id,
@@ -840,6 +919,7 @@ export class AcrFlowService {
       objectBy: x.object_by,
       updatedAt: x.updated_at.toISOString(),
       form: x.form,
+      ...(withLevels ? { levels: levels.get(x.id) ?? [] } : {}),
     }));
   }
 
@@ -855,7 +935,7 @@ export class AcrFlowService {
           );
       const id = cy.rows[0]?.id;
       if (!id) return { cycleId: null, rows: [], counts: {} };
-      const rows = await this.rows(c, 'r.cycle_id = $1', [id]);
+      const rows = await this.rows(c, 'r.cycle_id = $1', [id], true);
       const counts: Record<string, number> = {};
       for (const r of rows) counts[r.status] = (counts[r.status] ?? 0) + 1;
       return { cycleId: id, rows, counts };

@@ -60,6 +60,16 @@ export const RENDERERS: Record<string, RendererDefinition> = {
   },
 };
 
+// 19 Oct 2026: an employee's annual confidential report, or every ACR shown on the board (a page break
+// per ACR); the ACR endpoint checks the ids, so the renderer names no required parameter
+RENDERERS.acr_report = {
+  id: 'acr_report',
+  title: 'Annual confidential report',
+  permission: 'people.acr.view',
+  page: { width: '210mm', height: '297mm' },
+  requiredParams: [],
+};
+
 // Sprint 17: report cards — one pupil, or a whole section in one PDF (page break per pupil)
 RENDERERS.report_card = {
   id: 'report_card',

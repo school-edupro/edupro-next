@@ -163,7 +163,39 @@ export interface AcrRow {
   updatedAt: string;
   /** the self-appraisal form this ACR is on (0192) */
   form: string | null;
+  /** every level with its people and where it stands: on the board only (ACR managers) */
+  levels?: AcrRowLevel[];
 }
+export interface AcrRowLevel {
+  seq: number;
+  label: string;
+  status: 'waiting' | 'pending' | 'done' | 'skipped';
+  people: string[];
+  filledAt: string | null;
+  grade: string | null;
+  skippedNote: string | null;
+}
+export const LEVEL_WORD: Record<AcrRowLevel['status'], string> = {
+  waiting: 'not yet',
+  pending: 'with them now',
+  done: 'filled',
+  skipped: 'skipped',
+};
+export const LEVEL_TONE: Record<AcrRowLevel['status'], string> = {
+  waiting: 'neutral',
+  pending: 'info',
+  done: 'success',
+  skipped: 'warning',
+};
+/** The export watcher's words while the workers make an ACR PDF. */
+export const ACR_PDF_LABELS = {
+  queued: 'ACR PDF requested',
+  ready: 'ACR PDF',
+  pending: 'Preparing the PDF… open it to print, or download it',
+  failed: 'The PDF could not be made',
+  stuck:
+    'Still waiting after a minute: the workers service prepares files; check that it is running',
+};
 export const ACR_STATUS: Record<AcrRow['status'], string> = {
   self: 'Self-appraisal',
   review: 'With the levels',

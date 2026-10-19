@@ -218,3 +218,26 @@ employee)` picks the most specific active form: for their side naming their type
   Faculty; each for all staff, naming its type) and one questionnaire per approval level (HOD, L1, L2,
   L3, Principal), attaching each to the levels with that label in both chains (`--attach no` to skip).
   A form whose name exists is left alone, so it can run again. Seeded in Alpha on 19 Oct 2026.
+
+## A person assesses once, the board shows every level, the ACR PDF (19 Oct 2026)
+
+- **Same person anywhere in the chain:** a level whose people are exactly those of an earlier level
+  that stands (done, or not skipped) is skipped with "Same person as level N (label); assessed there",
+  whether the two levels are in a row or not; it comes back when the people change. A level with
+  nobody set is never skipped: the ACR waits there and the board counts it under "waiting on nobody".
+- **Board:** `GET people/acr/board` rows carry `levels[]` (seq, label, status, people, filledAt,
+  grade, skippedNote) for ACR managers only, never on an employee's own list. The screen shows a
+  **Levels** column with one chip per level (✓ filled, … with them now, – skipped), the details on
+  expand (people, status, date, grade, the skip note), an **At level** filter (ACRs now with that
+  level) and a search that also matches the levels' people.
+- **PDF:** `POST people/acr/pdf { ids }` (people.acr.view, up to 100 ACRs of the school) queues the
+  `acr_report` export; the workers render `renderers/acr-report.ts` on the letterhead: the employee's
+  facts, Part A the self-appraisal (answers by section with section scores, attendance and leave,
+  self score), Part B each level (people, filled by whom and when, answers, score, grade, remarks; a
+  skipped level with its note), Part C the result (score, grade, disclosure, objection, decision),
+  the steps, and signature lines for the employee and every level; a page break per ACR. The ACR page
+  has **PDF** (and the print view); the board has **PDF of the N shown**; both wait for the file with
+  the export watcher. Only what the ACR holds is printed; the requester must still hold
+  people.acr.view when the job runs.
+- Tests: `acr.e2e-spec.ts` "a person assesses once anywhere in the chain…"; workers
+  `test/acr-report.test.ts`.
