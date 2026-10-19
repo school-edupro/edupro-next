@@ -45,6 +45,14 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     problem.instance = req.url;
     if (req.ctx?.requestId) problem.requestId = req.ctx.requestId;
 
+    if (problem.status === 429) {
+      // @fastify/rate-limit sets retry-after on the reply before it throws; the header stays on this
+      // response, and the body mirrors it in seconds so callers that cannot read headers still see it.
+      const header = reply.getHeader('retry-after');
+      const seconds = Number(Array.isArray(header) ? header[0] : header);
+      if (Number.isFinite(seconds)) problem.retryAfter = seconds;
+    }
+
     if (problem.status >= 500) {
       this.logger.error(`${problem.type} on ${req.method} ${req.url}: ${String(exception)}`);
     }
@@ -162,11 +170,35 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       }
     }
 
+    // Errors thrown by Fastify plugins and hooks (@fastify/rate-limit, parsers) are plain Errors that
+    // carry an HTTP statusCode. Nest converts only those named FastifyError, so the rest arrive here:
+    // answer with their status (429 rate-limited, 403 for a ban) instead of reporting a 500.
+    const carried = this.carriedStatus(exception);
+    if (carried !== undefined) {
+      const type = this.defaultType(carried);
+      return {
+        type,
+        title: type.replace(/[-_.]/g, ' '),
+        status: carried,
+        ...(carried < 500 && exception instanceof Error ? { detail: exception.message } : {}),
+      };
+    }
+
     return {
       type: 'internal-error',
       title: 'Internal server error',
       status: HttpStatus.INTERNAL_SERVER_ERROR,
     };
+  }
+
+  /** The HTTP status a non-Nest error carries (`statusCode` or `status`) when it is a 4xx or 5xx. */
+  private carriedStatus(exception: unknown): number | undefined {
+    if (typeof exception !== 'object' || exception === null) return undefined;
+    const { statusCode, status } = exception as { statusCode?: unknown; status?: unknown };
+    const raw = typeof statusCode === 'number' ? statusCode : status;
+    return typeof raw === 'number' && Number.isInteger(raw) && raw >= 400 && raw <= 599
+      ? raw
+      : undefined;
   }
 
   private defaultType(status: number): string {
