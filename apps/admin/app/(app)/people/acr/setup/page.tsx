@@ -2,22 +2,18 @@ import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AcrGradesEditor } from '@/components/acr/AcrGradesEditor';
 import { AcrAssessorsEditor } from '@/components/acr/AcrAssessorsEditor';
+import { AcrForms } from '@/components/acr/AcrForms';
 import { AcrLevelsEditor } from '@/components/acr/AcrLevelsEditor';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { GROUP_LABEL, type AcrAssessors, type AcrQuestion, type AcrSetup } from '@/lib/acr';
-import {
-  importAcrAssessors,
-  saveAcrCycle,
-  saveAcrQuestion,
-  toggleAcrQuestion,
-} from '@/lib/acr-actions';
+import { GROUP_LABEL, type AcrAssessors, type AcrSetup } from '@/lib/acr';
+import { importAcrAssessors, saveAcrCycle } from '@/lib/acr-actions';
 
 const TABS = [
   ['cycles', 'Cycles'],
   ['levels', 'Approval levels'],
   ['assessors', 'Assessors'],
-  ['questions', 'Questions'],
+  ['questions', 'Forms and questions'],
   ['grades', 'Scale and grades'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -28,8 +24,8 @@ export default async function AcrSetupPage({
 }: {
   searchParams: Promise<{
     tab?: string;
-    part?: string;
-    group?: string;
+    form?: string;
+    section?: string;
     edit?: string;
     q?: string;
     ok?: string;
@@ -94,12 +90,13 @@ export default async function AcrSetupPage({
               roles={s.roles}
               designations={s.designations}
               staff={s.staff}
+              forms={s.forms}
               canEdit={canEdit}
             />
           ))}
         </div>
       ) : null}
-      {tab === 'questions' ? <Questions s={s} sp={sp} canEdit={canEdit} /> : null}
+      {tab === 'questions' ? <AcrForms s={s} sp={sp} canEdit={canEdit} /> : null}
       {tab === 'grades' ? (
         <AcrGradesEditor
           scaleLabels={s.settings.scaleLabels}
@@ -281,223 +278,4 @@ function Cycles({
   );
 }
 
-function Questions({
-  s,
-  sp,
-  canEdit,
-}: {
-  s: AcrSetup;
-  sp: { part?: string; group?: string; q?: string };
-  canEdit: boolean;
-}) {
-  const part = sp.part === 'rate' ? 'rate' : 'self';
-  const group = sp.group === 'non_teaching' ? 'non_teaching' : 'teaching';
-  const list = s.questions.filter(
-    (q) => q.part === part && (q.staffGroup === group || q.staffGroup === 'both'),
-  );
-  const sections = [...new Set(list.map((q) => q.section))];
-  const editing = s.questions.find((q) => q.id === sp.q);
-  const link = (p: string, g: string) => `?tab=questions&part=${p}&group=${g}`;
-  const allSections = [...new Set(s.questions.map((q) => q.section))];
-  return (
-    <div className="ep-grid-2">
-      <section className="ep-card" aria-labelledby="q-h" style={{ padding: 'var(--sp-4)' }}>
-        <h2 id="q-h" className="ep-card__title">
-          {part === 'self' ? 'Self-appraisal' : 'Rating by the levels'} · {GROUP_LABEL[group]}
-        </h2>
-        <nav
-          className="ep-tabs-links"
-          aria-label="Which form"
-          style={{ marginBottom: 'var(--sp-3)' }}
-        >
-          {(['self', 'rate'] as const).flatMap((p) =>
-            (['teaching', 'non_teaching'] as const).map((g) => (
-              <a
-                key={`${p}-${g}`}
-                href={link(p, g)}
-                aria-current={p === part && g === group ? 'page' : undefined}
-              >
-                {p === 'self' ? 'Self' : 'Rating'} · {GROUP_LABEL[g]}
-              </a>
-            )),
-          )}
-        </nav>
-        {sections.map((sec) => (
-          <div key={sec} style={{ marginBottom: 'var(--sp-3)' }}>
-            <h3 className="ep-field__label">{sec}</h3>
-            <ul className="ep-acr-qs">
-              {list
-                .filter((q) => q.section === sec)
-                .map((q) => (
-                  <li key={q.id} className="ep-acr-q" data-off={q.active ? undefined : 'true'}>
-                    <span>
-                      {q.text}{' '}
-                      <span className="ep-field__help">
-                        {q.kind === 'scale' ? 'rating' : 'written'}
-                        {q.weight !== 1 ? ` · weight ${String(q.weight)}` : ''}
-                        {q.staffGroup === 'both' ? ' · both' : ''}
-                        {q.required ? '' : ' · optional'}
-                        {q.active ? '' : ' · switched off'}
-                      </span>
-                    </span>
-                    {canEdit ? (
-                      <span style={{ display: 'flex', gap: 'var(--sp-1)' }}>
-                        <a
-                          className="ep-btn ep-btn--ghost ep-btn--sm"
-                          href={`${link(part, group)}&q=${q.id}`}
-                        >
-                          Change
-                        </a>
-                        <form action={toggleAcrQuestion}>
-                          <input type="hidden" name="id" value={q.id} />
-                          <input type="hidden" name="part" value={part} />
-                          <input type="hidden" name="active" value={q.active ? 'false' : 'true'} />
-                          <input type="hidden" name="q" value={JSON.stringify(body(q))} />
-                          <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                            {q.active ? 'Switch off' : 'Switch on'}
-                          </button>
-                        </form>
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-            </ul>
-          </div>
-        ))}
-      </section>
-      {canEdit ? (
-        <section className="ep-card" aria-labelledby="qf-h" style={{ padding: 'var(--sp-4)' }}>
-          <h2 id="qf-h" className="ep-card__title">
-            {editing ? 'Change the question' : 'Add a question'}
-          </h2>
-          <form action={saveAcrQuestion}>
-            <input type="hidden" name="id" value={editing?.id ?? ''} />
-            <div className="ep-fit-row">
-              <label className="ep-field" htmlFor="qf-part">
-                <span className="ep-field__label">Form *</span>
-                <select
-                  id="qf-part"
-                  name="part"
-                  className="ep-select"
-                  defaultValue={editing?.part ?? part}
-                >
-                  <option value="self">Self-appraisal (the employee)</option>
-                  <option value="rate">Rating (the levels)</option>
-                </select>
-              </label>
-              <label className="ep-field" htmlFor="qf-group">
-                <span className="ep-field__label">For *</span>
-                <select
-                  id="qf-group"
-                  name="staffGroup"
-                  className="ep-select"
-                  defaultValue={editing?.staffGroup ?? group}
-                >
-                  <option value="teaching">Teaching staff</option>
-                  <option value="non_teaching">Non-teaching staff</option>
-                  <option value="both">Both</option>
-                </select>
-              </label>
-            </div>
-            <label className="ep-field" htmlFor="qf-section">
-              <span className="ep-field__label">Section *</span>
-              <input
-                id="qf-section"
-                name="section"
-                className="ep-input"
-                list="qf-sections"
-                required
-                minLength={2}
-                maxLength={80}
-                defaultValue={editing?.section ?? ''}
-              />
-              <datalist id="qf-sections">
-                {allSections.map((x) => (
-                  <option key={x} value={x} />
-                ))}
-              </datalist>
-            </label>
-            <label className="ep-field" htmlFor="qf-text">
-              <span className="ep-field__label">Question *</span>
-              <input
-                id="qf-text"
-                name="text"
-                className="ep-input"
-                required
-                minLength={3}
-                maxLength={300}
-                defaultValue={editing?.text ?? ''}
-              />
-            </label>
-            <div className="ep-fit-row">
-              <label className="ep-field" htmlFor="qf-kind">
-                <span className="ep-field__label">Answer *</span>
-                <select
-                  id="qf-kind"
-                  name="kind"
-                  className="ep-select"
-                  defaultValue={editing?.kind ?? 'scale'}
-                >
-                  <option value="scale">A rating on the scale</option>
-                  <option value="text">Written</option>
-                </select>
-              </label>
-              <label className="ep-field" htmlFor="qf-weight">
-                <span className="ep-field__label">Weight</span>
-                <input
-                  id="qf-weight"
-                  name="weight"
-                  type="number"
-                  step="0.25"
-                  min={0.25}
-                  max={10}
-                  className="ep-input"
-                  defaultValue={editing?.weight ?? 1}
-                />
-              </label>
-              <label className="ep-field" htmlFor="qf-order">
-                <span className="ep-field__label">Order</span>
-                <input
-                  id="qf-order"
-                  name="sortOrder"
-                  type="number"
-                  min={0}
-                  max={9999}
-                  className="ep-input"
-                  defaultValue={editing?.sortOrder ?? (list.length + 1) * 10}
-                />
-              </label>
-            </div>
-            <label className="ep-check" style={{ marginBottom: 'var(--sp-3)' }}>
-              <input type="checkbox" name="required" defaultChecked={editing?.required ?? true} />{' '}
-              Must be answered
-            </label>
-            {editing && !editing.active ? <input type="hidden" name="active" value="off" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-              <button type="submit" className="ep-btn ep-btn--primary">
-                {editing ? 'Save' : 'Add question'}
-              </button>
-              {editing ? (
-                <a className="ep-btn ep-btn--ghost" href={link(part, group)}>
-                  Cancel
-                </a>
-              ) : null}
-            </div>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-const body = (q: AcrQuestion) => ({
-  part: q.part,
-  staffGroup: q.staffGroup,
-  section: q.section,
-  text: q.text,
-  kind: q.kind,
-  weight: q.weight,
-  required: q.required,
-  sortOrder: q.sortOrder,
-});
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;

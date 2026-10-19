@@ -9,12 +9,29 @@ import { useMemo, useState, type ReactNode } from 'react';
 export type AcrAnswer = number | string;
 export interface AcrQuestionView {
   id: string;
-  part: 'self' | 'rate';
-  section: string;
   text: string;
-  kind: 'scale' | 'text';
+  /** scale: a rating on the scale; text: written; yesno: yes or no (0191) */
+  kind: 'scale' | 'text' | 'yesno';
   weight: number;
   required: boolean;
+}
+/** A form the ACR was made with (0191): its sections, each with help, weight and questions. */
+export interface AcrFormView {
+  id: string;
+  name: string;
+  sections: Array<{
+    id: string;
+    title: string;
+    help: string | null;
+    weight: number;
+    questions: AcrQuestionView[];
+  }>;
+}
+export interface AcrSectionScore {
+  id: string;
+  title: string;
+  weight: number;
+  pct: number | null;
 }
 export interface AcrLevelView {
   seq: number;
@@ -24,6 +41,10 @@ export interface AcrLevelView {
   /** 0190: why the level is skipped (the same person as the level before) */
   skippedNote?: string | null;
   hidden?: boolean;
+  /** the questionnaire this level answers (in `forms`), none for the grade and remarks only */
+  formId?: string | null;
+  /** the section scores of a filled level */
+  sections?: AcrSectionScore[];
   people?: Array<{ id: string; name: string }>;
   answers?: Record<string, AcrAnswer>;
   remarks?: string | null;
@@ -70,8 +91,11 @@ export interface AcrReportView {
   cycle: { id: string; status: string; selfFrom: string; selfTo: string };
   scale: string[];
   bands: Array<{ minPct: number; label: string; adverse: boolean }>;
-  questions: { self: AcrQuestionView[]; rate: AcrQuestionView[] };
+  /** the forms this ACR was made with, by id: the self form and the levels' questionnaires one may see */
+  forms: Record<string, AcrFormView>;
   self: {
+    formId: string | null;
+    sections: AcrSectionScore[];
     answers: Record<string, AcrAnswer>;
     pct: number | null;
     submittedAt: string | null;
@@ -165,99 +189,138 @@ const when = (d: string | null | undefined) =>
       })
     : '—';
 
-function bySection(qs: AcrQuestionView[]) {
-  const out: Array<{ section: string; items: AcrQuestionView[] }> = [];
-  for (const q of qs) {
-    const g = out.find((x) => x.section === q.section);
-    if (g) g.items.push(q);
-    else out.push({ section: q.section, items: [q] });
-  }
-  return out;
-}
-
-/** A form of questions: ratings as a row of choices, written answers as text areas. */
+/** A form's sections: ratings as a row of choices, yes / no, written answers as text areas. */
 function QuestionForm({
   idPrefix,
-  questions,
+  form,
   scale,
   answers,
   onChange,
   editable,
+  scores,
 }: {
   idPrefix: string;
-  questions: AcrQuestionView[];
+  form: AcrFormView | undefined;
   scale: string[];
   answers: Record<string, AcrAnswer>;
   onChange: (id: string, v: AcrAnswer) => void;
   editable: boolean;
+  /** section scores to show beside the titles (filled forms) */
+  scores?: AcrSectionScore[];
 }) {
   const top = scale.length;
+  if (!form) return <p className="ep-field__help">No questions: the grade and remarks only.</p>;
   return (
     <>
-      {bySection(questions).map((g) => (
-        <fieldset key={g.section} className="ep-acr-sec">
-          <legend className="ep-acr-sec__title">{g.section}</legend>
-          {g.items.map((q) => {
-            const a = answers[q.id];
-            const name = `${idPrefix}-${q.id}`;
-            if (q.kind === 'text')
+      {form.sections.map((g) => {
+        const sc = scores?.find((x) => x.id === g.id);
+        return (
+          <fieldset key={g.id} className="ep-acr-sec">
+            <legend className="ep-acr-sec__title">
+              {g.title}
+              {sc && sc.pct !== null ? <span className="ep-field__help"> · {sc.pct}%</span> : null}
+              {g.weight !== 1 ? <span className="ep-field__help"> · weight {g.weight}</span> : null}
+            </legend>
+            {g.help ? (
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                {g.help}
+              </p>
+            ) : null}
+            {g.questions.map((q) => {
+              const a = answers[q.id];
+              const name = `${idPrefix}-${q.id}`;
+              if (q.kind === 'text')
+                return (
+                  <label key={q.id} className="ep-field" htmlFor={name}>
+                    <span className="ep-field__label">
+                      {q.text}
+                      {q.required && editable ? ' *' : ''}
+                    </span>
+                    {editable ? (
+                      <textarea
+                        id={name}
+                        className="ep-input"
+                        rows={3}
+                        maxLength={4000}
+                        value={typeof a === 'string' ? a : ''}
+                        onChange={(e) => onChange(q.id, e.target.value)}
+                      />
+                    ) : (
+                      <p className="ep-acr-answer">{typeof a === 'string' && a ? a : '—'}</p>
+                    )}
+                  </label>
+                );
+              if (q.kind === 'yesno')
+                return (
+                  <div
+                    key={q.id}
+                    className="ep-acr-rate"
+                    role="group"
+                    aria-labelledby={`${name}-q`}
+                  >
+                    <span id={`${name}-q`} className="ep-acr-rate__q">
+                      {q.text}
+                      {q.required && editable ? ' *' : ''}
+                    </span>
+                    {editable ? (
+                      <span className="ep-acr-rate__opts">
+                        {(['yes', 'no'] as const).map((v) => (
+                          <label key={v} className="ep-acr-opt">
+                            <input
+                              type="radio"
+                              name={name}
+                              checked={a === v}
+                              onChange={() => onChange(q.id, v)}
+                            />
+                            <span>{v === 'yes' ? 'Yes' : 'No'}</span>
+                          </label>
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="ep-acr-rate__val">
+                        {a === 'yes' ? 'Yes' : a === 'no' ? 'No' : '—'}
+                      </span>
+                    )}
+                  </div>
+                );
               return (
-                <label key={q.id} className="ep-field" htmlFor={name}>
-                  <span className="ep-field__label">
+                <div key={q.id} className="ep-acr-rate" role="group" aria-labelledby={`${name}-q`}>
+                  <span id={`${name}-q`} className="ep-acr-rate__q">
                     {q.text}
                     {q.required && editable ? ' *' : ''}
+                    {q.weight !== 1 ? <span className="ep-field__help"> (×{q.weight})</span> : null}
                   </span>
                   {editable ? (
-                    <textarea
-                      id={name}
-                      className="ep-input"
-                      rows={3}
-                      maxLength={4000}
-                      value={typeof a === 'string' ? a : ''}
-                      onChange={(e) => onChange(q.id, e.target.value)}
-                    />
+                    <span className="ep-acr-rate__opts">
+                      {scale.map((label, i) => {
+                        const v = top - i;
+                        return (
+                          <label key={v} className="ep-acr-opt" title={label}>
+                            <input
+                              type="radio"
+                              name={name}
+                              checked={a === v}
+                              onChange={() => onChange(q.id, v)}
+                            />
+                            <span>
+                              {v}
+                              <span className="ep-sr-only"> {label}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </span>
                   ) : (
-                    <p className="ep-acr-answer">{typeof a === 'string' && a ? a : '—'}</p>
+                    <span className="ep-acr-rate__val">
+                      {typeof a === 'number' ? `${String(a)} · ${scale[top - a] ?? ''}` : '—'}
+                    </span>
                   )}
-                </label>
+                </div>
               );
-            return (
-              <div key={q.id} className="ep-acr-rate" role="group" aria-labelledby={`${name}-q`}>
-                <span id={`${name}-q`} className="ep-acr-rate__q">
-                  {q.text}
-                  {q.required && editable ? ' *' : ''}
-                  {q.weight !== 1 ? <span className="ep-field__help"> (×{q.weight})</span> : null}
-                </span>
-                {editable ? (
-                  <span className="ep-acr-rate__opts">
-                    {scale.map((label, i) => {
-                      const v = top - i;
-                      return (
-                        <label key={v} className="ep-acr-opt" title={label}>
-                          <input
-                            type="radio"
-                            name={name}
-                            checked={a === v}
-                            onChange={() => onChange(q.id, v)}
-                          />
-                          <span>
-                            {v}
-                            <span className="ep-sr-only"> {label}</span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </span>
-                ) : (
-                  <span className="ep-acr-rate__val">
-                    {typeof a === 'number' ? `${String(a)} · ${scale[top - a] ?? ''}` : '—'}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </fieldset>
-      ))}
+            })}
+          </fieldset>
+        );
+      })}
     </>
   );
 }
@@ -452,6 +515,17 @@ export function AcrSheet({
                 Grade{r.result.scorePct !== null ? ` · score ${String(r.result.scorePct)}%` : ''}
                 {r.result.adverse ? ' · adverse' : ''}
               </span>
+              {r.levels.some((l) => l.status === 'done' && l.scorePct !== null) ? (
+                <span className="ep-field__help">
+                  {r.levels
+                    .filter(
+                      (l) => l.status === 'done' && l.scorePct !== null && l.scorePct !== undefined,
+                    )
+                    .map((l) => `${l.label} ${String(l.scorePct)}%`)
+                    .join(' · ')}
+                  {' · the average'}
+                </span>
+              ) : null}
             </div>
             <div className="ep-field__help">
               {r.result.disclosedAt ? (
@@ -547,10 +621,11 @@ export function AcrSheet({
         ) : null}
         <QuestionForm
           idPrefix="self"
-          questions={r.questions.self}
+          form={r.self.formId ? r.forms[r.self.formId] : undefined}
           scale={r.scale}
           answers={self}
           editable={r.can.self}
+          scores={r.self.submittedAt ? r.self.sections : undefined}
           onChange={(id, v) => setSelf((x) => ({ ...x, [id]: v }))}
         />
         {r.can.self ? (
@@ -616,13 +691,14 @@ export function AcrSheet({
                     : 'Nobody set for this level yet'}
                   {l.filledBy ? ` · filled by ${l.filledBy}, ${when(l.filledAt)}` : ''}
                 </p>
-                {l.action === 'rate' && (l.status === 'done' || editing) ? (
+                {l.formId && (l.status === 'done' || editing) ? (
                   <QuestionForm
                     idPrefix={`l${String(l.seq)}`}
-                    questions={r.questions.rate}
+                    form={r.forms[l.formId]}
                     scale={r.scale}
                     answers={editing ? lv.answers : (l.answers ?? {})}
                     editable={editing}
+                    scores={l.status === 'done' ? l.sections : undefined}
                     onChange={(id, v) =>
                       setLv((x) => ({ ...x, answers: { ...x.answers, [id]: v } }))
                     }

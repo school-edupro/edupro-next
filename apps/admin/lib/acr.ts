@@ -19,18 +19,42 @@ export interface AcrLevel {
   employeeId: string | null;
   employeeName?: string | null;
   action: 'rate' | 'review';
+  /** 0191: the questionnaire this level answers (none: the grade and remarks only) */
+  formId?: string | null;
+  formName?: string | null;
 }
 export interface AcrQuestion {
   id: string;
+  formId: string | null;
+  sectionId: string | null;
   part: 'self' | 'rate';
   staffGroup: StaffGroup | 'both';
   section: string;
   text: string;
-  kind: 'scale' | 'text';
+  kind: 'scale' | 'text' | 'yesno';
   weight: number;
   required: boolean;
   sortOrder: number;
   active: boolean;
+}
+/** 0191: a form (a self-appraisal of a staff category, or a level's questionnaire) with its sections. */
+export interface AcrSection {
+  id: string;
+  title: string;
+  help: string | null;
+  weight: number;
+  sortOrder: number;
+  questions: AcrQuestion[];
+}
+export interface AcrForm {
+  id: string;
+  name: string;
+  part: 'self' | 'level';
+  staffGroup: StaffGroup | 'both';
+  description: string | null;
+  active: boolean;
+  sortOrder: number;
+  sections: AcrSection[];
 }
 export interface AcrBand {
   minPct: number;
@@ -54,6 +78,7 @@ export interface AcrSetup {
   bands: AcrBand[];
   levels: Record<StaffGroup, AcrLevel[]>;
   questions: AcrQuestion[];
+  forms: AcrForm[];
   cycles: AcrCycle[];
   years: Array<{ id: string; code: string; status: string }>;
   roles: Array<{ code: string; name: string }>;

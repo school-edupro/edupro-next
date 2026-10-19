@@ -129,3 +129,32 @@ employee record and are copied into each cycle.
 - **Re-read assessors** also rebuilds the chain of ACRs still at the self-appraisal when the set-up's
   levels changed since the cycle started (levels added or removed).
 - Test: `acr.e2e-spec.ts` "a person on two levels in a row assesses once (0190)".
+
+## Forms and questions (19 Oct 2026, 0191)
+
+The school's requirements note: separate self-appraisal forms per staff category and **a different
+questionnaire for each approval level**, allotted automatically by category and level. Decisions: level
+questionnaires separate per category (a form may also serve all staff); scores averaged across the
+levels that rate, the last level setting the grade; sections carry weights and show a score.
+
+- **Tables:** `acr_forms` (name, part self | level, staff group teaching | non-teaching | both, on/off),
+  `acr_form_sections` (title, help, weight, order); `acr_questions` now belong to a form and a section
+  (`part`, `staff_group`, `section` kept in step for the seed); kind adds `yesno`. `acr_levels.form_id`
+  names a level's questionnaire (none: the grade and remarks only); `acr_reports.self_form_id` and
+  `acr_reviews.form_id` snapshot the forms an ACR was made with. `app.acr_forms_from_questions` builds
+  the four starting forms from the question bank (also after the seed) and points rating levels and
+  ACRs already made at them.
+- **Set-up → Forms and questions:** the self-appraisal forms and the level questionnaires as lists;
+  Add form, open a form: sections (add, change, move up, remove when empty) with questions (add,
+  change, move up, switch off; rating, written or yes / no; weight; required), the form's name,
+  category and description, switch off, and Copy as the start of another. **Approval levels** gets a
+  Questionnaire per level; a rating level must have one.
+- **Flow:** every level answers its own questionnaire; its ratings give the level's score by section
+  (question weights within a section, section weights across sections); a reviewing level is offered
+  the grade of the average of the scores so far and may give another with a reason; the ACR's score is
+  the average of the levels that rated and the last level's grade stands. The sheet shows each form's
+  sections with help and section scores, and the result lists the levels' scores.
+- API: `people/acr/setup/forms` (POST, PUT, `:id/copy`), `setup/sections` (POST, PUT, DELETE),
+  `setup/questions` (formId, sectionId); `reports/:id` returns `forms` by id, `self.formId`,
+  `self.sections`, `levels[].formId`, `levels[].sections`. Test: `acr.e2e-spec.ts` "forms, sections
+  and questions (0191)" and the flow cases.

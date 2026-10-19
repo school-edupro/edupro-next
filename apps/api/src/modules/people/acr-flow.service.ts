@@ -20,13 +20,29 @@ type Group = 'teaching' | 'non_teaching';
 type Answer = number | string;
 export interface Question {
   id: string;
-  part: 'self' | 'rate';
+  /** the section's title, id and weight (0191); questions without a section row keep their text */
   section: string;
+  sectionId: string | null;
+  sectionWeight: number;
+  sectionHelp: string | null;
   text: string;
-  kind: 'scale' | 'text';
+  kind: 'scale' | 'text' | 'yesno';
   weight: number;
   required: boolean;
 }
+/** A form as the sheet shows it (0191). */
+export interface FormView {
+  id: string;
+  name: string;
+  sections: Array<{
+    id: string;
+    title: string;
+    help: string | null;
+    weight: number;
+    questions: Array<Pick<Question, 'id' | 'text' | 'kind' | 'weight' | 'required'>>;
+  }>;
+}
+export type SectionScore = { id: string; title: string; weight: number; pct: number | null };
 interface Band {
   min_pct: number;
   label: string;
@@ -44,6 +60,7 @@ interface ReportRow {
   office_facts: Record<string, unknown>;
   self_pct: string | null;
   self_submitted_at: Date | null;
+  self_form_id: string | null;
   score_pct: string | null;
   grade: string | null;
   adverse: boolean;
@@ -77,16 +94,17 @@ interface ReviewRow {
   filled_by_name: string | null;
   filled_at: Date | null;
   skipped_note: string | null;
+  form_id: string | null;
 }
 
 const REPORT = `SELECT r.id::text, r.cycle_id::text, r.employee_id::text, r.staff_group, r.status, r.current_level,
-       r.self_answers, r.auto_facts, r.office_facts, r.self_pct::text, r.self_submitted_at, r.score_pct::text,
+       r.self_answers, r.auto_facts, r.office_facts, r.self_pct::text, r.self_submitted_at, r.self_form_id::text, r.score_pct::text,
        r.grade, r.adverse, r.disclosed_at, r.object_by::text, r.acknowledged_at, r.representation,
        r.represented_at, r.decision, r.decision_note, r.decided_at, r.closed_at,
        cy.status AS cycle_status, cy.self_from::text, cy.self_to::text, cy.academic_year_id::text
   FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id`;
 const REVIEW_COLS = `SELECT id::text, seq, label, action, reviewer_ids::text[] AS reviewer_ids, status, answers,
-       remarks, score_pct::text, grade, grade_reason, agreement, filled_by_name, filled_at, skipped_note FROM acr_reviews`;
+       remarks, score_pct::text, grade, grade_reason, agreement, filled_by_name, filled_at, skipped_note, form_id::text FROM acr_reviews`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
 const REVIEWS = `${REVIEW_COLS} WHERE report_id = $1 ORDER BY seq`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
@@ -154,13 +172,82 @@ export class AcrFlowService {
     return r.rows[0];
   }
 
-  private async questions(c: PoolClient, group: Group): Promise<Question[]> {
-    const r = await c.query<Question & { weight: string }>(
-      `SELECT id::text, part, section, text, kind, weight::text AS weight, required FROM acr_questions
-        WHERE active AND staff_group IN ($1, 'both') ORDER BY part, sort_order, id`,
+  /** The active questions of a form (0191), in section and question order; nothing for no form. */
+  private async formQuestions(c: PoolClient, formId: string | null): Promise<Question[]> {
+    if (!formId) return [];
+    const r = await c.query<{
+      id: string;
+      section: string;
+      section_id: string | null;
+      section_weight: string | null;
+      section_help: string | null;
+      text: string;
+      kind: 'scale' | 'text' | 'yesno';
+      weight: string;
+      required: boolean;
+    }>(
+      `SELECT q.id::text, COALESCE(s.title, q.section) AS section, q.section_id::text, s.weight::text AS section_weight,
+              s.help AS section_help, q.text, q.kind, q.weight::text, q.required
+         FROM acr_questions q LEFT JOIN acr_form_sections s ON s.id = q.section_id
+        WHERE q.form_id = $1 AND q.active
+        ORDER BY s.sort_order NULLS LAST, q.sort_order, q.id`,
+      [formId],
+    );
+    return r.rows.map((q) => ({
+      id: q.id,
+      section: q.section,
+      sectionId: q.section_id,
+      sectionWeight: q.section_weight ? Number(q.section_weight) : 1,
+      sectionHelp: q.section_help,
+      text: q.text,
+      kind: q.kind,
+      weight: Number(q.weight),
+      required: q.required,
+    }));
+  }
+
+  /** The self-appraisal form of a staff group: its own first, else one for both. */
+  private async selfFormId(c: PoolClient, group: Group): Promise<string | null> {
+    const r = await c.query<{ id: string }>(
+      `SELECT id::text FROM acr_forms WHERE part = 'self' AND active AND staff_group IN ($1, 'both')
+        ORDER BY (staff_group = $1) DESC, sort_order, id LIMIT 1`,
       [group],
     );
-    return r.rows.map((q) => ({ ...q, weight: Number(q.weight) }));
+    return r.rows[0]?.id ?? null;
+  }
+
+  /** A form as the sheet shows it: its sections with help and weight, each with its questions. */
+  private async formView(c: PoolClient, formId: string | null): Promise<FormView | null> {
+    if (!formId) return null;
+    const f = await c.query<{ id: string; name: string }>(
+      'SELECT id::text, name FROM acr_forms WHERE id = $1',
+      [formId],
+    );
+    if (!f.rows[0]) return null;
+    const qs = await this.formQuestions(c, formId);
+    const sections: FormView['sections'] = [];
+    for (const q of qs) {
+      const key = q.sectionId ?? q.section;
+      let sec = sections.find((x) => x.id === key);
+      if (!sec) {
+        sec = {
+          id: key,
+          title: q.section,
+          help: q.sectionHelp,
+          weight: q.sectionWeight,
+          questions: [],
+        };
+        sections.push(sec);
+      }
+      sec.questions.push({
+        id: q.id,
+        text: q.text,
+        kind: q.kind,
+        weight: q.weight,
+        required: q.required,
+      });
+    }
+    return { id: f.rows[0].id, name: f.rows[0].name, sections };
   }
 
   private async scale(
@@ -209,20 +296,48 @@ export class AcrFlowService {
       if (q.kind === 'scale' && (typeof a !== 'number' || a < 1 || a > top))
         errors.push(`“${q.text}”: a rating from 1 to ${String(top)}`);
       if (q.kind === 'text' && typeof a !== 'string') errors.push(`“${q.text}”: a written answer`);
+      if (q.kind === 'yesno' && a !== 'yes' && a !== 'no') errors.push(`“${q.text}”: yes or no`);
     }
     return errors;
   }
-  /** Weighted rating as % of the top of the scale (written answers do not count). */
-  private score(qs: Question[], answers: Record<string, Answer>, top: number): number | null {
-    let got = 0;
-    let max = 0;
+  /**
+   * Weighted ratings as % of the top of the scale, by section (written and yes / no answers do not
+   * count); the form's score weighs the sections that have ratings (0191).
+   */
+  private scoreOf(
+    qs: Question[],
+    answers: Record<string, Answer>,
+    top: number,
+  ): { pct: number | null; sections: SectionScore[] } {
+    const sections: Array<{ id: string; title: string; weight: number; got: number; max: number }> =
+      [];
     for (const q of qs) {
+      const key = q.sectionId ?? q.section;
+      let sec = sections.find((x) => x.id === key);
+      if (!sec) {
+        sec = { id: key, title: q.section, weight: q.sectionWeight, got: 0, max: 0 };
+        sections.push(sec);
+      }
       const a = answers[q.id];
       if (q.kind !== 'scale' || typeof a !== 'number') continue;
-      got += a * q.weight;
-      max += top * q.weight;
+      sec.got += a * q.weight;
+      sec.max += top * q.weight;
     }
-    return max ? pct((got / max) * 100) : null;
+    const out: SectionScore[] = sections.map((x) => ({
+      id: x.id,
+      title: x.title,
+      weight: x.weight,
+      pct: x.max ? pct((x.got / x.max) * 100) : null,
+    }));
+    const scored = out.filter((x) => x.pct !== null);
+    const w = scored.reduce((n, x) => n + x.weight, 0);
+    return {
+      pct: w ? pct(scored.reduce((n, x) => n + x.weight * (x.pct ?? 0), 0) / w) : null,
+      sections: out,
+    };
+  }
+  private score(qs: Question[], answers: Record<string, Answer>, top: number): number | null {
+    return this.scoreOf(qs, answers, top).pct;
   }
   /** Only the answers to these questions are kept. */
   private only(qs: Question[], answers: Record<string, Answer>) {
@@ -343,8 +458,13 @@ export class AcrFlowService {
     const sc = await this.scale(c);
     const bands = await this.bands(c);
     const final = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
-    const lastRate = [...final].reverse().find((x) => x.action === 'rate' && x.status === 'done');
-    const finalScore = lastRate?.score_pct ? Number(lastRate.score_pct) : null;
+    // the ACR's score: the average of the levels that rated (0191); the last level's grade stands
+    const scored = final
+      .filter((x) => x.status === 'done' && x.score_pct !== null)
+      .map((x) => Number(x.score_pct));
+    const finalScore = scored.length
+      ? pct(scored.reduce((n, x) => n + x, 0) / scored.length)
+      : null;
     const lastGrade =
       [...final].reverse().find((x) => x.status === 'done' && x.grade)?.grade ?? null;
     const finalGrade =
@@ -390,8 +510,9 @@ export class AcrFlowService {
         designation: string | null;
         employee_id: string | null;
         action: 'rate' | 'review';
+        form_id: string | null;
       }>(
-        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action
+        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action, form_id::text
            FROM acr_levels ORDER BY staff_group, seq`,
       );
       const staff = await c.query<{
@@ -413,18 +534,18 @@ export class AcrFlowService {
         const group: Group =
           e.side === 'teaching' || (e.side === 'both' && e.teaches) ? 'teaching' : 'non_teaching';
         const r = await c.query<{ id: string }>(
-          `INSERT INTO acr_reports (school_id, cycle_id, employee_id, staff_group)
-           VALUES (app.current_school_id(), $1, $2, $3) RETURNING id::text`,
-          [cycleId, e.id, group],
+          `INSERT INTO acr_reports (school_id, cycle_id, employee_id, staff_group, self_form_id)
+           VALUES (app.current_school_id(), $1, $2, $3, $4) RETURNING id::text`,
+          [cycleId, e.id, group, await this.selfFormId(c, group)],
         );
         const rid = r.rows[0]!.id;
         for (const l of levels.rows.filter((x) => x.staff_group === group)) {
           const people = await this.resolve(c, l, e);
           if (!people.length) unassigned.push({ employeeId: e.id, level: l.label });
           await c.query(
-            `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids)
-             VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[])`,
-            [rid, l.seq, l.label, l.action, people],
+            `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids, form_id)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[], $6)`,
+            [rid, l.seq, l.label, l.action, people, l.form_id],
           );
         }
         await this.applySkips(c, ctx, rid);
@@ -464,8 +585,9 @@ export class AcrFlowService {
         designation: string | null;
         employee_id: string | null;
         action: 'rate' | 'review';
+        form_id: string | null;
       }>(
-        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action FROM acr_levels ORDER BY staff_group, seq`,
+        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action, form_id::text FROM acr_levels ORDER BY staff_group, seq`,
       );
       const reports = await c.query<{
         id: string;
@@ -488,7 +610,12 @@ export class AcrFlowService {
           const have = (await c.query<ReviewRow>(REVIEWS, [rep.id])).rows;
           const sameShape =
             have.length === chain.length &&
-            have.every((v, i) => v.label === chain[i]!.label && v.action === chain[i]!.action);
+            have.every(
+              (v, i) =>
+                v.label === chain[i]!.label &&
+                v.action === chain[i]!.action &&
+                (v.form_id ?? null) === (chain[i]!.form_id ?? null),
+            );
           if (!sameShape) {
             await c.query('DELETE FROM acr_reviews WHERE report_id = $1', [rep.id]);
             for (const l of chain) {
@@ -497,10 +624,14 @@ export class AcrFlowService {
                 profile: rep.profile,
               });
               await c.query(
-                `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids)
-                 VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[])`,
-                [rep.id, l.seq, l.label, l.action, people],
+                `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids, form_id)
+                 VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[], $6)`,
+                [rep.id, l.seq, l.label, l.action, people, l.form_id],
               );
+              await c.query(`UPDATE acr_reports SET self_form_id = $2 WHERE id = $1`, [
+                rep.id,
+                await this.selfFormId(c, rep.staff_group),
+              ]);
               if (!people.length) unassigned.push({ employeeId: rep.employee_id, level: l.label });
             }
             changed += chain.length;
@@ -703,8 +834,8 @@ export class AcrFlowService {
       const r = await this.load(c, id);
       const reviews = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
       const a = await this.access(c, ctx, r, reviews);
-      const [qs, sc, bands, emp, events] = await Promise.all([
-        this.questions(c, r.staff_group),
+      const [selfForm, sc, bands, emp, events] = await Promise.all([
+        this.formView(c, await this.selfFormOf(c, r)),
         this.scale(c),
         this.bands(c),
         c.query<{
@@ -735,6 +866,21 @@ export class AcrFlowService {
       const windowOpen = r.cycle_status === 'open' && today >= r.self_from && today <= r.self_to;
       const returned = await this.wasReturned(c, id);
       const pending = reviews.find((v) => v.seq === r.current_level && v.status === 'pending');
+      const forms: Record<string, FormView> = {};
+      if (selfForm) forms[selfForm.id] = selfForm;
+      const levelSections = new Map<number, SectionScore[]>();
+      for (const v of reviews) {
+        if (!v.form_id || !seeLevel(v.seq)) continue;
+        if (!forms[v.form_id]) {
+          const fv = await this.formView(c, v.form_id);
+          if (fv) forms[v.form_id] = fv;
+        }
+        if (v.status === 'done')
+          levelSections.set(
+            v.seq,
+            this.scoreOf(await this.formQuestions(c, v.form_id), v.answers, sc.top).sections,
+          );
+      }
       return {
         id: r.id,
         employee: { id: r.employee_id, ...emp.rows[0]! },
@@ -744,11 +890,14 @@ export class AcrFlowService {
         cycle: { id: r.cycle_id, status: r.cycle_status, selfFrom: r.self_from, selfTo: r.self_to },
         scale: sc.labels,
         bands: bands.map((b) => ({ minPct: b.min_pct, label: b.label, adverse: b.adverse })),
-        questions: {
-          self: qs.filter((q) => q.part === 'self'),
-          rate: a.self && !shown ? [] : qs.filter((q) => q.part === 'rate'),
-        },
+        // 0191: the forms this ACR was made with; a level's once its people (or the employee, once shown) may see it
+        forms,
         self: {
+          formId: selfForm?.id ?? null,
+          sections: selfForm
+            ? this.scoreOf(await this.formQuestions(c, selfForm.id), r.self_answers, sc.top)
+                .sections
+            : [],
           answers: r.self_answers,
           pct: r.self_pct === null ? null : Number(r.self_pct),
           submittedAt: r.self_submitted_at?.toISOString() ?? null,
@@ -765,6 +914,8 @@ export class AcrFlowService {
                 action: v.action,
                 status: v.status,
                 people: v.reviewer_ids.map((x) => ({ id: x, name: nameOf.get(x) ?? '' })),
+                formId: v.form_id,
+                sections: levelSections.get(v.seq) ?? [],
                 answers: v.answers,
                 remarks: v.remarks,
                 scorePct: v.score_pct === null ? null : Number(v.score_pct),
@@ -782,6 +933,7 @@ export class AcrFlowService {
                 status: v.status,
                 hidden: true,
                 skippedNote: v.skipped_note,
+                formId: v.form_id,
               },
         ),
         result:
@@ -954,10 +1106,18 @@ export class AcrFlowService {
     return r;
   }
 
+  /** The self form an ACR was made with; one made before forms existed takes its group's form now. */
+  private async selfFormOf(c: PoolClient, r: ReportRow): Promise<string | null> {
+    if (r.self_form_id) return r.self_form_id;
+    const id = await this.selfFormId(c, r.staff_group);
+    if (id) await c.query('UPDATE acr_reports SET self_form_id = $2 WHERE id = $1', [r.id, id]);
+    return id;
+  }
+
   async saveSelf(ctx: RequestContext, id: string, dto: AcrSelfDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.selfReport(c, id);
-      const qs = (await this.questions(c, r.staff_group)).filter((q) => q.part === 'self');
+      const qs = await this.formQuestions(c, await this.selfFormOf(c, r));
       const { top } = await this.scale(c);
       const answers = this.only(qs, { ...r.self_answers, ...dto.answers });
       const errors = this.check(qs, answers, top, false);
@@ -974,7 +1134,7 @@ export class AcrFlowService {
   async submitSelf(ctx: RequestContext, id: string, dto: AcrSelfDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.selfReport(c, id);
-      const qs = (await this.questions(c, r.staff_group)).filter((q) => q.part === 'self');
+      const qs = await this.formQuestions(c, await this.selfFormOf(c, r));
       const sc = await this.scale(c);
       const answers = this.only(qs, { ...r.self_answers, ...dto.answers });
       const errors = this.check(qs, answers, sc.top, true);
@@ -1027,10 +1187,10 @@ export class AcrFlowService {
 
   async saveLevel(ctx: RequestContext, id: string, seq: number, dto: AcrLevelDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const { r, v } = await this.myLevel(c, id, seq);
-      const qs = (await this.questions(c, r.staff_group)).filter((q) => q.part === 'rate');
+      const { v } = await this.myLevel(c, id, seq);
+      const qs = await this.formQuestions(c, v.form_id);
       const { top } = await this.scale(c);
-      const answers = v.action === 'rate' ? this.only(qs, { ...v.answers, ...dto.answers }) : {};
+      const answers = this.only(qs, { ...v.answers, ...dto.answers });
       const errors = this.check(qs, answers, top, false);
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
@@ -1052,8 +1212,8 @@ export class AcrFlowService {
 
   async submitLevel(ctx: RequestContext, id: string, seq: number, dto: AcrLevelDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const { r, v } = await this.myLevel(c, id, seq);
-      const qs = (await this.questions(c, r.staff_group)).filter((q) => q.part === 'rate');
+      const { v } = await this.myLevel(c, id, seq);
+      const qs = await this.formQuestions(c, v.form_id);
       const sc = await this.scale(c);
       const bands = await this.bands(c);
       const all = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
@@ -1062,23 +1222,29 @@ export class AcrFlowService {
       let grade: string | null = null;
       let reason: string | null = null;
       let agreement: string | null = null;
-      let answers: Record<string, Answer> = {};
+      // every level answers its own questionnaire (0191); its ratings give the level's score
+      const answers = this.only(qs, { ...v.answers, ...dto.answers });
+      const errors = this.check(qs, answers, sc.top, true);
+      if (errors.length)
+        throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
+      score = this.score(qs, answers, sc.top);
       if (v.action === 'rate') {
-        answers = this.only(qs, { ...v.answers, ...dto.answers });
-        const errors = this.check(qs, answers, sc.top, true);
-        if (errors.length)
-          throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
-        score = this.score(qs, answers, sc.top);
         grade = score === null ? null : (this.gradeOf(bands, score)?.label ?? null);
       } else {
-        // the grade the ratings so far give; the reviewer keeps it or gives another with a reason
-        const lastRate = [...all]
-          .reverse()
-          .find((x) => x.seq < seq && x.action === 'rate' && x.status === 'done');
+        // the grade the scores so far give (the average of the levels that rated, this one included);
+        // the reviewer keeps it or gives another with a reason
+        const scored = [
+          ...all
+            .filter((x) => x.seq < seq && x.status === 'done' && x.score_pct !== null)
+            .map((x) => Number(x.score_pct)),
+          ...(score === null ? [] : [score]),
+        ];
+        const average = scored.length
+          ? pct(scored.reduce((n, x) => n + x, 0) / scored.length)
+          : null;
         const lastGrade =
           [...all].reverse().find((x) => x.seq < seq && x.status === 'done' && x.grade)?.grade ??
-          null;
-        score = lastRate?.score_pct ? Number(lastRate.score_pct) : null;
+          (average === null ? null : (this.gradeOf(bands, average)?.label ?? null));
         const given = (dto.grade ?? v.grade ?? lastGrade ?? '').trim();
         if (!bands.some((b) => b.label === given))
           throw new DomainError('validation-failed', 'Choose a grade', { status: 400 });

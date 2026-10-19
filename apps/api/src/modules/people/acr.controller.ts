@@ -1,4 +1,5 @@
 import {
+  Delete,
   Body,
   Controller,
   Get,
@@ -14,6 +15,9 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  AcrSectionDto,
+  AcrFormDto,
+  AcrFormCopyDto,
   AcrAssessorsQueryDto,
   AcrAssessorsSaveDto,
   AcrCycleDto,
@@ -79,8 +83,53 @@ export class AcrController {
     return this.setup.saveLevels(ctx, body);
   }
 
+  @Post('setup/forms')
+  @ApiOperation({
+    summary: 'Add a form: a self-appraisal of a staff category, or a level’s questionnaire',
+  })
+  @RequirePermission(PEOPLE.acrManage)
+  addForm(@ReqCtx() ctx: RequestContext, @Body() body: AcrFormDto) {
+    return this.setup.saveForm(ctx, null, body);
+  }
+
+  @Put('setup/forms/:id')
+  @ApiOperation({ summary: 'Change a form (name, who it is for, on or off)' })
+  @RequirePermission(PEOPLE.acrManage)
+  editForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrFormDto) {
+    return this.setup.saveForm(ctx, id, body);
+  }
+
+  @Post('setup/forms/:id/copy')
+  @ApiOperation({ summary: 'Copy a form with its sections and questions as the start of another' })
+  @RequirePermission(PEOPLE.acrManage)
+  copyForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrFormCopyDto) {
+    return this.setup.copyForm(ctx, id, body);
+  }
+
+  @Post('setup/sections')
+  @ApiOperation({ summary: 'Add a section to a form' })
+  @RequirePermission(PEOPLE.acrManage)
+  addSection(@ReqCtx() ctx: RequestContext, @Body() body: AcrSectionDto) {
+    return this.setup.saveSection(ctx, null, body);
+  }
+
+  @Put('setup/sections/:id')
+  @ApiOperation({ summary: 'Change a section (title, help, weight, order)' })
+  @RequirePermission(PEOPLE.acrManage)
+  editSection(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrSectionDto) {
+    return this.setup.saveSection(ctx, id, body);
+  }
+
+  @Delete('setup/sections/:id')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Remove an empty section' })
+  @RequirePermission(PEOPLE.acrManage)
+  removeSection(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.setup.deleteSection(ctx, id);
+  }
+
   @Post('setup/questions')
-  @ApiOperation({ summary: 'Add a question to the bank' })
+  @ApiOperation({ summary: 'Add a question to a section of a form' })
   @RequirePermission(PEOPLE.acrManage)
   addQuestion(@ReqCtx() ctx: RequestContext, @Body() body: AcrQuestionDto) {
     return this.setup.saveQuestion(ctx, null, body);

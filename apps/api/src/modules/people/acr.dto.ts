@@ -47,12 +47,39 @@ export const AcrLevelsSchema = z.object({
         designation: z.string().trim().max(80).nullable().optional(),
         employeeId: Id.nullable().optional(),
         action: z.enum(['rate', 'review']),
+        /** 0191: the questionnaire this level answers (none: the grade and remarks only) */
+        formId: Id.nullable().optional(),
       }),
     )
     .min(1)
     .max(6),
 });
 export class AcrLevelsDto extends createZodDto(AcrLevelsSchema) {}
+
+/** 0191: a form (the self-appraisal of a staff category, or a level's questionnaire). */
+export const AcrFormSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  part: z.enum(['self', 'level']),
+  staffGroup: z.enum(['teaching', 'non_teaching', 'both']),
+  description: z.string().trim().max(500).nullable().optional(),
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).max(9999).default(0),
+});
+export class AcrFormDto extends createZodDto(AcrFormSchema) {}
+export const AcrFormCopySchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  staffGroup: z.enum(['teaching', 'non_teaching', 'both']).optional(),
+});
+export class AcrFormCopyDto extends createZodDto(AcrFormCopySchema) {}
+/** A section of a form: a heading with help, its share of the score, its place. */
+export const AcrSectionSchema = z.object({
+  formId: Id,
+  title: z.string().trim().min(2).max(80),
+  help: z.string().trim().max(500).nullable().optional(),
+  weight: z.number().min(0.25).max(10).default(1),
+  sortOrder: z.number().int().min(0).max(9999).default(0),
+});
+export class AcrSectionDto extends createZodDto(AcrSectionSchema) {}
 
 /** The employee-wise level kinds: what the Assessors screen assigns (0189). */
 export const ASSESSOR_KINDS = [
@@ -88,11 +115,11 @@ export const AcrAssessorsSaveSchema = z.object({
 export class AcrAssessorsSaveDto extends createZodDto(AcrAssessorsSaveSchema) {}
 
 export const AcrQuestionSchema = z.object({
-  part: z.enum(['self', 'rate']),
-  staffGroup: z.enum(['teaching', 'non_teaching', 'both']),
-  section: z.string().trim().min(2).max(80),
+  formId: Id,
+  sectionId: Id,
   text: z.string().trim().min(3).max(300),
-  kind: z.enum(['scale', 'text']),
+  /** scale: a rating on the scale; text: written; yesno: yes or no (0191) */
+  kind: z.enum(['scale', 'text', 'yesno']),
   weight: z.number().min(0.25).max(10).default(1),
   required: z.boolean().default(true),
   sortOrder: z.number().int().min(0).max(9999).default(0),

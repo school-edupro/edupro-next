@@ -61,6 +61,7 @@ export async function saveAcrLevels(staffGroup: StaffGroup, levels: AcrLevel[]):
           designation: l.designation,
           employeeId: l.employeeId,
           action: l.action,
+          formId: l.formId ?? null,
         })),
       }),
     });
@@ -71,20 +72,113 @@ export async function saveAcrLevels(staffGroup: StaffGroup, levels: AcrLevel[]):
   return { ok: true };
 }
 
-/** Add or change a question (form). */
+// ---- forms, sections and questions (0191) --------------------------------------------------------
+
+const formsBack = (formId?: string) =>
+  `${SETUP}?tab=questions${formId && okId(formId) ? `&form=${formId}` : ''}`;
+
+/** Add or change a form (name, part, who it is for, on or off). */
+export async function saveAcrForm(fd: FormData) {
+  const id = str(fd, 'id');
+  const back_ = formsBack(id);
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch(okId(id) ? `${SETUP}/forms/${id}` : `${SETUP}/forms`, {
+      method: okId(id) ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        part: str(fd, 'part') === 'level' ? 'level' : 'self',
+        staffGroup: str(fd, 'staffGroup') || 'teaching',
+        description: str(fd, 'description') || null,
+        active: str(fd, 'active') !== 'false',
+        sortOrder: Number(str(fd, 'sortOrder') || '0'),
+      }),
+    });
+  } catch (error) {
+    back(back_, error);
+  }
+  revalidatePath(SETUP);
+  redirect(
+    `${formsBack(out!.id)}&ok=1&detail=${encodeURIComponent(okId(id) ? 'Form saved.' : 'Form added: now add its sections and questions.')}`,
+  );
+}
+
+/** Copy a form with its sections and questions. */
+export async function copyAcrForm(fd: FormData) {
+  const id = str(fd, 'id');
+  const back_ = formsBack(id);
+  if (!okId(id)) redirect(formsBack());
+  let out: { id: string } | undefined;
+  try {
+    out = await apiFetch(`${SETUP}/forms/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        staffGroup: str(fd, 'staffGroup') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(back_, error);
+  }
+  revalidatePath(SETUP);
+  redirect(`${formsBack(out!.id)}&ok=1&detail=${encodeURIComponent('Form copied.')}`);
+}
+
+/** Add or change a section (title, help, weight, order). */
+export async function saveAcrSection(fd: FormData) {
+  const id = str(fd, 'id');
+  const formId = str(fd, 'formId');
+  const back_ = formsBack(formId);
+  if (!okId(formId)) redirect(formsBack());
+  try {
+    await apiFetch(okId(id) ? `${SETUP}/sections/${id}` : `${SETUP}/sections`, {
+      method: okId(id) ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        formId,
+        title: str(fd, 'title'),
+        help: str(fd, 'help') || null,
+        weight: Number(str(fd, 'weight') || '1'),
+        sortOrder: Number(str(fd, 'sortOrder') || '0'),
+      }),
+    });
+  } catch (error) {
+    back(back_, error);
+  }
+  revalidatePath(SETUP);
+  redirect(
+    `${back_}&ok=1&detail=${encodeURIComponent(okId(id) ? 'Section saved.' : 'Section added.')}`,
+  );
+}
+
+/** Remove an empty section. */
+export async function removeAcrSection(fd: FormData) {
+  const id = str(fd, 'id');
+  const back_ = formsBack(str(fd, 'formId'));
+  if (!okId(id)) redirect(back_);
+  try {
+    await apiFetch(`${SETUP}/sections/${id}`, { method: 'DELETE' });
+  } catch (error) {
+    back(back_, error);
+  }
+  revalidatePath(SETUP);
+  redirect(`${back_}&ok=1&detail=${encodeURIComponent('Section removed.')}`);
+}
+
+/** Add or change a question of a section. */
 export async function saveAcrQuestion(fd: FormData) {
   const id = str(fd, 'id');
-  const part = str(fd, 'part') === 'rate' ? 'rate' : 'self';
-  const back_ = `${SETUP}?tab=questions&part=${part}`;
+  const formId = str(fd, 'formId');
+  const back_ = formsBack(formId);
+  if (!okId(formId)) redirect(formsBack());
+  const kind = str(fd, 'kind');
   try {
     await apiFetch(okId(id) ? `${SETUP}/questions/${id}` : `${SETUP}/questions`, {
       method: okId(id) ? 'PUT' : 'POST',
       body: JSON.stringify({
-        part,
-        staffGroup: str(fd, 'staffGroup'),
-        section: str(fd, 'section'),
+        formId,
+        sectionId: str(fd, 'sectionId'),
         text: str(fd, 'text'),
-        kind: str(fd, 'kind') === 'text' ? 'text' : 'scale',
+        kind: kind === 'text' || kind === 'yesno' ? kind : 'scale',
         weight: Number(str(fd, 'weight') || '1'),
         required: fd.get('required') === 'on',
         sortOrder: Number(str(fd, 'sortOrder') || '0'),
@@ -100,18 +194,17 @@ export async function saveAcrQuestion(fd: FormData) {
   );
 }
 
-/** Switch a question on or off (form). */
+/** Switch a question on or off, or move it (the whole question travels in `q`). */
 export async function toggleAcrQuestion(fd: FormData) {
   const id = str(fd, 'id');
-  const part = str(fd, 'part') === 'rate' ? 'rate' : 'self';
-  const back_ = `${SETUP}?tab=questions&part=${part}`;
+  const back_ = formsBack(str(fd, 'formId'));
   if (!okId(id)) redirect(back_);
   try {
     const q = JSON.parse(str(fd, 'q')) as Record<string, unknown>;
-    await apiFetch(`${SETUP}/questions/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ ...q, active: str(fd, 'active') === 'true' }),
-    });
+    const patch: Record<string, unknown> = { ...q };
+    if (str(fd, 'active')) patch.active = str(fd, 'active') === 'true';
+    if (str(fd, 'sortOrder')) patch.sortOrder = Number(str(fd, 'sortOrder'));
+    await apiFetch(`${SETUP}/questions/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
   } catch (error) {
     back(back_, error);
   }

@@ -15,6 +15,7 @@ export function AcrLevelsEditor({
   roles,
   designations,
   staff,
+  forms,
   canEdit,
 }: {
   group: StaffGroup;
@@ -23,6 +24,14 @@ export function AcrLevelsEditor({
   roles: Array<{ code: string; name: string }>;
   designations: string[];
   staff: Array<{ id: string; name: string; code: string }>;
+  /** 0191: the questionnaires a level may answer (level forms of this group or of all staff) */
+  forms: Array<{
+    id: string;
+    name: string;
+    part: 'self' | 'level';
+    staffGroup: string;
+    active: boolean;
+  }>;
   canEdit: boolean;
 }) {
   const [rows, setRows] = useState<AcrLevel[]>(initial);
@@ -177,6 +186,34 @@ export function AcrLevelsEditor({
                 >
                   <option value="rate">Rate the questions and write remarks</option>
                   <option value="review">Review: grade, agree or not, remarks</option>
+                </select>
+              </label>
+              <label className="ep-field" htmlFor={id('form', i)}>
+                <span className="ep-field__label">Questionnaire</span>
+                <select
+                  id={id('form', i)}
+                  className="ep-select"
+                  value={l.formId ?? ''}
+                  disabled={!canEdit}
+                  onChange={(e) => set(i, { formId: e.target.value || null })}
+                >
+                  <option value="">
+                    {l.action === 'rate'
+                      ? 'Choose… (a rating level needs one)'
+                      : 'None: grade and remarks only'}
+                  </option>
+                  {forms
+                    .filter(
+                      (f) =>
+                        f.part === 'level' &&
+                        (f.active || f.id === l.formId) &&
+                        (f.staffGroup === group || f.staffGroup === 'both'),
+                    )
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
                 </select>
               </label>
             </div>

@@ -86,9 +86,14 @@ describe('employee ACR set-up (e2e)', () => {
     expect(noRate.statusCode).toBe(400);
     const incomplete = await put([{ label: 'HOD', kind: 'role', action: 'rate' }]);
     expect(incomplete.statusCode).toBe(400);
+    // 0191: a rating level names the questionnaire it answers
+    const forms = (await setup()).forms as Array<{ id: string; part: string; staffGroup: string }>;
+    const rating = forms.find((f) => f.part === 'level' && f.staffGroup === 'non_teaching')!.id;
+    const noForm = await put([{ label: 'HOD', kind: 'acr_hod', action: 'rate' }]);
+    expect(noForm.statusCode).toBe(400);
     const ok = await put([
-      { label: 'Section head', kind: 'approver_l1', action: 'rate' },
-      { label: 'Administrator', kind: 'approver_l2', action: 'rate' },
+      { label: 'Section head', kind: 'approver_l1', action: 'rate', formId: rating },
+      { label: 'Administrator', kind: 'approver_l2', action: 'rate', formId: rating },
       { label: 'Principal', kind: 'designation', designation: 'Principal', action: 'review' },
       { label: 'Director', kind: 'role', roleCode: 'school_admin', action: 'review' },
     ]);
@@ -105,7 +110,10 @@ describe('employee ACR set-up (e2e)', () => {
       method: 'PUT',
       url: '/people/acr/setup/levels',
       headers: h(teacher),
-      json: { staffGroup: 'teaching', levels: [{ label: 'x', kind: 'acr_hod', action: 'rate' }] },
+      json: {
+        staffGroup: 'teaching',
+        levels: [{ label: 'x', kind: 'acr_hod', action: 'rate', formId: rating }],
+      },
     });
     expect(byTeacher.statusCode).toBe(403);
   });
@@ -156,29 +164,66 @@ describe('employee ACR set-up (e2e)', () => {
     ]);
   });
 
-  it('questions are added, changed and switched off; cycles one per year', async () => {
+  it('forms, sections and questions (0191): a new questionnaire with a section, a question added, changed and switched off, a form copied; cycles one per year', async () => {
+    const before = (await setup()).forms as Array<{
+      id: string;
+      part: string;
+      staffGroup: string;
+      name: string;
+    }>;
+    // the seed's four forms, from the question bank
+    expect(before.map((f) => [f.part, f.staffGroup]).sort()).toEqual([
+      ['level', 'non_teaching'],
+      ['level', 'teaching'],
+      ['self', 'non_teaching'],
+      ['self', 'teaching'],
+    ]);
+    const form = await inject({
+      method: 'POST',
+      url: '/people/acr/setup/forms',
+      headers: h(admin),
+      json: { name: 'Principal’s questionnaire · Teaching', part: 'level', staffGroup: 'teaching' },
+    });
+    expect(form.statusCode).toBe(201);
+    const formId = form.json().id as string;
+    const section = await inject({
+      method: 'POST',
+      url: '/people/acr/setup/sections',
+      headers: h(admin),
+      json: { formId, title: 'Values', help: 'As seen through the year', weight: 2 },
+    });
+    expect(section.statusCode).toBe(201);
+    const sectionId = section.json().id as string;
     const add = await inject({
       method: 'POST',
       url: '/people/acr/setup/questions',
       headers: h(admin),
-      json: {
-        part: 'rate',
-        staffGroup: 'both',
-        section: 'Values',
-        text: 'Care for children',
-        kind: 'scale',
-        weight: 2,
-      },
+      json: { formId, sectionId, text: 'Care for children', kind: 'scale', weight: 2 },
     });
     expect(add.statusCode).toBe(201);
+    const yn = await inject({
+      method: 'POST',
+      url: '/people/acr/setup/questions',
+      headers: h(admin),
+      json: { formId, sectionId, text: 'Fit for a leadership role?', kind: 'yesno' },
+    });
+    expect(yn.statusCode).toBe(201);
+    // a section of another form is refused
+    const otherForm = before.find((f) => f.part === 'self')!.id;
+    const wrong = await inject({
+      method: 'POST',
+      url: '/people/acr/setup/questions',
+      headers: h(admin),
+      json: { formId: otherForm, sectionId, text: 'x y z', kind: 'text' },
+    });
+    expect(wrong.statusCode).toBe(400);
     const off = await inject({
       method: 'PUT',
       url: `/people/acr/setup/questions/${add.json().id}`,
       headers: h(admin),
       json: {
-        part: 'rate',
-        staffGroup: 'both',
-        section: 'Values',
+        formId,
+        sectionId,
         text: 'Care for children',
         kind: 'scale',
         weight: 2,
@@ -186,8 +231,32 @@ describe('employee ACR set-up (e2e)', () => {
       },
     });
     expect(off.statusCode).toBe(200);
-    const q = (await setup()).questions.find((x: { id: string }) => x.id === add.json().id);
-    expect(q).toMatchObject({ weight: 2, active: false, staffGroup: 'both' });
+    const s1 = await setup();
+    const q = s1.questions.find((x: { id: string }) => x.id === add.json().id);
+    expect(q).toMatchObject({ weight: 2, active: false, formId, sectionId, section: 'Values' });
+    const f1 = s1.forms.find((f: { id: string }) => f.id === formId);
+    expect(f1.sections[0]).toMatchObject({ title: 'Values', weight: 2 });
+    expect(f1.sections[0].questions).toHaveLength(2);
+    // a section with questions stays; a copy carries sections and questions
+    expect(
+      (
+        await inject({
+          method: 'DELETE',
+          url: `/people/acr/setup/sections/${sectionId}`,
+          headers: h(admin),
+        })
+      ).statusCode,
+    ).toBe(409);
+    const copy = await inject({
+      method: 'POST',
+      url: `/people/acr/setup/forms/${formId}/copy`,
+      headers: h(admin),
+      json: { name: 'Principal’s questionnaire · Non-teaching', staffGroup: 'non_teaching' },
+    });
+    expect(copy.statusCode).toBe(201);
+    const f2 = (await setup()).forms.find((f: { id: string }) => f.id === copy.json().id);
+    expect(f2).toMatchObject({ staffGroup: 'non_teaching', part: 'level' });
+    expect(f2.sections[0].questions).toHaveLength(2);
 
     const year = await withMigrator((c) =>
       c.query<{ id: string }>('SELECT id::text FROM academic_years WHERE school_id = $1 LIMIT 1', [
@@ -328,9 +397,14 @@ describe('employee ACR flow (e2e)', () => {
   it('the self-appraisal: only the employee, inside the window, every required answer', async () => {
     const v = (await call(teacher, 'GET', `/people/acr/reports/${reportId}`)).json();
     expect(v.can.self).toBe(true);
-    expect(v.questions.rate).toEqual([]); // the employee does not see the rating form now
+    // the employee sees their self form only; the levels' questionnaires once the ACR is shown to them (0191)
+    expect(Object.keys(v.forms)).toEqual([v.self.formId]);
     expect(v.self.facts).toMatchObject({ results: [], activityLog: null });
-    const self = v.questions.self as Array<{ id: string; kind: string; required: boolean }>;
+    const self = (
+      v.forms[v.self.formId].sections as Array<{
+        questions: Array<{ id: string; kind: string; required: boolean }>;
+      }>
+    ).flatMap((x) => x.questions);
     // someone else cannot open it
     expect((await call(outsider, 'GET', `/people/acr/reports/${reportId}`)).statusCode).toBe(404);
     expect(
@@ -387,7 +461,11 @@ describe('employee ACR flow (e2e)', () => {
     expect(waiting.map((x: { id: string }) => x.id)).toContain(reportId);
     const v = (await call(hod, 'GET', `/people/acr/reports/${reportId}`)).json();
     expect(v.can.level).toEqual({ seq: 1, action: 'rate' });
-    const rate = v.questions.rate as Array<{ id: string; kind: string }>;
+    const rate = (
+      v.forms[v.levels[0].formId].sections as Array<{
+        questions: Array<{ id: string; kind: string }>;
+      }>
+    ).flatMap((x) => x.questions);
     // the Principal cannot fill the HOD's level
     expect(
       (
@@ -623,7 +701,11 @@ describe('employee ACR flow (e2e)', () => {
     expect(v.levels[1].skippedNote).toMatch(/level 1/);
     // the clerk's self-appraisal, then the Principal rates level 1: the ACR is shown to the employee at once
     const mine = (await call(clerk, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
-    const selfQ = mine.questions.self as Array<{ id: string; kind: string }>;
+    const selfQ = (
+      mine.forms[mine.self.formId].sections as Array<{
+        questions: Array<{ id: string; kind: string }>;
+      }>
+    ).flatMap((x) => x.questions);
     const done = await call(
       clerk,
       'POST',
@@ -639,7 +721,11 @@ describe('employee ACR flow (e2e)', () => {
       await call(principal, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)
     ).json();
     expect(turn).toMatchObject({ status: 'review', currentLevel: 1 });
-    const rateQ = turn.questions.rate as Array<{ id: string; kind: string }>;
+    const rateQ = (
+      turn.forms[turn.levels[0].formId].sections as Array<{
+        questions: Array<{ id: string; kind: string }>;
+      }>
+    ).flatMap((x) => x.questions);
     const rated = await call(
       principal,
       'POST',

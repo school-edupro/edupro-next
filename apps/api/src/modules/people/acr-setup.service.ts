@@ -10,7 +10,10 @@ import {
   type AcrAssessorsQueryDto,
   type AcrAssessorsSaveDto,
   type AcrCycleDto,
+  type AcrFormCopyDto,
+  type AcrFormDto,
   type AcrLevelsDto,
+  type AcrSectionDto,
   type AcrQuestionDto,
   type AcrSettingsDto,
   type AssessorKind,
@@ -28,93 +31,169 @@ export class AcrSetupService {
     private readonly audit: AuditService,
   ) {}
 
-  /** The first read of a school's set-up adds the starting levels, bands and questions. */
+  /** The first read of a school's set-up adds the starting levels, bands and questions, as forms (0191). */
   async seed(c: PoolClient) {
     await c.query('SELECT app.acr_seed(app.current_school_id())');
+    await c.query('SELECT app.acr_forms_from_questions(app.current_school_id())');
   }
 
   async view(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.seed(c);
-      const [settings, bands, levels, questions, cycles, years, roles, designations, staff] =
-        await Promise.all([
-          c.query<{ scale_labels: string[]; representation_days: number; late: string }>(
-            `SELECT scale_labels, representation_days, to_char(staff_late_after, 'HH24:MI') AS late FROM acr_settings`,
-          ),
-          c.query<{ min_pct: string; label: string; adverse: boolean }>(
-            'SELECT min_pct::text, label, adverse FROM acr_grade_bands ORDER BY min_pct DESC',
-          ),
-          c.query<{
-            staff_group: string;
-            seq: number;
-            label: string;
-            kind: string;
-            role_code: string | null;
-            designation: string | null;
-            employee_id: string | null;
-            employee_name: string | null;
-            action: string;
-          }>(
-            `SELECT l.staff_group, l.seq, l.label, l.kind, l.role_code, l.designation, l.employee_id::text,
-                    e.display_name AS employee_name, l.action
-               FROM acr_levels l LEFT JOIN employees e ON e.id = l.employee_id
+      const [
+        settings,
+        bands,
+        levels,
+        questions,
+        cycles,
+        years,
+        roles,
+        designations,
+        staff,
+        forms,
+        sections,
+      ] = await Promise.all([
+        c.query<{ scale_labels: string[]; representation_days: number; late: string }>(
+          `SELECT scale_labels, representation_days, to_char(staff_late_after, 'HH24:MI') AS late FROM acr_settings`,
+        ),
+        c.query<{ min_pct: string; label: string; adverse: boolean }>(
+          'SELECT min_pct::text, label, adverse FROM acr_grade_bands ORDER BY min_pct DESC',
+        ),
+        c.query<{
+          staff_group: string;
+          seq: number;
+          label: string;
+          kind: string;
+          role_code: string | null;
+          designation: string | null;
+          employee_id: string | null;
+          employee_name: string | null;
+          action: string;
+          form_id: string | null;
+          form_name: string | null;
+        }>(
+          `SELECT l.staff_group, l.seq, l.label, l.kind, l.role_code, l.designation, l.employee_id::text,
+                    e.display_name AS employee_name, l.action, l.form_id::text, f.name AS form_name
+               FROM acr_levels l LEFT JOIN employees e ON e.id = l.employee_id LEFT JOIN acr_forms f ON f.id = l.form_id
               ORDER BY l.staff_group, l.seq`,
-          ),
-          c.query<{
-            id: string;
-            part: string;
-            staff_group: string;
-            section: string;
-            text: string;
-            kind: string;
-            weight: string;
-            required: boolean;
-            sort_order: number;
-            active: boolean;
-          }>(
-            `SELECT id::text, part, staff_group, section, text, kind, weight::text, required, sort_order, active
+        ),
+        c.query<{
+          id: string;
+          part: string;
+          staff_group: string;
+          section: string;
+          text: string;
+          kind: string;
+          weight: string;
+          required: boolean;
+          sort_order: number;
+          active: boolean;
+          form_id: string | null;
+          section_id: string | null;
+        }>(
+          `SELECT id::text, part, staff_group, section, text, kind, weight::text, required, sort_order, active,
+                    form_id::text, section_id::text
                FROM acr_questions ORDER BY part, staff_group, sort_order, id`,
-          ),
-          c.query<{
-            id: string;
-            academic_year_id: string;
-            year: string;
-            name: string;
-            self_from: string;
-            self_to: string;
-            review_by: string | null;
-            status: string;
-            reports: number;
-            closed: number;
-          }>(
-            `SELECT cy.id::text, cy.academic_year_id::text, y.code AS year, cy.name, cy.self_from::text,
+        ),
+        c.query<{
+          id: string;
+          academic_year_id: string;
+          year: string;
+          name: string;
+          self_from: string;
+          self_to: string;
+          review_by: string | null;
+          status: string;
+          reports: number;
+          closed: number;
+        }>(
+          `SELECT cy.id::text, cy.academic_year_id::text, y.code AS year, cy.name, cy.self_from::text,
                     cy.self_to::text, cy.review_by::text, cy.status,
                     (SELECT count(*)::int FROM acr_reports r WHERE r.cycle_id = cy.id) AS reports,
                     (SELECT count(*)::int FROM acr_reports r WHERE r.cycle_id = cy.id AND r.status = 'closed') AS closed
                FROM acr_cycles cy JOIN academic_years y ON y.id = cy.academic_year_id
               ORDER BY y.start_date DESC`,
-          ),
-          c.query<{ id: string; code: string; status: string }>(
-            `SELECT id::text, code, status::text FROM academic_years
+        ),
+        c.query<{ id: string; code: string; status: string }>(
+          `SELECT id::text, code, status::text FROM academic_years
               WHERE status::text <> 'planned' ORDER BY start_date DESC`,
-          ),
-          c.query<{ code: string; name: string }>(
-            `SELECT code, name FROM roles
+        ),
+        c.query<{ code: string; name: string }>(
+          `SELECT code, name FROM roles
               WHERE (school_id IS NULL OR school_id = app.current_school_id()) AND deleted_at IS NULL
                 AND code NOT IN ('parent', 'student', 'support_engineer', 'erp_support')
               ORDER BY name`,
-          ),
-          c.query<{ designation: string }>(
-            `SELECT DISTINCT designation FROM employees
+        ),
+        c.query<{ designation: string }>(
+          `SELECT DISTINCT designation FROM employees
               WHERE deleted_at IS NULL AND status = 'active' AND designation IS NOT NULL AND designation <> ''
               ORDER BY designation`,
-          ),
-          c.query<{ id: string; name: string; code: string }>(
-            `SELECT id::text, display_name AS name, employee_code AS code FROM employees
+        ),
+        c.query<{ id: string; name: string; code: string }>(
+          `SELECT id::text, display_name AS name, employee_code AS code FROM employees
               WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name`,
-          ),
-        ]);
+        ),
+        c.query<{
+          id: string;
+          name: string;
+          part: 'self' | 'level';
+          staff_group: string;
+          description: string | null;
+          active: boolean;
+          sort_order: number;
+        }>(
+          `SELECT id::text, name, part, staff_group, description, active, sort_order
+               FROM acr_forms ORDER BY part, sort_order, id`,
+        ),
+        c.query<{
+          id: string;
+          form_id: string;
+          title: string;
+          help: string | null;
+          weight: string;
+          sort_order: number;
+        }>(
+          `SELECT id::text, form_id::text, title, help, weight::text, sort_order
+               FROM acr_form_sections ORDER BY form_id, sort_order, id`,
+        ),
+      ]);
       const s = settings.rows[0];
+      const qOf = (q: (typeof questions.rows)[number]) => ({
+        id: q.id,
+        formId: q.form_id,
+        sectionId: q.section_id,
+        part: q.part,
+        staffGroup: q.staff_group,
+        section: q.section,
+        text: q.text,
+        kind: q.kind,
+        weight: Number(q.weight),
+        required: q.required,
+        sortOrder: q.sort_order,
+        active: q.active,
+      });
+      const formsOut = forms.rows.map((f) => ({
+        id: f.id,
+        name: f.name,
+        part: f.part,
+        staffGroup: f.staff_group,
+        description: f.description,
+        active: f.active,
+        sortOrder: f.sort_order,
+        sections: sections.rows
+          .filter((x) => x.form_id === f.id)
+          .map((x) => ({
+            id: x.id,
+            title: x.title,
+            help: x.help,
+            weight: Number(x.weight),
+            sortOrder: x.sort_order,
+            questions: questions.rows
+              .filter((q) => q.section_id === x.id)
+              .sort((a, b) => a.sort_order - b.sort_order || Number(a.id) - Number(b.id))
+              .map(qOf),
+          })),
+      }));
       return {
         settings: {
           scaleLabels: s?.scale_labels ?? [],
@@ -130,18 +209,8 @@ export class AcrSetupService {
           teaching: levels.rows.filter((l) => l.staff_group === 'teaching').map(this.level),
           non_teaching: levels.rows.filter((l) => l.staff_group === 'non_teaching').map(this.level),
         },
-        questions: questions.rows.map((q) => ({
-          id: q.id,
-          part: q.part,
-          staffGroup: q.staff_group,
-          section: q.section,
-          text: q.text,
-          kind: q.kind,
-          weight: Number(q.weight),
-          required: q.required,
-          sortOrder: q.sort_order,
-          active: q.active,
-        })),
+        questions: questions.rows.map(qOf),
+        forms: formsOut,
         cycles: cycles.rows.map((y) => ({
           id: y.id,
           academicYearId: y.academic_year_id,
@@ -171,6 +240,8 @@ export class AcrSetupService {
     employee_id: string | null;
     employee_name: string | null;
     action: string;
+    form_id: string | null;
+    form_name: string | null;
   }) => ({
     seq: l.seq,
     label: l.label,
@@ -180,6 +251,8 @@ export class AcrSetupService {
     employeeId: l.employee_id,
     employeeName: l.employee_name,
     action: l.action,
+    formId: l.form_id,
+    formName: l.form_name,
   });
 
   async saveSettings(ctx: RequestContext, dto: AcrSettingsDto) {
@@ -252,11 +325,34 @@ export class AcrSetupService {
       });
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.seed(c);
+      // 0191: each level's questionnaire is a level form of this group (or of both); a rating level needs one
+      const forms = await c.query<{ id: string; staff_group: string }>(
+        `SELECT id::text, staff_group FROM acr_forms WHERE part = 'level' AND active`,
+      );
+      for (const [i, l] of dto.levels.entries()) {
+        const n = `Level ${String(i + 1)}`;
+        if (l.formId) {
+          const f = forms.rows.find((x) => x.id === l.formId);
+          if (!f || (f.staff_group !== 'both' && f.staff_group !== dto.staffGroup))
+            throw new DomainError(
+              'acr.level_form',
+              `${n}: choose a questionnaire for this staff group`,
+              {
+                status: 400,
+              },
+            );
+        } else if (l.action === 'rate')
+          throw new DomainError(
+            'acr.level_form',
+            `${n}: a rating level needs a questionnaire (make one under Forms and questions)`,
+            { status: 400 },
+          );
+      }
       await c.query('DELETE FROM acr_levels WHERE staff_group = $1', [dto.staffGroup]);
       for (const [i, l] of dto.levels.entries())
         await c.query(
-          `INSERT INTO acr_levels (school_id, staff_group, seq, label, kind, role_code, designation, employee_id, action)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8)`,
+          `INSERT INTO acr_levels (school_id, staff_group, seq, label, kind, role_code, designation, employee_id, action, form_id)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             dto.staffGroup,
             i + 1,
@@ -266,6 +362,7 @@ export class AcrSetupService {
             l.kind === 'designation' || l.kind === 'acr_reviewer' ? l.designation : null,
             l.kind === 'employee' ? l.employeeId : null,
             l.action,
+            l.formId ?? null,
           ],
         );
       await this.audit.stage(ctx, c, {
@@ -278,39 +375,205 @@ export class AcrSetupService {
     });
   }
 
+  // ---- forms, sections and questions (0191) ------------------------------------------------------
+
+  private async formOf(c: PoolClient, id: string) {
+    const r = await c.query<{ id: string; part: 'self' | 'level'; staff_group: string }>(
+      'SELECT id::text, part, staff_group FROM acr_forms WHERE id = $1',
+      [id],
+    );
+    if (!r.rows[0]) throw new DomainError('not-found', 'Form not found', { status: 404 });
+    return r.rows[0];
+  }
+
+  async saveForm(ctx: RequestContext, id: string | null, dto: AcrFormDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.seed(c);
+      if (id) {
+        const f = await this.formOf(c, id);
+        if (f.part !== dto.part)
+          throw new DomainError(
+            'acr.form_part',
+            'A form stays a self-appraisal or a questionnaire',
+            {
+              status: 400,
+            },
+          );
+        await c.query(
+          `UPDATE acr_forms SET name = $2, staff_group = $3, description = $4, active = $5, sort_order = $6 WHERE id = $1`,
+          [id, dto.name, dto.staffGroup, dto.description ?? null, dto.active, dto.sortOrder],
+        );
+        await c.query(`UPDATE acr_questions SET staff_group = $2 WHERE form_id = $1`, [
+          id,
+          dto.staffGroup,
+        ]);
+        await this.audit.stage(ctx, c, {
+          action: 'people.acr.form.save',
+          entityType: 'acr_forms',
+          entityId: id,
+        });
+        return { id };
+      }
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO acr_forms (school_id, name, part, staff_group, description, active, sort_order)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6) RETURNING id::text`,
+        [dto.name, dto.part, dto.staffGroup, dto.description ?? null, dto.active, dto.sortOrder],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.form.save',
+        entityType: 'acr_forms',
+        entityId: r.rows[0]!.id,
+      });
+      return { id: r.rows[0]!.id };
+    });
+  }
+
+  /** A copy with its sections and questions: the start of another form (another category or level). */
+  async copyForm(ctx: RequestContext, id: string, dto: AcrFormCopyDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const f = await this.formOf(c, id);
+      const n = await c.query<{ id: string }>(
+        `INSERT INTO acr_forms (school_id, name, part, staff_group, description, active, sort_order)
+         SELECT app.current_school_id(), $2, part, $3, description, true, sort_order + 1 FROM acr_forms WHERE id = $1
+         RETURNING id::text`,
+        [id, dto.name, dto.staffGroup ?? f.staff_group],
+      );
+      const newId = n.rows[0]!.id;
+      const secs = await c.query<{
+        id: string;
+        title: string;
+        help: string | null;
+        weight: string;
+        sort_order: number;
+      }>(
+        `SELECT id::text, title, help, weight::text, sort_order FROM acr_form_sections WHERE form_id = $1 ORDER BY sort_order, id`,
+        [id],
+      );
+      for (const sec of secs.rows) {
+        const ns = await c.query<{ id: string }>(
+          `INSERT INTO acr_form_sections (school_id, form_id, title, help, weight, sort_order)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5) RETURNING id::text`,
+          [newId, sec.title, sec.help, sec.weight, sec.sort_order],
+        );
+        await c.query(
+          `INSERT INTO acr_questions (school_id, part, staff_group, section, text, kind, weight, required, sort_order, active, form_id, section_id)
+           SELECT app.current_school_id(), part, $4, section, text, kind, weight, required, sort_order, active, $2, $3
+             FROM acr_questions WHERE section_id = $1 ORDER BY sort_order, id`,
+          [sec.id, newId, ns.rows[0]!.id, dto.staffGroup ?? f.staff_group],
+        );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.form.copy',
+        entityType: 'acr_forms',
+        entityId: newId,
+        after: { from: id },
+      });
+      return { id: newId };
+    });
+  }
+
+  async saveSection(ctx: RequestContext, id: string | null, dto: AcrSectionDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.formOf(c, dto.formId);
+      if (id) {
+        const r = await c.query(
+          `UPDATE acr_form_sections SET title = $2, help = $3, weight = $4, sort_order = $5 WHERE id = $1 AND form_id = $6`,
+          [id, dto.title, dto.help ?? null, dto.weight, dto.sortOrder, dto.formId],
+        );
+        if (!r.rowCount) throw new DomainError('not-found', 'Section not found', { status: 404 });
+        await c.query(`UPDATE acr_questions SET section = $2 WHERE section_id = $1`, [
+          id,
+          dto.title,
+        ]);
+        return { id };
+      }
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO acr_form_sections (school_id, form_id, title, help, weight, sort_order)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5) RETURNING id::text`,
+        [dto.formId, dto.title, dto.help ?? null, dto.weight, dto.sortOrder],
+      );
+      return { id: r.rows[0]!.id };
+    });
+  }
+
+  /** An empty section goes; one with questions is kept (move or switch off its questions first). */
+  async deleteSection(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const n = await c.query<{ n: string }>(
+        'SELECT count(*)::text AS n FROM acr_questions WHERE section_id = $1',
+        [id],
+      );
+      if (Number(n.rows[0]?.n ?? 0) > 0)
+        throw new DomainError('acr.section_in_use', 'Move or switch off its questions first', {
+          status: 409,
+        });
+      const r = await c.query('DELETE FROM acr_form_sections WHERE id = $1', [id]);
+      if (!r.rowCount) throw new DomainError('not-found', 'Section not found', { status: 404 });
+      return { ok: true };
+    });
+  }
+
   async saveQuestion(ctx: RequestContext, id: string | null, dto: AcrQuestionDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const args = [
-        dto.part,
-        dto.staffGroup,
-        dto.section,
-        dto.text,
-        dto.kind,
-        dto.weight,
-        dto.required,
-        dto.sortOrder,
-        dto.active,
-      ];
-      const r = id
-        ? await c.query<{ id: string }>(
-            `UPDATE acr_questions SET part = $1, staff_group = $2, section = $3, text = $4, kind = $5, weight = $6,
-                    required = $7, sort_order = $8, active = $9
-              WHERE id = $10 RETURNING id::text`,
-            [...args, id],
-          )
-        : await c.query<{ id: string }>(
-            `INSERT INTO acr_questions (school_id, part, staff_group, section, text, kind, weight, required, sort_order, active)
-             VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id::text`,
-            args,
-          );
-      if (!r.rows[0]) throw new DomainError('not-found', 'Question not found', { status: 404 });
+      const f = await this.formOf(c, dto.formId);
+      const sec = await c.query<{ title: string }>(
+        'SELECT title FROM acr_form_sections WHERE id = $1 AND form_id = $2',
+        [dto.sectionId, dto.formId],
+      );
+      if (!sec.rows[0])
+        throw new DomainError('acr.section', 'Choose a section of this form', { status: 400 });
+      const part = f.part === 'self' ? 'self' : 'rate';
+      if (id) {
+        const r = await c.query(
+          `UPDATE acr_questions SET part = $2, staff_group = $3, section = $4, text = $5, kind = $6, weight = $7,
+                  required = $8, sort_order = $9, active = $10, form_id = $11, section_id = $12
+            WHERE id = $1`,
+          [
+            id,
+            part,
+            f.staff_group,
+            sec.rows[0].title,
+            dto.text,
+            dto.kind,
+            dto.weight,
+            dto.required,
+            dto.sortOrder,
+            dto.active,
+            dto.formId,
+            dto.sectionId,
+          ],
+        );
+        if (!r.rowCount) throw new DomainError('not-found', 'Question not found', { status: 404 });
+        await this.audit.stage(ctx, c, {
+          action: 'people.acr.question.save',
+          entityType: 'acr_questions',
+          entityId: id,
+        });
+        return { id };
+      }
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO acr_questions (school_id, part, staff_group, section, text, kind, weight, required, sort_order, active, form_id, section_id)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id::text`,
+        [
+          part,
+          f.staff_group,
+          sec.rows[0].title,
+          dto.text,
+          dto.kind,
+          dto.weight,
+          dto.required,
+          dto.sortOrder,
+          dto.active,
+          dto.formId,
+          dto.sectionId,
+        ],
+      );
       await this.audit.stage(ctx, c, {
-        action: id ? 'people.acr.question.edit' : 'people.acr.question.add',
+        action: 'people.acr.question.save',
         entityType: 'acr_questions',
-        entityId: r.rows[0].id,
-        after: dto,
+        entityId: r.rows[0]!.id,
       });
-      return { id: r.rows[0].id };
+      return { id: r.rows[0]!.id };
     });
   }
 
