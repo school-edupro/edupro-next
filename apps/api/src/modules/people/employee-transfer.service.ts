@@ -41,7 +41,13 @@ export interface StaffSnapshot {
   values: Record<string, string | number>;
   /** ID numbers, encrypted at rest as the profile keeps them */
   secure: Record<string, string>;
-  rows: { education: Row[]; languages: Row[]; experience: Row[]; transfers: Row[] };
+  rows: {
+    education: Row[];
+    languages: Row[];
+    experience: Row[];
+    training?: Row[];
+    transfers: Row[];
+  };
   documents: Array<
     FileRef & {
       typeCode: string;
@@ -355,6 +361,9 @@ export class EmployeeTransferService {
         experience: await q(
           `SELECT organisation, designation, from_on::text, to_on::text, reason FROM employee_experience WHERE employee_id = $1`,
         ),
+        training: await q(
+          `SELECT trained_on::text, topic, venue, duration, organisation, entered_on::text FROM employee_training WHERE employee_id = $1`,
+        ),
         transfers: await q(
           `SELECT on_date::text, from_place, to_place, order_no, remarks FROM employee_transfers WHERE employee_id = $1`,
         ),
@@ -511,6 +520,11 @@ export class EmployeeTransferService {
         'employee_experience',
         ['organisation', 'designation', 'from_on', 'to_on', 'reason'],
         s.rows.experience,
+      );
+      await ins(
+        'employee_training',
+        ['trained_on', 'topic', 'venue', 'duration', 'organisation', 'entered_on'],
+        s.rows.training ?? [],
       );
       await ins(
         'employee_transfers',

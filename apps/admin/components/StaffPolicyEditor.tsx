@@ -304,10 +304,10 @@ export function StaffPolicyEditor({ data }: { data: StaffPolicyView }) {
             Lists staff may update
           </h2>
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            The photo, and education, languages, work experience and documents: staff ask for a new
-            photo, and add, change or remove rows, from My profile. A document a change must carry
-            is attached with the request and filed on the employee&apos;s record when accepted; HR
-            still ticks it against the original.
+            The photo, and education, languages, work experience, training and documents: staff ask
+            for a new photo, and add, change or remove rows, from My profile. A document a change
+            must carry is attached with the request and filed on the employee&apos;s record when
+            accepted; HR still ticks it against the original.
           </p>
           <div className="ep-table-wrap">
             <table className="ep-table ep-table--dense">

@@ -79,6 +79,7 @@ const ROW_FIELDS: Record<string, string[]> = {
   education: ['qualification', 'specialisation', 'institution', 'passingYear', 'score', 'mode'],
   languages: ['language', 'canRead', 'canWrite', 'canSpeak'],
   experience: ['organisation', 'designation', 'fromOn', 'toOn', 'reason'],
+  training: ['trainedOn', 'topic', 'venue', 'duration', 'organisation', 'enteredOn'],
   transfers: ['onDate', 'fromPlace', 'toPlace', 'orderNo', 'remarks'],
   remarks: ['onDate', 'remark'],
 };

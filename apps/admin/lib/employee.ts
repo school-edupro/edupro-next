@@ -55,6 +55,16 @@ export interface EmployeeRows {
     toOn: string | null;
     reason: string | null;
   }>;
+  /** 0188: the legacy "Add Training Detail" */
+  training: Array<{
+    id: string;
+    trainedOn: string;
+    topic: string;
+    venue: string | null;
+    duration: string | null;
+    organisation: string | null;
+    enteredOn: string | null;
+  }>;
   transfers: Array<{
     id: string;
     onDate: string;

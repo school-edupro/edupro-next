@@ -168,3 +168,12 @@ people/employees/:id/documents` with kind `photo`, which sets `employees.photo_f
   for those who may see ACRs.
 - **The employee's own photo** (decision: HR sets it on the page; the employee may ask for a change
   from My profile with approval): see docs/design/33, "My photo".
+
+## Training records (19 Oct 2026, 0188)
+
+The legacy "Add Training Detail" (training date, topic, venue, duration, name of organisation, date
+of entry) is a row list like education and work experience: `employee_training` (migration 0188),
+the `training` kind in `EMPLOYEE_LISTS` / `EMPLOYEE_ROW_SCHEMAS`, the **Training** tab on the
+employee's page (table, add, remove; the overview names the latest), the profile PDF, the transfer
+snapshot, and on My profile under the staff profile policy (`list:training`, default with approval;
+usual proof a training certificate). Date of entry defaults to the day the row is added.

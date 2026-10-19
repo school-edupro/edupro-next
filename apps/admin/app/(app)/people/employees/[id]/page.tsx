@@ -604,6 +604,75 @@ export default async function EmployeePage({
         </Card>
       ) : null}
 
+      {tab === 'training' ? (
+        <Card title="Training">
+          {rows.training.length ? (
+            <div className="ep-table-wrap">
+              <table className="ep-table ep-table--dense">
+                <caption className="ep-sr-only">Training</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Training date</th>
+                    <th scope="col">Topic</th>
+                    <th scope="col">Venue</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">Name of organisation</th>
+                    <th scope="col">Date of entry</th>
+                    <th scope="col">
+                      <span className="ep-sr-only">Remove</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.training.map((x) => (
+                    <tr key={x.id}>
+                      <td>{dmy(x.trainedOn)}</td>
+                      <td>
+                        <strong>{x.topic}</strong>
+                      </td>
+                      <td>{x.venue ?? '—'}</td>
+                      <td>{x.duration ?? '—'}</td>
+                      <td>{x.organisation ?? '—'}</td>
+                      <td>{dmy(x.enteredOn)}</td>
+                      <td>{remove('training', x.id, x.topic)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="ep-field__help">No training recorded yet.</p>
+          )}
+          {canEdit ? (
+            <form
+              action={saveEmployeeRow}
+              className="ep-filter-band"
+              style={{ marginTop: 'var(--sp-4)', marginBottom: 0 }}
+            >
+              {hidden('training')}
+              <InputField id="tn-on" name="trainedOn" label="Training date" type="date" required />
+              <InputField id="tn-topic" name="topic" label="Topic" maxLength={200} required />
+              <InputField id="tn-venue" name="venue" label="Venue" maxLength={200} />
+              <InputField id="tn-dur" name="duration" label="Duration" maxLength={60} />
+              <InputField
+                id="tn-org"
+                name="organisation"
+                label="Name of organisation"
+                maxLength={200}
+              />
+              <InputField
+                id="tn-entered"
+                name="enteredOn"
+                label="Date of entry"
+                type="date"
+                defaultValue={today}
+              />
+              {addButton}
+            </form>
+          ) : null}
+        </Card>
+      ) : null}
+
       {tab === 'history' && canTransfer && employee.status === 'active' ? (
         <div className="ep-chart__grid2">
           <Card title="Move to another campus">

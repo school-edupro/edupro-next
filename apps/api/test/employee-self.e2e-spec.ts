@@ -339,6 +339,7 @@ describe('employee self-service profile (e2e)', () => {
         education: { level: 'edit_approval', proof: panType },
         languages: { level: 'edit_direct' },
         experience: { level: 'edit_approval' },
+        training: { level: 'edit_direct' },
         documents: { level: 'edit_approval' },
       },
       // education and documents go to the L1 approver; experience to the office; the default stays office
@@ -358,6 +359,7 @@ describe('employee self-service profile (e2e)', () => {
       ['education', 'edit_approval'],
       ['languages', 'edit_direct'],
       ['experience', 'edit_approval'],
+      ['training', 'edit_direct'],
       ['documents', 'edit_approval'],
     ]);
     expect(mine0.lists[0].proof).toEqual({ typeId: panType, name: expect.any(String) });
@@ -579,12 +581,49 @@ describe('employee self-service profile (e2e)', () => {
     await call(admin, 'PUT', '/people/staff-profile/policy', {
       ...base,
       window: { mode: 'open' },
-      lists: { languages: { level: 'hidden' } },
+      lists: { languages: { level: 'hidden' }, training: { level: 'edit_direct' } },
     });
+    // 0188: a training record, at once
+    const trained = await call(teacher, 'POST', '/me/employee-profile/changes', {
+      rows: [
+        {
+          kind: 'training',
+          op: 'add',
+          data: {
+            trainedOn: '2026-06-12',
+            topic: 'CBSE assessment workshop',
+            venue: 'Pune',
+            duration: '2 days',
+            organisation: 'CBSE CoE',
+          },
+        },
+      ],
+    });
+    expect(trained.statusCode).toBe(201);
+    expect(trained.json().applied).toHaveLength(1);
+    const training = await withMigrator((c) =>
+      c.query<{ topic: string; entered_on: string }>(
+        `SELECT topic, entered_on::text FROM employee_training WHERE employee_id = $1`,
+        [teacherEmp],
+      ),
+    );
+    expect(training.rows).toHaveLength(1);
+    expect(training.rows[0]!.topic).toBe('CBSE assessment workshop');
+    expect(training.rows[0]!.entered_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const mineT = (await call(teacher, 'GET', '/me/employee-profile')).json();
+    const tList = mineT.lists.find((l: { id: string }) => l.id === 'training');
+    expect(tList.rows[0].summary).toBe(
+      'CBSE assessment workshop on 12-06-2026, at Pune, 2 days, by CBSE CoE',
+    );
+    // on the office's record and in the office's row endpoints too
+    const staffRows = (await call(admin, 'GET', `/people/staff/${teacherEmp}/profile`)).json().rows;
+    expect(staffRows.training).toHaveLength(1);
+
     const mine8 = (await call(teacher, 'GET', '/me/employee-profile')).json();
     expect(mine8.lists.map((l: { id: string }) => l.id)).toEqual([
       'education',
       'experience',
+      'training',
       'documents',
     ]);
     const hidden = await call(teacher, 'POST', '/me/employee-profile/changes', {

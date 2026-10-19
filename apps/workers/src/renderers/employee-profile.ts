@@ -119,6 +119,10 @@ export async function renderEmployeeProfile(
         `SELECT organisation, designation, from_on::text, to_on::text, reason FROM employee_experience
           WHERE employee_id = $1 ORDER BY from_on NULLS LAST, id`,
       ),
+      training: await q(
+        `SELECT trained_on::text, topic, venue, duration, organisation FROM employee_training
+          WHERE employee_id = $1 ORDER BY trained_on DESC, id`,
+      ),
       transfers: await q(
         `SELECT on_date::text, from_place, to_place, order_no FROM employee_transfers WHERE employee_id = $1 ORDER BY on_date`,
       ),
@@ -292,6 +296,17 @@ export async function renderEmployeeProfile(
       esc(dmy(r.from_on as string | null)),
       esc(dmy(r.to_on as string | null)),
       t(r.reason),
+    ]),
+  )}
+  ${table(
+    'Training',
+    ['Date', 'Topic', 'Venue', 'Duration', 'Organisation'],
+    data.training.map((r) => [
+      esc(dmy(r.trained_on as string)),
+      t(r.topic),
+      t(r.venue),
+      t(r.duration),
+      t(r.organisation),
     ]),
   )}
   ${table(

@@ -203,6 +203,20 @@ export function EmployeeOverview({
             </dd>
           </div>
           <div>
+            <dt>Training</dt>
+            <dd>
+              {profile.rows.training?.length
+                ? profile.rows.training
+                    .slice(0, 4)
+                    .map((x) => `${x.topic}${x.trainedOn ? ` (${dmy(x.trainedOn)!})` : ''}`)
+                    .join('; ') +
+                  (profile.rows.training.length > 4
+                    ? ` and ${String(profile.rows.training.length - 4)} more`
+                    : '')
+                : '—'}
+            </dd>
+          </div>
+          <div>
             <dt>Teaches</dt>
             <dd>
               {profile.subjects.length ? profile.subjects.map((x) => x.name).join(', ') : '—'}

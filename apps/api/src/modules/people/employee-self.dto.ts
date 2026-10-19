@@ -13,7 +13,7 @@ const Approver = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('employee'), employeeId: Id }),
 ]);
 const Route = z.array(Approver).min(1).max(2);
-const ListKind = z.enum(['education', 'languages', 'experience', 'documents']);
+const ListKind = z.enum(['education', 'languages', 'experience', 'training', 'documents']);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const EmployeePolicySchema = z.object({

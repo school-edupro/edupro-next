@@ -69,7 +69,7 @@ export const REQUEST_STATUS: Record<string, string> = {
 };
 
 // ---- 0187: the row lists (education, languages, experience, documents) --------------------------
-export type MyListKind = 'education' | 'languages' | 'experience' | 'documents';
+export type MyListKind = 'education' | 'languages' | 'experience' | 'training' | 'documents';
 export interface MyListColumn {
   key: string;
   label: string;

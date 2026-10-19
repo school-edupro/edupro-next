@@ -291,6 +291,7 @@ const PAGES = [
   '/people/employees/37',
   '/people/employees/37?tab=profile',
   '/people/employees/37?tab=education',
+  '/people/employees/37?tab=training',
   '/people/employees/37?tab=history',
   '/people/employees/37?tab=posting',
   '/people/employees/37?tab=documents',

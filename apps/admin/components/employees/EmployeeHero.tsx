@@ -18,6 +18,7 @@ export const EMPLOYEE_TABS = [
   ['education', 'Education'],
   ['languages', 'Languages'],
   ['experience', 'Experience'],
+  ['training', 'Training'],
   ['history', 'Transfers and remarks'],
   ['documents', 'Documents'],
   ['posting', 'Posting'],
@@ -97,6 +98,7 @@ export function EmployeeHero({
     education: { n: profile.rows.education.length, warn: false },
     languages: { n: profile.rows.languages.length, warn: false },
     experience: { n: profile.rows.experience.length, warn: false },
+    training: { n: profile.rows.training?.length ?? 0, warn: false },
     documents: {
       n: profile.documents.missing,
       warn: profile.documents.missing > 0,

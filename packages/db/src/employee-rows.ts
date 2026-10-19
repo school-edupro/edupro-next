@@ -5,11 +5,12 @@ import type { PoolClient } from 'pg';
  * docs/design/33-people-dashboards.md): education, languages, work experience and documents. One
  * definition drives the self-service screens, the API checks and the row summaries in approvals.
  */
-export type EmployeeListKind = 'education' | 'languages' | 'experience' | 'documents';
+export type EmployeeListKind = 'education' | 'languages' | 'experience' | 'training' | 'documents';
 export const EMPLOYEE_LIST_KINDS: readonly EmployeeListKind[] = [
   'education',
   'languages',
   'experience',
+  'training',
   'documents',
 ];
 export type EmployeeRowOp = 'add' | 'edit' | 'remove';
@@ -27,7 +28,12 @@ export interface EmployeeListColumn {
 export interface EmployeeListDef {
   title: string;
   /** Row table; documents live in employee_documents with their own shape. */
-  table: 'employee_education' | 'employee_languages' | 'employee_experience' | null;
+  table:
+    | 'employee_education'
+    | 'employee_languages'
+    | 'employee_experience'
+    | 'employee_training'
+    | null;
   /** API key → column, for the three row tables. */
   cols: Record<string, string>;
   columns: EmployeeListColumn[];
@@ -110,6 +116,29 @@ export const EMPLOYEE_LISTS: Record<EmployeeListKind, EmployeeListDef> = {
     ],
     order: 'from_on DESC NULLS LAST, id',
     proofHint: 'experience or relieving letter',
+  },
+  // 0188: the legacy "Add Training Detail"
+  training: {
+    title: 'Training',
+    table: 'employee_training',
+    cols: {
+      trainedOn: 'trained_on',
+      topic: 'topic',
+      venue: 'venue',
+      duration: 'duration',
+      organisation: 'organisation',
+      enteredOn: 'entered_on',
+    },
+    columns: [
+      { key: 'trainedOn', label: 'Training date', type: 'date', required: true },
+      { key: 'topic', label: 'Topic', type: 'text', required: true, max: 200 },
+      { key: 'venue', label: 'Venue', type: 'text', max: 200 },
+      { key: 'duration', label: 'Duration', type: 'text', max: 60 },
+      { key: 'organisation', label: 'Name of organisation', type: 'text', max: 200 },
+      { key: 'enteredOn', label: 'Date of entry', type: 'date' },
+    ],
+    order: 'trained_on DESC, id',
+    proofHint: 'training certificate',
   },
   documents: {
     title: 'Documents',
@@ -269,6 +298,15 @@ export function summariseEmployeeRow(kind: EmployeeListKind, d: RowData | null):
     }
     case 'experience':
       return `${s('organisation') ?? '?'}${s('designation') ? ` – ${s('designation')!}` : ''}, ${dmy(d.fromOn) ?? '?'} to ${dmy(d.toOn) ?? 'date'}${s('reason') ? ` (${s('reason')!})` : ''}`;
+    case 'training':
+      return [
+        `${s('topic') ?? '?'} on ${dmy(d.trainedOn) ?? '?'}`,
+        s('venue') ? `at ${s('venue')!}` : null,
+        s('duration'),
+        s('organisation') ? `by ${s('organisation')!}` : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
     case 'documents':
       return [
         `${s('typeName') ?? 'Document'}${s('number') ? ` ${s('number')!}` : ''}`,
@@ -287,7 +325,8 @@ export const employeeRowKey = (kind: EmployeeListKind, op: EmployeeRowOp, rowId:
 export function parseEmployeeRowKey(
   key: string,
 ): { kind: EmployeeListKind; op: EmployeeRowOp; rowId: string } | null {
-  const m = /^list:(education|languages|experience|documents):(add|edit|remove):(.+)$/.exec(key);
+  const m =
+    /^list:(education|languages|experience|training|documents):(add|edit|remove):(.+)$/.exec(key);
   if (!m) return null;
   return { kind: m[1] as EmployeeListKind, op: m[2] as EmployeeRowOp, rowId: m[3]! };
 }

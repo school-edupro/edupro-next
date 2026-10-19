@@ -348,6 +348,14 @@ export const EMPLOYEE_ROW_SCHEMAS = {
       message: 'the end is before the start',
       path: ['toOn'],
     }),
+  training: z.object({
+    trainedOn: day,
+    topic: txt(200).min(1),
+    venue: txt(200).optional(),
+    duration: txt(60).optional(),
+    organisation: txt(200).optional(),
+    enteredOn: day.optional(),
+  }),
   transfers: z.object({
     onDate: day,
     fromPlace: txt(200).optional(),
@@ -362,6 +370,7 @@ export const EmployeeRowKindSchema = z.enum([
   'education',
   'languages',
   'experience',
+  'training',
   'transfers',
   'remarks',
 ]);

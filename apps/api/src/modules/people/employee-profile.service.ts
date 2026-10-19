@@ -78,6 +78,18 @@ const ROWS: Record<
     },
     order: 'from_on DESC NULLS LAST, id',
   },
+  training: {
+    table: 'employee_training',
+    cols: {
+      trainedOn: 'trained_on',
+      topic: 'topic',
+      venue: 'venue',
+      duration: 'duration',
+      organisation: 'organisation',
+      enteredOn: 'entered_on',
+    },
+    order: 'trained_on DESC, id',
+  },
   transfers: {
     table: 'employee_transfers',
     cols: {
