@@ -3,7 +3,16 @@
  * browser) and Download saves a copy. No file name is shown; `label` names the file for screen readers
  * and the tooltip. `href` is an admin route that accepts `?save=1`.
  */
-export function FileLinks({ href, label }: { href: string; label: string }) {
+export function FileLinks({
+  href,
+  label,
+  viewOnly = false,
+}: {
+  href: string;
+  label: string;
+  /** only the View icon (where a copy is not the point, e.g. a document waiting for approval) */
+  viewOnly?: boolean;
+}) {
   const save = `${href}${href.includes('?') ? '&' : '?'}save=1`;
   return (
     <span className="ep-filelinks">
@@ -25,23 +34,25 @@ export function FileLinks({ href, label }: { href: string; label: string }) {
           />
         </svg>
       </a>
-      <a
-        href={save}
-        className="ep-filelinks__btn"
-        aria-label={`Download ${label}`}
-        title={`Download ${label}`}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path
-            d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </a>
+      {viewOnly ? null : (
+        <a
+          href={save}
+          className="ep-filelinks__btn"
+          aria-label={`Download ${label}`}
+          title={`Download ${label}`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+      )}
     </span>
   );
 }

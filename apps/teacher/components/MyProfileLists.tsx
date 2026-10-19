@@ -1,4 +1,5 @@
 import { Badge, Button } from '@edupro/ui';
+import type { ReactNode } from 'react';
 import { listEditable, type MyList, type MyRowData } from '@/lib/my-profile';
 
 const dmy = (v: unknown) =>
@@ -8,15 +9,27 @@ const dmy = (v: unknown) =>
       ? '—'
       : String(v);
 
-/** The cells of one row: documents show the type, number, dates, file and the HR check; others their columns. */
-function cells(l: MyList, values: MyRowData): Array<[string, string]> {
+/**
+ * The cells of one row: documents show the type, number, dates, the file as a View icon (never its name)
+ * and the HR check; others their columns.
+ */
+function cells(
+  l: MyList,
+  values: MyRowData,
+  fileLink: (fileId: string, label: string) => ReactNode,
+): Array<[string, ReactNode]> {
   if (l.id === 'documents')
     return [
       ['Document', String(values.typeName ?? '—')],
       ['Number', dmy(values.number)],
       ['Issued on', dmy(values.issuedOn)],
       ['Valid till', dmy(values.expiresOn)],
-      ['File', String(values.fileName ?? '—')],
+      [
+        'File',
+        typeof values.fileId === 'string' && values.fileId
+          ? fileLink(values.fileId, String(values.typeName ?? 'document'))
+          : '—',
+      ],
       ['Checked by HR', values.verified ? 'Yes' : 'Not yet'],
     ];
   return l.columns.map((c) => [
@@ -42,19 +55,22 @@ export function MyProfileLists({
   canEdit,
   editBase,
   removeAction,
+  fileLink,
 }: {
   lists: MyList[];
   canEdit: boolean;
   /** e.g. /me/profile/edit or /profile/edit */
   editBase: string;
   removeAction: (fd: FormData) => Promise<void>;
+  /** the View icon for one of my files (the app's own file route) */
+  fileLink: (fileId: string, label: string) => ReactNode;
 }) {
   return (
     <>
       {lists.map((l) => {
         const canChange = canEdit && listEditable(l);
         const headers = l.rows[0]
-          ? cells(l, l.rows[0].values).map(([h]) => h)
+          ? cells(l, l.rows[0].values, fileLink).map(([h]) => h)
           : l.id === 'documents'
             ? ['Document', 'Number', 'Issued on', 'Valid till', 'File', 'Checked by HR']
             : l.columns.map((c) => c.label);
@@ -112,7 +128,7 @@ export function MyProfileLists({
                   <tbody>
                     {l.rows.map((r) => (
                       <tr key={r.id}>
-                        {cells(l, r.values).map(([h, v], i) => (
+                        {cells(l, r.values, fileLink).map(([h, v], i) => (
                           <td key={h}>{i === 0 ? <strong>{v}</strong> : v}</td>
                         ))}
                         <td style={{ whiteSpace: 'nowrap' }}>
@@ -154,6 +170,9 @@ export function MyProfileLists({
                 {l.pendingAdds.map((a) => (
                   <li key={a.key}>
                     <Badge tone="warning">Waiting for approval: new</Badge> {a.summary}
+                    {l.id === 'documents' && typeof a.data.fileId === 'string' && a.data.fileId
+                      ? fileLink(a.data.fileId, String(a.data.typeName ?? 'document'))
+                      : null}
                   </li>
                 ))}
               </ul>

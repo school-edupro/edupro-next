@@ -548,7 +548,19 @@ describe('employee self-service profile (e2e)', () => {
       .data.find((q: { fields: Array<{ key: string }> }) =>
         q.fields.some((f) => f.key.startsWith('list:documents:add:')),
       );
-    expect(docWait.fields[0].to).toMatch(/ABCDE1234F.*pan-card\.jpg/);
+    expect(docWait.fields[0].to).toMatch(/ABCDE1234F/);
+    expect(docWait.fields[0].to).not.toMatch(/pan-card/);
+    const panId = file2.rows[0]!.id;
+    expect(docWait.fields[0].file).toBe(panId);
+    // the approver opens the file through the request; the employee through their own files
+    expect(
+      (await call(admin, 'GET', `/people/staff-profile-approvals/${docWait.id}/proofs/${panId}`))
+        .statusCode,
+    ).toBe(200);
+    expect((await call(teacher, 'GET', `/me/employee-profile/files/${panId}`)).statusCode).toBe(
+      200,
+    );
+    expect((await call(other, 'GET', `/me/employee-profile/files/${panId}`)).statusCode).toBe(404);
     await call(hod, 'POST', `/people/staff-profile-approvals/${docWait.id}/decide`, {
       approve: true,
     });

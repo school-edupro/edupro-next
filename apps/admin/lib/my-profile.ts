@@ -37,6 +37,8 @@ export interface MyRequest {
     to: Value;
     status: string;
     note: string | null;
+    /** 0187: the file of a document row change, opened through the app's own file route */
+    file?: string | null;
   }>;
 }
 export interface MyProfile {

@@ -166,6 +166,9 @@ export default async function MyProfilePage({
         canEdit={p.canEdit}
         editBase="/me/profile/edit"
         removeAction={removeMyRow}
+        fileLink={(fileId, label) => (
+          <FileLinks href={`/api/me/file/${fileId}`} label={label} viewOnly />
+        )}
       />
 
       <details className="ep-card ep-acr-card" open={waiting > 0}>
@@ -191,6 +194,9 @@ export default async function MyProfilePage({
                   {r.fields.map((f) => (
                     <li key={f.key}>
                       {f.label}: {shown(f.from)} → <strong>{shown(f.to)}</strong>
+                      {f.file ? (
+                        <FileLinks href={`/api/me/file/${f.file}`} label={f.label} viewOnly />
+                      ) : null}
                       {f.status === 'rejected' ? ` (refused${f.note ? `: ${f.note}` : ''})` : ''}
                     </li>
                   ))}

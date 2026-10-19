@@ -9,12 +9,15 @@ export function FileLinks({
   label,
   viewLabel = 'View',
   saveLabel = 'Download',
+  viewOnly = false,
 }: {
   url: string;
   saveUrl?: string | null;
   label: string;
   viewLabel?: string;
   saveLabel?: string;
+  /** only the View icon (where a copy is not the point, e.g. a document waiting for approval) */
+  viewOnly?: boolean;
 }) {
   return (
     <span className="ep-filelinks">
@@ -36,24 +39,26 @@ export function FileLinks({
           />
         </svg>
       </a>
-      <a
-        href={saveUrl ?? url}
-        className="ep-filelinks__btn"
-        download
-        aria-label={`${saveLabel}: ${label}`}
-        title={`${saveLabel}: ${label}`}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path
-            d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </a>
+      {viewOnly ? null : (
+        <a
+          href={saveUrl ?? url}
+          className="ep-filelinks__btn"
+          download
+          aria-label={`${saveLabel}: ${label}`}
+          title={`${saveLabel}: ${label}`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+      )}
     </span>
   );
 }

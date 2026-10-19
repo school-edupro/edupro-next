@@ -274,7 +274,7 @@ export function summariseEmployeeRow(kind: EmployeeListKind, d: RowData | null):
         `${s('typeName') ?? 'Document'}${s('number') ? ` ${s('number')!}` : ''}`,
         dmy(d.issuedOn) ? `issued ${dmy(d.issuedOn)!}` : null,
         dmy(d.expiresOn) ? `valid till ${dmy(d.expiresOn)!}` : null,
-        s('fileName'),
+        // the file itself is never named on screen: it is opened through a View icon
       ]
         .filter(Boolean)
         .join(', ');

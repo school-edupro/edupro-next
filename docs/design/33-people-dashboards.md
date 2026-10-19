@@ -78,3 +78,12 @@ health of the records (what is missing, what waits for approval).
   (`/api/me/photo` in admin, `/api/my-photo` in the staff app). Approvers see both pictures on the
   approval card through the request (`…/proofs/:fileId` accepts the request's photo ids).
 - **Test:** `employee-self.e2e-spec.ts` "photo (0188)".
+
+### Files are never named on screen (19 Oct 2026)
+
+Document rows on My profile, their pending additions, the request lines and the approval cards show
+the file as a **View** icon only (the admin's `/api/me/file/:id` and `/api/staff-proofs/:req/:file`
+routes, the staff app's `/api/my-file/:id`), never the uploaded file's name; the row summary carries
+the type, number and dates. `GET me/employee-profile/files/:fileId` gives a staff member the signed
+address of a document on their record, their photo or an upload of theirs; an approver opens a document
+row's file through the request's proofs endpoint.

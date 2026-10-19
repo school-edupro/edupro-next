@@ -1,4 +1,5 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { apiFetch } from '@/lib/api';
 import { decideStaffChange } from '@/lib/staff-profile-actions';
@@ -31,6 +32,8 @@ interface Req {
     to: Value;
     status: string;
     note: string | null;
+    /** the file of a document row change, viewable through this request */
+    file?: string | null;
   }>;
 }
 const shown = (v: Value) => {
@@ -168,6 +171,13 @@ export default async function StaffProfileApprovalsPage({
                       <td>{shown(f.from)}</td>
                       <td>
                         <strong>{shown(f.to)}</strong>
+                        {f.file ? (
+                          <FileLinks
+                            href={`/api/staff-proofs/${q.id}/${f.file}`}
+                            label={f.label}
+                            viewOnly
+                          />
+                        ) : null}
                       </td>
                       <td>
                         {q.canAct && f.status === 'pending' ? (
@@ -225,18 +235,21 @@ export default async function StaffProfileApprovalsPage({
               </p>
             ) : null}
             {q.proofs.length ? (
-              <p>
-                Documents:{' '}
-                {q.proofs.map((p) => (
-                  <a
+              <p
+                style={{
+                  display: 'flex',
+                  gap: 'var(--sp-3)',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span className="ep-kicker">Documents attached</span>
+                {q.proofs.map((p, i) => (
+                  <FileLinks
                     key={p.fileId}
                     href={`/api/staff-proofs/${q.id}/${p.fileId}`}
-                    target="_blank"
-                    rel="noopener"
-                    style={{ marginRight: 'var(--sp-3)' }}
-                  >
-                    View {p.fileName ?? 'document'}
-                  </a>
+                    label={`document ${String(i + 1)}`}
+                  />
                 ))}
               </p>
             ) : null}

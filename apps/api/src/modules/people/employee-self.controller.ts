@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { DomainError } from '../../common/errors/domain-error';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
@@ -47,6 +48,17 @@ export class EmployeeSelfController {
   @ApiOperation({ summary: 'My photo (on file, or one I uploaded for a change): a signed address' })
   myPhoto(@ReqCtx() ctx: RequestContext, @Query('file') file?: string) {
     return this.svc.myPhotoUrl(ctx, file && /^\d{1,18}$/.test(file) ? file : undefined);
+  }
+
+  @Get('me/employee-profile/files/:fileId')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary: 'One of my own files (photo, a document on my record, my upload): a signed address',
+  })
+  myFile(@ReqCtx() ctx: RequestContext, @Param('fileId') fileId: string) {
+    if (!/^\d{1,18}$/.test(fileId))
+      throw new DomainError('not-found', 'File not found', { status: 404 });
+    return this.svc.myFileUrl(ctx, fileId);
   }
 
   @Post('me/employee-profile/print')

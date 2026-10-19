@@ -100,6 +100,14 @@ const photoView = (v: ChangeItem): { from: Value; to: Value } => ({
   from: v.from ? 'Photo on file' : null,
   to: 'New photo',
 });
+/** The file of a document row change (0187): the one added or changed, or the one asked to be removed. */
+const fileOf = (key: string, v: ChangeItem): string | null => {
+  const pk = parseEmployeeRowKey(key);
+  if (!pk || pk.kind !== 'documents') return null;
+  const row = (pk.op === 'remove' ? v.from : v.to) as RowData | null;
+  const id = row?.fileId;
+  return typeof id === 'string' && /^\d{1,18}$/.test(id) ? id : null;
+};
 const photoOf = (changes: Record<string, ChangeItem>) => {
   const v = changes[EMPLOYEE_PHOTO_KEY];
   return v ? { from: (v.from as string | null) ?? null, to: String(v.to) } : null;
@@ -334,6 +342,7 @@ export class EmployeeSelfService {
           to: rv ? rv.to : v.enc && typeof v.to === 'string' ? decryptField(v.to) : v.to,
           status: v.status ?? 'pending',
           note: v.note ?? null,
+          file: fileOf(key, v),
         };
       }),
     }));
@@ -1094,6 +1103,7 @@ export class EmployeeSelfService {
           to: rv ? rv.to : show(v.to as Value, v.enc),
           status: v.status ?? 'pending',
           note: v.note ?? null,
+          file: fileOf(key, v),
         };
       }),
     };
@@ -1265,6 +1275,24 @@ export class EmployeeSelfService {
   }
 
   /**
+   * One of my own files (0188): the photo on file, a document on my record, or an upload of mine (one
+   * waiting for approval). The employee holds no file right, so the address is given here.
+   */
+  async myFileUrl(ctx: RequestContext, fileId: string) {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const id = await this.myEmployee(c);
+      const ok = await c.query(
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM employees WHERE id = $1 AND photo_file_id = $2)
+            OR EXISTS (SELECT 1 FROM employee_documents WHERE employee_id = $1 AND file_id = $2 AND deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM files WHERE id = $2 AND created_by = app.current_user_id() AND deleted_at IS NULL)`,
+        [id, fileId],
+      );
+      if (!ok.rows[0]) throw new DomainError('not-found', 'File not found', { status: 404 });
+    });
+    return this.files.downloadUrl(ctx, fileId);
+  }
+
+  /**
    * My own photo (0188): the one on file, or one I uploaded for a change (waiting for approval). The
    * employee holds no file right, so the address is given here.
    */
@@ -1294,7 +1322,8 @@ export class EmployeeSelfService {
         r &&
         (r.proofs.some((p) => p.fileId === fileId) ||
           photo?.to === fileId ||
-          photo?.from === fileId);
+          photo?.from === fileId ||
+          Object.entries(r.changes).some(([k, v]) => fileOf(k, v) === fileId));
       if (!r || !ofRequest)
         throw new DomainError('not-found', 'Document not found', { status: 404 });
       const actor = await this.actor(c, ctx);
