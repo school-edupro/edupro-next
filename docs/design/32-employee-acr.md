@@ -212,3 +212,9 @@ employee)` picks the most specific active form: for their side naming their type
   question added or switched off shows at once.
 - Test: `acr.e2e-spec.ts` "a self-appraisal form per employee type (0192)" and "open ACRs follow the
   record and the set-up at once".
+- **Sample forms for a dev school:** `node scripts/fixtures/acr-sample-forms.mjs --school 1` makes,
+  through the API as the dev admin, one self-appraisal form per employee type of Staff setup (Class
+  Four, Teaching Regular, Teaching Contract, Non-Teaching Regular, Non-Teaching Contract, Visiting
+  Faculty; each for all staff, naming its type) and one questionnaire per approval level (HOD, L1, L2,
+  L3, Principal), attaching each to the levels with that label in both chains (`--attach no` to skip).
+  A form whose name exists is left alone, so it can run again. Seeded in Alpha on 19 Oct 2026.
