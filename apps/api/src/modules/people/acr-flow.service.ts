@@ -228,12 +228,16 @@ export class AcrFlowService {
   }
 
   /** The self-appraisal form of a staff group: its own first, else one for both. */
-  private async selfFormId(c: PoolClient, group: Group): Promise<string | null> {
-    const r = await c.query<{ id: string }>(
-      `SELECT id::text FROM acr_forms WHERE part = 'self' AND active AND staff_group IN ($1, 'both')
-        ORDER BY (staff_group = $1) DESC, sort_order, id LIMIT 1`,
-      [group],
-    );
+  /** The self form for one employee (0192): the most specific active form of their side and employee type. */
+  private async selfFormId(
+    c: PoolClient,
+    group: Group,
+    employeeId: string,
+  ): Promise<string | null> {
+    const r = await c.query<{ id: string | null }>(`SELECT app.acr_self_form($1, $2)::text AS id`, [
+      group,
+      employeeId,
+    ]);
     return r.rows[0]?.id ?? null;
   }
 
@@ -557,7 +561,7 @@ export class AcrFlowService {
         const r = await c.query<{ id: string }>(
           `INSERT INTO acr_reports (school_id, cycle_id, employee_id, staff_group, self_form_id)
            VALUES (app.current_school_id(), $1, $2, $3, $4) RETURNING id::text`,
-          [cycleId, e.id, group, await this.selfFormId(c, group)],
+          [cycleId, e.id, group, await this.selfFormId(c, group, e.id)],
         );
         const rid = r.rows[0]!.id;
         for (const l of levels.rows.filter((x) => x.staff_group === group)) {
@@ -687,7 +691,7 @@ export class AcrFlowService {
         }
         await c.query(`UPDATE acr_reports SET self_form_id = $2 WHERE id = $1`, [
           rep.id,
-          await this.selfFormId(c, rep.staff_group),
+          await this.selfFormId(c, rep.staff_group, rep.employee_id),
         ]);
         await this.applySkips(c, ctx, rep.id);
         return chain.length;
@@ -757,17 +761,20 @@ export class AcrFlowService {
       adverse: boolean;
       object_by: string | null;
       updated_at: Date;
+      form: string | null;
     }>(
       // eslint-disable-next-line no-restricted-syntax -- the condition is one of the fixed ones below; values are bound
       `SELECT r.id::text, r.cycle_id::text, cy.name AS cycle, r.employee_id::text, e.display_name AS name,
               e.employee_code AS code, e.department, e.designation, r.staff_group, r.status, r.current_level,
               v.label AS level_label,
               (SELECT array_agg(x.display_name ORDER BY x.display_name) FROM employees x WHERE x.id = ANY(v.reviewer_ids)) AS waiting_on,
-              r.self_pct::text, r.score_pct::text, r.grade, r.adverse, r.object_by::text, r.updated_at
+              r.self_pct::text, r.score_pct::text, r.grade, r.adverse, r.object_by::text, r.updated_at,
+              f.name AS form
          FROM acr_reports r
          JOIN acr_cycles cy ON cy.id = r.cycle_id
          JOIN employees e ON e.id = r.employee_id
          LEFT JOIN acr_reviews v ON v.report_id = r.id AND v.seq = r.current_level
+         LEFT JOIN acr_forms f ON f.id = r.self_form_id
         WHERE ${where}
         ORDER BY e.display_name, cy.id`,
       args,
@@ -794,6 +801,7 @@ export class AcrFlowService {
       adverse: x.adverse,
       objectBy: x.object_by,
       updatedAt: x.updated_at.toISOString(),
+      form: x.form,
     }));
   }
 
@@ -1181,7 +1189,7 @@ export class AcrFlowService {
   /** The self form an ACR was made with; one made before forms existed takes its group's form now. */
   private async selfFormOf(c: PoolClient, r: ReportRow): Promise<string | null> {
     if (r.self_form_id) return r.self_form_id;
-    const id = await this.selfFormId(c, r.staff_group);
+    const id = await this.selfFormId(c, r.staff_group, r.employee_id);
     if (id) await c.query('UPDATE acr_reports SET self_form_id = $2 WHERE id = $1', [r.id, id]);
     return id;
   }

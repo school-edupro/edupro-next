@@ -183,3 +183,22 @@ levels that rate, the last level setting the grade; sections carry weights and s
   (`acr.level_same_person`); where an old set-up still has it, the Assessors tab shows the later column
   as "same as level N" instead of a second picker. Alpha's teaching Principal level was set to the
   employee's ACR reviewer with the Principal as fallback.
+
+## Self-appraisal forms per employee type (19 Oct 2026, 0192)
+
+- The employee master's **Employee type** (Staff setup → Employee types: Class Four, Teaching Regular,
+  Teaching Contract…) is a finer list than the ACR's two sides. Each type carries a staff group the
+  ERP reads; the ACR side of an employee comes from the department first, else from that group
+  (`app.acr_staff_group(employee, year)`, the rule a cycle start uses: contract staff in a department
+  for both are teaching when they have classes that year).
+- A **self-appraisal form may name employee types** (`acr_forms.employee_type_ids`, ids from Staff
+  setup; the name on the record, `profile.staff_type`, is what matches). `app.acr_self_form(side,
+employee)` picks the most specific active form: for their side naming their type → for all staff
+  naming their type → for their side → for all staff; ties by the order on the Forms tab. Used at cycle
+  start, on Re-read, on the set-up saves that refresh open ACRs still at an untouched self-appraisal, and
+  when an ACR made before forms existed first needs one. The levels' questionnaires stay per side.
+- Forms tab: the employee types as tick boxes on Add a form and on the form card (a self form only);
+  the list and the form header say the types and how many active employees the form serves now. The
+  ACR board gets a **Form** column. API: `employeeTypeIds` on `POST/PUT setup/forms`; absent on PUT
+  leaves them; unknown ids are refused (`acr.employee_type`); a copy carries them.
+- Test: `acr.e2e-spec.ts` "a self-appraisal form per employee type (0192)".

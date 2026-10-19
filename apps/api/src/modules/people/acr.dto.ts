@@ -64,6 +64,11 @@ export const AcrFormSchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
   active: z.boolean().default(true),
   sortOrder: z.number().int().min(0).max(9999).default(0),
+  /** 0192: a self-appraisal form for these employee types only (ids from Staff setup); absent = unchanged */
+  employeeTypeIds: z
+    .array(z.string().regex(/^\d{1,18}$/))
+    .max(50)
+    .optional(),
 });
 export class AcrFormDto extends createZodDto(AcrFormSchema) {}
 export const AcrFormCopySchema = z.object({

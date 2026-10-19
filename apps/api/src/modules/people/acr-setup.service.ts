@@ -149,8 +149,9 @@ export class AcrSetupService {
           description: string | null;
           active: boolean;
           sort_order: number;
+          employee_type_ids: string[];
         }>(
-          `SELECT id::text, name, part, staff_group, description, active, sort_order
+          `SELECT id::text, name, part, staff_group, description, active, sort_order, employee_type_ids::text[]
                FROM acr_forms ORDER BY part, sort_order, id`,
         ),
         c.query<{
@@ -165,6 +166,20 @@ export class AcrSetupService {
                FROM acr_form_sections ORDER BY form_id, sort_order, id`,
         ),
       ]);
+      // 0192: the employee types a self form may be for, and how many active employees each self form
+      // serves now (the side as the open or latest cycle's year would give it)
+      const types = await c.query<{ id: string; name: string; staff_group: string }>(
+        `SELECT id::text, name, staff_group::text FROM employee_types WHERE status = 'active' ORDER BY sort_order, name`,
+      );
+      const applies = await c.query<{ form_id: string | null; n: number }>(
+        `SELECT app.acr_self_form(app.acr_staff_group(e.id, y.id), e.id)::text AS form_id, count(*)::int AS n
+           FROM employees e, (SELECT COALESCE(
+                  (SELECT academic_year_id FROM acr_cycles ORDER BY (status = 'open') DESC, id DESC LIMIT 1),
+                  (SELECT id FROM academic_years WHERE status::text = 'current' ORDER BY start_date DESC LIMIT 1)) AS id) y
+          WHERE e.deleted_at IS NULL AND e.status = 'active' GROUP BY 1`,
+      );
+      const typeName = new Map(types.rows.map((t) => [t.id, t.name]));
+      const appliesTo = new Map(applies.rows.map((x) => [x.form_id, x.n]));
       const s = settings.rows[0];
       const qOf = (q: (typeof questions.rows)[number]) => ({
         id: q.id,
@@ -188,6 +203,11 @@ export class AcrSetupService {
         description: f.description,
         active: f.active,
         sortOrder: f.sort_order,
+        employeeTypeIds: f.employee_type_ids,
+        employeeTypes: f.employee_type_ids
+          .map((id) => typeName.get(id))
+          .filter((x): x is string => !!x),
+        appliesTo: f.part === 'self' ? (appliesTo.get(f.id) ?? 0) : null,
         sections: sections.rows
           .filter((x) => x.form_id === f.id)
           .map((x) => ({
@@ -219,6 +239,11 @@ export class AcrSetupService {
         },
         questions: questions.rows.map(qOf),
         forms: formsOut,
+        employeeTypes: types.rows.map((t) => ({
+          id: t.id,
+          name: t.name,
+          staffGroup: t.staff_group,
+        })),
         cycles: cycles.rows.map((y) => ({
           id: y.id,
           academicYearId: y.academic_year_id,
@@ -411,12 +436,10 @@ export class AcrSetupService {
           AND v.form_id IS DISTINCT FROM l.form_id`,
     );
     const sf = await c.query(
-      `UPDATE acr_reports r SET self_form_id = (
-          SELECT f.id FROM acr_forms f
-           WHERE f.part = 'self' AND f.active AND f.staff_group IN (r.staff_group, 'both')
-           ORDER BY (f.staff_group = r.staff_group) DESC, f.sort_order, f.id LIMIT 1)
+      `UPDATE acr_reports r SET self_form_id = app.acr_self_form(r.staff_group, r.employee_id)
          FROM acr_cycles cy
-        WHERE cy.id = r.cycle_id AND cy.status = 'open' AND r.status = 'self' AND r.self_answers = '{}'::jsonb`,
+        WHERE cy.id = r.cycle_id AND cy.status = 'open' AND r.status = 'self' AND r.self_answers = '{}'::jsonb
+          AND r.self_form_id IS DISTINCT FROM app.acr_self_form(r.staff_group, r.employee_id)`,
     );
     return { levels: lv.rowCount ?? 0, selfForms: sf.rowCount ?? 0 };
   }
@@ -432,9 +455,27 @@ export class AcrSetupService {
     return r.rows[0];
   }
 
+  /** 0192: the employee types a self form is for, checked against Staff setup; null = leave as they are. */
+  private async employeeTypeIds(c: PoolClient, dto: AcrFormDto): Promise<string[] | null> {
+    if (dto.part === 'level') return [];
+    if (!dto.employeeTypeIds) return null;
+    const ids = [...new Set(dto.employeeTypeIds)];
+    if (!ids.length) return [];
+    const ok = await c.query<{ id: string }>(
+      `SELECT id::text FROM employee_types WHERE id = ANY($1::bigint[])`,
+      [ids],
+    );
+    if (ok.rows.length !== ids.length)
+      throw new DomainError('acr.employee_type', 'An employee type named is not in Staff setup', {
+        status: 400,
+      });
+    return ids;
+  }
+
   async saveForm(ctx: RequestContext, id: string | null, dto: AcrFormDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.seed(c);
+      const types = await this.employeeTypeIds(c, dto);
       if (id) {
         const f = await this.formOf(c, id);
         if (f.part !== dto.part)
@@ -446,8 +487,9 @@ export class AcrSetupService {
             },
           );
         await c.query(
-          `UPDATE acr_forms SET name = $2, staff_group = $3, description = $4, active = $5, sort_order = $6 WHERE id = $1`,
-          [id, dto.name, dto.staffGroup, dto.description ?? null, dto.active, dto.sortOrder],
+          `UPDATE acr_forms SET name = $2, staff_group = $3, description = $4, active = $5, sort_order = $6,
+                  employee_type_ids = COALESCE($7::bigint[], employee_type_ids) WHERE id = $1`,
+          [id, dto.name, dto.staffGroup, dto.description ?? null, dto.active, dto.sortOrder, types],
         );
         await c.query(`UPDATE acr_questions SET staff_group = $2 WHERE form_id = $1`, [
           id,
@@ -462,9 +504,17 @@ export class AcrSetupService {
         return { id };
       }
       const r = await c.query<{ id: string }>(
-        `INSERT INTO acr_forms (school_id, name, part, staff_group, description, active, sort_order)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6) RETURNING id::text`,
-        [dto.name, dto.part, dto.staffGroup, dto.description ?? null, dto.active, dto.sortOrder],
+        `INSERT INTO acr_forms (school_id, name, part, staff_group, description, active, sort_order, employee_type_ids)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7::bigint[]) RETURNING id::text`,
+        [
+          dto.name,
+          dto.part,
+          dto.staffGroup,
+          dto.description ?? null,
+          dto.active,
+          dto.sortOrder,
+          types ?? [],
+        ],
       );
       await this.refreshOpenAcrForms(c);
       await this.audit.stage(ctx, c, {
@@ -539,8 +589,8 @@ export class AcrSetupService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const f = await this.formOf(c, id);
       const n = await c.query<{ id: string }>(
-        `INSERT INTO acr_forms (school_id, name, part, staff_group, description, active, sort_order)
-         SELECT app.current_school_id(), $2, part, $3, description, true, sort_order + 1 FROM acr_forms WHERE id = $1
+        `INSERT INTO acr_forms (school_id, name, part, staff_group, description, active, sort_order, employee_type_ids)
+         SELECT app.current_school_id(), $2, part, $3, description, true, sort_order + 1, employee_type_ids FROM acr_forms WHERE id = $1
          RETURNING id::text`,
         [id, dto.name, dto.staffGroup ?? f.staff_group],
       );

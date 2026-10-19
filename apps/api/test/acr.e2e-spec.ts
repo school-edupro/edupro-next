@@ -838,4 +838,81 @@ describe('employee ACR flow (e2e)', () => {
     });
     expect(back.json().changed).toBe(1);
   });
+  it('a self-appraisal form per employee type (0192): the most specific active form wins; open ACRs at the self-appraisal follow; the board names the form', async () => {
+    const setup = async () => (await call(admin, 'GET', '/people/acr/setup')).json();
+    // Om is on contract: his record's employee type names a type from Staff setup
+    const typeId = await withMigrator(async (c) => {
+      const t = await c.query<{ id: string }>(
+        `INSERT INTO employee_types (school_id, code, name, staff_group, sort_order)
+         VALUES ($1, 'teaching_contract', 'Teaching Contract', 'contract', 20)
+         ON CONFLICT (school_id, code) DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
+        [school.id],
+      );
+      await c.query(
+        `UPDATE employees SET profile = profile || '{"staff_type": "Teaching Contract"}'::jsonb
+          WHERE school_id = $1 AND employee_code = 'O1'`,
+        [school.id],
+      );
+      return t.rows[0]!.id;
+    });
+    const s0 = await setup();
+    expect(s0.employeeTypes.map((t: { name: string }) => t.name)).toContain('Teaching Contract');
+    const bad = await call(admin, 'POST', '/people/acr/setup/forms', {
+      name: 'Self-appraisal · Contract',
+      part: 'self',
+      staffGroup: 'teaching',
+      employeeTypeIds: ['999999999'],
+    });
+    expect(bad.statusCode).toBe(400);
+    const f = await call(admin, 'POST', '/people/acr/setup/forms', {
+      name: 'Self-appraisal · Contract',
+      part: 'self',
+      staffGroup: 'teaching',
+      employeeTypeIds: [typeId],
+    });
+    expect(f.statusCode).toBe(201);
+    const contractForm = f.json().id as string;
+    const s1 = await setup();
+    expect(s1.forms.find((x: { id: string }) => x.id === contractForm)).toMatchObject({
+      employeeTypeIds: [typeId],
+      employeeTypes: ['Teaching Contract'],
+      appliesTo: 1,
+    });
+    // Om's ACR, still at the self-appraisal, took it at once; Hema's keeps the teaching form
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const omAcr = board.rows.find((r: { employee: { code: string } }) => r.employee.code === 'O1');
+    const hemaAcr = board.rows.find(
+      (r: { employee: { code: string } }) => r.employee.code === 'H1',
+    );
+    expect(omAcr.form).toBe('Self-appraisal · Contract');
+    expect(hemaAcr.form).not.toBe('Self-appraisal · Contract');
+    const omView = () =>
+      call(admin, 'GET', `/people/acr/reports/${omAcr.id as string}`).then(
+        (r) => r.json().self.formId as string,
+      );
+    expect(await omView()).toBe(contractForm);
+    // a form for all staff naming the type, first in the order, loses to the one for their own side…
+    const all = await call(admin, 'POST', '/people/acr/setup/forms', {
+      name: 'Self-appraisal · Contract (all)',
+      part: 'self',
+      staffGroup: 'both',
+      employeeTypeIds: [typeId],
+      sortOrder: 0,
+    });
+    expect(all.statusCode).toBe(201);
+    expect(await omView()).toBe(contractForm);
+    // …until that one is switched off (a save without the ticks keeps the types)
+    const off = await call(admin, 'PUT', `/people/acr/setup/forms/${contractForm}`, {
+      name: 'Self-appraisal · Contract',
+      part: 'self',
+      staffGroup: 'teaching',
+      active: false,
+    });
+    expect(off.statusCode).toBe(200);
+    expect((await setup()).forms.find((x: { id: string }) => x.id === contractForm)).toMatchObject({
+      active: false,
+      employeeTypeIds: [typeId],
+    });
+    expect(await omView()).toBe(all.json().id);
+  });
 });

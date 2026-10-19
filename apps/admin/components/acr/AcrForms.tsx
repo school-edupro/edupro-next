@@ -101,6 +101,49 @@ function UsedByLevels({
  * weight) holding questions (a rating on the scale, written, or yes / no). Add a form, copy one as the
  * start of another, switch one off; add and move sections and questions.
  */
+/** 0192: the employee types a self-appraisal form is for (none ticked = every employee of its category). */
+function EmployeeTypesPick({
+  s,
+  form,
+  idPrefix,
+}: {
+  s: AcrSetup;
+  form: AcrForm | null;
+  idPrefix: string;
+}) {
+  if (!s.employeeTypes.length) return null;
+  const picked = new Set(form?.employeeTypeIds ?? []);
+  return (
+    <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: '0 0 var(--sp-3)' }}>
+      <legend className="ep-field__label">Employee types (a self-appraisal form)</legend>
+      <input type="hidden" name="employeeTypesGiven" value="1" />
+      <p className="ep-field__help" style={{ marginTop: 0 }}>
+        Tick types from Staff setup to make this the form of those employees only. The most specific
+        active form wins: for their category naming their type, for all staff naming their type,
+        then the category’s own form, then one for all staff.
+      </p>
+      <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
+        {s.employeeTypes.map((t) => (
+          <label
+            key={t.id}
+            htmlFor={`${idPrefix}-et-${t.id}`}
+            style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}
+          >
+            <input
+              id={`${idPrefix}-et-${t.id}`}
+              type="checkbox"
+              name="employeeTypeIds"
+              value={t.id}
+              defaultChecked={picked.has(t.id)}
+            />
+            {t.name}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 export function AcrForms({
   s,
   sp,
@@ -114,7 +157,7 @@ export function AcrForms({
   if (form) return <FormDetail s={s} form={form} sp={sp} canEdit={canEdit} />;
   const link = (id: string) => `?tab=questions&form=${id}`;
   const groups: Array<['self' | 'level', string]> = [
-    ['self', 'Self-appraisal forms (one per staff category)'],
+    ['self', 'Self-appraisal forms (per staff category or employee type)'],
     ['level', 'Questionnaires of the approval levels'],
   ];
   const usedBy = (f: AcrForm) =>
@@ -136,7 +179,7 @@ export function AcrForms({
             </h2>
             <p className="ep-field__help" style={{ marginTop: 0 }}>
               {part === 'self'
-                ? 'Each employee fills the first active form for their category (teaching or non-teaching; a form for all staff serves both).'
+                ? 'Each employee fills the most specific active form: one naming their employee type first, then their category’s (teaching or non-teaching), then one for all staff.'
                 : 'Each approval level names the questionnaire it answers under Approval levels; a level with none gives the grade and remarks only.'}
             </p>
             <div className="ep-table-wrap">
@@ -172,7 +215,10 @@ export function AcrForms({
                               <div className="ep-field__help">{f.description}</div>
                             ) : null}
                           </td>
-                          <td>{FOR_LABEL[f.staffGroup]}</td>
+                          <td>
+                            {FOR_LABEL[f.staffGroup]}
+                            {f.employeeTypes.length ? ` · ${f.employeeTypes.join(', ')}` : ''}
+                          </td>
                           <td>
                             {f.sections.length} · {n}
                           </td>
@@ -186,7 +232,12 @@ export function AcrForms({
                                 <span className="ep-field__help">No level yet</span>
                               )
                             ) : (
-                              <Badge tone="success">In use</Badge>
+                              <>
+                                <Badge tone="success">In use</Badge>
+                                {f.appliesTo !== null ? (
+                                  <div className="ep-field__help">{f.appliesTo} employees now</div>
+                                ) : null}
+                              </>
                             )}
                           </td>
                           <td>
@@ -260,9 +311,10 @@ export function AcrForms({
               <input id="nf-desc" name="description" className="ep-input" maxLength={500} />
             </label>
             <UsedByLevels s={s} form={null} idPrefix="nf" />
+            <EmployeeTypesPick s={s} form={null} idPrefix="nf" />
             <p className="ep-field__help" style={{ marginTop: 0 }}>
-              The ticks apply to a questionnaire of an approval level; a self-appraisal form goes by
-              the staff category alone.
+              The level ticks apply to a questionnaire of an approval level; the employee types to a
+              self-appraisal form.
             </p>
             <button type="submit" className="ep-btn ep-btn--primary">
               Add form
@@ -324,8 +376,10 @@ function FormDetail({
           </a>
         </div>
         <p className="ep-field__help">
-          {PART_LABEL[form.part]} · {FOR_LABEL[form.staffGroup]} · {sections.length} sections ·{' '}
-          {total} questions
+          {PART_LABEL[form.part]} · {FOR_LABEL[form.staffGroup]}
+          {form.employeeTypes.length ? ` · ${form.employeeTypes.join(', ')}` : ''}
+          {form.appliesTo !== null ? ` · ${String(form.appliesTo)} employees now` : ''} ·{' '}
+          {sections.length} sections · {total} questions
           {form.part === 'level'
             ? ` · ${usedBy.length ? `used by ${usedBy.join(', ')}` : 'no level uses it yet'}`
             : ''}
@@ -669,7 +723,11 @@ function FormDetail({
                   defaultValue={form.description ?? ''}
                 />
               </label>
-              {form.part === 'level' ? <UsedByLevels s={s} form={form} idPrefix="ff" /> : null}
+              {form.part === 'level' ? (
+                <UsedByLevels s={s} form={form} idPrefix="ff" />
+              ) : (
+                <EmployeeTypesPick s={s} form={form} idPrefix="ff" />
+              )}
               <button type="submit" className="ep-btn ep-btn--secondary">
                 Save the form
               </button>

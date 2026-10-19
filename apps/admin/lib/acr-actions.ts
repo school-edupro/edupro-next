@@ -96,6 +96,10 @@ export async function saveAcrForm(fd: FormData) {
         description: str(fd, 'description') || null,
         active: str(fd, 'active') !== 'false',
         sortOrder: Number(str(fd, 'sortOrder') || '0'),
+        // the employee types a self form is for (0192); a save without the ticks keeps them
+        ...(str(fd, 'employeeTypesGiven') === '1'
+          ? { employeeTypeIds: fd.getAll('employeeTypeIds').map(String).filter(okId) }
+          : {}),
       }),
     });
     if (part === 'level' && str(fd, 'levelsGiven') === '1') {

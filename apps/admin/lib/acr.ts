@@ -54,6 +54,11 @@ export interface AcrForm {
   description: string | null;
   active: boolean;
   sortOrder: number;
+  /** 0192: a self-appraisal form for these employee types only (ids and names from Staff setup) */
+  employeeTypeIds: string[];
+  employeeTypes: string[];
+  /** active employees this self form serves now; null for a level's questionnaire */
+  appliesTo: number | null;
   sections: AcrSection[];
 }
 export interface AcrBand {
@@ -79,6 +84,7 @@ export interface AcrSetup {
   levels: Record<StaffGroup, AcrLevel[]>;
   questions: AcrQuestion[];
   forms: AcrForm[];
+  employeeTypes: Array<{ id: string; name: string; staffGroup: string }>;
   cycles: AcrCycle[];
   years: Array<{ id: string; code: string; status: string }>;
   roles: Array<{ code: string; name: string }>;
@@ -155,6 +161,8 @@ export interface AcrRow {
   adverse: boolean;
   objectBy: string | null;
   updatedAt: string;
+  /** the self-appraisal form this ACR is on (0192) */
+  form: string | null;
 }
 export const ACR_STATUS: Record<AcrRow['status'], string> = {
   self: 'Self-appraisal',

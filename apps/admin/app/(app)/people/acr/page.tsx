@@ -283,6 +283,7 @@ export default async function AcrBoardPage({
                 <tr>
                   <th scope="col">Employee</th>
                   <th scope="col">Staff</th>
+                  <th scope="col">Form</th>
                   <th scope="col">Status</th>
                   <th scope="col">Waiting on</th>
                   <th scope="col">Self %</th>
@@ -304,6 +305,7 @@ export default async function AcrBoardPage({
                       </div>
                     </td>
                     <td>{GROUP_LABEL[r.staffGroup]}</td>
+                    <td>{r.form ?? '—'}</td>
                     <td>
                       <Badge tone={tone(r.status)}>{ACR_STATUS[r.status]}</Badge>
                     </td>
@@ -328,7 +330,7 @@ export default async function AcrBoardPage({
                 ))}
                 {!rows.length ? (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       {total ? 'No ACR matches.' : 'No ACRs yet: start the cycle.'}
                     </td>
                   </tr>
