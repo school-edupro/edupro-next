@@ -87,7 +87,9 @@ export function AcrAssessorsEditor({
       const n = { ...t };
       for (const r of shown) {
         const l = levelAt(r, seq);
-        if (l?.field) n[r.id] = { ...n[r.id], [l.field]: value };
+        const earlier =
+          l?.field && data.levels[r.staffGroup].some((x) => x.seq < seq && x.field === l.field);
+        if (l?.field && !earlier) n[r.id] = { ...n[r.id], [l.field]: value };
       }
       return n;
     });
@@ -140,6 +142,14 @@ export function AcrAssessorsEditor({
     const l = levelAt(r, seq);
     if (!l) return <span className="ep-field__help">—</span>;
     if (!l.field) return <span className="ep-field__help">{l.fixed ?? '—'}</span>;
+    // an earlier level of the chain reads the same record field: one picker, one person
+    const earlier = data.levels[r.staffGroup].find((x) => x.seq < seq && x.field === l.field);
+    if (earlier)
+      return (
+        <span className="ep-field__help">
+          same as level {earlier.seq} ({earlier.label}); set another kind under Approval levels
+        </span>
+      );
     const value = text[r.id]?.[l.field] ?? '';
     if (!canEdit)
       return value || (l.fallback ? <span className="ep-field__help">{l.fallback}</span> : '—');

@@ -20,6 +20,13 @@ import {
   type AssessorKind,
 } from './acr.dto';
 type Group = 'teaching' | 'non_teaching';
+const KIND_WORDS: Record<AssessorKind, string> = {
+  acr_hod: 'the employee’s ACR HOD',
+  acr_reviewer: 'the employee’s ACR reviewer',
+  approver_l1: 'the employee’s L1 approver',
+  approver_l2: 'the employee’s L2 approver',
+  approver_l3: 'the employee’s L3 approver',
+};
 
 /**
  * Employee ACR set-up (0184, docs/design/32-employee-acr.md): the rating words, days to object and grade
@@ -324,6 +331,19 @@ export class AcrSetupService {
       throw new DomainError('acr.no_rating', 'At least one level must rate the questions', {
         status: 400,
       });
+    // two levels reading the same record field would always be the same person
+    const seen = new Map<string, number>();
+    for (const [i, l] of dto.levels.entries()) {
+      if (!(ASSESSOR_KINDS as readonly string[]).includes(l.kind)) continue;
+      const first = seen.get(l.kind);
+      if (first !== undefined)
+        throw new DomainError(
+          'acr.level_same_person',
+          `Levels ${String(first)} and ${String(i + 1)} both read “${KIND_WORDS[l.kind as AssessorKind]}”: each level needs its own person, so choose another kind for one of them`,
+          { status: 400 },
+        );
+      seen.set(l.kind, i + 1);
+    }
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.seed(c);
       // 0191: each level's questionnaire is a level form of this group (or of both); a rating level needs one

@@ -91,6 +91,13 @@ describe('employee ACR set-up (e2e)', () => {
     const rating = forms.find((f) => f.part === 'level' && f.staffGroup === 'non_teaching')!.id;
     const noForm = await put([{ label: 'HOD', kind: 'acr_hod', action: 'rate' }]);
     expect(noForm.statusCode).toBe(400);
+    // two levels reading the same record field would always be the same person
+    const twice = await put([
+      { label: 'HOD', kind: 'acr_hod', action: 'rate', formId: rating },
+      { label: 'Principal', kind: 'acr_hod', action: 'review' },
+    ]);
+    expect(twice.statusCode).toBe(400);
+    expect(twice.json().type).toBe('acr.level_same_person');
     const ok = await put([
       { label: 'Section head', kind: 'approver_l1', action: 'rate', formId: rating },
       { label: 'Administrator', kind: 'approver_l2', action: 'rate', formId: rating },

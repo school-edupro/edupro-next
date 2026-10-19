@@ -173,3 +173,9 @@ levels that rate, the last level setting the grade; sections carry weights and s
   step until the next action: its reason, who sent it and when show as a notice on the self-appraisal
   for the employee (`self.returned`) or on the level that must act again (`levels[].returned`), beside
   the Steps list.
+- **One record field per chain (19 Oct 2026):** two levels of a chain cannot both read the same
+  record field (for example HOD and Principal both as "the employee's ACR HOD"): they would always be
+  the same person and the Assessors tab would show one person in two columns. Saving levels refuses it
+  (`acr.level_same_person`); where an old set-up still has it, the Assessors tab shows the later column
+  as "same as level N" instead of a second picker. Alpha's teaching Principal level was set to the
+  employee's ACR reviewer with the Principal as fallback.
