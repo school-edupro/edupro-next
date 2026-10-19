@@ -857,11 +857,24 @@ export class AcrFlowService {
       const shown = r.status === 'disclosed' || r.status === 'represented' || r.status === 'closed';
       // the employee sees the levels once the ACR is shown to them; a level's people up to their level
       const seeLevel = (seq: number) => a.viewer || (a.self ? shown : seq <= a.upTo);
-      const names = await c.query<{ id: string; name: string }>(
-        `SELECT id::text, display_name AS name FROM employees WHERE id = ANY($1::bigint[])`,
+      const names = await c.query<{ id: string; name: string; code: string }>(
+        `SELECT id::text, display_name AS name, employee_code AS code FROM employees WHERE id = ANY($1::bigint[])`,
         [reviews.flatMap((v) => v.reviewer_ids)],
       );
       const nameOf = new Map(names.rows.map((x) => [x.id, x.name]));
+      const codeOf = new Map(names.rows.map((x) => [x.id, x.code]));
+      const peopleOf = (v: ReviewRow) =>
+        v.reviewer_ids.map((x) => ({
+          id: x,
+          name: nameOf.get(x) ?? '',
+          code: codeOf.get(x) ?? '',
+        }));
+      // a send-back is the latest step until the next action: its reason goes to whoever must act now
+      const last = events.rows[events.rows.length - 1];
+      const returnedNote =
+        last && (last.what === 'returned' || last.what === 'returned_to_employee')
+          ? { at: last.at.toISOString(), by: last.by_name, reason: last.note }
+          : null;
       const today = new Date().toISOString().slice(0, 10);
       const windowOpen = r.cycle_status === 'open' && today >= r.self_from && today <= r.self_to;
       const returned = await this.wasReturned(c, id);
@@ -893,6 +906,10 @@ export class AcrFlowService {
         // 0191: the forms this ACR was made with; a level's once its people (or the employee, once shown) may see it
         forms,
         self: {
+          returned:
+            returnedNote && last!.what === 'returned_to_employee' && r.status === 'self'
+              ? returnedNote
+              : null,
           formId: selfForm?.id ?? null,
           sections: selfForm
             ? this.scoreOf(await this.formQuestions(c, selfForm.id), r.self_answers, sc.top)
@@ -913,7 +930,14 @@ export class AcrFlowService {
                 label: v.label,
                 action: v.action,
                 status: v.status,
-                people: v.reviewer_ids.map((x) => ({ id: x, name: nameOf.get(x) ?? '' })),
+                people: peopleOf(v),
+                returned:
+                  returnedNote &&
+                  last!.what === 'returned' &&
+                  r.status === 'review' &&
+                  v.seq === r.current_level
+                    ? returnedNote
+                    : null,
                 formId: v.form_id,
                 sections: levelSections.get(v.seq) ?? [],
                 answers: v.answers,
@@ -927,11 +951,13 @@ export class AcrFlowService {
                 skippedNote: v.skipped_note,
               }
             : {
+                // who sits at the level is always shown; the answers once the ACR is complete
                 seq: v.seq,
                 label: v.label,
                 action: v.action,
                 status: v.status,
                 hidden: true,
+                people: peopleOf(v),
                 skippedNote: v.skipped_note,
                 formId: v.form_id,
               },

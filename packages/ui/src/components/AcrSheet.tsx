@@ -41,11 +41,13 @@ export interface AcrLevelView {
   /** 0190: why the level is skipped (the same person as the level before) */
   skippedNote?: string | null;
   hidden?: boolean;
+  /** the latest send-back, when this level must act on it */
+  returned?: AcrReturned | null;
   /** the questionnaire this level answers (in `forms`), none for the grade and remarks only */
   formId?: string | null;
   /** the section scores of a filled level */
   sections?: AcrSectionScore[];
-  people?: Array<{ id: string; name: string }>;
+  people?: Array<{ id: string; name: string; code?: string }>;
   answers?: Record<string, AcrAnswer>;
   remarks?: string | null;
   scorePct?: number | null;
@@ -54,6 +56,12 @@ export interface AcrLevelView {
   agreement?: 'agree' | 'partly' | 'disagree' | null;
   filledBy?: string | null;
   filledAt?: string | null;
+}
+/** A send-back: when, by whom, why. */
+export interface AcrReturned {
+  at: string;
+  by: string | null;
+  reason: string | null;
 }
 export interface AcrFacts {
   period: { from: string | null; to: string | null };
@@ -94,6 +102,8 @@ export interface AcrReportView {
   /** the forms this ACR was made with, by id: the self form and the levels' questionnaires one may see */
   forms: Record<string, AcrFormView>;
   self: {
+    /** the latest send-back to the employee, while the self-appraisal is theirs again */
+    returned?: AcrReturned | null;
     formId: string | null;
     sections: AcrSectionScore[];
     answers: Record<string, AcrAnswer>;
@@ -176,6 +186,15 @@ const EVENT: Record<string, string> = {
   grade_upheld: 'Objection decided: grade kept',
   grade_revised: 'Objection decided: grade revised',
 };
+const who = (p: Array<{ name: string; code?: string }> | undefined) =>
+  p?.length ? p.map((x) => (x.code ? `${x.name} (${x.code})` : x.name)).join(', ') : '';
+const Returned = ({ r, to }: { r: AcrReturned; to: string }) => (
+  <div className="ep-alert ep-alert--warning" role="status" style={{ marginBottom: 'var(--sp-3)' }}>
+    <strong>Sent back to {to}</strong>
+    {r.by ? ` by ${r.by}` : ''}, {when(r.at)}
+    {r.reason ? `: ${r.reason}` : ''}
+  </div>
+);
 const dmy = (d: string | null | undefined) =>
   d ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : '—';
 const when = (d: string | null | undefined) =>
@@ -619,6 +638,7 @@ export function AcrSheet({
             Submitted {when(r.self.submittedAt)}
           </p>
         ) : null}
+        {r.self.returned ? <Returned r={r.self.returned} to="you" /> : null}
         <QuestionForm
           idPrefix="self"
           form={r.self.formId ? r.forms[r.self.formId] : undefined}
@@ -682,15 +702,19 @@ export function AcrSheet({
               </span>
             </h2>
             {l.hidden ? (
-              <p className="ep-field__help">Shown once the ACR is complete.</p>
+              <>
+                <p className="ep-field__help" style={{ marginTop: 0 }}>
+                  {who(l.people) || 'Nobody set for this level yet'}
+                </p>
+                <p className="ep-field__help">Their answers are shown once the ACR is complete.</p>
+              </>
             ) : (
               <>
                 <p className="ep-field__help" style={{ marginTop: 0 }}>
-                  {l.people?.length
-                    ? l.people.map((p) => p.name).join(', ')
-                    : 'Nobody set for this level yet'}
+                  {who(l.people) || 'Nobody set for this level yet'}
                   {l.filledBy ? ` · filled by ${l.filledBy}, ${when(l.filledAt)}` : ''}
                 </p>
+                {l.returned ? <Returned r={l.returned} to="this level" /> : null}
                 {l.formId && (l.status === 'done' || editing) ? (
                   <QuestionForm
                     idPrefix={`l${String(l.seq)}`}

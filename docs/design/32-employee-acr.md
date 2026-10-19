@@ -168,3 +168,8 @@ levels that rate, the last level setting the grade; sections carry weights and s
   yet filled (matched by number, label and action), and the self form its category has now for ACRs whose
   self-appraisal has no answers yet. Filled steps keep the form they were answered on. Found when the HOD
   still saw the old questionnaire on ACRs started before a new one was assigned.
+- **Who sits at each level, and why it came back (19 Oct 2026):** the employee always sees the name and
+  code of the people at every level (only their answers wait for disclosure). A send-back is the latest
+  step until the next action: its reason, who sent it and when show as a notice on the self-appraisal
+  for the employee (`self.returned`) or on the level that must act again (`levels[].returned`), beside
+  the Steps list.

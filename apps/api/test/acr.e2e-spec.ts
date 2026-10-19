@@ -464,6 +464,8 @@ describe('employee ACR flow (e2e)', () => {
     expect(v.can.self).toBe(true);
     // the employee sees their self form only; the levels' questionnaires once the ACR is shown to them (0191)
     expect(Object.keys(v.forms)).toEqual([v.self.formId]);
+    // but always who sits at each level, name and code
+    expect(v.levels[0]).toMatchObject({ hidden: true, people: [{ name: 'Hema', code: 'H1' }] });
     expect(v.self.facts).toMatchObject({ results: [], activityLog: null });
     const self = (
       v.forms[v.self.formId].sections as Array<{
@@ -552,7 +554,7 @@ describe('employee ACR flow (e2e)', () => {
       remarks: 'Struggles with class management',
     });
     expect(r1.json()).toEqual({ status: 'review', next: 'Principal' });
-    // the Principal sends it back to the HOD, who submits again
+    // the Principal sends it back to the HOD, who sees why and submits again
     expect(
       (await call(principal, 'POST', `/people/acr/reports/${reportId}/send-back`, { reason: 'x' }))
         .statusCode,
@@ -561,6 +563,13 @@ describe('employee ACR flow (e2e)', () => {
       reason: 'Please add the remarks on results',
     });
     expect(back.json()).toEqual({ status: 'review', level: 1 });
+    // the HOD sees why it came back; the employee is not told of a return between levels
+    const backTo = (await call(hod, 'GET', `/people/acr/reports/${reportId}`)).json();
+    expect(backTo.levels[0].returned).toMatchObject({
+      reason: 'Please add the remarks on results',
+    });
+    expect(backTo.levels[0].returned.by).toBeTruthy();
+    expect(backTo.self.returned ?? null).toBeNull();
     await call(hod, 'POST', `/people/acr/reports/${reportId}/levels/1/submit`, {
       answers: low,
       remarks: 'Results added',
