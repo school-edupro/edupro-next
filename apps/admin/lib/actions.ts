@@ -854,22 +854,34 @@ export async function startImpersonation(fd: FormData) {
   redirect('/?ok=1');
 }
 
+/**
+ * End: the admin's own session (S5-02) is closed with their own token; the admin app opened as an employee
+ * (0188, view / act) closes itself the way the portals do (`portal-as/end` under the session's token, no
+ * impersonation right needed) and returns to the employee's page.
+ */
 export async function endImpersonation() {
   const session = await readSession();
   if (!session) redirect('/login');
   const imp = session.impersonation;
+  const portal = imp?.mode === 'view' || imp?.mode === 'act';
   if (imp) {
-    await apiFetch(
-      `/access/impersonation/${imp.sessionId}`,
-      { method: 'DELETE' },
-      { token: imp.originalAccessToken },
+    await (
+      portal
+        ? apiFetch('/access/portal-as/end', { method: 'POST' })
+        : apiFetch(
+            `/access/impersonation/${imp.sessionId}`,
+            { method: 'DELETE' },
+            { token: imp.originalAccessToken },
+          )
     ).catch(() => undefined);
     const { impersonation: _dropped, ...rest } = session;
     void _dropped;
     await writeSession({ ...rest, accessToken: imp.originalAccessToken });
   }
   revalidatePath('/');
-  redirect('/access/memberships?ok=1');
+  redirect(
+    portal ? `${imp!.returnTo ?? '/people/employees'}?ok=view_ended` : '/access/memberships?ok=1',
+  );
 }
 
 export async function openBreakGlass(fd: FormData) {

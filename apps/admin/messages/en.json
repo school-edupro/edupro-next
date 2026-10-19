@@ -962,7 +962,13 @@
     "end": "End impersonation",
     "actAs": "Act as",
     "reason": "Reason (shown in the audit log)",
-    "minutes": "Minutes"
+    "minutes": "Minutes",
+    "viewing": "Viewing as {name}",
+    "actingAs": "Acting as {name}",
+    "openedBy": "opened by {by} · until {until}",
+    "viewOnly": "view only: nothing can be sent or changed",
+    "noPayments": "payments, sign-in settings and sessions as others are not available",
+    "endView": "End"
   },
   "academics": {
     "code": "Code",

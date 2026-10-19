@@ -53,3 +53,28 @@ Opening the teacher app as a warden showed every tile, most greyed out, and "16 
 - Home: designation and roles (`/me/card`), **Today** figures for what the person does (hostel roll-calls,
   pupils away, to hand over, hostel and student leave to decide, answers to approve, gate passes waiting,
   new messages), then the screens by group. Notices and Calendar tiles (never built) are gone.
+
+## The admin app as an employee (19 Oct 2026, 0188)
+
+Asked for from `/people/employees`: "open the admin panel of this user" (port 3000), the way the teacher
+app is opened. Decision: view only or act, like the portals, with the same two rights, a reason and a time
+limit; administrators are never opened as.
+
+- **Where:** the employee's page has **Open as…** listing the **teacher app** and the **admin app** for
+  the employee (`GET access/portal-as/employee/:id` now returns both, `app: 'teacher' | 'admin'`); the
+  list's row menu has **Open an app as them…** (`?openAs=1` opens the dialog at once).
+- **No hand-off code for the admin app:** the opening happens in the admin app itself, and its session
+  cookie is shared by every tab, so `POST access/portal-as` with `app: 'admin'` returns the session
+  **token** directly (as `POST access/impersonation` always has) and the admin app swaps its own session
+  (`Session.impersonation` with `mode` and `returnTo`, the original token kept). The page reloads as them
+  in the same tab. `portal_handoffs` stays for the parent and teacher apps only.
+- **The bar:** the shell shows the portals' bar (`.ep-viewas`, bilingual): viewing or acting as whom,
+  opened by whom, until when, what is not available, **End**. End calls `POST access/portal-as/end`
+  under the session's token (no impersonation right or MFA needed, unlike the S5-02 session's DELETE),
+  restores the admin's token and returns to the employee's page. Sign out ends the session too.
+- **Refusals** (`impersonation-rules.ts`): view only refuses every change as before; acting additionally
+  refuses `access/impersonation`, `access/portal-as` (except `end`) and `access/break-glass`, so no session
+  as someone else is opened from inside one and emergency access stays personal.
+- **Never while opened as someone:** the Open as… button and the memberships' Act as are hidden
+  (`me.impersonation`); the API refuses nesting anyway.
+- **Test:** `portal-as.e2e-spec.ts` "the admin app as an employee (0188)".

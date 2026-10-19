@@ -136,13 +136,30 @@ export const StartImpersonationSchema = z.object({
 export class StartImpersonationDto extends createZodDto(StartImpersonationSchema) {}
 
 /** A portal opened as a student, parent or employee (0183). */
-export const PortalAsSchema = z.object({
-  personType: z.enum(['student', 'guardian', 'employee']),
-  id: IdSchema,
-  mode: z.enum(['view', 'act']).default('view'),
-  reason: z.string().trim().min(5, 'say in a few words why').max(500),
-  minutes: z.number().int().min(5).max(60).default(30),
-});
+export const PortalAsSchema = z
+  .object({
+    personType: z.enum(['student', 'guardian', 'employee']),
+    id: IdSchema,
+    /** which app: the parent portal for a student or parent; the teacher app (default) or the admin app for an employee */
+    app: z.enum(['parent', 'teacher', 'admin']).optional(),
+    mode: z.enum(['view', 'act']).default('view'),
+    reason: z.string().trim().min(5, 'say in a few words why').max(500),
+    minutes: z.number().int().min(5).max(60).default(30),
+  })
+  .superRefine((v, ctx) => {
+    if (v.app && v.personType === 'employee' && v.app === 'parent')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['app'],
+        message: 'an employee is opened in the teacher app or the admin app',
+      });
+    if (v.app && v.personType !== 'employee' && v.app !== 'parent')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['app'],
+        message: 'a student or parent is opened in the parent portal',
+      });
+  });
 export class PortalAsDto extends createZodDto(PortalAsSchema) {}
 
 export const PortalLoginSchema = z.object({

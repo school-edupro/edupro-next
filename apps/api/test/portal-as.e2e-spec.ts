@@ -1,7 +1,9 @@
 /**
  * Open a portal as someone (0183, docs/design/31-portal-view-as.md): who can be opened for a student or an
  * employee, making a login first, the one-time hand-off code, view only refusing changes, acting refusing
- * payments, push devices never, administrators never opened, and ending from the portal.
+ * payments, push devices never, administrators never opened, and ending from the portal. The admin app
+ * opened as an employee (0188): the token comes back directly, view only refuses office work, acting
+ * refuses sessions as others and break-glass.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -30,6 +32,7 @@ describe('portal opened as someone (e2e)', () => {
   let motherId = '';
   let teacherEmp = '';
   let adminEmp = '';
+  let acctEmp = '';
   const h = (u: SeededUser) => headersFor(u.sub, school.id);
   const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
   const codeOf = (url: string) => decodeURIComponent(url.split('code=')[1] ?? '');
@@ -45,12 +48,14 @@ describe('portal opened as someone (e2e)', () => {
       otherAdmin = await seedUser(c, school, `${s}-admin2`, 'school_admin');
       const e = await c.query<{ id: string }>(
         `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id, mobile)
-         VALUES ($1, 'T1', 'Tara', 'Teacher', $2, '9800000001'), ($1, 'A1', 'Asha', 'Admin', $3, '9800000002')
+         VALUES ($1, 'T1', 'Tara', 'Teacher', $2, '9800000001'), ($1, 'A1', 'Asha', 'Admin', $3, '9800000002'),
+                ($1, 'C1', 'Chitra', 'Counts', $4, '9800000003')
          RETURNING id::text`,
-        [school.id, teacher.id, otherAdmin.id],
+        [school.id, teacher.id, otherAdmin.id, accountant.id],
       );
       teacherEmp = e.rows[0]!.id;
       adminEmp = e.rows[1]!.id;
+      acctEmp = e.rows[2]!.id;
     });
     app = await createApp();
     inject = injector(app);
@@ -314,6 +319,120 @@ describe('portal opened as someone (e2e)', () => {
     });
     expect(leave.statusCode).toBe(400);
     await inject({ method: 'POST', url: '/access/portal-as/end', headers: bearer(token) });
+  });
+
+  it('the admin app as an employee (0188): the token comes back; view only refuses office work; acting refuses sessions as others; End', async () => {
+    const list = await inject({
+      method: 'GET',
+      url: `/access/portal-as/employee/${acctEmp}`,
+      headers: h(admin),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().targets.map((t: { app: string }) => t.app)).toEqual(['teacher', 'admin']);
+    expect(list.json().targets[1]).toMatchObject({ as: 'Employee', hasLogin: true, blocked: null });
+    // a student or parent is never opened in the admin app
+    const wrongApp = await inject({
+      method: 'POST',
+      url: '/access/portal-as',
+      headers: h(admin),
+      json: { personType: 'guardian', id: fatherId, app: 'admin', reason: 'Looking around' },
+    });
+    expect(wrongApp.statusCode).toBe(400);
+
+    const open = await inject({
+      method: 'POST',
+      url: '/access/portal-as',
+      headers: h(admin),
+      json: {
+        personType: 'employee',
+        id: acctEmp,
+        app: 'admin',
+        reason: 'Fee counter shows nothing',
+      },
+    });
+    expect(open.statusCode).toBe(201);
+    expect(open.json()).toMatchObject({
+      url: null,
+      app: 'admin',
+      sub: accountant.sub,
+      displayName: expect.any(String),
+      schoolId: school.id,
+    });
+    const token = open.json().token as string;
+    expect(token.startsWith('imp.')).toBe(true);
+    const me = await inject({ method: 'GET', url: '/me', headers: bearer(token) });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().impersonation).toMatchObject({
+      byUserId: admin.id,
+      mode: 'view',
+      app: 'admin',
+    });
+    expect(me.json().user.id).toBe(accountant.id);
+    // reading passes; office work is refused while viewing
+    const mine = await inject({
+      method: 'GET',
+      url: '/me/employee-profile',
+      headers: bearer(token),
+    });
+    expect(mine.statusCode).toBe(200);
+    const change = await inject({
+      method: 'POST',
+      url: '/me/employee-profile/changes',
+      headers: bearer(token),
+      json: { changes: { mobile: '9800000009' } },
+    });
+    expect(change.statusCode).toBe(403);
+    expect(change.json().type).toBe('impersonation-view-only');
+    const end = await inject({
+      method: 'POST',
+      url: '/access/portal-as/end',
+      headers: bearer(token),
+    });
+    expect(end.statusCode).toBe(200);
+    expect((await inject({ method: 'GET', url: '/me', headers: bearer(token) })).statusCode).toBe(
+      401,
+    );
+
+    // acting: their work passes the guard; sessions as others and break-glass do not
+    const act = await inject({
+      method: 'POST',
+      url: '/access/portal-as',
+      headers: h(admin),
+      json: {
+        personType: 'employee',
+        id: acctEmp,
+        app: 'admin',
+        mode: 'act',
+        reason: 'Do the fee entry with them',
+      },
+    });
+    expect(act.statusCode).toBe(201);
+    const actToken = act.json().token as string;
+    const work = await inject({
+      method: 'POST',
+      url: '/me/employee-profile/changes',
+      headers: bearer(actToken),
+      json: { changes: {} },
+    });
+    expect(work.statusCode).not.toBe(403);
+    for (const url of ['/access/portal-as', '/access/impersonation', '/access/break-glass']) {
+      const nested = await inject({ method: 'POST', url, headers: bearer(actToken), json: {} });
+      expect(nested.statusCode).toBe(403);
+      expect(nested.json().type).toBe('impersonation-restricted');
+    }
+    const session = await withMigrator((c) =>
+      c.query<{ mode: string; app: string; person_type: string }>(
+        `SELECT mode, app, person_type FROM impersonation_sessions WHERE id = $1`,
+        [act.json().session.id],
+      ),
+    );
+    expect(session.rows[0]).toEqual({ mode: 'act', app: 'admin', person_type: 'employee' });
+    const endAct = await inject({
+      method: 'POST',
+      url: '/access/portal-as/end',
+      headers: bearer(actToken),
+    });
+    expect(endAct.statusCode).toBe(200);
   });
 
   it('another administrator is never opened', async () => {

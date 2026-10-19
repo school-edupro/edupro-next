@@ -17,7 +17,8 @@ export interface PortalTarget {
   /** Student, Father, Mother, Guardian, Employee */
   as: string;
   name: string;
-  app: 'parent' | 'teacher';
+  /** the parent portal; for an employee the teacher app, or the admin app (0188) */
+  app: 'parent' | 'teacher' | 'admin';
   hasLogin: boolean;
   /** a login can be made (a parent or employee needs a mobile or an email) */
   canMakeLogin: boolean;
@@ -38,9 +39,10 @@ const contactOk = (email: string | null, mobile: string | null) =>
   Boolean(email?.trim()) || (mobile ?? '').replace(/\D/g, '').length >= 10;
 
 /**
- * Open the parent portal as a student or parent, or the teacher app as an employee
+ * Open the parent portal as a student or parent, or the teacher app or the admin app as an employee
  * (docs/design/31-portal-view-as.md): an impersonation session (view only, or acting except money) with a
- * reason and a time limit, carried into the other app by a one-time code.
+ * reason and a time limit, carried into the other app by a one-time code. The admin app is where the
+ * opening happens, so it is given the session token directly and swaps its own session (0188).
  */
 @Injectable()
 export class PortalAsService {
@@ -120,7 +122,7 @@ export class PortalAsService {
     });
   }
 
-  /** The employee, for the teacher app. */
+  /** The employee, for the teacher app and for the admin app (what they see when they sign in there). */
   async forEmployee(ctx: RequestContext, employeeId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{
@@ -137,21 +139,20 @@ export class PortalAsService {
       const e = r.rows[0];
       if (!e) throw new DomainError('not-found', 'Employee not found', { status: 404 });
       const admins = await this.adminOf(c, e.user_id ? [e.user_id] : []);
-      const targets: PortalTarget[] = [
-        {
-          personType: 'employee',
-          id: e.id,
-          as: 'Employee',
-          name: e.name,
-          app: 'teacher',
-          hasLogin: Boolean(e.user_id),
-          canMakeLogin: contactOk(e.email, e.mobile),
-          blocked:
-            e.user_id && (admins.has(e.user_id) || e.user_id === ctx.user.id)
-              ? 'An administrator; not opened'
-              : null,
-        },
-      ];
+      const one = (app: 'teacher' | 'admin'): PortalTarget => ({
+        personType: 'employee',
+        id: e.id,
+        as: 'Employee',
+        name: e.name,
+        app,
+        hasLogin: Boolean(e.user_id),
+        canMakeLogin: contactOk(e.email, e.mobile),
+        blocked:
+          e.user_id && (admins.has(e.user_id) || e.user_id === ctx.user.id)
+            ? 'An administrator; not opened'
+            : null,
+      });
+      const targets: PortalTarget[] = [one('teacher'), one('admin')];
       return { targets, modes: this.modes(ctx) };
     });
   }
@@ -199,7 +200,10 @@ export class PortalAsService {
     });
   }
 
-  /** Starts the session and gives the link that opens the portal (good for a minute, once). */
+  /**
+   * Starts the session and gives the link that opens the portal (good for a minute, once). For the admin
+   * app (an employee, 0188) there is no link: the token comes back and the admin app swaps its session.
+   */
   async open(ctx: RequestContext, dto: PortalAsDto) {
     const need = dto.mode === 'act' ? ACCESS.portalActAs : ACCESS.portalViewAs;
     if (!ctx.permissions?.has(need))
@@ -215,9 +219,11 @@ export class PortalAsService {
       const table = { student: 'students', guardian: 'guardians', employee: 'employees' }[
         dto.personType
       ];
-      const r = await c.query<{ user_id: string | null }>(
+      const r = await c.query<{ user_id: string | null; sub: string | null; name: string | null }>(
         // eslint-disable-next-line no-restricted-syntax -- the table is one of three fixed names
-        `SELECT user_id::text FROM ${table} WHERE id = $1 AND deleted_at IS NULL`,
+        `SELECT t.user_id::text, u.oneauth_sub AS sub, u.display_name AS name
+           FROM ${table} t LEFT JOIN users u ON u.id = t.user_id
+          WHERE t.id = $1 AND t.deleted_at IS NULL`,
         [dto.id],
       );
       if (!r.rows[0]) throw new DomainError('not-found', 'Not found', { status: 404 });
@@ -230,11 +236,12 @@ export class PortalAsService {
         throw new DomainError('portal.admin', 'An administrator is not opened as', {
           status: 409,
         });
-      return uid;
+      return { uid, sub: r.rows[0].sub ?? '', name: r.rows[0].name ?? '' };
     });
-    const app = dto.personType === 'employee' ? 'teacher' : 'parent';
-    const { session } = await this.impersonation.open(ctx, {
-      userId: target,
+    const app =
+      dto.personType === 'employee' ? (dto.app === 'admin' ? 'admin' : 'teacher') : 'parent';
+    const { session, token } = await this.impersonation.open(ctx, {
+      userId: target.uid,
       reason: dto.reason,
       minutes: dto.minutes,
       mode: dto.mode,
@@ -242,6 +249,17 @@ export class PortalAsService {
       personType: dto.personType,
       personRefId: dto.id,
     });
+    if (app === 'admin')
+      return {
+        url: null,
+        app,
+        token,
+        sub: target.sub,
+        displayName: target.name,
+        schoolId: tenant.schoolId,
+        expiresAt: session.expiresAt,
+        session,
+      };
     const code = randomBytes(32).toString('base64url');
     await this.db.tenant(tenant, (c) =>
       c.query(
@@ -253,6 +271,7 @@ export class PortalAsService {
     const base = app === 'teacher' ? this.env.TEACHER_APP_URL : this.env.PARENT_APP_URL;
     return {
       url: `${base}/api/auth/handoff?code=${encodeURIComponent(code)}`,
+      app,
       session,
     };
   }

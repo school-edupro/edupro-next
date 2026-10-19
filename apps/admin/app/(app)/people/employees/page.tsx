@@ -60,6 +60,7 @@ export default async function EmployeesPage({
           builder: can('reports.builder.use'),
           edit: can('people.employee.edit'),
           setup: can('people.employee.view'),
+          portal: can('access.portal.view_as'),
         }}
         reports={reports}
         actions={{

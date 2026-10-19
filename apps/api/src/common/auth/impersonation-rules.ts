@@ -2,7 +2,8 @@
  * What a portal opened as someone may do (0183, docs/design/31-portal-view-as.md). View only: reading,
  * plus downloads made on request (report cards, receipts, the profile printout), the assistant and
  * ending the session. Acting: everything the person may do except paying and their own sign-in.
- * Never, in any impersonation: registering this browser for the person's push messages.
+ * Never, in any impersonation: registering this browser for the person's push messages. Acting in the
+ * admin app as an employee also keeps sessions as someone else and break-glass out of reach.
  */
 const READ_POSTS = [/\/pdf$/, /\/print$/, /^\/insights\/assistant$/, /^\/access\/portal-as\/end$/];
 const NEVER = [/^\/comms\/push\/devices(\/|$)/];
@@ -10,6 +11,9 @@ const NOT_WHEN_ACTING = [
   /^\/payments(\/|$)/,
   /^\/fees\/.*\/pay(\/|$)/,
   /^\/me\/(email|mobile|password|sign-in|otp|devices|security)(\/|$)/,
+  // the admin app opened as an employee (0188): no sessions as someone else from inside one, no break-glass
+  /^\/access\/(impersonation|break-glass)(\/|$)/,
+  /^\/access\/portal-as(?!\/end(\/|$))(\/|$)/,
 ];
 
 export function impersonationRefusal(
@@ -33,7 +37,9 @@ export function impersonationRefusal(
   if (mode === 'act' && NOT_WHEN_ACTING.some((r) => r.test(path)))
     return {
       type: 'impersonation-restricted',
-      detail: 'Payments and sign-in settings are only for the person themselves',
+      detail: path.startsWith('/access/')
+        ? 'Not while opened as someone else: sessions as others and emergency access are only for yourself'
+        : 'Payments and sign-in settings are only for the person themselves',
     };
   return null;
 }

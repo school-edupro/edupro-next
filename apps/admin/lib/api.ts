@@ -69,6 +69,9 @@ export interface Me {
     byUserId: string;
     byDisplayName: string;
     expiresAt: string;
+    /** 'full' (S5-02) or, opened as an employee from their page (0188), 'view' / 'act' */
+    mode: 'full' | 'view' | 'act';
+    app: 'admin' | 'parent' | 'teacher';
   } | null;
   memberships: Array<{
     schoolId: string;

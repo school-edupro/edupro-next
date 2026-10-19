@@ -52,6 +52,7 @@ const TABS = [
 type Tab = (typeof TABS)[number][0];
 const OK: Record<string, string> = {
   saved: 'Saved.',
+  view_ended: 'The session as them has ended; you are yourself again.',
   removed: 'Removed.',
   login: 'The staff login is made: they sign in with a code sent to their mobile or email.',
   uploaded: 'The document is uploaded.',
@@ -87,6 +88,8 @@ export default async function EmployeePage({
     error?: string;
     detail?: string;
     export?: string;
+    /** 1: open the "Open an app as them" dialog at once (from the list's row menu, 0188) */
+    openAs?: string;
   }>;
 }) {
   const { id } = await params;
@@ -208,8 +211,14 @@ export default async function EmployeePage({
                 {p('students.requestIdCard')}
               </Button>
             </form>
-            {me.permissions.includes('access.portal.view_as') ? (
-              <OpenPortalAs kind="employee" id={employee.id} canMakeLogin={canEdit} />
+            {me.permissions.includes('access.portal.view_as') && !me.impersonation ? (
+              <OpenPortalAs
+                kind="employee"
+                id={employee.id}
+                canMakeLogin={canEdit}
+                autoOpen={sp.openAs === '1'}
+                returnTo={`/people/employees/${employee.id}`}
+              />
             ) : null}
           </div>
         }

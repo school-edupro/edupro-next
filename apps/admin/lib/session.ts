@@ -20,6 +20,10 @@ export interface Session {
     targetName: string;
     expiresAt: string;
     originalAccessToken: string;
+    /** 'full' (S5-02, the default when absent); 'view' / 'act': the admin app opened as an employee (0188) */
+    mode?: 'full' | 'view' | 'act';
+    /** where End returns to (the employee's page) */
+    returnTo?: string;
   };
 }
 

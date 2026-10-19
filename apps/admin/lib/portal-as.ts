@@ -1,5 +1,7 @@
 'use server';
+import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
+import { readSession, writeSession } from './session';
 
 /** One person a portal can be opened as (docs/design/31-portal-view-as.md). */
 export interface PortalTarget {
@@ -7,7 +9,8 @@ export interface PortalTarget {
   id: string;
   as: string;
   name: string;
-  app: 'parent' | 'teacher';
+  /** the parent portal; for an employee the teacher app, or this admin app (0188) */
+  app: 'parent' | 'teacher' | 'admin';
   hasLogin: boolean;
   canMakeLogin: boolean;
   blocked: string | null;
@@ -54,21 +57,52 @@ export async function portalMakeLogin(
   }
 }
 
-/** Starts the session; the link opens the portal (once, within a minute). */
+/**
+ * Starts the session. A portal: the link opens it in a new tab (once, within a minute). The admin app
+ * (an employee, 0188): this very session becomes theirs until End, which brings the admin back to
+ * `returnTo`; the caller reloads the page.
+ */
 export async function portalOpen(input: {
   personType: PortalTarget['personType'];
   id: string;
+  app?: PortalTarget['app'];
   mode: 'view' | 'act';
   reason: string;
   minutes: number;
-}): Promise<Out<{ url: string }>> {
+  returnTo?: string;
+}): Promise<Out<{ url: string; inPlace: boolean }>> {
   if (!idOk(input.id)) return { ok: false, error: 'Unknown person' };
+  const { returnTo, ...body } = input;
   try {
-    const r = await apiFetch<{ url: string }>('/access/portal-as', {
-      method: 'POST',
-      body: JSON.stringify(input),
+    const r = await apiFetch<{
+      url: string | null;
+      app: PortalTarget['app'];
+      token?: string;
+      sub?: string;
+      displayName?: string;
+      expiresAt?: string;
+      session: { id: string; targetName: string; expiresAt: string };
+    }>('/access/portal-as', { method: 'POST', body: JSON.stringify(body) });
+    if (r.app !== 'admin' && r.url) return { ok: true, data: { url: r.url, inPlace: false } };
+    const session = await readSession();
+    if (!session || !r.token) return { ok: false, error: 'Your session has ended; sign in again' };
+    await writeSession({
+      ...session,
+      accessToken: r.token,
+      impersonation: {
+        sessionId: r.session.id,
+        targetName: r.session.targetName,
+        expiresAt: r.session.expiresAt,
+        originalAccessToken: session.accessToken,
+        mode: input.mode,
+        returnTo:
+          returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')
+            ? returnTo
+            : '/people/employees',
+      },
     });
-    return { ok: true, data: { url: r.url } };
+    revalidatePath('/');
+    return { ok: true, data: { url: '/', inPlace: true } };
   } catch (e) {
     return fail(e);
   }

@@ -494,7 +494,33 @@ export async function Shell({
         </div>
       </header>
       <main className="ep-main">
-        {me.impersonation ? (
+        {me.impersonation && me.impersonation.mode !== 'full' ? (
+          // the admin app opened as an employee from their page (0188): the bar the portals show
+          <div className="ep-viewas" role="status" style={{ marginBottom: 'var(--sp-4)' }}>
+            <span>
+              <strong>
+                {banner(me.impersonation.mode === 'view' ? 'viewing' : 'actingAs', {
+                  name: me.user.displayName,
+                })}
+              </strong>
+              {' · '}
+              {banner('openedBy', {
+                by: me.impersonation.byDisplayName,
+                until: new Date(me.impersonation.expiresAt).toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              })}
+              {' · '}
+              {banner(me.impersonation.mode === 'view' ? 'viewOnly' : 'noPayments')}
+            </span>
+            <form action={endImpersonation}>
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                {banner('endView')}
+              </button>
+            </form>
+          </div>
+        ) : me.impersonation ? (
           <div
             className="ep-alert ep-alert--warning"
             role="status"

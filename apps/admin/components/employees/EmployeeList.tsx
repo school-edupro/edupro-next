@@ -105,6 +105,11 @@ const EMPLOYEES: PeopleListConfig<EmployeeListView, EmployeeListResult> = {
       <li>
         <a href={`/people/employees/${id}?tab=posting`}>Posting and documents</a>
       </li>
+      {can.portal ? (
+        <li>
+          <a href={`/people/employees/${id}?openAs=1`}>Open an app as them…</a>
+        </li>
+      ) : null}
     </>
   ),
   tools: (can) => (
@@ -133,7 +138,15 @@ export function EmployeeList(props: {
   fields: EmployeeListFields;
   initial: EmployeeListResult;
   initialView: EmployeeListView;
-  can: { create: boolean; importRun: boolean; builder: boolean; edit: boolean; setup: boolean };
+  can: {
+    create: boolean;
+    importRun: boolean;
+    builder: boolean;
+    edit: boolean;
+    setup: boolean;
+    /** may open the teacher app or the admin app as an employee (access.portal.view_as, 0188) */
+    portal: boolean;
+  };
   actions: {
     load: (q: EmployeeListQuery) => Promise<Result<EmployeeListResult>>;
     saveView: (v: EmployeeListView) => Promise<void>;
