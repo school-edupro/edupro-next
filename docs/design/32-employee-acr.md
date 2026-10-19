@@ -163,3 +163,8 @@ levels that rate, the last level setting the grade; sections carry weights and s
   a ticked level drops the questionnaire it had, a level that rates the questions cannot be left without
   one, and levels of the other staff group are refused unless the form is for all staff. The Approval
   levels tab's Questionnaire box is the same setting seen from the level's side.
+- **Open cycles follow the set-up until a step is filled (19 Oct 2026):** saving levels, a form or a
+  form's levels also gives every ACR of an open cycle the questionnaire its level has now, for levels not
+  yet filled (matched by number, label and action), and the self form its category has now for ACRs whose
+  self-appraisal has no answers yet. Filled steps keep the form they were answered on. Found when the HOD
+  still saw the old questionnaire on ACRs started before a new one was assigned.

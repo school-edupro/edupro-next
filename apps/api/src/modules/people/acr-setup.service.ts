@@ -366,14 +366,39 @@ export class AcrSetupService {
             l.formId ?? null,
           ],
         );
+      const followed = await this.refreshOpenAcrForms(c);
       await this.audit.stage(ctx, c, {
         action: 'people.acr.levels',
         entityType: 'acr_levels',
         entityId: dto.staffGroup,
-        after: dto,
+        after: { ...dto, followed },
       });
       return { ok: true };
     });
+  }
+
+  /**
+   * ACRs of open cycles follow the set-up until a step is filled: a level not yet filled takes the
+   * questionnaire its level has now; an ACR whose self-appraisal has not been started takes the self
+   * form its category has now. Filled steps keep the form they were answered on.
+   */
+  private async refreshOpenAcrForms(c: PoolClient) {
+    const lv = await c.query(
+      `UPDATE acr_reviews v SET form_id = l.form_id
+         FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id, acr_levels l
+        WHERE v.report_id = r.id AND cy.status = 'open' AND v.status <> 'done'
+          AND l.staff_group = r.staff_group AND l.seq = v.seq AND l.label = v.label AND l.action = v.action
+          AND v.form_id IS DISTINCT FROM l.form_id`,
+    );
+    const sf = await c.query(
+      `UPDATE acr_reports r SET self_form_id = (
+          SELECT f.id FROM acr_forms f
+           WHERE f.part = 'self' AND f.active AND f.staff_group IN (r.staff_group, 'both')
+           ORDER BY (f.staff_group = r.staff_group) DESC, f.sort_order, f.id LIMIT 1)
+         FROM acr_cycles cy
+        WHERE cy.id = r.cycle_id AND cy.status = 'open' AND r.status = 'self' AND r.self_answers = '{}'::jsonb`,
+    );
+    return { levels: lv.rowCount ?? 0, selfForms: sf.rowCount ?? 0 };
   }
 
   // ---- forms, sections and questions (0191) ------------------------------------------------------
@@ -408,6 +433,7 @@ export class AcrSetupService {
           id,
           dto.staffGroup,
         ]);
+        await this.refreshOpenAcrForms(c);
         await this.audit.stage(ctx, c, {
           action: 'people.acr.form.save',
           entityType: 'acr_forms',
@@ -420,6 +446,7 @@ export class AcrSetupService {
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6) RETURNING id::text`,
         [dto.name, dto.part, dto.staffGroup, dto.description ?? null, dto.active, dto.sortOrder],
       );
+      await this.refreshOpenAcrForms(c);
       await this.audit.stage(ctx, c, {
         action: 'people.acr.form.save',
         entityType: 'acr_forms',
@@ -476,13 +503,14 @@ export class AcrSetupService {
         );
         set += r.rowCount ?? 0;
       }
+      const followed = await this.refreshOpenAcrForms(c);
       await this.audit.stage(ctx, c, {
         action: 'people.acr.form.levels',
         entityType: 'acr_forms',
         entityId: id,
-        after: { levels: dto.levels, set },
+        after: { levels: dto.levels, set, followed },
       });
-      return { set };
+      return { set, followed };
     });
   }
 

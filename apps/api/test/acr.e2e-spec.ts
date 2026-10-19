@@ -420,6 +420,45 @@ describe('employee ACR flow (e2e)', () => {
     expect(clerkMine.json().data[0].staffGroup).toBe('non_teaching');
   });
 
+  it('ACRs of an open cycle follow the set-up until a step is filled: a level not yet filled takes the questionnaire its level has now', async () => {
+    const before = (await call(admin, 'GET', '/people/acr/setup')).json();
+    const chain = before.levels.teaching as Array<{
+      seq: number;
+      label: string;
+      kind: string;
+      roleCode: string | null;
+      designation: string | null;
+      employeeId: string | null;
+      action: 'rate' | 'review';
+      formId: string | null;
+    }>;
+    const copy = await call(
+      admin,
+      'POST',
+      `/people/acr/setup/forms/${chain[0]!.formId as string}/copy`,
+      {
+        name: 'HOD · Teaching (new)',
+      },
+    );
+    expect(copy.statusCode).toBe(201);
+    const put = await call(admin, 'PUT', '/people/acr/setup/levels', {
+      staffGroup: 'teaching',
+      levels: chain.map((l) => ({
+        label: l.label,
+        kind: l.kind,
+        roleCode: l.roleCode,
+        designation: l.designation,
+        employeeId: l.employeeId,
+        action: l.action,
+        formId: l.seq === 1 ? copy.json().id : l.formId,
+      })),
+    });
+    expect(put.statusCode).toBe(200);
+    const v = (await call(admin, 'GET', `/people/acr/reports/${reportId}`)).json();
+    expect(v.levels[0].formId).toBe(copy.json().id);
+    expect(v.forms[copy.json().id].name).toBe('HOD · Teaching (new)');
+  });
+
   it('the self-appraisal: only the employee, inside the window, every required answer', async () => {
     const v = (await call(teacher, 'GET', `/people/acr/reports/${reportId}`)).json();
     expect(v.can.self).toBe(true);
