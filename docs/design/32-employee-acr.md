@@ -201,4 +201,14 @@ employee)` picks the most specific active form: for their side naming their type
   the list and the form header say the types and how many active employees the form serves now. The
   ACR board gets a **Form** column. API: `employeeTypeIds` on `POST/PUT setup/forms`; absent on PUT
   leaves them; unknown ids are refused (`acr.employee_type`); a copy carries them.
-- Test: `acr.e2e-spec.ts` "a self-appraisal form per employee type (0192)".
+- **At run time the user side follows every change at once** (no Re-read needed): a set-up save
+  (levels, forms, a form's levels) runs `AcrFlowService.refreshOpenCycles`; a record save (the
+  employee's profile, the Assessors tab, a transfer) runs `refreshEmployees` for that employee. For an
+  ACR **not yet submitted** the record decides the side again (`app.acr_staff_group`: department,
+  employee type, classes this year), the chain is rebuilt when the levels changed shape, and the self
+  form is the one the set-up gives now (a draft keeps the answers to questions still on it). For every
+  ACR the levels not yet done take the people the records give and the questionnaire their level has
+  now; filled steps keep what they were answered on. The sheet reads sections and questions live, so a
+  question added or switched off shows at once.
+- Test: `acr.e2e-spec.ts` "a self-appraisal form per employee type (0192)" and "open ACRs follow the
+  record and the set-up at once".

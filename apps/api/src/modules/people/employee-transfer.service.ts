@@ -14,6 +14,7 @@ import {
 } from '@edupro/db';
 import { LocalStorage } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
+import { AcrFlowService } from './acr-flow.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -108,6 +109,7 @@ export class EmployeeTransferService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
+    private readonly acr: AcrFlowService,
   ) {}
 
   private async userName(c: PoolClient) {
@@ -120,7 +122,7 @@ export class EmployeeTransferService {
   // ---- within the school ------------------------------------------------------------------------
   /** Moves an employee to another campus (and, if given, department / designation) from a date. */
   async campusMove(ctx: RequestContext, id: string, dto: EmployeeCampusMoveDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
+    const out = await this.db.tenant(requireTenant(ctx), async (c) => {
       const e = await c.query<{
         department: string | null;
         designation: string | null;
@@ -197,6 +199,9 @@ export class EmployeeTransferService {
       });
       return { ok: true };
     });
+    // a new department can change the ACR side: the open cycle's ACR follows at once (0192)
+    await this.acr.refreshEmployees(ctx, [id]);
+    return out;
   }
 
   // ---- to another school of the group -----------------------------------------------------------

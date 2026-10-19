@@ -915,4 +915,59 @@ describe('employee ACR flow (e2e)', () => {
     });
     expect(await omView()).toBe(all.json().id);
   });
+  it('open ACRs follow the record and the set-up at once: an employee type moves Hema’s ACR to the other side with its chain and form; a level added shows on her ACR without Re-read', async () => {
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO employee_types (school_id, code, name, staff_group, sort_order)
+         VALUES ($1, 'non_teaching_regular', 'Non-Teaching Regular', 'non_teaching', 30)
+         ON CONFLICT DO NOTHING`,
+        [school.id],
+      ),
+    );
+    const list = (await call(admin, 'GET', '/people/acr/setup/assessors')).json();
+    const hemaId = list.rows.find((r: { code: string }) => r.code === 'H1').id as string;
+    const rec = await call(admin, 'PUT', `/people/staff/${hemaId}/profile`, {
+      changes: { staff_type: 'Non-Teaching Regular' },
+    });
+    expect(rec.statusCode).toBe(200);
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const hema = board.rows.find((r: { employee: { code: string } }) => r.employee.code === 'H1');
+    expect(hema.staffGroup).toBe('non_teaching');
+    expect(hema.form).toBe('Self-appraisal · Non-teaching');
+    const labels = async () =>
+      (
+        (await call(admin, 'GET', `/people/acr/reports/${hema.id as string}`)).json()
+          .levels as Array<{
+          label: string;
+        }>
+      ).map((l) => l.label);
+    expect(await labels()).toEqual(['HOD', 'Principal']);
+    // a level added to the non-teaching chain is on her ACR at once
+    const nt = (await call(admin, 'GET', '/people/acr/setup')).json().levels.non_teaching as Array<{
+      label: string;
+      kind: string;
+      roleCode: string | null;
+      designation: string | null;
+      employeeId: string | null;
+      action: string;
+      formId: string | null;
+    }>;
+    const put = await call(admin, 'PUT', '/people/acr/setup/levels', {
+      staffGroup: 'non_teaching',
+      levels: [
+        ...nt.map((l) => ({
+          label: l.label,
+          kind: l.kind,
+          roleCode: l.roleCode,
+          designation: l.designation,
+          employeeId: l.employeeId,
+          action: l.action,
+          formId: l.formId,
+        })),
+        { label: 'Trustee', kind: 'designation', designation: 'Trustee', action: 'review' },
+      ],
+    });
+    expect(put.statusCode).toBe(200);
+    expect(await labels()).toEqual(['HOD', 'Principal', 'Trustee']);
+  });
 });

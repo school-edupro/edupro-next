@@ -424,8 +424,9 @@ export class AcrSetupService {
 
   /**
    * ACRs of open cycles follow the set-up until a step is filled: a level not yet filled takes the
-   * questionnaire its level has now; an ACR whose self-appraisal has not been started takes the self
-   * form its category has now. Filled steps keep the form they were answered on.
+   * questionnaire its level has now; an ACR whose self-appraisal is not yet submitted takes the self
+   * form its category and employee type have now (a draft keeps the answers to questions still on it).
+   * Filled steps keep the form they were answered on.
    */
   private async refreshOpenAcrForms(c: PoolClient) {
     const lv = await c.query(
@@ -438,7 +439,7 @@ export class AcrSetupService {
     const sf = await c.query(
       `UPDATE acr_reports r SET self_form_id = app.acr_self_form(r.staff_group, r.employee_id)
          FROM acr_cycles cy
-        WHERE cy.id = r.cycle_id AND cy.status = 'open' AND r.status = 'self' AND r.self_answers = '{}'::jsonb
+        WHERE cy.id = r.cycle_id AND cy.status = 'open' AND r.status = 'self'
           AND r.self_form_id IS DISTINCT FROM app.acr_self_form(r.staff_group, r.employee_id)`,
     );
     return { levels: lv.rowCount ?? 0, selfForms: sf.rowCount ?? 0 };

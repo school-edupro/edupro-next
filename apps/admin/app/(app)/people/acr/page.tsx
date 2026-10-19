@@ -201,9 +201,10 @@ export default async function AcrBoardPage({
                       title="Read the assessors again?"
                       confirmLabel="Re-read"
                     >
-                      Levels not yet done take the people the set-up and the employee records give
-                      now (ACR set-up → Assessors). A level the office filled by hand keeps them
-                      when the record gives nobody.
+                      Usually not needed: ACRs follow the set-up and the records as they are saved.
+                      After a bulk import or a change made outside these screens, levels not yet
+                      done take the people the records give now; a level the office filled by hand
+                      keeps them when the record gives nobody.
                     </ConfirmAction>
                   ) : null}
                   {cycle.status === 'open' ? (

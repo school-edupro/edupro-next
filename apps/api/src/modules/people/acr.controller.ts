@@ -76,15 +76,18 @@ export class AcrController {
   async saveAssessors(@ReqCtx() ctx: RequestContext, @Body() body: AcrAssessorsSaveDto) {
     const saved = await this.setup.saveAssessors(ctx, body);
     // the ACRs of the open cycles follow the records at once (levels not yet done)
-    const openAcrs = await this.flow.refreshAssessors(ctx, saved.employeeIds);
+    const openAcrs = await this.flow.refreshEmployees(ctx, saved.employeeIds);
     return { changed: saved.changed, errors: saved.errors, openAcrs };
   }
 
   @Put('setup/levels')
   @ApiOperation({ summary: 'The levels of teaching or non-teaching ACRs, in order' })
   @RequirePermission(PEOPLE.acrManage)
-  levels(@ReqCtx() ctx: RequestContext, @Body() body: AcrLevelsDto) {
-    return this.setup.saveLevels(ctx, body);
+  async levels(@ReqCtx() ctx: RequestContext, @Body() body: AcrLevelsDto) {
+    const out = await this.setup.saveLevels(ctx, body);
+    // the ACRs of the open cycles follow the set-up at once (chains still at the self-appraisal)
+    await this.flow.refreshOpenCycles(ctx);
+    return out;
   }
 
   @Post('setup/forms')
@@ -92,26 +95,32 @@ export class AcrController {
     summary: 'Add a form: a self-appraisal of a staff category, or a level’s questionnaire',
   })
   @RequirePermission(PEOPLE.acrManage)
-  addForm(@ReqCtx() ctx: RequestContext, @Body() body: AcrFormDto) {
-    return this.setup.saveForm(ctx, null, body);
+  async addForm(@ReqCtx() ctx: RequestContext, @Body() body: AcrFormDto) {
+    const out = await this.setup.saveForm(ctx, null, body);
+    await this.flow.refreshOpenCycles(ctx);
+    return out;
   }
 
   @Put('setup/forms/:id')
   @ApiOperation({ summary: 'Change a form (name, who it is for, on or off)' })
   @RequirePermission(PEOPLE.acrManage)
-  editForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrFormDto) {
-    return this.setup.saveForm(ctx, id, body);
+  async editForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrFormDto) {
+    const out = await this.setup.saveForm(ctx, id, body);
+    await this.flow.refreshOpenCycles(ctx);
+    return out;
   }
 
   @Put('setup/forms/:id/levels')
   @ApiOperation({ summary: 'Which approval levels answer this questionnaire (set from the form)' })
   @RequirePermission(PEOPLE.acrManage)
-  formLevels(
+  async formLevels(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
     @Body() body: AcrFormLevelsDto,
   ) {
-    return this.setup.setFormLevels(ctx, id, body);
+    const out = await this.setup.setFormLevels(ctx, id, body);
+    await this.flow.refreshOpenCycles(ctx);
+    return out;
   }
 
   @Post('setup/forms/:id/copy')

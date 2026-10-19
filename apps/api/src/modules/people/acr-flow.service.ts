@@ -109,6 +109,9 @@ const REVIEW_COLS = `SELECT id::text, seq, label, action, reviewer_ids::text[] A
 const REVIEWS = `${REVIEW_COLS} WHERE report_id = $1 ORDER BY seq`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
 const REVIEW_ONE = `${REVIEW_COLS} WHERE report_id = $1 AND seq = $2`;
+/** The ACRs not yet with the employee, with the record their levels read and the cycle's year. */
+const OPEN_REPORTS = `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, e.profile, cy.academic_year_id::text
+   FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id JOIN employees e ON e.id = r.employee_id`;
 
 const pct = (n: number) => Math.round(n * 100) / 100;
 
@@ -131,6 +134,7 @@ interface OpenReport {
   staff_group: Group;
   status: string;
   profile: Record<string, unknown>;
+  academic_year_id: string;
 }
 
 /**
@@ -603,9 +607,8 @@ export class AcrFlowService {
         });
       const levels = await this.levelRows(c);
       const reports = await c.query<OpenReport>(
-        `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, e.profile
-           FROM acr_reports r JOIN employees e ON e.id = r.employee_id
-          WHERE r.cycle_id = $1 AND r.status IN ('self', 'review')`,
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
+        `${OPEN_REPORTS} WHERE r.cycle_id = $1 AND r.status IN ('self', 'review')`,
         [cycleId],
       );
       let changed = 0;
@@ -623,25 +626,40 @@ export class AcrFlowService {
   }
 
   /**
-   * The records changed (the Assessors tab, an employee's Approvers section): the ACRs of the open
-   * cycles follow at once for the levels not yet done, as Re-read assessors does for a whole cycle.
+   * The records changed (the Assessors tab, an employee's record): the ACRs of the open cycles follow
+   * at once for these employees, as Re-read assessors does for a whole cycle: the people of the levels
+   * not yet done; the side, the chain and the self form until the self-appraisal is submitted.
    * Nothing to do when no cycle is open or none of these employees has an ACR under way.
    */
-  async refreshAssessors(ctx: RequestContext, employeeIds: string[]) {
+  async refreshEmployees(ctx: RequestContext, employeeIds: string[]) {
     if (!employeeIds.length) return { reports: 0, changed: 0 };
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const reports = await c.query<OpenReport>(
-        `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, e.profile
-           FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id JOIN employees e ON e.id = r.employee_id
-          WHERE cy.status = 'open' AND r.status IN ('self', 'review') AND r.employee_id = ANY($1::bigint[])`,
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
+        `${OPEN_REPORTS} WHERE cy.status = 'open' AND r.status IN ('self', 'review') AND r.employee_id = ANY($1::bigint[])`,
         [employeeIds],
       );
-      if (!reports.rows.length) return { reports: 0, changed: 0 };
-      const levels = await this.levelRows(c);
-      let changed = 0;
-      for (const rep of reports.rows) changed += await this.refreshReport(c, ctx, rep, levels, []);
-      return { reports: reports.rows.length, changed };
+      return this.refreshAll(c, ctx, reports.rows);
     });
+  }
+
+  /** The set-up changed (levels, forms): every ACR of the open cycles follows at once. */
+  async refreshOpenCycles(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const reports = await c.query<OpenReport>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragments
+        `${OPEN_REPORTS} WHERE cy.status = 'open' AND r.status IN ('self', 'review')`,
+      );
+      return this.refreshAll(c, ctx, reports.rows);
+    });
+  }
+
+  private async refreshAll(c: PoolClient, ctx: RequestContext, reports: OpenReport[]) {
+    if (!reports.length) return { reports: 0, changed: 0 };
+    const levels = await this.levelRows(c);
+    let changed = 0;
+    for (const rep of reports) changed += await this.refreshReport(c, ctx, rep, levels, []);
+    return { reports: reports.length, changed };
   }
 
   private async levelRows(c: PoolClient) {
@@ -653,22 +671,46 @@ export class AcrFlowService {
   }
 
   /**
-   * One ACR follows the set-up and the record again: at the self-appraisal the chain itself is rebuilt
-   * when the levels changed shape (added, removed, another questionnaire); otherwise each level not yet
+   * One ACR follows the set-up and the record again. Until the self-appraisal is submitted the record
+   * decides the side (department, employee type, classes this year), the chain is rebuilt when the
+   * levels changed shape (added, removed, another questionnaire) and the self form is the one the
+   * set-up gives now (0192; a draft keeps the answers to questions still on it). Each level not yet
    * done takes the people the record gives now, keeping those the office set by hand when the record
-   * gives nobody. Skips are recomputed. Returns how many levels changed.
+   * gives nobody. Skips are recomputed. Returns how many levels or forms changed.
    */
   private async refreshReport(
     c: PoolClient,
     ctx: RequestContext,
-    rep: OpenReport,
+    report: OpenReport,
     levels: LevelRow[],
     unassigned: Array<{ employeeId: string; level: string }>,
   ) {
-    const chain = levels.filter((x) => x.staff_group === rep.staff_group);
+    let rep = report;
     const employee = { id: rep.employee_id, profile: rep.profile };
     let changed = 0;
     if (rep.status === 'self') {
+      const side = (
+        await c.query<{ g: Group }>(`SELECT app.acr_staff_group($1, $2) AS g`, [
+          rep.employee_id,
+          rep.academic_year_id,
+        ])
+      ).rows[0]!.g;
+      if (side !== rep.staff_group) {
+        await c.query(`UPDATE acr_reports SET staff_group = $2, updated_at = now() WHERE id = $1`, [
+          rep.id,
+          side,
+        ]);
+        rep = { ...rep, staff_group: side };
+        changed++;
+      }
+    }
+    const chain = levels.filter((x) => x.staff_group === rep.staff_group);
+    if (rep.status === 'self') {
+      const sf = await c.query(
+        `UPDATE acr_reports SET self_form_id = $2::bigint WHERE id = $1 AND self_form_id IS DISTINCT FROM $2::bigint`,
+        [rep.id, await this.selfFormId(c, rep.staff_group, rep.employee_id)],
+      );
+      changed += sf.rowCount ?? 0;
       const have = (await c.query<ReviewRow>(REVIEWS, [rep.id])).rows;
       const sameShape =
         have.length === chain.length &&
@@ -689,12 +731,8 @@ export class AcrFlowService {
           );
           if (!people.length) unassigned.push({ employeeId: rep.employee_id, level: l.label });
         }
-        await c.query(`UPDATE acr_reports SET self_form_id = $2 WHERE id = $1`, [
-          rep.id,
-          await this.selfFormId(c, rep.staff_group, rep.employee_id),
-        ]);
         await this.applySkips(c, ctx, rep.id);
-        return chain.length;
+        return changed + chain.length;
       }
     }
     for (const l of chain) {
