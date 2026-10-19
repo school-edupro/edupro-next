@@ -314,13 +314,20 @@ export async function acrRepresent(id: string, text: string) {
 export async function saveAcrAssessors(
   rows: Array<{ employee: string; assessors: Record<string, string | null> }>,
 ): Promise<
-  | { ok: true; changed: number; errors: Array<{ employee: string; message: string }> }
+  | {
+      ok: true;
+      changed: number;
+      errors: Array<{ employee: string; message: string }>;
+      /** the ACRs of the open cycles that followed the records at once */
+      openAcrs: { reports: number; changed: number };
+    }
   | { ok: false; error: string }
 > {
   try {
     const r = await apiFetch<{
       changed: number;
       errors: Array<{ employee: string; message: string }>;
+      openAcrs: { reports: number; changed: number };
     }>('/people/acr/setup/assessors', { method: 'PUT', body: JSON.stringify({ rows }) });
     revalidatePath(SETUP);
     return { ok: true, ...r };

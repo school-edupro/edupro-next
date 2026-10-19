@@ -109,6 +109,10 @@ export function AcrAssessorsEditor({
       setMsg({
         tone: r.errors.length ? 'info' : 'success',
         text: `${String(r.changed)} employees updated.${
+          r.openAcrs.reports
+            ? ` ${String(r.openAcrs.reports)} open ACRs now show these assessors.`
+            : ''
+        }${
           r.errors.length
             ? ` Not taken: ${r.errors.map((e) => `${e.employee} (${e.message})`).join('; ')}`
             : ''

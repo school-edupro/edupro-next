@@ -73,8 +73,11 @@ export class AcrController {
   @Put('setup/assessors')
   @ApiOperation({ summary: 'Assign assessors on the employees’ records (by id or employee code)' })
   @RequirePermission(PEOPLE.acrManage)
-  saveAssessors(@ReqCtx() ctx: RequestContext, @Body() body: AcrAssessorsSaveDto) {
-    return this.setup.saveAssessors(ctx, body);
+  async saveAssessors(@ReqCtx() ctx: RequestContext, @Body() body: AcrAssessorsSaveDto) {
+    const saved = await this.setup.saveAssessors(ctx, body);
+    // the ACRs of the open cycles follow the records at once (levels not yet done)
+    const openAcrs = await this.flow.refreshAssessors(ctx, saved.employeeIds);
+    return { changed: saved.changed, errors: saved.errors, openAcrs };
   }
 
   @Put('setup/levels')

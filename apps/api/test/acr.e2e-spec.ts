@@ -752,10 +752,8 @@ describe('employee ACR flow (e2e)', () => {
     expect(
       (await call(teacher, 'PUT', '/people/acr/setup/assessors', { rows: [] })).statusCode,
     ).toBe(403);
-    // the open cycle re-reads the records: the clerk's HOD level now has Om
-    const rr = await call(admin, 'POST', `/people/acr/cycles/${cycleId}/reresolve`);
-    expect(rr.statusCode).toBe(201);
-    expect(rr.json().changed).toBeGreaterThanOrEqual(1);
+    // the clerk's open ACR followed the record at once: the HOD level now has Om, nothing to re-read
+    expect(save.json().openAcrs).toEqual({ reports: 1, changed: 1 });
     const board = (await call(admin, 'GET', '/people/acr/board')).json();
     const clerkAcr = board.rows.find(
       (r: { employee: { code: string } }) => r.employee.code === 'C1',
@@ -763,6 +761,18 @@ describe('employee ACR flow (e2e)', () => {
     const pv = (await call(admin, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
     expect(pv.levels[0].people.map((p: { name: string }) => p.name)).toEqual(['Om']);
     expect(pv.levels[1].people.map((p: { name: string }) => p.name)).toEqual(['Prem']);
+    const rr = await call(admin, 'POST', `/people/acr/cycles/${cycleId}/reresolve`);
+    expect(rr.statusCode).toBe(201);
+    expect(rr.json().changed).toBe(0);
+    // the Approvers section of the record does the same: the HOD set there is on the ACR at once
+    const clerkId = list.rows.find((r: { code: string }) => r.code === 'C1').id as string;
+    const hemaId = list.rows.find((r: { code: string }) => r.code === 'H1').id as string;
+    const rec = await call(admin, 'PUT', `/people/staff/${clerkId}/profile`, {
+      changes: { acr_hod: hemaId },
+    });
+    expect(rec.statusCode).toBe(200);
+    const pv2 = (await call(admin, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
+    expect(pv2.levels[0].people.map((p: { name: string }) => p.name)).toEqual(['Hema']);
   });
 
   it('a person on two levels in a row assesses once (0190): the second level is skipped and the ACR goes on', async () => {

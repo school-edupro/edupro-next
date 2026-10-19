@@ -112,6 +112,27 @@ const REVIEW_ONE = `${REVIEW_COLS} WHERE report_id = $1 AND seq = $2`;
 
 const pct = (n: number) => Math.round(n * 100) / 100;
 
+/** A level of the set-up as the chain of one staff group reads it. */
+interface LevelRow {
+  staff_group: Group;
+  seq: number;
+  label: string;
+  kind: string;
+  role_code: string | null;
+  designation: string | null;
+  employee_id: string | null;
+  action: 'rate' | 'review';
+  form_id: string | null;
+}
+/** An ACR of an open cycle not yet with the employee, with the record its levels read. */
+interface OpenReport {
+  id: string;
+  employee_id: string;
+  staff_group: Group;
+  status: string;
+  profile: Record<string, unknown>;
+}
+
 /**
  * The ACR flow (docs/design/32-employee-acr.md, part 2): a cycle starts an ACR for every active employee with
  * the people of each level; the employee fills the self-appraisal inside the window; each level in turn
@@ -576,26 +597,8 @@ export class AcrFlowService {
         throw new DomainError('acr.cycle_not_open', 'Only an open cycle is re-read', {
           status: 409,
         });
-      const levels = await c.query<{
-        staff_group: Group;
-        seq: number;
-        label: string;
-        kind: string;
-        role_code: string | null;
-        designation: string | null;
-        employee_id: string | null;
-        action: 'rate' | 'review';
-        form_id: string | null;
-      }>(
-        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action, form_id::text FROM acr_levels ORDER BY staff_group, seq`,
-      );
-      const reports = await c.query<{
-        id: string;
-        employee_id: string;
-        staff_group: Group;
-        status: string;
-        profile: Record<string, unknown>;
-      }>(
+      const levels = await this.levelRows(c);
+      const reports = await c.query<OpenReport>(
         `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, e.profile
            FROM acr_reports r JOIN employees e ON e.id = r.employee_id
           WHERE r.cycle_id = $1 AND r.status IN ('self', 'review')`,
@@ -603,62 +606,8 @@ export class AcrFlowService {
       );
       let changed = 0;
       const unassigned: Array<{ employeeId: string; level: string }> = [];
-      for (const rep of reports.rows) {
-        const chain = levels.rows.filter((x) => x.staff_group === rep.staff_group);
-        if (rep.status === 'self') {
-          // nothing filled yet: the chain itself follows the set-up (levels added or removed since the start)
-          const have = (await c.query<ReviewRow>(REVIEWS, [rep.id])).rows;
-          const sameShape =
-            have.length === chain.length &&
-            have.every(
-              (v, i) =>
-                v.label === chain[i]!.label &&
-                v.action === chain[i]!.action &&
-                (v.form_id ?? null) === (chain[i]!.form_id ?? null),
-            );
-          if (!sameShape) {
-            await c.query('DELETE FROM acr_reviews WHERE report_id = $1', [rep.id]);
-            for (const l of chain) {
-              const people = await this.resolve(c, l, {
-                id: rep.employee_id,
-                profile: rep.profile,
-              });
-              await c.query(
-                `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids, form_id)
-                 VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[], $6)`,
-                [rep.id, l.seq, l.label, l.action, people, l.form_id],
-              );
-              await c.query(`UPDATE acr_reports SET self_form_id = $2 WHERE id = $1`, [
-                rep.id,
-                await this.selfFormId(c, rep.staff_group),
-              ]);
-              if (!people.length) unassigned.push({ employeeId: rep.employee_id, level: l.label });
-            }
-            changed += chain.length;
-            await this.applySkips(c, ctx, rep.id);
-            continue;
-          }
-        }
-        for (const l of chain) {
-          const people = await this.resolve(c, l, { id: rep.employee_id, profile: rep.profile });
-          if (!people.length) {
-            const now = await c.query<{ n: number }>(
-              `SELECT cardinality(reviewer_ids) AS n FROM acr_reviews WHERE report_id = $1 AND seq = $2`,
-              [rep.id, l.seq],
-            );
-            if (!(now.rows[0]?.n ?? 0))
-              unassigned.push({ employeeId: rep.employee_id, level: l.label });
-            continue;
-          }
-          const upd = await c.query(
-            `UPDATE acr_reviews SET reviewer_ids = $3::bigint[]
-              WHERE report_id = $1 AND seq = $2 AND status <> 'done' AND reviewer_ids IS DISTINCT FROM $3::bigint[]`,
-            [rep.id, l.seq, people],
-          );
-          changed += upd.rowCount ?? 0;
-        }
-        await this.applySkips(c, ctx, rep.id);
-      }
+      for (const rep of reports.rows)
+        changed += await this.refreshReport(c, ctx, rep, levels, unassigned);
       await this.audit.stage(ctx, c, {
         action: 'people.acr.cycle.reresolve',
         entityType: 'acr_cycles',
@@ -667,6 +616,103 @@ export class AcrFlowService {
       });
       return { changed, unassigned };
     });
+  }
+
+  /**
+   * The records changed (the Assessors tab, an employee's Approvers section): the ACRs of the open
+   * cycles follow at once for the levels not yet done, as Re-read assessors does for a whole cycle.
+   * Nothing to do when no cycle is open or none of these employees has an ACR under way.
+   */
+  async refreshAssessors(ctx: RequestContext, employeeIds: string[]) {
+    if (!employeeIds.length) return { reports: 0, changed: 0 };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const reports = await c.query<OpenReport>(
+        `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, e.profile
+           FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id JOIN employees e ON e.id = r.employee_id
+          WHERE cy.status = 'open' AND r.status IN ('self', 'review') AND r.employee_id = ANY($1::bigint[])`,
+        [employeeIds],
+      );
+      if (!reports.rows.length) return { reports: 0, changed: 0 };
+      const levels = await this.levelRows(c);
+      let changed = 0;
+      for (const rep of reports.rows) changed += await this.refreshReport(c, ctx, rep, levels, []);
+      return { reports: reports.rows.length, changed };
+    });
+  }
+
+  private async levelRows(c: PoolClient) {
+    return (
+      await c.query<LevelRow>(
+        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action, form_id::text FROM acr_levels ORDER BY staff_group, seq`,
+      )
+    ).rows;
+  }
+
+  /**
+   * One ACR follows the set-up and the record again: at the self-appraisal the chain itself is rebuilt
+   * when the levels changed shape (added, removed, another questionnaire); otherwise each level not yet
+   * done takes the people the record gives now, keeping those the office set by hand when the record
+   * gives nobody. Skips are recomputed. Returns how many levels changed.
+   */
+  private async refreshReport(
+    c: PoolClient,
+    ctx: RequestContext,
+    rep: OpenReport,
+    levels: LevelRow[],
+    unassigned: Array<{ employeeId: string; level: string }>,
+  ) {
+    const chain = levels.filter((x) => x.staff_group === rep.staff_group);
+    const employee = { id: rep.employee_id, profile: rep.profile };
+    let changed = 0;
+    if (rep.status === 'self') {
+      const have = (await c.query<ReviewRow>(REVIEWS, [rep.id])).rows;
+      const sameShape =
+        have.length === chain.length &&
+        have.every(
+          (v, i) =>
+            v.label === chain[i]!.label &&
+            v.action === chain[i]!.action &&
+            (v.form_id ?? null) === (chain[i]!.form_id ?? null),
+        );
+      if (!sameShape) {
+        await c.query('DELETE FROM acr_reviews WHERE report_id = $1', [rep.id]);
+        for (const l of chain) {
+          const people = await this.resolve(c, l, employee);
+          await c.query(
+            `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids, form_id)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[], $6)`,
+            [rep.id, l.seq, l.label, l.action, people, l.form_id],
+          );
+          if (!people.length) unassigned.push({ employeeId: rep.employee_id, level: l.label });
+        }
+        await c.query(`UPDATE acr_reports SET self_form_id = $2 WHERE id = $1`, [
+          rep.id,
+          await this.selfFormId(c, rep.staff_group),
+        ]);
+        await this.applySkips(c, ctx, rep.id);
+        return chain.length;
+      }
+    }
+    for (const l of chain) {
+      const people = await this.resolve(c, l, employee);
+      if (!people.length) {
+        const now = await c.query<{ n: number }>(
+          `SELECT cardinality(reviewer_ids) AS n FROM acr_reviews WHERE report_id = $1 AND seq = $2`,
+          [rep.id, l.seq],
+        );
+        if (!(now.rows[0]?.n ?? 0))
+          unassigned.push({ employeeId: rep.employee_id, level: l.label });
+        continue;
+      }
+      const upd = await c.query(
+        `UPDATE acr_reviews SET reviewer_ids = $3::bigint[]
+          WHERE report_id = $1 AND seq = $2 AND status <> 'done' AND reviewer_ids IS DISTINCT FROM $3::bigint[]`,
+        [rep.id, l.seq, people],
+      );
+      changed += upd.rowCount ?? 0;
+    }
+    await this.applySkips(c, ctx, rep.id);
+    return changed;
   }
 
   async closeCycle(ctx: RequestContext, cycleId: string) {

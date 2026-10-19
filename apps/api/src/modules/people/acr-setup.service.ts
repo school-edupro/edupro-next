@@ -880,7 +880,7 @@ export class AcrSetupService {
         byRef.set(f.code, f.id);
       }
       const errors: Array<{ employee: string; message: string }> = [];
-      let changed = 0;
+      const employeeIds: string[] = [];
       for (const row of dto.rows) {
         const emp = byRef.get(row.employee.toUpperCase());
         if (!emp) {
@@ -908,15 +908,16 @@ export class AcrSetupService {
         }
         if (bad || !Object.keys(values).length) continue;
         await writeEmployeeProfile(c, emp, values);
-        changed++;
+        employeeIds.push(emp);
       }
+      const changed = employeeIds.length;
       await this.audit.stage(ctx, c, {
         action: 'people.acr.assessors.save',
         entityType: 'employees',
         entityId: requireTenant(ctx).schoolId,
         after: { changed, errors: errors.length },
       });
-      return { changed, errors };
+      return { changed, errors, employeeIds };
     });
   }
 }

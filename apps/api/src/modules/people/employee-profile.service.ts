@@ -14,6 +14,8 @@ import {
   type PoolClient,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
+import { AcrFlowService } from './acr-flow.service';
+import { ASSESSOR_KINDS } from './acr.dto';
 import { FilesService } from '../files/files.service';
 import { ReportsService } from '../reports/reports.service';
 import { DbService } from '../../common/db/db.service';
@@ -121,6 +123,7 @@ export class EmployeeProfileService {
     private readonly audit: AuditService,
     private readonly files: FilesService,
     private readonly reports: ReportsService,
+    private readonly acr: AcrFlowService,
   ) {}
 
   /** The employee profile printout (A4 PDF on the letterhead), as an export the screen waits for. */
@@ -294,7 +297,7 @@ export class EmployeeProfileService {
   }
 
   async save(ctx: RequestContext, id: string, dto: EmployeeProfileDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
+    const out = await this.db.tenant(requireTenant(ctx), async (c) => {
       const lists = await loadEmployeeLists(c);
       const { values, errors } = await validateEmployeeChanges(c, dto.changes, lists, id);
       if (Object.keys(errors).length) this.errors(errors);
@@ -315,8 +318,16 @@ export class EmployeeProfileService {
         // the keys changed; values of sensitive fields never go to the audit
         after: { changed: Object.keys(values) },
       });
-      return this.view(c, ctx, id);
+      return {
+        view: await this.view(c, ctx, id),
+        assessors: Object.keys(values).some((k) =>
+          (ASSESSOR_KINDS as readonly string[]).includes(k),
+        ),
+      };
     });
+    // an approver changed on the record (0189): the ACR of the open cycle follows at once
+    if (out.assessors) await this.acr.refreshAssessors(ctx, [id]);
+    return out.view;
   }
 
   private async leaving(c: PoolClient, id: string, leftOn: string | null) {

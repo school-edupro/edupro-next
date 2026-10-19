@@ -112,7 +112,11 @@ employee record and are copied into each cycle.
   themselves; rows with a problem are reported and the rest saved.
 - **Open cycle:** the board's **Re-read assessors** (`POST people/acr/cycles/:id/reresolve`) gives the
   levels not yet done the people the set-up and the records give now; a level the office filled by hand
-  keeps them when the record gives nobody.
+  keeps them when the record gives nobody. **Saving assessors does this at once** for the employees
+  saved (the Assessors tab and its CSV upload, and the Approvers section of an employee's record):
+  `AcrFlowService.refreshAssessors` runs the same per-ACR refresh after the records are written, so an
+  employee's ACR never shows the people of an earlier record. Re-read stays for records changed another
+  way (a bulk import, a transfer).
 - Test: `acr.e2e-spec.ts` "assessors (0189)".
 
 ## Every level on the Assessors tab; a person on two levels assesses once (19 Oct 2026, 0190)
