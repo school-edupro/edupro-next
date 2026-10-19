@@ -158,3 +158,8 @@ levels that rate, the last level setting the grade; sections carry weights and s
   `setup/questions` (formId, sectionId); `reports/:id` returns `forms` by id, `self.formId`,
   `self.sections`, `levels[].formId`, `levels[].sections`. Test: `acr.e2e-spec.ts` "forms, sections
   and questions (0191)" and the flow cases.
+- **Used by levels, from the form's side (19 Oct 2026):** the Add form card and a questionnaire's own
+  card tick the levels (of either chain) whose people answer it (`PUT people/acr/setup/forms/:id/levels`);
+  a ticked level drops the questionnaire it had, a level that rates the questions cannot be left without
+  one, and levels of the other staff group are refused unless the form is for all staff. The Approval
+  levels tab's Questionnaire box is the same setting seen from the level's side.

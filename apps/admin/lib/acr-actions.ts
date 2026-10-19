@@ -77,25 +77,41 @@ export async function saveAcrLevels(staffGroup: StaffGroup, levels: AcrLevel[]):
 const formsBack = (formId?: string) =>
   `${SETUP}?tab=questions${formId && okId(formId) ? `&form=${formId}` : ''}`;
 
-/** Add or change a form (name, part, who it is for, on or off). */
+/**
+ * Add or change a form (name, part, who it is for, on or off). A level questionnaire may also name
+ * the levels that answer it (`levels` ticks as "teaching:2"; `levelsGiven` says the ticks were shown).
+ */
 export async function saveAcrForm(fd: FormData) {
   const id = str(fd, 'id');
   const back_ = formsBack(id);
+  const part = str(fd, 'part') === 'level' ? 'level' : 'self';
   let out: { id: string } | undefined;
   try {
     out = await apiFetch(okId(id) ? `${SETUP}/forms/${id}` : `${SETUP}/forms`, {
       method: okId(id) ? 'PUT' : 'POST',
       body: JSON.stringify({
         name: str(fd, 'name'),
-        part: str(fd, 'part') === 'level' ? 'level' : 'self',
+        part,
         staffGroup: str(fd, 'staffGroup') || 'teaching',
         description: str(fd, 'description') || null,
         active: str(fd, 'active') !== 'false',
         sortOrder: Number(str(fd, 'sortOrder') || '0'),
       }),
     });
+    if (part === 'level' && str(fd, 'levelsGiven') === '1') {
+      const levels = fd
+        .getAll('levels')
+        .map(String)
+        .map((v) => /^(teaching|non_teaching):([1-6])$/.exec(v))
+        .filter((m): m is RegExpExecArray => !!m)
+        .map((m) => ({ staffGroup: m[1], seq: Number(m[2]) }));
+      await apiFetch(`${SETUP}/forms/${out!.id}/levels`, {
+        method: 'PUT',
+        body: JSON.stringify({ levels }),
+      });
+    }
   } catch (error) {
-    back(back_, error);
+    back(okId(id) ? back_ : out ? formsBack(out.id) : back_, error);
   }
   revalidatePath(SETUP);
   redirect(

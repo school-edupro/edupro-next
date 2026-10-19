@@ -257,6 +257,32 @@ describe('employee ACR set-up (e2e)', () => {
     const f2 = (await setup()).forms.find((f: { id: string }) => f.id === copy.json().id);
     expect(f2).toMatchObject({ staffGroup: 'non_teaching', part: 'level' });
     expect(f2.sections[0].questions).toHaveLength(2);
+    // from the form's side: which levels answer it; the other chain is refused; a rating level keeps one
+    const wrongChain = await inject({
+      method: 'PUT',
+      url: `/people/acr/setup/forms/${formId}/levels`,
+      headers: h(admin),
+      json: { levels: [{ staffGroup: 'non_teaching', seq: 1 }] },
+    });
+    expect(wrongChain.statusCode).toBe(400);
+    const assign = await inject({
+      method: 'PUT',
+      url: `/people/acr/setup/forms/${formId}/levels`,
+      headers: h(admin),
+      json: { levels: [{ staffGroup: 'teaching', seq: 2 }] },
+    });
+    expect(assign.statusCode).toBe(200);
+    expect(assign.json().set).toBe(1);
+    const lv = (await setup()).levels.teaching as Array<{ seq: number; formId: string | null }>;
+    expect(lv.find((l) => l.seq === 2)!.formId).toBe(formId);
+    const ratingForm = lv.find((l) => l.seq === 1)!.formId as string;
+    const untick = await inject({
+      method: 'PUT',
+      url: `/people/acr/setup/forms/${ratingForm}/levels`,
+      headers: h(admin),
+      json: { levels: [] },
+    });
+    expect(untick.statusCode).toBe(409);
 
     const year = await withMigrator((c) =>
       c.query<{ id: string }>('SELECT id::text FROM academic_years WHERE school_id = $1 LIMIT 1', [

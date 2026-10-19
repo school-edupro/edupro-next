@@ -12,6 +12,7 @@ import {
   type AcrCycleDto,
   type AcrFormCopyDto,
   type AcrFormDto,
+  type AcrFormLevelsDto,
   type AcrLevelsDto,
   type AcrSectionDto,
   type AcrQuestionDto,
@@ -425,6 +426,63 @@ export class AcrSetupService {
         entityId: r.rows[0]!.id,
       });
       return { id: r.rows[0]!.id };
+    });
+  }
+
+  /**
+   * The levels that answer a questionnaire, set from the form's side: the levels named take this form
+   * (whatever they answered before); a level that answered it and is not named is left without one,
+   * unless it rates the questions, which needs a questionnaire.
+   */
+  async setFormLevels(ctx: RequestContext, id: string, dto: AcrFormLevelsDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const f = await this.formOf(c, id);
+      if (f.part !== 'level')
+        throw new DomainError(
+          'acr.form_part',
+          'Only a level questionnaire is answered by a level',
+          {
+            status: 400,
+          },
+        );
+      for (const l of dto.levels)
+        if (f.staff_group !== 'both' && f.staff_group !== l.staffGroup)
+          throw new DomainError(
+            'acr.level_form',
+            `This form is for ${f.staff_group === 'teaching' ? 'teaching' : 'non-teaching'} staff; choose levels of that chain`,
+            { status: 400 },
+          );
+      const using = await c.query<{
+        staff_group: string;
+        seq: number;
+        label: string;
+        action: string;
+      }>(`SELECT staff_group, seq, label, action FROM acr_levels WHERE form_id = $1`, [id]);
+      const named = (g: string, seq: number) =>
+        dto.levels.some((l) => l.staffGroup === g && l.seq === seq);
+      for (const u of using.rows)
+        if (!named(u.staff_group, u.seq) && u.action === 'rate')
+          throw new DomainError(
+            'acr.level_form',
+            `${u.label} (${u.staff_group === 'teaching' ? 'teaching' : 'non-teaching'}) rates the questions and needs a questionnaire: give it another one under Approval levels first`,
+            { status: 409 },
+          );
+      await c.query(`UPDATE acr_levels SET form_id = NULL WHERE form_id = $1`, [id]);
+      let set = 0;
+      for (const l of dto.levels) {
+        const r = await c.query(
+          `UPDATE acr_levels SET form_id = $1 WHERE staff_group = $2 AND seq = $3`,
+          [id, l.staffGroup, l.seq],
+        );
+        set += r.rowCount ?? 0;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.form.levels',
+        entityType: 'acr_forms',
+        entityId: id,
+        after: { levels: dto.levels, set },
+      });
+      return { set };
     });
   }
 

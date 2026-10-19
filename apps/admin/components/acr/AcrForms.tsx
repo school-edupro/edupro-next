@@ -27,6 +27,74 @@ const qBody = (q: AcrQuestion) => ({
   active: q.active,
 });
 
+/** The levels of both chains as tick boxes: which of them answer this questionnaire. */
+function UsedByLevels({
+  s,
+  form,
+  idPrefix,
+}: {
+  s: AcrSetup;
+  form: AcrForm | null;
+  idPrefix: string;
+}) {
+  const groups = (['teaching', 'non_teaching'] as const).filter(
+    (g) => !form || form.staffGroup === 'both' || form.staffGroup === g,
+  );
+  return (
+    <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: '0 0 var(--sp-3)' }}>
+      <legend className="ep-field__label">Used by levels</legend>
+      <input type="hidden" name="levelsGiven" value="1" />
+      <p className="ep-field__help" style={{ marginTop: 0 }}>
+        Tick the levels whose people answer this questionnaire; a ticked level drops the
+        questionnaire it had. A level that rates the questions keeps one, so it cannot be unticked
+        here.
+        {form
+          ? ''
+          : ' Levels of the other staff group are refused unless the form is for all staff.'}
+      </p>
+      {groups.map((g) => (
+        <div
+          key={g}
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            flexWrap: 'wrap',
+            marginBottom: 'var(--sp-1)',
+          }}
+        >
+          <span className="ep-kicker" style={{ minWidth: '7rem' }}>
+            {GROUP_LABEL[g]}
+          </span>
+          {s.levels[g].map((l) => (
+            <label
+              key={`${g}-${String(l.seq)}`}
+              className="ep-check"
+              htmlFor={`${idPrefix}-${g}-${String(l.seq)}`}
+            >
+              <input
+                id={`${idPrefix}-${g}-${String(l.seq)}`}
+                type="checkbox"
+                className="ep-check__input"
+                name="levels"
+                value={`${g}:${String(l.seq)}`}
+                defaultChecked={!!form && l.formId === form.id}
+              />
+              <span className="ep-check__box" aria-hidden="true" />
+              <span className="ep-check__text">
+                {l.seq}. {l.label}
+                {l.formId && (!form || l.formId !== form.id) ? (
+                  <span className="ep-field__help"> · now {l.formName ?? 'another form'}</span>
+                ) : null}
+              </span>
+            </label>
+          ))}
+          {!s.levels[g].length ? <span className="ep-field__help">no levels yet</span> : null}
+        </div>
+      ))}
+    </fieldset>
+  );
+}
+
 /**
  * Forms and questions (0191, docs/design/32-employee-acr.md): the self-appraisal forms per staff
  * category and the questionnaire of each approval level, each a list of sections (title, help,
@@ -191,6 +259,11 @@ export function AcrForms({
               <span className="ep-field__label">Description (shown on the sheet)</span>
               <input id="nf-desc" name="description" className="ep-input" maxLength={500} />
             </label>
+            <UsedByLevels s={s} form={null} idPrefix="nf" />
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              The ticks apply to a questionnaire of an approval level; a self-appraisal form goes by
+              the staff category alone.
+            </p>
             <button type="submit" className="ep-btn ep-btn--primary">
               Add form
             </button>
@@ -596,6 +669,7 @@ function FormDetail({
                   defaultValue={form.description ?? ''}
                 />
               </label>
+              {form.part === 'level' ? <UsedByLevels s={s} form={form} idPrefix="ff" /> : null}
               <button type="submit" className="ep-btn ep-btn--secondary">
                 Save the form
               </button>

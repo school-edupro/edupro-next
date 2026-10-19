@@ -15,6 +15,7 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  AcrFormLevelsDto,
   AcrSectionDto,
   AcrFormDto,
   AcrFormCopyDto,
@@ -97,6 +98,17 @@ export class AcrController {
   @RequirePermission(PEOPLE.acrManage)
   editForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrFormDto) {
     return this.setup.saveForm(ctx, id, body);
+  }
+
+  @Put('setup/forms/:id/levels')
+  @ApiOperation({ summary: 'Which approval levels answer this questionnaire (set from the form)' })
+  @RequirePermission(PEOPLE.acrManage)
+  formLevels(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: AcrFormLevelsDto,
+  ) {
+    return this.setup.setFormLevels(ctx, id, body);
   }
 
   @Post('setup/forms/:id/copy')

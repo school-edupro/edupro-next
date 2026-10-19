@@ -71,6 +71,14 @@ export const AcrFormCopySchema = z.object({
   staffGroup: z.enum(['teaching', 'non_teaching', 'both']).optional(),
 });
 export class AcrFormCopyDto extends createZodDto(AcrFormCopySchema) {}
+/** Which levels answer a questionnaire (set from the form's side): staff group and level number. */
+export const AcrFormLevelsSchema = z.object({
+  levels: z
+    .array(z.object({ staffGroup: Group, seq: z.number().int().min(1).max(6) }))
+    .max(12)
+    .default([]),
+});
+export class AcrFormLevelsDto extends createZodDto(AcrFormLevelsSchema) {}
 /** A section of a form: a heading with help, its share of the score, its place. */
 export const AcrSectionSchema = z.object({
   formId: Id,
