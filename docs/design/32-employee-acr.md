@@ -114,3 +114,18 @@ employee record and are copied into each cycle.
   levels not yet done the people the set-up and the records give now; a level the office filled by hand
   keeps them when the record gives nobody.
 - Test: `acr.e2e-spec.ts` "assessors (0189)".
+
+## Every level on the Assessors tab; a person on two levels assesses once (19 Oct 2026, 0190)
+
+- The Assessors tab shows **one column per level of the chain** of each staff group (as many levels as
+  Approval levels holds): a picker where the level reads the record (ACR HOD, ACR reviewer, L1–L3), the
+  fixed people otherwise (a designation, a role, a named person). Teaching and non-teaching chains may
+  differ; the header names both. The CSV's columns are the record fields in use.
+- **Same person on two levels in a row:** when a level's people are exactly those of the level before it
+  (the last one not skipped), the level is **skipped** (`acr_reviews.status = 'skipped'`, with a note)
+  and the ACR goes on to the next level; with nothing left it is shown to the employee after the first
+  of them submits. Recomputed on start, on Re-read assessors and when the office changes a level's
+  people; a done level is never touched. The sheet shows "skipped: same person as level N".
+- **Re-read assessors** also rebuilds the chain of ACRs still at the self-appraisal when the set-up's
+  levels changed since the cycle started (levels added or removed).
+- Test: `acr.e2e-spec.ts` "a person on two levels in a row assesses once (0190)".

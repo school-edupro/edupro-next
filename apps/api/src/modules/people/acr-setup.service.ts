@@ -349,26 +349,69 @@ export class AcrSetupService {
 
   // ---- assessors per employee (0189) -------------------------------------------------------------
 
-  /** The employee-wise level kinds in use (both groups, in level order): the columns of the Assessors screen. */
-  private async assessorColumns(c: PoolClient) {
-    const r = await c.query<{ kind: AssessorKind; label: string; designation: string | null }>(
-      `SELECT kind, min(label) AS label, min(designation) AS designation
-         FROM acr_levels WHERE kind = ANY($1::text[]) GROUP BY kind ORDER BY min(seq), kind`,
-      [[...ASSESSOR_KINDS]],
+  /**
+   * The chain of each staff group as the Assessors screen shows it (0190): every level, with the record
+   * field it reads when it is employee-wise, the designation it falls back to, or who fills it otherwise.
+   */
+  private async assessorLevels(c: PoolClient) {
+    const r = await c.query<{
+      staff_group: Group;
+      seq: number;
+      label: string;
+      kind: string;
+      role_code: string | null;
+      designation: string | null;
+      employee_name: string | null;
+    }>(
+      `SELECT l.staff_group, l.seq, l.label, l.kind, l.role_code, l.designation, e.display_name AS employee_name
+         FROM acr_levels l LEFT JOIN employees e ON e.id = l.employee_id ORDER BY l.staff_group, l.seq`,
     );
-    const cols = r.rows.map((x) => ({
-      key: x.kind,
-      label: x.label,
-      fallback: x.kind === 'acr_reviewer' ? x.designation : null,
-    }));
-    return cols.length ? cols : [{ key: 'acr_hod' as AssessorKind, label: 'HOD', fallback: null }];
+    const out: Record<
+      Group,
+      Array<{
+        seq: number;
+        label: string;
+        kind: string;
+        field: AssessorKind | null;
+        fallback: string | null;
+        fixed: string | null;
+      }>
+    > = { teaching: [], non_teaching: [] };
+    for (const x of r.rows)
+      out[x.staff_group].push({
+        seq: x.seq,
+        label: x.label,
+        kind: x.kind,
+        field: (ASSESSOR_KINDS as readonly string[]).includes(x.kind)
+          ? (x.kind as AssessorKind)
+          : null,
+        fallback: x.kind === 'acr_reviewer' ? x.designation : null,
+        fixed:
+          x.kind === 'designation'
+            ? `everyone with the designation ${x.designation ?? ''}`
+            : x.kind === 'role'
+              ? `everyone with the role ${x.role_code ?? ''}`
+              : x.kind === 'employee'
+                ? (x.employee_name ?? 'a named person')
+                : null,
+      });
+    return out;
   }
 
-  /** Every active employee with who assesses them, who is missing, and the filters' departments. */
+  /**
+   * Every active employee with who assesses them at each level of their group's chain, who is missing,
+   * and the filters' departments. The record fields in use are the CSV's columns.
+   */
   async assessors(ctx: RequestContext, q: AcrAssessorsQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.seed(c);
-      const columns = await this.assessorColumns(c);
+      const levels = await this.assessorLevels(c);
+      const fields: Array<{ key: AssessorKind; label: string }> = [];
+      for (const g of ['teaching', 'non_teaching'] as const)
+        for (const l of levels[g])
+          if (l.field && !fields.some((f) => f.key === l.field))
+            fields.push({ key: l.field, label: l.label });
+      if (!fields.length) fields.push({ key: 'acr_hod', label: 'HOD' });
       const r = await c.query<{
         id: string;
         code: string;
@@ -384,8 +427,8 @@ export class AcrSetupService {
       );
       const ids = new Set<string>();
       for (const x of r.rows)
-        for (const col of columns) {
-          const v = x.profile[col.key];
+        for (const f of fields) {
+          const v = x.profile[f.key];
           if (typeof v === 'string' && /^\d{1,18}$/.test(v)) ids.add(v);
           if (typeof v === 'number') ids.add(String(v));
         }
@@ -398,11 +441,12 @@ export class AcrSetupService {
         for (const x of n.rows) names.set(x.id, x);
       }
       const all = r.rows.map((x) => {
+        const group: Group = x.side === 'non_teaching' ? 'non_teaching' : 'teaching';
         const assessors: Record<string, { id: string; name: string; code: string } | null> = {};
-        for (const col of columns) {
-          const v = x.profile[col.key];
+        for (const f of fields) {
+          const v = x.profile[f.key];
           const id = typeof v === 'string' || typeof v === 'number' ? String(v) : '';
-          assessors[col.key] = (id && names.get(id)) || null;
+          assessors[f.key] = (id && names.get(id)) || null;
         }
         return {
           id: x.id,
@@ -410,10 +454,10 @@ export class AcrSetupService {
           name: x.name,
           department: x.department,
           designation: x.designation,
-          staffGroup: (x.side === 'non_teaching' ? 'non_teaching' : 'teaching') as Group,
+          staffGroup: group,
           assessors,
-          // a reviewer column with a fallback designation is never "missing"
-          missing: columns.some((col) => !assessors[col.key] && !col.fallback),
+          // a level of their chain that reads the record, with nobody there and no fallback designation
+          missing: levels[group].some((l) => l.field && !assessors[l.field] && !l.fallback),
         };
       });
       const needle = (q.q ?? '').toLowerCase();
@@ -427,7 +471,13 @@ export class AcrSetupService {
           (!q.missing || x.missing),
       );
       return {
-        columns,
+        levels,
+        maxSeq: Math.max(
+          0,
+          ...levels.teaching.map((l) => l.seq),
+          ...levels.non_teaching.map((l) => l.seq),
+        ),
+        fields,
         rows,
         total: all.length,
         missing: all.filter((x) => x.missing).length,

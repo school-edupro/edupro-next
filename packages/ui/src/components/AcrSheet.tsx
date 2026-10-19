@@ -20,7 +20,9 @@ export interface AcrLevelView {
   seq: number;
   label: string;
   action: 'rate' | 'review';
-  status: 'waiting' | 'pending' | 'done';
+  status: 'waiting' | 'pending' | 'done' | 'skipped';
+  /** 0190: why the level is skipped (the same person as the level before) */
+  skippedNote?: string | null;
   hidden?: boolean;
   people?: Array<{ id: string; name: string }>;
   answers?: Record<string, AcrAnswer>;
@@ -599,7 +601,9 @@ export function AcrSheet({
                   ? 'filled'
                   : l.status === 'pending'
                     ? 'at this level now'
-                    : 'not yet'}
+                    : l.status === 'skipped'
+                      ? `skipped: ${l.skippedNote ?? 'the same person as the level before'}`
+                      : 'not yet'}
               </span>
             </h2>
             {l.hidden ? (

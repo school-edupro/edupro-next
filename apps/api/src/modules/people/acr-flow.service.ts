@@ -67,7 +67,7 @@ interface ReviewRow {
   label: string;
   action: 'rate' | 'review';
   reviewer_ids: string[];
-  status: 'waiting' | 'pending' | 'done';
+  status: 'waiting' | 'pending' | 'done' | 'skipped';
   answers: Record<string, Answer>;
   remarks: string | null;
   score_pct: string | null;
@@ -76,6 +76,7 @@ interface ReviewRow {
   agreement: string | null;
   filled_by_name: string | null;
   filled_at: Date | null;
+  skipped_note: string | null;
 }
 
 const REPORT = `SELECT r.id::text, r.cycle_id::text, r.employee_id::text, r.staff_group, r.status, r.current_level,
@@ -85,7 +86,7 @@ const REPORT = `SELECT r.id::text, r.cycle_id::text, r.employee_id::text, r.staf
        cy.status AS cycle_status, cy.self_from::text, cy.self_to::text, cy.academic_year_id::text
   FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id`;
 const REVIEW_COLS = `SELECT id::text, seq, label, action, reviewer_ids::text[] AS reviewer_ids, status, answers,
-       remarks, score_pct::text, grade, grade_reason, agreement, filled_by_name, filled_at FROM acr_reviews`;
+       remarks, score_pct::text, grade, grade_reason, agreement, filled_by_name, filled_at, skipped_note FROM acr_reviews`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
 const REVIEWS = `${REVIEW_COLS} WHERE report_id = $1 ORDER BY seq`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
@@ -280,6 +281,93 @@ export class AcrFlowService {
     return ok.rows.map((x) => x.id).filter((x) => x !== employee.id);
   }
 
+  /**
+   * A person on two levels in a row assesses once (0190): a level whose people are exactly those of the
+   * level before it (the last one not skipped) is skipped with a note, and comes back when that changes.
+   * Done levels stay. When the level the ACR waits on gets skipped, the ACR moves on; with nothing left
+   * it is shown to the employee.
+   */
+  private async applySkips(c: PoolClient, ctx: RequestContext, reportId: string) {
+    const rows = (await c.query<ReviewRow>(REVIEWS, [reportId])).rows;
+    let prev: { seq: number; label: string; people: string[] } | null = null;
+    for (const v of rows) {
+      const people = [...v.reviewer_ids].sort();
+      if (v.status === 'done') {
+        prev = { seq: v.seq, label: v.label, people };
+        continue;
+      }
+      const same =
+        prev !== null &&
+        people.length > 0 &&
+        people.length === prev.people.length &&
+        people.every((x, i) => x === prev!.people[i]);
+      if (same) {
+        if (v.status !== 'skipped')
+          await c.query(
+            `UPDATE acr_reviews SET status = 'skipped', skipped_note = $2 WHERE id = $1`,
+            [v.id, `Same person as level ${String(prev!.seq)} (${prev!.label}); assessed there`],
+          );
+        continue; // the next level compares with the level before the skipped one
+      }
+      if (v.status === 'skipped')
+        await c.query(
+          `UPDATE acr_reviews SET status = 'waiting', skipped_note = NULL WHERE id = $1`,
+          [v.id],
+        );
+      prev = { seq: v.seq, label: v.label, people };
+    }
+    const r = (
+      await c.query<{ status: string; current_level: number | null }>(
+        'SELECT status, current_level FROM acr_reports WHERE id = $1',
+        [reportId],
+      )
+    ).rows[0];
+    if (r?.status !== 'review' || !r.current_level) return;
+    const now = (await c.query<ReviewRow>(REVIEWS, [reportId])).rows;
+    const cur = now.find((x) => x.seq === r.current_level);
+    if (!cur || cur.status !== 'skipped') return;
+    const next = now.find((x) => x.seq > cur.seq && x.status !== 'skipped' && x.status !== 'done');
+    if (next) {
+      await c.query(`UPDATE acr_reviews SET status = 'pending' WHERE id = $1`, [next.id]);
+      await c.query(`UPDATE acr_reports SET current_level = $2, updated_at = now() WHERE id = $1`, [
+        reportId,
+        next.seq,
+      ]);
+      return;
+    }
+    await this.finish(c, ctx, reportId, null);
+  }
+
+  /** After the last level: the score of the last rating, the grade of the last level; shown to the employee. */
+  private async finish(c: PoolClient, ctx: RequestContext, id: string, grade: string | null) {
+    const sc = await this.scale(c);
+    const bands = await this.bands(c);
+    const final = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
+    const lastRate = [...final].reverse().find((x) => x.action === 'rate' && x.status === 'done');
+    const finalScore = lastRate?.score_pct ? Number(lastRate.score_pct) : null;
+    const lastGrade =
+      [...final].reverse().find((x) => x.status === 'done' && x.grade)?.grade ?? null;
+    const finalGrade =
+      grade ??
+      lastGrade ??
+      (finalScore === null ? null : (this.gradeOf(bands, finalScore)?.label ?? null));
+    const adverse = bands.find((b) => b.label === finalGrade)?.adverse ?? false;
+    await c.query(
+      `UPDATE acr_reports SET status = 'disclosed', current_level = NULL, score_pct = $2, grade = $3, adverse = $4,
+              disclosed_at = now(), object_by = CURRENT_DATE + $5::int, updated_at = now()
+        WHERE id = $1`,
+      [id, finalScore, finalGrade, adverse, sc.days],
+    );
+    await this.event(c, ctx, id, 'disclosed', finalGrade);
+    await this.audit.stage(ctx, c, {
+      action: 'people.acr.complete',
+      entityType: 'acr_reports',
+      entityId: id,
+      after: { score: finalScore, grade: finalGrade, adverse },
+    });
+    return { status: 'disclosed' as const, grade: finalGrade };
+  }
+
   // ---- cycles ------------------------------------------------------------------------------------
 
   /** Opens a cycle: an ACR for every active employee who has none (run again for later joiners). */
@@ -339,6 +427,7 @@ export class AcrFlowService {
             [rid, l.seq, l.label, l.action, people],
           );
         }
+        await this.applySkips(c, ctx, rid);
         await this.event(c, ctx, rid, 'started');
       }
       await c.query(`UPDATE acr_cycles SET status = 'open' WHERE id = $1`, [cycleId]);
@@ -374,16 +463,18 @@ export class AcrFlowService {
         role_code: string | null;
         designation: string | null;
         employee_id: string | null;
+        action: 'rate' | 'review';
       }>(
-        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text FROM acr_levels ORDER BY staff_group, seq`,
+        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text, action FROM acr_levels ORDER BY staff_group, seq`,
       );
       const reports = await c.query<{
         id: string;
         employee_id: string;
         staff_group: Group;
+        status: string;
         profile: Record<string, unknown>;
       }>(
-        `SELECT r.id::text, r.employee_id::text, r.staff_group, e.profile
+        `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, e.profile
            FROM acr_reports r JOIN employees e ON e.id = r.employee_id
           WHERE r.cycle_id = $1 AND r.status IN ('self', 'review')`,
         [cycleId],
@@ -391,7 +482,33 @@ export class AcrFlowService {
       let changed = 0;
       const unassigned: Array<{ employeeId: string; level: string }> = [];
       for (const rep of reports.rows) {
-        for (const l of levels.rows.filter((x) => x.staff_group === rep.staff_group)) {
+        const chain = levels.rows.filter((x) => x.staff_group === rep.staff_group);
+        if (rep.status === 'self') {
+          // nothing filled yet: the chain itself follows the set-up (levels added or removed since the start)
+          const have = (await c.query<ReviewRow>(REVIEWS, [rep.id])).rows;
+          const sameShape =
+            have.length === chain.length &&
+            have.every((v, i) => v.label === chain[i]!.label && v.action === chain[i]!.action);
+          if (!sameShape) {
+            await c.query('DELETE FROM acr_reviews WHERE report_id = $1', [rep.id]);
+            for (const l of chain) {
+              const people = await this.resolve(c, l, {
+                id: rep.employee_id,
+                profile: rep.profile,
+              });
+              await c.query(
+                `INSERT INTO acr_reviews (school_id, report_id, seq, label, action, reviewer_ids)
+                 VALUES (app.current_school_id(), $1, $2, $3, $4, $5::bigint[])`,
+                [rep.id, l.seq, l.label, l.action, people],
+              );
+              if (!people.length) unassigned.push({ employeeId: rep.employee_id, level: l.label });
+            }
+            changed += chain.length;
+            await this.applySkips(c, ctx, rep.id);
+            continue;
+          }
+        }
+        for (const l of chain) {
           const people = await this.resolve(c, l, { id: rep.employee_id, profile: rep.profile });
           if (!people.length) {
             const now = await c.query<{ n: number }>(
@@ -409,6 +526,7 @@ export class AcrFlowService {
           );
           changed += upd.rowCount ?? 0;
         }
+        await this.applySkips(c, ctx, rep.id);
       }
       await this.audit.stage(ctx, c, {
         action: 'people.acr.cycle.reresolve',
@@ -655,8 +773,16 @@ export class AcrFlowService {
                 agreement: v.agreement,
                 filledBy: v.filled_by_name,
                 filledAt: v.filled_at?.toISOString() ?? null,
+                skippedNote: v.skipped_note,
               }
-            : { seq: v.seq, label: v.label, action: v.action, status: v.status, hidden: true },
+            : {
+                seq: v.seq,
+                label: v.label,
+                action: v.action,
+                status: v.status,
+                hidden: true,
+                skippedNote: v.skipped_note,
+              },
         ),
         result:
           shown || a.viewer
@@ -855,14 +981,24 @@ export class AcrFlowService {
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       const facts = await this.facts(c, r, sc.lateAfter);
+      // the first level that is not skipped (a person on two levels in a row assesses once, 0190)
+      const first =
+        (await c.query<ReviewRow>(REVIEWS, [id])).rows.find((x) => x.status !== 'skipped') ?? null;
       await c.query(
         `UPDATE acr_reports SET self_answers = $2::jsonb, self_pct = $3, auto_facts = $4::jsonb,
-                self_submitted_at = now(), status = 'review', current_level = 1, updated_at = now()
+                self_submitted_at = now(), status = 'review', current_level = $5, updated_at = now()
           WHERE id = $1`,
-        [id, JSON.stringify(answers), this.score(qs, answers, sc.top), JSON.stringify(facts)],
+        [
+          id,
+          JSON.stringify(answers),
+          this.score(qs, answers, sc.top),
+          JSON.stringify(facts),
+          first?.seq ?? 1,
+        ],
       );
-      await c.query(`UPDATE acr_reviews SET status = 'pending' WHERE report_id = $1 AND seq = 1`, [
+      await c.query(`UPDATE acr_reviews SET status = 'pending' WHERE report_id = $1 AND seq = $2`, [
         id,
+        first?.seq ?? 1,
       ]);
       await this.event(c, ctx, id, 'self_submitted');
       await this.audit.stage(ctx, c, {
@@ -980,7 +1116,7 @@ export class AcrFlowService {
         ],
       );
       await this.event(c, ctx, id, 'level_done', v.label);
-      const next = all.find((x) => x.seq > seq);
+      const next = all.find((x) => x.seq > seq && x.status !== 'skipped');
       if (next) {
         await c.query(`UPDATE acr_reviews SET status = 'pending' WHERE id = $1`, [next.id]);
         await c.query(
@@ -990,26 +1126,7 @@ export class AcrFlowService {
         return { status: 'review', next: next.label };
       }
       // the last level: the score of the last rating, the grade of the last level; shown to the employee
-      const final = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
-      const lastRate = [...final].reverse().find((x) => x.action === 'rate');
-      const finalScore = lastRate?.score_pct ? Number(lastRate.score_pct) : null;
-      const finalGrade =
-        grade ?? (finalScore === null ? null : (this.gradeOf(bands, finalScore)?.label ?? null));
-      const adverse = bands.find((b) => b.label === finalGrade)?.adverse ?? false;
-      await c.query(
-        `UPDATE acr_reports SET status = 'disclosed', current_level = NULL, score_pct = $2, grade = $3, adverse = $4,
-                disclosed_at = now(), object_by = CURRENT_DATE + $5::int, updated_at = now()
-          WHERE id = $1`,
-        [id, finalScore, finalGrade, adverse, sc.days],
-      );
-      await this.event(c, ctx, id, 'disclosed', finalGrade);
-      await this.audit.stage(ctx, c, {
-        action: 'people.acr.complete',
-        entityType: 'acr_reports',
-        entityId: id,
-        after: { score: finalScore, grade: finalGrade, adverse },
-      });
-      return { status: 'disclosed', grade: finalGrade };
+      return this.finish(c, ctx, id, grade);
     });
   }
 
@@ -1023,7 +1140,10 @@ export class AcrFlowService {
         });
       const { v } = await this.myLevel(c, id, r.current_level);
       await c.query(`UPDATE acr_reviews SET status = 'waiting' WHERE id = $1`, [v.id]);
-      if (r.current_level === 1) {
+      const before = [...(await c.query<ReviewRow>(REVIEWS, [id])).rows]
+        .reverse()
+        .find((x) => x.seq < r.current_level! && x.status !== 'skipped');
+      if (!before) {
         await c.query(
           `UPDATE acr_reports SET status = 'self', current_level = NULL, self_submitted_at = NULL, auto_facts = NULL,
                   updated_at = now() WHERE id = $1`,
@@ -1032,7 +1152,7 @@ export class AcrFlowService {
         await this.event(c, ctx, id, 'returned_to_employee', dto.reason);
         return { status: 'self' };
       }
-      const prev = r.current_level - 1;
+      const prev = before.seq;
       await c.query(`UPDATE acr_reviews SET status = 'pending' WHERE report_id = $1 AND seq = $2`, [
         id,
         prev,
@@ -1060,6 +1180,7 @@ export class AcrFlowService {
       );
       if (!u.rowCount)
         throw new DomainError('acr.level_done', 'That level is already filled', { status: 409 });
+      await this.applySkips(c, ctx, id);
       await this.event(c, ctx, id, 'reviewers_changed', `Level ${String(seq)}`);
       return { ok: true };
     });

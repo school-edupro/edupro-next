@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { saveAcrAssessors } from '@/lib/acr-actions';
-import type { AcrAssessorRow, AcrAssessors } from '@/lib/acr';
+import type { AcrAssessorLevel, AcrAssessorRow, AcrAssessors } from '@/lib/acr';
 
 type Staff = { id: string; name: string; code: string };
 const label = (s: Staff | { name: string; code: string } | null | undefined) =>
@@ -15,10 +15,12 @@ const refOf = (text: string) => {
 };
 
 /**
- * Who assesses each employee (0189, docs/design/32-employee-acr.md): every active employee in one list
- * with a searchable picker per employee-wise level (HOD, reviewer, …), filters, "set for the shown rows",
- * a missing count, Save, and a CSV to download, fill in Excel and upload (as the earlier ERP's ACR Master).
- * The pickers write the same record fields the ACR levels read.
+ * Who assesses each employee (0189/0190, docs/design/32-employee-acr.md): every active employee in one
+ * list with a column per level of their group's chain (as many levels as the school set): a searchable
+ * picker where the level reads the record, the fixed people otherwise; filters, "set for the shown
+ * rows", a missing count, Save, and a CSV to download, fill in Excel and upload (as the earlier ERP's
+ * ACR Master). The pickers write the record fields the levels read. A person on two levels in a row
+ * assesses once: the second of them is skipped on the ACR.
  */
 export function AcrAssessorsEditor({
   data,
@@ -31,12 +33,12 @@ export function AcrAssessorsEditor({
   canEdit: boolean;
   importAction: (fd: FormData) => Promise<void>;
 }) {
-  // the text in each picker, by employee id and column key
+  // the text in each picker, by employee id and record field
   const initial = useMemo(() => {
     const m: Record<string, Record<string, string>> = {};
     for (const r of data.rows) {
       m[r.id] = {};
-      for (const c of data.columns) m[r.id]![c.key] = label(r.assessors[c.key]);
+      for (const f of data.fields) m[r.id]![f.key] = label(r.assessors[f.key]);
     }
     return m;
   }, [data]);
@@ -45,13 +47,26 @@ export function AcrAssessorsEditor({
   const [department, setDepartment] = useState('');
   const [group, setGroup] = useState('');
   const [missingOnly, setMissingOnly] = useState(false);
-  const [bulk, setBulk] = useState<Record<string, string>>({});
+  const [bulk, setBulk] = useState<Record<number, string>>({});
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger' | 'info'; text: string } | null>(
     null,
   );
   const [pending, start] = useTransition();
   const router = useRouter();
 
+  const seqs = Array.from({ length: data.maxSeq }, (_, i) => i + 1);
+  const levelAt = (r: AcrAssessorRow, seq: number): AcrAssessorLevel | undefined =>
+    data.levels[r.staffGroup].find((l) => l.seq === seq);
+  const headerOf = (seq: number) => {
+    const labels = [
+      ...new Set(
+        (['teaching', 'non_teaching'] as const)
+          .map((g) => data.levels[g].find((l) => l.seq === seq)?.label)
+          .filter((x): x is string => !!x),
+      ),
+    ];
+    return labels.join(' / ') || `Level ${String(seq)}`;
+  };
   const shown = data.rows.filter(
     (r) =>
       (!q ||
@@ -61,16 +76,19 @@ export function AcrAssessorsEditor({
       (!group || r.staffGroup === group) &&
       (!missingOnly || r.missing),
   );
-  const changed = data.rows.filter((r) =>
-    data.columns.some((c) => (text[r.id]?.[c.key] ?? '') !== (initial[r.id]?.[c.key] ?? '')),
-  );
+  const changedFields = (r: AcrAssessorRow) =>
+    data.fields.filter((f) => (text[r.id]?.[f.key] ?? '') !== (initial[r.id]?.[f.key] ?? ''));
+  const changed = data.rows.filter((r) => changedFields(r).length > 0);
   const setCell = (rowId: string, key: string, value: string) =>
     setText((t) => ({ ...t, [rowId]: { ...t[rowId], [key]: value } }));
-  const applyBulk = (key: string) => {
-    const value = bulk[key] ?? '';
+  const applyBulk = (seq: number) => {
+    const value = bulk[seq] ?? '';
     setText((t) => {
       const n = { ...t };
-      for (const r of shown) n[r.id] = { ...n[r.id], [key]: value };
+      for (const r of shown) {
+        const l = levelAt(r, seq);
+        if (l?.field) n[r.id] = { ...n[r.id], [l.field]: value };
+      }
       return n;
     });
   };
@@ -79,9 +97,7 @@ export function AcrAssessorsEditor({
       const rows = changed.map((r) => ({
         employee: r.code,
         assessors: Object.fromEntries(
-          data.columns
-            .filter((c) => (text[r.id]?.[c.key] ?? '') !== (initial[r.id]?.[c.key] ?? ''))
-            .map((c) => [c.key, refOf(text[r.id]?.[c.key] ?? '')]),
+          changedFields(r).map((f) => [f.key, refOf(text[r.id]?.[f.key] ?? '')]),
         ),
       }));
       const r = await saveAcrAssessors(rows);
@@ -99,7 +115,7 @@ export function AcrAssessorsEditor({
     });
   const download = () => {
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const head = ['employee_code', 'name', 'department', ...data.columns.map((c) => c.key)];
+    const head = ['employee_code', 'name', 'department', ...data.fields.map((f) => f.key)];
     const lines = [
       head.join(','),
       ...data.rows.map((r) =>
@@ -107,7 +123,7 @@ export function AcrAssessorsEditor({
           r.code,
           r.name,
           r.department ?? '',
-          ...data.columns.map((c) => r.assessors[c.key]?.code ?? ''),
+          ...data.fields.map((f) => r.assessors[f.key]?.code ?? ''),
         ]
           .map(esc)
           .join(','),
@@ -120,7 +136,24 @@ export function AcrAssessorsEditor({
     a.click();
     URL.revokeObjectURL(a.href);
   };
-  const cellOf = (r: AcrAssessorRow, key: string) => text[r.id]?.[key] ?? '';
+  const cell = (r: AcrAssessorRow, seq: number) => {
+    const l = levelAt(r, seq);
+    if (!l) return <span className="ep-field__help">—</span>;
+    if (!l.field) return <span className="ep-field__help">{l.fixed ?? '—'}</span>;
+    const value = text[r.id]?.[l.field] ?? '';
+    if (!canEdit)
+      return value || (l.fallback ? <span className="ep-field__help">{l.fallback}</span> : '—');
+    return (
+      <input
+        className="ep-input"
+        list="acr-staff-list"
+        aria-label={`${l.label} of ${r.name}`}
+        placeholder={l.fallback ? `${l.fallback} unless set` : ''}
+        value={value}
+        onChange={(e) => setCell(r.id, l.field!, e.target.value)}
+      />
+    );
+  };
 
   return (
     <section
@@ -132,17 +165,18 @@ export function AcrAssessorsEditor({
         Who assesses each employee
       </h2>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        The levels marked “the employee’s …” read these people from each record. Type a name or
-        code; a reviewer left empty falls back to{' '}
-        {data.columns.find((c) => c.fallback)?.fallback ?? 'the designation set on the level'}.
+        One column per level of the chain (
+        <a href="/people/acr/setup?tab=levels">Approval levels</a>: add as many as you need). A
+        level marked “the employee’s …” reads the person set here; type a name or code. A person on
+        two levels in a row assesses once; the second is skipped on that ACR.
       </p>
-      <div className="ep-stat-row" style={{ marginBottom: 'var(--sp-3)' }}>
+      <p style={{ marginBottom: 'var(--sp-3)' }}>
         <span className={`ep-badge ep-badge--${data.missing ? 'warning' : 'success'}`}>
           {data.missing
             ? `${String(data.missing)} of ${String(data.total)} employees have nobody on a level`
             : `All ${String(data.total)} employees have their assessors`}
         </span>
-      </div>
+      </p>
       {msg ? (
         <div
           className={`ep-alert ep-alert--${msg.tone}`}
@@ -204,16 +238,13 @@ export function AcrAssessorsEditor({
       </div>
       <div className="ep-table-wrap">
         <table className="ep-table ep-table--dense">
-          <caption className="ep-sr-only">Assessors by employee</caption>
+          <caption className="ep-sr-only">Assessors by employee and level</caption>
           <thead>
             <tr>
               <th scope="col">Employee</th>
-              {data.columns.map((c) => (
-                <th key={c.key} scope="col">
-                  {c.label}
-                  {c.fallback ? (
-                    <span className="ep-field__help"> · empty = {c.fallback} by designation</span>
-                  ) : null}
+              {seqs.map((seq) => (
+                <th key={seq} scope="col">
+                  {seq}. {headerOf(seq)}
                 </th>
               ))}
             </tr>
@@ -221,27 +252,29 @@ export function AcrAssessorsEditor({
           <tbody>
             {canEdit && shown.length ? (
               <tr>
-                <th scope="row">
+                <td>
                   <span className="ep-field__help">Set for the {String(shown.length)} shown</span>
-                </th>
-                {data.columns.map((c) => (
-                  <td key={c.key}>
-                    <span style={{ display: 'flex', gap: 'var(--sp-1)' }}>
-                      <input
-                        className="ep-input"
-                        list="acr-staff-list"
-                        aria-label={`${c.label}: set for the shown rows`}
-                        value={bulk[c.key] ?? ''}
-                        onChange={(e) => setBulk((b) => ({ ...b, [c.key]: e.target.value }))}
-                      />
-                      <button
-                        type="button"
-                        className="ep-btn ep-btn--ghost ep-btn--sm"
-                        onClick={() => applyBulk(c.key)}
-                      >
-                        Apply
-                      </button>
-                    </span>
+                </td>
+                {seqs.map((seq) => (
+                  <td key={seq}>
+                    {shown.some((r) => levelAt(r, seq)?.field) ? (
+                      <span style={{ display: 'flex', gap: 'var(--sp-1)' }}>
+                        <input
+                          className="ep-input"
+                          list="acr-staff-list"
+                          aria-label={`${headerOf(seq)}: set for the shown rows`}
+                          value={bulk[seq] ?? ''}
+                          onChange={(e) => setBulk((b) => ({ ...b, [seq]: e.target.value }))}
+                        />
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                          onClick={() => applyBulk(seq)}
+                        >
+                          Apply
+                        </button>
+                      </span>
+                    ) : null}
                   </td>
                 ))}
               </tr>
@@ -262,26 +295,14 @@ export function AcrAssessorsEditor({
                     ) : null}
                   </div>
                 </td>
-                {data.columns.map((c) => (
-                  <td key={c.key}>
-                    {canEdit ? (
-                      <input
-                        className="ep-input"
-                        list="acr-staff-list"
-                        aria-label={`${c.label} of ${r.name}`}
-                        value={cellOf(r, c.key)}
-                        onChange={(e) => setCell(r.id, c.key, e.target.value)}
-                      />
-                    ) : (
-                      cellOf(r, c.key) || '—'
-                    )}
-                  </td>
+                {seqs.map((seq) => (
+                  <td key={seq}>{cell(r, seq)}</td>
                 ))}
               </tr>
             ))}
             {!shown.length ? (
               <tr>
-                <td colSpan={data.columns.length + 1} className="ep-field__help">
+                <td colSpan={seqs.length + 1} className="ep-field__help">
                   Nobody matches.
                 </td>
               </tr>
@@ -327,8 +348,9 @@ export function AcrAssessorsEditor({
         ) : null}
       </div>
       <p className="ep-field__help" style={{ marginBottom: 0 }}>
-        The CSV has employee_code and a column per level with the assessor’s employee code. Fill it
-        in Excel, save as CSV and upload; an empty cell clears that assessor.
+        The CSV has employee_code and a column per record field (
+        {data.fields.map((f) => `${f.key} = ${f.label}`).join(', ')}) holding the assessor’s
+        employee code. Fill it in Excel, save as CSV and upload; an empty cell clears that assessor.
       </p>
     </section>
   );

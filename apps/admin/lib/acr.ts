@@ -71,12 +71,17 @@ export const KIND_LABEL: Record<LevelKind, string> = {
   designation: 'Anyone with a designation',
   employee: 'A named person',
 };
-/** Who assesses each employee (people/acr/setup/assessors, 0189). */
-export interface AcrAssessorColumn {
-  key: string;
+/** Who assesses each employee (people/acr/setup/assessors, 0189; the whole chain per group, 0190). */
+export interface AcrAssessorLevel {
+  seq: number;
   label: string;
+  kind: string;
+  /** the record field this level reads, when it is employee-wise */
+  field: string | null;
   /** the reviewer level's designation used when nobody is set on the record */
   fallback: string | null;
+  /** who fills it when it is not employee-wise */
+  fixed: string | null;
 }
 export interface AcrAssessorRow {
   id: string;
@@ -89,7 +94,10 @@ export interface AcrAssessorRow {
   missing: boolean;
 }
 export interface AcrAssessors {
-  columns: AcrAssessorColumn[];
+  levels: Record<StaffGroup, AcrAssessorLevel[]>;
+  maxSeq: number;
+  /** the record fields in use: the CSV's columns */
+  fields: Array<{ key: string; label: string }>;
   rows: AcrAssessorRow[];
   total: number;
   missing: number;

@@ -549,12 +549,21 @@ describe('employee ACR flow (e2e)', () => {
 
   it('assessors (0189): who is missing; set by code and by id, never oneself; the reviewer falls back to the Principal; re-read for the open cycle', async () => {
     const list = (await call(admin, 'GET', '/people/acr/setup/assessors')).json();
-    const keys = list.columns.map((c: { key: string }) => c.key);
-    expect(keys).toContain('acr_hod');
-    expect(keys).toContain('acr_reviewer');
-    expect(list.columns.find((c: { key: string }) => c.key === 'acr_reviewer').fallback).toBe(
-      'Principal',
-    );
+    // the whole chain per group (0190): seq, the record field it reads, the fallback
+    expect(
+      list.levels.teaching.map(
+        (l: { seq: number; field: string | null; fallback: string | null }) => [
+          l.seq,
+          l.field,
+          l.fallback,
+        ],
+      ),
+    ).toEqual([
+      [1, 'acr_hod', null],
+      [2, 'acr_reviewer', 'Principal'],
+    ]);
+    expect(list.maxSeq).toBe(2);
+    expect(list.fields.map((f: { key: string }) => f.key)).toEqual(['acr_hod', 'acr_reviewer']);
     const clerkRow = list.rows.find((r: { code: string }) => r.code === 'C1');
     expect(clerkRow.missing).toBe(true);
     expect(clerkRow.assessors.acr_hod).toBeNull();
@@ -595,5 +604,61 @@ describe('employee ACR flow (e2e)', () => {
     const pv = (await call(admin, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
     expect(pv.levels[0].people.map((p: { name: string }) => p.name)).toEqual(['Om']);
     expect(pv.levels[1].people.map((p: { name: string }) => p.name)).toEqual(['Prem']);
+  });
+
+  it('a person on two levels in a row assesses once (0190): the second level is skipped and the ACR goes on', async () => {
+    // the clerk: HOD = the Principal; the reviewer level falls back to the Principal → the same person
+    const set = await call(admin, 'PUT', '/people/acr/setup/assessors', {
+      rows: [{ employee: 'C1', assessors: { acr_hod: 'P1', acr_reviewer: null } }],
+    });
+    expect(set.json().changed).toBe(1);
+    await call(admin, 'POST', `/people/acr/cycles/${cycleId}/reresolve`);
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const clerkAcr = board.rows.find(
+      (r: { employee: { code: string } }) => r.employee.code === 'C1',
+    );
+    const v = (await call(admin, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
+    expect(v.levels[0].people.map((p: { name: string }) => p.name)).toEqual(['Prem']);
+    expect(v.levels[1]).toMatchObject({ status: 'skipped' });
+    expect(v.levels[1].skippedNote).toMatch(/level 1/);
+    // the clerk's self-appraisal, then the Principal rates level 1: the ACR is shown to the employee at once
+    const mine = (await call(clerk, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
+    const selfQ = mine.questions.self as Array<{ id: string; kind: string }>;
+    const done = await call(
+      clerk,
+      'POST',
+      `/people/acr/reports/${clerkAcr.id as string}/self/submit`,
+      {
+        answers: Object.fromEntries(
+          selfQ.map((q) => [q.id, q.kind === 'scale' ? 4 : 'Done with care']),
+        ),
+      },
+    );
+    expect(done.statusCode).toBe(200);
+    const turn = (
+      await call(principal, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)
+    ).json();
+    expect(turn).toMatchObject({ status: 'review', currentLevel: 1 });
+    const rateQ = turn.questions.rate as Array<{ id: string; kind: string }>;
+    const rated = await call(
+      principal,
+      'POST',
+      `/people/acr/reports/${clerkAcr.id as string}/levels/1/submit`,
+      {
+        answers: Object.fromEntries(rateQ.map((q) => [q.id, q.kind === 'scale' ? 4 : 'Good work'])),
+        remarks: 'Reliable and punctual',
+      },
+    );
+    expect(rated.statusCode).toBe(200);
+    expect(rated.json().status).toBe('disclosed');
+    const after = (await call(admin, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
+    expect(after.status).toBe('disclosed');
+    expect(after.levels[1].status).toBe('skipped');
+    expect(after.result.grade).toBeTruthy();
+    // a different reviewer brings the level back
+    const back = await call(admin, 'PUT', '/people/acr/setup/assessors', {
+      rows: [{ employee: 'T1', assessors: { acr_hod: 'P1' } }],
+    });
+    expect(back.json().changed).toBe(1);
   });
 });
