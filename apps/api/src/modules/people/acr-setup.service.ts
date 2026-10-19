@@ -1,10 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import { writeEmployeeProfile } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { AcrCycleDto, AcrLevelsDto, AcrQuestionDto, AcrSettingsDto } from './acr.dto';
+import {
+  ASSESSOR_KINDS,
+  type AcrAssessorsQueryDto,
+  type AcrAssessorsSaveDto,
+  type AcrCycleDto,
+  type AcrLevelsDto,
+  type AcrQuestionDto,
+  type AcrSettingsDto,
+  type AssessorKind,
+} from './acr.dto';
+type Group = 'teaching' | 'non_teaching';
 
 /**
  * Employee ACR set-up (0184, docs/design/32-employee-acr.md): the rating words, days to object and grade
@@ -227,6 +238,13 @@ export class AcrSetupService {
         });
       if (l.kind === 'employee' && !l.employeeId)
         throw new DomainError('acr.level_incomplete', `${n}: choose the person`, { status: 400 });
+      // the reviewer level needs a fallback designation (the Principal) for records with nobody set
+      if (l.kind === 'acr_reviewer' && !l.designation)
+        throw new DomainError(
+          'acr.level_incomplete',
+          `${n}: choose the designation that reviews when nobody is set on the record`,
+          { status: 400 },
+        );
     }
     if (!dto.levels.some((l) => l.action === 'rate'))
       throw new DomainError('acr.no_rating', 'At least one level must rate the questions', {
@@ -245,7 +263,7 @@ export class AcrSetupService {
             l.label,
             l.kind,
             l.kind === 'role' ? l.roleCode : null,
-            l.kind === 'designation' ? l.designation : null,
+            l.kind === 'designation' || l.kind === 'acr_reviewer' ? l.designation : null,
             l.kind === 'employee' ? l.employeeId : null,
             l.action,
           ],
@@ -326,6 +344,160 @@ export class AcrSetupService {
           });
         throw e;
       }
+    });
+  }
+
+  // ---- assessors per employee (0189) -------------------------------------------------------------
+
+  /** The employee-wise level kinds in use (both groups, in level order): the columns of the Assessors screen. */
+  private async assessorColumns(c: PoolClient) {
+    const r = await c.query<{ kind: AssessorKind; label: string; designation: string | null }>(
+      `SELECT kind, min(label) AS label, min(designation) AS designation
+         FROM acr_levels WHERE kind = ANY($1::text[]) GROUP BY kind ORDER BY min(seq), kind`,
+      [[...ASSESSOR_KINDS]],
+    );
+    const cols = r.rows.map((x) => ({
+      key: x.kind,
+      label: x.label,
+      fallback: x.kind === 'acr_reviewer' ? x.designation : null,
+    }));
+    return cols.length ? cols : [{ key: 'acr_hod' as AssessorKind, label: 'HOD', fallback: null }];
+  }
+
+  /** Every active employee with who assesses them, who is missing, and the filters' departments. */
+  async assessors(ctx: RequestContext, q: AcrAssessorsQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.seed(c);
+      const columns = await this.assessorColumns(c);
+      const r = await c.query<{
+        id: string;
+        code: string;
+        name: string;
+        department: string | null;
+        designation: string | null;
+        side: string;
+        profile: Record<string, unknown>;
+      }>(
+        `SELECT e.id::text, e.employee_code AS code, e.display_name AS name, e.department, e.designation,
+                app.employee_staff_side(e.department, e.employee_type) AS side, e.profile
+           FROM employees e WHERE e.deleted_at IS NULL AND e.status = 'active' ORDER BY e.display_name, e.id`,
+      );
+      const ids = new Set<string>();
+      for (const x of r.rows)
+        for (const col of columns) {
+          const v = x.profile[col.key];
+          if (typeof v === 'string' && /^\d{1,18}$/.test(v)) ids.add(v);
+          if (typeof v === 'number') ids.add(String(v));
+        }
+      const names = new Map<string, { id: string; name: string; code: string }>();
+      if (ids.size) {
+        const n = await c.query<{ id: string; name: string; code: string }>(
+          `SELECT id::text, display_name AS name, employee_code AS code FROM employees WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+          [[...ids]],
+        );
+        for (const x of n.rows) names.set(x.id, x);
+      }
+      const all = r.rows.map((x) => {
+        const assessors: Record<string, { id: string; name: string; code: string } | null> = {};
+        for (const col of columns) {
+          const v = x.profile[col.key];
+          const id = typeof v === 'string' || typeof v === 'number' ? String(v) : '';
+          assessors[col.key] = (id && names.get(id)) || null;
+        }
+        return {
+          id: x.id,
+          code: x.code,
+          name: x.name,
+          department: x.department,
+          designation: x.designation,
+          staffGroup: (x.side === 'non_teaching' ? 'non_teaching' : 'teaching') as Group,
+          assessors,
+          // a reviewer column with a fallback designation is never "missing"
+          missing: columns.some((col) => !assessors[col.key] && !col.fallback),
+        };
+      });
+      const needle = (q.q ?? '').toLowerCase();
+      const rows = all.filter(
+        (x) =>
+          (!needle ||
+            x.name.toLowerCase().includes(needle) ||
+            x.code.toLowerCase().includes(needle)) &&
+          (!q.department || (x.department ?? '') === q.department) &&
+          (!q.staffGroup || x.staffGroup === q.staffGroup) &&
+          (!q.missing || x.missing),
+      );
+      return {
+        columns,
+        rows,
+        total: all.length,
+        missing: all.filter((x) => x.missing).length,
+        departments: [
+          ...new Set(all.map((x) => x.department).filter((d): d is string => !!d)),
+        ].sort(),
+      };
+    });
+  }
+
+  /**
+   * Writes the assessors on the employees' records (the same fields the levels read). Each reference
+   * is an id or an employee code; nobody assesses themselves; rows with a problem are reported, the
+   * rest are saved.
+   */
+  async saveAssessors(ctx: RequestContext, dto: AcrAssessorsSaveDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const refs = new Set<string>();
+      for (const row of dto.rows) {
+        refs.add(row.employee.toUpperCase());
+        for (const v of Object.values(row.assessors)) if (v) refs.add(v.toUpperCase());
+      }
+      const found = await c.query<{ id: string; code: string }>(
+        `SELECT id::text, upper(employee_code) AS code FROM employees
+          WHERE deleted_at IS NULL AND status = 'active' AND (id::text = ANY($1::text[]) OR upper(employee_code) = ANY($1::text[]))`,
+        [[...refs]],
+      );
+      const byRef = new Map<string, string>();
+      for (const f of found.rows) {
+        byRef.set(f.id, f.id);
+        byRef.set(f.code, f.id);
+      }
+      const errors: Array<{ employee: string; message: string }> = [];
+      let changed = 0;
+      for (const row of dto.rows) {
+        const emp = byRef.get(row.employee.toUpperCase());
+        if (!emp) {
+          errors.push({ employee: row.employee, message: 'No active employee with this code' });
+          continue;
+        }
+        const values: Record<string, string | null> = {};
+        let bad = false;
+        for (const [k, v] of Object.entries(row.assessors)) {
+          if (!v) {
+            values[k] = null;
+            continue;
+          }
+          const a = byRef.get(v.toUpperCase());
+          if (!a) {
+            errors.push({ employee: row.employee, message: `${k}: no active employee ${v}` });
+            bad = true;
+          } else if (a === emp) {
+            errors.push({
+              employee: row.employee,
+              message: `${k}: an employee never assesses themselves`,
+            });
+            bad = true;
+          } else values[k] = a;
+        }
+        if (bad || !Object.keys(values).length) continue;
+        await writeEmployeeProfile(c, emp, values);
+        changed++;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.assessors.save',
+        entityType: 'employees',
+        entityId: requireTenant(ctx).schoolId,
+        after: { changed, errors: errors.length },
+      });
+      return { changed, errors };
     });
   }
 }

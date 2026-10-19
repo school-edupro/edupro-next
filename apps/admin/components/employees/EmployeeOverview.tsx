@@ -28,7 +28,7 @@ export function EmployeeOverview({
     const x = v[k];
     if (x === null || x === undefined || x === '') return null;
     if (typeof x === 'boolean') return x ? 'Yes' : 'No';
-    if (k.startsWith('acr_hod') || k.startsWith('approver_'))
+    if (k.startsWith('acr_') || k.startsWith('approver_'))
       return profile.approvers[String(x)] ?? String(x);
     return dateKeys.has(k) ? ddmmyyyy(String(x)) : String(x);
   };

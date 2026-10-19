@@ -1081,9 +1081,10 @@ export default async function EmployeePage({
             </p>
           )}
           <p className="ep-field__help">
-            Who assesses this employee: the ACR HOD and L1–L3 approvers on the Profile tab
-            (Approvers), used by the levels set in{' '}
-            <a href="/people/acr/setup?tab=levels">ACR set-up</a>.
+            Who assesses this employee: the ACR HOD and ACR reviewer on the Profile tab (Approvers),
+            or for all staff at once under{' '}
+            <a href="/people/acr/setup?tab=assessors">ACR set-up → Assessors</a>; the levels in{' '}
+            <a href="/people/acr/setup?tab=levels">ACR set-up</a> say which is used.
           </p>
         </Card>
       ) : null}

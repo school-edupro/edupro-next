@@ -1,15 +1,22 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AcrGradesEditor } from '@/components/acr/AcrGradesEditor';
+import { AcrAssessorsEditor } from '@/components/acr/AcrAssessorsEditor';
 import { AcrLevelsEditor } from '@/components/acr/AcrLevelsEditor';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { GROUP_LABEL, type AcrQuestion, type AcrSetup } from '@/lib/acr';
-import { saveAcrCycle, saveAcrQuestion, toggleAcrQuestion } from '@/lib/acr-actions';
+import { GROUP_LABEL, type AcrAssessors, type AcrQuestion, type AcrSetup } from '@/lib/acr';
+import {
+  importAcrAssessors,
+  saveAcrCycle,
+  saveAcrQuestion,
+  toggleAcrQuestion,
+} from '@/lib/acr-actions';
 
 const TABS = [
   ['cycles', 'Cycles'],
   ['levels', 'Approval levels'],
+  ['assessors', 'Assessors'],
   ['questions', 'Questions'],
   ['grades', 'Scale and grades'],
 ] as const;
@@ -36,6 +43,8 @@ export default async function AcrSetupPage({
   const canEdit = me.permissions.includes('people.acr.manage');
   const tab: Tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : 'cycles';
   const s = await apiFetch<AcrSetup>('/people/acr/setup');
+  const assessors =
+    tab === 'assessors' ? await apiFetch<AcrAssessors>('/people/acr/setup/assessors') : null;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -66,6 +75,14 @@ export default async function AcrSetupPage({
       </nav>
 
       {tab === 'cycles' ? <Cycles s={s} sp={sp} canEdit={canEdit} today={today} /> : null}
+      {tab === 'assessors' && assessors ? (
+        <AcrAssessorsEditor
+          data={assessors}
+          staff={s.staff}
+          canEdit={canEdit}
+          importAction={importAcrAssessors}
+        />
+      ) : null}
       {tab === 'levels' ? (
         <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
           {(['teaching', 'non_teaching'] as const).map((g) => (

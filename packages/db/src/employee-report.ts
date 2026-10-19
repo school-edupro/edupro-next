@@ -163,7 +163,7 @@ export async function loadEmployeeReportRows(
   // approvers by name
   const approverIds = new Set<string>();
   for (const x of r.rows)
-    for (const k of ['acr_hod', 'approver_l1', 'approver_l2', 'approver_l3'])
+    for (const k of ['acr_hod', 'acr_reviewer', 'approver_l1', 'approver_l2', 'approver_l3'])
       if (typeof x.profile?.[k] === 'string') approverIds.add(x.profile[k] as string);
   const names = new Map<string, string>();
   if (approverIds.size) {

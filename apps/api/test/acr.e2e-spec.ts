@@ -48,7 +48,8 @@ describe('employee ACR set-up (e2e)', () => {
       ]),
     ).toEqual([
       ['HOD', 'acr_hod', 'rate'],
-      ['Principal', 'designation', 'review'],
+      // 0189: per employee, the Principal designation as the fallback
+      ['Principal', 'acr_reviewer', 'review'],
     ]);
     expect(s.bands.map((b: { label: string }) => b.label)).toEqual([
       'Outstanding',
@@ -544,5 +545,55 @@ describe('employee ACR flow (e2e)', () => {
     expect(office.statusCode).toBe(200);
     const v = (await call(admin, 'GET', `/people/acr/reports/${reportId}`)).json();
     expect(v.self.office).toEqual({ cl: 6, el: 2, absent: 8 });
+  });
+
+  it('assessors (0189): who is missing; set by code and by id, never oneself; the reviewer falls back to the Principal; re-read for the open cycle', async () => {
+    const list = (await call(admin, 'GET', '/people/acr/setup/assessors')).json();
+    const keys = list.columns.map((c: { key: string }) => c.key);
+    expect(keys).toContain('acr_hod');
+    expect(keys).toContain('acr_reviewer');
+    expect(list.columns.find((c: { key: string }) => c.key === 'acr_reviewer').fallback).toBe(
+      'Principal',
+    );
+    const clerkRow = list.rows.find((r: { code: string }) => r.code === 'C1');
+    expect(clerkRow.missing).toBe(true);
+    expect(clerkRow.assessors.acr_hod).toBeNull();
+    const tara = list.rows.find((r: { code: string }) => r.code === 'T1');
+    expect(tara.assessors.acr_hod).toMatchObject({ code: 'H1' });
+    // the teacher's reviewer level fell back to the Principal when the cycle started
+    const v = (await call(admin, 'GET', `/people/acr/reports/${reportId}`)).json();
+    expect(v.levels[1].people.map((p: { name: string }) => p.name)).toEqual(['Prem']);
+    // by code (the Excel way) and by id; oneself is refused and the row left as it was
+    const principalId = list.rows.find((r: { code: string }) => r.code === 'P1').id;
+    const save = await call(admin, 'PUT', '/people/acr/setup/assessors', {
+      rows: [
+        { employee: 'c1', assessors: { acr_hod: 'o1', acr_reviewer: principalId } },
+        { employee: 'H1', assessors: { acr_hod: 'H1' } },
+        { employee: 'ZZ9', assessors: { acr_hod: 'H1' } },
+      ],
+    });
+    expect(save.statusCode).toBe(200);
+    expect(save.json().changed).toBe(1);
+    expect(save.json().errors).toHaveLength(2);
+    const after = (await call(admin, 'GET', '/people/acr/setup/assessors?missing=true')).json();
+    expect(after.rows.map((r: { code: string }) => r.code)).not.toContain('C1');
+    expect(
+      (await call(admin, 'GET', '/people/acr/setup/assessors?q=chetan')).json().rows[0].assessors
+        .acr_hod,
+    ).toMatchObject({ code: 'O1' });
+    expect(
+      (await call(teacher, 'PUT', '/people/acr/setup/assessors', { rows: [] })).statusCode,
+    ).toBe(403);
+    // the open cycle re-reads the records: the clerk's HOD level now has Om
+    const rr = await call(admin, 'POST', `/people/acr/cycles/${cycleId}/reresolve`);
+    expect(rr.statusCode).toBe(201);
+    expect(rr.json().changed).toBeGreaterThanOrEqual(1);
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const clerkAcr = board.rows.find(
+      (r: { employee: { code: string } }) => r.employee.code === 'C1',
+    );
+    const pv = (await call(admin, 'GET', `/people/acr/reports/${clerkAcr.id as string}`)).json();
+    expect(pv.levels[0].people.map((p: { name: string }) => p.name)).toEqual(['Om']);
+    expect(pv.levels[1].people.map((p: { name: string }) => p.name)).toEqual(['Prem']);
   });
 });

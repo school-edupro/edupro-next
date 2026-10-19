@@ -342,6 +342,7 @@ const PAGES = [
   '/people/employees/36?tab=acr',
   '/people/acr/setup',
   '/people/acr/setup?tab=levels',
+  '/people/acr/setup?tab=assessors',
   '/people/acr/setup?tab=questions&part=rate&group=non_teaching',
   '/people/acr/setup?tab=grades',
   '/comms',

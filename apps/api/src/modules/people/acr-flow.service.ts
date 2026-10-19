@@ -241,18 +241,26 @@ export class AcrFlowService {
     employee: { id: string; profile: Record<string, unknown> },
   ): Promise<string[]> {
     let ids: string[] = [];
-    if (['acr_hod', 'approver_l1', 'approver_l2', 'approver_l3'].includes(level.kind)) {
+    const byDesignation = async (designation: string) =>
+      (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM employees WHERE deleted_at IS NULL AND status = 'active'
+              AND lower(designation) = lower($1)`,
+          [designation],
+        )
+      ).rows.map((x) => x.id);
+    if (
+      ['acr_hod', 'acr_reviewer', 'approver_l1', 'approver_l2', 'approver_l3'].includes(level.kind)
+    ) {
       const v = employee.profile[level.kind];
       if (typeof v === 'string' && /^\d{1,18}$/.test(v)) ids = [v];
       if (typeof v === 'number') ids = [String(v)];
+      // the reviewer level (0189): the designation on the level when nobody is set on the record
+      if (!ids.length && level.kind === 'acr_reviewer' && level.designation)
+        ids = await byDesignation(level.designation);
     } else if (level.kind === 'employee' && level.employee_id) ids = [level.employee_id];
     else if (level.kind === 'designation' && level.designation) {
-      const r = await c.query<{ id: string }>(
-        `SELECT id::text FROM employees WHERE deleted_at IS NULL AND status = 'active'
-            AND lower(designation) = lower($1)`,
-        [level.designation],
-      );
-      ids = r.rows.map((x) => x.id);
+      ids = await byDesignation(level.designation);
     } else if (level.kind === 'role' && level.role_code) {
       const r = await c.query<{ id: string }>(
         `SELECT DISTINCT e.id::text FROM employees e
@@ -341,6 +349,74 @@ export class AcrFlowService {
         after: { added: staff.rows.length, unassigned: unassigned.length },
       });
       return { added: staff.rows.length, unassigned };
+    });
+  }
+
+  /**
+   * Reads the assessors again for an open cycle (0189): levels not yet done take the people the set-up
+   * and the records give now. A level the office filled by hand keeps them when the record gives nobody.
+   */
+  async reresolve(ctx: RequestContext, cycleId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const cy = await c.query<{ status: string }>('SELECT status FROM acr_cycles WHERE id = $1', [
+        cycleId,
+      ]);
+      if (!cy.rows[0]) throw new DomainError('not-found', 'Cycle not found', { status: 404 });
+      if (cy.rows[0].status !== 'open')
+        throw new DomainError('acr.cycle_not_open', 'Only an open cycle is re-read', {
+          status: 409,
+        });
+      const levels = await c.query<{
+        staff_group: Group;
+        seq: number;
+        label: string;
+        kind: string;
+        role_code: string | null;
+        designation: string | null;
+        employee_id: string | null;
+      }>(
+        `SELECT staff_group, seq, label, kind, role_code, designation, employee_id::text FROM acr_levels ORDER BY staff_group, seq`,
+      );
+      const reports = await c.query<{
+        id: string;
+        employee_id: string;
+        staff_group: Group;
+        profile: Record<string, unknown>;
+      }>(
+        `SELECT r.id::text, r.employee_id::text, r.staff_group, e.profile
+           FROM acr_reports r JOIN employees e ON e.id = r.employee_id
+          WHERE r.cycle_id = $1 AND r.status IN ('self', 'review')`,
+        [cycleId],
+      );
+      let changed = 0;
+      const unassigned: Array<{ employeeId: string; level: string }> = [];
+      for (const rep of reports.rows) {
+        for (const l of levels.rows.filter((x) => x.staff_group === rep.staff_group)) {
+          const people = await this.resolve(c, l, { id: rep.employee_id, profile: rep.profile });
+          if (!people.length) {
+            const now = await c.query<{ n: number }>(
+              `SELECT cardinality(reviewer_ids) AS n FROM acr_reviews WHERE report_id = $1 AND seq = $2`,
+              [rep.id, l.seq],
+            );
+            if (!(now.rows[0]?.n ?? 0))
+              unassigned.push({ employeeId: rep.employee_id, level: l.label });
+            continue;
+          }
+          const upd = await c.query(
+            `UPDATE acr_reviews SET reviewer_ids = $3::bigint[]
+              WHERE report_id = $1 AND seq = $2 AND status <> 'done' AND reviewer_ids IS DISTINCT FROM $3::bigint[]`,
+            [rep.id, l.seq, people],
+          );
+          changed += upd.rowCount ?? 0;
+        }
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.cycle.reresolve',
+        entityType: 'acr_cycles',
+        entityId: cycleId,
+        after: { changed, unassigned: unassigned.length },
+      });
+      return { changed, unassigned };
     });
   }
 

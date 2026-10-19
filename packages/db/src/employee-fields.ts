@@ -630,6 +630,14 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
     help: 'Who writes the annual report (pick by name or code).',
   },
   {
+    key: 'acr_reviewer',
+    section: 'approvers',
+    label: 'ACR reviewer',
+    type: 'employee',
+    store: { t: 'json', key: 'acr_reviewer' },
+    help: 'Reviews the ACR after the HOD; the Principal unless someone is set (ACR set-up → Assessors).',
+  },
+  {
     key: 'approver_l1',
     section: 'approvers',
     label: 'L1 approver',

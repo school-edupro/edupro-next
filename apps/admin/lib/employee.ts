@@ -111,7 +111,7 @@ export type OnboardResult =
 /** Approvers are kept as ids; the form shows and sends "NAME (CODE)". */
 export function forForm(p: EmployeeProfile): ProfileValues {
   const v: ProfileValues = { ...p.values };
-  for (const k of ['acr_hod', 'approver_l1', 'approver_l2', 'approver_l3']) {
+  for (const k of ['acr_hod', 'acr_reviewer', 'approver_l1', 'approver_l2', 'approver_l3']) {
     const id = v[k];
     if (typeof id === 'string' && p.approvers[id]) v[k] = p.approvers[id];
   }

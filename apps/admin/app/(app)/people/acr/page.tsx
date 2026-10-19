@@ -4,7 +4,7 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { ACR_STATUS, GROUP_LABEL, type AcrRow, type AcrSetup } from '@/lib/acr';
-import { acrCloseCycle, acrStartCycle } from '@/lib/acr-actions';
+import { acrCloseCycle, acrReresolve, acrStartCycle } from '@/lib/acr-actions';
 
 const ORDER: AcrRow['status'][] = ['self', 'review', 'disclosed', 'represented', 'closed'];
 const tone = (s: AcrRow['status']) =>
@@ -192,6 +192,20 @@ export default async function AcrBoardPage({
                     An ACR is made for every active employee who has none, with the people of each
                     level from the set-up and the employee records.
                   </ConfirmAction>
+                  {cycle.status === 'open' ? (
+                    <ConfirmAction
+                      action={acrReresolve}
+                      fields={{ cycleId: cycle.id }}
+                      label="Re-read assessors"
+                      variant="secondary"
+                      title="Read the assessors again?"
+                      confirmLabel="Re-read"
+                    >
+                      Levels not yet done take the people the set-up and the employee records give
+                      now (ACR set-up → Assessors). A level the office filled by hand keeps them
+                      when the record gives nobody.
+                    </ConfirmAction>
+                  ) : null}
                   {cycle.status === 'open' ? (
                     <ConfirmAction
                       action={acrCloseCycle}

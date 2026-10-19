@@ -35,6 +35,7 @@ export const AcrLevelsSchema = z.object({
         label: z.string().trim().min(2).max(60),
         kind: z.enum([
           'acr_hod',
+          'acr_reviewer',
           'approver_l1',
           'approver_l2',
           'approver_l3',
@@ -52,6 +53,39 @@ export const AcrLevelsSchema = z.object({
     .max(6),
 });
 export class AcrLevelsDto extends createZodDto(AcrLevelsSchema) {}
+
+/** The employee-wise level kinds: what the Assessors screen assigns (0189). */
+export const ASSESSOR_KINDS = [
+  'acr_hod',
+  'acr_reviewer',
+  'approver_l1',
+  'approver_l2',
+  'approver_l3',
+] as const;
+export type AssessorKind = (typeof ASSESSOR_KINDS)[number];
+export const AcrAssessorsQuerySchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  department: z.string().trim().max(80).optional(),
+  staffGroup: Group.optional(),
+  missing: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+});
+export class AcrAssessorsQueryDto extends createZodDto(AcrAssessorsQuerySchema) {}
+/** Rows to save: the employee and each assessor as an id or an employee code; null clears. */
+export const AcrAssessorsSaveSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        employee: z.string().trim().min(1).max(40),
+        assessors: z.record(z.enum(ASSESSOR_KINDS), z.string().trim().max(40).nullable()),
+      }),
+    )
+    .min(1)
+    .max(2000),
+});
+export class AcrAssessorsSaveDto extends createZodDto(AcrAssessorsSaveSchema) {}
 
 export const AcrQuestionSchema = z.object({
   part: z.enum(['self', 'rate']),

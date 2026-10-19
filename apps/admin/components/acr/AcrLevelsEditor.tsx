@@ -117,9 +117,13 @@ export function AcrLevelsEditor({
                     ))}
                   </select>
                 </label>
-              ) : l.kind === 'designation' ? (
+              ) : l.kind === 'designation' || l.kind === 'acr_reviewer' ? (
                 <label className="ep-field" htmlFor={id('desig', i)}>
-                  <span className="ep-field__label">Designation</span>
+                  <span className="ep-field__label">
+                    {l.kind === 'acr_reviewer'
+                      ? 'When nobody is set on the record: everyone with this designation'
+                      : 'Designation'}
+                  </span>
                   <select
                     id={id('desig', i)}
                     className="ep-select"
@@ -159,7 +163,7 @@ export function AcrLevelsEditor({
                 </label>
               ) : (
                 <p className="ep-field__help ep-acr-level__note">
-                  Set on each employee’s record (Approvers section).
+                  Set per employee under the Assessors tab (or on the record, Approvers section).
                 </p>
               )}
               <label className="ep-field" htmlFor={id('action', i)}>

@@ -92,3 +92,25 @@ app's Office → My ACR had no twin. Now Employee management → **My ACR** (`/m
 staff login beside My profile) lists my own reports and the ones waiting on me as a level, and
 `/me/acr/:id` shows the sheet (`AcrReport`) with the same self-appraisal, level, acknowledge and
 objection controls the staff app has; the admin's `/people/acr/:id` stays the HR view.
+
+## Assessors per employee (19 Oct 2026, 0189)
+
+The school assigns who assesses whom per employee, not by role (the earlier ERP's ACR Master: HOD and
+Principal by employee code, per financial year, with an Excel import). Decisions: an **Assessors** tab in
+ACR set-up; the second level per employee too, the Principal as the default; assignments live on the
+employee record and are copied into each cycle.
+
+- **Record:** a new field **ACR reviewer** (`acr_reviewer`, Approvers section) beside ACR HOD. A new
+  level kind **`acr_reviewer`** reads it and falls back to the designation on the level (the Principal)
+  when nobody is set; migration 0189 turns the seeded "Principal by designation" level into it (the
+  designation kept as the fallback) and the seed does the same for new schools.
+- **Assessors tab** (`GET/PUT people/acr/setup/assessors`): every active employee with a searchable
+  picker per employee-wise level in use (the columns follow the levels of both groups), filters (name or
+  code, department, staff group, only those with nobody), "set for the shown rows", the missing count,
+  Save of the changed rows, and a CSV (employee_code, name, department, one column per level holding
+  employee codes) to download, fill in Excel and upload. References are ids or codes; nobody assesses
+  themselves; rows with a problem are reported and the rest saved.
+- **Open cycle:** the board's **Re-read assessors** (`POST people/acr/cycles/:id/reresolve`) gives the
+  levels not yet done the people the set-up and the records give now; a level the office filled by hand
+  keeps them when the record gives nobody.
+- Test: `acr.e2e-spec.ts` "assessors (0189)".

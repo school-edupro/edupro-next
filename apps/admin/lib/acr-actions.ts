@@ -17,6 +17,7 @@ function back(path: string, error: unknown): never {
     );
   throw error;
 }
+const back_ = back;
 const problem = (e: unknown): { ok: false; error: string } => {
   if (e instanceof ApiError) {
     const list = e.problem.errors as Array<{ message?: string }> | undefined;
@@ -196,6 +197,117 @@ export async function acrRepresent(id: string, text: string) {
   return okId(id)
     ? call(`${R(id)}/represent`, 'POST', { text })
     : { ok: false as const, error: 'Unknown ACR' };
+}
+
+// ---- assessors per employee (0189) ---------------------------------------------------------------
+
+/** Rows changed on the Assessors tab: each assessor as an employee code (or id); null clears. */
+export async function saveAcrAssessors(
+  rows: Array<{ employee: string; assessors: Record<string, string | null> }>,
+): Promise<
+  | { ok: true; changed: number; errors: Array<{ employee: string; message: string }> }
+  | { ok: false; error: string }
+> {
+  try {
+    const r = await apiFetch<{
+      changed: number;
+      errors: Array<{ employee: string; message: string }>;
+    }>('/people/acr/setup/assessors', { method: 'PUT', body: JSON.stringify({ rows }) });
+    revalidatePath(SETUP);
+    return { ok: true, ...r };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+/** One CSV line → cells (quotes and doubled quotes as Excel writes them). */
+function csvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (q) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (ch === '"') q = false;
+      else cur += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((x) => x.trim());
+}
+
+/**
+ * The CSV the Assessors tab downloads, filled in and uploaded: a header with employee_code and one
+ * column per assessor kind (acr_hod, acr_reviewer, …) holding employee codes; an empty cell clears.
+ */
+export async function importAcrAssessors(fd: FormData) {
+  const back = `${SETUP}?tab=assessors`;
+  const f = fd.get('file');
+  const fail = (detail: string): never =>
+    redirect(`${back}&error=validation-failed&detail=${encodeURIComponent(detail)}`);
+  if (!(f instanceof File) || !f.size) fail('Choose the CSV file to upload.');
+  const file = f as File;
+  if (file.size > 2 * 1024 * 1024) fail('The file is larger than 2 MB.');
+  const text = (await file.text()).replace(/^\uFEFF/, '');
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) fail('The file has no rows.');
+  const header = csvLine(lines[0]!).map((h) => h.toLowerCase());
+  const codeCol = header.indexOf('employee_code');
+  const kinds = ['acr_hod', 'acr_reviewer', 'approver_l1', 'approver_l2', 'approver_l3'];
+  const cols = kinds.map((k) => [k, header.indexOf(k)] as const).filter(([, i]) => i >= 0);
+  if (codeCol < 0 || !cols.length)
+    fail('The header needs employee_code and at least one of acr_hod, acr_reviewer, approver_l1…');
+  const rows = lines.slice(1).map((l) => {
+    const cells = csvLine(l);
+    const assessors: Record<string, string | null> = {};
+    for (const [k, i] of cols) assessors[k] = cells[i] ? cells[i]! : null;
+    return { employee: cells[codeCol] ?? '', assessors };
+  });
+  const valid = rows.filter((r) => r.employee);
+  if (!valid.length) fail('No row has an employee code.');
+  let out: { changed: number; errors: Array<{ employee: string; message: string }> };
+  try {
+    out = await apiFetch('/people/acr/setup/assessors', {
+      method: 'PUT',
+      body: JSON.stringify({ rows: valid.slice(0, 2000) }),
+    });
+  } catch (error) {
+    back_(back, error);
+  }
+  revalidatePath(SETUP);
+  const detail = `${String(out!.changed)} employees updated${
+    out!.errors.length
+      ? `; ${String(out!.errors.length)} rows not taken: ${out!.errors
+          .slice(0, 5)
+          .map((e) => `${e.employee} (${e.message})`)
+          .join('; ')}`
+      : ''
+  }.`;
+  redirect(`${back}&ok=1&detail=${encodeURIComponent(detail.slice(0, 400))}`);
+}
+
+/** The board's "Re-read assessors" for an open cycle. */
+export async function acrReresolve(fd: FormData) {
+  const id = str(fd, 'cycleId');
+  const page = `/people/acr?cycle=${id}`;
+  if (!okId(id)) redirect('/people/acr');
+  let out: { changed: number; unassigned: Array<{ employeeId: string; level: string }> };
+  try {
+    out = await apiFetch(`/people/acr/cycles/${id}/reresolve`, { method: 'POST', body: '{}' });
+  } catch (error) {
+    back_(page, error);
+  }
+  revalidatePath('/people/acr');
+  redirect(
+    `${page}&ok=1&detail=${encodeURIComponent(`${String(out!.changed)} levels updated${out!.unassigned.length ? `; ${String(out!.unassigned.length)} levels still have nobody` : ''}.`)}`,
+  );
 }
 
 /** Start (or top up) a cycle (form on the board). */

@@ -14,6 +14,8 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  AcrAssessorsQueryDto,
+  AcrAssessorsSaveDto,
   AcrCycleDto,
   AcrDecideDto,
   AcrLevelDto,
@@ -52,6 +54,22 @@ export class AcrController {
   @RequirePermission(PEOPLE.acrManage)
   settings(@ReqCtx() ctx: RequestContext, @Body() body: AcrSettingsDto) {
     return this.setup.saveSettings(ctx, body);
+  }
+
+  @Get('setup/assessors')
+  @ApiOperation({
+    summary: 'Who assesses each employee (the employee-wise levels), and who is missing',
+  })
+  @RequirePermission(PEOPLE.acrView)
+  assessors(@ReqCtx() ctx: RequestContext, @Query() q: AcrAssessorsQueryDto) {
+    return this.setup.assessors(ctx, q);
+  }
+
+  @Put('setup/assessors')
+  @ApiOperation({ summary: 'Assign assessors on the employees’ records (by id or employee code)' })
+  @RequirePermission(PEOPLE.acrManage)
+  saveAssessors(@ReqCtx() ctx: RequestContext, @Body() body: AcrAssessorsSaveDto) {
+    return this.setup.saveAssessors(ctx, body);
   }
 
   @Put('setup/levels')
@@ -102,6 +120,15 @@ export class AcrController {
   @RequirePermission(PEOPLE.acrManage)
   start(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.flow.start(ctx, id);
+  }
+
+  @Post('cycles/:id/reresolve')
+  @ApiOperation({
+    summary: 'Read the assessors again for the levels not yet done in an open cycle',
+  })
+  @RequirePermission(PEOPLE.acrManage)
+  reresolve(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.flow.reresolve(ctx, id);
   }
 
   @Post('cycles/:id/close')
