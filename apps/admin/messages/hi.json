@@ -205,7 +205,8 @@
     "studentDashboard": "छात्र डैशबोर्ड",
     "employeeDashboard": "कर्मचारी डैशबोर्ड",
     "staffProfileApprovals": "स्टाफ़ प्रोफ़ाइल अनुमोदन",
-    "staffProfileSettings": "स्टाफ़ प्रोफ़ाइल सेटिंग"
+    "staffProfileSettings": "स्टाफ़ प्रोफ़ाइल सेटिंग",
+    "myProfile": "मेरी प्रोफ़ाइल"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
@@ -913,6 +914,11 @@
       "kicker": "सहायता",
       "title": "सहायता केंद्र",
       "description": "हर मॉड्यूल के प्रशिक्षण पृष्ठ, वही दिनचर्या जो प्रशिक्षकों ने दिखाई।"
+    },
+    "me_profile": {
+      "kicker": "मेरी प्रोफ़ाइल",
+      "title": "मेरी प्रोफ़ाइल",
+      "description": "विद्यालय के पास मेरे विवरण; उन्हें अद्यतन करें, PDF डाउनलोड करें।"
     }
   },
   "stepUp": {

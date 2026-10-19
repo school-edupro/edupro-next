@@ -45,3 +45,8 @@ health of the records (what is missing, what waits for approval).
 - Staff app: Office → **My profile** (sections, update per section with proofs, my requests with
   withdraw, Download PDF) and **Profile changes to approve** (shown when something waits on me).
 - Test: `apps/api/test/employee-self.e2e-spec.ts`.
+- Admin app (19 Oct 2026): the same **My profile** for staff who work in the admin app: Employee
+  management → My profile (`/me/profile`, `/me/profile/edit?section=`), shown to every login linked to an
+  employee record; the header name opens it. Same API (`me/employee-profile`, changes with proofs, print,
+  `me/exports/:id` through `/me/exports/:id/file`), same rules; a login without an employee record sees a
+  notice instead. Approvals stay under Employee management → Staff profile approvals.

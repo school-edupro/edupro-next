@@ -205,7 +205,8 @@
     "studentDashboard": "Student dashboard",
     "employeeDashboard": "Employee dashboard",
     "staffProfileApprovals": "Staff profile approvals",
-    "staffProfileSettings": "Staff profile settings"
+    "staffProfileSettings": "Staff profile settings",
+    "myProfile": "My profile"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -913,6 +914,11 @@
       "kicker": "Help",
       "title": "Help centre",
       "description": "The training pages for each module, the same routines the trainers walked through."
+    },
+    "me_profile": {
+      "kicker": "My profile",
+      "title": "My profile",
+      "description": "My details as the school has them; update them, download as PDF."
     }
   },
   "stepUp": {

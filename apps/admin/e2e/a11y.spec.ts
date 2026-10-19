@@ -297,6 +297,7 @@ const PAGES = [
   '/masters/staff',
   '/transport?by=month',
   '/my-forms',
+  '/me/profile',
   '/engagement/certificates',
   '/engagement/cctv',
   '/engagement/employee-queries',

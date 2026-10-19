@@ -154,23 +154,35 @@ export async function Shell({
   )
     .then((f) => new Set(f.modules.filter((m) => m.enabled).map((m) => m.module)))
     .catch(() => null);
-  const groups = NAV.map((group) => ({
-    ...group,
-    items: group.items.filter((i) => i.permission === null || allowed.has(i.permission)),
-  })).filter(
-    (g) =>
-      g.items.length > 0 &&
-      (g.section === 'overview' ||
-        g.section === 'system' ||
-        !features ||
-        features.has(g.section) ||
-        // staff screens ride on the people module switch
-        (g.section === 'employeeManagement' && features.has('people')) ||
-        // appointments ride on the engagement module switch
-        ((g.section === 'appointments' || g.section === 'clinic') && features.has('engagement')) ||
-        // the hostel rides on the fee module switch (its fee is on the hostel ledger)
-        (g.section === 'hostel' && features.has('fees'))),
-  );
+  // staff who work here get My profile (the staff app's Office → My profile) with the other staff items
+  const myProfile = { href: '/me/profile', label: 'myProfile', permission: null };
+  const navWithMine = isStaff
+    ? NAV.some((g) => g.section === 'employeeManagement')
+      ? NAV.map((g) =>
+          g.section === 'employeeManagement' ? { ...g, items: [...g.items, myProfile] } : g,
+        )
+      : [...NAV, { section: 'employeeManagement', items: [myProfile] }]
+    : NAV;
+  const groups = navWithMine
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((i) => i.permission === null || allowed.has(i.permission)),
+    }))
+    .filter(
+      (g) =>
+        g.items.length > 0 &&
+        (g.section === 'overview' ||
+          g.section === 'system' ||
+          !features ||
+          features.has(g.section) ||
+          // staff screens ride on the people module switch
+          (g.section === 'employeeManagement' && features.has('people')) ||
+          // appointments ride on the engagement module switch
+          ((g.section === 'appointments' || g.section === 'clinic') &&
+            features.has('engagement')) ||
+          // the hostel rides on the fee module switch (its fee is on the hostel ledger)
+          (g.section === 'hostel' && features.has('fees'))),
+    );
   const portal =
     me.memberships.find((m) => m.schoolId === me.school?.id)?.schoolName ??
     me.memberships[0]?.schoolName ??
@@ -413,7 +425,7 @@ export async function Shell({
           <div className="ep-usercard">
             <a
               className="ep-header__user"
-              href="/system/security"
+              href={isStaff ? '/me/profile' : '/system/security'}
               aria-label={`My account: ${me.user.displayName}`}
               aria-describedby="ep-usercard-panel"
             >
