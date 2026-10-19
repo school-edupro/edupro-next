@@ -151,6 +151,7 @@ async function call(path: string, method: 'POST' | 'PUT', body?: unknown): Promi
     return problem(e);
   }
   revalidatePath('/people/acr');
+  revalidatePath('/me/acr');
   return { ok: true };
 }
 type AnswerMap = Record<string, number | string>;

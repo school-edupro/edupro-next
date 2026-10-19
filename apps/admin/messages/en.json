@@ -206,7 +206,8 @@
     "employeeDashboard": "Employee dashboard",
     "staffProfileApprovals": "Staff profile approvals",
     "staffProfileSettings": "Staff profile settings",
-    "myProfile": "My profile"
+    "myProfile": "My profile",
+    "myAcr": "My ACR"
   },
   "shell": {
     "primaryNavigation": "Primary",

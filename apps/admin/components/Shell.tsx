@@ -155,13 +155,17 @@ export async function Shell({
     .then((f) => new Set(f.modules.filter((m) => m.enabled).map((m) => m.module)))
     .catch(() => null);
   // staff who work here get My profile (the staff app's Office → My profile) with the other staff items
-  const myProfile = { href: '/me/profile', label: 'myProfile', permission: null };
+  const mine = [
+    { href: '/me/profile', label: 'myProfile', permission: null },
+    // the staff app's Office → My ACR: my own report and the ones waiting on me as a level
+    { href: '/me/acr', label: 'myAcr', permission: null },
+  ];
   const navWithMine = isStaff
     ? NAV.some((g) => g.section === 'employeeManagement')
       ? NAV.map((g) =>
-          g.section === 'employeeManagement' ? { ...g, items: [...g.items, myProfile] } : g,
+          g.section === 'employeeManagement' ? { ...g, items: [...g.items, ...mine] } : g,
         )
-      : [...NAV, { section: 'employeeManagement', items: [myProfile] }]
+      : [...NAV, { section: 'employeeManagement', items: mine }]
     : NAV;
   const groups = navWithMine
     .map((group) => ({

@@ -84,3 +84,11 @@ schools) and HR suites (Darwinbox, Keka).
   acknowledge or object) and **ACRs to assess** (the levels waiting on me) with the same sheet.
 - Tested in the browser on Alpha's test cycle "ACR 2026-27" (started 18 Oct 2026 with the user's
   agreement): one self-appraisal and one HOD level filled; the Principal level is left for the user.
+
+## My ACR in the admin app (19 Oct 2026)
+
+Office staff who work in the admin app (an accountant, a clerk) asked where their ACR was: the staff
+app's Office → My ACR had no twin. Now Employee management → **My ACR** (`/me/acr`, shown to every
+staff login beside My profile) lists my own reports and the ones waiting on me as a level, and
+`/me/acr/:id` shows the sheet (`AcrReport`) with the same self-appraisal, level, acknowledge and
+objection controls the staff app has; the admin's `/people/acr/:id` stays the HR view.

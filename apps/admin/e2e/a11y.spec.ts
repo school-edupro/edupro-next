@@ -299,6 +299,7 @@ const PAGES = [
   '/transport?by=month',
   '/my-forms',
   '/me/profile',
+  '/me/acr',
   '/engagement/certificates',
   '/engagement/cctv',
   '/engagement/employee-queries',

@@ -206,7 +206,8 @@
     "employeeDashboard": "कर्मचारी डैशबोर्ड",
     "staffProfileApprovals": "स्टाफ़ प्रोफ़ाइल अनुमोदन",
     "staffProfileSettings": "स्टाफ़ प्रोफ़ाइल सेटिंग",
-    "myProfile": "मेरी प्रोफ़ाइल"
+    "myProfile": "मेरी प्रोफ़ाइल",
+    "myAcr": "मेरा ACR"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
