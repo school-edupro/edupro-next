@@ -114,4 +114,31 @@ applications/:id/reject | resume`, `GET vacancies/:id/pipeline`, `GET/PUT setup/
   `.ep-steps` and `.ep-step`, which the approval timeline and an older step list own; renamed).
 - Test: `apps/api/test/recruitment-screening.e2e-spec.ts`.
 
-## Part 4 — from selected candidate to employee (next)
+## Part 4 — from selected candidate to employee (migration 0200, built)
+
+- **The move** (`POST people/recruitment/applications/:id/join`; people.recruitment.manage on the route and
+  people.employee.create checked in the service): only a selected application, once. It runs the employee
+  master's own onboarding inside the same transaction (`EmployeeProfileService.onboardWith`: its checks,
+  the next employee code unless one is given, the posting of the year, the "Onboarded" remark, a staff
+  login when asked) with the candidate's answers in the master's fields (Aadhaar and PAN decrypted for the
+  master's checks and encrypted again by the master) and the employment the office sets: date of joining,
+  department, designation (also the designation at joining), employee type and nature of appointment,
+  defaulting to the vacancy's.
+- **Rows:** qualifications → education (school or college and board or university joined as the
+  institution; marks and division as the score), experience → work experience, training → training (the
+  year as 1 January of it). Children, references, father or spouse education and work, present pay and
+  notice, skills, interests and travel stay on the application.
+- **Documents:** the office gives each uploaded document an employee document type or leaves it (photo →
+  Photograph, address proof → Address proof, résumé → Resume / CV suggested); the photo also becomes the
+  employee's photo when there is none. A remark "Joined from recruitment" is added.
+- **Duplicates:** active employees with the same mobile, email, Aadhaar or PAN (IDs compared decrypted,
+  as the encryption has a random IV) hold the move back (409 `recruitment.employee_match`, naming them and
+  what matched) until the office confirms it is a different person or a rejoining (`confirmMatch`).
+- The application becomes **Joined** with `employee_id` and `joined_at`; an event names the code.
+  `GET applications/:id/join` previews it: the next code, the defaults and lists, what carries over and
+  what stays, the documents with a suggested type, the matches.
+- **Admin:** the application page of a selected candidate shows **Move to the employee master** (the
+  preview, the employment fields, the documents to copy, a staff login tick, the confirmation when a
+  match is found); after it, a line links to the new employee, whose page says what came over.
+- Test: `apps/api/test/recruitment-join.e2e-spec.ts`; the employee master suite still passes after the
+  onboarding was split for use inside a transaction.

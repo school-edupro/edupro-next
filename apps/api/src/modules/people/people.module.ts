@@ -24,6 +24,7 @@ import { CandidateGuard } from './candidate.guard';
 import { RecruitmentPublicController } from './recruitment-public.controller';
 import { RecruitmentPublicService } from './recruitment-public.service';
 import { RecruitmentScreeningService } from './recruitment-screening.service';
+import { RecruitmentJoinService } from './recruitment-join.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { RecruitmentController } from './recruitment.controller';
 import { RecruitmentService } from './recruitment.service';
@@ -65,6 +66,7 @@ import { StudentsService } from './students.service';
     RecruitmentService,
     RecruitmentPublicService,
     RecruitmentScreeningService,
+    RecruitmentJoinService,
     CandidateAuthService,
     CandidateGuard,
     EmployeeProfileService,

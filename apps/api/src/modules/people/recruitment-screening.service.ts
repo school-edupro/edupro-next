@@ -57,11 +57,13 @@ interface AppRow {
   c_mobile: string | null;
   c_email: string | null;
   c_name: string | null;
+  employee_id: string | null;
+  joined_at: Date | null;
 }
 const APP_COLS = `SELECT a.id::text, a.number, a.vacancy_id::text, v.title AS vacancy, v.code AS vacancy_code,
        v.stage_ids::text[] AS stage_ids, a.candidate_id::text, a.status, a.current_stage_id::text, st.name AS stage,
        a.source, a.snapshot, a.snapshot_secure, a.employee_match, a.decision_note, a.submitted_at, a.decided_at,
-       c.mobile AS c_mobile, c.email::text AS c_email, c.name AS c_name
+       c.mobile AS c_mobile, c.email::text AS c_email, c.name AS c_name, a.employee_id::text, a.joined_at
   FROM job_applications a
   JOIN vacancies v ON v.id = a.vacancy_id
   JOIN candidates c ON c.id = a.candidate_id
@@ -342,7 +344,21 @@ export class RecruitmentScreeningService {
           };
         }),
         events: events.rows.map((e) => ({ ...e, at: e.at.toISOString() })),
+        employee: a.employee_id
+          ? await c
+              .query<{ id: string; code: string; name: string }>(
+                `SELECT id::text, employee_code AS code, display_name AS name FROM employees WHERE id = $1`,
+                [a.employee_id],
+              )
+              .then((x) => x.rows[0] ?? null)
+          : null,
+        joinedAt: a.joined_at?.toISOString() ?? null,
         can: {
+          join:
+            a.status === 'selected' &&
+            !a.employee_id &&
+            this.manage(ctx) &&
+            (ctx.permissions?.has(PEOPLE.employeeCreate) ?? false),
           record: this.manage(ctx) && open,
           reject: this.manage(ctx) && open,
           resume: this.manage(ctx) && a.status === 'on_hold',

@@ -41,6 +41,8 @@ type Tab = EmployeeTab;
 const OK: Record<string, string> = {
   saved: 'Saved.',
   photo: 'The photo is updated: it shows on the profile printout and the ID card.',
+  joined:
+    'Made from the recruitment application: the profile, qualifications, experience, training and the documents picked are on the record. Fill what the profile still lists as missing.',
   signature:
     'The signature is saved: it prints under their line on an ACR once their step is filled.',
   view_ended: 'The session as them has ended; you are yourself again.',

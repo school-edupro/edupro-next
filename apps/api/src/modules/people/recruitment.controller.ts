@@ -18,6 +18,8 @@ import {
   WalkInDto,
 } from './recruitment-screening.dto';
 import { RecruitmentScreeningService } from './recruitment-screening.service';
+import { JoinDto } from './recruitment-join.dto';
+import { RecruitmentJoinService } from './recruitment-join.service';
 import { PEOPLE } from './people.permissions';
 import { RecruitmentService } from './recruitment.service';
 
@@ -29,6 +31,7 @@ export class RecruitmentController {
   constructor(
     private readonly svc: RecruitmentService,
     private readonly screening: RecruitmentScreeningService,
+    private readonly joining: RecruitmentJoinService,
   ) {}
 
   @Get('setup')
@@ -197,5 +200,23 @@ export class RecruitmentController {
   @RequirePermission(PEOPLE.recruitmentManage)
   resume(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.screening.resume(ctx, id);
+  }
+
+  // ---- part 4: from selected candidate to employee ----
+
+  @Get('applications/:id/join')
+  @ApiOperation({ summary: 'What moving the candidate to the employee master will make' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  joinPreview(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.joining.preview(ctx, id);
+  }
+
+  @Post('applications/:id/join')
+  @ApiOperation({
+    summary: 'Make the selected candidate an employee (needs the right to add employees too)',
+  })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  join(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: JoinDto) {
+    return this.joining.join(ctx, id, body);
   }
 }

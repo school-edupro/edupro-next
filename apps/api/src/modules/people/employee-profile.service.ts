@@ -346,73 +346,79 @@ export class EmployeeProfileService {
 
   /** Quick onboarding: the minimum fields (code filled with the next one), and a staff login if asked. */
   async onboard(ctx: RequestContext, dto: EmployeeOnboardDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(
-        `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id()), app.employee_document_types_seed(app.current_school_id())`,
-      );
-      const lists = await loadEmployeeLists(c);
-      const raw: Record<string, unknown> = { ...dto.values };
-      if (!raw.employee_code) raw.employee_code = await nextEmployeeCode(c);
-      const { values, errors } = await validateEmployeeChanges(c, raw, lists, null);
-      for (const k of [
-        'first_name',
-        'gender',
-        'mobile',
-        'staff_type',
-        'department',
-        'designation',
-        'joined_on',
-      ])
-        if (!values[k] && !errors[k])
-          errors[k] = `${EMPLOYEE_FIELDS.find((f) => f.key === k)!.label}: an answer is needed`;
-      if (Object.keys(errors).length) this.errors(errors);
-      let id: string;
+    return this.db.tenant(requireTenant(ctx), (c) => this.onboardWith(c, ctx, dto));
+  }
+
+  /**
+   * Onboarding inside a transaction the caller holds (the move of a selected candidate, part 4 of
+   * docs/design/34-recruitment.md, does the rest of its work in the same one).
+   */
+  async onboardWith(c: PoolClient, ctx: RequestContext, dto: EmployeeOnboardDto) {
+    await c.query(
+      `SELECT app.staff_masters_seed(app.current_school_id()), app.staff_profile_lists_seed(app.current_school_id()), app.employee_document_types_seed(app.current_school_id())`,
+    );
+    const lists = await loadEmployeeLists(c);
+    const raw: Record<string, unknown> = { ...dto.values };
+    if (!raw.employee_code) raw.employee_code = await nextEmployeeCode(c);
+    const { values, errors } = await validateEmployeeChanges(c, raw, lists, null);
+    for (const k of [
+      'first_name',
+      'gender',
+      'mobile',
+      'staff_type',
+      'department',
+      'designation',
+      'joined_on',
+    ])
+      if (!values[k] && !errors[k])
+        errors[k] = `${EMPLOYEE_FIELDS.find((f) => f.key === k)!.label}: an answer is needed`;
+    if (Object.keys(errors).length) this.errors(errors);
+    let id: string;
+    try {
+      id = await writeEmployeeProfile(c, null, values);
+    } catch (e) {
+      if (e instanceof EmployeeWriteError) this.errors(e.errors);
+      throw e;
+    }
+    // the posting of the year, so the timetable and the department lists know the person
+    await c.query(
+      `INSERT INTO postings (school_id, employee_id, academic_year_id, department, designation, valid_from, created_by)
+       SELECT app.current_school_id(), $1, y.id, $2, $3, COALESCE($4::date, CURRENT_DATE), app.current_user_id()
+         FROM academic_years y WHERE y.status = 'active' ORDER BY y.start_date DESC LIMIT 1
+       ON CONFLICT (employee_id, academic_year_id) DO NOTHING`,
+      [id, values.department, values.designation, values.joined_on],
+    );
+    await c.query(
+      `INSERT INTO employee_remarks (school_id, employee_id, remark, source, created_by)
+       VALUES (app.current_school_id(), $1, 'Onboarded', 'system', app.current_user_id())`,
+      [id],
+    );
+    let login: { made: boolean; reason?: string } = { made: false };
+    if (dto.createLogin) {
+      // a savepoint: a login that cannot be made never undoes the onboarding
+      await c.query('SAVEPOINT login');
       try {
-        id = await writeEmployeeProfile(c, null, values);
+        await c.query(`SELECT app.employee_create_login($1)`, [id]);
+        await c.query('RELEASE SAVEPOINT login');
+        login = { made: true };
       } catch (e) {
-        if (e instanceof EmployeeWriteError) this.errors(e.errors);
-        throw e;
+        await c.query('ROLLBACK TO SAVEPOINT login');
+        const msg = e instanceof Error ? e.message : '';
+        login = {
+          made: false,
+          reason: msg.includes('employee.no_contact')
+            ? 'no mobile or email to sign in with'
+            : 'the login could not be made',
+        };
       }
-      // the posting of the year, so the timetable and the department lists know the person
-      await c.query(
-        `INSERT INTO postings (school_id, employee_id, academic_year_id, department, designation, valid_from, created_by)
-         SELECT app.current_school_id(), $1, y.id, $2, $3, COALESCE($4::date, CURRENT_DATE), app.current_user_id()
-           FROM academic_years y WHERE y.status = 'active' ORDER BY y.start_date DESC LIMIT 1
-         ON CONFLICT (employee_id, academic_year_id) DO NOTHING`,
-        [id, values.department, values.designation, values.joined_on],
-      );
-      await c.query(
-        `INSERT INTO employee_remarks (school_id, employee_id, remark, source, created_by)
-         VALUES (app.current_school_id(), $1, 'Onboarded', 'system', app.current_user_id())`,
-        [id],
-      );
-      let login: { made: boolean; reason?: string } = { made: false };
-      if (dto.createLogin) {
-        // a savepoint: a login that cannot be made never undoes the onboarding
-        await c.query('SAVEPOINT login');
-        try {
-          await c.query(`SELECT app.employee_create_login($1)`, [id]);
-          await c.query('RELEASE SAVEPOINT login');
-          login = { made: true };
-        } catch (e) {
-          await c.query('ROLLBACK TO SAVEPOINT login');
-          const msg = e instanceof Error ? e.message : '';
-          login = {
-            made: false,
-            reason: msg.includes('employee.no_contact')
-              ? 'no mobile or email to sign in with'
-              : 'the login could not be made',
-          };
-        }
-      }
-      await this.audit.stage(ctx, c, {
-        action: 'people.employee.onboard',
-        entityType: 'employees',
-        entityId: id,
-        after: { code: values.employee_code, login: login.made },
-      });
-      return { id, code: values.employee_code, login };
+    }
+    await this.audit.stage(ctx, c, {
+      action: 'people.employee.onboard',
+      entityType: 'employees',
+      entityId: id,
+      after: { code: values.employee_code, login: login.made },
     });
+    return { id, code: values.employee_code, login };
   }
 
   /** A staff login for an employee who has none. */

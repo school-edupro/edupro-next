@@ -138,6 +138,7 @@ export const APP_EVENT: Record<string, string> = {
   resumed: 'Taken up again',
   not_taken_forward: 'Not taken forward',
   selected: 'Selected',
+  joined: 'Joined the staff',
 };
 export interface ApplicationRow {
   id: string;
@@ -202,7 +203,39 @@ export interface ApplicationView {
   }>;
   stages: ApplicationStage[];
   events: Array<{ at: string; what: string; note: string | null; by_name: string | null }>;
-  can: { record: boolean; reject: boolean; resume: boolean; sensitive: boolean };
+  /** the employee the candidate became (part 4) */
+  employee: { id: string; code: string; name: string } | null;
+  joinedAt: string | null;
+  can: { record: boolean; reject: boolean; resume: boolean; sensitive: boolean; join: boolean };
+}
+/** What moving a selected candidate to the employee master will make (part 4). */
+export interface JoinPreview {
+  status: AppStatus;
+  employeeId: string | null;
+  nextCode: string;
+  defaults: {
+    department: string | null;
+    designation: string | null;
+    employeeType: string | null;
+    post: string;
+  };
+  lists: {
+    departments: string[];
+    designations: string[];
+    employeeTypes: string[];
+    natures: string[];
+  };
+  copies: { fields: string[]; education: number; experience: number; training: number };
+  stays: string[];
+  documents: Array<{
+    id: string;
+    kind: string;
+    label: string;
+    fileId: string;
+    suggestedTypeId: string | null;
+  }>;
+  documentTypes: Array<{ id: string; name: string }>;
+  matches: Array<{ id: string; code: string; name: string; why: string[] }>;
 }
 export interface VacancyPipeline {
   posts: number;

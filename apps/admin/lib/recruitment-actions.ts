@@ -281,3 +281,40 @@ export async function saveRecruitmentNotices(input: RecruitmentNotices): Promise
   revalidatePath(`${PAGE}/setup`);
   return { ok: true };
 }
+
+// ---- part 4: from selected candidate to employee ---------------------------------------------------
+
+/** The move: the employment set here, the documents given a type; the new employee's page after. */
+export async function joinCandidate(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `${APP_PAGE}/${id}`;
+  if (!okId(id)) redirect(CANDIDATES);
+  const documents: Array<{ id: string; typeId: string | null }> = [];
+  for (const [k, v] of fd.entries()) {
+    const m = /^doc\.(\d{1,18})$/.exec(k);
+    if (m) documents.push({ id: m[1]!, typeId: okId(String(v)) ? String(v) : null });
+  }
+  let out = { employeeId: '', code: '' };
+  try {
+    out = await apiFetch(`${BASE}/applications/${id}/join`, {
+      method: 'POST',
+      body: JSON.stringify({
+        joinedOn: str(fd, 'joinedOn'),
+        ...(str(fd, 'employeeCode') ? { employeeCode: str(fd, 'employeeCode') } : {}),
+        ...(str(fd, 'department') ? { department: str(fd, 'department') } : {}),
+        ...(str(fd, 'designation') ? { designation: str(fd, 'designation') } : {}),
+        ...(str(fd, 'employeeType') ? { employeeType: str(fd, 'employeeType') } : {}),
+        ...(str(fd, 'natureOfAppointment')
+          ? { natureOfAppointment: str(fd, 'natureOfAppointment') }
+          : {}),
+        createLogin: fd.get('createLogin') === 'yes',
+        confirmMatch: fd.get('confirmMatch') === 'yes',
+        documents,
+      }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(page);
+  redirect(`/people/employees/${out.employeeId}?ok=joined`);
+}

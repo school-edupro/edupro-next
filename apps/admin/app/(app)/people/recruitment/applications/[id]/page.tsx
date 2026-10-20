@@ -11,8 +11,14 @@ import {
   RESULT_WORD,
   dmy,
   type ApplicationView,
+  type JoinPreview,
 } from '@/lib/recruitment';
-import { recordStage, rejectApplication, resumeApplication } from '@/lib/recruitment-actions';
+import {
+  joinCandidate,
+  recordStage,
+  rejectApplication,
+  resumeApplication,
+} from '@/lib/recruitment-actions';
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-IN', {
@@ -52,6 +58,10 @@ export default async function ApplicationPage({
     },
   );
   const current = a.stages.find((s) => s.current);
+  const join = a.can.join
+    ? await apiFetch<JoinPreview>(`/people/recruitment/applications/${id}/join`).catch(() => null)
+    : null;
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <>
       <Breadcrumbs
@@ -87,6 +97,172 @@ export default async function ApplicationPage({
         </p>
       ) : null}
 
+      {a.employee ? (
+        <p className="ep-alert ep-alert--success" role="status">
+          Joined the staff as{' '}
+          <a href={`/people/employees/${a.employee.id}`}>
+            {a.employee.name} ({a.employee.code})
+          </a>
+          {a.joinedAt ? ` on ${dmy(a.joinedAt)}` : ''}.
+        </p>
+      ) : null}
+      {join ? (
+        <section className="ep-card ep-acr-card" aria-labelledby="ap-join-h">
+          <h2 id="ap-join-h" className="ep-card__title">
+            Move to the employee master
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Made through the employee master’s own onboarding and its checks. Carries over:{' '}
+            {join.copies.fields.join(', ')}; {join.copies.education} qualifications,{' '}
+            {join.copies.experience} jobs, {join.copies.training} trainings. Stays on this
+            application: {join.stays.join('; ')}.
+          </p>
+          {join.matches.length ? (
+            <p className="ep-alert ep-alert--warning" role="status">
+              Already on the staff with the same details:{' '}
+              {join.matches.map((m, i) => (
+                <span key={m.id}>
+                  {i ? '; ' : ''}
+                  <a href={`/people/employees/${m.id}`}>
+                    {m.name} ({m.code})
+                  </a>{' '}
+                  ({m.why.join(', ')})
+                </span>
+              ))}
+              . Go on only if this is a different person or a rejoining.
+            </p>
+          ) : null}
+          <form action={joinCandidate}>
+            <input type="hidden" name="id" value={a.id} />
+            <div className="ep-acr-filter">
+              <label className="ep-field" htmlFor="jn-code" style={{ margin: 0 }}>
+                <span className="ep-field__label">Employee code</span>
+                <input
+                  id="jn-code"
+                  name="employeeCode"
+                  className="ep-input"
+                  maxLength={30}
+                  placeholder={join.nextCode}
+                />
+                <span className="ep-field__help">Empty: {join.nextCode}</span>
+              </label>
+              <label className="ep-field" htmlFor="jn-on" style={{ margin: 0 }}>
+                <span className="ep-field__label">Date of joining *</span>
+                <input
+                  id="jn-on"
+                  name="joinedOn"
+                  type="date"
+                  className="ep-input"
+                  required
+                  defaultValue={today}
+                />
+              </label>
+              {(
+                [
+                  ['department', 'Department *', join.lists.departments, join.defaults.department],
+                  [
+                    'designation',
+                    'Designation *',
+                    join.lists.designations,
+                    join.defaults.designation,
+                  ],
+                  [
+                    'employeeType',
+                    'Employee type *',
+                    join.lists.employeeTypes,
+                    join.defaults.employeeType,
+                  ],
+                  ['natureOfAppointment', 'Nature of appointment', join.lists.natures, null],
+                ] as const
+              ).map(([name, label, options, value]) => (
+                <label key={name} className="ep-field" htmlFor={`jn-${name}`} style={{ margin: 0 }}>
+                  <span className="ep-field__label">{label}</span>
+                  <select
+                    id={`jn-${name}`}
+                    name={name}
+                    className="ep-select"
+                    defaultValue={value ?? ''}
+                    required={label.endsWith('*')}
+                  >
+                    <option value="">—</option>
+                    {options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            {join.documents.length ? (
+              <div className="ep-table-wrap" style={{ marginTop: 'var(--sp-3)' }}>
+                <table className="ep-table ep-table--dense">
+                  <caption className="ep-field__label" style={{ textAlign: 'left' }}>
+                    Documents to copy to the employee record
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Uploaded as</th>
+                      <th scope="col">View</th>
+                      <th scope="col">Becomes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {join.documents.map((d) => (
+                      <tr key={d.id}>
+                        <td>{d.label}</td>
+                        <td>
+                          <FileLinks
+                            href={`/api/recruitment-file/${a.id}/${d.fileId}`}
+                            label={d.label}
+                            viewOnly
+                          />
+                        </td>
+                        <td>
+                          <select
+                            name={`doc.${d.id}`}
+                            className="ep-select"
+                            aria-label={`${d.label} becomes`}
+                            defaultValue={d.suggestedTypeId ?? ''}
+                          >
+                            <option value="">Do not copy</option>
+                            {join.documentTypes.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <div style={{ display: 'grid', gap: 'var(--sp-2)', margin: 'var(--sp-3) 0' }}>
+              <label className="ep-check" htmlFor="jn-login">
+                <input
+                  id="jn-login"
+                  type="checkbox"
+                  name="createLogin"
+                  value="yes"
+                  defaultChecked
+                />{' '}
+                Make a staff login (they sign in with a code to their mobile or email)
+              </label>
+              {join.matches.length ? (
+                <label className="ep-check" htmlFor="jn-confirm">
+                  <input id="jn-confirm" type="checkbox" name="confirmMatch" value="yes" required />{' '}
+                  I have checked: this is a different person, or a rejoining that needs a new record
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" className="ep-btn ep-btn--primary">
+              Make the employee record
+            </button>
+          </form>
+        </section>
+      ) : null}
       <section className="ep-card ep-acr-card" aria-labelledby="ap-stages-h">
         <h2 id="ap-stages-h" className="ep-card__title">
           <Badge tone={APP_TONE[a.status] as 'neutral'}>{APP_STATUS[a.status]}</Badge>{' '}
