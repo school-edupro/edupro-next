@@ -215,6 +215,10 @@ export const AddDocumentSchema = z.object({
 });
 export class AddDocumentDto extends createZodDto(AddDocumentSchema) {}
 
+/** The signature image on an employee's record (0193): null clears it. */
+export const SetSignatureSchema = z.object({ fileId: IdSchema.nullable() });
+export class SetSignatureDto extends createZodDto(SetSignatureSchema) {}
+
 export const ReplaceDocumentSchema = z.object({
   fileId: IdSchema,
   title: z.string().trim().max(120).optional(),

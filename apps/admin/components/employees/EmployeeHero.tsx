@@ -7,6 +7,7 @@ import {
   createEmployeeLogin,
   requestEmployeePrint,
   uploadEmployeePhoto,
+  uploadEmployeeSignature,
 } from '@/lib/employee-actions';
 import type { EmployeeProfile } from '@/lib/employee';
 import { ddmmyyyy } from '@/lib/profile';
@@ -126,6 +127,24 @@ export function EmployeeHero({
               fields={{ kind: 'photo' }}
             />
           ) : null}
+          <div className="ep-hero__signature">
+            {employee.signatureFileId ? (
+              <img
+                src={`/api/files/${employee.signatureFileId}/view`}
+                alt={`Signature of ${employee.displayName}`}
+              />
+            ) : (
+              <span className="ep-field__help">No signature on file</span>
+            )}
+            {canEdit ? (
+              <PhotoUploader
+                action={uploadEmployeeSignature}
+                studentId={employee.id}
+                label={employee.signatureFileId ? 'Change signature' : 'Add signature'}
+                fields={{ kind: 'signature' }}
+              />
+            ) : null}
+          </div>
         </div>
         <div className="ep-hero__main">
           <div className="ep-hero__title">

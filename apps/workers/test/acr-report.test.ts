@@ -116,7 +116,14 @@ describe('ACR printout', () => {
     expect(html).toContain('2. Principal · reviews');
     expect(html).toContain('With them now');
     expect(html).toContain('ACR started');
-    expect(html).toContain('<div>Employee</div><div>HOD</div><div>Principal</div>');
+    // the signature lines: the employee (signed on submission), the HOD who filled (by their login),
+    // the Principal's people still to sign; no signature image on file, so the names only
+    expect(html).toContain('Tara (T9) · TGT');
+    expect(html).toContain('<div class="line">Employee</div>');
+    expect(html).toContain('<div class="line">HOD</div>');
+    expect(html).toContain('<div class="line">Principal</div>');
+    expect(html).toContain('Hema (H9)');
+    expect(html).not.toContain('<img src="data:');
     expect(html).not.toContain('class="acr brk"');
   });
 

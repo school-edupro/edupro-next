@@ -20,6 +20,7 @@ import {
   ListEmployeesQueryDto,
   UpdateEmployeeDto,
   UpsertPostingDto,
+  SetSignatureDto,
 } from './people.dto';
 import { PEOPLE } from './people.permissions';
 
@@ -71,6 +72,12 @@ export class EmployeesController {
   @RequirePermission(PEOPLE.employeeEdit)
   posting(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: UpsertPostingDto) {
     return this.employees.upsertPosting(ctx, id, body);
+  }
+
+  @Post(':id/signature')
+  @RequirePermission(PEOPLE.employeeEdit)
+  signature(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: SetSignatureDto) {
+    return this.employees.setSignature(ctx, id, body.fileId);
   }
 
   @Post(':id/documents')

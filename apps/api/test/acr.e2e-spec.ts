@@ -1128,6 +1128,37 @@ describe('employee ACR flow (e2e)', () => {
       absent: 9,
       lateSlips: 3,
     });
+    // the office puts a signature image on the record (0193); it is a file of the record for the ACR
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const slot = await call(admin, 'POST', '/platform/files', {
+      fileName: 'sign.png',
+      contentType: 'image/png',
+      sizeBytes: png.length,
+    });
+    expect(slot.statusCode).toBe(201);
+    const putr = await inject({
+      method: 'PUT',
+      url: slot.json().upload.url,
+      headers: {},
+      raw: { body: png, contentType: 'image/png' },
+    } as never);
+    expect(putr.statusCode).toBe(200);
+    const fileId = slot.json().file.id as string;
+    const sig = await call(admin, 'POST', `/people/employees/${teacherEmp}/signature`, { fileId });
+    expect(sig.statusCode).toBe(201);
+    expect(
+      (await call(admin, 'GET', `/people/employees/${teacherEmp}`)).json().signatureFileId,
+    ).toBe(fileId);
+    expect(
+      (await call(teacher, 'GET', `/people/acr/reports/${reportId}/files/${fileId}`)).statusCode,
+    ).toBe(200);
+    expect(
+      (await call(teacher, 'POST', `/people/employees/${teacherEmp}/signature`, { fileId }))
+        .statusCode,
+    ).toBe(403);
     // a file that is not on the record, or an ACR one may not see: not found
     expect(
       (await call(teacher, 'GET', `/people/acr/reports/${reportId}/files/999999999`)).statusCode,

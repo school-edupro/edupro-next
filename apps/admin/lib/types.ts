@@ -259,6 +259,8 @@ export interface Student {
   admittedOn: string | null;
   leftOn: string | null;
   photoFileId: string | null;
+  /** the signature image on the record (0193), printed on the ACR once a step is filled */
+  signatureFileId: string | null;
   address: Record<string, unknown>;
   details: Record<string, unknown>;
   status: 'active' | 'inactive';
@@ -332,6 +334,8 @@ export interface Employee {
   mobile: string | null;
   email: string | null;
   photoFileId: string | null;
+  /** the signature image on the record (0193), printed on the ACR once a step is filled */
+  signatureFileId: string | null;
   status: 'active' | 'inactive';
   updatedAt: string;
   posting: Posting | null;

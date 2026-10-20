@@ -262,6 +262,10 @@ employee)` picks the most specific active form: for their side naming their type
 reports/:id/files/:fileId` gives a signed address to whoever may see the ACR; the apps pass it
   through at `/api/acr-file/:id/:fileId` and `/api/my-acr-file/:id/:fileId`). Leave status gains
   half-pay leave and the late arrival slips the office enters (`office_facts.hpl`, `lateSlips`).
-- `employees.signature_file_id` (0193) is for the signature under each person's line on the printout
-  (next part): uploaded by the office on the employee page, printed once the step is filled.
+- **Signatures on the printout** (`employees.signature_file_id`, 0193): the office uploads a signature
+  image on the employee page (`POST people/employees/:id/signature { fileId }`, people.employee.edit;
+  shown small under the photo). Each signature line of the PDF names who signs with code and
+  designation: the employee (signed on submission, with the date) and, for a filled level, the person
+  who filled it (by their login) with the date; a level not yet filled names its people. The signature
+  image prints above the line only once that step is filled.
 - Test: `acr.e2e-spec.ts` "the sheet carries the school’s guidelines and the employee’s record".

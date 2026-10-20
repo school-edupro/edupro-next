@@ -44,6 +44,7 @@ export interface EmployeeRow {
   mobile: string | null;
   email: string | null;
   photoFileId: string | null;
+  signatureFileId: string | null;
   address: Record<string, unknown>;
   details: Record<string, unknown>;
   status: 'active' | 'inactive';
@@ -67,6 +68,7 @@ interface EmployeeDbRow {
   mobile: string | null;
   email: string | null;
   photo_file_id: string | null;
+  signature_file_id: string | null;
   address: Record<string, unknown>;
   details: Record<string, unknown>;
   status: 'active' | 'inactive';
@@ -86,7 +88,7 @@ interface EmployeeDbRow {
 
 const SELECT =
   'SELECT em.id::text, em.employee_code, em.first_name, em.last_name, em.display_name, em.dob::text, em.gender::text, em.employee_type::text, em.designation, em.department,' +
-  ' em.joined_on::text, em.left_on::text, em.mobile, em.email::text, em.photo_file_id::text, em.address, em.details, em.status::text, em.updated_at,' +
+  ' em.joined_on::text, em.left_on::text, em.mobile, em.email::text, em.photo_file_id::text, em.signature_file_id::text, em.address, em.details, em.status::text, em.updated_at,' +
   ' p.id::text AS posting_id, p.academic_year_id::text, y.code AS academic_year, p.campus_id::text, ca.name AS campus, p.department AS p_department,' +
   ' p.designation AS p_designation, p.reports_to_employee_id::text, mgr.display_name AS reports_to, p.valid_from::text, p.valid_to::text' +
   ' FROM employees em' +
@@ -111,6 +113,7 @@ const toRow = (x: EmployeeDbRow): EmployeeRow => ({
   mobile: x.mobile,
   email: x.email,
   photoFileId: x.photo_file_id,
+  signatureFileId: x.signature_file_id,
   address: x.address,
   details: x.details,
   status: x.status,
@@ -438,6 +441,40 @@ export class EmployeesService {
         after: after.posting,
       });
       return after;
+    });
+  }
+
+  /**
+   * The signature image on the record (0193): printed under the person's line on an ACR once their step
+   * is filled. The office sets it; null clears it.
+   */
+  async setSignature(ctx: RequestContext, employeeId: string, fileId: string | null) {
+    const tenant = requireTenant(ctx);
+    if (fileId) {
+      const file = await this.files.get(ctx, fileId);
+      if (file.status !== 'ready')
+        throw new DomainError('file.not_ready', 'Upload the file before attaching it', {
+          status: 409,
+        });
+      const type = (file as { contentType?: string | null }).contentType ?? '';
+      if (type && !/^image\/(png|jpeg|webp)$/.test(type))
+        throw new DomainError('validation-failed', 'A signature is an image (PNG, JPG or WebP)', {
+          status: 400,
+        });
+    }
+    return this.db.tenant(tenant, async (c) => {
+      await this.find(tenant, employeeId, c);
+      await c.query(
+        `UPDATE employees SET signature_file_id = $2, updated_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
+        [employeeId, fileId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'people.employee.signature',
+        entityType: 'employees',
+        entityId: employeeId,
+        after: { fileId },
+      });
+      return { ok: true };
     });
   }
 

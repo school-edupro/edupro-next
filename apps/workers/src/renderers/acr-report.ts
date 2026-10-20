@@ -33,11 +33,22 @@ interface Review {
   score_pct: string | null;
   grade: string | null;
   grade_reason: string | null;
+  filled_by: string | null;
   filled_by_name: string | null;
   filled_at: Date | null;
   skipped_note: string | null;
   form_id: string | null;
   form_name: string | null;
+}
+/** Who signs a line: the employee or the person who filled a level, with their signature on file. */
+interface Signer {
+  id: string;
+  user_id: string | null;
+  name: string;
+  code: string;
+  designation: string | null;
+  object_key: string | null;
+  content_type: string | null;
 }
 interface Report {
   id: string;
@@ -83,6 +94,18 @@ interface Ev {
   what: string;
   note: string | null;
   by_name: string | null;
+}
+
+async function imageUri(storage: StorageDriver, key: string | null, type: string | null) {
+  if (!key || !type || !/^image\/(png|jpe?g|webp)$/.test(type)) return null;
+  try {
+    const bytes = await storage.read(key);
+    return bytes.length <= 2 * 1024 * 1024
+      ? `data:${type};base64,${bytes.toString('base64')}`
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 const esc = (s: string): string =>
@@ -222,7 +245,7 @@ export async function renderAcrReport(
     const reviews = (
       await c.query<Review>(
         `SELECT v.report_id::text, v.seq, v.label, v.action, v.status, v.answers, v.remarks, v.score_pct::text,
-                v.grade, v.grade_reason, v.filled_by_name, v.filled_at, v.skipped_note, v.form_id::text, f.name AS form_name,
+                v.grade, v.grade_reason, v.filled_by::text, v.filled_by_name, v.filled_at, v.skipped_note, v.form_id::text, f.name AS form_name,
                 (SELECT array_agg(x.display_name || ' (' || x.employee_code || ')' ORDER BY x.display_name)
                    FROM employees x WHERE x.id = ANY(v.reviewer_ids)) AS people
            FROM acr_reviews v LEFT JOIN acr_forms f ON f.id = v.form_id
@@ -278,11 +301,25 @@ export async function renderAcrReport(
          FROM employee_documents d JOIN employee_document_types t ON t.id = d.type_id
         WHERE d.employee_id = ANY($1::bigint[]) AND d.deleted_at IS NULL ORDER BY t.sort_order, t.name, d.id`,
     );
+    // who signs: the employees, and the people who filled a level (by their login), with signatures
+    const signerUsers = [
+      ...new Set(reviews.map((v) => v.filled_by).filter((x): x is string => !!x)),
+    ];
+    const signers = (
+      await c.query<Signer>(
+        `SELECT e.id::text, e.user_id::text, e.display_name AS name, e.employee_code AS code, e.designation,
+                f.object_key, f.content_type
+           FROM employees e LEFT JOIN files f ON f.id = e.signature_file_id AND f.status = 'ready'
+          WHERE e.id = ANY($1::bigint[]) OR e.user_id = ANY($2::bigint[])`,
+        [empIds, signerUsers],
+      )
+    ).rows;
     return {
       reports,
       reviews,
       questions,
       events,
+      signers,
       education,
       experience,
       training,
@@ -298,6 +335,11 @@ export async function renderAcrReport(
   });
   const lh: Letterhead = await letterhead(db, storage, tenant);
   const stamp = istStamp(new Date());
+  const sigOf = new Map<string, string>();
+  for (const x of data.signers) {
+    const uri = await imageUri(storage, x.object_key, x.content_type);
+    if (uri) sigOf.set(x.id, uri);
+  }
   const qsOf = (formId: string | null) =>
     formId ? data.questions.filter((q) => q.form_id === formId) : [];
 
@@ -450,7 +492,42 @@ export async function renderAcrReport(
         `${r.decision === 'upheld' ? 'Grade upheld' : 'Grade revised'}${r.decision_note ? ` · ${esc(r.decision_note)}` : ''}`,
       ]);
     if (r.closed_at) resultRows.push(['Closed', esc(dmy(r.closed_at))]);
-    const signs = ['Employee', ...levels.filter((v) => v.status !== 'skipped').map((v) => v.label)];
+    // the signature lines: the employee, then every level that stands; a signed line shows the
+    // signature on file, the name, code and designation of who signed, and the date
+    const signer = (
+      who: Signer | undefined,
+      signed: boolean,
+      when: Date | null,
+      fallback: string,
+    ) =>
+      `<div class="sig">${
+        who && signed && sigOf.has(who.id)
+          ? `<img src="${sigOf.get(who.id)!}" alt="" />`
+          : '<div class="pad"></div>'
+      }<div class="who">${
+        who
+          ? `${esc(who.name)} (${esc(who.code)})${who.designation ? ` · ${esc(who.designation)}` : ''}${
+              signed && when ? `<br/>${esc(dmy(when))}` : ''
+            }`
+          : esc(fallback)
+      }</div>`;
+    const employeeSigner = data.signers.find((x) => x.id === r.employee_id);
+    const signs = [
+      `${signer(employeeSigner, !!r.self_submitted_at, r.self_submitted_at, '')}<div class="line">Employee</div></div>`,
+      ...levels
+        .filter((v) => v.status !== 'skipped')
+        .map(
+          (v) =>
+            `${signer(
+              v.status === 'done' && v.filled_by
+                ? data.signers.find((x) => x.user_id === v.filled_by)
+                : undefined,
+              v.status === 'done',
+              v.filled_at,
+              v.people?.join(', ') ?? '',
+            )}<div class="line">${esc(v.label)}</div></div>`,
+        ),
+    ];
     return `<article class="acr${last ? '' : ' brk'}">
   <div class="title"><h1>Annual Confidential Report</h1><span>${t(r.cycle)} · Confidential</span></div>
   <div class="top">
@@ -478,7 +555,7 @@ export async function renderAcrReport(
           .join('')}</tbody></table></section>`
       : ''
   }
-  <div class="signs">${signs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>
+  <div class="signs">${signs.join('')}</div>
 </article>`;
   };
 
@@ -522,8 +599,11 @@ export async function renderAcrReport(
   th { color: #52606D; font-weight: 600; }
   .qa th { background: #F5F7FA; color: #00265D; }
   .ans { width: 34%; text-align: right; }
-  .signs { display: grid; grid-auto-flow: column; gap: 16px; margin-top: 26px; text-align: center; color: #52606D; break-inside: avoid; }
-  .signs div { border-top: 1px solid #52606D; padding-top: 3px; }
+  .signs { display: grid; grid-auto-flow: column; gap: 16px; margin-top: 18px; text-align: center; color: #52606D; break-inside: avoid; align-items: end; }
+  .sig { display: flex; flex-direction: column; justify-content: flex-end; }
+  .sig img, .sig .pad { height: 42px; max-width: 100%; object-fit: contain; display: block; margin: 0 auto 2px; }
+  .sig .who { font-size: 8px; min-height: 18px; }
+  .sig .line { border-top: 1px solid #52606D; padding-top: 3px; font-weight: 600; color: #1F2933; }
 </style></head>
 <body>
   <div class="lh">
