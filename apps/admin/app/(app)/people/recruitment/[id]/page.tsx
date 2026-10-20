@@ -10,6 +10,7 @@ import {
   VACANCY_TONE,
   dmy,
   type RecruitmentSetup,
+  type VacancyPipeline,
   type VacancyView,
 } from '@/lib/recruitment';
 import {
@@ -47,6 +48,9 @@ export default async function VacancyPage({
     },
   );
   const setup = v.can.edit ? await apiFetch<RecruitmentSetup>('/people/recruitment/setup') : null;
+  const pipe = ['approved', 'published', 'closed'].includes(v.status)
+    ? await apiFetch<VacancyPipeline>(`/people/recruitment/vacancies/${id}/pipeline`)
+    : null;
   const today = new Date().toISOString().slice(0, 10);
   const facts: Array<[string, string | null]> = [
     ['Code', v.code],
@@ -165,6 +169,36 @@ export default async function VacancyPage({
           ) : null}
         </div>
       </section>
+      {pipe ? (
+        <section className="ep-card ep-acr-card" aria-labelledby="vac-cand-h">
+          <h2 id="vac-cand-h" className="ep-card__title">
+            Candidates · {pipe.total}{' '}
+            <span className="ep-field__help">
+              Selected {pipe.selected} of {pipe.posts} post{pipe.posts > 1 ? 's' : ''}
+              {pipe.onHold ? ` · ${String(pipe.onHold)} on hold` : ''}
+              {pipe.rejected ? ` · ${String(pipe.rejected)} not taken forward` : ''}
+            </span>
+          </h2>
+          <div className="ep-dash-kpis">
+            {pipe.stages.map((st) => (
+              <a
+                key={st.id}
+                className="ep-card ep-card--elevated ep-staff-kpi"
+                href={`/people/recruitment/candidates?vacancy=${v.id}&stage=${st.id}`}
+              >
+                <span className="ep-kpi__value">{st.open}</span>
+                <span className="ep-kpi__label">At {st.name}</span>
+              </a>
+            ))}
+          </div>
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/people/recruitment/candidates?vacancy=${v.id}`}
+          >
+            Open the candidates
+          </a>
+        </section>
+      ) : null}
       <div className="ep-grid-2">
         <section className="ep-card ep-acr-card" aria-labelledby="vac-facts-h">
           <h2 id="vac-facts-h" className="ep-card__title">

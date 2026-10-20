@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { StageKind } from './recruitment';
+import type { RecruitmentNotices, StageKind } from './recruitment';
 
 const BASE = '/people/recruitment';
 const PAGE = '/people/recruitment';
@@ -135,4 +135,149 @@ export async function closeVacancy(fd: FormData) {
 }
 export async function cancelVacancy(fd: FormData) {
   await act(fd, 'cancel', 'Cancelled.');
+}
+
+// ---- part 3: candidates and screening -----------------------------------------------------------------
+
+const APP_PAGE = '/people/recruitment/applications';
+const CANDIDATES = '/people/recruitment/candidates';
+/** Where to come back to: only the recruitment screens, never an outside address. */
+const backTo = (fd: FormData, fallback: string) => {
+  const raw = str(fd, 'back');
+  return /^\/people\/recruitment(\/[\w/-]*)?(\?[\w=&%.+-]*)?$/.test(raw) ? raw : fallback;
+};
+/** The schedule and result fields of a stage form (date-time, venue, panel, marks, result, remarks). */
+function stageBody(fd: FormData) {
+  const marks = str(fd, 'marks');
+  const result = str(fd, 'result');
+  return {
+    ...(str(fd, 'scheduledAt') ? { scheduledAt: str(fd, 'scheduledAt').slice(0, 16) } : {}),
+    ...(str(fd, 'venue') ? { venue: str(fd, 'venue') } : {}),
+    ...(str(fd, 'panel') ? { panel: str(fd, 'panel') } : {}),
+    ...(marks !== '' && Number.isFinite(Number(marks)) ? { marks: Number(marks) } : {}),
+    ...(['pass', 'fail', 'hold'].includes(result) ? { result } : {}),
+    ...(str(fd, 'remarks') ? { remarks: str(fd, 'remarks') } : {}),
+  };
+}
+
+/** One application's current stage: the schedule, or the marks and result. */
+export async function recordStage(fd: FormData) {
+  const id = str(fd, 'id');
+  const stageId = str(fd, 'stageId');
+  const page = `${APP_PAGE}/${id}`;
+  if (!okId(id) || !okId(stageId)) redirect(CANDIDATES);
+  try {
+    await apiFetch(`${BASE}/applications/${id}/stages/${stageId}`, {
+      method: 'POST',
+      body: JSON.stringify(stageBody(fd)),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(page);
+  done(page, 'Saved.');
+}
+
+/** The ticked candidates at one stage: each button sends its own result (no button name reaches a server action). */
+async function bulk(fd: FormData, result: 'pass' | 'fail' | 'hold' | null, ok: string) {
+  const page = backTo(fd, CANDIDATES);
+  const ids = fd.getAll('ids').map(String).filter(okId);
+  const stageId = str(fd, 'stageId');
+  if (!ids.length)
+    redirect(
+      `${page}${page.includes('?') ? '&' : '?'}error=validation-failed&detail=${encodeURIComponent('Tick the candidates first')}`,
+    );
+  let out: { done: number; skipped: string[] } = { done: 0, skipped: [] };
+  try {
+    out = await apiFetch(`${BASE}/applications/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ ids, stageId, ...stageBody(fd), ...(result ? { result } : {}) }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(CANDIDATES);
+  done(
+    page,
+    `${ok}: ${String(out.done)}.${out.skipped.length ? ` Not at this stage, left as they were: ${out.skipped.join(', ')}.` : ''}`,
+  );
+}
+export async function bulkPass(fd: FormData) {
+  await bulk(fd, 'pass', 'Passed this stage');
+}
+export async function bulkFail(fd: FormData) {
+  await bulk(fd, 'fail', 'Not taken forward');
+}
+export async function bulkHold(fd: FormData) {
+  await bulk(fd, 'hold', 'Put on hold');
+}
+export async function bulkSchedule(fd: FormData) {
+  await bulk(fd, null, 'Scheduled');
+}
+
+export async function rejectApplication(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `${APP_PAGE}/${id}`;
+  if (!okId(id)) redirect(CANDIDATES);
+  try {
+    await apiFetch(`${BASE}/applications/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note: str(fd, 'reason') || undefined }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(page);
+  done(page, 'Not taken forward.');
+}
+
+export async function resumeApplication(fd: FormData) {
+  const id = str(fd, 'id');
+  const page = `${APP_PAGE}/${id}`;
+  if (!okId(id)) redirect(CANDIDATES);
+  try {
+    await apiFetch(`${BASE}/applications/${id}/resume`, { method: 'POST', body: '{}' });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(page);
+  done(page, 'Taken up again at the same stage.');
+}
+
+/** A candidate the office met (walk-in, referral), added to a vacancy. */
+export async function addWalkIn(fd: FormData) {
+  const page = backTo(fd, CANDIDATES);
+  let out = { id: '', number: '' };
+  try {
+    out = await apiFetch(`${BASE}/applications`, {
+      method: 'POST',
+      body: JSON.stringify({
+        vacancyId: str(fd, 'vacancyId'),
+        firstName: str(fd, 'firstName'),
+        lastName: str(fd, 'lastName') || undefined,
+        gender: str(fd, 'gender'),
+        dob: str(fd, 'dob') || undefined,
+        mobile: str(fd, 'mobile'),
+        email: str(fd, 'email') || undefined,
+      }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(CANDIDATES);
+  done(
+    `${APP_PAGE}/${out.id}`,
+    `Added as application ${out.number}. The candidate can complete the form online with this mobile.`,
+  );
+}
+
+export async function saveRecruitmentNotices(input: RecruitmentNotices): Promise<Out> {
+  try {
+    await apiFetch(`${BASE}/setup/notices`, { method: 'PUT', body: JSON.stringify(input) });
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: e.problem.detail ?? e.problem.type };
+    throw e;
+  }
+  revalidatePath(`${PAGE}/setup`);
+  return { ok: true };
 }

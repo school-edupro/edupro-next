@@ -9,6 +9,15 @@ import {
   VacancyNoteDto,
   VacancyPublishDto,
 } from './recruitment.dto';
+import {
+  ApplicationBulkDto,
+  ApplicationListDto,
+  ApplicationNoteDto,
+  RecruitmentNoticesDto,
+  StageResultDto,
+  WalkInDto,
+} from './recruitment-screening.dto';
+import { RecruitmentScreeningService } from './recruitment-screening.service';
 import { PEOPLE } from './people.permissions';
 import { RecruitmentService } from './recruitment.service';
 
@@ -17,7 +26,10 @@ import { RecruitmentService } from './recruitment.service';
 @ApiBearerAuth()
 @Controller('people/recruitment')
 export class RecruitmentController {
-  constructor(private readonly svc: RecruitmentService) {}
+  constructor(
+    private readonly svc: RecruitmentService,
+    private readonly screening: RecruitmentScreeningService,
+  ) {}
 
   @Get('setup')
   @ApiOperation({
@@ -93,5 +105,97 @@ export class RecruitmentController {
   @RequirePermission(PEOPLE.recruitmentManage)
   cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: VacancyNoteDto) {
     return this.svc.cancel(ctx, id, body);
+  }
+
+  // ---- part 3: candidates and screening ----
+
+  @Get('setup/notices')
+  @ApiOperation({ summary: 'Which notices go to candidates, and by which channels' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  notices(@ReqCtx() ctx: RequestContext) {
+    return this.screening.notices(ctx);
+  }
+
+  @Put('setup/notices')
+  @ApiOperation({ summary: 'Set the notices to candidates' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  saveNotices(@ReqCtx() ctx: RequestContext, @Body() body: RecruitmentNoticesDto) {
+    return this.screening.saveNotices(ctx, body);
+  }
+
+  @Get('vacancies/:id/pipeline')
+  @ApiOperation({ summary: 'Candidates of a vacancy at each stage, and how many are selected' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  pipeline(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.screening.pipeline(ctx, id);
+  }
+
+  @Get('applications')
+  @ApiOperation({ summary: 'Candidates: the applications, with filters and the count per status' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  applications(@ReqCtx() ctx: RequestContext, @Query() q: ApplicationListDto) {
+    return this.screening.list(ctx, q);
+  }
+
+  @Post('applications')
+  @ApiOperation({ summary: 'Add a candidate the office met (walk-in, referral) to a vacancy' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  walkIn(@ReqCtx() ctx: RequestContext, @Body() body: WalkInDto) {
+    return this.screening.walkIn(ctx, body);
+  }
+
+  @Post('applications/bulk')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'The same result or schedule for several candidates at one stage' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  bulk(@ReqCtx() ctx: RequestContext, @Body() body: ApplicationBulkDto) {
+    return this.screening.bulk(ctx, body);
+  }
+
+  @Get('applications/:id')
+  @ApiOperation({ summary: 'One application: the form as submitted, the stages and the steps' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  application(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.screening.view(ctx, id);
+  }
+
+  @Get('applications/:id/files/:fileId')
+  @ApiOperation({ summary: 'A document of the application, as a signed address' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  applicationFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+  ) {
+    return this.screening.fileUrl(ctx, id, fileId);
+  }
+
+  @Post('applications/:id/stages/:stageId')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Schedule a stage, or record its marks and result' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  stage(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('stageId') stageId: string,
+    @Body() body: StageResultDto,
+  ) {
+    return this.screening.record(ctx, id, stageId, body);
+  }
+
+  @Post('applications/:id/reject')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Do not take the application forward (with the reason)' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  reject(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ApplicationNoteDto) {
+    return this.screening.reject(ctx, id, body);
+  }
+
+  @Post('applications/:id/resume')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Go on with an application on hold' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  resume(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.screening.resume(ctx, id);
   }
 }

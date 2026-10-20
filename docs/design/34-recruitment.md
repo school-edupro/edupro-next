@@ -74,6 +74,44 @@ the filled sample is a real applicant's and was not kept) to shape the candidate
 - Tests: `apps/api/test/recruitment-public.e2e-spec.ts`; `apps/admin/e2e/public-a11y.spec.ts` "public
   careers pages".
 
-## Part 3 — candidates and screening (next)
+## Part 3 — candidates and screening (migration 0199, built)
+
+- **Flow:** an application starts at its vacancy's first stage (status New). At the stage it is at, the
+  office schedules it (date and time, venue, panel) and, once held, records the marks (within the stage's
+  maximum) and the result: **pass** moves it to the next stage (In screening), and passing the **last**
+  stage selects it; **fail** ends it (Not taken forward, with the remarks); **hold** keeps it waiting at the
+  stage until it is taken up again. It can be ended at any stage with a reason. Only the stage the
+  candidate is at is recorded; a decided application is not changed.
+- Tables: `application_stage_results` (one row per application and stage: when, venue, panel, marks, the
+  maximum, result, remarks, who recorded it), `job_application_events` (applied, added, scheduled,
+  passed, on_hold, resumed, not_taken_forward, selected), `job_applications.source` (online | office),
+  `decision_note`, `decided_at`; existing applications got their vacancy's first stage.
+- **Walk-ins:** the office adds a candidate met in person or referred (name, gender, date of birth,
+  mobile, email; checked by the employee master's validation) to an approved vacancy; the candidate is
+  found by mobile or email or made new, and can complete the full form online with that mobile. Once per
+  post; the employee match is checked as for online applications.
+- **Notices** (`recruitment_settings`, Recruitment set-up → Notices): received, a stage scheduled,
+  selected (on to start) and not taken forward (off to start), by SMS, WhatsApp and email (SMS and
+  email to start). The words are the school's templates (`recruitment_applied`, `_scheduled`,
+  `_selected`, `_not_selected`); `app.recruitment_notify` sends by the channels set, and the template rule
+  holds: an SMS goes only when its template has the DLT id, a WhatsApp only with the approved name.
+- **API** (`people/recruitment`): `GET applications` (vacancy, stage, status, search, same-as-employee
+  filter; counts per status), `POST applications` (walk-in), `POST applications/bulk` (one result or
+  schedule for the ticked candidates at one stage; others are skipped and named), `GET applications/:id`
+  (the form as submitted by section with the master's labels, Aadhaar and PAN masked unless
+  people.sensitive.view, the rows, interests, documents, the stages with what happened, the steps),
+  `GET applications/:id/files/:fileId`, `POST applications/:id/stages/:stageId`, `POST
+applications/:id/reject | resume`, `GET vacancies/:id/pipeline`, `GET/PUT setup/notices`. Recording
+  needs people.recruitment.manage; an HOD sees.
+- **Admin:** Employee management → **Candidates** (figures per status first, filters, pages of 25/50/100,
+  with a vacancy and a stage picked: tick candidates, then Schedule, Passed this stage, Put on hold or Not
+  taken forward; Add a candidate the office met); the **application page** (the stage bar, the record of
+  each stage, the current stage's form, Take up again, Do not take forward, the warning when the mobile
+  or email belongs to an employee with links, the details, rows, documents with View and Download, the
+  steps); the **vacancy page** shows the candidates at each stage and how many are selected of the posts;
+  **Recruitment set-up** gains Notices.
+- The numbered step bar (ACR and the application page) is `.ep-stepbar` (its first version reused
+  `.ep-steps` and `.ep-step`, which the approval timeline and an older step list own; renamed).
+- Test: `apps/api/test/recruitment-screening.e2e-spec.ts`.
 
 ## Part 4 — from selected candidate to employee (next)

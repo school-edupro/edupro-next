@@ -498,8 +498,9 @@ export class RecruitmentPublicService {
       );
       const number = `APP-${String(y)}-${String(n.rows[0]!.n).padStart(4, '0')}`;
       const r = await c.query<{ id: string }>(
-        `INSERT INTO job_applications (school_id, number, vacancy_id, candidate_id, snapshot, snapshot_secure, employee_match)
-         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb) RETURNING id::text`,
+        `INSERT INTO job_applications (school_id, number, vacancy_id, candidate_id, snapshot, snapshot_secure, employee_match, current_stage_id)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, (SELECT stage_ids[1] FROM vacancies WHERE id = $2))
+         RETURNING id::text`,
         [
           number,
           vacancyId,
@@ -509,7 +510,14 @@ export class RecruitmentPublicService {
           match.rows.length ? JSON.stringify(match.rows) : null,
         ],
       );
-      return { id: r.rows[0]!.id, number };
+      const id = r.rows[0]!.id;
+      await c.query(
+        `INSERT INTO job_application_events (school_id, application_id, what, note) VALUES (app.current_school_id(), $1, 'applied', 'Online')`,
+        [id],
+      );
+      // the candidate hears it is received (when the school sends this notice)
+      await c.query(`SELECT app.recruitment_notify($1, 'applied')`, [id]);
+      return { id, number };
     });
   }
 }
