@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { AuditService } from '../../common/audit/audit.service';
 import { ReportsService } from '../reports/reports.service';
+import { FilesService } from '../files/files.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -161,6 +162,7 @@ export class AcrFlowService {
     private readonly audit: AuditService,
     private readonly setup: AcrSetupService,
     private readonly reports: ReportsService,
+    private readonly files: FilesService,
   ) {}
 
   // ---- helpers -----------------------------------------------------------------------------------
@@ -512,6 +514,134 @@ export class AcrFlowService {
       return;
     }
     await this.finish(c, ctx, reportId, null);
+  }
+
+  /** The employee's record as the sheet and the printout show it (20 Oct 2026): particulars, rows, documents. */
+  private async records(c: PoolClient, employeeId: string) {
+    const [emp, education, experience, training, documents] = await Promise.all([
+      c.query<{
+        joined_on: string | null;
+        designation: string | null;
+        department: string | null;
+        profile: Record<string, unknown>;
+      }>(`SELECT joined_on::text, designation, department, profile FROM employees WHERE id = $1`, [
+        employeeId,
+      ]),
+      c.query<{
+        qualification: string | null;
+        specialisation: string | null;
+        institution: string | null;
+        passing_year: number | null;
+        score: string | null;
+        mode: string | null;
+      }>(
+        `SELECT qualification, specialisation, institution, passing_year, score::text, mode FROM employee_education
+          WHERE employee_id = $1 ORDER BY passing_year NULLS LAST, id`,
+        [employeeId],
+      ),
+      c.query<{
+        organisation: string | null;
+        designation: string | null;
+        from_on: string | null;
+        to_on: string | null;
+        reason: string | null;
+      }>(
+        `SELECT organisation, designation, from_on::text, to_on::text, reason FROM employee_experience
+          WHERE employee_id = $1 ORDER BY from_on NULLS LAST, id`,
+        [employeeId],
+      ),
+      c.query<{
+        trained_on: string | null;
+        topic: string | null;
+        venue: string | null;
+        duration: string | null;
+        organisation: string | null;
+      }>(
+        `SELECT trained_on::text, topic, venue, duration, organisation FROM employee_training
+          WHERE employee_id = $1 ORDER BY trained_on DESC, id`,
+        [employeeId],
+      ),
+      c.query<{
+        id: string;
+        type: string;
+        file_id: string;
+        issued_on: string | null;
+        expires_on: string | null;
+        verified: boolean;
+      }>(
+        `SELECT d.id::text, t.name AS type, d.file_id::text, d.issued_on::text, d.expires_on::text,
+                d.verified_at IS NOT NULL AS verified
+           FROM employee_documents d JOIN employee_document_types t ON t.id = d.type_id
+          WHERE d.employee_id = $1 AND d.deleted_at IS NULL ORDER BY t.sort_order, t.name, d.id`,
+        [employeeId],
+      ),
+    ]);
+    const e = emp.rows[0];
+    const p = e?.profile ?? {};
+    const str = (k: string) => {
+      const v = p[k];
+      return v === null || v === undefined || v === '' ? null : String(v);
+    };
+    return {
+      particulars: {
+        joinedOn: e?.joined_on ?? null,
+        designationAtJoining: str('designation_at_joining'),
+        designation: e?.designation ?? null,
+        department: e?.department ?? null,
+        employeeType: str('staff_type'),
+        regularisedOn: str('regularised_on'),
+        promotedOn: str('promoted_on'),
+        upgradedOn: str('upgraded_on'),
+        payBand: str('pay_band'),
+      },
+      education: education.rows.map((x) => ({
+        qualification: x.qualification,
+        specialisation: x.specialisation,
+        institution: x.institution,
+        passingYear: x.passing_year,
+        score: x.score,
+        mode: x.mode,
+      })),
+      experience: experience.rows.map((x) => ({
+        organisation: x.organisation,
+        designation: x.designation,
+        fromOn: x.from_on,
+        toOn: x.to_on,
+        reason: x.reason,
+      })),
+      training: training.rows.map((x) => ({
+        trainedOn: x.trained_on,
+        topic: x.topic,
+        venue: x.venue,
+        duration: x.duration,
+        organisation: x.organisation,
+      })),
+      documents: documents.rows.map((x) => ({
+        id: x.id,
+        type: x.type,
+        fileId: x.file_id,
+        issuedOn: x.issued_on,
+        expiresOn: x.expires_on,
+        verified: x.verified,
+      })),
+    };
+  }
+
+  /** A file on the employee's record (a document, the photo, the signature) for whoever may see the ACR. */
+  async fileUrl(ctx: RequestContext, id: string, fileId: string) {
+    if (!/^\d{1,18}$/.test(id) || !/^\d{1,18}$/.test(fileId))
+      throw new DomainError('not-found', 'File not found', { status: 404 });
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.load(c, id);
+      await this.access(c, ctx, r, (await c.query<ReviewRow>(REVIEWS, [id])).rows);
+      const ok = await c.query(
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM employee_documents WHERE employee_id = $1 AND file_id = $2 AND deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM employees WHERE id = $1 AND (photo_file_id = $2 OR signature_file_id = $2))`,
+        [r.employee_id, fileId],
+      );
+      if (!ok.rows[0]) throw new DomainError('not-found', 'File not found', { status: 404 });
+    });
+    return this.files.downloadUrl(ctx, fileId);
   }
 
   /** After the last level: the score of the last rating, the grade of the last level; shown to the employee. */
@@ -1044,6 +1174,11 @@ export class AcrFlowService {
           [id],
         ),
       ]);
+      // the school's guidelines and the employee's record, for everyone who may see the ACR (20 Oct 2026)
+      const [records, guide] = await Promise.all([
+        this.records(c, r.employee_id),
+        c.query<{ guidelines: string }>('SELECT guidelines FROM acr_settings'),
+      ]);
       const shown = r.status === 'disclosed' || r.status === 'represented' || r.status === 'closed';
       // the employee sees the levels once the ACR is shown to them; a level's people up to their level
       const seeLevel = (seq: number) => a.viewer || (a.self ? shown : seq <= a.upTo);
@@ -1093,6 +1228,8 @@ export class AcrFlowService {
         cycle: { id: r.cycle_id, status: r.cycle_status, selfFrom: r.self_from, selfTo: r.self_to },
         scale: sc.labels,
         bands: bands.map((b) => ({ minPct: b.min_pct, label: b.label, adverse: b.adverse })),
+        guidelines: guide.rows[0]?.guidelines ?? '',
+        records,
         // 0191: the forms this ACR was made with; a level's once its people (or the employee, once shown) may see it
         forms,
         self: {

@@ -62,14 +62,20 @@ interface Report {
   decision_note: string | null;
   decided_at: Date | null;
   closed_at: Date | null;
+  employee_id: string;
   name: string;
   code: string;
   designation: string | null;
   department: string | null;
   joined_on: string | null;
   staff_type: string | null;
+  profile: Record<string, unknown>;
   cycle: string;
   year: string;
+}
+interface Row {
+  employee_id: string;
+  [k: string]: string | number | boolean | null;
 }
 interface Ev {
   report_id: string;
@@ -197,12 +203,12 @@ export async function renderAcrReport(
     }
     const reports = (
       await c.query<Report>(
-        `SELECT r.id::text, r.staff_group, r.status, r.self_answers, r.auto_facts, r.office_facts,
+        `SELECT r.id::text, r.employee_id::text, r.staff_group, r.status, r.self_answers, r.auto_facts, r.office_facts,
                 r.self_pct::text, r.self_submitted_at, r.self_form_id::text, sf.name AS self_form,
                 r.score_pct::text, r.grade, r.adverse, r.disclosed_at, r.object_by::text, r.acknowledged_at,
                 r.representation, r.represented_at, r.decision, r.decision_note, r.decided_at, r.closed_at,
                 e.display_name AS name, e.employee_code AS code, e.designation, e.department, e.joined_on::text,
-                e.profile->>'staff_type' AS staff_type, cy.name AS cycle, y.code AS year
+                e.profile->>'staff_type' AS staff_type, e.profile, cy.name AS cycle, y.code AS year
            FROM acr_reports r
            JOIN employees e ON e.id = r.employee_id
            JOIN acr_cycles cy ON cy.id = r.cycle_id
@@ -252,11 +258,35 @@ export async function renderAcrReport(
         [ids],
       )
     ).rows;
+    // the employee's record (20 Oct 2026): education, experience, training, documents on file
+    const empIds = [...new Set(reports.map((r) => r.employee_id))];
+    const rowsOf = async (sql: string) => (await c.query<Row>(sql, [empIds])).rows;
+    const education = await rowsOf(
+      `SELECT employee_id::text, qualification, specialisation, institution, passing_year, score::text, mode
+         FROM employee_education WHERE employee_id = ANY($1::bigint[]) ORDER BY passing_year NULLS LAST, id`,
+    );
+    const experience = await rowsOf(
+      `SELECT employee_id::text, organisation, designation, from_on::text, to_on::text, reason
+         FROM employee_experience WHERE employee_id = ANY($1::bigint[]) ORDER BY from_on NULLS LAST, id`,
+    );
+    const training = await rowsOf(
+      `SELECT employee_id::text, trained_on::text, topic, venue, duration, organisation
+         FROM employee_training WHERE employee_id = ANY($1::bigint[]) ORDER BY trained_on DESC, id`,
+    );
+    const documents = await rowsOf(
+      `SELECT d.employee_id::text, t.name, d.issued_on::text, d.expires_on::text, d.verified_at IS NOT NULL AS verified
+         FROM employee_documents d JOIN employee_document_types t ON t.id = d.type_id
+        WHERE d.employee_id = ANY($1::bigint[]) AND d.deleted_at IS NULL ORDER BY t.sort_order, t.name, d.id`,
+    );
     return {
       reports,
       reviews,
       questions,
       events,
+      education,
+      experience,
+      training,
+      documents,
       scale: settings.rows[0]?.scale_labels ?? [
         'Outstanding',
         'Very good',
@@ -285,12 +315,91 @@ export async function renderAcrReport(
       ['Status', t(STATUS_WORD[r.status] ?? r.status)],
     ];
     const office = (r.office_facts ?? {}) as Record<string, unknown>;
-    const officeRows = (['cl', 'el', 'other', 'absent'] as const)
+    const officeRows = (['cl', 'el', 'hpl', 'other', 'absent', 'lateSlips'] as const)
       .filter((k) => office[k] !== null && office[k] !== undefined && office[k] !== '')
       .map((k) => [
-        { cl: 'CL', el: 'EL', other: 'Other leave', absent: 'Total absence' }[k],
+        {
+          cl: 'CL',
+          el: 'EL',
+          hpl: 'Half-pay leave',
+          other: 'Other leave (EOL/LWP)',
+          absent: 'Total absence',
+          lateSlips: 'Late arrival slips',
+        }[k],
         t(office[k]),
       ]);
+    const pf = (k: string) => {
+      const v = r.profile[k];
+      return v === null || v === undefined || v === '' ? '' : String(v);
+    };
+    const particulars = (
+      [
+        ['Designation at joining', esc(pf('designation_at_joining'))],
+        ['Date of regularisation', esc(dmy(pf('regularised_on')))],
+        ['Last promotion', esc(dmy(pf('promoted_on')))],
+        ['Last upgradation', esc(dmy(pf('upgraded_on')))],
+        ['Pay band / grade', esc(pf('pay_band'))],
+      ] as Array<[string, string]>
+    ).filter(([, v]) => v);
+    const table = (title: string, head: string[], rows: string[][]) =>
+      rows.length
+        ? `<section class="sec"><h3>${esc(title)}</h3><table><thead><tr>${head
+            .map((h) => `<th>${esc(h)}</th>`)
+            .join('')}</tr></thead><tbody>${rows
+            .map((row) => `<tr>${row.map((x) => `<td>${x}</td>`).join('')}</tr>`)
+            .join('')}</tbody></table></section>`
+        : '';
+    const mine = (rows: Row[]) => rows.filter((x) => x.employee_id === r.employee_id);
+    const recordHtml =
+      (particulars.length
+        ? `<section class="sec"><h3>Personal particulars</h3>${particulars
+            .map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${v}</b></div>`)
+            .join('')}</section>`
+        : '') +
+      table(
+        'Educational details',
+        ['Qualification', 'Specialisation', 'Institution', 'Year', 'Score', 'Mode'],
+        mine(data.education).map((x) => [
+          t(x.qualification),
+          t(x.specialisation),
+          t(x.institution),
+          t(x.passing_year),
+          t(x.score),
+          t(x.mode),
+        ]),
+      ) +
+      table(
+        'Experience details',
+        ['Organisation', 'Designation', 'From', 'To', 'Reason for leaving'],
+        mine(data.experience).map((x) => [
+          t(x.organisation),
+          t(x.designation),
+          esc(dmy(x.from_on as string | null)),
+          esc(dmy(x.to_on as string | null)),
+          t(x.reason),
+        ]),
+      ) +
+      table(
+        'Training details',
+        ['Date', 'Topic', 'Venue', 'Duration', 'Organisation'],
+        mine(data.training).map((x) => [
+          esc(dmy(x.trained_on as string | null)),
+          t(x.topic),
+          t(x.venue),
+          t(x.duration),
+          t(x.organisation),
+        ]),
+      ) +
+      table(
+        'Documents on file',
+        ['Document', 'Issued', 'Expires', 'Checked'],
+        mine(data.documents).map((x) => [
+          t(x.name),
+          esc(dmy(x.issued_on as string | null)),
+          esc(dmy(x.expires_on as string | null)),
+          x.verified ? 'Yes' : '',
+        ]),
+      );
     const att = (
       r.auto_facts as { attendance?: { daysPresent: number; lateArrivals: number } } | null
     )?.attendance;
@@ -348,6 +457,7 @@ export async function renderAcrReport(
     <div class="name">${t(r.name)}</div>
     <div class="facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span><b>${v}</b></div>`).join('')}</div>
   </div>
+  ${recordHtml}
   <section class="sec"><h3>Part A · Self-appraisal${r.self_form ? ` · ${esc(r.self_form)}` : ''}</h3>
     <div class="kv"><span>Submitted</span><b>${r.self_submitted_at ? esc(dmy(r.self_submitted_at)) : 'Not yet'}</b></div>
     ${att ? `<div class="kv"><span>Attendance (from the records)</span><b>${String(att.daysPresent)} days present · ${String(att.lateArrivals)} late</b></div>` : ''}

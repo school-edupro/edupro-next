@@ -60,6 +60,7 @@ export async function saveAcrSettings(input: {
   scaleLabels: string[];
   representationDays: number;
   staffLateAfter: string;
+  guidelines: string;
   bands: AcrBand[];
 }): Promise<Out> {
   try {
@@ -513,6 +514,8 @@ export async function acrOffice(fd: FormData) {
         el: num('el'),
         other: num('other'),
         absent: num('absent'),
+        hpl: num('hpl'),
+        lateSlips: num('lateSlips'),
         note: str(fd, 'note') || null,
       }),
     });

@@ -20,6 +20,7 @@ export function AcrReport({ report }: { report: AcrReportView }) {
       key={`${report.status}-${String(report.currentLevel)}`}
       report={report}
       onDone={() => router.refresh()}
+      fileHref={(f) => `/api/my-acr-file/${id}/${f}`}
       actions={{
         saveSelf: (a) => saveSelf(id, a),
         submitSelf: (a) => submitSelf(id, a),

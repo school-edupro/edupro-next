@@ -61,8 +61,13 @@ export class AcrSetupService {
         forms,
         sections,
       ] = await Promise.all([
-        c.query<{ scale_labels: string[]; representation_days: number; late: string }>(
-          `SELECT scale_labels, representation_days, to_char(staff_late_after, 'HH24:MI') AS late FROM acr_settings`,
+        c.query<{
+          scale_labels: string[];
+          representation_days: number;
+          late: string;
+          guidelines: string;
+        }>(
+          `SELECT scale_labels, representation_days, to_char(staff_late_after, 'HH24:MI') AS late, guidelines FROM acr_settings`,
         ),
         c.query<{ min_pct: string; label: string; adverse: boolean }>(
           'SELECT min_pct::text, label, adverse FROM acr_grade_bands ORDER BY min_pct DESC',
@@ -227,6 +232,7 @@ export class AcrSetupService {
           scaleLabels: s?.scale_labels ?? [],
           representationDays: s?.representation_days ?? 15,
           staffLateAfter: s?.late ?? '08:00',
+          guidelines: s?.guidelines ?? '',
         },
         bands: bands.rows.map((b) => ({
           minPct: Number(b.min_pct),
@@ -313,8 +319,13 @@ export class AcrSetupService {
       await this.seed(c);
       await c.query(
         `UPDATE acr_settings SET scale_labels = $1::jsonb, representation_days = $2, staff_late_after = $3::time,
-                updated_at = now(), updated_by = app.current_user_id()`,
-        [JSON.stringify(dto.scaleLabels), dto.representationDays, dto.staffLateAfter],
+                guidelines = $4, updated_at = now(), updated_by = app.current_user_id()`,
+        [
+          JSON.stringify(dto.scaleLabels),
+          dto.representationDays,
+          dto.staffLateAfter,
+          dto.guidelines,
+        ],
       );
       await c.query('DELETE FROM acr_grade_bands');
       for (const b of dto.bands)

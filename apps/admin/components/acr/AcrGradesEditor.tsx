@@ -11,18 +11,21 @@ export function AcrGradesEditor({
   scaleLabels,
   representationDays,
   staffLateAfter,
+  guidelines,
   bands,
   canEdit,
 }: {
   scaleLabels: string[];
   representationDays: number;
   staffLateAfter: string;
+  guidelines: string;
   bands: AcrBand[];
   canEdit: boolean;
 }) {
   const [words, setWords] = useState<string[]>(scaleLabels);
   const [days, setDays] = useState(representationDays);
   const [late, setLate] = useState(staffLateAfter);
+  const [guide, setGuide] = useState(guidelines);
   const [rows, setRows] = useState<AcrBand[]>(bands);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
@@ -32,6 +35,7 @@ export function AcrGradesEditor({
         scaleLabels: words.map((w) => w.trim()).filter(Boolean),
         representationDays: days,
         staffLateAfter: late,
+        guidelines: guide,
         bands: [...rows].sort((a, b) => b.minPct - a.minPct),
       });
       setMsg(r.ok ? { tone: 'success', text: 'Saved.' } : { tone: 'danger', text: r.error });
@@ -220,6 +224,36 @@ export function AcrGradesEditor({
           </button>
         </div>
       ) : null}
+      <section className="ep-card" aria-labelledby="acr-guide-h" style={{ padding: 'var(--sp-4)' }}>
+        <h2 id="acr-guide-h" className="ep-card__title">
+          Guidelines to complete the performance report
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          Shown above every self-appraisal, as written here (line breaks and numbering kept).
+        </p>
+        <label className="ep-field" htmlFor="acr-guide">
+          <span className="ep-field__label">Guidelines</span>
+          <textarea
+            id="acr-guide"
+            className="ep-input"
+            rows={8}
+            maxLength={5000}
+            value={guide}
+            onChange={(e) => setGuide(e.target.value)}
+            disabled={!canEdit}
+          />
+        </label>
+        {canEdit ? (
+          <button
+            type="button"
+            className="ep-btn ep-btn--primary"
+            onClick={save}
+            disabled={pending}
+          >
+            Save
+          </button>
+        ) : null}
+      </section>
     </div>
   );
 }

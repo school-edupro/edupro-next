@@ -62,6 +62,7 @@ describe('employee ACR set-up (e2e)', () => {
       scaleLabels: ['Outstanding', 'Very good', 'Good', 'Average', 'Below average'],
       representationDays: 15,
       staffLateAfter: '08:00',
+      guidelines: '',
     });
     const q = s.questions as Array<{ part: string; staffGroup: string; kind: string }>;
     expect(q.filter((x) => x.part === 'rate' && x.staffGroup === 'non_teaching')).toHaveLength(21);
@@ -163,6 +164,7 @@ describe('employee ACR set-up (e2e)', () => {
       scaleLabels: ['Excellent', 'Good', 'Fair', 'Poor'],
       representationDays: 10,
       staffLateAfter: '08:00',
+      guidelines: '',
     });
     expect(s.bands).toEqual([
       { minPct: 80, label: 'A', adverse: false },
@@ -1089,5 +1091,49 @@ describe('employee ACR flow (e2e)', () => {
       ['HOD', 'waiting'],
       ['Principal', 'waiting'],
     ]);
+  });
+  it('the sheet carries the school’s guidelines and the employee’s record; a file on the record opens only for those who may see the ACR', async () => {
+    const s = (await call(admin, 'GET', '/people/acr/setup')).json();
+    const put = await call(admin, 'PUT', '/people/acr/setup/settings', {
+      scaleLabels: s.settings.scaleLabels,
+      representationDays: s.settings.representationDays,
+      staffLateAfter: s.settings.staffLateAfter,
+      bands: s.bands,
+      guidelines: '1. Assess the review period only.\n2. Keep fact and opinion apart.',
+    });
+    expect(put.statusCode).toBe(200);
+    expect((await call(admin, 'GET', '/people/acr/setup')).json().settings.guidelines).toMatch(
+      /review period/,
+    );
+    const v = (await call(teacher, 'GET', `/people/acr/reports/${reportId}`)).json();
+    expect(v.guidelines).toMatch(/fact and opinion/);
+    expect(v.records.particulars).toMatchObject({ designation: 'TGT' });
+    expect(v.records.education).toEqual([]);
+    expect(v.records.documents).toEqual([]);
+    // the office keeps half-pay leave and the late slips with the rest
+    const office = await call(admin, 'PUT', `/people/acr/reports/${reportId}/office`, {
+      cl: 6,
+      el: 2,
+      hpl: 1,
+      absent: 9,
+      lateSlips: 3,
+    });
+    expect(office.statusCode).toBe(200);
+    expect(
+      (await call(admin, 'GET', `/people/acr/reports/${reportId}`)).json().self.office,
+    ).toEqual({
+      cl: 6,
+      el: 2,
+      hpl: 1,
+      absent: 9,
+      lateSlips: 3,
+    });
+    // a file that is not on the record, or an ACR one may not see: not found
+    expect(
+      (await call(teacher, 'GET', `/people/acr/reports/${reportId}/files/999999999`)).statusCode,
+    ).toBe(404);
+    expect(
+      (await call(outsider, 'GET', `/people/acr/reports/${reportId}/files/1`)).statusCode,
+    ).toBe(404);
   });
 });

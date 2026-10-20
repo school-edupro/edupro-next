@@ -83,6 +83,50 @@ export interface AcrFacts {
   };
   activityLog: { daysSubmitted: number; late: number; returned: number } | null;
 }
+/** The employee's record as the sheet shows it (20 Oct 2026). */
+export interface AcrRecords {
+  particulars: {
+    joinedOn: string | null;
+    designationAtJoining: string | null;
+    designation: string | null;
+    department: string | null;
+    employeeType: string | null;
+    regularisedOn: string | null;
+    promotedOn: string | null;
+    upgradedOn: string | null;
+    payBand: string | null;
+  };
+  education: Array<{
+    qualification: string | null;
+    specialisation: string | null;
+    institution: string | null;
+    passingYear: number | null;
+    score: string | null;
+    mode: string | null;
+  }>;
+  experience: Array<{
+    organisation: string | null;
+    designation: string | null;
+    fromOn: string | null;
+    toOn: string | null;
+    reason: string | null;
+  }>;
+  training: Array<{
+    trainedOn: string | null;
+    topic: string | null;
+    venue: string | null;
+    duration: string | null;
+    organisation: string | null;
+  }>;
+  documents: Array<{
+    id: string;
+    type: string;
+    fileId: string;
+    issuedOn: string | null;
+    expiresOn: string | null;
+    verified: boolean;
+  }>;
+}
 export interface AcrReportView {
   id: string;
   employee: {
@@ -99,6 +143,10 @@ export interface AcrReportView {
   cycle: { id: string; status: string; selfFrom: string; selfTo: string };
   scale: string[];
   bands: Array<{ minPct: number; label: string; adverse: boolean }>;
+  /** the school's guidelines for the self-appraisal (ACR set-up), shown above it */
+  guidelines: string;
+  /** the employee's record (20 Oct 2026) */
+  records: AcrRecords;
   /** the forms this ACR was made with, by id: the self form and the levels' questionnaires one may see */
   forms: Record<string, AcrFormView>;
   self: {
@@ -115,6 +163,8 @@ export interface AcrReportView {
       el?: number | null;
       other?: number | null;
       absent?: number | null;
+      hpl?: number | null;
+      lateSlips?: number | null;
       note?: string | null;
     };
   };
@@ -344,13 +394,172 @@ function QuestionForm({
   );
 }
 
+const VIEW_ICON = (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path
+      d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** The employee's record (20 Oct 2026): particulars, education, experience, training, documents. */
+function Records({ rec, fileHref }: { rec: AcrRecords; fileHref?: (fileId: string) => string }) {
+  const p = rec.particulars;
+  const d = (x: string | null) => (x ? dmy(x) : null);
+  const facts: Array<[string, string | null]> = [
+    ['Date of joining', d(p.joinedOn)],
+    ['Designation at joining', p.designationAtJoining],
+    ['Present designation', p.designation],
+    ['Department', p.department],
+    ['Employee type', p.employeeType],
+    ['Date of regularisation', d(p.regularisedOn)],
+    ['Last promotion', d(p.promotedOn)],
+    ['Last upgradation', d(p.upgradedOn)],
+    ['Pay band / grade', p.payBand],
+  ];
+  const table = (title: string, head: string[], rows: Array<Array<string | null>>) =>
+    rows.length ? (
+      <div className="ep-table-wrap" style={{ marginTop: 'var(--sp-3)' }}>
+        <table className="ep-table ep-table--dense">
+          <caption className="ep-field__label" style={{ textAlign: 'left' }}>
+            {title}
+          </caption>
+          <thead>
+            <tr>
+              {head.map((h) => (
+                <th key={h} scope="col">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i}>
+                {row.map((cell, j) => (
+                  <td key={j}>{cell ?? '—'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
+        {title}: none on record.
+      </p>
+    );
+  return (
+    <section className="ep-card ep-acr-card" aria-labelledby="acr-record-h">
+      <h2 id="acr-record-h" className="ep-card__title">
+        The employee’s record
+      </h2>
+      <h3 className="ep-field__label">Personal particulars</h3>
+      <dl className="ep-hero__facts">
+        {facts.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v ?? '—'}</dd>
+          </div>
+        ))}
+      </dl>
+      {table(
+        'Educational details',
+        ['Qualification', 'Specialisation', 'Institution', 'Year', 'Score', 'Mode'],
+        rec.education.map((e) => [
+          e.qualification,
+          e.specialisation,
+          e.institution,
+          e.passingYear === null ? null : String(e.passingYear),
+          e.score,
+          e.mode,
+        ]),
+      )}
+      {table(
+        'Experience details',
+        ['Organisation', 'Designation', 'From', 'To', 'Reason for leaving'],
+        rec.experience.map((e) => [
+          e.organisation,
+          e.designation,
+          d(e.fromOn),
+          d(e.toOn),
+          e.reason,
+        ]),
+      )}
+      {table(
+        'Training details',
+        ['Date', 'Topic', 'Venue', 'Duration', 'Organisation'],
+        rec.training.map((t) => [d(t.trainedOn), t.topic, t.venue, t.duration, t.organisation]),
+      )}
+      {rec.documents.length ? (
+        <div className="ep-table-wrap" style={{ marginTop: 'var(--sp-3)' }}>
+          <table className="ep-table ep-table--dense">
+            <caption className="ep-field__label" style={{ textAlign: 'left' }}>
+              Documents on file
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Document</th>
+                <th scope="col">Issued</th>
+                <th scope="col">Expires</th>
+                <th scope="col">Checked</th>
+                {fileHref ? (
+                  <th scope="col">
+                    <span className="ep-sr-only">View</span>
+                  </th>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {rec.documents.map((doc) => (
+                <tr key={doc.id}>
+                  <td>{doc.type}</td>
+                  <td>{d(doc.issuedOn) ?? '—'}</td>
+                  <td>{d(doc.expiresOn) ?? '—'}</td>
+                  <td>{doc.verified ? 'Yes' : '—'}</td>
+                  {fileHref ? (
+                    <td>
+                      <span className="ep-filelinks">
+                        <a
+                          href={fileHref(doc.fileId)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ep-filelinks__btn"
+                          aria-label={`View ${doc.type}`}
+                          title={`View ${doc.type}`}
+                        >
+                          {VIEW_ICON}
+                        </a>
+                      </span>
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="ep-field__help" style={{ marginTop: 'var(--sp-3)' }}>
+          Documents on file: none.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function Facts({ f, office }: { f: AcrFacts | null; office: AcrReportView['self']['office'] }) {
   if (!f) return null;
   const leave = [
     ['CL', office.cl],
     ['EL', office.el],
-    ['Other leave', office.other],
+    ['Half-pay leave', office.hpl],
+    ['Other leave (EOL/LWP)', office.other],
     ['Total absence', office.absent],
+    ['Late arrival slips', office.lateSlips],
   ].filter(([, v]) => v !== null && v !== undefined);
   return (
     <section className="ep-card ep-acr-card" aria-labelledby="acr-facts-h">
@@ -447,6 +656,7 @@ export function AcrSheet({
   actions,
   extra,
   onDone,
+  fileHref,
 }: {
   report: AcrReportView;
   actions: AcrActions;
@@ -454,6 +664,8 @@ export function AcrSheet({
   onDone?: () => void;
   /** the app's own controls (the admin's: people of a level, office figures, decide) */
   extra?: ReactNode;
+  /** where a document on the record opens (View); none: the documents are listed without a link */
+  fileHref?: (fileId: string) => string;
 }) {
   const r = report;
   const [self, setSelf] = useState<Record<string, AcrAnswer>>(r.self.answers);
@@ -624,7 +836,18 @@ export function AcrSheet({
         </section>
       ) : null}
 
+      {r.guidelines ? (
+        <section className="ep-card ep-acr-card" aria-labelledby="acr-guide-h">
+          <h2 id="acr-guide-h" className="ep-card__title">
+            Guidelines to complete the performance report
+          </h2>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{r.guidelines}</div>
+        </section>
+      ) : null}
+
       <Facts f={r.self.facts} office={r.self.office} />
+
+      <Records rec={r.records} fileHref={fileHref} />
 
       <section className="ep-card ep-acr-card" aria-labelledby="acr-self-h">
         <h2 id="acr-self-h" className="ep-card__title">

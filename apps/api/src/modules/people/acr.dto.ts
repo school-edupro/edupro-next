@@ -14,6 +14,8 @@ export const AcrSettingsSchema = z.object({
     .string()
     .regex(/^\d{2}:\d{2}$/)
     .default('08:00'),
+  /** shown above every self-appraisal and kept with line breaks (20 Oct 2026) */
+  guidelines: z.string().max(5000).default(''),
   bands: z
     .array(
       z.object({
@@ -205,6 +207,9 @@ export const AcrOfficeFactsSchema = z.object({
   el: z.number().min(0).max(366).nullable().optional(),
   other: z.number().min(0).max(366).nullable().optional(),
   absent: z.number().min(0).max(366).nullable().optional(),
+  /** half-pay leave and the late arrival slips issued, as the office keeps them (20 Oct 2026) */
+  hpl: z.number().min(0).max(366).nullable().optional(),
+  lateSlips: z.number().int().min(0).max(999).nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),
 });
 export class AcrOfficeFactsDto extends createZodDto(AcrOfficeFactsSchema) {}

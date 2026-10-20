@@ -102,6 +102,7 @@ export default async function AcrSetupPage({
           scaleLabels={s.settings.scaleLabels}
           representationDays={s.settings.representationDays}
           staffLateAfter={s.settings.staffLateAfter}
+          guidelines={s.settings.guidelines}
           bands={s.bands}
           canEdit={canEdit}
         />

@@ -42,8 +42,10 @@ export default async function AcrReportPage({
               [
                 ['cl', 'CL', o.cl],
                 ['el', 'EL', o.el],
+                ['hpl', 'Half-pay leave', o.hpl],
                 ['other', 'Other leave', o.other],
                 ['absent', 'Total absence', o.absent],
+                ['lateSlips', 'Late arrival slips', o.lateSlips],
               ] as const
             ).map(([k, label, v]) => (
               <label key={k} className="ep-field" htmlFor={`of-${k}`}>

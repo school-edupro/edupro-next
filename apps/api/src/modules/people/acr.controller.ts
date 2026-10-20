@@ -262,6 +262,15 @@ export class AcrController {
     return this.flow.saveSelf(ctx, id, body);
   }
 
+  @Get('reports/:id/files/:fileId')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary: 'A file on the employee’s record, for whoever may see the ACR: a signed address',
+  })
+  file(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('fileId') fileId: string) {
+    return this.flow.fileUrl(ctx, id, fileId);
+  }
+
   @Post('reports/:id/self/submit')
   @HttpCode(200)
   @AuthenticatedOnly()

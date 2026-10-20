@@ -250,3 +250,18 @@ employee)` picks the most specific active form: for their side naming their type
   at the signed-in person's level (`GET people/acr/to-assess`, asked for everyone, empty for those who
   sit at no level) as the group "ACRs to assess", each item opening `/me/acr/:id`. An approver sees a
   new ACR there the moment it reaches their level.
+
+## The sheet shows the guidelines and the employee's record (20 Oct 2026, 0193)
+
+- **Guidelines** (`acr_settings.guidelines`, ACR set-up → Scale and grades): one text for the school,
+  shown above every self-appraisal with its line breaks, in the admin and the staff app. Not printed.
+- **The employee's record** on the sheet (`GET reports/:id` → `records`) and the printout: personal
+  particulars (date of joining, designation at joining, present designation, department, employee type,
+  regularisation, last promotion and upgradation, pay band — pay band only, no salary), educational,
+  experience and training details, and the documents on file with View (`GET
+reports/:id/files/:fileId` gives a signed address to whoever may see the ACR; the apps pass it
+  through at `/api/acr-file/:id/:fileId` and `/api/my-acr-file/:id/:fileId`). Leave status gains
+  half-pay leave and the late arrival slips the office enters (`office_facts.hpl`, `lateSlips`).
+- `employees.signature_file_id` (0193) is for the signature under each person's line on the printout
+  (next part): uploaded by the office on the employee page, printed once the step is filled.
+- Test: `acr.e2e-spec.ts` "the sheet carries the school’s guidelines and the employee’s record".
