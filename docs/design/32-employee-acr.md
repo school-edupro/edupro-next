@@ -223,8 +223,13 @@ employee)` picks the most specific active form: for their side naming their type
 
 - **Same person anywhere in the chain:** a level whose people are exactly those of an earlier level
   that stands (done, or not skipped) is skipped with "Same person as level N (label); assessed there",
-  whether the two levels are in a row or not; it comes back when the people change. A level with
-  nobody set is never skipped: the ACR waits there and the board counts it under "waiting on nobody".
+  whether the two levels are in a row or not; it comes back when the people change.
+- **Nobody set (20 Oct 2026):** a level with nobody is skipped with "Nobody set for this level;
+  skipped" when a later level has someone, so the ACR goes past it (HOD → Principal when L1 is
+  empty). When nobody is set anywhere after it, the ACR waits there and the board counts it under
+  "waiting on nobody". Someone put there before the ACR reaches it brings the level back; a level the
+  ACR has gone past stays as it is. Test: "a level with nobody set is skipped when a later level has
+  someone".
 - **Board:** `GET people/acr/board` rows carry `levels[]` (seq, label, status, people, filledAt,
   grade, skippedNote) for ACR managers only, never on an employee's own list. The screen shows a
   **Levels** column with one chip per level (✓ filled, … with them now, – skipped), the details on

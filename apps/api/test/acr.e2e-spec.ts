@@ -1027,4 +1027,67 @@ describe('employee ACR flow (e2e)', () => {
       404,
     );
   });
+  it('a level with nobody set is skipped when a later level has someone: the ACR goes past it to the next level; someone put there before that brings it back', async () => {
+    // two new joiners with no HOD on record get their ACRs: the HOD level is skipped, the Principal stands
+    const s2 = stamp('ACN');
+    const joiners = await withMigrator(async (c) => {
+      const u1 = await seedUser(c, school, `${s2}-n1`);
+      const u2 = await seedUser(c, school, `${s2}-n2`);
+      await c.query(
+        `INSERT INTO employees (school_id, employee_code, first_name, user_id, designation, employee_type)
+         VALUES ($1, 'N1', 'Nisha', $2, 'TGT', 'teaching'), ($1, 'N2', 'Neel', $3, 'TGT', 'teaching')`,
+        [school.id, u1.id, u2.id],
+      );
+      return { u1, u2 };
+    });
+    const add = await call(admin, 'POST', `/people/acr/cycles/${cycleId}/start`);
+    expect(add.statusCode).toBe(201);
+    expect(add.json().added).toBe(2);
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const rowOf = (code: string) =>
+      board.rows.find((r: { employee: { code: string } }) => r.employee.code === code);
+    const shape = (row: { levels: Array<{ label: string; status: string }> }) =>
+      row.levels.map((l) => [l.label, l.status]);
+    expect(shape(rowOf('N1'))).toEqual([
+      ['HOD', 'skipped'],
+      ['Principal', 'waiting'],
+    ]);
+    expect(rowOf('N1').levels[0].skippedNote).toMatch(/Nobody set/);
+    // the ACR is not "waiting on nobody": it will go to the Principal
+    const n1 = rowOf('N1').id as string;
+    const mine = (await call(joiners.u1, 'GET', `/people/acr/reports/${n1}`)).json();
+    const qs = (
+      mine.forms[mine.self.formId].sections as Array<{
+        questions: Array<{ id: string; kind: string }>;
+      }>
+    ).flatMap((x) => x.questions);
+    const done = await call(joiners.u1, 'POST', `/people/acr/reports/${n1}/self/submit`, {
+      answers: Object.fromEntries(
+        qs.map((q) => [
+          q.id,
+          q.kind === 'scale' ? 4 : q.kind === 'yesno' ? 'yes' : 'Done with care',
+        ]),
+      ),
+    });
+    expect(done.statusCode).toBe(200);
+    const after = (await call(admin, 'GET', `/people/acr/reports/${n1}`)).json();
+    expect(after.status).toBe('review');
+    expect(after.currentLevel).toBe(2);
+    expect(after.levels[1]).toMatchObject({ status: 'pending' });
+    expect(
+      (await call(principal, 'GET', '/people/acr/to-assess'))
+        .json()
+        .waiting.map((r: { employee: { code: string } }) => r.employee.code),
+    ).toContain('N1');
+    // someone put on the record before the ACR reaches the level brings it back
+    const set = await call(admin, 'PUT', '/people/acr/setup/assessors', {
+      rows: [{ employee: 'N2', assessors: { acr_hod: 'H1' } }],
+    });
+    expect(set.json().changed).toBe(1);
+    const n2 = (await call(admin, 'GET', `/people/acr/reports/${rowOf('N2').id as string}`)).json();
+    expect(n2.levels.map((l: { label: string; status: string }) => [l.label, l.status])).toEqual([
+      ['HOD', 'waiting'],
+      ['Principal', 'waiting'],
+    ]);
+  });
 });

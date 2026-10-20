@@ -438,48 +438,66 @@ export class AcrFlowService {
   }
 
   /**
-   * A person assesses an ACR once (0190, widened 19 Oct 2026): a level whose people are exactly those
-   * of an earlier level that stands (done, or not skipped) is skipped with a note, whether the two are
-   * in a row or not, and comes back when the people change. A level with nobody set is never skipped:
-   * the ACR waits there. Done levels stay. When the level the ACR waits on gets skipped, the ACR moves
-   * on; with nothing left it is shown to the employee.
+   * Which levels stand (0190, widened 19 and 20 Oct 2026). A person assesses an ACR once: a level whose
+   * people are exactly those of an earlier level that stands (done, or not skipped) is skipped with a
+   * note, in a row or not. A level with nobody set is skipped too ("Nobody set") when a later level has
+   * someone; when nobody is set anywhere after it the ACR waits there and the office sets the people.
+   * A skipped level comes back when its people change, unless the ACR has already gone past it. Done
+   * levels stay. When the level the ACR waits on gets skipped, the ACR moves on; with nothing left it
+   * is shown to the employee.
    */
   private async applySkips(c: PoolClient, ctx: RequestContext, reportId: string) {
-    const rows = (await c.query<ReviewRow>(REVIEWS, [reportId])).rows;
-    const earlier: Array<{ seq: number; label: string; people: string[] }> = [];
-    for (const v of rows) {
-      const people = [...v.reviewer_ids].sort();
-      if (v.status === 'done') {
-        earlier.push({ seq: v.seq, label: v.label, people });
-        continue;
-      }
-      const same = people.length
-        ? earlier.find(
-            (p) => p.people.length === people.length && p.people.every((x, i) => x === people[i]),
-          )
-        : undefined;
-      if (same) {
-        // skipped, with the note naming the level that stands now (it may be another than before)
-        await c.query(
-          `UPDATE acr_reviews SET status = 'skipped', skipped_note = $2
-            WHERE id = $1 AND (status <> 'skipped' OR skipped_note IS DISTINCT FROM $2)`,
-          [v.id, `Same person as level ${String(same.seq)} (${same.label}); assessed there`],
-        );
-        continue; // a skipped level is not one the later levels compare with
-      }
-      if (v.status === 'skipped')
-        await c.query(
-          `UPDATE acr_reviews SET status = 'waiting', skipped_note = NULL WHERE id = $1`,
-          [v.id],
-        );
-      earlier.push({ seq: v.seq, label: v.label, people });
-    }
     const r = (
       await c.query<{ status: string; current_level: number | null }>(
         'SELECT status, current_level FROM acr_reports WHERE id = $1',
         [reportId],
       )
     ).rows[0];
+    // the levels before the one the ACR is at are behind it: they stay as they are
+    const passed = r?.status === 'review' && r.current_level ? r.current_level : 0;
+    const rows = (await c.query<ReviewRow>(REVIEWS, [reportId])).rows;
+    const earlier: Array<{ seq: number; label: string; people: string[] }> = [];
+    const skip = (v: ReviewRow, note: string) =>
+      c.query(
+        `UPDATE acr_reviews SET status = 'skipped', skipped_note = $2
+          WHERE id = $1 AND (status <> 'skipped' OR skipped_note IS DISTINCT FROM $2)`,
+        [v.id, note],
+      );
+    const back = async (v: ReviewRow) => {
+      if (v.status === 'skipped')
+        await c.query(
+          `UPDATE acr_reviews SET status = 'waiting', skipped_note = NULL WHERE id = $1`,
+          [v.id],
+        );
+    };
+    for (const v of rows) {
+      const people = [...v.reviewer_ids].sort();
+      if (v.status === 'done') {
+        earlier.push({ seq: v.seq, label: v.label, people });
+        continue;
+      }
+      if (v.seq < passed) {
+        if (v.status !== 'skipped') earlier.push({ seq: v.seq, label: v.label, people });
+        continue;
+      }
+      if (!people.length) {
+        const later = rows.some(
+          (x) => x.seq > v.seq && x.status !== 'done' && x.reviewer_ids.length > 0,
+        );
+        if (later) await skip(v, 'Nobody set for this level; skipped');
+        else await back(v);
+        continue;
+      }
+      const same = earlier.find(
+        (p) => p.people.length === people.length && p.people.every((x, i) => x === people[i]),
+      );
+      if (same) {
+        await skip(v, `Same person as level ${String(same.seq)} (${same.label}); assessed there`);
+        continue; // a skipped level is not one the later levels compare with
+      }
+      await back(v);
+      earlier.push({ seq: v.seq, label: v.label, people });
+    }
     if (r?.status !== 'review' || !r.current_level) return;
     const now = (await c.query<ReviewRow>(REVIEWS, [reportId])).rows;
     const cur = now.find((x) => x.seq === r.current_level);
