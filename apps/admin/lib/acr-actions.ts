@@ -6,6 +6,7 @@ import { ApiError, apiFetch } from './api';
 import type { AcrBand, AcrLevel, StaffGroup } from './acr';
 
 const SETUP = '/people/acr/setup';
+const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:4000';
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 type Out = { ok: true } | { ok: false; error: string };
@@ -53,6 +54,50 @@ export async function requestAcrPdf(fd: FormData) {
     back(backTo, error);
   }
   redirect(`${backTo}${backTo.includes('?') ? '&' : '?'}export=${exportId}`);
+}
+
+/**
+ * A file for an attachment question (0194), uploaded as the signed-in person: an image or a PDF up to
+ * 5 MB. The sheet puts the id on the answer; the API checks the file is theirs when the answer is saved.
+ */
+export async function acrUploadFile(
+  id: string,
+  fd: FormData,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  if (!okId(id)) return { ok: false, error: 'Unknown ACR' };
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Choose a file.' };
+  if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(file.type))
+    return { ok: false, error: `${file.name}: attach a PDF or an image (JPG, PNG, WebP).` };
+  if (file.size > 5 * 1024 * 1024) return { ok: false, error: `${file.name} is larger than 5 MB.` };
+  try {
+    const reg = await apiFetch<{
+      file: { id: string };
+      upload: { url: string; method: string; headers?: Record<string, string> };
+    }>(`${R(id)}/files`, {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name.slice(0, 200),
+        contentType: file.type,
+        sizeBytes: file.size,
+        classification: 'personal',
+      }),
+    });
+    const target = reg.upload.url.startsWith('http')
+      ? reg.upload.url
+      : `${API_BASE}${reg.upload.url}`;
+    const headers = new Headers({ 'content-type': file.type });
+    for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
+    const put = await fetch(target, {
+      method: reg.upload.method || 'PUT',
+      headers,
+      body: Buffer.from(await file.arrayBuffer()),
+    });
+    if (!put.ok) return { ok: false, error: `${file.name} did not upload.` };
+    return { ok: true, id: reg.file.id };
+  } catch (e) {
+    return problem(e);
+  }
 }
 
 /** Rating words, days to object and the grade bands (from the client editor). */
@@ -293,7 +338,7 @@ async function call(path: string, method: 'POST' | 'PUT', body?: unknown): Promi
   revalidatePath('/me/acr');
   return { ok: true };
 }
-type AnswerMap = Record<string, number | string>;
+type AnswerMap = Record<string, number | string | string[]>;
 interface LevelBody {
   answers: AnswerMap;
   remarks: string | null;

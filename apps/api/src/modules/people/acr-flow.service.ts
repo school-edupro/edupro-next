@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { AuditService } from '../../common/audit/audit.service';
 import { ReportsService } from '../reports/reports.service';
 import { FilesService } from '../files/files.service';
+import type { CreateUploadDto } from '../files/files.dto';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -19,7 +20,8 @@ import { AcrSetupService } from './acr-setup.service';
 import { PEOPLE } from './people.permissions';
 
 type Group = 'teaching' | 'non_teaching';
-type Answer = number | string;
+/** a rating, a written answer, yes / no, or the ids of the files attached (0194) */
+type Answer = number | string | string[];
 export interface Question {
   id: string;
   /** the section's title, id and weight (0191); questions without a section row keep their text */
@@ -28,7 +30,7 @@ export interface Question {
   sectionWeight: number;
   sectionHelp: string | null;
   text: string;
-  kind: 'scale' | 'text' | 'yesno';
+  kind: 'scale' | 'text' | 'yesno' | 'file';
   weight: number;
   required: boolean;
 }
@@ -221,7 +223,7 @@ export class AcrFlowService {
       section_weight: string | null;
       section_help: string | null;
       text: string;
-      kind: 'scale' | 'text' | 'yesno';
+      kind: 'scale' | 'text' | 'yesno' | 'file';
       weight: string;
       required: boolean;
     }>(
@@ -331,11 +333,18 @@ export class AcrFlowService {
     const errors: string[] = [];
     for (const q of qs) {
       const a = answers[q.id];
-      const empty = a === undefined || a === null || (typeof a === 'string' && a.trim() === '');
+      const empty =
+        a === undefined ||
+        a === null ||
+        (typeof a === 'string' && a.trim() === '') ||
+        (Array.isArray(a) && a.length === 0);
       if (empty) {
         if (strict && q.required) errors.push(`Answer “${q.text}”`);
         continue;
       }
+      if (q.kind === 'file' && (!Array.isArray(a) || a.length > 3))
+        errors.push(`“${q.text}”: up to three files`);
+      if (q.kind !== 'file' && Array.isArray(a)) errors.push(`“${q.text}”: not a file answer`);
       if (q.kind === 'scale' && (typeof a !== 'number' || a < 1 || a > top))
         errors.push(`“${q.text}”: a rating from 1 to ${String(top)}`);
       if (q.kind === 'text' && typeof a !== 'string') errors.push(`“${q.text}”: a written answer`);
@@ -381,6 +390,32 @@ export class AcrFlowService {
   }
   private score(qs: Question[], answers: Record<string, Answer>, top: number): number | null {
     return this.scoreOf(qs, answers, top).pct;
+  }
+  /**
+   * The files attached to the answers (0194) must be the person's own uploads, ready and not deleted;
+   * files already on the saved answers stay as they are.
+   */
+  private async checkFiles(
+    c: PoolClient,
+    qs: Question[],
+    answers: Record<string, Answer>,
+    prev: Record<string, Answer>,
+  ): Promise<string[]> {
+    const kept = new Set(Object.values(prev).flatMap((a) => (Array.isArray(a) ? a : [])));
+    const wanted = new Set<string>();
+    for (const q of qs) {
+      const a = answers[q.id];
+      if (q.kind !== 'file' || !Array.isArray(a)) continue;
+      for (const id of a) if (!kept.has(id)) wanted.add(id);
+    }
+    if (!wanted.size) return [];
+    const ok = await c.query<{ id: string }>(
+      `SELECT id::text FROM files WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL AND status = 'ready'
+          AND created_by = app.current_user_id()`,
+      [[...wanted]],
+    );
+    const good = new Set(ok.rows.map((x) => x.id));
+    return [...wanted].some((id) => !good.has(id)) ? ['Attach only files you uploaded here'] : [];
   }
   /** Only the answers to these questions are kept. */
   private only(qs: Question[], answers: Record<string, Answer>) {
@@ -627,13 +662,34 @@ export class AcrFlowService {
     };
   }
 
+  /**
+   * An upload slot for a file to attach to an answer (0194): for the employee, the people of a level
+   * and the school's ACR people, without a platform file right. The answer that names the file is
+   * checked against the uploader when it is saved.
+   */
+  async requestUpload(ctx: RequestContext, id: string, dto: CreateUploadDto) {
+    if (!/^\d{1,18}$/.test(id))
+      throw new DomainError('not-found', 'ACR not found', { status: 404 });
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.load(c, id);
+      await this.access(c, ctx, r, (await c.query<ReviewRow>(REVIEWS, [id])).rows);
+    });
+    return this.files.createUpload(ctx, { ...dto, classification: 'personal' });
+  }
+
   /** A file on the employee's record (a document, the photo, the signature) for whoever may see the ACR. */
   async fileUrl(ctx: RequestContext, id: string, fileId: string) {
     if (!/^\d{1,18}$/.test(id) || !/^\d{1,18}$/.test(fileId))
       throw new DomainError('not-found', 'File not found', { status: 404 });
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await this.load(c, id);
-      await this.access(c, ctx, r, (await c.query<ReviewRow>(REVIEWS, [id])).rows);
+      const reviews = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
+      await this.access(c, ctx, r, reviews);
+      // a file attached to an answer (0194) is part of the ACR
+      const attached = [r.self_answers, ...reviews.map((v) => v.answers)].some((a) =>
+        Object.values(a).some((x) => Array.isArray(x) && x.includes(fileId)),
+      );
+      if (attached) return;
       const ok = await c.query(
         `SELECT 1 WHERE EXISTS (SELECT 1 FROM employee_documents WHERE employee_id = $1 AND file_id = $2 AND deleted_at IS NULL)
             OR EXISTS (SELECT 1 FROM employees WHERE id = $1 AND (photo_file_id = $2 OR signature_file_id = $2))`,
@@ -1474,6 +1530,7 @@ export class AcrFlowService {
       const { top } = await this.scale(c);
       const answers = this.only(qs, { ...r.self_answers, ...dto.answers });
       const errors = this.check(qs, answers, top, false);
+      errors.push(...(await this.checkFiles(c, qs, answers, r.self_answers)));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       await c.query(
@@ -1491,6 +1548,7 @@ export class AcrFlowService {
       const sc = await this.scale(c);
       const answers = this.only(qs, { ...r.self_answers, ...dto.answers });
       const errors = this.check(qs, answers, sc.top, true);
+      errors.push(...(await this.checkFiles(c, qs, answers, r.self_answers)));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       const facts = await this.facts(c, r, sc.lateAfter);
@@ -1545,6 +1603,7 @@ export class AcrFlowService {
       const { top } = await this.scale(c);
       const answers = this.only(qs, { ...v.answers, ...dto.answers });
       const errors = this.check(qs, answers, top, false);
+      errors.push(...(await this.checkFiles(c, qs, answers, v.answers)));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       await c.query(
@@ -1578,6 +1637,7 @@ export class AcrFlowService {
       // every level answers its own questionnaire (0191); its ratings give the level's score
       const answers = this.only(qs, { ...v.answers, ...dto.answers });
       const errors = this.check(qs, answers, sc.top, true);
+      errors.push(...(await this.checkFiles(c, qs, answers, v.answers)));
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       score = this.score(qs, answers, sc.top);

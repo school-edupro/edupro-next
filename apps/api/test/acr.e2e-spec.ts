@@ -1167,4 +1167,120 @@ describe('employee ACR flow (e2e)', () => {
       (await call(outsider, 'GET', `/people/acr/reports/${reportId}/files/1`)).statusCode,
     ).toBe(404);
   });
+  it('an attachment question (0194): up to three of the person’s own files as the answer, required when ticked; the levels and the office open them', async () => {
+    const s3 = stamp('ACA');
+    const nita = await withMigrator(async (c) => {
+      const u = await seedUser(c, school, `${s3}-n3`);
+      await c.query(
+        `INSERT INTO employees (school_id, employee_code, first_name, user_id, designation, employee_type)
+         VALUES ($1, 'N3', 'Nita', $2, 'TGT', 'teaching')`,
+        [school.id, u.id],
+      );
+      return u;
+    });
+    expect((await call(admin, 'POST', `/people/acr/cycles/${cycleId}/start`)).json().added).toBe(1);
+    // a required attachment question on the teaching self form, which open ACRs read live
+    const forms = (await call(admin, 'GET', '/people/acr/setup')).json().forms as Array<{
+      id: string;
+      part: string;
+      staffGroup: string;
+      active: boolean;
+      employeeTypeIds: string[];
+    }>;
+    const teachingForm = forms.find(
+      (f) =>
+        f.part === 'self' && f.staffGroup === 'teaching' && f.active && !f.employeeTypeIds.length,
+    )!;
+    const section = await call(admin, 'POST', '/people/acr/setup/sections', {
+      formId: teachingForm.id,
+      title: 'Evidence',
+    });
+    const fq = await call(admin, 'POST', '/people/acr/setup/questions', {
+      formId: teachingForm.id,
+      sectionId: section.json().id,
+      text: 'Certificates of the training attended',
+      kind: 'file',
+      required: true,
+    });
+    expect(fq.statusCode).toBe(201);
+    const qid = fq.json().id as string;
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const acr = board.rows.find((r: { employee: { code: string } }) => r.employee.code === 'N3')
+      .id as string;
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const uploadAs = async (u: SeededUser, path: string) => {
+      const slot = await call(u, 'POST', path, {
+        fileName: 'cert.png',
+        contentType: 'image/png',
+        sizeBytes: png.length,
+      });
+      expect(slot.statusCode).toBe(201);
+      const putr = await inject({
+        method: 'PUT',
+        url: slot.json().upload.url,
+        headers: {},
+        raw: { body: png, contentType: 'image/png' },
+      } as never);
+      expect(putr.statusCode).toBe(200);
+      return slot.json().file.id as string;
+    };
+    // the employee gets an upload slot from the ACR itself (no platform file right needed)
+    const mine = await uploadAs(nita, `/people/acr/reports/${acr}/files`);
+    const theirs = await uploadAs(admin, '/platform/files');
+    expect(
+      (
+        await call(outsider, 'POST', `/people/acr/reports/${acr}/files`, {
+          fileName: 'x.png',
+          contentType: 'image/png',
+          sizeBytes: 10,
+        })
+      ).statusCode,
+    ).toBe(404);
+    // only the person's own uploads, three at most
+    expect(
+      (await call(nita, 'PUT', `/people/acr/reports/${acr}/self`, { answers: { [qid]: [theirs] } }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await call(nita, 'PUT', `/people/acr/reports/${acr}/self`, {
+          answers: { [qid]: [mine, mine, mine, mine] },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const saved = await call(nita, 'PUT', `/people/acr/reports/${acr}/self`, {
+      answers: { [qid]: [mine] },
+    });
+    expect(saved.statusCode).toBe(200);
+    const v = (await call(nita, 'GET', `/people/acr/reports/${acr}`)).json();
+    expect(v.self.answers[qid]).toEqual([mine]);
+    // the file opens for the employee and for the office; a required attachment is needed to submit
+    expect((await call(nita, 'GET', `/people/acr/reports/${acr}/files/${mine}`)).statusCode).toBe(
+      200,
+    );
+    expect((await call(admin, 'GET', `/people/acr/reports/${acr}/files/${mine}`)).statusCode).toBe(
+      200,
+    );
+    const qs = (
+      v.forms[v.self.formId].sections as Array<{
+        questions: Array<{ id: string; kind: string }>;
+      }>
+    ).flatMap((x) => x.questions);
+    const answers = Object.fromEntries(
+      qs.map((q) => [
+        q.id,
+        q.kind === 'scale' ? 4 : q.kind === 'yesno' ? 'yes' : q.kind === 'file' ? [] : 'Done',
+      ]),
+    );
+    const without = await call(nita, 'POST', `/people/acr/reports/${acr}/self/submit`, { answers });
+    expect(without.statusCode).toBe(400);
+    expect(without.json().detail).toMatch(/Certificates/);
+    const done = await call(nita, 'POST', `/people/acr/reports/${acr}/self/submit`, {
+      answers: { ...answers, [qid]: [mine] },
+    });
+    expect(done.statusCode).toBe(200);
+  });
 });

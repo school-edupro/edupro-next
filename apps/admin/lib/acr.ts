@@ -31,7 +31,7 @@ export interface AcrQuestion {
   staffGroup: StaffGroup | 'both';
   section: string;
   text: string;
-  kind: 'scale' | 'text' | 'yesno';
+  kind: 'scale' | 'text' | 'yesno' | 'file';
   weight: number;
   required: boolean;
   sortOrder: number;

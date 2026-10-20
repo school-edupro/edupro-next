@@ -6,12 +6,13 @@ import { useMemo, useState, type ReactNode } from 'react';
  * filled in the admin app and the staff app: the school's facts, the self-appraisal, each level, the result,
  * and the steps. What may be filled comes from `report.can`.
  */
-export type AcrAnswer = number | string;
+/** a rating, a written answer, yes / no, or the ids of the files attached (0194) */
+export type AcrAnswer = number | string | string[];
 export interface AcrQuestionView {
   id: string;
   text: string;
-  /** scale: a rating on the scale; text: written; yesno: yes or no (0191) */
-  kind: 'scale' | 'text' | 'yesno';
+  /** scale: a rating on the scale; text: written; yesno: yes or no (0191); file: attachments (0194) */
+  kind: 'scale' | 'text' | 'yesno' | 'file';
   weight: number;
   required: boolean;
 }
@@ -202,6 +203,8 @@ export interface AcrActions {
   sendBack?: (reason: string) => Promise<AcrResult>;
   acknowledge?: () => Promise<AcrResult>;
   represent?: (text: string) => Promise<AcrResult>;
+  /** an attachment question (0194): the app uploads the picked file as the person and gives its id */
+  uploadFile?: (fd: FormData) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
 }
 export interface AcrLevelBody {
   answers: Record<string, AcrAnswer>;
@@ -267,6 +270,8 @@ function QuestionForm({
   onChange,
   editable,
   scores,
+  fileHref,
+  uploadFile,
 }: {
   idPrefix: string;
   form: AcrFormView | undefined;
@@ -276,7 +281,12 @@ function QuestionForm({
   editable: boolean;
   /** section scores to show beside the titles (filled forms) */
   scores?: AcrSectionScore[];
+  /** where an attached file opens; none: attachments are counted, not linked */
+  fileHref?: (fileId: string) => string;
+  uploadFile?: AcrActions['uploadFile'];
 }) {
+  const [fileErr, setFileErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const top = scale.length;
   if (!form) return <p className="ep-field__help">No questions: the grade and remarks only.</p>;
   return (
@@ -319,6 +329,87 @@ function QuestionForm({
                     )}
                   </label>
                 );
+              if (q.kind === 'file') {
+                const ids = Array.isArray(a) ? a : [];
+                const pick = async (file: File | undefined) => {
+                  if (!file || !uploadFile) return;
+                  setBusy(true);
+                  setFileErr(null);
+                  const fd = new FormData();
+                  fd.set('file', file);
+                  const r = await uploadFile(fd);
+                  setBusy(false);
+                  if (r.ok) onChange(q.id, [...ids, r.id]);
+                  else setFileErr(r.error);
+                };
+                return (
+                  <div key={q.id} className="ep-field" role="group" aria-labelledby={`${name}-q`}>
+                    <span id={`${name}-q`} className="ep-field__label">
+                      {q.text}
+                      {q.required && editable ? ' *' : ''}
+                    </span>
+                    <div className="ep-acr-files">
+                      {ids.map((f, i) => (
+                        <span key={f} className="ep-acr-files__item">
+                          {fileHref ? (
+                            <a
+                              href={fileHref(f)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ep-filelinks__btn"
+                              aria-label={`View attachment ${String(i + 1)}`}
+                              title={`View attachment ${String(i + 1)}`}
+                            >
+                              {VIEW_ICON}
+                            </a>
+                          ) : (
+                            <span className="ep-field__help">Attachment {i + 1}</span>
+                          )}
+                          {editable ? (
+                            <button
+                              type="button"
+                              className="ep-btn ep-btn--ghost ep-btn--sm"
+                              aria-label={`Remove attachment ${String(i + 1)}`}
+                              onClick={() =>
+                                onChange(
+                                  q.id,
+                                  ids.filter((x) => x !== f),
+                                )
+                              }
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </span>
+                      ))}
+                      {!ids.length && !editable ? <span className="ep-field__help">—</span> : null}
+                      {editable && uploadFile && ids.length < 3 ? (
+                        <>
+                          <label className="ep-btn ep-btn--ghost ep-btn--sm" htmlFor={name}>
+                            {busy ? 'Uploading…' : 'Attach a file'}
+                          </label>
+                          <input
+                            id={name}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,application/pdf"
+                            className="ep-sr-only"
+                            disabled={busy}
+                            onChange={(e) => {
+                              void pick(e.target.files?.[0]);
+                              e.target.value = '';
+                            }}
+                          />
+                        </>
+                      ) : null}
+                    </div>
+                    {editable ? (
+                      <span className="ep-field__help">
+                        Up to three images or PDFs, 5 MB each. {fileErr ?? ''}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              }
               if (q.kind === 'yesno')
                 return (
                   <div
@@ -863,6 +954,8 @@ export function AcrSheet({
         ) : null}
         {r.self.returned ? <Returned r={r.self.returned} to="you" /> : null}
         <QuestionForm
+          fileHref={fileHref}
+          uploadFile={actions.uploadFile}
           idPrefix="self"
           form={r.self.formId ? r.forms[r.self.formId] : undefined}
           scale={r.scale}
@@ -940,6 +1033,8 @@ export function AcrSheet({
                 {l.returned ? <Returned r={l.returned} to="this level" /> : null}
                 {l.formId && (l.status === 'done' || editing) ? (
                   <QuestionForm
+                    fileHref={fileHref}
+                    uploadFile={actions.uploadFile}
                     idPrefix={`l${String(l.seq)}`}
                     form={r.forms[l.formId]}
                     scale={r.scale}

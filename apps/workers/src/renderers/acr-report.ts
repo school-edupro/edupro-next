@@ -10,7 +10,7 @@ import { istStamp, letterhead, type Letterhead } from './report-builder';
  * is what the ACR holds; nothing is recomputed from the records.
  */
 
-type Answer = number | string | null;
+type Answer = number | string | string[] | null;
 interface Q {
   id: string;
   form_id: string;
@@ -18,8 +18,15 @@ interface Q {
   section_id: string | null;
   section_weight: string;
   text: string;
-  kind: 'scale' | 'text' | 'yesno';
+  kind: 'scale' | 'text' | 'yesno' | 'file';
   weight: string;
+}
+/** A file attached to an answer (0194): an image as a data address, a PDF as a note. */
+interface Attachment {
+  id: string;
+  content_type: string | null;
+  object_key: string | null;
+  uri: string | null;
 }
 interface Review {
   report_id: string;
@@ -151,6 +158,7 @@ const eventWord = (w: string) =>
 /** A rating as "3 · Good" on the scale (the first word is the top), yes / no, or the text. */
 function answerText(q: Q, a: Answer, scale: string[]): string {
   if (a === null || a === undefined || a === '') return '—';
+  if (Array.isArray(a)) return a.length ? `${String(a.length)} attached` : '—';
   if (q.kind === 'scale' && typeof a === 'number')
     return `${String(a)} · ${scale[scale.length - a] ?? ''}`;
   if (q.kind === 'yesno') return a === 'yes' ? 'Yes' : a === 'no' ? 'No' : String(a);
@@ -180,16 +188,32 @@ function sectionScores(qs: Q[], answers: Record<string, Answer>, top: number) {
 }
 
 /** A form's answers as one table per section, with the section score beside its title. */
-function answersHtml(qs: Q[], answers: Record<string, Answer>, scale: string[]): string {
+function answersHtml(
+  qs: Q[],
+  answers: Record<string, Answer>,
+  scale: string[],
+  att: Map<string, Attachment>,
+): string {
   if (!qs.length) return '<p class="muted">No questions on this form.</p>';
   const scores = sectionScores(qs, answers, scale.length);
+  // the files attached to an answer: images small, a PDF as a note
+  const files = (a: Answer) =>
+    Array.isArray(a) && a.length
+      ? `<div class="att">${a
+          .map((id) => {
+            const f = att.get(id);
+            if (f?.uri) return `<img src="${f.uri}" alt="" />`;
+            return `<span class="chip">${f?.content_type === 'application/pdf' ? 'PDF attached' : 'File attached'}</span>`;
+          })
+          .join('')}</div>`
+      : '';
   return scores
     .map((sec) => {
       const rows = qs
         .filter((q) => (q.section_id ?? q.section) === sec.key)
         .map(
           (q) =>
-            `<tr><td>${esc(q.text)}</td><td class="ans">${esc(answerText(q, answers[q.id] ?? null, scale))}</td></tr>`,
+            `<tr><td>${esc(q.text)}${q.kind === 'file' ? files(answers[q.id] ?? null) : ''}</td><td class="ans">${esc(answerText(q, answers[q.id] ?? null, scale))}</td></tr>`,
         )
         .join('');
       return `<table class="qa"><thead><tr><th>${esc(sec.title)}</th><th class="ans">${
@@ -314,12 +338,29 @@ export async function renderAcrReport(
         [empIds, signerUsers],
       )
     ).rows;
+    // the files attached to answers (0194)
+    const fileIds = [
+      ...new Set(
+        [...reports.map((r) => r.self_answers), ...reviews.map((v) => v.answers)].flatMap((a) =>
+          Object.values(a).flatMap((x) => (Array.isArray(x) ? x : [])),
+        ),
+      ),
+    ];
+    const attachments = fileIds.length
+      ? (
+          await c.query<{ id: string; content_type: string | null; object_key: string | null }>(
+            `SELECT id::text, content_type, object_key FROM files WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL AND status = 'ready'`,
+            [fileIds],
+          )
+        ).rows
+      : [];
     return {
       reports,
       reviews,
       questions,
       events,
       signers,
+      attachments,
       education,
       experience,
       training,
@@ -340,6 +381,9 @@ export async function renderAcrReport(
     const uri = await imageUri(storage, x.object_key, x.content_type);
     if (uri) sigOf.set(x.id, uri);
   }
+  const attached = new Map<string, Attachment>();
+  for (const f of data.attachments.slice(0, 60))
+    attached.set(f.id, { ...f, uri: await imageUri(storage, f.object_key, f.content_type) });
   const qsOf = (formId: string | null) =>
     formId ? data.questions.filter((q) => q.form_id === formId) : [];
 
@@ -469,7 +513,7 @@ export async function renderAcrReport(
             : '',
           v.remarks ? `<div class="kv"><span>Remarks</span><b>${esc(v.remarks)}</b></div>` : '',
         ].join('');
-        return `<section class="sec">${head}${who}${filled}${answersHtml(qsOf(v.form_id), v.answers, data.scale)}${result}</section>`;
+        return `<section class="sec">${head}${who}${filled}${answersHtml(qsOf(v.form_id), v.answers, data.scale, attached)}${result}</section>`;
       })
       .join('');
     const resultRows: Array<[string, string]> = [];
@@ -539,7 +583,7 @@ export async function renderAcrReport(
     <div class="kv"><span>Submitted</span><b>${r.self_submitted_at ? esc(dmy(r.self_submitted_at)) : 'Not yet'}</b></div>
     ${att ? `<div class="kv"><span>Attendance (from the records)</span><b>${String(att.daysPresent)} days present · ${String(att.lateArrivals)} late</b></div>` : ''}
     ${officeRows.length ? `<div class="kv"><span>Leave taken (office)</span><b>${officeRows.map(([k, v]) => `${k} ${v}`).join(' · ')}</b></div>` : ''}
-    ${r.self_submitted_at ? answersHtml(qsOf(r.self_form_id), r.self_answers, data.scale) : ''}
+    ${r.self_submitted_at ? answersHtml(qsOf(r.self_form_id), r.self_answers, data.scale, attached) : ''}
     ${r.self_pct !== null ? `<div class="kv"><span>Self score</span><b>${String(num(r.self_pct))}%</b></div>` : ''}
   </section>
   <h2>Part B · Assessment by the levels</h2>
@@ -598,6 +642,9 @@ export async function renderAcrReport(
   td, th { border-bottom: 1px solid #EEF2F6; padding: 2.5px 4px; text-align: left; vertical-align: top; }
   th { color: #52606D; font-weight: 600; }
   .qa th { background: #F5F7FA; color: #00265D; }
+  .att { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .att img { height: 60px; border: 1px solid #D9E2EC; }
+  .chip { font-size: 8px; color: #52606D; border: 1px solid #D9E2EC; border-radius: 3px; padding: 1px 4px; }
   .ans { width: 34%; text-align: right; }
   .signs { display: grid; grid-auto-flow: column; gap: 16px; margin-top: 18px; text-align: center; color: #52606D; break-inside: avoid; align-items: end; }
   .sig { display: flex; flex-direction: column; justify-content: flex-end; }

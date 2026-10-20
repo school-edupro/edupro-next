@@ -9,6 +9,7 @@ import {
   sendBack,
   submitLevel,
   submitSelf,
+  uploadAcrFile,
 } from '@/app/(app)/acr/actions';
 
 /** One ACR in the staff app: the shared sheet with this app's actions; reloads after each step. */
@@ -29,6 +30,7 @@ export function AcrReport({ report }: { report: AcrReportView }) {
         sendBack: (reason) => sendBack(id, reason),
         acknowledge: () => acknowledge(id),
         represent: (text) => represent(id, text),
+        uploadFile: (fd) => uploadAcrFile(id, fd),
       }}
     />
   );

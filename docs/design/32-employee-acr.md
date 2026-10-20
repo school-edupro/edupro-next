@@ -269,3 +269,18 @@ reports/:id/files/:fileId` gives a signed address to whoever may see the ACR; th
   who filled it (by their login) with the date; a level not yet filled names its people. The signature
   image prints above the line only once that step is filled.
 - Test: `acr.e2e-spec.ts` "the sheet carries the school’s guidelines and the employee’s record".
+
+## Attachment questions (20 Oct 2026, 0194)
+
+- A question of kind **file**: the person answering attaches up to three of their own files (images or
+  PDFs, 5 MB each) as the answer; not scored; required means at least one file on submission. The
+  sheet shows each as a View icon with a remove button while editable, and an "Attach a file" button
+  that uploads through the app (`acrUploadFile` / `uploadAcrFile`; the slot comes from `POST
+reports/:id/files`, open to the employee, the levels and the office without a platform file right)
+  and puts the id on the answer. The API keeps only files the person uploaded (`files.created_by`), ready
+  and not deleted; files already on the saved answer stay. A file on an answer is part of the ACR:
+  `GET reports/:id/files/:fileId` opens it for whoever may see the ACR. The printout prints images
+  small under the question and notes a PDF.
+- Set-up: Forms and questions → kind "Attachment (files the person uploads)". Works on the levels'
+  questionnaires too (the level attaches, the later levels and the office see).
+- Test: `acr.e2e-spec.ts` "an attachment question (0194)".

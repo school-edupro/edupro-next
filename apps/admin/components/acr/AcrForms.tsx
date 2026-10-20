@@ -15,7 +15,12 @@ const FOR_LABEL = {
   non_teaching: 'Non-teaching staff',
   both: 'All staff',
 } as const;
-const KIND_LABEL = { scale: 'rating', text: 'written', yesno: 'yes / no' } as const;
+const KIND_LABEL = {
+  scale: 'rating',
+  text: 'written',
+  yesno: 'yes / no',
+  file: 'attachment',
+} as const;
 const qBody = (q: AcrQuestion) => ({
   formId: q.formId,
   sectionId: q.sectionId,
@@ -627,6 +632,7 @@ function FormDetail({
                       <option value="scale">A rating on the scale</option>
                       <option value="text">Written</option>
                       <option value="yesno">Yes or no</option>
+                      <option value="file">Attachment (files the person uploads)</option>
                     </select>
                   </label>
                   <label className="ep-field" htmlFor="qf-weight">

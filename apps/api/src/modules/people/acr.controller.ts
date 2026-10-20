@@ -34,6 +34,7 @@ import {
   AcrSettingsDto,
   AcrPdfDto,
 } from './acr.dto';
+import { CreateUploadDto } from '../files/files.dto';
 import { AcrFlowService } from './acr-flow.service';
 import { AcrSetupService } from './acr-setup.service';
 import { PEOPLE } from './people.permissions';
@@ -260,6 +261,13 @@ export class AcrController {
   @ApiOperation({ summary: 'Save my self-appraisal (draft)' })
   saveSelf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AcrSelfDto) {
     return this.flow.saveSelf(ctx, id, body);
+  }
+
+  @Post('reports/:id/files')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'An upload slot for a file to attach to an answer (0194)' })
+  upload(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: CreateUploadDto) {
+    return this.flow.requestUpload(ctx, id, body);
   }
 
   @Get('reports/:id/files/:fileId')

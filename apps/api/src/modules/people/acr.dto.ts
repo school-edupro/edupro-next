@@ -134,7 +134,7 @@ export const AcrQuestionSchema = z.object({
   sectionId: Id,
   text: z.string().trim().min(3).max(300),
   /** scale: a rating on the scale; text: written; yesno: yes or no (0191) */
-  kind: z.enum(['scale', 'text', 'yesno']),
+  kind: z.enum(['scale', 'text', 'yesno', 'file']),
   weight: z.number().min(0.25).max(10).default(1),
   required: z.boolean().default(true),
   sortOrder: z.number().int().min(0).max(9999).default(0),
@@ -163,7 +163,12 @@ export class AcrCycleDto extends createZodDto(AcrCycleSchema) {}
 /** The answers of a form: question id → a rating (1 to the scale's top) or written text. */
 const Answers = z.record(
   z.string().regex(/^\d{1,18}$/),
-  z.union([z.number().int().min(1).max(10), z.string().max(4000)]),
+  z.union([
+    // an attachment question: up to three of the person's own files (0194)
+    z.array(Id).max(3),
+    z.number().int().min(1).max(10),
+    z.string().max(4000),
+  ]),
 );
 
 export const AcrSelfSchema = z.object({ answers: Answers });

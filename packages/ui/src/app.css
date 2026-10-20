@@ -8527,6 +8527,18 @@ a.db-list__main:hover strong {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
   align-items: end;
 }
+/* an attachment question on the ACR sheet (0194): the files as View icons, one to add */
+.ep-acr-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-acr-files__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
 /* the signature on the employee record (0193): shown small under the photo */
 .ep-hero__signature {
   display: grid;
