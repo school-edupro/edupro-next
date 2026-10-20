@@ -33,6 +33,9 @@ export default async function SchoolPage({
         )}
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/${school}/careers`}>
+              {t(lang, 'Careers', 'नौकरियाँ')}
+            </a>
             <a
               className="ep-btn ep-btn--ghost ep-btn--sm"
               href={`/${school}/appointment?lang=${lang}`}

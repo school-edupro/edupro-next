@@ -38,13 +38,41 @@ the filled sample is a real applicant's and was not kept) to shape the candidate
   levels under Workflow). The vacancy shows in the approvers' header approvals through the workflow inbox.
 - Test: `apps/api/test/recruitment.e2e-spec.ts`.
 
-## Part 2 — the careers page and the application (next)
+## Part 2 — the careers page and the application (migration 0198, built)
 
-The public site lists the published vacancies of a school; a candidate signs in with a code to mobile or
-email, fills the application (personal details, father or spouse, qualifications, experience, training,
-children, current pay and notice period, skills and activities, references, contact and addresses,
-documents and photo), submits it to one or more vacancies, and sees where each stands. Fields that exist in
-the employee master use its lists and checks.
+- **Public pages** (public app, `/<school>/careers`): the open posts (published, inside their dates), one
+  post with what it asks for, the candidate's form (`/careers/form`, `?apply=<vacancy>` to apply after it),
+  and My applications (`/careers/mine`). The school's admissions page links to Careers. English only.
+- **Sign-in:** a six-digit code to the mobile (SMS and WhatsApp) or the email, as the candidate chooses
+  (`POST public/careers/otp` with the shared proof-of-work challenge, `otp/verify`), ten minutes, five
+  tries, three live codes per address; the code goes through the school's template `recruitment_otp`
+  (`app.recruitment_otp_send`, editable under Communication); under the development bypass it shows on
+  screen. The token is `cand.<jwt>` (two hours, issuer edupro-candidate) in the HttpOnly cookie
+  `edupro_candidate`, kept apart from admissions. A candidate is one per mobile or email; the other one
+  given on the form becomes a second way to sign in when nobody else uses it.
+- **The form** (`packages/db/src/candidate-fields.ts`): every field the employee master has is named by the
+  master's key and takes its label, type, list and validation (`validateEmployeeChanges` on save): name,
+  gender, date of birth, nationality, religion, marital status, Aadhaar and PAN (encrypted, shown masked),
+  father's and spouse's name, mobile, alternate mobile, email, the present and permanent address. The
+  candidate's own: father or spouse education and work, experience in years and months, present pay,
+  last job's end, when they can join, reason for leaving, testimonials, computer skills, sports,
+  languages, travel abroad, remarks, the nine interests. Rows: qualifications, experience, training,
+  children, references (columns named as the master's rows where they map). Saving keeps every answer
+  accepted and lists the refused ones (a long form is never lost over one answer).
+- **Documents:** photo (needed to apply), father's and mother's photo, address proof, Class X
+  certificate, qualification certificates (several), father's and mother's ID proof, résumé; images or
+  PDFs up to 5 MB, photos images only. The slot comes from `POST public/careers/me/files/slot` (a file
+  owned by the candidate), the bytes go to the signed upload address, `POST me/files` makes it the
+  document; View opens only the candidate's own files.
+- **Applying** (`POST public/careers/vacancies/:id/apply`, with the declaration): the vacancy must be
+  open, everything required on file (the required fields, a qualification, the photo), once per post.
+  `job_applications` keeps the number (APP-yyyy-nnnn), status `submitted`, a snapshot of the answers,
+  rows and files and the encrypted IDs, and `employee_match`: active employees with the same mobile or
+  email, for the office (part 3) and the duplicate check before joining (part 4). No message goes out on
+  applying yet (notices come with the screening in part 3).
+- Public allow-list: `RecruitmentPublicController.*` with the reasons (permission-coverage).
+- Tests: `apps/api/test/recruitment-public.e2e-spec.ts`; `apps/admin/e2e/public-a11y.spec.ts` "public
+  careers pages".
 
 ## Part 3 — candidates and screening (next)
 

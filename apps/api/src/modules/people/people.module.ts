@@ -18,6 +18,11 @@ import { AuditService } from '../../common/audit/audit.service';
 import { FilesModule } from '../files/files.module';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
+import { AdmissionsModule } from '../admissions/admissions.module';
+import { CandidateAuthService } from './candidate-auth.service';
+import { CandidateGuard } from './candidate.guard';
+import { RecruitmentPublicController } from './recruitment-public.controller';
+import { RecruitmentPublicService } from './recruitment-public.service';
 import { WorkflowService } from '../workflow/workflow.service';
 import { RecruitmentController } from './recruitment.controller';
 import { RecruitmentService } from './recruitment.service';
@@ -35,12 +40,13 @@ import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
 @Module({
-  imports: [FilesModule, ReportsModule, WorkflowModule],
+  imports: [FilesModule, ReportsModule, WorkflowModule, AdmissionsModule],
   controllers: [
     EmployeeSelfController,
     PeopleDashboardController,
     AcrController,
     RecruitmentController,
+    RecruitmentPublicController,
     EmployeeProfileController,
     EmployeeTransferController,
     SectionRollController,
@@ -56,6 +62,9 @@ import { StudentsService } from './students.service';
     AcrSetupService,
     AcrFlowService,
     RecruitmentService,
+    RecruitmentPublicService,
+    CandidateAuthService,
+    CandidateGuard,
     EmployeeProfileService,
     EmployeeGridService,
     EmployeeBulkService,

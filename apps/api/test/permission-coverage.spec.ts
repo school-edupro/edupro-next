@@ -138,6 +138,21 @@ describe('permission coverage', () => {
       'PublicVisitorsController.options (public/visitors)',
       'PublicVisitorsController.register (public/visitors)',
       'PunchController.ingest (attendance/punch)',
+      // the careers page (0198): the vacancy pages and the form are read-only and throttled; otp needs a proof
+      // of work (three live codes per address), verify allows five tries; the rest need the `cand.` token
+      // (two hours, signed) and touch only that candidate's own form, files and applications
+      'RecruitmentPublicController.addFile (public/careers)',
+      'RecruitmentPublicController.apply (public/careers)',
+      'RecruitmentPublicController.fileUrl (public/careers)',
+      'RecruitmentPublicController.form (public/careers)',
+      'RecruitmentPublicController.me (public/careers)',
+      'RecruitmentPublicController.otp (public/careers)',
+      'RecruitmentPublicController.profile (public/careers)',
+      'RecruitmentPublicController.removeFile (public/careers)',
+      'RecruitmentPublicController.slot (public/careers)',
+      'RecruitmentPublicController.vacancies (public/careers)',
+      'RecruitmentPublicController.vacancy (public/careers)',
+      'RecruitmentPublicController.verify (public/careers)',
       'RfidController.ingest (attendance/rfid)',
       'ShadowController.ingest (shadow)',
     ]);

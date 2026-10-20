@@ -86,3 +86,32 @@ for (const width of [1280, 375]) {
     expect(problems).toEqual([]);
   });
 }
+
+// the careers page (docs/design/34-recruitment.md, part 2): the open posts, one post with the sign-in
+// (mobile or email), signed out, desktop and phone
+for (const width of [1280, 375]) {
+  test(`public careers pages @${width}`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.setViewportSize({ width, height: 900 });
+    const problems: string[] = [];
+    const check = async (label: string) => {
+      await page.waitForTimeout(400);
+      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      for (const v of r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical'))
+        problems.push(`${label}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+    };
+    await page.goto(`${BASE}/alpha/careers`);
+    await check('open posts');
+    const first = page.locator('main article a').first();
+    if (await first.count()) {
+      await first.click();
+      await page.waitForURL(/\/careers\/\d+/);
+      await check('one post');
+      await page.getByLabel('My email').check();
+      await check('sign-in by email');
+    }
+    await page.goto(`${BASE}/alpha/careers/mine`);
+    await check('my applications, signed out');
+    expect(problems).toEqual([]);
+  });
+}
