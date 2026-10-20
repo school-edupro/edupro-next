@@ -297,6 +297,19 @@ export class WorkflowService {
         ],
       },
       {
+        code: 'vacancy_approval',
+        name: 'Vacancy approval',
+        entityType: 'vacancy',
+        levels: [
+          {
+            level: 1,
+            name: 'Principal approval',
+            resolver: { kind: 'role', roleCode: 'school_admin' },
+            slaHours: 72,
+          },
+        ],
+      },
+      {
         code: 'lesson_plan_approval',
         name: 'Lesson plan approval',
         entityType: 'lesson_plan',

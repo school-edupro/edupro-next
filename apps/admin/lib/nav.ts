@@ -71,6 +71,12 @@ export const NAV: Array<{
       },
       { href: '/people/acr', label: 'employeeAcr', permission: 'people.acr.view' },
       { href: '/people/acr/setup', label: 'acrSetup', permission: 'people.acr.view' },
+      { href: '/people/recruitment', label: 'vacancies', permission: 'people.recruitment.view' },
+      {
+        href: '/people/recruitment/setup',
+        label: 'recruitmentSetup',
+        permission: 'people.recruitment.view',
+      },
     ],
   },
   {

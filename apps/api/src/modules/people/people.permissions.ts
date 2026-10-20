@@ -27,4 +27,10 @@ export const PEOPLE = {
   staffProfileManage: 'people.staff_profile.manage',
   staffChangeApprove: 'people.staff_change.approve',
   staffChangeOverride: 'people.staff_change.override',
+  /** Recruitment (0197): vacancies, candidates and the screening. */
+  recruitmentView: 'people.recruitment.view',
+  /** Raise a vacancy and send it for approval (the office, an HOD). */
+  recruitmentRaise: 'people.recruitment.raise',
+  /** Set up, publish and close vacancies, screen and select candidates. */
+  recruitmentManage: 'people.recruitment.manage',
 } as const;
