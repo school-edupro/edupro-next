@@ -66,6 +66,11 @@ describe('permission coverage', () => {
       'CommsWebhooksController.msg91 (comms/webhooks)',
       'CompatController.handshake (compat/v1)',
       'CompatParityController.appVersion (compat/v1)',
+      // the consent form API for other systems (0170): a per-form `cfk_` key as Bearer, kept as a SHA-256 hash,
+      // refused when unknown, revoked or expired, 60 calls a minute per key; decide needs the read_approve scope
+      'ConsentApiController.decide (consent-api/v1)',
+      'ConsentApiController.list (consent-api/v1)',
+      'ConsentApiController.one (consent-api/v1)',
       'FilesController.localGet (platform/files)',
       'FilesController.localPut (platform/files)',
       'GpsController.ingest (transport/gps)',
@@ -87,6 +92,9 @@ describe('permission coverage', () => {
       // SBI ePay answers encrypted with the school account's AES key: it opens only with that key (0142)
       'PaymentsController.sbiepayReturned (payments)',
       'PaymentsController.webhook (payments)',
+      // portal view-as (0183): the other app has no session yet; it hands in a one-time code (32 random bytes,
+      // kept as a hash, 60 seconds, used once, bound to the app) for the signed impersonation token
+      'PortalAsController.handoff (access/portal-as)',
       'PublicAdmissionsController.challenge (public/admissions)',
       'PublicAdmissionsController.createApplication (public/admissions)',
       'PublicAdmissionsController.cycles (public/admissions)',
@@ -111,6 +119,19 @@ describe('permission coverage', () => {
       'PublicAppointmentsController.pass (public/appointments)',
       'PublicAppointmentsController.passCard (public/appointments)',
       'PublicAppointmentsController.slots (public/appointments)',
+      // the public link and QR of a consent form (0169): only with the form's random link token, throttled per IP;
+      // info is read-only, otp needs a proof of work (three live codes per address), verify allows five tries;
+      // the rest need the `cf.` pass (two hours, signed, bound to the form) and touch only that pass's answers
+      'PublicConsentFormsController.answer (public/consent-forms)',
+      'PublicConsentFormsController.edit (public/consent-forms)',
+      'PublicConsentFormsController.info (public/consent-forms)',
+      'PublicConsentFormsController.me (public/consent-forms)',
+      'PublicConsentFormsController.otp (public/consent-forms)',
+      'PublicConsentFormsController.pay (public/consent-forms)',
+      'PublicConsentFormsController.pdf (public/consent-forms)',
+      'PublicConsentFormsController.respond (public/consent-forms)',
+      'PublicConsentFormsController.upload (public/consent-forms)',
+      'PublicConsentFormsController.verify (public/consent-forms)',
       // walk-in visitors registering on their own phone (0065): the lists are read-only and throttled;
       // registering and the visitor's own entry need the OTP-issued applicant token
       'PublicVisitorsController.mine (public/visitors)',
