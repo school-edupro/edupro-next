@@ -35,7 +35,6 @@ export function CandidateSignIn({
     return () => clearTimeout(t);
   }, [wait]);
   const [to, setTo] = useState('');
-  const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [stage, setStage] = useState<'address' | 'code'>('address');
   const [busy, setBusy] = useState<string | null>(null);
@@ -93,7 +92,7 @@ export function CandidateSignIn({
       const res = await fetch('/api/careers/verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ school, channel, to, code, name }),
+        body: JSON.stringify({ school, channel, to, code }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail ?? body.type ?? 'failed');
@@ -142,15 +141,6 @@ export function CandidateSignIn({
               </span>
             ) : null}
           </fieldset>
-          <label className="ep-field">
-            <span className="ep-field__label">Your name</span>
-            <input
-              className="ep-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-            />
-          </label>
           <label className="ep-field">
             <span className="ep-field__label">
               {channel === 'mobile' ? 'Mobile number' : 'Email address'}

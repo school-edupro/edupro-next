@@ -23,6 +23,7 @@ import { CommsModule } from '../comms/comms.module';
 import { MastersModule } from '../masters/masters.module';
 import { MastersService } from '../masters/masters.service';
 import { RecruitmentApprovalService } from './recruitment-approval.service';
+import { ApplicationPdfService } from './application-pdf.service';
 import { CandidateAuthService } from './candidate-auth.service';
 import { CandidateGuard } from './candidate.guard';
 import { RecruitmentPublicController } from './recruitment-public.controller';
@@ -76,6 +77,7 @@ import { StudentsService } from './students.service';
     AcrFlowService,
     RecruitmentService,
     RecruitmentApprovalService,
+    ApplicationPdfService,
     RecruitmentPublicService,
     RecruitmentScreeningService,
     RecruitmentJoinService,

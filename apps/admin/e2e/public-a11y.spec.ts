@@ -159,6 +159,9 @@ for (const width of [1280, 375]) {
     await page.getByRole('button', { name: 'Save and continue' }).click();
     await expect(page.getByText('Please put these right:')).toBeVisible();
     await check('mistakes shown');
+    // the applications as cards, with their PDF
+    await page.goto(`${BASE}/rcpmvgl1kms166/careers/mine`);
+    await check('my applications, signed in');
     expect(problems).toEqual([]);
   });
 }

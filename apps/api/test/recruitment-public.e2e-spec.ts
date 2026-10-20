@@ -453,4 +453,67 @@ describe('recruitment: the public careers page (e2e)', () => {
     // an active employee has the same mobile: noted for the office
     expect(row.rows[0]!.employee_match).toEqual([expect.objectContaining({ code: 'EX1' })]);
   });
+
+  it('the application is kept as a PDF the designed "received" email carries; the candidate and the office download it; the next step shows', async () => {
+    const appId = (await pub('GET', '/public/careers/me', token)).json().applications[0]
+      .id as string;
+    const mail = await withMigrator((c) =>
+      c.query<{
+        pdf: string | null;
+        format: string;
+        body: string;
+        attachments: Array<{ fileId: string }>;
+      }>(
+        `SELECT ja.pdf_file_id::text AS pdf, m.format, m.body, m.attachments
+           FROM job_applications ja
+           JOIN comms_messages m ON m.school_id = ja.school_id AND m.channel = 'email'
+           JOIN comms_templates t ON t.id = m.template_id AND t.code = 'recruitment_applied'
+          WHERE ja.id = $1`,
+        [appId],
+      ),
+    );
+    expect(mail.rows).toHaveLength(1);
+    const m = mail.rows[0]!;
+    expect(m.pdf).toBeTruthy();
+    expect(m.format).toBe('html');
+    expect(m.body).toContain('Application received');
+    expect(m.attachments).toEqual([
+      expect.objectContaining({ fileId: m.pdf, contentType: 'application/pdf' }),
+    ]);
+    // the code email is designed too: the code in its box
+    const code = await withMigrator((c) =>
+      c.query<{ format: string; body: string }>(
+        `SELECT m.format, m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+          WHERE m.school_id = $1 AND t.code = 'recruitment_otp' AND m.channel = 'email' ORDER BY m.id DESC LIMIT 1`,
+        [school.id],
+      ),
+    );
+    expect(code.rows[0]).toMatchObject({ format: 'html' });
+    expect(code.rows[0]!.body).toContain('Your sign-in code');
+    // the candidate's own PDF; another candidate's is not found
+    const pdf = (await pub('GET', `/public/careers/me/applications/${appId}/pdf`, token)).json();
+    expect(pdf.contentType).toBe('application/pdf');
+    expect(pdf.base64.startsWith('JVBER')).toBe(true);
+    const other = await signIn('email', 'someone.else@example.invalid');
+    expect(
+      (await pub('GET', `/public/careers/me/applications/${appId}/pdf`, other)).statusCode,
+    ).toBe(404);
+    // the office's copy
+    const office = await call(admin, 'GET', `/people/recruitment/applications/${appId}/pdf`);
+    expect(office.statusCode).toBe(200);
+    expect(office.json().filename).toMatch(/^Application-APP-\d{4}-0001\.pdf$/);
+    // the office schedules the first stage: My applications shows it, with the post's details
+    const view = (await call(admin, 'GET', `/people/recruitment/applications/${appId}`)).json();
+    const current = view.stages.find((s: { current: boolean }) => s.current);
+    await call(admin, 'POST', `/people/recruitment/applications/${appId}/stages/${current.id}`, {
+      scheduledAt: '2099-01-10T10:30',
+      venue: 'Room 4',
+    });
+    const a = (await pub('GET', '/public/careers/me', token)).json().applications[0];
+    expect(a).toMatchObject({
+      department: 'Science',
+      open: true,
+      next: { stage: current.name, at: '2099-01-10T05:00:00.000Z', venue: 'Room 4' },
+    });
+  });
 });

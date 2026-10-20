@@ -1,6 +1,38 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { CandidateSignIn } from '@/components/CandidateSignIn';
-import { APPLICATION_STATUS, careersFetch, careersMe, dmy, type CareerSignIn } from '@/lib/careers';
+import {
+  APPLICATION_STATUS,
+  careersFetch,
+  careersMe,
+  istText,
+  type CareerSignIn,
+} from '@/lib/careers';
+
+const TONE: Record<string, 'info' | 'success' | 'warning' | 'neutral'> = {
+  submitted: 'info',
+  screening: 'info',
+  on_hold: 'warning',
+  selected: 'success',
+  joined: 'success',
+  rejected: 'neutral',
+  withdrawn: 'neutral',
+};
+const icon = (d: string) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path
+      d={d}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+const EYE = icon(
+  'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+);
+const SAVE = icon('M12 4v12m0 0-4-4m4 4 4-4M4 20h16');
 
 /** My applications and where each stands; my application form. */
 export default async function MyApplicationsPage({
@@ -54,37 +86,74 @@ export default async function MyApplicationsPage({
               shortlisted.
             </div>
           ) : null}
-          <Card title="Applications">
-            {me.applications.length ? (
-              <div className="ep-table-wrap">
-                <table className="ep-table">
-                  <caption className="ep-sr-only">My applications</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Post</th>
-                      <th scope="col">Application</th>
-                      <th scope="col">Sent on</th>
-                      <th scope="col">Where it stands</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {me.applications.map((a) => (
-                      <tr key={a.id}>
-                        <td>{a.title}</td>
-                        <td>{a.number}</td>
-                        <td>{dmy(a.submittedAt)}</td>
-                        <td>
-                          <Badge tone="info">{APPLICATION_STATUS[a.status] ?? a.status}</Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p style={{ margin: 0 }}>No application yet. Pick a post from the careers page.</p>
-            )}
-          </Card>
+          {me.applications.length ? (
+            <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+              {me.applications.map((a) => (
+                <article
+                  key={a.id}
+                  className="ep-card ep-career-app"
+                  style={{ padding: 'var(--sp-4)' }}
+                >
+                  <div className="ep-career-app__head">
+                    <h2 className="ep-card__title" style={{ margin: 0 }}>
+                      {a.open ? (
+                        <a href={`/${school}/careers/${a.vacancyId}`}>{a.title}</a>
+                      ) : (
+                        a.title
+                      )}
+                    </h2>
+                    <Badge tone={TONE[a.status] ?? 'neutral'}>
+                      {APPLICATION_STATUS[a.status] ?? a.status}
+                    </Badge>
+                  </div>
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    {[a.department, a.subject, a.employeeType, a.campus]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    Application <strong>{a.number}</strong> · sent {istText(a.submittedAt)}
+                  </p>
+                  {a.next ? (
+                    <p className="ep-alert ep-alert--info" role="status" style={{ margin: 0 }}>
+                      <span>
+                        <strong>{a.next.stage}</strong>: {istText(a.next.at)}
+                        {a.next.venue ? ` · ${a.next.venue}` : ''}
+                      </span>
+                    </p>
+                  ) : null}
+                  <div className="ep-career-app__tools">
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/api/careers/application-pdf/${a.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`View application ${a.number}`}
+                    >
+                      {EYE} View
+                    </a>
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/api/careers/application-pdf/${a.id}?save=1`}
+                      aria-label={`Download application ${a.number} (PDF)`}
+                    >
+                      {SAVE} Download
+                    </a>
+                    {a.open ? (
+                      <a
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        href={`/${school}/careers/${a.vacancyId}`}
+                      >
+                        The post
+                      </a>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <Card>No application yet. Pick a post from the careers page.</Card>
+          )}
           <div style={{ marginTop: 'var(--sp-4)' }}>
             <Card title="My application form">
               <p style={{ marginTop: 0 }}>

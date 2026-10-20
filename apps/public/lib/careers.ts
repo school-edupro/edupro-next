@@ -126,6 +126,14 @@ export interface CareerMe {
     code: string;
     status: string;
     submittedAt: string;
+    department: string | null;
+    subject: string | null;
+    employeeType: string | null;
+    campus: string | null;
+    /** the post still takes applications */
+    open: boolean;
+    /** the next step the school has set: the stage, when, where */
+    next: { stage: string; at: string; venue: string | null } | null;
   }>;
 }
 export const APPLICATION_STATUS: Record<string, string> = {

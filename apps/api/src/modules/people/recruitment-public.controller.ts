@@ -113,6 +113,15 @@ export class RecruitmentPublicController {
     return this.svc.fileUrl(req.candidate!, fileId);
   }
 
+  @Get('me/applications/:id/pdf')
+  @Public()
+  @UseGuards(CandidateGuard)
+  @PublicThrottle(30)
+  @ApiOperation({ summary: 'My application as a PDF (base64)' })
+  applicationPdf(@Req() req: CandidateRequest, @Param('id') id: string) {
+    return this.svc.applicationPdf(req.candidate!, id);
+  }
+
   @Post('vacancies/:id/apply')
   @HttpCode(201)
   @Public()

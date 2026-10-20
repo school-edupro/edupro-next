@@ -1,0 +1,29 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { ApiError, apiFetch } from '@/lib/api';
+
+/**
+ * A job application as the candidate sent it, as a PDF (docs/design/34-recruitment.md, part 7): for
+ * those who may see candidates. Shown in the browser (View) or saved (`?save=1`).
+ */
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!/^\d{1,18}$/.test(id)) return new NextResponse(null, { status: 404 });
+  try {
+    const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
+      `/people/recruitment/applications/${id}/pdf`,
+    );
+    const save = req.nextUrl.searchParams.get('save') === '1';
+    return new NextResponse(Buffer.from(f.base64, 'base64'), {
+      headers: {
+        'content-type': f.contentType,
+        'content-disposition': `${save ? 'attachment' : 'inline'}; filename="${f.filename}"`,
+        'cache-control': 'private, no-store',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      return NextResponse.json(error.problem, { status: error.status });
+    throw error;
+  }
+}

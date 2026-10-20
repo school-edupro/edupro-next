@@ -17,6 +17,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { FilesService } from '../files/files.service';
+import { ApplicationPdfService } from './application-pdf.service';
 import { PEOPLE } from './people.permissions';
 import type {
   ApplicationBulkDto,
@@ -101,6 +102,7 @@ export class RecruitmentScreeningService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly files: FilesService,
+    private readonly pdf: ApplicationPdfService,
   ) {}
 
   private manage(ctx: RequestContext) {
@@ -739,7 +741,12 @@ export class RecruitmentScreeningService {
       );
       const id = r.rows[0]!.id;
       await this.event(c, ctx, id, 'added', 'Added by the office');
-      await c.query(`SELECT app.recruitment_notify($1, 'applied')`, [id]);
+      // the application as entered, kept as a PDF the "received" email carries
+      const pdf = await this.pdf.store(c, id);
+      await c.query(`SELECT app.recruitment_notify($1, 'applied', $2::jsonb)`, [
+        id,
+        JSON.stringify(pdf ? { attachments: [pdf] } : {}),
+      ]);
       await this.audit.stage(ctx, c, {
         action: 'people.recruitment.walk_in',
         entityType: 'job_applications',
@@ -797,6 +804,21 @@ export class RecruitmentScreeningService {
         after: dto,
       });
       return { saved: true };
+    });
+  }
+
+  /** The application PDF for the office (made again from the application as it was sent). */
+  async applicationPdf(ctx: RequestContext, id: string) {
+    if (!/^\d{1,18}$/.test(id))
+      throw new DomainError('not-found', 'Application not found', { status: 404 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const out = await this.pdf.render(c, id);
+      if (!out) throw new DomainError('not-found', 'Application not found', { status: 404 });
+      return {
+        filename: out.filename,
+        contentType: 'application/pdf',
+        base64: out.bytes.toString('base64'),
+      };
     });
   }
 }

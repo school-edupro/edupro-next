@@ -244,6 +244,13 @@ export class RecruitmentController {
     return this.screening.view(ctx, id);
   }
 
+  @Get('applications/:id/pdf')
+  @ApiOperation({ summary: 'The application as the candidate sent it, as a PDF (base64)' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  applicationPdf(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.screening.applicationPdf(ctx, id);
+  }
+
   @Get('applications/:id/files/:fileId')
   @ApiOperation({ summary: 'A document of the application, as a signed address' })
   @RequirePermission(PEOPLE.recruitmentView)

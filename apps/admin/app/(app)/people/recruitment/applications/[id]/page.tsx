@@ -76,9 +76,16 @@ export default async function ApplicationPage({
         title={a.name}
         description={`${a.vacancy.title} (${a.vacancy.code}) · applied ${dmy(a.submittedAt)}${a.source === 'office' ? ' · added by the office' : ''}`}
         actions={
-          <a className="ep-btn ep-btn--ghost" href={`/people/recruitment/${a.vacancy.id}`}>
-            The vacancy
-          </a>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+            <span className="ep-field__help">Application PDF</span>
+            <FileLinks
+              href={`/api/recruitment-application-pdf/${a.id}`}
+              label={`application ${a.number} (PDF)`}
+            />
+            <a className="ep-btn ep-btn--ghost" href={`/people/recruitment/${a.vacancy.id}`}>
+              The vacancy
+            </a>
+          </span>
         }
       />
       <Notice params={sp} />

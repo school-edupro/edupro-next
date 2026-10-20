@@ -145,6 +145,7 @@ describe('permission coverage', () => {
       // of work (three live codes per address), verify allows five tries; the rest need the `cand.` token
       // (two hours, signed) and touch only that candidate's own form, files and applications
       'RecruitmentPublicController.addFile (public/careers)',
+      'RecruitmentPublicController.applicationPdf (public/careers)',
       'RecruitmentPublicController.apply (public/careers)',
       'RecruitmentPublicController.fileUrl (public/careers)',
       'RecruitmentPublicController.form (public/careers)',

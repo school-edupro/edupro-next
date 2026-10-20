@@ -1001,17 +1001,45 @@ export function CareerForm({
           </div>
           <ul className="ep-wiz__review-docs">
             {form.documents.map((d) => {
-              const n = me.files.filter((x) => x.kind === d.kind).length;
+              const have = me.files.filter((x) => x.kind === d.kind);
               return (
                 <li key={d.kind}>
-                  {d.label}:{' '}
-                  {n
-                    ? n > 1
-                      ? `${String(n)} uploaded`
-                      : 'uploaded'
-                    : d.required
-                      ? 'needed'
-                      : 'not given'}
+                  <span className="ep-wiz__review-doc-label">
+                    {d.label}
+                    <span className="ep-field__help">
+                      {have.length
+                        ? have.length > 1
+                          ? `${String(have.length)} uploaded`
+                          : 'Uploaded'
+                        : d.required
+                          ? 'Needed'
+                          : 'Not given'}
+                    </span>
+                  </span>
+                  {have.length ? (
+                    <span className="ep-wiz__thumbs">
+                      {have.map((x, i) => (
+                        <a
+                          key={x.id}
+                          href={`/api/careers/file/${x.fileId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ep-wiz__thumb ep-wiz__thumb--link"
+                          aria-label={`View ${d.label}${have.length > 1 ? ` ${String(i + 1)}` : ''}`}
+                          title={`View ${d.label}`}
+                        >
+                          {IMAGE.test(x.contentType) ? (
+                            <img src={`/api/careers/file/${x.fileId}`} alt="" />
+                          ) : (
+                            <span className="ep-wiz__pdf" aria-hidden="true">
+                              PDF
+                            </span>
+                          )}
+                          {EYE}
+                        </a>
+                      ))}
+                    </span>
+                  ) : null}
                 </li>
               );
             })}

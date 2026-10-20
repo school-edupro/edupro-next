@@ -240,3 +240,36 @@ office alert for messages that do not go out).
   sent, the school of the sign-in, the places, refusals by field, the new rules), the join suite with
   valid Aadhaar numbers; `public-a11y.spec.ts` runs every step and the mistakes summary signed in, at
   1280 and 375 wide.
+
+## Part 7 — designed emails, My applications as cards, the application PDF (migration 0202, built)
+
+Decisions (20 Oct 2026): the emails carry the school's **name band, no logo**; My applications shows the
+**status and the next step**; the PDF shows **Aadhaar and PAN in full** (the school's choice; UIDAI
+advises masking on shared copies); the PDF is **downloaded by the candidate, attached to the "received"
+email and downloaded by the office**. The sign-in asks **no name** (step 1 of the form has it).
+
+- **Emails** (`app.recruitment_mail_html`, `app.recruitment_mail`; `app.recruitment_otp_send` and
+  `app.recruitment_notify` redefined): designed HTML for the code (the code in a large box, how long it
+  works, "ignore it if you did not ask"), application received (post, number, received on; the PDF
+  attached), a stage scheduled (date, time, venue; bring originals), selected, not taken forward. The
+  school's band at the top, its address, phone, email and website at the foot. The subject is the
+  school's email template subject; switching that template off stops the email. SMS and WhatsApp go
+  from their templates as before.
+- **The PDF** (`application-pdf.ts`, `ApplicationPdfService`): A4, the letterhead (logo, name, address,
+  contact), "Application for" the post with the number and when it was received, the photo, every
+  answer section by section, the lists as tables (the header again on a new page; a heading kept with
+  its first rows), interests, the documents given, the declaration (online, or entered by the office), a
+  footer with the number and page on every page. Made when the application is sent (online or by the
+  office) and kept (`job_applications.pdf_file_id`, file class sensitive) for the email; made again from
+  the application's snapshot whenever it is downloaded: `GET public/careers/me/applications/:id/pdf`
+  (the candidate's own only) and `GET people/recruitment/applications/:id/pdf` (recruitment view). A PDF
+  that cannot be made leaves the email without it, never the application unsent. Latin fonts only, as
+  the other PDFs.
+- **My applications:** cards like the careers list (the post linked while open, department, subject,
+  type, campus), the status badge, the number and when it was sent, the next step the school set (stage,
+  date and time, venue), View and Download of the PDF.
+- **Review step:** each uploaded document with a thumbnail (photos) and a View button.
+- **Office:** the application page shows View and Download of the PDF.
+- Tests: `recruitment-public.e2e-spec.ts` (the kept PDF on the designed email, the code email's design,
+  the candidate's and the office's downloads, another candidate refused, the next step on My
+  applications); `public-a11y.spec.ts` (My applications signed in).

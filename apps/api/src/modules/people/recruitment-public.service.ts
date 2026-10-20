@@ -31,6 +31,7 @@ import {
   CANDIDATE_AGE,
   todayIst,
 } from './candidate-checks';
+import { ApplicationPdfService } from './application-pdf.service';
 import { istText } from './recruitment.service';
 import type {
   CandidateApplyDto,
@@ -102,6 +103,7 @@ export class RecruitmentPublicService {
     private readonly db: DbService,
     private readonly auth: CandidateAuthService,
     private readonly files: FilesService,
+    private readonly pdf: ApplicationPdfService,
   ) {}
 
   // ---- what anyone sees ------------------------------------------------------------------------------
@@ -207,6 +209,7 @@ export class RecruitmentPublicService {
         masked[f.key] = plain ? maskValue(plain, f.type) : null;
       }
       const files = await this.filesOf(c, cand.id);
+      // each application with its post, and the next step the school has set (a date, a time, a venue)
       const apps = await c.query<{
         id: string;
         number: string;
@@ -215,9 +218,24 @@ export class RecruitmentPublicService {
         code: string;
         status: string;
         submitted_at: Date;
+        department: string | null;
+        subject: string | null;
+        employee_type: string | null;
+        campus: string | null;
+        open: boolean;
+        next_stage: string | null;
+        next_at: Date | null;
+        next_venue: string | null;
       }>(
-        `SELECT a.id::text, a.number, a.vacancy_id::text, v.title, v.code, a.status, a.submitted_at
+        `SELECT a.id::text, a.number, a.vacancy_id::text, v.title, v.code, a.status, a.submitted_at,
+                v.department, v.subject, v.employee_type, cp.name AS campus,
+                (v.status = 'published' AND v.opens_at <= now() AND v.closes_at > now()) AS open,
+                st.name AS next_stage, r.scheduled_at AS next_at, NULLIF(btrim(r.venue), '') AS next_venue
            FROM job_applications a JOIN vacancies v ON v.id = a.vacancy_id
+           LEFT JOIN campuses cp ON cp.id = v.campus_id
+           LEFT JOIN application_stage_results r ON r.application_id = a.id AND r.stage_id = a.current_stage_id
+                 AND r.scheduled_at IS NOT NULL AND r.result IS NULL AND a.status IN ('submitted', 'screening')
+           LEFT JOIN recruitment_stages st ON st.id = r.stage_id
           WHERE a.candidate_id = $1 ORDER BY a.submitted_at DESC`,
         [cand.id],
       );
@@ -241,6 +259,18 @@ export class RecruitmentPublicService {
           code: a.code,
           status: a.status,
           submittedAt: a.submitted_at.toISOString(),
+          department: a.department,
+          subject: a.subject,
+          employeeType: a.employee_type,
+          campus: a.campus,
+          open: a.open,
+          next: a.next_stage
+            ? {
+                stage: a.next_stage,
+                at: a.next_at!.toISOString(),
+                venue: a.next_venue,
+              }
+            : null,
         })),
       };
     });
@@ -606,9 +636,32 @@ export class RecruitmentPublicService {
         `INSERT INTO job_application_events (school_id, application_id, what, note) VALUES (app.current_school_id(), $1, 'applied', 'Online')`,
         [id],
       );
-      // the candidate hears it is received (when the school sends this notice)
-      await c.query(`SELECT app.recruitment_notify($1, 'applied')`, [id]);
+      // the candidate hears it is received (when the school sends this notice), with the application as a PDF
+      const pdf = await this.pdf.store(c, id);
+      await c.query(`SELECT app.recruitment_notify($1, 'applied', $2::jsonb)`, [
+        id,
+        JSON.stringify(pdf ? { attachments: [pdf] } : {}),
+      ]);
       return { id, number };
+    });
+  }
+
+  /** The candidate's own application as a PDF (made again from the application as it was sent). */
+  async applicationPdf(cand: Candidate, id: string) {
+    if (!/^\d{1,18}$/.test(id))
+      throw new DomainError('not-found', 'Application not found', { status: 404 });
+    return this.db.tenant(publicTenant(cand.schoolId), async (c) => {
+      const mine = await c.query(
+        `SELECT 1 FROM job_applications WHERE id = $1 AND candidate_id = $2`,
+        [id, cand.id],
+      );
+      const out = mine.rowCount ? await this.pdf.render(c, id) : null;
+      if (!out) throw new DomainError('not-found', 'Application not found', { status: 404 });
+      return {
+        filename: out.filename,
+        contentType: 'application/pdf',
+        base64: out.bytes.toString('base64'),
+      };
     });
   }
 }
