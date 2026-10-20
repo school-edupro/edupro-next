@@ -188,6 +188,7 @@ export async function saveAcrLevels(staffGroup: StaffGroup, levels: AcrLevel[]):
           employeeId: l.employeeId,
           action: l.action,
           formId: l.formId ?? null,
+          instructions: l.instructions ?? '',
         })),
       }),
     });

@@ -41,6 +41,8 @@ export interface AcrLevelView {
   status: 'waiting' | 'pending' | 'done' | 'skipped';
   /** 0190: why the level is skipped (the same person as the level before) */
   skippedNote?: string | null;
+  /** what to do at this level (0196): the set-up's text, or a plain default */
+  instructions?: string;
   /** the last level that stands: the final approval, where the standard remarks are ticked (0195) */
   final?: boolean;
   remarkIds?: string[];
@@ -778,6 +780,41 @@ export function AcrSheet({
     agreement: mine?.agreement ?? null,
     remarkIds: mine?.remarkIds ?? [],
   });
+  // the ACR as steps (20 Oct 2026): the self-appraisal, then each level; the current one opens first
+  const steps = useMemo(
+    () => [
+      {
+        key: 'self',
+        n: 1,
+        label: 'Self-appraisal',
+        who: r.employee.name,
+        state: r.self.submittedAt ? 'done' : r.status === 'self' ? 'current' : 'waiting',
+      },
+      ...r.levels.map((l) => ({
+        key: `l${String(l.seq)}`,
+        n: l.seq + 1,
+        label: l.label,
+        who: who(l.people) || 'Nobody set',
+        state:
+          l.status === 'done'
+            ? 'done'
+            : l.status === 'pending'
+              ? 'current'
+              : l.status === 'skipped'
+                ? 'skipped'
+                : 'waiting',
+      })),
+    ],
+    [r],
+  );
+  const [open, setOpen] = useState<string>(
+    () =>
+      steps.find((x) => x.state === 'current')?.key ??
+      [...steps].reverse().find((x) => x.state === 'done')?.key ??
+      'self',
+  );
+  const STATE_WORD = { done: 'Filled', current: 'Now', waiting: 'Not yet', skipped: 'Skipped' };
+  const STATE_TONE = { done: 'success', current: 'info', waiting: 'neutral', skipped: 'warning' };
   const [back, setBack] = useState('');
   const [rep, setRep] = useState('');
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
@@ -937,77 +974,114 @@ export function AcrSheet({
         </section>
       ) : null}
 
-      {r.guidelines ? (
-        <section className="ep-card ep-acr-card" aria-labelledby="acr-guide-h">
-          <h2 id="acr-guide-h" className="ep-card__title">
-            Guidelines to complete the performance report
-          </h2>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{r.guidelines}</div>
-        </section>
-      ) : null}
-
       <Facts f={r.self.facts} office={r.self.office} />
 
       <Records rec={r.records} fileHref={fileHref} />
 
+      <ol className="ep-steps" aria-label="Steps of the ACR">
+        {steps.map((st) => (
+          <li key={st.key}>
+            <button
+              type="button"
+              className="ep-step"
+              data-state={st.state}
+              aria-current={open === st.key ? 'step' : undefined}
+              onClick={() => setOpen(st.key)}
+            >
+              <span className="ep-step__n" aria-hidden="true">
+                {st.n}
+              </span>
+              <span>
+                <span className="ep-step__label">{st.label}</span>
+                <br />
+                <span className="ep-field__help">{st.who}</span>
+              </span>
+              <span
+                className={`ep-badge ep-badge--${STATE_TONE[st.state as keyof typeof STATE_TONE]}`}
+              >
+                {STATE_WORD[st.state as keyof typeof STATE_WORD]}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+
       <section className="ep-card ep-acr-card" aria-labelledby="acr-self-h">
         <h2 id="acr-self-h" className="ep-card__title">
-          Self-appraisal
-          {r.self.pct !== null ? (
-            <span className="ep-field__help"> · self-rating {r.self.pct}%</span>
-          ) : null}
+          <button
+            type="button"
+            className="ep-acr-step__toggle"
+            aria-expanded={open === 'self'}
+            aria-controls="acr-self-panel"
+            onClick={() => setOpen(open === 'self' ? '' : 'self')}
+          >
+            1. Self-appraisal
+            {r.self.pct !== null ? (
+              <span className="ep-field__help"> · self-rating {r.self.pct}%</span>
+            ) : null}
+          </button>
         </h2>
-        {r.self.submittedAt ? (
-          <p className="ep-field__help" style={{ marginTop: 0 }}>
-            Submitted {when(r.self.submittedAt)}
-          </p>
-        ) : null}
-        {r.self.returned ? <Returned r={r.self.returned} to="you" /> : null}
-        <QuestionForm
-          fileHref={fileHref}
-          uploadFile={actions.uploadFile}
-          idPrefix="self"
-          form={r.self.formId ? r.forms[r.self.formId] : undefined}
-          scale={r.scale}
-          answers={self}
-          editable={r.can.self}
-          scores={r.self.submittedAt ? r.self.sections : undefined}
-          onChange={(id, v) => setSelf((x) => ({ ...x, [id]: v }))}
-        />
-        {r.can.self ? (
-          <div className="ep-acr-actions">
-            <button
-              type="button"
-              className="ep-btn ep-btn--secondary"
-              disabled={busy}
-              onClick={() =>
-                void run(
-                  actions.saveSelf ? () => actions.saveSelf!(self) : undefined,
-                  'Saved. You can come back to it.',
-                )
-              }
-            >
-              Save draft
-            </button>
-            <button
-              type="button"
-              className="ep-btn ep-btn--primary"
-              disabled={busy}
-              onClick={() =>
-                void run(
-                  actions.submitSelf ? () => actions.submitSelf!(self) : undefined,
-                  'Submitted to the first level.',
-                )
-              }
-            >
-              Submit self-appraisal
-            </button>
-          </div>
-        ) : null}
+        <div id="acr-self-panel" hidden={open !== 'self'}>
+          {r.guidelines ? (
+            <div className="ep-acr-instructions">
+              <strong>Guidelines to complete the performance report</strong>
+              {'\n'}
+              {r.guidelines}
+            </div>
+          ) : null}
+          {r.self.submittedAt ? (
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              Submitted {when(r.self.submittedAt)}
+            </p>
+          ) : null}
+          {r.self.returned ? <Returned r={r.self.returned} to="you" /> : null}
+          <QuestionForm
+            fileHref={fileHref}
+            uploadFile={actions.uploadFile}
+            idPrefix="self"
+            form={r.self.formId ? r.forms[r.self.formId] : undefined}
+            scale={r.scale}
+            answers={self}
+            editable={r.can.self}
+            scores={r.self.submittedAt ? r.self.sections : undefined}
+            onChange={(id, v) => setSelf((x) => ({ ...x, [id]: v }))}
+          />
+          {r.can.self ? (
+            <div className="ep-acr-actions">
+              <button
+                type="button"
+                className="ep-btn ep-btn--secondary"
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    actions.saveSelf ? () => actions.saveSelf!(self) : undefined,
+                    'Saved. You can come back to it.',
+                  )
+                }
+              >
+                Save draft
+              </button>
+              <button
+                type="button"
+                className="ep-btn ep-btn--primary"
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    actions.submitSelf ? () => actions.submitSelf!(self) : undefined,
+                    'Submitted to the first level.',
+                  )
+                }
+              >
+                Submit self-appraisal
+              </button>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       {r.levels.map((l) => {
         const editing = r.can.level?.seq === l.seq;
+        const key = `l${String(l.seq)}`;
         return (
           <section
             key={l.seq}
@@ -1015,240 +1089,255 @@ export function AcrSheet({
             aria-labelledby={`acr-l${String(l.seq)}-h`}
           >
             <h2 id={`acr-l${String(l.seq)}-h`} className="ep-card__title">
-              {l.seq}. {l.label}{' '}
-              <span className="ep-field__help">
-                · {l.action === 'rate' ? 'rates' : 'reviews'} ·{' '}
-                {l.status === 'done'
-                  ? 'filled'
-                  : l.status === 'pending'
-                    ? 'at this level now'
-                    : l.status === 'skipped'
-                      ? `skipped: ${l.skippedNote ?? 'the same person as the level before'}`
-                      : 'not yet'}
-              </span>
+              <button
+                type="button"
+                className="ep-acr-step__toggle"
+                aria-expanded={open === key}
+                aria-controls={`acr-${key}-panel`}
+                onClick={() => setOpen(open === key ? '' : key)}
+              >
+                {l.seq + 1}. {l.label}{' '}
+                <span className="ep-field__help">
+                  · {l.action === 'rate' ? 'rates' : 'reviews'} ·{' '}
+                  {l.status === 'done'
+                    ? 'filled'
+                    : l.status === 'pending'
+                      ? 'at this level now'
+                      : l.status === 'skipped'
+                        ? `skipped: ${l.skippedNote ?? 'the same person as the level before'}`
+                        : 'not yet'}
+                </span>
+              </button>
             </h2>
-            {l.hidden ? (
-              <>
-                <p className="ep-field__help" style={{ marginTop: 0 }}>
-                  {who(l.people) || 'Nobody set for this level yet'}
-                </p>
-                <p className="ep-field__help">Their answers are shown once the ACR is complete.</p>
-              </>
-            ) : (
-              <>
-                <p className="ep-field__help" style={{ marginTop: 0 }}>
-                  {who(l.people) || 'Nobody set for this level yet'}
-                  {l.filledBy ? ` · filled by ${l.filledBy}, ${when(l.filledAt)}` : ''}
-                </p>
-                {l.returned ? <Returned r={l.returned} to="this level" /> : null}
-                {l.formId && (l.status === 'done' || editing) ? (
-                  <QuestionForm
-                    fileHref={fileHref}
-                    uploadFile={actions.uploadFile}
-                    idPrefix={`l${String(l.seq)}`}
-                    form={r.forms[l.formId]}
-                    scale={r.scale}
-                    answers={editing ? lv.answers : (l.answers ?? {})}
-                    editable={editing}
-                    scores={l.status === 'done' ? l.sections : undefined}
-                    onChange={(id, v) =>
-                      setLv((x) => ({ ...x, answers: { ...x.answers, [id]: v } }))
-                    }
-                  />
-                ) : null}
-                {l.status === 'done' && !editing ? (
-                  <div className="ep-acr-note">
-                    {l.scorePct !== null && l.scorePct !== undefined ? (
-                      <p>
-                        <strong>Score {l.scorePct}%</strong>
-                        {l.grade ? ` · ${l.grade}` : ''}
-                      </p>
-                    ) : l.grade ? (
-                      <p>
-                        <strong>Grade {l.grade}</strong>
-                      </p>
-                    ) : null}
-                    {l.gradeReason ? <p>Why this grade: {l.gradeReason}</p> : null}
-                    {l.agreement ? <p>{AGREE[l.agreement]}</p> : null}
-                    {l.remarkTexts?.length ? (
-                      <ul>
-                        {l.remarkTexts.map((t, i) => (
-                          <li key={i}>{t}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {l.remarks ? <p>{l.remarks}</p> : null}
-                  </div>
-                ) : null}
-                {editing ? (
-                  <div className="ep-acr-level-form">
-                    {l.action === 'review' ? (
-                      <>
-                        <label className="ep-field" htmlFor="acr-grade">
-                          <span className="ep-field__label">Grade *</span>
-                          <select
-                            id="acr-grade"
-                            className="ep-select"
-                            value={grade ?? ''}
-                            onChange={(e) =>
-                              setLv((x) => ({ ...x, grade: e.target.value || null }))
-                            }
-                          >
-                            <option value="">Choose…</option>
-                            {r.bands.map((b) => (
-                              <option key={b.label} value={b.label}>
-                                {b.label} (from {b.minPct}%)
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {before && grade && grade !== before ? (
-                          <label className="ep-field" htmlFor="acr-why">
-                            <span className="ep-field__label">Why not {before}? *</span>
-                            <input
-                              id="acr-why"
-                              className="ep-input"
-                              maxLength={1000}
-                              value={lv.gradeReason ?? ''}
-                              onChange={(e) =>
-                                setLv((x) => ({ ...x, gradeReason: e.target.value }))
-                              }
-                            />
-                          </label>
-                        ) : null}
-                        <fieldset className="ep-field" style={{ border: 0, padding: 0 }}>
-                          <legend className="ep-field__label">The level before *</legend>
-                          {(['agree', 'partly', 'disagree'] as const).map((k) => (
-                            <label key={k} className="ep-check">
-                              <input
-                                type="radio"
-                                name="acr-agree"
-                                checked={lv.agreement === k}
-                                onChange={() => setLv((x) => ({ ...x, agreement: k }))}
-                              />{' '}
-                              {k === 'agree'
-                                ? 'I agree'
-                                : k === 'partly'
-                                  ? 'I partly agree'
-                                  : 'I disagree'}
-                            </label>
-                          ))}
-                        </fieldset>
-                      </>
-                    ) : null}
-                    {l.final && r.remarkLines.length ? (
-                      <fieldset className="ep-field" style={{ border: 0, padding: 0 }}>
-                        <legend className="ep-field__label">Principal’s remarks</legend>
-                        <p className="ep-field__help" style={{ marginTop: 0 }}>
-                          Tick the standard lines that apply for the grade {grade ?? ''}; add your
-                          own words below.
+            <div id={`acr-${key}-panel`} hidden={open !== key}>
+              {!l.hidden && l.instructions && (editing || l.status !== 'done') ? (
+                <p className="ep-acr-instructions">{l.instructions}</p>
+              ) : null}
+              {l.hidden ? (
+                <>
+                  <p className="ep-field__help" style={{ marginTop: 0 }}>
+                    {who(l.people) || 'Nobody set for this level yet'}
+                  </p>
+                  <p className="ep-field__help">
+                    Their answers are shown once the ACR is complete.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="ep-field__help" style={{ marginTop: 0 }}>
+                    {who(l.people) || 'Nobody set for this level yet'}
+                    {l.filledBy ? ` · filled by ${l.filledBy}, ${when(l.filledAt)}` : ''}
+                  </p>
+                  {l.returned ? <Returned r={l.returned} to="this level" /> : null}
+                  {l.formId && (l.status === 'done' || editing) ? (
+                    <QuestionForm
+                      fileHref={fileHref}
+                      uploadFile={actions.uploadFile}
+                      idPrefix={`l${String(l.seq)}`}
+                      form={r.forms[l.formId]}
+                      scale={r.scale}
+                      answers={editing ? lv.answers : (l.answers ?? {})}
+                      editable={editing}
+                      scores={l.status === 'done' ? l.sections : undefined}
+                      onChange={(id, v) =>
+                        setLv((x) => ({ ...x, answers: { ...x.answers, [id]: v } }))
+                      }
+                    />
+                  ) : null}
+                  {l.status === 'done' && !editing ? (
+                    <div className="ep-acr-note">
+                      {l.scorePct !== null && l.scorePct !== undefined ? (
+                        <p>
+                          <strong>Score {l.scorePct}%</strong>
+                          {l.grade ? ` · ${l.grade}` : ''}
                         </p>
-                        {r.remarkLines.filter((x) => x.grade === grade).length ? (
-                          r.remarkLines
-                            .filter((x) => x.grade === grade)
-                            .map((x) => (
-                              <label key={x.id} className="ep-check">
-                                <input
-                                  type="checkbox"
-                                  checked={(lv.remarkIds ?? []).includes(x.id)}
-                                  onChange={(e) =>
-                                    setLv((cur) => ({
-                                      ...cur,
-                                      remarkIds: e.target.checked
-                                        ? [...(cur.remarkIds ?? []), x.id]
-                                        : (cur.remarkIds ?? []).filter((id) => id !== x.id),
-                                    }))
-                                  }
-                                />{' '}
-                                {x.text}
-                              </label>
-                            ))
-                        ) : (
-                          <p className="ep-field__help">
-                            No standard remarks for this grade in the set-up.
-                          </p>
-                        )}
-                      </fieldset>
-                    ) : null}
-                    <label className="ep-field" htmlFor="acr-remarks">
-                      <span className="ep-field__label">
-                        Remarks{l.action === 'review' ? ' *' : ''}
-                      </span>
-                      <textarea
-                        id="acr-remarks"
-                        className="ep-input"
-                        rows={4}
-                        maxLength={4000}
-                        value={lv.remarks ?? ''}
-                        onChange={(e) => setLv((x) => ({ ...x, remarks: e.target.value }))}
-                      />
-                    </label>
-                    <div className="ep-acr-actions">
-                      <button
-                        type="button"
-                        className="ep-btn ep-btn--secondary"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(
-                            actions.saveLevel
-                              ? () => actions.saveLevel!(l.seq, { ...lv, grade })
-                              : undefined,
-                            'Saved. You can come back to it.',
-                          )
-                        }
-                      >
-                        Save draft
-                      </button>
-                      <button
-                        type="button"
-                        className="ep-btn ep-btn--primary"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(
-                            actions.submitLevel
-                              ? () => actions.submitLevel!(l.seq, { ...lv, grade })
-                              : undefined,
-                            'Submitted.',
-                          )
-                        }
-                      >
-                        Submit
-                      </button>
+                      ) : l.grade ? (
+                        <p>
+                          <strong>Grade {l.grade}</strong>
+                        </p>
+                      ) : null}
+                      {l.gradeReason ? <p>Why this grade: {l.gradeReason}</p> : null}
+                      {l.agreement ? <p>{AGREE[l.agreement]}</p> : null}
+                      {l.remarkTexts?.length ? (
+                        <ul>
+                          {l.remarkTexts.map((t, i) => (
+                            <li key={i}>{t}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {l.remarks ? <p>{l.remarks}</p> : null}
                     </div>
-                    {r.can.sendBack ? (
-                      <div className="ep-acr-object">
-                        <label className="ep-field" htmlFor="acr-back">
-                          <span className="ep-field__label">
-                            Or send it back to {l.seq === 1 ? 'the employee' : 'the level before'}:
-                            why
-                          </span>
-                          <input
-                            id="acr-back"
-                            className="ep-input"
-                            maxLength={1000}
-                            value={back}
-                            onChange={(e) => setBack(e.target.value)}
-                          />
-                        </label>
+                  ) : null}
+                  {editing ? (
+                    <div className="ep-acr-level-form">
+                      {l.action === 'review' ? (
+                        <>
+                          <label className="ep-field" htmlFor="acr-grade">
+                            <span className="ep-field__label">Grade *</span>
+                            <select
+                              id="acr-grade"
+                              className="ep-select"
+                              value={grade ?? ''}
+                              onChange={(e) =>
+                                setLv((x) => ({ ...x, grade: e.target.value || null }))
+                              }
+                            >
+                              <option value="">Choose…</option>
+                              {r.bands.map((b) => (
+                                <option key={b.label} value={b.label}>
+                                  {b.label} (from {b.minPct}%)
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {before && grade && grade !== before ? (
+                            <label className="ep-field" htmlFor="acr-why">
+                              <span className="ep-field__label">Why not {before}? *</span>
+                              <input
+                                id="acr-why"
+                                className="ep-input"
+                                maxLength={1000}
+                                value={lv.gradeReason ?? ''}
+                                onChange={(e) =>
+                                  setLv((x) => ({ ...x, gradeReason: e.target.value }))
+                                }
+                              />
+                            </label>
+                          ) : null}
+                          <fieldset className="ep-field" style={{ border: 0, padding: 0 }}>
+                            <legend className="ep-field__label">The level before *</legend>
+                            {(['agree', 'partly', 'disagree'] as const).map((k) => (
+                              <label key={k} className="ep-check">
+                                <input
+                                  type="radio"
+                                  name="acr-agree"
+                                  checked={lv.agreement === k}
+                                  onChange={() => setLv((x) => ({ ...x, agreement: k }))}
+                                />{' '}
+                                {k === 'agree'
+                                  ? 'I agree'
+                                  : k === 'partly'
+                                    ? 'I partly agree'
+                                    : 'I disagree'}
+                              </label>
+                            ))}
+                          </fieldset>
+                        </>
+                      ) : null}
+                      {l.final && r.remarkLines.length ? (
+                        <fieldset className="ep-field" style={{ border: 0, padding: 0 }}>
+                          <legend className="ep-field__label">Principal’s remarks</legend>
+                          <p className="ep-field__help" style={{ marginTop: 0 }}>
+                            Tick the standard lines that apply for the grade {grade ?? ''}; add your
+                            own words below.
+                          </p>
+                          {r.remarkLines.filter((x) => x.grade === grade).length ? (
+                            r.remarkLines
+                              .filter((x) => x.grade === grade)
+                              .map((x) => (
+                                <label key={x.id} className="ep-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={(lv.remarkIds ?? []).includes(x.id)}
+                                    onChange={(e) =>
+                                      setLv((cur) => ({
+                                        ...cur,
+                                        remarkIds: e.target.checked
+                                          ? [...(cur.remarkIds ?? []), x.id]
+                                          : (cur.remarkIds ?? []).filter((id) => id !== x.id),
+                                      }))
+                                    }
+                                  />{' '}
+                                  {x.text}
+                                </label>
+                              ))
+                          ) : (
+                            <p className="ep-field__help">
+                              No standard remarks for this grade in the set-up.
+                            </p>
+                          )}
+                        </fieldset>
+                      ) : null}
+                      <label className="ep-field" htmlFor="acr-remarks">
+                        <span className="ep-field__label">
+                          Remarks{l.action === 'review' ? ' *' : ''}
+                        </span>
+                        <textarea
+                          id="acr-remarks"
+                          className="ep-input"
+                          rows={4}
+                          maxLength={4000}
+                          value={lv.remarks ?? ''}
+                          onChange={(e) => setLv((x) => ({ ...x, remarks: e.target.value }))}
+                        />
+                      </label>
+                      <div className="ep-acr-actions">
                         <button
                           type="button"
-                          className="ep-btn ep-btn--ghost"
-                          disabled={busy || back.trim().length < 5}
+                          className="ep-btn ep-btn--secondary"
+                          disabled={busy}
                           onClick={() =>
                             void run(
-                              actions.sendBack ? () => actions.sendBack!(back) : undefined,
-                              'Sent back.',
+                              actions.saveLevel
+                                ? () => actions.saveLevel!(l.seq, { ...lv, grade })
+                                : undefined,
+                              'Saved. You can come back to it.',
                             )
                           }
                         >
-                          Send back
+                          Save draft
+                        </button>
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--primary"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(
+                              actions.submitLevel
+                                ? () => actions.submitLevel!(l.seq, { ...lv, grade })
+                                : undefined,
+                              'Submitted.',
+                            )
+                          }
+                        >
+                          Submit
                         </button>
                       </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </>
-            )}
+                      {r.can.sendBack ? (
+                        <div className="ep-acr-object">
+                          <label className="ep-field" htmlFor="acr-back">
+                            <span className="ep-field__label">
+                              Or send it back to {l.seq === 1 ? 'the employee' : 'the level before'}
+                              : why
+                            </span>
+                            <input
+                              id="acr-back"
+                              className="ep-input"
+                              maxLength={1000}
+                              value={back}
+                              onChange={(e) => setBack(e.target.value)}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="ep-btn ep-btn--ghost"
+                            disabled={busy || back.trim().length < 5}
+                            onClick={() =>
+                              void run(
+                                actions.sendBack ? () => actions.sendBack!(back) : undefined,
+                                'Sent back.',
+                              )
+                            }
+                          >
+                            Send back
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
           </section>
         );
       })}

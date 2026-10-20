@@ -718,6 +718,16 @@
   border-color: var(--status-danger);
 }
 
+/* a select shows the chevron (Lucide) inside its right padding; a multi-select is a list */
+.ep-select:not([multiple]) {
+  appearance: none;
+  padding-right: calc(var(--sp-3) * 2 + 1rem);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='rgb(82,96,109)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-3) center;
+  background-size: 1rem 1rem;
+}
+
 /* ---- Data table ----------------------------------------------------------------- */
 .ep-table-wrap {
   overflow: auto;
@@ -8526,6 +8536,71 @@ a.db-list__main:hover strong {
   gap: var(--sp-3);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
   align-items: end;
+}
+/* a filter field fits its column; the select and the input fill it */
+.ep-acr-filter .ep-field {
+  min-width: 0;
+}
+.ep-acr-filter .ep-select,
+.ep-acr-filter .ep-input {
+  width: 100%;
+  min-width: 0;
+}
+/* the ACR as steps (20 Oct 2026): the bar on top, one step open at a time */
+.ep-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  list-style: none;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+}
+.ep-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  font: inherit;
+  color: var(--text-body);
+  cursor: pointer;
+  text-align: left;
+}
+.ep-step[aria-current='step'] {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.ep-step__n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-weight: var(--fw-semibold);
+  flex: none;
+}
+.ep-step__label {
+  font-weight: var(--fw-semibold);
+}
+.ep-acr-step__toggle {
+  all: unset;
+  display: block;
+  width: 100%;
+  cursor: pointer;
+}
+.ep-acr-step__toggle:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+.ep-acr-instructions {
+  white-space: pre-wrap;
+  border-left: 3px solid var(--border-accent);
+  padding: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
 }
 /* an attachment question on the ACR sheet (0194): the files as View icons, one to add */
 .ep-acr-files {

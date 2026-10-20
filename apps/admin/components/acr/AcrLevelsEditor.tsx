@@ -216,6 +216,19 @@ export function AcrLevelsEditor({
                     ))}
                 </select>
               </label>
+              <label className="ep-field" htmlFor={id('instr', i)}>
+                <span className="ep-field__label">Instructions for this step</span>
+                <textarea
+                  id={id('instr', i)}
+                  className="ep-input"
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="Empty: a plain default for a rating or a review level"
+                  value={l.instructions ?? ''}
+                  disabled={!canEdit}
+                  onChange={(e) => set(i, { instructions: e.target.value })}
+                />
+              </label>
             </div>
             {canEdit ? (
               <div className="ep-acr-level__tools">

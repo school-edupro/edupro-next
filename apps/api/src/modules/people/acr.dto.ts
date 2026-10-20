@@ -51,6 +51,8 @@ export const AcrLevelsSchema = z.object({
         action: z.enum(['rate', 'review']),
         /** 0191: the questionnaire this level answers (none: the grade and remarks only) */
         formId: Id.nullable().optional(),
+        /** 0196: shown at the top of the level's step; empty = the plain default */
+        instructions: z.string().trim().max(2000).default(''),
       }),
     )
     .min(1)

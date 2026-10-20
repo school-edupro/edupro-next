@@ -1283,6 +1283,22 @@ export class AcrFlowService {
       ).rows;
       const remarkText = new Map(remarkRows.map((x) => [x.id, x.text]));
       const finalSeq = [...reviews].reverse().find((v) => v.status !== 'skipped')?.seq ?? null;
+      // instructions per level (0196): the set-up's text for the level of that number and name, else plain
+      const setupLevels = (
+        await c.query<{ seq: number; label: string; instructions: string }>(
+          `SELECT seq, label, instructions FROM acr_levels WHERE staff_group = $1`,
+          [r.staff_group],
+        )
+      ).rows;
+      const instructionsOf = (v: ReviewRow) => {
+        const own = setupLevels.find((l) => l.seq === v.seq && l.label === v.label)?.instructions;
+        if (own) return own;
+        if (v.action === 'rate')
+          return 'Rate each point on the scale and write your remarks. Save a draft any time; submit when done. The employee sees your rating once the ACR is complete.';
+        return v.seq === finalSeq
+          ? 'Read the levels before you, say whether you agree, give the final grade with your reasons, tick the standard remarks for the grade and add your own words. Submitting completes the ACR.'
+          : 'Read the levels before you, say whether you agree, give the grade with your reasons and write your remarks. Submitting sends the ACR to the next level.';
+      };
       const today = new Date().toISOString().slice(0, 10);
       const windowOpen = r.cycle_status === 'open' && today >= r.self_from && today <= r.self_to;
       const returned = await this.wasReturned(c, id);
@@ -1360,6 +1376,7 @@ export class AcrFlowService {
                 filledAt: v.filled_at?.toISOString() ?? null,
                 skippedNote: v.skipped_note,
                 final: v.seq === finalSeq,
+                instructions: instructionsOf(v),
                 remarkIds: v.remark_ids,
                 remarkTexts: v.remark_ids.map((id) => remarkText.get(id) ?? '').filter((x) => x),
               }

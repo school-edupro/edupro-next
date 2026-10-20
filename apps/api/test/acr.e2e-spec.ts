@@ -1360,4 +1360,37 @@ describe('employee ACR flow (e2e)', () => {
       remarkTexts: ['A model for the staff room.'],
     });
   });
+  it('instructions per level (0196): the set-up’s text shows on the level’s step, a plain default otherwise', async () => {
+    const s = (await call(admin, 'GET', '/people/acr/setup')).json();
+    const teaching = s.levels.teaching as Array<{
+      label: string;
+      kind: string;
+      roleCode: string | null;
+      designation: string | null;
+      employeeId: string | null;
+      action: string;
+      formId: string | null;
+      instructions: string;
+    }>;
+    expect(teaching.map((l) => l.instructions)).toEqual(['', '']);
+    const put = await call(admin, 'PUT', '/people/acr/setup/levels', {
+      staffGroup: 'teaching',
+      levels: teaching.map((l, i) => ({
+        label: l.label,
+        kind: l.kind,
+        roleCode: l.roleCode,
+        designation: l.designation,
+        employeeId: l.employeeId,
+        action: l.action,
+        formId: l.formId,
+        instructions: i === 0 ? 'Rate the year as seen in class; be specific in the remarks.' : '',
+      })),
+    });
+    expect(put.statusCode).toBe(200);
+    const v = (await call(admin, 'GET', `/people/acr/reports/${reportId}`)).json();
+    expect(v.levels[0].instructions).toBe(
+      'Rate the year as seen in class; be specific in the remarks.',
+    );
+    expect(v.levels[1].instructions).toMatch(/final grade|next level/);
+  });
 });

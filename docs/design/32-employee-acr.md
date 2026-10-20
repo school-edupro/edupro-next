@@ -301,3 +301,16 @@ reports/:id/files`, open to the employee, the levels and the office without a pl
   `remarkLines`, `levels[].final`, `remarkIds`, `remarkTexts`; the employee sees them with the level
   once disclosed; the PDF prints them as "Standard remarks".
 - Test: `acr.e2e-spec.ts` "Principal’s remarks (0195)".
+
+## The ACR as steps; instructions per level; the board's selects (20 Oct 2026, 0196)
+
+- **Steps:** the sheet (admin and staff app) shows a step bar above the self-appraisal: 1. Self-appraisal,
+  then each level numbered, with the person and a mark (Filled, Now, Not yet, Skipped). The step the
+  ACR is at opens first; the others fold and open on click (or from the bar). The records and the
+  result stay as cards. The self-appraisal step carries the school's guidelines at its top.
+- **Instructions per level** (`acr_levels.instructions`, 0196): a text per level under Approval levels,
+  shown at the top of the level's step while it is being filled; empty gives a plain default for a
+  rating level, a review level or the final approval. The view gives `levels[].instructions`.
+- **Selects:** `.ep-select` draws the Lucide chevron inside its right padding (multi-selects stay
+  lists); the board's filter fields fit their columns, so no control is clipped.
+- Test: `acr.e2e-spec.ts` "instructions per level (0196)".

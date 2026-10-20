@@ -22,6 +22,8 @@ export interface AcrLevel {
   /** 0191: the questionnaire this level answers (none: the grade and remarks only) */
   formId?: string | null;
   formName?: string | null;
+  /** 0196: shown at the top of the level's step on the sheet; empty = the plain default */
+  instructions?: string;
 }
 export interface AcrQuestion {
   id: string;

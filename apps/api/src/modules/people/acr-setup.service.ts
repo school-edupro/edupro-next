@@ -83,12 +83,13 @@ export class AcrSetupService {
           designation: string | null;
           employee_id: string | null;
           employee_name: string | null;
+          instructions: string;
           action: string;
           form_id: string | null;
           form_name: string | null;
         }>(
           `SELECT l.staff_group, l.seq, l.label, l.kind, l.role_code, l.designation, l.employee_id::text,
-                    e.display_name AS employee_name, l.action, l.form_id::text, f.name AS form_name
+                    e.display_name AS employee_name, l.action, l.form_id::text, f.name AS form_name, l.instructions
                FROM acr_levels l LEFT JOIN employees e ON e.id = l.employee_id LEFT JOIN acr_forms f ON f.id = l.form_id
               ORDER BY l.staff_group, l.seq`,
         ),
@@ -301,8 +302,10 @@ export class AcrSetupService {
     action: string;
     form_id: string | null;
     form_name: string | null;
+    instructions: string;
   }) => ({
     seq: l.seq,
+    instructions: l.instructions,
     label: l.label,
     kind: l.kind,
     roleCode: l.role_code,
@@ -428,8 +431,8 @@ export class AcrSetupService {
       await c.query('DELETE FROM acr_levels WHERE staff_group = $1', [dto.staffGroup]);
       for (const [i, l] of dto.levels.entries())
         await c.query(
-          `INSERT INTO acr_levels (school_id, staff_group, seq, label, kind, role_code, designation, employee_id, action, form_id)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          `INSERT INTO acr_levels (school_id, staff_group, seq, label, kind, role_code, designation, employee_id, action, form_id, instructions)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             dto.staffGroup,
             i + 1,
@@ -440,6 +443,7 @@ export class AcrSetupService {
             l.kind === 'employee' ? l.employeeId : null,
             l.action,
             l.formId ?? null,
+            l.instructions,
           ],
         );
       const followed = await this.refreshOpenAcrForms(c);
