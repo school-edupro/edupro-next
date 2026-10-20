@@ -129,7 +129,7 @@ export function checkField(
       return `Your age must be ${String(form.age.min)} to ${String(form.age.max)}: born between ${dmy(r.min)} and ${dmy(r.max)}`;
   }
   if (f.key === 'aadhaar' && !aadhaarOk(v))
-    return 'Not a valid Aadhaar number: check the 12 digits';
+    return 'Not valid: the last digit does not match the others. Check each digit as on your Aadhaar card';
   if (f.key === 'alternate_mobile' && v === tidy('mobile', a.mobile ?? ''))
     return 'Give another number than your mobile';
   if (f.key === 'total_exp_months' && !(Number(v) >= 0 && Number(v) <= 11)) return 'Enter 0 to 11';

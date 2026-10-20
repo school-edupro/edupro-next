@@ -162,3 +162,24 @@ for (const width of [1280, 375]) {
     expect(problems).toEqual([]);
   });
 }
+
+// every public page of a school carries the school: its name (and logo) at the top, how to reach the
+// office at the foot, and its name in the browser tab
+test('every public page carries the school', async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const path of [
+    '/alpha',
+    '/alpha/status',
+    '/alpha/appointment',
+    '/alpha/visitor',
+    '/alpha/careers',
+    '/alpha/careers/form',
+    '/alpha/careers/mine',
+  ]) {
+    await page.goto(`${BASE}${path}`);
+    await expect(page.getByRole('banner'), path).toContainText('Alpha Public School');
+    await expect(page.getByRole('contentinfo'), path).toContainText('Alpha Public School');
+    await expect(page.getByRole('main'), path).toBeVisible();
+    await expect(page, path).toHaveTitle(/Alpha Public School/);
+  }
+});

@@ -115,7 +115,7 @@ export default async function ApplyPage({
     return (
       <>
         <PageHeader
-          kicker={school.toUpperCase()}
+          kicker={t(lang, 'Admissions', 'प्रवेश')}
           title={t(lang, 'Applications closed', 'आवेदन बंद')}
         />
         <Card>{t(lang, 'This admission cycle is not open.', 'यह प्रवेश चक्र खुला नहीं है।')}</Card>
@@ -126,7 +126,7 @@ export default async function ApplyPage({
   return (
     <>
       <PageHeader
-        kicker={school.toUpperCase()}
+        kicker={t(lang, 'Admissions', 'प्रवेश')}
         title={lang === 'hi' && cycle.nameHi ? cycle.nameHi : cycle.name}
         description={
           criterion

@@ -37,7 +37,7 @@ export default async function PassPage({
   return (
     <>
       <PageHeader
-        kicker={pass.school}
+        kicker={t(lang, 'Visitor', 'आगंतुक')}
         title={t(lang, 'Gate pass', 'गेट पास')}
         actions={<Badge tone={tone}>{t(lang, en, hi)}</Badge>}
       />

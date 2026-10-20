@@ -620,8 +620,10 @@
   background: transparent;
   color: var(--text-link);
 }
+/* hover text goes navy like a:hover: cyan-700 on the band is only 4.46:1, navy-800 is 13.2:1 */
 .ep-btn--ghost:hover:not(:disabled) {
   background: var(--surface-band);
+  color: var(--text-link-hover);
 }
 
 .ep-btn--danger {
@@ -9139,4 +9141,101 @@ a.db-list__main:hover strong {
   .ep-wiz__nav > .ep-btn {
     flex: 1;
   }
+}
+
+/* ---- a school's public pages: its band at the top, its address and contact at the foot ---- */
+.ep-pub-main {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: var(--sp-4);
+}
+.ep-pub-band {
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--border-default);
+  box-shadow: var(--shadow-card);
+}
+.ep-pub-band__home {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: var(--sp-3) var(--sp-4);
+  color: inherit;
+  text-decoration: none;
+}
+.ep-pub-band__home:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: -2px;
+}
+.ep-pub-band__logo {
+  flex: none;
+  width: auto;
+  height: 3.5rem;
+  max-width: min(12rem, 35vw);
+  object-fit: contain;
+  object-position: left center;
+}
+.ep-pub-band__mark {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-dark);
+  color: var(--text-inverse);
+  font-family: var(--font-heading);
+  font-weight: var(--fw-bold);
+}
+.ep-pub-band__text {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.ep-pub-band__name {
+  font-family: var(--font-heading);
+  font-size: var(--fs-body-lg);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+  color: var(--text-heading);
+}
+.ep-pub-band__sub {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-pub-foot {
+  margin-top: var(--sp-6);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-card);
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-pub-foot__in {
+  display: grid;
+  gap: var(--sp-2);
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: var(--sp-4);
+}
+.ep-pub-foot__name {
+  color: var(--text-heading);
+}
+.ep-pub-foot__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+}
+.ep-pub-foot__item {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+.ep-pub-foot__item > svg {
+  flex: none;
+  margin-top: 0.15em;
+}
+a.ep-pub-foot__item {
+  color: var(--text-link);
 }

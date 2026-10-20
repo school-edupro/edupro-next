@@ -32,6 +32,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@edupro/ui'],
   output: 'standalone',
+  // a school's logo is sent resized for its band (the files kept are often a megabyte or more)
+  images: { localPatterns: [{ pathname: '/api/school-logo/**' }] },
   async headers() {
     return [
       {

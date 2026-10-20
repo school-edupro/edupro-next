@@ -85,7 +85,7 @@ export default async function GateVisitorPage({
   return (
     <>
       <PageHeader
-        kicker={o.school}
+        kicker={t(lang, 'At the gate', 'गेट पर')}
         title={t(lang, 'Visitor pass', 'आगंतुक पास')}
         description={t(
           lang,

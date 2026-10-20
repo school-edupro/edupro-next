@@ -46,7 +46,7 @@ export default async function StatusPage({
   return (
     <>
       <PageHeader
-        kicker={school.toUpperCase()}
+        kicker={t(lang, 'Admissions', 'प्रवेश')}
         title={t(lang, 'My applications', 'मेरे आवेदन')}
         description={
           me

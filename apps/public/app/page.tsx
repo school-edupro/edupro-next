@@ -18,7 +18,7 @@ export default async function HomePage({
   const schools = await publicFetch<{ data: School[] }>('/schools', {}, null).then((r) => r.data);
   const open = schools.filter((s) => s.openCycles > 0);
   return (
-    <>
+    <main className="ep-pub-main">
       <PageHeader
         kicker="EduPro"
         title={t(lang, 'Online admissions', 'ऑनलाइन प्रवेश')}
@@ -75,6 +75,6 @@ export default async function HomePage({
           </a>
         ))}
       </div>
-    </>
+    </main>
   );
 }

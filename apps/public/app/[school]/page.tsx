@@ -24,7 +24,7 @@ export default async function SchoolPage({
   return (
     <>
       <PageHeader
-        kicker={school.toUpperCase()}
+        kicker={t(lang, 'Online services', 'ऑनलाइन सेवाएँ')}
         title={t(lang, 'Admissions', 'प्रवेश')}
         description={t(
           lang,

@@ -16,7 +16,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body style={{ background: 'var(--surface-page)' }}>
         <SearchableSelects />
-        <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>{children}</main>
+        {/* a school's pages bring its frame (app/[school]/layout.tsx); the home page its own main */}
+        {children}
       </body>
     </html>
   );

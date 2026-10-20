@@ -132,6 +132,9 @@ describe('permission coverage', () => {
       'PublicConsentFormsController.respond (public/consent-forms)',
       'PublicConsentFormsController.upload (public/consent-forms)',
       'PublicConsentFormsController.verify (public/consent-forms)',
+      // the school's band on its public pages (name, logo, address, contact): read-only, throttled
+      'PublicSchoolController.logo (public/schools)',
+      'PublicSchoolController.profile (public/schools)',
       // walk-in visitors registering on their own phone (0065): the lists are read-only and throttled;
       // registering and the visitor's own entry need the OTP-issued applicant token
       'PublicVisitorsController.mine (public/visitors)',

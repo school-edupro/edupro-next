@@ -98,7 +98,8 @@ export function checkCandidateValues(
           `your age must be ${String(CANDIDATE_AGE.min)} to ${String(CANDIDATE_AGE.max)}: born ` +
           `between ${dmy(nextDay(shift(today, -CANDIDATE_AGE.max - 1)))} and ${dmy(shift(today, -CANDIDATE_AGE.min))}`;
     } else if (k === 'aadhaar' && !aadhaarOk(v))
-      out[k] = 'not a valid Aadhaar number: check the 12 digits';
+      out[k] =
+        'not valid: the last digit does not match the others; check each digit as on the Aadhaar card';
     else if (k === 'alternate_mobile' && v === s('mobile'))
       out[k] = 'another number than your mobile';
     else if (k === 'total_exp_months' && !(Number(v) >= 0 && Number(v) <= 11))

@@ -13,15 +13,19 @@ import { PowService } from './public/pow.service';
 import { PublicAdmissionsController } from './public/public-admissions.controller';
 import { PublicAdmissionsService } from './public/public-admissions.service';
 import { PublicThrottleGuard } from './public/public-throttle.guard';
+import { FilesModule } from '../files/files.module';
+import { PublicSchoolController } from './public/public-school.controller';
+import { PublicSchoolService } from './public/public-school.service';
 
 /** Sprint 8: admission cycles, intake desk and the public applicant surface. */
 @Module({
-  imports: [WorkflowModule, PaymentsModule],
-  controllers: [AdmissionsController, PublicAdmissionsController],
+  imports: [WorkflowModule, PaymentsModule, FilesModule],
+  controllers: [AdmissionsController, PublicAdmissionsController, PublicSchoolController],
   providers: [
     AdmissionsService,
     DecisionsService,
     PublicAdmissionsService,
+    PublicSchoolService,
     PowService,
     OtpService,
     ApplicantGuard,

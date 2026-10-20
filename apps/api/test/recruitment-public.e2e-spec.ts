@@ -157,6 +157,39 @@ describe('recruitment: the public careers page (e2e)', () => {
     });
   });
 
+  it('the school’s public pages show it: name, address and contact; no logo, no file', async () => {
+    await withMigrator((c) =>
+      c.query(`UPDATE schools SET address = $2::jsonb, contact = $3::jsonb WHERE id = $1`, [
+        school.id,
+        JSON.stringify({
+          line1: '4 Lake Road',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201301',
+        }),
+        JSON.stringify({
+          phone: '0120 455 1234',
+          email: 'office@example.invalid',
+          website: 'school.example.invalid',
+          accountsEmail: 'accounts@example.invalid',
+        }),
+      ]),
+    );
+    const p = (await pub('GET', `/public/schools/${school.code}`)).json();
+    expect(p).toMatchObject({
+      code: school.code.toLowerCase(),
+      address: '4 Lake Road, Noida, Uttar Pradesh, 201301',
+      phone: '0120 455 1234',
+      email: 'office@example.invalid',
+      website: 'https://school.example.invalid',
+      logo: null,
+    });
+    // the office's own addresses stay inside
+    expect(JSON.stringify(p)).not.toContain('accounts@');
+    expect((await pub('GET', `/public/schools/${school.code}/logo`)).statusCode).toBe(404);
+    expect((await pub('GET', '/public/schools/NOSUCHSCHOOL')).statusCode).toBe(404);
+  });
+
   it('the sign-in offers the ways the school can send codes by; the form brings the places for the address', async () => {
     const none = (await pub('GET', `/public/careers/${school.code}/sign-in`)).json();
     expect(none).toEqual({ mobile: false, email: false, minutes: expect.any(Number), dev: true });

@@ -145,7 +145,7 @@ export default async function AppointmentPage({
   return (
     <>
       <PageHeader
-        kicker={info.school}
+        kicker={t(lang, 'Book a meeting', 'मुलाक़ात तय करें')}
         title={t(lang, 'Appointments', 'मुलाक़ात')}
         description={t(
           lang,

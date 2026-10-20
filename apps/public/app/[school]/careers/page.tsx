@@ -19,7 +19,7 @@ export default async function CareersPage({ params }: { params: Promise<{ school
   return (
     <>
       <PageHeader
-        kicker={list.school || school.toUpperCase()}
+        kicker="Jobs at the school"
         title="Careers"
         description="Posts open now. Sign in with a code to your mobile or email, fill your application once, and apply to any of them."
         actions={

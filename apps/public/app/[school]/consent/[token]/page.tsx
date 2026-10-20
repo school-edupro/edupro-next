@@ -65,7 +65,7 @@ export default async function PublicConsentPage({
   const hidden = { school, token };
   return (
     <>
-      <PageHeader kicker={info.school} title={info.title} />
+      <PageHeader kicker="Consent form" title={info.title} />
       {info.description ? (
         <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{info.description}</p>
       ) : null}
