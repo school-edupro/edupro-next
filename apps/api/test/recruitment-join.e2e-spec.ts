@@ -8,6 +8,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import IORedis from 'ioredis';
 import { encryptField } from '@edupro/db';
 import { PowService } from '../src/modules/admissions/public/pow.service';
+import { aadhaarOk } from '../src/modules/people/candidate-checks';
 import {
   createApp,
   headersFor,
@@ -90,8 +91,9 @@ describe('recruitment: from selected candidate to employee (e2e)', () => {
         email,
         present_line1: '4 Lake Road',
         present_city: 'Noida',
+        present_pin: '201301',
         present_state: 'Uttar Pradesh',
-        aadhaar: `2345678901${mobile.slice(-2)}`,
+        aadhaar: aadhaarOf(mobile),
         pan,
         current_basic: 30000,
       },
@@ -156,6 +158,11 @@ describe('recruitment: from selected candidate to employee (e2e)', () => {
 
   let x = '';
   let y = '';
+  /** A valid Aadhaar number per candidate: eleven digits from the mobile, then the check digit. */
+  const aadhaarOf = (mobile: string) => {
+    const b = `234567890${mobile.slice(-2)}`;
+    return b + [...'0123456789'].find((d) => aadhaarOk(b + d))!;
+  };
 
   beforeAll(async () => {
     process.env.PUBLIC_POW_DIFFICULTY = '1';
@@ -252,7 +259,9 @@ describe('recruitment: from selected candidate to employee (e2e)', () => {
       joined_on: today,
       mobile: '9833333331',
     });
-    expect(String(prof.values.aadhaar)).toMatch(/0131$/);
+    expect(String(prof.values.aadhaar)).toMatch(
+      new RegExp(`${aadhaarOf('9833333331').slice(-4)}$`),
+    );
     expect(prof.photoFileId).toBeTruthy();
     expect(prof.rows.education).toEqual([
       expect.objectContaining({

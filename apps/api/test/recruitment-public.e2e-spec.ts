@@ -7,6 +7,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import IORedis from 'ioredis';
 import { PowService } from '../src/modules/admissions/public/pow.service';
+import { aadhaarOk } from '../src/modules/people/candidate-checks';
 import {
   createApp,
   headersFor,
@@ -156,6 +157,44 @@ describe('recruitment: the public careers page (e2e)', () => {
     });
   });
 
+  it('the sign-in offers the ways the school can send codes by; the form brings the places for the address', async () => {
+    const none = (await pub('GET', `/public/careers/${school.code}/sign-in`)).json();
+    expect(none).toEqual({ mobile: false, email: false, minutes: expect.any(Number), dev: true });
+    // an email provider on: codes go by email; a mobile needs SMS with its DLT id or WhatsApp's name
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO comms_providers (school_id, channel, provider, active) VALUES ($1, 'email', 'console', true)
+         ON CONFLICT (school_id, channel) DO UPDATE SET active = true`,
+        [school.id],
+      ),
+    );
+    expect((await pub('GET', `/public/careers/${school.code}/sign-in`)).json()).toMatchObject({
+      mobile: false,
+      email: true,
+    });
+    // a way that cannot send: refused outside development; here the code comes, marked not sent
+    const ch = await pub('POST', '/public/admissions/challenge');
+    const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+    const r = await pub('POST', '/public/careers/otp', undefined, {
+      schoolCode: school.code,
+      channel: 'mobile',
+      to: '9123400001',
+      challenge: ch.json().challenge,
+      nonce,
+    });
+    expect(r.json()).toMatchObject({ sent: false, devCode: expect.stringMatching(/^\d{6}$/) });
+    const form = (await pub('GET', `/public/careers/${school.code}/form`)).json();
+    expect(form.places).toEqual({
+      countries: expect.any(Array),
+      states: expect.any(Array),
+      cities: expect.any(Array),
+    });
+    expect(form.age).toEqual({ min: 18, max: 65 });
+    expect(form.fields.map((f: { key: string }) => f.key)).toEqual(
+      expect.arrayContaining(['present_country', 'present_state', 'present_city', 'present_pin']),
+    );
+  });
+
   let token = '';
 
   it('a candidate signs in with a code to the email; a wrong code and an admissions token are refused', async () => {
@@ -184,6 +223,8 @@ describe('recruitment: the public careers page (e2e)', () => {
       email: 'meera.rao@example.invalid',
       name: 'Meera Rao',
     });
+    // the school the sign-in is for (a careers page of another school asks to sign in there)
+    expect(me.json().school).toBe(school.code.toLowerCase());
     expect(me.json().missing).toEqual(expect.arrayContaining(['First name', 'Your photo']));
     expect((await pub('GET', '/public/careers/me', 'app.not-a-candidate')).statusCode).toBe(401);
     // the mobile works the same way, for another candidate
@@ -203,14 +244,35 @@ describe('recruitment: the public careers page (e2e)', () => {
     const refused = (bad.json().refused as string[]).join('; ');
     expect(refused).toMatch(/PAN/);
     expect(refused).toMatch(/Gender/);
-    expect(refused).toMatch(/Qualifications row 1, Year/);
-    expect(refused).toMatch(/Qualifications row 2: Qualification is needed/);
+    expect(refused).toMatch(/Qualifications entry 1, Year/);
+    expect(refused).toMatch(/Qualifications entry 2, Qualification: needed/);
+    // and by field, for the form to show beside each answer
+    expect(Object.keys(bad.json().errors).sort()).toEqual([
+      'education.0.passingYear',
+      'education.1.qualification',
+      'gender',
+      'pan',
+    ]);
     const kept = (await pub('GET', '/public/careers/me', token)).json();
     expect(kept.values).toMatchObject({ last_name: 'RAO' });
     expect(kept.values.pan ?? null).toBeNull();
     expect(kept.rows.education).toEqual([
       expect.objectContaining({ qualification: 'M.Sc.', passingYear: null }),
     ]);
+    // the candidate's own rules: age, names in letters, the Aadhaar check digit, years after the age of 14
+    const rules = await pub('PUT', '/public/careers/me/profile', token, {
+      values: { dob: '2012-01-01', first_name: 'Meera2', aadhaar: '234567890123' },
+      rows: { education: [{ qualification: 'B.Sc.', passingYear: '2001', score: '120%' }] },
+    });
+    expect(Object.keys(rules.json().errors).sort()).toEqual([
+      'aadhaar',
+      'dob',
+      'education.0.score',
+      'first_name',
+    ]);
+    // a valid Aadhaar number: its last digit is the check digit
+    const aadhaar = (b: string) => b + [...'0123456789'].find((d) => aadhaarOk(b + d))!;
+    const meeraId = aadhaar('23456789012');
     const ok = await pub('PUT', '/public/careers/me/profile', token, {
       values: {
         first_name: 'Meera',
@@ -223,8 +285,10 @@ describe('recruitment: the public careers page (e2e)', () => {
         present_line1: '12 Park Street',
         present_city: 'Noida',
         present_state: 'Uttar Pradesh',
-        aadhaar: '123456789012',
+        present_pin: '201301',
+        aadhaar: meeraId,
         current_basic: '31400',
+        current_allowance: '6000',
         notice_period: 'One month',
       },
       rows: {
@@ -242,11 +306,15 @@ describe('recruitment: the public careers page (e2e)', () => {
       activities: ['Music', 'Quiz', 'Juggling'],
     });
     expect(ok.statusCode).toBe(200);
+    expect(ok.json().errors).toEqual({});
     const me = (await pub('GET', '/public/careers/me', token)).json();
+    const masked = `XXXX-XXXX-${meeraId.slice(-4)}`;
     expect(me.values).toMatchObject({
       first_name: 'MEERA',
-      aadhaar: 'XXXX-XXXX-9012',
+      aadhaar: masked,
       current_basic: 31400,
+      // worked out from its parts
+      current_total: 37400,
     });
     expect(me.rows.education).toHaveLength(1);
     expect(me.activities).toEqual(['Music', 'Quiz']);
@@ -257,14 +325,12 @@ describe('recruitment: the public careers page (e2e)', () => {
         [school.id],
       ),
     );
-    expect(JSON.stringify(stored.rows[0]!.secure)).not.toContain('123456789012');
+    expect(JSON.stringify(stored.rows[0]!.secure)).not.toContain(meeraId);
     // the masked value sent back keeps the one on file
     await pub('PUT', '/public/careers/me/profile', token, {
-      values: { aadhaar: 'XXXX-XXXX-9012' },
+      values: { aadhaar: masked },
     });
-    expect((await pub('GET', '/public/careers/me', token)).json().values.aadhaar).toBe(
-      'XXXX-XXXX-9012',
-    );
+    expect((await pub('GET', '/public/careers/me', token)).json().values.aadhaar).toBe(masked);
   });
 
   let photoId = '';

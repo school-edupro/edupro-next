@@ -149,6 +149,7 @@ describe('permission coverage', () => {
       'RecruitmentPublicController.otp (public/careers)',
       'RecruitmentPublicController.profile (public/careers)',
       'RecruitmentPublicController.removeFile (public/careers)',
+      'RecruitmentPublicController.signIn (public/careers)',
       'RecruitmentPublicController.slot (public/careers)',
       'RecruitmentPublicController.vacancies (public/careers)',
       'RecruitmentPublicController.vacancy (public/careers)',

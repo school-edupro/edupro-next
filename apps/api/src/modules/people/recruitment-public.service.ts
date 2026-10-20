@@ -25,6 +25,12 @@ import { publicTenant } from '../admissions/public/otp.service';
 import { FilesService } from '../files/files.service';
 import type { Candidate } from './candidate-auth.service';
 import { CandidateAuthService } from './candidate-auth.service';
+import {
+  checkCandidateRow,
+  checkCandidateValues,
+  CANDIDATE_AGE,
+  todayIst,
+} from './candidate-checks';
 import { istText } from './recruitment.service';
 import type {
   CandidateApplyDto,
@@ -147,6 +153,10 @@ export class RecruitmentPublicService {
         rows: CANDIDATE_ROWS,
         documents: CANDIDATE_DOCUMENTS,
         activities: CANDIDATE_ACTIVITIES,
+        // the address picks country → state → city from the school's lists (a city's PIN fills itself)
+        places: await this.places(c),
+        age: CANDIDATE_AGE,
+        today: todayIst(),
       };
     });
   }
@@ -211,8 +221,13 @@ export class RecruitmentPublicService {
           WHERE a.candidate_id = $1 ORDER BY a.submitted_at DESC`,
         [cand.id],
       );
+      const school = await c.query<{ code: string }>(
+        `SELECT lower(code) AS code FROM schools WHERE id = app.current_school_id()`,
+      );
       return {
         candidate: { id: cand.id, name: cand.name, mobile: cand.mobile, email: cand.email },
+        // the school the sign-in is for: a careers page of another school asks to sign in there
+        school: school.rows[0]!.code,
         values: { ...p.values, ...masked },
         rows: p.rows,
         activities: p.activities,
@@ -231,12 +246,21 @@ export class RecruitmentPublicService {
     });
   }
 
-  /** One row of a list, each column checked; empty rows are dropped. */
-  /** One row of a list: a cell refused is left empty and reported; a row without its key column is dropped. */
-  private row(kind: CandidateRowKind, raw: Record<string, unknown>, i: number, errors: string[]) {
+  /**
+   * One row of a list: each cell checked by its column's type and the candidate's rules; a cell refused
+   * is left empty and reported (by `kind.i.column` for the form); a row without its key column is dropped.
+   */
+  private row(
+    kind: CandidateRowKind,
+    raw: Record<string, unknown>,
+    i: number,
+    dob: string | null,
+    report: (key: string, text: string) => void,
+  ) {
     const def = CANDIDATE_ROWS[kind];
     const out: Record<string, string | null> = {};
     let any = false;
+    const year = Number(todayIst().slice(0, 4));
     for (const col of def.columns) {
       const v = raw[col.key];
       const s =
@@ -244,42 +268,82 @@ export class RecruitmentPublicService {
       out[col.key] = null;
       if (!s) continue;
       any = true;
-      const where = `${def.title} row ${String(i + 1)}, ${col.label}`;
-      if (col.type === 'year' && !/^(19[4-9]\d|20\d\d)$/.test(s))
-        errors.push(`${where}: a 4-digit year`);
-      else if (col.type === 'date' && !parseDate(s)) errors.push(`${where}: a date`);
+      const key = `${kind}.${String(i)}.${col.key}`;
+      if (col.type === 'year' && !(/^\d{4}$/.test(s) && Number(s) >= 1940 && Number(s) <= year))
+        report(key, `a 4-digit year from 1940 to ${String(year)}`);
+      else if (col.type === 'date' && !parseDate(s)) report(key, 'a date');
       else if (col.type === 'list' && col.options && !col.options.includes(s))
-        errors.push(`${where}: one of ${col.options.join(', ')}`);
+        report(key, `one of ${col.options.join(', ')}`);
       else out[col.key] = col.type === 'date' ? parseDate(s) : s;
     }
     if (!any) return null;
+    for (const [col, text] of Object.entries(checkCandidateRow(kind, out, dob))) {
+      report(`${kind}.${String(i)}.${col}`, text);
+      out[col] = null;
+    }
     const missing = def.columns.find((col) => col.required && !out[col.key]);
     if (missing) {
-      errors.push(
-        `${def.title} row ${String(i + 1)}: ${missing.label} is needed; the row is not kept`,
-      );
+      report(`${kind}.${String(i)}.${missing.key}`, 'needed; the entry is not kept without it');
       return null;
     }
     return out;
   }
 
+  /** The school's lists of places, for the address (country → state → city, a city's PIN). */
+  private async places(c: PoolClient) {
+    const r = await c.query<{
+      kind: string;
+      name: string;
+      parent: string | null;
+      pin: string | null;
+    }>(
+      `SELECT 'country' AS kind, name, NULL AS parent, NULL AS pin FROM countries WHERE status = 'active'
+       UNION ALL
+       SELECT 'state', s.name, co.name, NULL FROM states s LEFT JOIN countries co ON co.id = s.country_id WHERE s.status = 'active'
+       UNION ALL
+       SELECT 'city', ci.name, st.name, NULLIF(ci.pincode, '') FROM cities ci LEFT JOIN states st ON st.id = ci.state_id WHERE ci.status = 'active'
+       ORDER BY 1, 2`,
+    );
+    return {
+      countries: r.rows.filter((x) => x.kind === 'country').map((x) => x.name),
+      states: r.rows
+        .filter((x) => x.kind === 'state')
+        .map((x) => ({ name: x.name, country: x.parent })),
+      cities: r.rows
+        .filter((x) => x.kind === 'city')
+        .map((x) => ({ name: x.name, state: x.parent, pin: x.pin })),
+    };
+  }
+
   /**
-   * Saves the form as it stands (a draft may be incomplete): each answer is checked as the employee
-   * master checks it (the master's own validation for its fields), Aadhaar and PAN are encrypted, the
-   * rows are checked column by column. Every answer accepted is saved; the ones refused are left as they
-   * were and listed, so a long form is never lost over one answer.
+   * Saves the form as it stands (a draft may be incomplete; the careers form saves one step at a time):
+   * each answer is checked as the employee master checks it (the master's own validation for its
+   * fields), then by the candidate's own rules (age, names, Aadhaar check digit, places in their lists…);
+   * Aadhaar and PAN are encrypted, the rows are checked column by column. Every answer accepted is saved;
+   * the ones refused are left as they were and come back by field (`errors`, for the form) and as lines
+   * (`refused`), so a long form is never lost over one answer.
    */
   async saveProfile(cand: Candidate, dto: CandidateProfileDto) {
     return this.db.tenant(publicTenant(cand.schoolId), async (c) => {
       const lists = await loadEmployeeLists(c);
       const errors: string[] = [];
+      const byField: Record<string, string> = {};
+      const refuse = (key: string, label: string, text: string) => {
+        byField[key] = text;
+        errors.push(`${label}: ${text}`);
+      };
+      const cur = await c.query<{ profile: unknown; secure: Record<string, string> }>(
+        `SELECT profile, secure FROM candidates WHERE id = $1 FOR UPDATE`,
+        [cand.id],
+      );
+      const p = this.profileOf(cur.rows[0]?.profile);
       const masterRaw: Values = {};
       const ownValues: Values = {};
       const secureNew: Record<string, string | null> = {};
       for (const [key, raw] of Object.entries(dto.values ?? {})) {
         const f = CANDIDATE_FIELD_BY_KEY.get(key);
         if (!f) {
-          errors.push(`${key}: not a field of the application`);
+          refuse(key, key, 'not a field of the application');
           continue;
         }
         // a masked ID sent back unchanged keeps the one on file
@@ -287,44 +351,60 @@ export class RecruitmentPublicService {
         if (f.master) masterRaw[key] = raw;
         else if (f.type === 'textarea') {
           const s = typeof raw === 'string' ? raw.trim() : '';
-          if (s.length > 2000) errors.push(`${f.label}: at most 2000 characters`);
+          if (s.length > 2000) refuse(key, f.label, 'at most 2000 characters');
           else ownValues[key] = s || null;
         } else {
           const n = normaliseValue(f as never, raw, lists);
           if (n.ok) ownValues[key] = n.value;
-          else errors.push(`${f.label}: ${n.error}`);
+          else refuse(key, f.label, n.error);
         }
       }
       // the employee master's own checks for its fields (and its lists)
       const checked = await validateEmployeeChanges(c, masterRaw, lists, null);
       for (const [k, e] of Object.entries(checked.errors)) {
         const f = CANDIDATE_FIELD_BY_KEY.get(k);
-        errors.push(f && !e.startsWith(f.label) ? `${f.label}: ${e}` : e);
+        const label = f?.label ?? k;
+        refuse(k, label, e.startsWith(label) ? e.slice(label.length).replace(/^[:\s]+/, '') : e);
       }
-      for (const [k, v] of Object.entries(checked.values)) {
-        const f = CANDIDATE_FIELD_BY_KEY.get(k)!;
-        if (f.sensitive) secureNew[k] = v === null || v === undefined ? null : String(v);
+      const accepted: Values = { ...ownValues, ...checked.values };
+      // the pay total is worked out from its parts
+      const basic = Number(accepted.current_basic ?? p.values.current_basic ?? 0) || 0;
+      const allow = Number(accepted.current_allowance ?? p.values.current_allowance ?? 0) || 0;
+      if ('current_basic' in accepted || 'current_allowance' in accepted)
+        accepted.current_total = basic || allow ? basic + allow : null;
+      // the candidate's own rules, on the form as it will stand
+      const all = { ...p.values, ...accepted } as Record<string, string | number | null>;
+      const own = checkCandidateValues(Object.keys(accepted), all, await this.places(c));
+      for (const [k, text] of Object.entries(own)) {
+        refuse(k, CANDIDATE_FIELD_BY_KEY.get(k)?.label ?? k, text);
+        delete accepted[k];
+      }
+      for (const [k, v] of Object.entries(accepted)) {
+        const f = CANDIDATE_FIELD_BY_KEY.get(k);
+        if (f?.sensitive) secureNew[k] = v === null || v === undefined ? null : String(v);
         else ownValues[k] = v;
       }
+      for (const k of Object.keys(ownValues)) if (!(k in accepted)) delete ownValues[k];
+      const dob = typeof all.dob === 'string' && !own.dob ? all.dob : null;
       const rows: Rows = {};
       for (const kind of Object.keys(CANDIDATE_ROWS) as CandidateRowKind[]) {
         const given = dto.rows?.[kind];
         if (given === undefined) continue;
+        const def = CANDIDATE_ROWS[kind];
         const list = given
-          .map((r, i) => this.row(kind, r, i, errors))
+          .map((r, i) =>
+            this.row(kind, r, i, dob, (key, text) => {
+              const col = def.columns.find((x) => key.endsWith(`.${x.key}`));
+              refuse(key, `${def.title} entry ${String(i + 1)}, ${col?.label ?? ''}`, text);
+            }),
+          )
           .filter((x): x is Record<string, string | null> => x !== null);
-        if (list.length > CANDIDATE_ROWS[kind].max)
-          errors.push(`${CANDIDATE_ROWS[kind].title}: at most ${String(CANDIDATE_ROWS[kind].max)}`);
-        rows[kind] = list;
+        if (list.length > def.max) refuse(kind, def.title, `at most ${String(def.max)}`);
+        rows[kind] = list.slice(0, def.max);
       }
       const activities = dto.activities?.filter((a) =>
         (CANDIDATE_ACTIVITIES as readonly string[]).includes(a),
       );
-      const cur = await c.query<{ profile: unknown; secure: Record<string, string> }>(
-        `SELECT profile, secure FROM candidates WHERE id = $1 FOR UPDATE`,
-        [cand.id],
-      );
-      const p = this.profileOf(cur.rows[0]?.profile);
       const secure = { ...(cur.rows[0]?.secure ?? {}) };
       for (const [k, v] of Object.entries(secureNew)) {
         if (v === null) delete secure[k];
@@ -356,7 +436,7 @@ export class RecruitmentPublicService {
               AND NOT EXISTS (SELECT 1 FROM candidates x WHERE x.email = $2 AND x.id <> $1)`,
           [cand.id, mail],
         );
-      return { saved: true, refused: errors };
+      return { saved: true, refused: errors, errors: byField };
     });
   }
 

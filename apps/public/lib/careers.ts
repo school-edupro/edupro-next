@@ -5,6 +5,16 @@ import { API, PublicApiError } from './api';
 export const CAREERS_COOKIE = 'edupro_candidate';
 
 /** Server-side call to the careers API; the candidate token comes from the HttpOnly cookie. */
+/**
+ * The signed-in candidate, when the sign-in is for this school's careers page (one sign-in at a time:
+ * signing in at another school's page asks again).
+ */
+export async function careersMe(school: string): Promise<CareerMe | null> {
+  if (!(await cookies()).get(CAREERS_COOKIE)?.value) return null;
+  const me = await careersFetch<CareerMe>('/me').catch(() => null);
+  return me && me.school === school.toLowerCase() ? me : null;
+}
+
 export async function careersFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -53,6 +63,8 @@ export interface CareerField {
   help: string | null;
   sensitive: boolean;
   options: string[] | null;
+  /** shown only when another answer is (or is not) one of these */
+  when: { key: string; in?: string[]; notIn?: string[] } | null;
 }
 export interface CareerColumn {
   key: string;
@@ -73,9 +85,34 @@ export interface CareerForm {
     image?: boolean;
   }>;
   activities: string[];
+  /** the school's lists of places: country → state → city (a city's PIN when known) */
+  places: {
+    countries: string[];
+    states: Array<{ name: string; country: string | null }>;
+    cities: Array<{ name: string; state: string | null; pin: string | null }>;
+  };
+  age: { min: number; max: number };
+  /** today in India, YYYY-MM-DD */
+  today: string;
+}
+/** How a code can reach a candidate at the school. */
+export interface CareerSignIn {
+  mobile: boolean;
+  email: boolean;
+  minutes: number;
+  dev: boolean;
+}
+/** What saving a step gives back: the refusals by field (`kind.i.column` for entries) and the form now. */
+export interface CareerSaved {
+  ok: boolean;
+  errors: Record<string, string>;
+  problem?: string;
+  me?: CareerMe;
 }
 export interface CareerMe {
   candidate: { id: string; name: string | null; mobile: string | null; email: string | null };
+  /** the school the sign-in is for (lower-case code) */
+  school: string;
   values: Record<string, unknown>;
   rows: Record<string, Array<Record<string, string | null>>>;
   activities: string[];

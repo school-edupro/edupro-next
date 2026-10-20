@@ -131,6 +131,16 @@ export class RecruitmentPublicController {
     return this.svc.vacancies(schoolCode);
   }
 
+  @Get(':schoolCode/sign-in')
+  @Public()
+  @PublicThrottle(60)
+  @ApiOperation({
+    summary: 'How a candidate can get a sign-in code at this school (mobile, email)',
+  })
+  async signIn(@Param('schoolCode') schoolCode: string) {
+    return this.auth.channels(await this.auth.schoolId(schoolCode));
+  }
+
   @Get(':schoolCode/form')
   @Public()
   @PublicThrottle(60)

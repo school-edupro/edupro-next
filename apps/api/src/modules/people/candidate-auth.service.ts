@@ -49,15 +49,50 @@ export class CandidateAuthService {
     return id;
   }
 
+  /**
+   * The ways a code can reach a candidate at this school: the email when an email provider is on and the
+   * code's email template is active; the mobile when SMS (with its DLT id) or WhatsApp (with its approved
+   * name) can carry it.
+   */
+  private async channelsWith(c: PoolClient): Promise<Record<CandidateChannel, boolean>> {
+    await c.query(`SELECT app.recruitment_seed_templates(app.current_school_id())`);
+    const r = await c.query<{ ch: string }>(
+      `SELECT DISTINCT t.channel::text AS ch FROM comms_templates t
+         JOIN comms_providers p ON p.school_id = t.school_id AND p.channel = t.channel AND p.active
+        WHERE t.code = 'recruitment_otp' AND t.status = 'active' AND t.deleted_at IS NULL
+          AND (t.channel <> 'sms' OR COALESCE(btrim(t.dlt_template_id), '') <> '')
+          AND (t.channel <> 'whatsapp' OR COALESCE(btrim(t.wa_template_name), '') <> '')`,
+    );
+    const ch = new Set(r.rows.map((x) => x.ch));
+    return { mobile: ch.has('sms') || ch.has('whatsapp'), email: ch.has('email') };
+  }
+
+  /** What the sign-in offers (and, under the development bypass, that codes show on screen). */
+  async channels(schoolId: string) {
+    const ok = await this.db.tenant(publicTenant(schoolId), (c) => this.channelsWith(c));
+    return { ...ok, minutes: this.env.OTP_TTL_MINUTES, dev: Boolean(this.env.AUTH_DEV_BYPASS) };
+  }
+
   async request(
     schoolId: string,
     channel: CandidateChannel,
     to: string,
     ip: string | undefined,
-  ): Promise<{ sent: true; expiresInMinutes: number; devCode?: string }> {
+  ): Promise<{ sent: boolean; expiresInMinutes: number; devCode?: string }> {
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const purpose = `recruitment_${channel}`;
+    let sent = true;
     await this.db.tenant(publicTenant(schoolId), async (c) => {
+      // a way the school cannot send by is refused at once, not left to wait for a code that never comes
+      sent = (await this.channelsWith(c))[channel];
+      if (!sent && !this.env.AUTH_DEV_BYPASS)
+        throw new DomainError(
+          'otp.channel_unavailable',
+          channel === 'mobile'
+            ? 'This school cannot send codes to mobiles yet: use your email'
+            : 'This school cannot send codes by email yet: use your mobile',
+          { status: 409 },
+        );
       const live = await c.query<{ n: number }>(
         `SELECT count(*)::int AS n FROM public_otps WHERE mobile = $1 AND purpose = $2 AND consumed_at IS NULL AND expires_at > now()`,
         [to, purpose],
@@ -82,8 +117,8 @@ export class CandidateAuthService {
       ]);
     });
     this.logger.log(`careers code by ${channel} issued (school ${schoolId})`);
-    const out: { sent: true; expiresInMinutes: number; devCode?: string } = {
-      sent: true,
+    const out: { sent: boolean; expiresInMinutes: number; devCode?: string } = {
+      sent,
       expiresInMinutes: this.env.OTP_TTL_MINUTES,
     };
     if (this.env.AUTH_DEV_BYPASS) out.devCode = code;

@@ -1,14 +1,13 @@
 import { Card, PageHeader } from '@edupro/ui';
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { CandidateSignIn } from '@/components/CandidateSignIn';
 import { PublicApiError } from '@/lib/api';
 import {
-  CAREERS_COOKIE,
   careersFetch,
+  careersMe,
   dmy,
   istText,
-  type CareerMe,
+  type CareerSignIn,
   type CareerVacancy,
 } from '@/lib/careers';
 
@@ -26,9 +25,9 @@ export default async function CareerVacancyPage({
       throw error;
     },
   );
-  const signedIn = Boolean((await cookies()).get(CAREERS_COOKIE)?.value);
-  const me = signedIn ? await careersFetch<CareerMe>('/me').catch(() => null) : null;
+  const me = await careersMe(school);
   const applied = me?.applications.find((a) => a.vacancyId === v.id);
+  const channels = me ? null : await careersFetch<CareerSignIn>(`/${school}/sign-in`, {}, null);
   const facts: Array<[string, string | null]> = [
     ['Department', v.department],
     ['Subject', v.subject],
@@ -68,7 +67,11 @@ export default async function CareerVacancyPage({
       <div style={{ marginTop: 'var(--sp-4)' }}>
         {!me ? (
           <Card title="Sign in to apply">
-            <CandidateSignIn school={school} returnTo={`/${school}/careers/${v.id}`} />
+            <CandidateSignIn
+              school={school}
+              returnTo={`/${school}/careers/form?apply=${v.id}`}
+              channels={channels!}
+            />
           </Card>
         ) : applied ? (
           <Card title="You have applied">

@@ -1,13 +1,6 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
-import { cookies } from 'next/headers';
 import { CandidateSignIn } from '@/components/CandidateSignIn';
-import {
-  APPLICATION_STATUS,
-  CAREERS_COOKIE,
-  careersFetch,
-  dmy,
-  type CareerMe,
-} from '@/lib/careers';
+import { APPLICATION_STATUS, careersFetch, careersMe, dmy, type CareerSignIn } from '@/lib/careers';
 
 /** My applications and where each stands; my application form. */
 export default async function MyApplicationsPage({
@@ -19,8 +12,8 @@ export default async function MyApplicationsPage({
 }) {
   const { school } = await params;
   const sp = await searchParams;
-  const signedIn = Boolean((await cookies()).get(CAREERS_COOKIE)?.value);
-  const me = signedIn ? await careersFetch<CareerMe>('/me').catch(() => null) : null;
+  const me = await careersMe(school);
+  const channels = me ? null : await careersFetch<CareerSignIn>(`/${school}/sign-in`, {}, null);
   return (
     <>
       <PageHeader
@@ -43,7 +36,11 @@ export default async function MyApplicationsPage({
       />
       {!me ? (
         <Card title="Sign in">
-          <CandidateSignIn school={school} returnTo={`/${school}/careers/mine`} />
+          <CandidateSignIn
+            school={school}
+            returnTo={`/${school}/careers/mine`}
+            channels={channels!}
+          />
         </Card>
       ) : (
         <>

@@ -115,3 +115,50 @@ for (const width of [1280, 375]) {
     expect(problems).toEqual([]);
   });
 }
+
+// the application as steps, signed in (a test school's candidate: the code shows on screen in
+// development and the school has no providers, so nothing is sent), each step and the mistakes summary
+for (const width of [1280, 375]) {
+  test(`careers application steps @${width}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width, height: 900 });
+    const res = await page.goto(`${BASE}/rcpmvgl1kms166/careers/form`);
+    test.skip(res?.status() === 404, 'the test school is not in this database');
+    const problems: string[] = [];
+    const check = async (label: string) => {
+      // the pointer off the buttons: a button under it is measured in its hover colours, half way
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(400);
+      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      for (const v of r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical'))
+        problems.push(`${label}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+    };
+    if (await page.getByRole('button', { name: 'Send code' }).count()) {
+      await page.getByLabel('My email').check();
+      await page.getByLabel('Email address').fill('browser.check@example.invalid');
+      await page.getByRole('button', { name: 'Send code' }).click();
+      const code = (await page.getByText(/Development code: \d{6}/).textContent())!.match(
+        /\d{6}/,
+      )![0];
+      await check('the code sent');
+      await page.getByLabel('Code').fill(code);
+      await page.getByRole('button', { name: 'Sign in' }).click();
+    }
+    await page.locator('.ep-wiz').waitFor();
+    // the form is drawn on the server first: wait until it answers clicks
+    await page.waitForLoadState('networkidle');
+    const steps = page.locator('.ep-wiz__step');
+    for (let i = 0; i < 6; i += 1) {
+      await steps.nth(i).click();
+      await expect(steps.nth(i)).toHaveAttribute('aria-current', 'step');
+      await check(`step ${String(i + 1)}`);
+    }
+    // a required answer left empty: the mistakes summary and the field marked
+    await steps.nth(0).click();
+    await page.getByLabel('First name').fill('');
+    await page.getByRole('button', { name: 'Save and continue' }).click();
+    await expect(page.getByText('Please put these right:')).toBeVisible();
+    await check('mistakes shown');
+    expect(problems).toEqual([]);
+  });
+}

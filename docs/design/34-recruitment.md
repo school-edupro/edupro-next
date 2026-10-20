@@ -1,6 +1,6 @@
 # 34 · Recruitment: vacancies, candidates, screening, joining
 
-Built in five parts (20 Oct 2026). The school's legacy had an online staff registration form with an
+Built in six parts (20 Oct 2026). The school's legacy had an online staff registration form with an
 OTP check and a printout; it had no screening pipeline. The form's input fields were read (labels only;
 the filled sample is a real applicant's and was not kept) to shape the candidate form of part 2.
 
@@ -194,3 +194,49 @@ set-up the **careers page link and QR**; the careers page window is **a date and
   `/api/vacancy-share` serves them (View or `save=1`).
 - Test: `apps/api/test/recruitment-approval.e2e-spec.ts`; the other recruitment suites use the new
   window and, where the school admin both raises and approves, the vacancy approved as it is sent.
+
+## Part 6 — the careers form as steps; sign-in that says where the code went (20 Oct 2026, built)
+
+Decisions: a **step form**; a city **only from the school's Cities list** (the office keeps it complete);
+an **age of 18 to 65**; the sign-in gets **resend after 30 s, the address shown masked and hints** (no
+office alert for messages that do not go out).
+
+- **Why a code did not come:** the email code waits in the queue until the workers run (they send the
+  mail); and Alpha's recruitment SMS template had no DLT id and WhatsApp no approved name, so no code could
+  go to a mobile. `GET public/careers/:school/sign-in` now says which ways can carry a code (an active
+  provider and a usable `recruitment_otp` template per channel); the sign-in offers only those, and
+  asking by another way is refused at once (`otp.channel_unavailable`; under the development bypass the
+  code still comes, marked `sent: false`). The code screen shows the address masked (k•••@gmail.com,
+  98•••••210), how long the code lasts, "look in spam / use my mobile instead", and "Send a new code"
+  after 30 seconds.
+- **One sign-in per school:** `/me` says the school the sign-in is for; a careers page of another school
+  asks to sign in there (before, a candidate signed in at one school saw their form on another school's
+  page; the API never mixed the schools).
+- **The form** (`apps/public/components/CareerForm.tsx`): six steps: about you; contact and address;
+  education, experience and training; present job, skills, interests, children and references; photo
+  and documents; review (and apply when `?apply=`). A progress bar and a step list (numbers on a phone);
+  Save and continue saves the step (`saveCareerStep`, only that step's answers and lists); Back keeps
+  what was typed; leaving with unsaved answers warns. Qualifications, jobs, training, children and
+  references are cards with "Add another" and Remove, not wide tables. Two or three choices are buttons
+  (gender, permanent address same as present); longer lists are searchable drop-downs. A returning
+  candidate with nothing missing opens on the review.
+- **Address:** country (India set when the list has it) → state of that country → city of that state
+  from the school's lists; changing one empties the ones under it; a city brings its PIN. A state with
+  no city in the list says to contact the school; a school with no city list at all takes the city typed.
+  The PIN is now required; country added to both addresses.
+- **Checks** in the browser as each answer is left (`apps/public/lib/career-checks.ts`) and in the API
+  (`candidate-checks.ts`, on top of the employee master's): names in letters; date of birth for an age
+  of 18 to 65 (the date box allows only those days); Aadhaar 12 digits with its Verhoeff check digit;
+  the alternate mobile not the mobile; months 0–11; no date in the future; a year of passing after the
+  age of 14; marks as a percentage, out of a total (450/600) or a CGPA; experience From before To; the
+  city in its state and the state in its country. The API now returns refusals by field (`errors`:
+  `aadhaar`, `education.0.passingYear`…) as well as the lines (`refused`); the form shows each beside its
+  answer and in a summary at the top whose lines go to the answer. The pay total is worked out from the
+  basic pay and allowances.
+- **Documents:** a drop area per document (or tap to choose), type and size checked before upload, a
+  thumbnail for photos, View and Remove; each upload saved at once through `POST /api/careers/upload`
+  (a route, as server actions refuse files over 1 MB; the old form's uploads of 1–5 MB failed).
+- Tests: `candidate-checks.spec.ts` (unit), `recruitment-public.e2e-spec.ts` (sign-in ways, the code not
+  sent, the school of the sign-in, the places, refusals by field, the new rules), the join suite with
+  valid Aadhaar numbers; `public-a11y.spec.ts` runs every step and the mistakes summary signed in, at
+  1280 and 375 wide.

@@ -1,13 +1,39 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { maskAddress } from '@/lib/career-checks';
+import type { CareerSignIn } from '@/lib/careers';
+
+const RESEND_AFTER = 30;
 
 /**
  * Careers page sign-in (docs/design/34-recruitment.md, part 2): the candidate chooses a code to the mobile
- * or to the email. The browser solves a proof-of-work challenge first, as on the admissions page; the
- * token lives in an HttpOnly cookie set by our route handler, never in the browser.
+ * or to the email, among the ways the school can send by. The browser solves a proof-of-work challenge
+ * first, as on the admissions page; the token lives in an HttpOnly cookie set by our route handler, never
+ * in the browser. The code may be sent again after 30 seconds; the screen says where it went, how long it
+ * lasts and what to do when it does not come.
  */
-export function CandidateSignIn({ school, returnTo }: { school: string; returnTo: string }) {
-  const [channel, setChannel] = useState<'mobile' | 'email'>('mobile');
+export function CandidateSignIn({
+  school,
+  returnTo,
+  channels,
+}: {
+  school: string;
+  returnTo: string;
+  channels: CareerSignIn;
+}) {
+  // a way the school cannot send by is not offered (in development both are, the code shows on screen)
+  const usable = (c: 'mobile' | 'email') => channels[c] || channels.dev;
+  const [channel, setChannel] = useState<'mobile' | 'email'>(
+    channels.email && !channels.mobile ? 'email' : 'mobile',
+  );
+  const [wait, setWait] = useState(0);
+  const [notSent, setNotSent] = useState(false);
+  const [minutes, setMinutes] = useState(channels.minutes);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
   const [to, setTo] = useState('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -47,7 +73,11 @@ export function CandidateSignIn({ school, returnTo }: { school: string; returnTo
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail ?? body.type ?? 'failed');
-      if (body.devCode) setDevCode(body.devCode);
+      setDevCode(body.devCode ?? null);
+      setNotSent(body.sent === false);
+      if (body.expiresInMinutes) setMinutes(body.expiresInMinutes);
+      setCode('');
+      setWait(RESEND_AFTER);
       setStage('code');
     } catch (e) {
       setError((e as Error).message);
@@ -74,28 +104,43 @@ export function CandidateSignIn({ school, returnTo }: { school: string; returnTo
     }
   }
 
+  if (!usable('mobile') && !usable('email'))
+    return (
+      <div className="ep-alert ep-alert--warning" role="status">
+        Online sign-in is not open at this school yet: please contact the school office.
+      </div>
+    );
   return (
     <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
       {stage === 'address' ? (
         <>
           <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
             <legend className="ep-field__label">Send the code to</legend>
-            <div style={{ display: 'flex', gap: 'var(--sp-4)' }}>
+            <div className="ep-wiz__choices">
               {(['mobile', 'email'] as const).map((c) => (
-                <label key={c} className="ep-check">
+                <label key={c} className="ep-wiz__choice">
                   <input
                     type="radio"
                     name="cand-channel"
                     checked={channel === c}
+                    disabled={!usable(c)}
                     onChange={() => {
                       setChannel(c);
                       setTo('');
                     }}
-                  />{' '}
-                  {c === 'mobile' ? 'My mobile' : 'My email'}
+                  />
+                  <span>{c === 'mobile' ? 'My mobile' : 'My email'}</span>
                 </label>
               ))}
             </div>
+            {channels.mobile !== channels.email ? (
+              <span className="ep-field__help">
+                This school sends codes {channels.email ? 'by email' : 'to mobiles'} only.
+                {channels.dev
+                  ? ' (Development: the other way works too; its code shows here.)'
+                  : ''}
+              </span>
+            ) : null}
           </fieldset>
           <label className="ep-field">
             <span className="ep-field__label">Your name</span>
@@ -140,12 +185,16 @@ export function CandidateSignIn({ school, returnTo }: { school: string; returnTo
         </>
       ) : (
         <>
-          <p>
-            We sent a 6-digit code to <strong>{to}</strong>.
+          <p style={{ margin: 0 }}>
+            {notSent ? 'A code was made for' : 'We sent a 6-digit code to'}{' '}
+            <strong>{maskAddress(to)}</strong>. It works for {minutes} minutes.
             {devCode ? (
               <>
                 {' '}
-                <span className="ep-kicker">Development code: {devCode}</span>
+                <span className="ep-kicker">
+                  Development code: {devCode}
+                  {notSent ? ' (not sent: the school cannot send by this way)' : ''}
+                </span>
               </>
             ) : null}
           </p>
@@ -176,6 +225,42 @@ export function CandidateSignIn({ school, returnTo }: { school: string; returnTo
             >
               {channel === 'mobile' ? 'Change number' : 'Change email'}
             </button>
+          </div>
+          <div className="ep-field__help">
+            <p style={{ margin: '0 0 var(--sp-1)' }}>
+              No code?{' '}
+              {channel === 'email'
+                ? 'Look in the spam or promotions folder; mail can take a minute.'
+                : 'An SMS can take a minute; check the number is right.'}
+              {usable(channel === 'email' ? 'mobile' : 'email') ? (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="ep-wiz__link"
+                    onClick={() => {
+                      setChannel(channel === 'email' ? 'mobile' : 'email');
+                      setTo('');
+                      setStage('address');
+                    }}
+                  >
+                    {channel === 'email' ? 'Use my mobile instead' : 'Use my email instead'}
+                  </button>
+                </>
+              ) : null}
+            </p>
+            {wait > 0 ? (
+              <span>You can ask for a new code in {wait} s.</span>
+            ) : (
+              <button
+                type="button"
+                className="ep-wiz__link"
+                onClick={() => void requestCode()}
+                disabled={busy !== null}
+              >
+                Send a new code
+              </button>
+            )}
           </div>
         </>
       )}
