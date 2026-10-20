@@ -8546,8 +8546,9 @@ a.db-list__main:hover strong {
   width: 100%;
   min-width: 0;
 }
-/* the ACR as steps (20 Oct 2026): the bar on top, one step open at a time */
-.ep-steps {
+/* a bar of numbered steps across the top (the ACR, a job application's screening); named apart from
+   the approval timeline and the older step list, whose classes are taken */
+.ep-stepbar {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
@@ -8555,7 +8556,7 @@ a.db-list__main:hover strong {
   margin: 0 0 var(--sp-4);
   padding: 0;
 }
-.ep-step {
+.ep-stepbar__item {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -8568,11 +8569,11 @@ a.db-list__main:hover strong {
   cursor: pointer;
   text-align: left;
 }
-.ep-step[aria-current='step'] {
+.ep-stepbar__item[aria-current='step'] {
   border-color: var(--border-accent);
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
-.ep-step__n {
+.ep-stepbar__n {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8583,7 +8584,7 @@ a.db-list__main:hover strong {
   font-weight: var(--fw-semibold);
   flex: none;
 }
-.ep-step__label {
+.ep-stepbar__label {
   font-weight: var(--fw-semibold);
 }
 .ep-acr-step__toggle {

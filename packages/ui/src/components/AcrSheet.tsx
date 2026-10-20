@@ -978,21 +978,21 @@ export function AcrSheet({
 
       <Records rec={r.records} fileHref={fileHref} />
 
-      <ol className="ep-steps" aria-label="Steps of the ACR">
+      <ol className="ep-stepbar" aria-label="Steps of the ACR">
         {steps.map((st) => (
           <li key={st.key}>
             <button
               type="button"
-              className="ep-step"
+              className="ep-stepbar__item"
               data-state={st.state}
               aria-current={open === st.key ? 'step' : undefined}
               onClick={() => setOpen(st.key)}
             >
-              <span className="ep-step__n" aria-hidden="true">
+              <span className="ep-stepbar__n" aria-hidden="true">
                 {st.n}
               </span>
               <span>
-                <span className="ep-step__label">{st.label}</span>
+                <span className="ep-stepbar__label">{st.label}</span>
                 <br />
                 <span className="ep-field__help">{st.who}</span>
               </span>
