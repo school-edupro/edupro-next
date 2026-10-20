@@ -23,7 +23,17 @@ export interface Level {
   escalateTo?: Resolver;
   /** Approved by itself when the requester is one of its approvers; ignored on the last level. */
   autoIfRequester?: boolean;
+  /** The steps are worked out again as the request moves and when the set-up changes (replan). */
+  autoSkip?: boolean;
 }
+
+/** Why a step was decided without anybody acting on it (replan). */
+const NOBODY = 'Nobody at this level';
+const RAISED = "Raised by this level's approver";
+const EARLIER = 'Approved at an earlier level by the same person';
+const TAKEN_OUT = 'Taken out of the approval levels';
+const sameSet = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
 
 export interface EventRow {
   id: string;
@@ -300,12 +310,14 @@ export class WorkflowService {
         code: 'vacancy_approval',
         name: 'Vacancy approval',
         entityType: 'vacancy',
+        // set in Recruitment set-up; worked out again as the vacancy moves
         levels: [
           {
             level: 1,
             name: 'Principal approval',
             resolver: { kind: 'role', roleCode: 'school_admin' },
             slaHours: 72,
+            autoSkip: true,
           },
         ],
       },
@@ -439,10 +451,33 @@ export class WorkflowService {
     c: PoolClient,
     resolver: Resolver,
     requestedBy: string | null,
-    /** what the request is about: the pupil's section for a class-teacher level */
-    scope: { sectionId?: string | null } = {},
+    /** what the request is about: the pupil's section for a class-teacher level, the department for its HOD */
+    scope: { sectionId?: string | null; department?: string | null } = {},
   ): Promise<string[]> {
     if (resolver.kind === 'named_user') return [resolver.userId];
+    if (resolver.kind === 'staff') {
+      const live = `e.user_id IS NOT NULL AND e.status = 'active' AND e.deleted_at IS NULL`;
+      const r =
+        resolver.by === 'employees'
+          ? await c.query<{ id: string }>(
+              // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
+              `SELECT DISTINCT e.user_id::text AS id FROM employees e WHERE e.id = ANY($1::bigint[]) AND ${live}`,
+              [resolver.employeeIds],
+            )
+          : resolver.by === 'designation'
+            ? await c.query<{ id: string }>(
+                // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
+                `SELECT DISTINCT e.user_id::text AS id FROM employees e WHERE lower(e.designation) = lower($1) AND ${live}`,
+                [resolver.designation ?? ''],
+              )
+            : await c.query<{ id: string }>(
+                // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
+                `SELECT DISTINCT e.user_id::text AS id FROM departments d JOIN employees e ON e.id = d.hod_employee_id
+                  WHERE (lower(d.name) = lower($1) OR d.code = $1) AND ${live}`,
+                [scope.department ?? ''],
+              );
+      return r.rows.map((x) => x.id);
+    }
     if (resolver.kind === 'class_teacher') {
       const r = await c.query<{ id: string }>(
         `SELECT DISTINCT e.user_id::text AS id FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
@@ -608,6 +643,29 @@ export class WorkflowService {
       throw error;
     }
     const requester = ctx.user.id;
+    // levels worked out again as the request moves (vacancy approval): the plan writes the steps
+    if (def.rows[0].levels.some((l) => l.autoSkip)) {
+      await this.event(c, id, null, 'started', ctx.user.id, null, { subject: input.subject });
+      const planned = await this.replan(c, ctx, id);
+      if (planned.outcome === 'none')
+        throw new DomainError(
+          'workflow.no_assignee',
+          'Nobody is set to approve this request: check its approval levels',
+          { status: 409 },
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'workflow.instance.started',
+        entityType: 'workflow_instances',
+        entityId: id,
+        after: {
+          definition: input.definitionCode,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          subject: input.subject,
+        },
+      });
+      return (await this.instanceWith(c, id))!;
+    }
     const scope = {
       sectionId: typeof input.payload?.sectionId === 'string' ? input.payload.sectionId : null,
     };
@@ -680,6 +738,238 @@ export class WorkflowService {
       },
     });
     return (await this.instanceWith(c, id))!;
+  }
+
+  /**
+   * The steps of a request whose levels are "autoSkip" (vacancy approval), worked out again from its
+   * definition as it is now. A level counts as approved when someone who approved the request before is
+   * among its people, or the person who raised it is; a level approved earlier stays approved while its
+   * approver is still on it or the level is unchanged; a level nobody holds is skipped; the first other
+   * level waits and the ones after it wait their turn. Run when the request starts, after each approval
+   * and when the set-up changes, so a request in progress follows the set-up. Writes nothing and says
+   * 'none' when nobody at all can approve it.
+   */
+  private async replan(
+    c: PoolClient,
+    ctx: RequestContext,
+    instanceId: string,
+  ): Promise<{ outcome: 'waiting' | 'approved' | 'none'; moved: boolean }> {
+    const inst = (
+      await c.query<{
+        requested_by: string | null;
+        payload: Record<string, unknown>;
+        subject: string;
+        current_level: number;
+        levels: Level[];
+      }>(
+        `SELECT i.requested_by::text, i.payload, i.subject, i.current_level, d.levels
+           FROM workflow_instances i JOIN workflow_definitions d ON d.id = i.definition_id
+          WHERE i.id = $1 AND i.status = 'pending' FOR UPDATE OF i`,
+        [instanceId],
+      )
+    ).rows[0];
+    if (!inst) return { outcome: 'none', moved: false };
+    const steps = (
+      await c.query<{
+        level: number;
+        name: string;
+        status: StepRow['status'];
+        resolver: Resolver;
+        acted_by: string | null;
+        acted_at: Date | null;
+        note: string | null;
+        assignees: string[];
+        due_at: Date | null;
+      }>(
+        `SELECT level, name, status::text, resolver, acted_by::text, acted_at, note, assignee_user_ids::text[] AS assignees, due_at
+           FROM workflow_steps WHERE instance_id = $1 ORDER BY level`,
+        [instanceId],
+      )
+    ).rows;
+    const approvals = steps.filter((s) => s.status === 'approved' && s.acted_by);
+    const requester = inst.requested_by;
+    const scope = {
+      sectionId: typeof inst.payload.sectionId === 'string' ? inst.payload.sectionId : null,
+      department: typeof inst.payload.department === 'string' ? inst.payload.department : null,
+    };
+    interface Plan {
+      level: Level;
+      assignees: string[];
+      status: StepRow['status'];
+      actedBy: string | null;
+      actedAt: Date | null;
+      note: string | null;
+    }
+    const plan: Plan[] = [];
+    let current: Plan | null = null;
+    let anybody = false;
+    for (const level of [...inst.levels].sort((a, b) => a.level - b.level)) {
+      const assignees = await this.resolveAssignees(c, level.resolver, requester, scope);
+      if (assignees.length) anybody = true;
+      const base = { level, assignees, actedBy: null, actedAt: null, note: null };
+      const own = steps.find((s) => s.level === level.level);
+      const kept =
+        own?.status === 'approved' &&
+        own.acted_by &&
+        (assignees.includes(own.acted_by) ||
+          JSON.stringify(own.resolver) === JSON.stringify(level.resolver))
+          ? own
+          : null;
+      const earlier = approvals.find((a) => assignees.includes(a.acted_by!));
+      let p: Plan;
+      if (current)
+        p = assignees.length
+          ? { ...base, status: 'pending' }
+          : { ...base, status: 'skipped', note: NOBODY };
+      else if (kept)
+        p = {
+          ...base,
+          status: 'approved',
+          actedBy: kept.acted_by,
+          actedAt: kept.acted_at,
+          note: kept.note,
+        };
+      else if (earlier)
+        p = {
+          ...base,
+          status: 'approved',
+          actedBy: earlier.acted_by,
+          actedAt: earlier.acted_at,
+          note: EARLIER,
+        };
+      else if (requester && assignees.includes(requester))
+        p = {
+          ...base,
+          status: 'approved',
+          actedBy: requester,
+          actedAt: own?.acted_by === requester && own.acted_at ? own.acted_at : new Date(),
+          note: RAISED,
+        };
+      else if (!assignees.length) p = { ...base, status: 'skipped', note: NOBODY };
+      else {
+        p = { ...base, status: 'pending' };
+        current = p;
+      }
+      plan.push(p);
+    }
+    if (!plan.length || (!anybody && !approvals.length)) return { outcome: 'none', moved: false };
+    const was = steps.find((s) => s.level === inst.current_level && s.status === 'pending') ?? null;
+    let moved = false;
+    for (const p of plan) {
+      const own = steps.find((s) => s.level === p.level.level);
+      const isCurrent = p === current;
+      const keepDue =
+        isCurrent && was?.level === p.level.level && sameSet(was.assignees, p.assignees);
+      const due = !isCurrent
+        ? null
+        : keepDue
+          ? was.due_at
+          : p.level.slaHours
+            ? new Date(Date.now() + p.level.slaHours * 3_600_000)
+            : null;
+      // nothing to write when the step is already so (the refresh runs often)
+      const unchanged =
+        own &&
+        own.name === p.level.name &&
+        own.status === p.status &&
+        own.acted_by === p.actedBy &&
+        own.note === p.note &&
+        sameSet(own.assignees, p.assignees) &&
+        JSON.stringify(own.resolver) === JSON.stringify(p.level.resolver) &&
+        (isCurrent ? keepDue : own.due_at === null);
+      if (!unchanged)
+        await c.query(
+          `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status, acted_by, acted_at, note, due_at)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::bigint[], $6::step_status, $7, $8, $9, $10)
+         ON CONFLICT (instance_id, level) DO UPDATE SET name = EXCLUDED.name, resolver = EXCLUDED.resolver,
+           assignee_user_ids = EXCLUDED.assignee_user_ids, status = EXCLUDED.status, acted_by = EXCLUDED.acted_by,
+           acted_at = EXCLUDED.acted_at, note = EXCLUDED.note, due_at = EXCLUDED.due_at`,
+          [
+            instanceId,
+            p.level.level,
+            p.level.name,
+            JSON.stringify(p.level.resolver),
+            p.assignees,
+            p.status,
+            p.actedBy,
+            p.actedAt,
+            p.note,
+            due,
+          ],
+        );
+      // a level decided by the plan (not by a person acting on it) goes in the history
+      const fresh =
+        p.status === 'approved' && !(own?.status === 'approved' && own.acted_by === p.actedBy);
+      if (fresh || (p.status === 'skipped' && own?.status !== 'skipped'))
+        await this.event(c, instanceId, null, p.status, p.actedBy, p.note, {
+          level: p.level.level,
+          auto: true,
+        });
+      // the people of the waiting level changed under it (the set-up or the records changed)
+      if (isCurrent && own?.status === 'pending' && !sameSet(own.assignees, p.assignees)) {
+        moved = true;
+        await this.event(c, instanceId, null, 'reassigned', null, null, {
+          level: p.level.level,
+          from: own.assignees,
+          to: p.assignees,
+          by: 'setup',
+        });
+      }
+    }
+    // levels taken out of the set-up that had not been reached
+    await c.query(
+      `UPDATE workflow_steps SET status = 'skipped', note = $3, due_at = NULL
+        WHERE instance_id = $1 AND status = 'pending' AND NOT (level = ANY($2::int[]))`,
+      [instanceId, plan.map((p) => p.level.level), TAKEN_OUT],
+    );
+    const done = !current;
+    const level = current?.level.level ?? plan[plan.length - 1]!.level.level;
+    if (done || level !== inst.current_level)
+      await c.query(
+        `UPDATE workflow_instances SET current_level = $2, updated_at = now(),
+                status = CASE WHEN $3 THEN 'approved'::workflow_status ELSE status END,
+                completed_at = CASE WHEN $3 THEN now() ELSE completed_at END,
+                completed_by = CASE WHEN $3 THEN app.current_user_id() ELSE completed_by END
+          WHERE id = $1`,
+        [instanceId, level, done],
+      );
+    if (current) {
+      if (was?.level !== current.level.level) moved = moved || steps.length > 0;
+      // the people the request now waits with hear of it (the ones it already waited with did)
+      const before = was?.level === current.level.level ? was.assignees : [];
+      const fresh = current.assignees.filter((u) => !before.includes(u));
+      if (fresh.length) for (const l of this.assignListeners) await l(c, ctx, fresh, inst.subject);
+    }
+    return { outcome: done ? 'approved' : 'waiting', moved: moved || done };
+  }
+
+  /**
+   * Requests of a definition still waiting follow its levels as they are now (definitions whose levels
+   * are "autoSkip"): the steps are worked out again; one with nothing left to wait for is approved and
+   * its module told. A request nobody could approve any more is left as it was.
+   */
+  async refreshOpen(
+    c: PoolClient,
+    ctx: RequestContext,
+    definitionCode: string,
+  ): Promise<{ moved: string[]; approved: string[] }> {
+    const open = await c.query<{ id: string; entity_id: string }>(
+      `SELECT i.id::text, i.entity_id::text FROM workflow_instances i JOIN workflow_definitions d ON d.id = i.definition_id
+        WHERE d.code = $1 AND d.deleted_at IS NULL AND i.status = 'pending' ORDER BY i.id`,
+      [definitionCode],
+    );
+    const moved: string[] = [];
+    const approved: string[] = [];
+    for (const { id, entity_id } of open.rows) {
+      const r = await this.replan(c, ctx, id);
+      if (r.outcome === 'waiting' && r.moved) moved.push(entity_id);
+      if (r.outcome !== 'approved') continue;
+      approved.push(entity_id);
+      const instance = (await this.instanceWith(c, id))!;
+      const handler = this.handlers.get(instance.entityType);
+      if (handler) await handler(c, ctx, instance, 'approved');
+    }
+    return { moved, approved };
   }
 
   /** History line of an instance (Sprint 17). */
@@ -821,8 +1111,9 @@ export class WorkflowService {
           });
         delegatedFrom = d.rows[0].from_user_id;
       }
-      const inst = await c.query<{ status: string; current_level: number }>(
-        `SELECT status::text, current_level FROM workflow_instances WHERE id = $1 FOR UPDATE`,
+      const inst = await c.query<{ status: string; current_level: number; levels: Level[] }>(
+        `SELECT i.status::text, i.current_level, d.levels FROM workflow_instances i
+           JOIN workflow_definitions d ON d.id = i.definition_id WHERE i.id = $1 FOR UPDATE OF i`,
         [step.instance_id],
       );
       if (inst.rows[0]!.status !== 'pending' || inst.rows[0]!.current_level !== step.level)
@@ -834,6 +1125,7 @@ export class WorkflowService {
         [stepId, outcome, dto.note ?? null],
       );
       let completed: 'approved' | 'rejected' | null = null;
+      let replan = false;
       if (outcome === 'rejected') {
         await c.query(
           `UPDATE workflow_steps SET status = 'skipped' WHERE instance_id = $1 AND status = 'pending'`,
@@ -844,6 +1136,10 @@ export class WorkflowService {
           [step.instance_id],
         );
         completed = 'rejected';
+      } else if (inst.rows[0]!.levels.some((l) => l.autoSkip)) {
+        // the levels after this one are worked out again with this approval counted (below, once the
+        // approval is in the history)
+        replan = true;
       } else {
         const next = await c.query<{ level: number }>(
           `SELECT level FROM workflow_steps WHERE instance_id = $1 AND status = 'pending' ORDER BY level LIMIT 1`,
@@ -878,6 +1174,8 @@ export class WorkflowService {
         await this.event(c, step.instance_id, stepId, 'delegated', ctx.user.id, null, {
           from: delegatedFrom,
         });
+      if (replan && (await this.replan(c, ctx, step.instance_id)).outcome === 'approved')
+        completed = 'approved';
       const instance = (await this.instanceWith(c, step.instance_id))!;
       await this.audit.stage(ctx, c, {
         action: `workflow.step.${outcome}`,

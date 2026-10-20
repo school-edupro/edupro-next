@@ -1,13 +1,14 @@
 # 34 · Recruitment: vacancies, candidates, screening, joining
 
-Built in four parts (20 Oct 2026). The school's legacy had an online staff registration form with an
+Built in five parts (20 Oct 2026). The school's legacy had an online staff registration form with an
 OTP check and a printout; it had no screening pipeline. The form's input fields were read (labels only;
 the filled sample is a real applicant's and was not kept) to shape the candidate form of part 2.
 
 ## Decisions (20 Oct 2026)
 
-- A vacancy is approved **through the levels the school sets** (Workflow → "Vacancy approval"); a school
-  that has not set them gets one level, the Principal (role school_admin), made on the first submission.
+- A vacancy is approved **through the levels the school sets** (Recruitment set-up since part 5; Workflow →
+  "Vacancy approval" before); a school that has not set them gets one level, the Principal (role
+  school_admin), made on the first submission.
 - Candidates sign in on the public link with a **code to their mobile or their email**, as they choose.
 - **Screening stages:** the school keeps one list in Recruitment set-up; each vacancy ticks the ones it uses.
 - Form fields the employee master has no place for (children, references, current pay, notice period,
@@ -142,3 +143,54 @@ applications/:id/reject | resume`, `GET vacancies/:id/pipeline`, `GET/PUT setup/
   match is found); after it, a line links to the new employee, whose page says what came over.
 - Test: `apps/api/test/recruitment-join.e2e-spec.ts`; the employee master suite still passes after the
   onboarding was split for use inside a transaction.
+
+
+## Part 5 — who approves, the approver's page, the public link (migration 0201, built)
+
+Decisions (20 Oct 2026): a level is **named employees, everyone holding a designation, or the HOD of the
+vacancy's department**; a vacancy **waiting follows the set-up at once** (levels already approved stay);
+the vacancy page carries **the link, the QR, an A4 poster, WhatsApp and LinkedIn share**, and Recruitment
+set-up the **careers page link and QR**; the careers page window is **a date and a time in India time**.
+
+- **Approval levels in Recruitment set-up** (`GET/PUT people/recruitment/setup/approval`): up to six
+  levels, each a name, who approves and a reply time. Saved into the workflow definition
+  `vacancy_approval` with a new resolver kind `staff` (`by` employees | designation | hod) and the level
+  flag `autoSkip`. Checked on save: picked employees must be able to sign in, a designation must be in
+  Staff setup and held by someone who signs in, an HOD level needs at least one department with an HOD.
+  A level set before under Workflow is shown as it was (a named user becomes its employee; a role stays
+  until changed). Workflow → Approval set-up lists Vacancy under "set in the module".
+- **HOD of a department:** `departments.hod_employee_id`, the column "HOD (employee)" in Staff setup →
+  Departments. The vacancy's department picks the HOD.
+- **The plan (`autoSkip` levels):** the engine works the steps out again from the definition as it is now
+  when the vacancy is sent, after each approval and when the set-up changes. A level counts as approved
+  when someone who already approved is among its people ("Approved at an earlier level by the same
+  person") or the raiser is ("Raised by this level's approver", the last level too); a level approved
+  stays while its approver is still on it or the level is unchanged; a level nobody holds is skipped
+  ("Nobody at this level"); the first other level waits. Sending is refused (`recruitment.no_approver`)
+  when nobody at all can approve; a vacancy whose every level is the raiser's is approved as it is sent. A
+  waiting vacancy nobody could approve under a new set-up stays with the people it had. Nothing is
+  written when nothing changed. Steps decided by the plan go in the approval's history (event kinds gain
+  `skipped`).
+- **Following the set-up at once:** saving the levels, saving a department (the masters service now tells
+  modules when a master's rows change: `MastersService.onChange`), saving an employee's record, and
+  reading the vacancy list or a waiting vacancy re-plan the vacancies waiting; one whose waiting level
+  changed people gets the event `approval_moved` ("Now with …") and the new people hear of it.
+- **The approver** (`GET people/recruitment/to-approve`, `POST vacancies/:id/approve | send-back`, signed
+  in only; the service checks the step is theirs or delegated to them): the header approvals show
+  **Vacancies to approve** (left out of "Approval steps" so nothing counts twice); the vacancy page opens
+  for anyone who takes part in its approval, without the recruitment rights, with **Approve** and **Send
+  back** (a reason). The page shows every level: its people, approved or skipped and by whom, the note,
+  the level waiting (overdue past its reply time). The raiser gets a push with the outcome.
+- **The window:** `vacancies.opens_at` / `closes_at` (timestamps; the old dates were moved over, from the
+  start of the first day to 23:59 of the last in the school's time zone). Publishing takes `opensAt` and
+  `closesAt` as YYYY-MM-DDTHH:MM read as India time: the opening not in the past (a published vacancy
+  keeps the one it has), the last date and time later than now, at least an hour and at most a year
+  apart. A published vacancy may change its dates ("Dates changed"). The careers page lists it from the
+  opening minute to the closing minute; it closes by itself (closed at its last date and time); an
+  application sent after that is refused with the time it closed.
+- **Sharing** (people.recruitment.view): `GET vacancies/:id/qr` (PNG), `GET vacancies/:id/poster` (A4 PDF:
+  the school's band, the post and what it asks, the last date and time, the QR and the link),
+  `GET setup/careers` (the school's careers page, its QR, how many posts are open); the admin route
+  `/api/vacancy-share` serves them (View or `save=1`).
+- Test: `apps/api/test/recruitment-approval.e2e-spec.ts`; the other recruitment suites use the new
+  window and, where the school admin both raises and approves, the vacancy approved as it is sent.

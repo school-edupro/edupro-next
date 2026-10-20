@@ -94,6 +94,11 @@ export default async function InboxPage({
                 <a href={`/admissions/applications/${s.instance.entityId}`}>{w('viewEntity')}</a>
               </p>
             ) : null}
+            {s.instance.entityType === 'vacancy' ? (
+              <p style={{ marginTop: 'var(--sp-2)' }}>
+                <a href={`/people/recruitment/${s.instance.entityId}`}>{w('viewEntity')}</a>
+              </p>
+            ) : null}
             <form action={actOnStep} style={{ marginTop: 'var(--sp-3)' }}>
               <NoEnterSubmit />
               <input type="hidden" name="id" value={s.id} />

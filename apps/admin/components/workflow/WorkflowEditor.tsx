@@ -32,6 +32,9 @@ const fromResolver = (
       : { ...base, kind: 'person', userId: r.userIds[0] ?? '' };
   if (r.kind === 'named_user') return { ...base, kind: 'person', userId: r.userId };
   if (r.kind === 'position') return { ...base, kind: 'designation', designation: r.designation };
+  // staff levels are set in Recruitment set-up (vacancy approval); shown here as a designation
+  if (r.kind === 'staff')
+    return { ...base, kind: 'designation', designation: r.designation ?? '' };
   return { ...base, kind: 'chain', depth: r.depth };
 };
 const toResolver = (r: Row): WorkflowResolver | null => {

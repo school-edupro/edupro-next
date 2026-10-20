@@ -15,6 +15,7 @@ import {
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { AcrFlowService } from './acr-flow.service';
+import { RecruitmentApprovalService } from './recruitment-approval.service';
 import { FilesService } from '../files/files.service';
 import { ReportsService } from '../reports/reports.service';
 import { DbService } from '../../common/db/db.service';
@@ -123,6 +124,7 @@ export class EmployeeProfileService {
     private readonly files: FilesService,
     private readonly reports: ReportsService,
     private readonly acr: AcrFlowService,
+    private readonly vacancies: RecruitmentApprovalService,
   ) {}
 
   /** The employee profile printout (A4 PDF on the letterhead), as an export the screen waits for. */
@@ -322,6 +324,8 @@ export class EmployeeProfileService {
     // the record changed: the ACR of the open cycle follows at once (the approvers, 0189; the side
     // and the self form until the self-appraisal is submitted, 0192)
     await this.acr.refreshEmployees(ctx, [id]);
+    // and a vacancy waiting for approval follows a designation or a sign-in that changed (0201)
+    await this.vacancies.refresh(ctx);
     return out;
   }
 

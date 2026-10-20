@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { RecruitmentNotices, StageKind } from './recruitment';
+import type { ApprovalLevel, RecruitmentNotices, StageKind } from './recruitment';
 
 const BASE = '/people/recruitment';
 const PAGE = '/people/recruitment';
@@ -108,7 +108,7 @@ async function act(fd: FormData, what: 'submit' | 'publish' | 'close' | 'cancel'
   if (!okId(id)) redirect(PAGE);
   const payload =
     what === 'publish'
-      ? { opensOn: str(fd, 'opensOn'), closesOn: str(fd, 'closesOn') }
+      ? { opensAt: str(fd, 'opensAt'), closesAt: str(fd, 'closesAt') }
       : what === 'submit'
         ? {}
         : { note: str(fd, 'reason') || undefined };
@@ -128,7 +128,70 @@ export async function submitVacancy(fd: FormData) {
   await act(fd, 'submit', 'Sent for approval. It shows in the approvers’ header approvals.');
 }
 export async function publishVacancy(fd: FormData) {
-  await act(fd, 'publish', 'Published for the dates given.');
+  await act(
+    fd,
+    'publish',
+    'Published: the careers page takes applications from the opening to the last date and time.',
+  );
+}
+
+/** The approver's decision on the vacancy waiting with them (ConfirmAction sends the note as `reason`). */
+async function decide(fd: FormData, what: 'approve' | 'send-back', ok: string) {
+  const id = str(fd, 'id');
+  if (!okId(id)) redirect(PAGE);
+  try {
+    await apiFetch(`${BASE}/vacancies/${id}/${what}`, {
+      method: 'POST',
+      body: JSON.stringify({ note: str(fd, 'reason') || undefined }),
+    });
+  } catch (error) {
+    back(`${PAGE}/${id}`, error);
+  }
+  revalidatePath(PAGE);
+  revalidatePath(`${PAGE}/${id}`);
+  done(`${PAGE}/${id}`, ok);
+}
+export async function approveVacancy(fd: FormData) {
+  await decide(fd, 'approve', 'Approved. It goes to the next level, or is ready to publish.');
+}
+export async function sendBackVacancy(fd: FormData) {
+  await decide(fd, 'send-back', 'Sent back to the person who raised it, with your reason.');
+}
+
+/** Who approves a vacancy, level by level, saved at once from the set-up editor. */
+export async function saveVacancyApproval(
+  levels: ApprovalLevel[],
+): Promise<{ ok: true; moved: number; approved: number } | { ok: false; error: string }> {
+  let r: { moved: number; approved: number };
+  try {
+    r = await apiFetch(`${BASE}/setup/approval`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        levels: levels.map((l) => ({
+          name: l.name.trim(),
+          by: l.by,
+          employeeIds: l.by === 'employees' ? l.employeeIds : [],
+          ...(l.by === 'designation' && l.designation ? { designation: l.designation } : {}),
+          ...(l.by === 'role' && l.roleCode ? { roleCode: l.roleCode } : {}),
+          slaHours: l.slaHours,
+        })),
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const list = e.problem.errors as Array<{ message?: string }> | undefined;
+      return {
+        ok: false,
+        error: list?.length
+          ? list.map((x) => x.message).join('; ')
+          : (e.problem.detail ?? e.problem.type),
+      };
+    }
+    throw e;
+  }
+  revalidatePath(`${PAGE}/setup`);
+  revalidatePath(PAGE);
+  return { ok: true, moved: r.moved, approved: r.approved };
 }
 export async function closeVacancy(fd: FormData) {
   await act(fd, 'close', 'Closed: no new applications.');

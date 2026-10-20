@@ -72,6 +72,22 @@ export class MastersService {
     private readonly audit: AuditService,
   ) {}
 
+  private readonly listeners = new Map<string, Array<(ctx: RequestContext) => Promise<unknown>>>();
+
+  /**
+   * A module hears when rows of a master change (saved, uploaded, bulk-changed, switched on or off),
+   * after the change is in: the departments' HODs move the vacancies waiting for approval.
+   */
+  onChange(id: string, fn: (ctx: RequestContext) => Promise<unknown>): void {
+    this.listeners.set(id, [...(this.listeners.get(id) ?? []), fn]);
+  }
+
+  private async changed<T>(ctx: RequestContext, id: string, out: Promise<T>): Promise<T> {
+    const r = await out;
+    for (const fn of this.listeners.get(id) ?? []) await fn(ctx);
+    return r;
+  }
+
   // ---- registry ----------------------------------------------------------------------------------
   private def(id: string): MasterDefinition {
     const d = masterOrNull(id);
@@ -468,40 +484,44 @@ export class MastersService {
     const def = this.def(id);
     this.assertPermission(ctx, def, true);
     const tenant = requireTenant(ctx);
-    return this.db.tenant(tenant, async (c) => {
-      const imp = await c.query<{ status: string; payload: Array<Record<string, unknown>> }>(
-        'SELECT status::text, payload FROM master_imports WHERE id = $1 AND master = $2',
-        [importId, def.id],
-      );
-      const row = imp.rows[0];
-      if (!row) throw new DomainError('not-found', 'Upload not found', { status: 404 });
-      if (row.status !== 'validated')
-        throw new DomainError(
-          'conflict',
-          `Upload is ${row.status}; only a validated upload commits`,
-          {
-            status: 409,
-          },
+    return this.changed(
+      ctx,
+      def.id,
+      this.db.tenant(tenant, async (c) => {
+        const imp = await c.query<{ status: string; payload: Array<Record<string, unknown>> }>(
+          'SELECT status::text, payload FROM master_imports WHERE id = $1 AND master = $2',
+          [importId, def.id],
         );
-      let inserted = 0;
-      let updated = 0;
-      for (const values of row.payload) {
-        const res = await this.upsert(c, def, tenant, values);
-        if (res.inserted) inserted += 1;
-        else updated += 1;
-      }
-      await c.query(
-        `UPDATE master_imports SET status = 'committed', committed_at = now(), inserted_rows = $2, updated_rows = $3 WHERE id = $1`,
-        [importId, inserted, updated],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'masters.upload.commit',
-        entityType: def.table,
-        entityId: importId,
-        after: { master: def.id, inserted, updated },
-      });
-      return (await this.getImport(c, importId))!;
-    });
+        const row = imp.rows[0];
+        if (!row) throw new DomainError('not-found', 'Upload not found', { status: 404 });
+        if (row.status !== 'validated')
+          throw new DomainError(
+            'conflict',
+            `Upload is ${row.status}; only a validated upload commits`,
+            {
+              status: 409,
+            },
+          );
+        let inserted = 0;
+        let updated = 0;
+        for (const values of row.payload) {
+          const res = await this.upsert(c, def, tenant, values);
+          if (res.inserted) inserted += 1;
+          else updated += 1;
+        }
+        await c.query(
+          `UPDATE master_imports SET status = 'committed', committed_at = now(), inserted_rows = $2, updated_rows = $3 WHERE id = $1`,
+          [importId, inserted, updated],
+        );
+        await this.audit.stage(ctx, c, {
+          action: 'masters.upload.commit',
+          entityType: def.table,
+          entityId: importId,
+          after: { master: def.id, inserted, updated },
+        });
+        return (await this.getImport(c, importId))!;
+      }),
+    );
   }
 
   async imports(ctx: RequestContext, id: string): Promise<MasterImportRow[]> {
@@ -531,107 +551,111 @@ export class MastersService {
       const v = dto.values[f.key];
       return v === undefined || v === null ? null : (v as Cell);
     });
-    return this.db.tenant(tenant, async (c) => {
-      const columnIndex = Object.fromEntries(header.map((h, i) => [h, i]));
-      const lookups = await this.resolveLookups(c, tenant, fields, [cells], columnIndex);
-      const out: Record<string, unknown> = {};
-      const errors: string[] = [];
-      for (const f of fields) {
-        const { value, error } = coerce(f, cells[columnIndex[f.key]!] ?? null, lookups);
-        if (error) errors.push(`${f.header}: ${error}`);
-        else if (value !== undefined) out[f.key] = value;
-      }
-      if (dto.id) {
-        // the edit form shows every field: one the user emptied is cleared, where the column may be empty
-        const blank = fields.filter(
-          (f) =>
-            !f.required &&
-            !f.identity &&
-            f.type !== 'boolean' &&
-            f.key in dto.values &&
-            out[f.key] === undefined,
-        );
-        if (blank.length) {
-          const nullable = await c.query<{ column_name: string }>(
-            `SELECT column_name FROM information_schema.columns
-              WHERE table_schema = 'public' AND table_name = $1 AND is_nullable = 'YES' AND column_name = ANY($2::text[])`,
-            [def.table, blank.map((f) => f.key)],
-          );
-          for (const x of nullable.rows) out[x.column_name] = null;
+    return this.changed(
+      ctx,
+      def.id,
+      this.db.tenant(tenant, async (c) => {
+        const columnIndex = Object.fromEntries(header.map((h, i) => [h, i]));
+        const lookups = await this.resolveLookups(c, tenant, fields, [cells], columnIndex);
+        const out: Record<string, unknown> = {};
+        const errors: string[] = [];
+        for (const f of fields) {
+          const { value, error } = coerce(f, cells[columnIndex[f.key]!] ?? null, lookups);
+          if (error) errors.push(`${f.header}: ${error}`);
+          else if (value !== undefined) out[f.key] = value;
         }
-      }
-      errors.push(...crossChecks(fields, out, lookups).map((e) => `${e.column}: ${e.message}`));
-      if (errors.length)
-        throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
-      const openKeys = editableKeys(def);
-      if (dto.id && openKeys.length) {
-        // editing a row whose key may change: it is updated in place, by its id; a key that may not
-        // change stays what the row has
-        const locked = def.naturalKey.filter((k) => !openKeys.includes(k));
-        if (locked.length) {
+        if (dto.id) {
+          // the edit form shows every field: one the user emptied is cleared, where the column may be empty
+          const blank = fields.filter(
+            (f) =>
+              !f.required &&
+              !f.identity &&
+              f.type !== 'boolean' &&
+              f.key in dto.values &&
+              out[f.key] === undefined,
+          );
+          if (blank.length) {
+            const nullable = await c.query<{ column_name: string }>(
+              `SELECT column_name FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = $1 AND is_nullable = 'YES' AND column_name = ANY($2::text[])`,
+              [def.table, blank.map((f) => f.key)],
+            );
+            for (const x of nullable.rows) out[x.column_name] = null;
+          }
+        }
+        errors.push(...crossChecks(fields, out, lookups).map((e) => `${e.column}: ${e.message}`));
+        if (errors.length)
+          throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
+        const openKeys = editableKeys(def);
+        if (dto.id && openKeys.length) {
+          // editing a row whose key may change: it is updated in place, by its id; a key that may not
+          // change stays what the row has
+          const locked = def.naturalKey.filter((k) => !openKeys.includes(k));
+          if (locked.length) {
+            const cur = await c.query<Record<string, unknown>>(
+              // eslint-disable-next-line no-restricted-syntax -- table and key columns come from the registry
+              `SELECT ${locked.join(', ')} FROM ${def.table} WHERE id = $1`,
+              [dto.id],
+            );
+            if (!cur.rows[0]) throw new DomainError('not-found', 'Row not found', { status: 404 });
+            for (const k of locked) out[k] = cur.rows[0][k];
+          }
+          const keys = Object.keys(out);
+          try {
+            const r = await c.query(
+              // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry; values are bound
+              `UPDATE ${def.table} SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE id = $1`,
+              [dto.id, ...keys.map((k) => out[k])],
+            );
+            if (r.rowCount === 0)
+              throw new DomainError('not-found', 'Row not found', { status: 404 });
+          } catch (error) {
+            const e = error as { code?: string; message?: string };
+            if (e.code === '23505')
+              throw new DomainError(
+                'validation-failed',
+                `${def.title}: another row already has this ${def.fields
+                  .filter((f) => f.identity)
+                  .map((f) => f.header)
+                  .join(' + ')}`,
+                { status: 400 },
+              );
+            if (e.code && e.code.startsWith('23'))
+              throw new DomainError(
+                'validation-failed',
+                `${def.title}: ${e.message ?? 'constraint failed'}`,
+                { status: 400 },
+              );
+            throw error;
+          }
+          await this.audit.stage(ctx, c, {
+            action: 'masters.row.update',
+            entityType: def.table,
+            entityId: dto.id,
+            after: out,
+          });
+          return { id: dto.id, ...out };
+        }
+        if (dto.id) {
+          // editing: the natural key must stay what the row has
           const cur = await c.query<Record<string, unknown>>(
             // eslint-disable-next-line no-restricted-syntax -- table and key columns come from the registry
-            `SELECT ${locked.join(', ')} FROM ${def.table} WHERE id = $1`,
+            `SELECT ${def.naturalKey.join(', ')} FROM ${def.table} WHERE id = $1`,
             [dto.id],
           );
           if (!cur.rows[0]) throw new DomainError('not-found', 'Row not found', { status: 404 });
-          for (const k of locked) out[k] = cur.rows[0][k];
+          for (const k of def.naturalKey) out[k] = cur.rows[0][k];
         }
-        const keys = Object.keys(out);
-        try {
-          const r = await c.query(
-            // eslint-disable-next-line no-restricted-syntax -- table and column names come from the registry; values are bound
-            `UPDATE ${def.table} SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE id = $1`,
-            [dto.id, ...keys.map((k) => out[k])],
-          );
-          if (r.rowCount === 0)
-            throw new DomainError('not-found', 'Row not found', { status: 404 });
-        } catch (error) {
-          const e = error as { code?: string; message?: string };
-          if (e.code === '23505')
-            throw new DomainError(
-              'validation-failed',
-              `${def.title}: another row already has this ${def.fields
-                .filter((f) => f.identity)
-                .map((f) => f.header)
-                .join(' + ')}`,
-              { status: 400 },
-            );
-          if (e.code && e.code.startsWith('23'))
-            throw new DomainError(
-              'validation-failed',
-              `${def.title}: ${e.message ?? 'constraint failed'}`,
-              { status: 400 },
-            );
-          throw error;
-        }
+        const res = await this.upsert(c, def, tenant, out);
         await this.audit.stage(ctx, c, {
-          action: 'masters.row.update',
+          action: dto.id ? 'masters.row.update' : 'masters.row.create',
           entityType: def.table,
-          entityId: dto.id,
+          entityId: res.id,
           after: out,
         });
-        return { id: dto.id, ...out };
-      }
-      if (dto.id) {
-        // editing: the natural key must stay what the row has
-        const cur = await c.query<Record<string, unknown>>(
-          // eslint-disable-next-line no-restricted-syntax -- table and key columns come from the registry
-          `SELECT ${def.naturalKey.join(', ')} FROM ${def.table} WHERE id = $1`,
-          [dto.id],
-        );
-        if (!cur.rows[0]) throw new DomainError('not-found', 'Row not found', { status: 404 });
-        for (const k of def.naturalKey) out[k] = cur.rows[0][k];
-      }
-      const res = await this.upsert(c, def, tenant, out);
-      await this.audit.stage(ctx, c, {
-        action: dto.id ? 'masters.row.update' : 'masters.row.create',
-        entityType: def.table,
-        entityId: res.id,
-        after: out,
-      });
-      return { id: res.id, ...out };
-    });
+        return { id: res.id, ...out };
+      }),
+    );
   }
 
   async setStatus(ctx: RequestContext, id: string, rowId: string, status: string): Promise<void> {
@@ -639,20 +663,24 @@ export class MastersService {
     this.assertPermission(ctx, def, true);
     if (!def.status || !def.status.values.includes(status))
       throw new DomainError('validation-failed', 'This master has no such status', { status: 400 });
-    await this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query(
-        // eslint-disable-next-line no-restricted-syntax -- table and status column come from the registry; the value is bound
-        `UPDATE ${def.table} SET ${def.status!.column} = $2 WHERE id = $1`,
-        [rowId, status],
-      );
-      if (r.rowCount === 0) throw new DomainError('not-found', 'Row not found', { status: 404 });
-      await this.audit.stage(ctx, c, {
-        action: 'masters.row.status',
-        entityType: def.table,
-        entityId: rowId,
-        after: { status },
-      });
-    });
+    await this.changed(
+      ctx,
+      def.id,
+      this.db.tenant(requireTenant(ctx), async (c) => {
+        const r = await c.query(
+          // eslint-disable-next-line no-restricted-syntax -- table and status column come from the registry; the value is bound
+          `UPDATE ${def.table} SET ${def.status!.column} = $2 WHERE id = $1`,
+          [rowId, status],
+        );
+        if (r.rowCount === 0) throw new DomainError('not-found', 'Row not found', { status: 404 });
+        await this.audit.stage(ctx, c, {
+          action: 'masters.row.status',
+          entityType: def.table,
+          entityId: rowId,
+          after: { status },
+        });
+      }),
+    );
   }
 
   // ---- bulk update -------------------------------------------------------------------------------
@@ -667,25 +695,29 @@ export class MastersService {
       throw new DomainError('validation-failed', 'This column cannot be updated in bulk', {
         status: 400,
       });
-    return this.db.tenant(tenant, async (c) => {
-      const lookups = await this.resolveLookups(c, tenant, [field], [[dto.value as Cell]], {
-        [field.key]: 0,
-      });
-      const { value, error } = coerce(field, dto.value as Cell, lookups);
-      if (error)
-        throw new DomainError('validation-failed', `${field.header}: ${error}`, { status: 400 });
-      const r = await c.query(
-        // eslint-disable-next-line no-restricted-syntax -- table and column come from the registry; ids and value are bound
-        `UPDATE ${def.table} SET ${field.key} = $2 WHERE id = ANY($1::bigint[])`,
-        [dto.ids, value],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'masters.bulk.update',
-        entityType: def.table,
-        after: { master: def.id, field: field.key, value, rows: r.rowCount },
-      });
-      return { updated: r.rowCount ?? 0 };
-    });
+    return this.changed(
+      ctx,
+      def.id,
+      this.db.tenant(tenant, async (c) => {
+        const lookups = await this.resolveLookups(c, tenant, [field], [[dto.value as Cell]], {
+          [field.key]: 0,
+        });
+        const { value, error } = coerce(field, dto.value as Cell, lookups);
+        if (error)
+          throw new DomainError('validation-failed', `${field.header}: ${error}`, { status: 400 });
+        const r = await c.query(
+          // eslint-disable-next-line no-restricted-syntax -- table and column come from the registry; ids and value are bound
+          `UPDATE ${def.table} SET ${field.key} = $2 WHERE id = ANY($1::bigint[])`,
+          [dto.ids, value],
+        );
+        await this.audit.stage(ctx, c, {
+          action: 'masters.bulk.update',
+          entityType: def.table,
+          after: { master: def.id, field: field.key, value, rows: r.rowCount },
+        });
+        return { updated: r.rowCount ?? 0 };
+      }),
+    );
   }
 
   // ---- clone -------------------------------------------------------------------------------------

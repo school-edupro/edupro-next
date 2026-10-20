@@ -31,6 +31,8 @@ describe('recruitment: candidates and screening (e2e)', () => {
   let draftId = '';
   const stage: Record<string, string> = {};
   const app_: Record<string, string> = {};
+  /** A date-and-time box's value (India time), `ms` from now. */
+  const ist = (ms: number) => new Date(Date.now() + 330 * 60_000 + ms).toISOString().slice(0, 16);
   const empMobile = `9${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
 
   beforeAll(async () => {
@@ -59,18 +61,13 @@ describe('recruitment: candidates and screening (e2e)', () => {
       ).json().id as string;
     vacancyId = await make('TGT English');
     draftId = await make('Driver');
-    await call(admin, 'POST', `${R}/vacancies/${vacancyId}/submit`);
-    const inbox = (await call(admin, 'GET', '/workflow/inbox')).json().data as Array<{
-      id: string;
-      instance: { entityType: string; entityId: string };
-    }>;
-    const step = inbox.find(
-      (x) => x.instance.entityType === 'vacancy' && x.instance.entityId === vacancyId,
-    )!;
-    await call(admin, 'POST', `/workflow/steps/${step.id}/approve`, {});
+    // raised by the school admin, the approver: approved as it is sent
+    expect((await call(admin, 'POST', `${R}/vacancies/${vacancyId}/submit`)).json().status).toBe(
+      'approved',
+    );
     await call(admin, 'POST', `${R}/vacancies/${vacancyId}/publish`, {
-      opensOn: new Date().toISOString().slice(0, 10),
-      closesOn: '2099-12-31',
+      opensAt: ist(0),
+      closesAt: ist(300 * 86_400_000),
     });
   });
   afterAll(async () => app.close());

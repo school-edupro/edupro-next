@@ -8692,3 +8692,91 @@ a.db-list__main:hover strong {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* ---- recruitment set-up: who approves a vacancy (docs/design/34-recruitment.md, part 5) ---- */
+.ep-ra-levels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ep-ra-level {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-ra-level__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-ra-level__head > .ep-field {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+}
+.ep-ra-level__head > .ep-ra-level__sla {
+  flex: 0 1 9rem;
+}
+.ep-ra-level__n {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  align-self: center;
+  border-radius: 50%;
+  background: var(--surface-band);
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-ra-level__tools {
+  display: flex;
+  gap: var(--sp-1);
+}
+.ep-ra-level__who {
+  margin-top: var(--sp-2);
+  padding-left: calc(2rem + var(--sp-3));
+}
+.ep-ra-level__hods {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-ra-level__hods > summary {
+  cursor: pointer;
+}
+.ep-ra-level__hods ul {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-4);
+  columns: 2 16rem;
+}
+
+/* ---- a vacancy's public link, QR and poster ---- */
+.ep-vac-share {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.ep-vac-share__qr {
+  width: 9rem;
+  height: 9rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+}
+.ep-vac-share__body {
+  flex: 1 1 18rem;
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.ep-vac-share__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+@media (max-width: 40rem) {
+  .ep-ra-level__who {
+    padding-left: 0;
+  }
+}

@@ -2,8 +2,12 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 const Id = z.string().regex(/^\d{1,18}$/);
-const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const txt = (n: number) => z.string().trim().max(n);
+/** A date and time as the browser gives it (YYYY-MM-DDTHH:MM), read as India time. */
+const When = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'a date and a time')
+  .transform((s) => `${s}:00+05:30`);
 
 /** The school's screening stages, the whole list at once (0197): stages left out switch off. */
 export const RecruitmentStagesSchema = z.object({
@@ -39,14 +43,46 @@ export const VacancySchema = z.object({
 });
 export class VacancyDto extends createZodDto(VacancySchema) {}
 
-/** Publish on the careers page for a period. */
+/** Publish on the careers page from one minute to another (India time); the rest is checked on save. */
 export const VacancyPublishSchema = z
-  .object({ opensOn: Day, closesOn: Day })
-  .refine((x) => x.closesOn >= x.opensOn, {
-    message: 'The closing date is on or after the opening date',
-    path: ['closesOn'],
+  .object({ opensAt: When, closesAt: When })
+  .refine((x) => new Date(x.closesAt) > new Date(x.opensAt), {
+    message: 'The last date and time come after the opening',
+    path: ['closesAt'],
   });
 export class VacancyPublishDto extends createZodDto(VacancyPublishSchema) {}
+
+/** An approver's decision on the vacancy waiting with them: a note to approve, a reason to send back. */
+export const VacancyApproveSchema = z.object({ note: txt(500).optional() });
+export class VacancyApproveDto extends createZodDto(VacancyApproveSchema) {}
+export const VacancySendBackSchema = z.object({
+  note: txt(500).min(3, 'Say why it is sent back'),
+});
+export class VacancySendBackDto extends createZodDto(VacancySendBackSchema) {}
+
+/**
+ * Who approves a vacancy, level by level (Recruitment set-up): named employees, everyone holding a
+ * designation, or the HOD of the vacancy's department. "role" keeps a level set under Workflow before.
+ */
+export const RecruitmentApprovalSchema = z.object({
+  levels: z
+    .array(
+      z.object({
+        name: txt(80).min(2),
+        by: z.enum(['employees', 'designation', 'hod', 'role']),
+        employeeIds: z.array(Id).max(30).default([]),
+        designation: txt(80).optional(),
+        roleCode: z
+          .string()
+          .regex(/^[a-z_]{2,40}$/)
+          .optional(),
+        slaHours: z.number().int().min(1).max(720).nullable().optional(),
+      }),
+    )
+    .min(1, 'Keep at least one level')
+    .max(6),
+});
+export class RecruitmentApprovalDto extends createZodDto(RecruitmentApprovalSchema) {}
 
 export const VacancyNoteSchema = z.object({ note: txt(1000).optional() });
 export class VacancyNoteDto extends createZodDto(VacancyNoteSchema) {}

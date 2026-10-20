@@ -350,6 +350,7 @@ const PAGES = [
   '/people/recruitment/new',
   '/people/recruitment/setup',
   '/people/recruitment/4',
+  '/people/recruitment/35',
   '/people/recruitment/candidates',
   '/people/recruitment/candidates?vacancy=4&stage=9',
   '/people/recruitment/applications/7',

@@ -19,6 +19,10 @@ import { FilesModule } from '../files/files.module';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { AdmissionsModule } from '../admissions/admissions.module';
+import { CommsModule } from '../comms/comms.module';
+import { MastersModule } from '../masters/masters.module';
+import { MastersService } from '../masters/masters.service';
+import { RecruitmentApprovalService } from './recruitment-approval.service';
 import { CandidateAuthService } from './candidate-auth.service';
 import { CandidateGuard } from './candidate.guard';
 import { RecruitmentPublicController } from './recruitment-public.controller';
@@ -42,7 +46,14 @@ import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
 @Module({
-  imports: [FilesModule, ReportsModule, WorkflowModule, AdmissionsModule],
+  imports: [
+    FilesModule,
+    ReportsModule,
+    WorkflowModule,
+    AdmissionsModule,
+    CommsModule,
+    MastersModule,
+  ],
   controllers: [
     EmployeeSelfController,
     PeopleDashboardController,
@@ -64,6 +75,7 @@ import { StudentsService } from './students.service';
     AcrSetupService,
     AcrFlowService,
     RecruitmentService,
+    RecruitmentApprovalService,
     RecruitmentPublicService,
     RecruitmentScreeningService,
     RecruitmentJoinService,
@@ -89,6 +101,8 @@ export class PeopleModule implements OnModuleInit {
   constructor(
     private readonly workflow: WorkflowService,
     private readonly recruitment: RecruitmentService,
+    private readonly approval: RecruitmentApprovalService,
+    private readonly masters: MastersService,
   ) {}
 
   onModuleInit() {
@@ -96,5 +110,7 @@ export class PeopleModule implements OnModuleInit {
     this.workflow.onComplete('vacancy', (c, ctx, instance, outcome) =>
       this.recruitment.onDecision(c, ctx, instance, outcome),
     );
+    // a department's HOD changed: the vacancies waiting for approval follow at once (0201)
+    this.masters.onChange('departments', (ctx) => this.approval.refresh(ctx));
   }
 }

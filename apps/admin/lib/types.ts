@@ -968,7 +968,14 @@ export type WorkflowResolver =
   | { kind: 'role'; roleCode: string }
   | { kind: 'position'; designation: string }
   | { kind: 'approver_chain'; depth: number }
-  | { kind: 'any_of'; roleCodes: string[]; userIds: string[] };
+  | { kind: 'any_of'; roleCodes: string[]; userIds: string[] }
+  /** vacancy approval (Recruitment set-up): named employees, a designation or the department's HOD */
+  | {
+      kind: 'staff';
+      by: 'employees' | 'designation' | 'hod';
+      employeeIds: string[];
+      designation?: string;
+    };
 export interface WorkflowLevel {
   level: number;
   name: string;

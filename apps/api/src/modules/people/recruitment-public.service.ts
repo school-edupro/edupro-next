@@ -25,6 +25,7 @@ import { publicTenant } from '../admissions/public/otp.service';
 import { FilesService } from '../files/files.service';
 import type { Candidate } from './candidate-auth.service';
 import { CandidateAuthService } from './candidate-auth.service';
+import { istText } from './recruitment.service';
 import type {
   CandidateApplyDto,
   CandidateFileDto,
@@ -41,10 +42,10 @@ interface Profile {
 }
 
 const VACANCY_PUBLIC = `SELECT v.id::text, v.code, v.title, v.designation, v.department, v.subject, v.employee_type,
-       v.posts, v.qualification, v.experience, v.pay_band, v.description, v.opens_on::text, v.closes_on::text,
+       v.posts, v.qualification, v.experience, v.pay_band, v.description, v.opens_at, v.closes_at,
        cp.name AS campus
   FROM vacancies v LEFT JOIN campuses cp ON cp.id = v.campus_id
- WHERE v.status = 'published' AND v.opens_on <= CURRENT_DATE AND v.closes_on >= CURRENT_DATE`;
+ WHERE v.status = 'published' AND v.opens_at <= now() AND v.closes_at > now()`;
 interface VacancyPublicRow {
   id: string;
   code: string;
@@ -58,8 +59,8 @@ interface VacancyPublicRow {
   experience: string | null;
   pay_band: string | null;
   description: string | null;
-  opens_on: string;
-  closes_on: string;
+  opens_at: Date;
+  closes_at: Date;
   campus: string | null;
 }
 const vacancyOut = (v: VacancyPublicRow) => ({
@@ -75,8 +76,8 @@ const vacancyOut = (v: VacancyPublicRow) => ({
   experience: v.experience,
   payBand: v.pay_band,
   description: v.description,
-  opensOn: v.opens_on,
-  closesOn: v.closes_on,
+  opensAt: v.opens_at.toISOString(),
+  closesAt: v.closes_at.toISOString(),
   campus: v.campus,
 });
 
@@ -107,7 +108,7 @@ export class RecruitmentPublicService {
       );
       const r = await c.query<VacancyPublicRow>(
         // eslint-disable-next-line no-restricted-syntax -- a fixed fragment
-        `${VACANCY_PUBLIC} ORDER BY v.closes_on, v.title`,
+        `${VACANCY_PUBLIC} ORDER BY v.closes_at, v.title`,
       );
       return { school: school.rows[0]?.name ?? '', data: r.rows.map(vacancyOut) };
     });
@@ -455,10 +456,20 @@ export class RecruitmentPublicService {
       throw new DomainError('not-found', 'Vacancy not found', { status: 404 });
     return this.db.tenant(publicTenant(cand.schoolId), async (c) => {
       const v = await c.query<VacancyPublicRow>(`${VACANCY_PUBLIC} AND v.id = $1`, [vacancyId]);
-      if (!v.rows[0])
-        throw new DomainError('recruitment.closed', 'This vacancy is not open for applications', {
-          status: 409,
-        });
+      if (!v.rows[0]) {
+        // the window passed while the form was being filled: say when it closed
+        const was = await c.query<{ closes_at: Date | null }>(
+          `SELECT closes_at FROM vacancies WHERE id = $1 AND status IN ('published', 'closed') AND closes_at <= now()`,
+          [vacancyId],
+        );
+        throw new DomainError(
+          'recruitment.closed',
+          was.rows[0]?.closes_at
+            ? `Applications for this post closed at ${istText(was.rows[0].closes_at)}`
+            : 'This vacancy is not open for applications',
+          { status: 409 },
+        );
+      }
       const row = await c.query<{ profile: unknown; secure: Record<string, string> }>(
         `SELECT profile, secure FROM candidates WHERE id = $1`,
         [cand.id],

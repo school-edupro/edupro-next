@@ -1,14 +1,20 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { ENV, type Env } from '../../config/env';
 import {
+  RecruitmentApprovalDto,
   RecruitmentStagesDto,
+  VacancyApproveDto,
   VacancyDto,
   VacancyListDto,
   VacancyNoteDto,
   VacancyPublishDto,
+  VacancySendBackDto,
 } from './recruitment.dto';
+import { RecruitmentApprovalService } from './recruitment-approval.service';
 import {
   ApplicationBulkDto,
   ApplicationListDto,
@@ -32,6 +38,8 @@ export class RecruitmentController {
     private readonly svc: RecruitmentService,
     private readonly screening: RecruitmentScreeningService,
     private readonly joining: RecruitmentJoinService,
+    private readonly approval: RecruitmentApprovalService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   @Get('setup')
@@ -66,9 +74,10 @@ export class RecruitmentController {
 
   @Get('vacancies/:id')
   @ApiOperation({ summary: 'One vacancy with its steps and what the signed-in person may do' })
-  @RequirePermission(PEOPLE.recruitmentView)
+  // the recruitment rights, or a part in the vacancy's approval (checked in the service)
+  @AuthenticatedOnly()
   view(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.svc.view(ctx, id);
+    return this.svc.view(ctx, id, this.env.PUBLIC_APP_URL);
   }
 
   @Put('vacancies/:id')
@@ -108,6 +117,79 @@ export class RecruitmentController {
   @RequirePermission(PEOPLE.recruitmentManage)
   cancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: VacancyNoteDto) {
     return this.svc.cancel(ctx, id, body);
+  }
+
+  // ---- part 5: who approves, the approver's decision, sharing ----
+
+  @Get('setup/approval')
+  @ApiOperation({
+    summary: 'Who approves a vacancy, level by level, and what the set-up picks from',
+  })
+  @RequirePermission(PEOPLE.recruitmentView)
+  approvalSetup(@ReqCtx() ctx: RequestContext) {
+    return this.approval.setup(ctx);
+  }
+
+  @Put('setup/approval')
+  @ApiOperation({
+    summary: 'Set who approves a vacancy; the vacancies waiting move to the new people',
+  })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  saveApproval(@ReqCtx() ctx: RequestContext, @Body() body: RecruitmentApprovalDto) {
+    return this.approval.save(ctx, body);
+  }
+
+  @Get('setup/careers')
+  @ApiOperation({
+    summary: 'The school’s careers page: the link, its QR and how many posts are open',
+  })
+  @RequirePermission(PEOPLE.recruitmentView)
+  careers(@ReqCtx() ctx: RequestContext) {
+    return this.svc.careers(ctx, this.env.PUBLIC_APP_URL);
+  }
+
+  @Get('to-approve')
+  @ApiOperation({ summary: 'Vacancies waiting at my approval level (the header approvals)' })
+  // anybody may sit at a level: empty for those who do not
+  @AuthenticatedOnly()
+  toApprove(@ReqCtx() ctx: RequestContext) {
+    return this.approval.toApprove(ctx);
+  }
+
+  @Post('vacancies/:id/approve')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Approve the vacancy waiting with me' })
+  // the approver of the waiting level (checked in the service)
+  @AuthenticatedOnly()
+  approve(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: VacancyApproveDto) {
+    return this.approval.decide(ctx, id, 'approved', body.note);
+  }
+
+  @Post('vacancies/:id/send-back')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Send the vacancy waiting with me back, with the reason' })
+  // the approver of the waiting level (checked in the service)
+  @AuthenticatedOnly()
+  sendBack(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: VacancySendBackDto,
+  ) {
+    return this.approval.decide(ctx, id, 'rejected', body.note);
+  }
+
+  @Get('vacancies/:id/qr')
+  @ApiOperation({ summary: 'The QR of a published vacancy’s careers page (PNG)' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  qr(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.qr(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Get('vacancies/:id/poster')
+  @ApiOperation({ summary: 'The A4 poster of a published vacancy (PDF)' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  poster(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.poster(ctx, id, this.env.PUBLIC_APP_URL);
   }
 
   // ---- part 3: candidates and screening ----

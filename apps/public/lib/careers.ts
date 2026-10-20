@@ -40,8 +40,8 @@ export interface CareerVacancy {
   experience: string | null;
   payBand: string | null;
   description: string | null;
-  opensOn: string;
-  closesOn: string;
+  opensAt: string;
+  closesAt: string;
   campus: string | null;
 }
 export interface CareerField {
@@ -102,3 +102,19 @@ export const APPLICATION_STATUS: Record<string, string> = {
 };
 export const dmy = (d: string | null | undefined) =>
   d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : '';
+/** A moment as people in the school read it: 30-10-2026, 5:00 pm (India time). */
+export const istText = (iso: string | null | undefined) =>
+  iso
+    ? new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+        .format(new Date(iso))
+        .replace(/\//g, '-')
+        .replace(/\s?(am|pm)$/i, (m) => ` ${m.trim().toLowerCase()}`)
+    : '';

@@ -30,6 +30,12 @@ const ELSEWHERE = [
     help: 'approval levels for new transport, change and withdrawal: Transport → Settings',
   },
   {
+    name: 'Vacancy',
+    href: '/people/recruitment/setup',
+    permission: 'people.recruitment.view',
+    help: 'named employees, a designation or the department’s HOD at each level: Recruitment set-up',
+  },
+  {
     name: 'Appointment',
     href: '/engagement/appointments/setup',
     permission: 'engagement.appointment_setup.manage',
@@ -57,8 +63,9 @@ export default async function WorkflowDefinitionsPage({
   const canManage = me.permissions.includes('workflow.definition.manage');
   const [defs, options] = await Promise.all([
     apiFetch<{ data: WorkflowDefinition[] }>('/workflow/definitions').then((r) =>
-      // the fee change approval is edited under Fee setup → Approval levels
-      r.data.filter((d) => d.entityType !== 'fee_profile_change'),
+      // the fee change approval is edited under Fee setup → Approval levels, the vacancy approval
+      // under Recruitment set-up
+      r.data.filter((d) => d.entityType !== 'fee_profile_change' && d.entityType !== 'vacancy'),
     ),
     apiFetch<WorkflowOptions>('/workflow/options').catch(
       () => ({ roles: [], designations: [], people: [] }) as WorkflowOptions,

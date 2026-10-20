@@ -25,6 +25,9 @@ describe('recruitment: vacancies and their approval (e2e)', () => {
   const h = (u: SeededUser) => headersFor(u.sub, school.id);
   const call = (u: SeededUser, method: 'GET' | 'POST' | 'PUT', url: string, json?: unknown) =>
     inject({ method, url, headers: h(u), ...(json === undefined ? {} : { json }) });
+  /** A date-and-time box's value (India time), `ms` from now. */
+  const ist = (ms: number) => new Date(Date.now() + 330 * 60_000 + ms).toISOString().slice(0, 16);
+  const DAY = 86_400_000;
 
   beforeAll(async () => {
     const s = stamp('REC');
@@ -144,8 +147,8 @@ describe('recruitment: vacancies and their approval (e2e)', () => {
     expect(
       (
         await call(hod, 'POST', `/people/recruitment/vacancies/${vacancyId}/publish`, {
-          opensOn: '2026-11-01',
-          closesOn: '2026-11-30',
+          opensAt: ist(DAY),
+          closesAt: ist(30 * DAY),
         })
       ).statusCode,
     ).toBe(403);
@@ -183,14 +186,14 @@ describe('recruitment: vacancies and their approval (e2e)', () => {
     expect(
       (
         await call(admin, 'POST', `/people/recruitment/vacancies/${vacancyId}/publish`, {
-          opensOn: '2026-11-30',
-          closesOn: '2026-11-01',
+          opensAt: ist(30 * DAY),
+          closesAt: ist(DAY),
         })
       ).statusCode,
     ).toBe(400);
     const pub = await call(admin, 'POST', `/people/recruitment/vacancies/${vacancyId}/publish`, {
-      opensOn: '2026-11-01',
-      closesOn: '2099-11-30',
+      opensAt: ist(0),
+      closesAt: ist(30 * DAY),
     });
     expect(pub.statusCode).toBe(200);
     const list = (await call(hod, 'GET', '/people/recruitment/vacancies')).json();
@@ -215,14 +218,14 @@ describe('recruitment: vacancies and their approval (e2e)', () => {
   });
 
   it('sent back by the approver it is editable again with the note; a vacancy waiting for approval can be cancelled', async () => {
-    const r = await call(admin, 'POST', '/people/recruitment/vacancies', {
+    const r = await call(hod, 'POST', '/people/recruitment/vacancies', {
       title: 'Accountant',
       department: 'Accounts',
       employeeType: 'Non-Teaching Regular',
       stageIds: [stageIds[0]!, stageIds[2]!, stageIds[3]!],
     });
     const id = r.json().id as string;
-    await call(admin, 'POST', `/people/recruitment/vacancies/${id}/submit`);
+    await call(hod, 'POST', `/people/recruitment/vacancies/${id}/submit`);
     const inbox = (await call(admin, 'GET', '/workflow/inbox')).json().data as Array<{
       id: string;
       instance: { entityType: string; entityId: string };
@@ -237,7 +240,7 @@ describe('recruitment: vacancies and their approval (e2e)', () => {
     const v = (await call(admin, 'GET', `/people/recruitment/vacancies/${id}`)).json();
     expect(v).toMatchObject({ status: 'rejected', decisionNote: 'Say the pay band' });
     expect(v.can.edit).toBe(true);
-    const fixed = await call(admin, 'PUT', `/people/recruitment/vacancies/${id}`, {
+    const fixed = await call(hod, 'PUT', `/people/recruitment/vacancies/${id}`, {
       title: 'Accountant',
       department: 'Accounts',
       employeeType: 'Non-Teaching Regular',
@@ -245,9 +248,9 @@ describe('recruitment: vacancies and their approval (e2e)', () => {
       stageIds: [stageIds[0]!, stageIds[2]!, stageIds[3]!],
     });
     expect(fixed.statusCode).toBe(200);
-    expect(
-      (await call(admin, 'POST', `/people/recruitment/vacancies/${id}/submit`)).statusCode,
-    ).toBe(200);
+    expect((await call(hod, 'POST', `/people/recruitment/vacancies/${id}/submit`)).statusCode).toBe(
+      200,
+    );
     // cancelled while waiting: the approval is withdrawn from the inbox
     expect(
       (

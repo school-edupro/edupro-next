@@ -17,7 +17,8 @@ export interface ApprovalGroup {
     | 'leave'
     | 'fee'
     | 'file'
-    | 'acr';
+    | 'acr'
+    | 'vacancy';
   title: string;
   help: string;
   href: string;
@@ -39,7 +40,12 @@ interface WorkflowItem {
   id: string;
   name: string;
   overdue?: boolean;
-  instance: { definitionName: string; subject: string | null; createdAt?: string };
+  instance: {
+    definitionName: string;
+    subject: string | null;
+    createdAt?: string;
+    entityType?: string;
+  };
 }
 
 /**
@@ -73,13 +79,15 @@ export async function myApprovals(
       : null,
     has.has('workflow.inbox.act')
       ? apiFetch<{ data: WorkflowItem[] }>('/workflow/inbox')
-          .then((r): ApprovalGroup => ({
+          // vacancies have their own group below
+          .then((r) => r.data.filter((x) => x.instance.entityType !== 'vacancy'))
+          .then((data): ApprovalGroup => ({
             key: 'workflow',
             title: 'Approval steps',
             help: 'Leave, admissions, lesson plans, messages and other requests at your step',
             href: '/workflow/inbox',
-            count: r.data.length,
-            items: r.data.slice(0, size).map((x) => ({
+            count: data.length,
+            items: data.slice(0, size).map((x) => ({
               id: x.id,
               title: x.instance.subject ?? x.instance.definitionName,
               detail: `${x.instance.definitionName} · ${x.name}${x.overdue ? ' · overdue' : ''}`,
@@ -253,6 +261,40 @@ export async function myApprovals(
                 detail: `${p.kind.replace('_', ' ')} · ${p.onDate}${p.atTime ? `, ${p.atTime}` : ''} · ${p.reason}`,
                 href: `/engagement/gate-passes/${p.id}`,
                 since: p.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // vacancies at my approval level (docs/design/34-recruitment.md): anybody may sit at a level, so this
+    // is asked for everyone and is empty for those who do not
+    apiFetch<{
+      data: Array<{
+        id: string;
+        code: string;
+        title: string;
+        department: string | null;
+        posts: number;
+        level: string;
+        raisedBy: string | null;
+        since: string;
+        overdue: boolean;
+      }>;
+    }>('/people/recruitment/to-approve')
+      .then((r): ApprovalGroup | null =>
+        r.data.length
+          ? {
+              key: 'vacancy',
+              title: 'Vacancies to approve',
+              help: 'Posts raised for recruitment, waiting at your approval level',
+              href: `/people/recruitment/${r.data[0]!.id}`,
+              count: r.data.length,
+              items: r.data.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.code} · ${x.title}`,
+                detail: `${x.level} · ${x.department ? `${x.department} · ` : ''}${x.posts} post${x.posts > 1 ? 's' : ''}${x.raisedBy ? ` · raised by ${x.raisedBy}` : ''}${x.overdue ? ' · overdue' : ''}`,
+                href: `/people/recruitment/${x.id}`,
+                since: x.since,
               })),
             }
           : null,

@@ -2,7 +2,7 @@ import { Card, PageHeader } from '@edupro/ui';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { PublicApiError } from '@/lib/api';
-import { CAREERS_COOKIE, careersFetch, dmy, type CareerVacancy } from '@/lib/careers';
+import { CAREERS_COOKIE, careersFetch, istText, type CareerVacancy } from '@/lib/careers';
 
 /** The school's open vacancies (docs/design/34-recruitment.md, part 2). */
 export default async function CareersPage({ params }: { params: Promise<{ school: string }> }) {
@@ -49,7 +49,7 @@ export default async function CareersPage({ params }: { params: Promise<{ school
               {v.qualification ? (
                 <p style={{ margin: 0 }}>Qualifications: {v.qualification}</p>
               ) : null}
-              <p className="ep-field__help">Last date to apply: {dmy(v.closesOn)}</p>
+              <p className="ep-field__help">Last date to apply: {istText(v.closesAt)}</p>
               <a className="ep-btn ep-btn--primary ep-btn--sm" href={`/${school}/careers/${v.id}`}>
                 View and apply
               </a>

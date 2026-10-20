@@ -37,8 +37,8 @@ export interface Vacancy {
   stageIds: string[];
   stages: string[];
   status: VacancyStatus;
-  opensOn: string | null;
-  closesOn: string | null;
+  opensAt: string | null;
+  closesAt: string | null;
   waitingWith: string | null;
   decisionNote: string | null;
   raisedBy: string | null;
@@ -48,9 +48,72 @@ export interface Vacancy {
   closedAt: string | null;
   createdAt: string;
 }
+export interface VacancyApprovalStep {
+  level: number;
+  name: string;
+  status: 'pending' | 'approved' | 'rejected' | 'skipped';
+  people: string[];
+  actedBy: string | null;
+  actedAt: string | null;
+  note: string | null;
+  current: boolean;
+  overdue: boolean;
+}
 export interface VacancyView extends Vacancy {
   events: Array<{ at: string; what: string; note: string | null; by_name: string | null }>;
-  can: { edit: boolean; submit: boolean; publish: boolean; close: boolean; cancel: boolean };
+  approval: { status: string; steps: VacancyApprovalStep[] } | null;
+  /** the careers page of the vacancy, while it is published */
+  share: { url: string; open: boolean } | null;
+  can: {
+    view: boolean;
+    edit: boolean;
+    submit: boolean;
+    publish: boolean;
+    close: boolean;
+    cancel: boolean;
+    approve: boolean;
+  };
+}
+
+/** Who approves a vacancy, level by level (Recruitment set-up). */
+export type ApprovalBy = 'employees' | 'designation' | 'hod' | 'role';
+export interface ApprovalLevel {
+  name: string;
+  by: ApprovalBy;
+  employeeIds: string[];
+  designation: string | null;
+  roleCode: string | null;
+  slaHours: number | null;
+}
+export interface ApprovalSetup {
+  levels: ApprovalLevel[];
+  staff: Array<{
+    id: string;
+    code: string;
+    name: string;
+    designation: string | null;
+    department: string | null;
+    signsIn: boolean;
+  }>;
+  designations: Array<{ name: string; holders: number }>;
+  departments: Array<{
+    name: string;
+    hod: { code: string; name: string; signsIn: boolean } | null;
+  }>;
+  roles: Array<{ code: string; name: string }>;
+  waiting: number;
+  can: { manage: boolean };
+}
+export interface VacancyToApprove {
+  id: string;
+  code: string;
+  title: string;
+  department: string | null;
+  posts: number;
+  level: string;
+  raisedBy: string | null;
+  since: string;
+  overdue: boolean;
 }
 
 export const VACANCY_ORDER: VacancyStatus[] = [
@@ -91,12 +154,33 @@ export const VACANCY_EVENT: Record<string, string> = {
   submitted: 'Sent for approval',
   approved: 'Approved',
   sent_back: 'Sent back',
+  approval_moved: 'Approval moved (set-up changed)',
   published: 'Published',
+  rescheduled: 'Dates changed',
   closed: 'Closed',
   cancelled: 'Cancelled',
 };
 export const dmy = (d: string | null | undefined) =>
   d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : '';
+/** A moment as people in the school read it: 30-10-2026, 5:00 pm (India time). */
+export const istText = (iso: string | null | undefined) =>
+  iso
+    ? new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+        .format(new Date(iso))
+        .replace(/\//g, '-')
+        .replace(/\s?(am|pm)$/i, (m) => ` ${m.trim().toLowerCase()}`)
+    : '';
+/** The value of a date-and-time box (YYYY-MM-DDTHH:MM) for a moment, in India time. */
+export const istInput = (iso: string | null | undefined) =>
+  iso ? new Date(new Date(iso).getTime() + 330 * 60_000).toISOString().slice(0, 16) : '';
 
 // ---- part 3: candidates and screening -----------------------------------------------------------------
 

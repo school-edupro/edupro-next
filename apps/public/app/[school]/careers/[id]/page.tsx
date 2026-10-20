@@ -7,6 +7,7 @@ import {
   CAREERS_COOKIE,
   careersFetch,
   dmy,
+  istText,
   type CareerMe,
   type CareerVacancy,
 } from '@/lib/careers';
@@ -38,7 +39,7 @@ export default async function CareerVacancyPage({
     ['Qualifications', v.qualification],
     ['Experience', v.experience],
     ['Pay', v.payBand],
-    ['Last date to apply', dmy(v.closesOn)],
+    ['Last date to apply', istText(v.closesAt)],
   ];
   return (
     <>

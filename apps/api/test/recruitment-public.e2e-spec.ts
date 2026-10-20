@@ -53,12 +53,14 @@ describe('recruitment: the public careers page (e2e)', () => {
       redis.disconnect();
     }
   };
-  const today = new Date().toISOString().slice(0, 10);
   let openId = '';
   let draftId = '';
   const employeeMobile = `9${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
 
-  /** A vacancy raised, approved and (when asked) published from today. */
+  /** A date-and-time box's value (India time), `ms` from now. */
+  const ist = (ms: number) => new Date(Date.now() + 330 * 60_000 + ms).toISOString().slice(0, 16);
+
+  /** A vacancy raised, approved and (when asked) published from now. */
   const vacancy = async (title: string, publish: boolean) => {
     const setup = (await call(admin, 'GET', '/people/recruitment/setup')).json();
     const r = await call(admin, 'POST', '/people/recruitment/vacancies', {
@@ -67,19 +69,13 @@ describe('recruitment: the public careers page (e2e)', () => {
       stageIds: setup.stages.map((s: { id: string }) => s.id),
     });
     const id = r.json().id as string;
-    await call(admin, 'POST', `/people/recruitment/vacancies/${id}/submit`);
-    const inbox = (await call(admin, 'GET', '/workflow/inbox')).json().data as Array<{
-      id: string;
-      instance: { entityType: string; entityId: string };
-    }>;
-    const step = inbox.find(
-      (x) => x.instance.entityType === 'vacancy' && x.instance.entityId === id,
-    )!;
-    await call(admin, 'POST', `/workflow/steps/${step.id}/approve`, {});
+    // raised by the school admin, the approver: approved as it is sent
+    const sent = await call(admin, 'POST', `/people/recruitment/vacancies/${id}/submit`);
+    expect(sent.json().status).toBe('approved');
     if (publish)
       await call(admin, 'POST', `/people/recruitment/vacancies/${id}/publish`, {
-        opensOn: today,
-        closesOn: '2099-12-31',
+        opensAt: ist(0),
+        closesAt: ist(300 * 86_400_000),
       });
     return id;
   };

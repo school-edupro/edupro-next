@@ -37,6 +37,8 @@ describe('recruitment: from selected candidate to employee (e2e)', () => {
     });
   const R = '/people/recruitment';
   const today = new Date().toISOString().slice(0, 10);
+  /** A date-and-time box's value (India time), `ms` from now. */
+  const ist = (ms: number) => new Date(Date.now() + 330 * 60_000 + ms).toISOString().slice(0, 16);
   let vacancyId = '';
   const stage: Record<string, string> = {};
   const png = Buffer.from(
@@ -184,18 +186,11 @@ describe('recruitment: from selected candidate to employee (e2e)', () => {
         stageIds: [stage.Shortlisting, stage['Final round']],
       })
     ).json().id as string;
+    // raised by the school admin, the approver: approved as it is sent
     await call(admin, 'POST', `${R}/vacancies/${vacancyId}/submit`);
-    const inbox = (await call(admin, 'GET', '/workflow/inbox')).json().data as Array<{
-      id: string;
-      instance: { entityType: string; entityId: string };
-    }>;
-    const step = inbox.find(
-      (i) => i.instance.entityType === 'vacancy' && i.instance.entityId === vacancyId,
-    )!;
-    await call(admin, 'POST', `/workflow/steps/${step.id}/approve`, {});
     await call(admin, 'POST', `${R}/vacancies/${vacancyId}/publish`, {
-      opensOn: today,
-      closesOn: '2099-12-31',
+      opensAt: ist(0),
+      closesAt: ist(300 * 86_400_000),
     });
     x = await candidate('kavya@example.invalid', 'Kavya', '9833333331', 'PQRSX5678K');
     y = await candidate('lata@example.invalid', 'Lata', '9833333332', 'ABCDE1234F');

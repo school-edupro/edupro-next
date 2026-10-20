@@ -6,7 +6,7 @@ import {
   VACANCY_ORDER,
   VACANCY_STATUS,
   VACANCY_TONE,
-  dmy,
+  istText,
   type Vacancy,
   type VacancyStatus,
 } from '@/lib/recruitment';
@@ -143,11 +143,13 @@ export default async function VacanciesPage({
                   {v.status === 'pending'
                     ? (v.waitingWith ?? 'With the approvers')
                     : v.status === 'published'
-                      ? `Open ${dmy(v.opensOn)} to ${dmy(v.closesOn)}`
+                      ? v.opensAt && v.opensAt > new Date().toISOString()
+                        ? `Opens ${istText(v.opensAt)}, closes ${istText(v.closesAt)}`
+                        : `Open until ${istText(v.closesAt)}`
                       : v.status === 'rejected'
                         ? (v.decisionNote ?? 'Sent back')
                         : v.status === 'closed'
-                          ? `Closed ${dmy(v.closedAt)}`
+                          ? `Closed ${istText(v.closedAt)}`
                           : '—'}
                 </td>
                 <td>{v.raisedBy ?? '—'}</td>

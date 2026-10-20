@@ -5,6 +5,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { PushService } from '../comms/push.service';
 import { WAITING_WITH } from '../fees/fee-approval';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import type {
@@ -14,10 +15,27 @@ import type {
   VacancyNoteDto,
   VacancyPublishDto,
 } from './recruitment.dto';
+import { RecruitmentApprovalService, VACANCY_FLOW } from './recruitment-approval.service';
 import { PEOPLE } from './people.permissions';
+import { vacancyPosterPdf } from './vacancy-poster';
+import { qrPng } from '../engagement/visitor-card';
 
-/** The approval of a vacancy: the levels the school sets under Workflow (0197). */
-export const VACANCY_FLOW = { code: 'vacancy_approval', entityType: 'vacancy' } as const;
+export { VACANCY_FLOW } from './recruitment-approval.service';
+
+/** A moment as people in the school read it: 30-10-2026, 5:00 pm (India time). */
+export const istText = (d: Date) =>
+  new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+    .format(d)
+    .replace(/\//g, '-')
+    .replace(/\s?(am|pm)$/i, (m) => ` ${m.trim().toLowerCase()}`);
 
 type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'published' | 'closed' | 'cancelled';
 interface VacancyRow {
@@ -37,8 +55,8 @@ interface VacancyRow {
   description: string | null;
   stage_ids: string[];
   status: Status;
-  opens_on: string | null;
-  closes_on: string | null;
+  opens_at: Date | null;
+  closes_at: Date | null;
   workflow_instance_id: string | null;
   decision_note: string | null;
   raised_by: string | null;
@@ -54,7 +72,7 @@ interface VacancyRow {
 // eslint-disable-next-line no-restricted-syntax -- a fixed fragment (who an approval waits with)
 const VACANCY_COLS = `SELECT v.id::text, v.code, v.title, v.designation, v.department, v.subject, v.employee_type,
        v.campus_id::text, cp.name AS campus, v.posts, v.qualification, v.experience, v.pay_band, v.description,
-       v.stage_ids::text[] AS stage_ids, v.status, v.opens_on::text, v.closes_on::text, v.workflow_instance_id::text,
+       v.stage_ids::text[] AS stage_ids, v.status, v.opens_at, v.closes_at, v.workflow_instance_id::text,
        v.decision_note, v.raised_by::text, v.raised_by_name, v.submitted_at, v.decided_at, v.published_at, v.closed_at,
        v.created_at, ${WAITING_WITH('v.workflow_instance_id')} AS waiting_with
   FROM vacancies v LEFT JOIN campuses cp ON cp.id = v.campus_id`;
@@ -70,9 +88,9 @@ const STARTER_STAGES: Array<{ name: string; kind: string; maxMarks: number | nul
 
 /**
  * Recruitment, part 1 (docs/design/34-recruitment.md): vacancies raised by the office or an HOD, approved
- * through the levels the school sets (workflow "vacancy_approval", one level, the Principal, until the
- * school changes it), published on the careers page for a period, closed or cancelled; the school's
- * screening stages, from which each vacancy picks the ones it uses.
+ * through the levels set in Recruitment set-up (workflow "vacancy_approval", one level, the Principal,
+ * until the school changes it; part 5), published on the careers page from one minute to another,
+ * closed or cancelled; the school's screening stages, from which each vacancy picks the ones it uses.
  */
 @Injectable()
 export class RecruitmentService {
@@ -80,6 +98,8 @@ export class RecruitmentService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
+    private readonly approval: RecruitmentApprovalService,
+    private readonly push: PushService,
   ) {}
 
   private can(ctx: RequestContext, p: string) {
@@ -227,8 +247,8 @@ export class RecruitmentService {
       stageIds: v.stage_ids,
       stages: v.stage_ids.map((x) => stageName.get(x) ?? '').filter(Boolean),
       status: v.status,
-      opensOn: v.opens_on,
-      closesOn: v.closes_on,
+      opensAt: v.opens_at?.toISOString() ?? null,
+      closesAt: v.closes_at?.toISOString() ?? null,
       waitingWith: v.status === 'pending' ? v.waiting_with : null,
       decisionNote: v.decision_note,
       raisedBy: v.raised_by_name,
@@ -243,11 +263,9 @@ export class RecruitmentService {
   async list(ctx: RequestContext, q: VacancyListDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.seedStages(c);
-      // published vacancies past their closing date close by themselves
-      await c.query(
-        `UPDATE vacancies SET status = 'closed', closed_at = now(), updated_at = now()
-          WHERE status = 'published' AND closes_on < CURRENT_DATE`,
-      );
+      await this.closeLapsed(c);
+      // the vacancies waiting for approval follow the set-up and the records as they are now
+      await this.approval.followSetup(c, ctx);
       const stages = await this.stagesOf(c);
       const stageName = new Map(stages.rows.map((x) => [x.id, x.name]));
       const rows = await c.query<VacancyRow>(
@@ -265,9 +283,37 @@ export class RecruitmentService {
     });
   }
 
-  async view(ctx: RequestContext, id: string) {
+  /** Published vacancies past their last date and time close by themselves. */
+  private async closeLapsed(c: PoolClient) {
+    await c.query(
+      `UPDATE vacancies SET status = 'closed', closed_at = closes_at, updated_at = now()
+        WHERE status = 'published' AND closes_at <= now()`,
+    );
+  }
+
+  /** The careers page of the school, or of one vacancy on it. */
+  private async careersUrl(c: PoolClient, base: string, id?: string) {
+    const r = await c.query<{ code: string }>(
+      `SELECT lower(code) AS code FROM schools WHERE id = app.current_school_id()`,
+    );
+    return `${base.replace(/\/$/, '')}/${r.rows[0]!.code}/careers${id ? `/${id}` : ''}`;
+  }
+
+  /**
+   * One vacancy with its steps and approval, and what the signed-in person may do. Its approvers open
+   * it without the recruitment rights (to decide on it).
+   */
+  async view(ctx: RequestContext, id: string, base: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const v = await this.load(c, id);
+      const viewer = this.can(ctx, PEOPLE.recruitmentView);
+      if (!/^\d{1,18}$/.test(id) || (!viewer && !(await this.approval.takesPart(c, id))))
+        throw new DomainError('not-found', 'Vacancy not found', { status: 404 });
+      await this.closeLapsed(c);
+      let v = await this.load(c, id);
+      if (v.status === 'pending') {
+        await this.approval.followSetup(c, ctx);
+        v = await this.load(c, id);
+      }
       const stages = await this.stagesOf(c);
       const stageName = new Map(stages.rows.map((x) => [x.id, x.name]));
       const events = await c.query<{
@@ -282,15 +328,48 @@ export class RecruitmentService {
       const editable = v.status === 'draft' || v.status === 'rejected';
       const raise = this.can(ctx, PEOPLE.recruitmentRaise);
       const manage = this.can(ctx, PEOPLE.recruitmentManage);
+      const instance = v.workflow_instance_id
+        ? await this.workflow.instanceWith(c, v.workflow_instance_id)
+        : null;
+      const mine =
+        v.status === 'pending' ? await this.approval.myStep(c, v.workflow_instance_id) : null;
       return {
         ...this.out(v, stageName),
         events: events.rows.map((e) => ({ ...e, at: e.at.toISOString() })),
+        approval: instance
+          ? {
+              status: instance.status,
+              steps: instance.steps.map((s) => ({
+                level: s.level,
+                name: s.name,
+                status: s.status,
+                people: s.assignees.map((a) => a.name),
+                actedBy: s.actedBy,
+                actedAt: s.actedAt,
+                note: s.note,
+                current:
+                  instance.status === 'pending' &&
+                  s.level === instance.currentLevel &&
+                  s.status === 'pending',
+                overdue: s.overdue,
+              })),
+            }
+          : null,
+        share:
+          viewer && v.status === 'published'
+            ? {
+                url: await this.careersUrl(c, base, v.id),
+                open: (v.opens_at?.getTime() ?? 0) <= Date.now(),
+              }
+            : null,
         can: {
+          view: viewer,
           edit: editable && (raise || manage),
           submit: editable && (raise || manage),
-          publish: manage && (v.status === 'approved' || v.status === 'closed'),
+          publish: manage && ['approved', 'closed', 'published'].includes(v.status),
           close: manage && v.status === 'published',
           cancel: manage && !['closed', 'cancelled'].includes(v.status),
+          approve: mine !== null,
         },
       };
     });
@@ -413,43 +492,47 @@ export class RecruitmentService {
           'Tick the screening stages this vacancy uses before sending it',
           { status: 400 },
         );
+      await this.approval.ensureFlow(c);
+      const instance = await this.workflow
+        .start(c, ctx, {
+          definitionCode: VACANCY_FLOW.code,
+          entityType: VACANCY_FLOW.entityType,
+          entityId: id,
+          subject: `Vacancy ${v.code} · ${v.title}${v.department ? ` · ${v.department}` : ''} · ${String(v.posts)} post${v.posts > 1 ? 's' : ''}`,
+          payload: { department: v.department },
+        })
+        .catch((e: unknown) => {
+          if (e instanceof DomainError && e.type === 'workflow.no_assignee')
+            throw new DomainError(
+              'recruitment.no_approver',
+              'Nobody is set to approve vacancies: set the approval levels in Recruitment set-up',
+              { status: 409 },
+            );
+          throw e;
+        });
+      // every level was the raiser's own: approved as it is sent
+      const status = instance.status === 'approved' ? 'approved' : 'pending';
       await c.query(
-        `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by, updated_by)
-         SELECT app.current_school_id(), $1, 'Vacancy approval', $2, $3::jsonb, app.current_user_id(), app.current_user_id()
-          WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE code = $1 AND deleted_at IS NULL)`,
-        [
-          VACANCY_FLOW.code,
-          VACANCY_FLOW.entityType,
-          JSON.stringify([
-            {
-              level: 1,
-              name: 'Principal approval',
-              resolver: { kind: 'role', roleCode: 'school_admin' },
-              slaHours: 72,
-            },
-          ]),
-        ],
-      );
-      const instance = await this.workflow.start(c, ctx, {
-        definitionCode: VACANCY_FLOW.code,
-        entityType: VACANCY_FLOW.entityType,
-        entityId: id,
-        subject: `Vacancy ${v.code} · ${v.title}${v.department ? ` · ${v.department}` : ''} · ${String(v.posts)} post${v.posts > 1 ? 's' : ''}`,
-        payload: { department: v.department },
-      });
-      await c.query(
-        `UPDATE vacancies SET status = 'pending', workflow_instance_id = $2, submitted_at = now(), decision_note = NULL,
-                updated_at = now() WHERE id = $1`,
-        [id, instance.id],
+        `UPDATE vacancies SET status = $3, workflow_instance_id = $2, submitted_at = now(), decision_note = NULL,
+                decided_at = CASE WHEN $3 = 'approved' THEN now() END, updated_at = now() WHERE id = $1`,
+        [id, instance.id, status],
       );
       await this.event(c, ctx, id, 'submitted');
+      if (status === 'approved')
+        await this.event(
+          c,
+          ctx,
+          id,
+          'approved',
+          'Raised by its approver: no other level to wait for',
+        );
       await this.audit.stage(ctx, c, {
         action: 'people.recruitment.vacancy.submit',
         entityType: 'vacancies',
         entityId: id,
-        after: { workflowInstanceId: instance.id },
+        after: { workflowInstanceId: instance.id, status },
       });
-      return { status: 'pending' };
+      return { status };
     });
   }
 
@@ -466,35 +549,80 @@ export class RecruitmentService {
         .map((s) => s.note)
         .filter(Boolean)
         .join(' · ') || null;
-    const u = await c.query(
+    const u = await c.query<{ raised_by: string | null; code: string; title: string }>(
       `UPDATE vacancies SET status = $2, decided_at = now(), decision_note = $3, updated_at = now()
-        WHERE id = $1 AND status = 'pending'`,
+        WHERE id = $1 AND status = 'pending' RETURNING raised_by::text, code, title`,
       [instance.entityId, outcome === 'approved' ? 'approved' : 'rejected', note],
     );
-    if (u.rowCount)
-      await this.event(
-        c,
-        ctx,
-        instance.entityId,
-        outcome === 'approved' ? 'approved' : 'sent_back',
-        note ?? undefined,
-      );
+    const v = u.rows[0];
+    if (!v) return;
+    await this.event(
+      c,
+      ctx,
+      instance.entityId,
+      outcome === 'approved' ? 'approved' : 'sent_back',
+      note ?? undefined,
+    );
+    // the person who raised it hears the outcome (in the teacher app, where they have it)
+    if (v.raised_by && v.raised_by !== ctx.user.id)
+      await this.push.send(c, ctx, {
+        userIds: [v.raised_by],
+        title: outcome === 'approved' ? 'Vacancy approved' : 'Vacancy sent back',
+        body: `${v.code} · ${v.title}${outcome === 'rejected' && note ? ` · ${note}` : ''}`.slice(
+          0,
+          240,
+        ),
+        link: '/',
+        event: null,
+      });
   }
 
+  /**
+   * Publish on the careers page from one minute to another (India time), or change the window of a
+   * published vacancy. The opening is not in the past (a published vacancy keeps the one it has), the
+   * last date and time are later than now and at least an hour after the opening, within a year.
+   */
   async publish(ctx: RequestContext, id: string, dto: VacancyPublishDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.closeLapsed(c);
       const v = await this.load(c, id);
-      if (v.status !== 'approved' && v.status !== 'closed')
+      if (!['approved', 'closed', 'published'].includes(v.status))
         throw new DomainError('recruitment.not_approved', 'Only an approved vacancy is published', {
           status: 409,
         });
+      const opens = new Date(dto.opensAt);
+      const closes = new Date(dto.closesAt);
+      const now = Date.now();
+      const bad = (path: string, message: string): never => {
+        throw new DomainError('validation-failed', message, {
+          status: 400,
+          extra: { errors: [{ path, message }] },
+        });
+      };
+      const kept = v.status === 'published' && v.opens_at?.getTime() === opens.getTime();
+      // a minute's grace for the time it takes to press Publish
+      if (!kept && opens.getTime() < now - 5 * 60_000)
+        bad('opensAt', 'Open from: the time has passed; pick now or later');
+      if (closes.getTime() <= now)
+        bad('closesAt', 'Last date: the time has passed; pick a later one');
+      if (closes.getTime() - opens.getTime() < 3_600_000)
+        bad('closesAt', 'Last date: keep the vacancy open for at least an hour');
+      if (closes.getTime() - opens.getTime() > 366 * 86_400_000)
+        bad('closesAt', 'Last date: keep the vacancy open for a year at most');
+      const again = v.status === 'published';
       await c.query(
-        `UPDATE vacancies SET status = 'published', opens_on = $2, closes_on = $3, published_at = now(), closed_at = NULL,
+        `UPDATE vacancies SET status = 'published', opens_at = $2, closes_at = $3,
+                published_at = CASE WHEN status = 'published' THEN published_at ELSE now() END, closed_at = NULL,
                 updated_at = now() WHERE id = $1`,
-        [id, dto.opensOn, dto.closesOn],
+        [id, opens, closes],
       );
-      const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
-      await this.event(c, ctx, id, 'published', `${dmy(dto.opensOn)} to ${dmy(dto.closesOn)}`);
+      await this.event(
+        c,
+        ctx,
+        id,
+        again ? 'rescheduled' : 'published',
+        `${istText(opens)} to ${istText(closes)}`,
+      );
       await this.audit.stage(ctx, c, {
         action: 'people.recruitment.vacancy.publish',
         entityType: 'vacancies',
@@ -549,6 +677,98 @@ export class RecruitmentService {
         entityId: id,
       });
       return { status: 'cancelled' };
+    });
+  }
+
+  // ---- part 5: sharing a vacancy -------------------------------------------------------------------
+
+  /** A published vacancy, for its link, QR and poster. */
+  private async published(c: PoolClient, id: string) {
+    await this.closeLapsed(c);
+    const v = await this.load(c, id);
+    if (v.status !== 'published')
+      throw new DomainError('recruitment.not_published', 'The vacancy is not on the careers page', {
+        status: 409,
+      });
+    return v;
+  }
+
+  /** The QR of the careers page of one vacancy (PNG). */
+  async qr(ctx: RequestContext, id: string, base: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const v = await this.published(c, id);
+      const url = await this.careersUrl(c, base, v.id);
+      return {
+        url,
+        filename: `${v.code}-qr.png`,
+        contentType: 'image/png',
+        base64: (await qrPng(url)).toString('base64'),
+      };
+    });
+  }
+
+  /** The careers page of the school (every open vacancy): the link and its QR. */
+  async careers(ctx: RequestContext, base: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const url = await this.careersUrl(c, base);
+      const open = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM vacancies WHERE status = 'published' AND opens_at <= now() AND closes_at > now()`,
+      );
+      return {
+        url,
+        open: open.rows[0]!.n,
+        filename: 'careers-qr.png',
+        contentType: 'image/png',
+        base64: (await qrPng(url)).toString('base64'),
+      };
+    });
+  }
+
+  /** The A4 poster of a published vacancy (PDF): the post, the last date and time, the QR and link. */
+  async poster(ctx: RequestContext, id: string, base: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const v = await this.published(c, id);
+      const s = (
+        await c.query<{ name: string; address: string | null; contact: string | null }>(
+          `SELECT name,
+                  NULLIF(concat_ws(', ', NULLIF(address->>'line1', ''), NULLIF(address->>'line2', ''), NULLIF(address->>'city', ''),
+                         NULLIF(address->>'state', ''), NULLIF(COALESCE(address->>'pincode', address->>'pin'), '')), '') AS address,
+                  NULLIF(concat_ws(' · ', NULLIF('Phone ' || NULLIF(contact->>'phone', ''), ''), NULLIF(contact->>'email', ''),
+                         NULLIF(contact->>'website', '')), '') AS contact
+             FROM schools WHERE id = app.current_school_id()`,
+        )
+      ).rows[0]!;
+      const campus = v.campus;
+      const bytes = await vacancyPosterPdf({
+        school: s.name,
+        address: s.address,
+        contact: s.contact,
+        code: v.code,
+        title: v.title,
+        subline: [
+          v.designation,
+          v.department,
+          v.subject,
+          `${String(v.posts)} post${v.posts > 1 ? 's' : ''}`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        rows: [
+          ['Employee type', v.employee_type],
+          ['Campus', campus],
+          ['Qualifications', v.qualification],
+          ['Experience', v.experience],
+          ['Pay band / grade', v.pay_band],
+        ],
+        description: v.description,
+        closes: v.closes_at ? istText(v.closes_at) : '',
+        url: await this.careersUrl(c, base, v.id),
+      });
+      return {
+        filename: `${v.code}-poster.pdf`,
+        contentType: 'application/pdf',
+        base64: bytes.toString('base64'),
+      };
     });
   }
 }

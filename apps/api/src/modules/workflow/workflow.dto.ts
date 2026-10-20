@@ -39,6 +39,17 @@ export const ResolverSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('class_teacher') }),
   /** The requester's reporting line: level n is the n-th manager above the requesting employee. */
   z.object({ kind: z.literal('approver_chain'), depth: z.number().int().min(1).max(5).default(1) }),
+  /**
+   * Staff of the school (vacancy approval, set in Recruitment set-up): the employees named, everyone
+   * holding a designation, or the HOD of the request's department (payload.department; the HOD is set on
+   * the department master). Employees without a sign-in are left out.
+   */
+  z.object({
+    kind: z.literal('staff'),
+    by: z.enum(['employees', 'designation', 'hod']),
+    employeeIds: z.array(IdSchema).max(30).default([]),
+    designation: z.string().trim().max(80).optional(),
+  }),
 ]);
 export type Resolver = z.infer<typeof ResolverSchema>;
 
@@ -51,6 +62,12 @@ export const LevelSchema = z.object({
   escalateTo: ResolverSchema.optional(),
   /** The level is approved by itself when the person who raised the request is one of its approvers (never the last level). */
   autoIfRequester: z.boolean().optional(),
+  /**
+   * The steps are worked out again whenever the request moves and when the set-up changes: a level
+   * nobody holds is skipped; one whose people include the requester, or someone who approved an
+   * earlier level, counts as approved (vacancy approval).
+   */
+  autoSkip: z.boolean().optional(),
 });
 
 export const CreateDefinitionSchema = z.object({
