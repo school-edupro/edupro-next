@@ -284,3 +284,20 @@ reports/:id/files`, open to the employee, the levels and the office without a pl
 - Set-up: Forms and questions → kind "Attachment (files the person uploads)". Works on the levels'
   questionnaires too (the level attaches, the later levels and the office see).
 - Test: `acr.e2e-spec.ts` "an attachment question (0194)".
+
+## The board's filters and pages; Principal's remarks (20 Oct 2026, 0195)
+
+- **Board:** filters for Department and Employee type (from the rows), the page size (25, 50, 100)
+  with Previous / Next and the count, all in the address. Print, PDF and Excel take every row matching
+  the filters (PDF capped at 100 ACRs); the filter logic is shared (`filterAcrRows`) with the Excel
+  route, which gains an Employee type column. The board rows carry `employee.type`.
+- **Principal's remarks** (`acr_remarks`: grade, text, sort_order, active; `acr_reviews.remark_ids`):
+  standard lines per grade, seeded with two plain lines per band, edited on ACR set-up → Principal
+  remarks (the whole list saved at once; a line left out switches off but stays on ACRs that carry it),
+  downloaded as CSV and uploaded in the legacy export's layout (grade, remark, status: "02/05 - Below
+  Average" reads as the band, "Excellent" as the top band, "Very bad" as the bottom; doubles and
+  dashes are skipped). On the sheet the **final level** (the last that stands) sees the lines for the
+  grade it chose as tick boxes above its remarks; ticked lines count as remarks. The view gives
+  `remarkLines`, `levels[].final`, `remarkIds`, `remarkTexts`; the employee sees them with the level
+  once disclosed; the PDF prints them as "Standard remarks".
+- Test: `acr.e2e-spec.ts` "Principal’s remarks (0195)".

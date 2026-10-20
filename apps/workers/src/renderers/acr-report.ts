@@ -46,6 +46,7 @@ interface Review {
   skipped_note: string | null;
   form_id: string | null;
   form_name: string | null;
+  remark_ids: string[];
 }
 /** Who signs a line: the employee or the person who filled a level, with their signature on file. */
 interface Signer {
@@ -270,6 +271,7 @@ export async function renderAcrReport(
       await c.query<Review>(
         `SELECT v.report_id::text, v.seq, v.label, v.action, v.status, v.answers, v.remarks, v.score_pct::text,
                 v.grade, v.grade_reason, v.filled_by::text, v.filled_by_name, v.filled_at, v.skipped_note, v.form_id::text, f.name AS form_name,
+                v.remark_ids::text[] AS remark_ids,
                 (SELECT array_agg(x.display_name || ' (' || x.employee_code || ')' ORDER BY x.display_name)
                    FROM employees x WHERE x.id = ANY(v.reviewer_ids)) AS people
            FROM acr_reviews v LEFT JOIN acr_forms f ON f.id = v.form_id
@@ -354,6 +356,16 @@ export async function renderAcrReport(
           )
         ).rows
       : [];
+    // the standard remark lines ticked (0195)
+    const remarkIds = [...new Set(reviews.flatMap((v) => v.remark_ids))];
+    const remarkLines = remarkIds.length
+      ? (
+          await c.query<{ id: string; text: string }>(
+            `SELECT id::text, text FROM acr_remarks WHERE id = ANY($1::bigint[])`,
+            [remarkIds],
+          )
+        ).rows
+      : [];
     return {
       reports,
       reviews,
@@ -361,6 +373,7 @@ export async function renderAcrReport(
       events,
       signers,
       attachments,
+      remarkLines,
       education,
       experience,
       training,
@@ -510,6 +523,13 @@ export async function renderAcrReport(
             : '',
           v.grade
             ? `<div class="kv"><span>Grade</span><b>${esc(v.grade)}${v.grade_reason ? ` · ${esc(v.grade_reason)}` : ''}</b></div>`
+            : '',
+          v.remark_ids.length
+            ? `<div class="kv"><span>Standard remarks</span><b>${v.remark_ids
+                .map((id) => data.remarkLines.find((x) => x.id === id)?.text ?? '')
+                .filter((x) => x)
+                .map(esc)
+                .join(' · ')}</b></div>`
             : '',
           v.remarks ? `<div class="kv"><span>Remarks</span><b>${esc(v.remarks)}</b></div>` : '',
         ].join('');

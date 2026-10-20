@@ -99,6 +99,8 @@ interface ReviewRow {
   filled_at: Date | null;
   skipped_note: string | null;
   form_id: string | null;
+  /** the standard remark lines ticked (0195) */
+  remark_ids: string[];
 }
 
 const REPORT = `SELECT r.id::text, r.cycle_id::text, r.employee_id::text, r.staff_group, r.status, r.current_level,
@@ -108,7 +110,8 @@ const REPORT = `SELECT r.id::text, r.cycle_id::text, r.employee_id::text, r.staf
        cy.status AS cycle_status, cy.self_from::text, cy.self_to::text, cy.academic_year_id::text
   FROM acr_reports r JOIN acr_cycles cy ON cy.id = r.cycle_id`;
 const REVIEW_COLS = `SELECT id::text, seq, label, action, reviewer_ids::text[] AS reviewer_ids, status, answers,
-       remarks, score_pct::text, grade, grade_reason, agreement, filled_by_name, filled_at, skipped_note, form_id::text FROM acr_reviews`;
+       remarks, score_pct::text, grade, grade_reason, agreement, filled_by_name, filled_at, skipped_note, form_id::text,
+       remark_ids::text[] AS remark_ids FROM acr_reviews`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
 const REVIEWS = `${REVIEW_COLS} WHERE report_id = $1 ORDER BY seq`;
 // eslint-disable-next-line no-restricted-syntax -- fixed fragments, values are bound
@@ -416,6 +419,19 @@ export class AcrFlowService {
     );
     const good = new Set(ok.rows.map((x) => x.id));
     return [...wanted].some((id) => !good.has(id)) ? ['Attach only files you uploaded here'] : [];
+  }
+  /** The standard remark lines ticked (0195): the ones given, checked against the set-up; none given = as saved. */
+  private async remarkIds(c: PoolClient, given: string[] | undefined, prev: string[]) {
+    if (!given) return prev;
+    const ids = [...new Set(given)];
+    if (!ids.length) return [];
+    const ok = await c.query<{ id: string }>(
+      `SELECT id::text FROM acr_remarks WHERE id = ANY($1::bigint[])`,
+      [ids],
+    );
+    if (ok.rows.length !== ids.length)
+      throw new DomainError('validation-failed', 'Unknown remark line', { status: 400 });
+    return ids;
   }
   /** Only the answers to these questions are kept. */
   private only(qs: Question[], answers: Record<string, Answer>) {
@@ -1038,6 +1054,7 @@ export class AcrFlowService {
       code: string;
       department: string | null;
       designation: string | null;
+      staff_type: string | null;
       staff_group: Group;
       status: string;
       current_level: number | null;
@@ -1053,7 +1070,8 @@ export class AcrFlowService {
     }>(
       // eslint-disable-next-line no-restricted-syntax -- the condition is one of the fixed ones below; values are bound
       `SELECT r.id::text, r.cycle_id::text, cy.name AS cycle, r.employee_id::text, e.display_name AS name,
-              e.employee_code AS code, e.department, e.designation, r.staff_group, r.status, r.current_level,
+              e.employee_code AS code, e.department, e.designation, e.profile->>'staff_type' AS staff_type,
+              r.staff_group, r.status, r.current_level,
               v.label AS level_label,
               (SELECT array_agg(x.display_name ORDER BY x.display_name) FROM employees x WHERE x.id = ANY(v.reviewer_ids)) AS waiting_on,
               r.self_pct::text, r.score_pct::text, r.grade, r.adverse, r.object_by::text, r.updated_at,
@@ -1110,6 +1128,7 @@ export class AcrFlowService {
         code: x.code,
         department: x.department,
         designation: x.designation,
+        type: x.staff_type,
       },
       staffGroup: x.staff_group,
       status: x.status,
@@ -1256,6 +1275,14 @@ export class AcrFlowService {
         last && (last.what === 'returned' || last.what === 'returned_to_employee')
           ? { at: last.at.toISOString(), by: last.by_name, reason: last.note }
           : null;
+      // Principal's remarks (0195): the standard lines, and which level is the final one
+      const remarkRows = (
+        await c.query<{ id: string; grade: string; text: string; active: boolean }>(
+          `SELECT id::text, grade, text, active FROM acr_remarks ORDER BY grade, sort_order, id`,
+        )
+      ).rows;
+      const remarkText = new Map(remarkRows.map((x) => [x.id, x.text]));
+      const finalSeq = [...reviews].reverse().find((v) => v.status !== 'skipped')?.seq ?? null;
       const today = new Date().toISOString().slice(0, 10);
       const windowOpen = r.cycle_status === 'open' && today >= r.self_from && today <= r.self_to;
       const returned = await this.wasReturned(c, id);
@@ -1332,6 +1359,9 @@ export class AcrFlowService {
                 filledBy: v.filled_by_name,
                 filledAt: v.filled_at?.toISOString() ?? null,
                 skippedNote: v.skipped_note,
+                final: v.seq === finalSeq,
+                remarkIds: v.remark_ids,
+                remarkTexts: v.remark_ids.map((id) => remarkText.get(id) ?? '').filter((x) => x),
               }
             : {
                 // who sits at the level is always shown; the answers once the ACR is complete
@@ -1343,8 +1373,12 @@ export class AcrFlowService {
                 people: peopleOf(v),
                 skippedNote: v.skipped_note,
                 formId: v.form_id,
+                final: v.seq === finalSeq,
               },
         ),
+        remarkLines: remarkRows
+          .filter((x) => x.active)
+          .map((x) => ({ id: x.id, grade: x.grade, text: x.text })),
         result:
           shown || a.viewer
             ? {
@@ -1607,7 +1641,8 @@ export class AcrFlowService {
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
       await c.query(
-        `UPDATE acr_reviews SET answers = $2::jsonb, remarks = $3, grade = $4, grade_reason = $5, agreement = $6
+        `UPDATE acr_reviews SET answers = $2::jsonb, remarks = $3, grade = $4, grade_reason = $5, agreement = $6,
+                remark_ids = $7::bigint[]
           WHERE id = $1`,
         [
           v.id,
@@ -1616,6 +1651,7 @@ export class AcrFlowService {
           dto.grade ?? v.grade,
           dto.gradeReason ?? v.grade_reason,
           dto.agreement ?? v.agreement,
+          await this.remarkIds(c, dto.remarkIds, v.remark_ids),
         ],
       );
       return { saved: true };
@@ -1630,6 +1666,7 @@ export class AcrFlowService {
       const bands = await this.bands(c);
       const all = (await c.query<ReviewRow>(REVIEWS, [id])).rows;
       const remarks = (dto.remarks ?? v.remarks ?? '').trim();
+      const remarkIds = await this.remarkIds(c, dto.remarkIds, v.remark_ids);
       let score: number | null = null;
       let grade: string | null = null;
       let reason: string | null = null;
@@ -1676,12 +1713,13 @@ export class AcrFlowService {
             'Say whether you agree with the level before',
             { status: 400 },
           );
-        if (remarks.length < 3)
+        if (remarks.length < 3 && !remarkIds.length)
           throw new DomainError('validation-failed', 'Write your remarks', { status: 400 });
       }
       await c.query(
         `UPDATE acr_reviews SET answers = $2::jsonb, remarks = $3, score_pct = $4, grade = $5, grade_reason = $6,
-                agreement = $7, status = 'done', filled_by = app.current_user_id(), filled_by_name = $8, filled_at = now()
+                agreement = $7, status = 'done', filled_by = app.current_user_id(), filled_by_name = $8, filled_at = now(),
+                remark_ids = $9::bigint[]
           WHERE id = $1`,
         [
           v.id,
@@ -1692,6 +1730,7 @@ export class AcrFlowService {
           reason,
           agreement,
           ctx.user.displayName,
+          remarkIds,
         ],
       );
       await this.event(c, ctx, id, 'level_done', v.label);

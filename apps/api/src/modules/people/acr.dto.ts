@@ -181,8 +181,39 @@ export const AcrLevelSchema = z.object({
   grade: z.string().trim().max(40).nullable().optional(),
   gradeReason: z.string().trim().max(1000).nullable().optional(),
   agreement: z.enum(['agree', 'partly', 'disagree']).nullable().optional(),
+  /** the standard remark lines ticked at the final level (0195) */
+  remarkIds: z.array(Id).max(10).optional(),
 });
 export class AcrLevelDto extends createZodDto(AcrLevelSchema) {}
+
+/** Principal's remarks (0195): standard lines per grade; the whole list is saved at once. */
+export const AcrRemarksSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        id: Id.optional(),
+        grade: z.string().trim().min(1).max(60),
+        text: z.string().trim().min(3).max(1000),
+        sortOrder: z.number().int().min(0).max(9999).default(0),
+        active: z.boolean().default(true),
+      }),
+    )
+    .max(500),
+});
+export class AcrRemarksDto extends createZodDto(AcrRemarksSchema) {}
+/** Lines from a spreadsheet (grade, remark, status): added when new, never doubled. */
+export const AcrRemarksImportSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        grade: z.string().trim().max(80),
+        text: z.string().trim().max(1000),
+        active: z.boolean().optional(),
+      }),
+    )
+    .max(2000),
+});
+export class AcrRemarksImportDto extends createZodDto(AcrRemarksImportSchema) {}
 
 export const AcrReasonSchema = z.object({ reason: z.string().trim().min(5, 'say why').max(1000) });
 export class AcrReasonDto extends createZodDto(AcrReasonSchema) {}

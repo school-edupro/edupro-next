@@ -5,11 +5,13 @@ import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import {
+  ACR_PAGE_SIZES,
   ACR_PDF_LABELS,
   ACR_STATUS,
   GROUP_LABEL,
   LEVEL_TONE,
   LEVEL_WORD,
+  filterAcrRows,
   type AcrRow,
   type AcrSetup,
 } from '@/lib/acr';
@@ -34,7 +36,11 @@ export default async function AcrBoardPage({
     status?: string;
     group?: string;
     level?: string;
+    dept?: string;
+    type?: string;
     q?: string;
+    page?: string;
+    size?: string;
     export?: string;
     ok?: string;
     error?: string;
@@ -53,17 +59,32 @@ export default async function AcrBoardPage({
     ),
   ]);
   const cycle = setup.cycles.find((c) => c.id === board.cycleId) ?? null;
-  const q = (sp.q ?? '').trim().toLowerCase();
-  const rows = board.rows.filter(
-    (r) =>
-      (!sp.status || r.status === sp.status) &&
-      (!sp.group || r.staffGroup === sp.group) &&
-      (!sp.level || r.level?.label === sp.level) &&
-      (!q ||
-        `${r.employee.name} ${r.employee.code} ${r.employee.department ?? ''} ${r.employee.designation ?? ''} ${(r.levels ?? []).flatMap((l) => l.people).join(' ')}`
-          .toLowerCase()
-          .includes(q)),
-  );
+  const rows = filterAcrRows(board.rows, sp);
+  // departments and employee types on this board, for the filters
+  const depts = [...new Set(board.rows.map((r) => r.employee.department).filter(Boolean))].sort();
+  const types = [...new Set(board.rows.map((r) => r.employee.type).filter(Boolean))].sort();
+  // pages of 25, 50 or 100; exports take every row matching the filters
+  const size = (ACR_PAGE_SIZES as readonly number[]).includes(Number(sp.size))
+    ? Number(sp.size)
+    : 25;
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  const page = Math.min(pages, Math.max(1, Number(sp.page) || 1));
+  const pageRows = rows.slice((page - 1) * size, page * size);
+  const params = (over: Record<string, string | number | undefined>) =>
+    new URLSearchParams(
+      Object.entries({
+        cycle: board.cycleId ?? '',
+        status: sp.status,
+        group: sp.group,
+        level: sp.level,
+        dept: sp.dept,
+        type: sp.type,
+        q: sp.q,
+        size: sp.size,
+        page: sp.page,
+        ...over,
+      }).flatMap(([k, v]) => (v === undefined || v === '' ? [] : [[k, String(v)]])),
+    ).toString();
   const total = board.rows.length;
   const noOne = board.rows.filter((r) => r.level && r.level.waitingOn.length === 0).length;
   // the levels seen on this board, in chain order, for the filter
@@ -74,13 +95,7 @@ export default async function AcrBoardPage({
   ]
     .sort((a, b) => a[1] - b[1])
     .map(([label]) => label);
-  const backTo = `/people/acr?${new URLSearchParams({
-    ...(board.cycleId ? { cycle: board.cycleId } : {}),
-    ...(sp.status ? { status: sp.status } : {}),
-    ...(sp.group ? { group: sp.group } : {}),
-    ...(sp.level ? { level: sp.level } : {}),
-    ...(sp.q ? { q: sp.q } : {}),
-  }).toString()}`;
+  const backTo = `/people/acr?${params({})}`;
   const dmyIso = (iso: string) => dmy(iso.slice(0, 10));
 
   return (
@@ -169,8 +184,40 @@ export default async function AcrBoardPage({
                 ))}
               </select>
             </label>
+            <label className="ep-field" htmlFor="b-dept" style={{ margin: 0 }}>
+              <span className="ep-field__label">Department</span>
+              <select id="b-dept" name="dept" className="ep-select" defaultValue={sp.dept ?? ''}>
+                <option value="">All</option>
+                {depts.map((d) => (
+                  <option key={d} value={d ?? ''}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ep-field" htmlFor="b-type" style={{ margin: 0 }}>
+              <span className="ep-field__label">Employee type</span>
+              <select id="b-type" name="type" className="ep-select" defaultValue={sp.type ?? ''}>
+                <option value="">All</option>
+                {types.map((t) => (
+                  <option key={t} value={t ?? ''}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ep-field" htmlFor="b-size" style={{ margin: 0 }}>
+              <span className="ep-field__label">Per page</span>
+              <select id="b-size" name="size" className="ep-select" defaultValue={String(size)}>
+                {ACR_PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="ep-field" htmlFor="b-q" style={{ margin: 0 }}>
-              <span className="ep-field__label">Name, code, department or reviewer</span>
+              <span className="ep-field__label">Name or code</span>
               <input
                 id="b-q"
                 name="q"
@@ -300,7 +347,7 @@ export default async function AcrBoardPage({
                 target="_blank"
                 rel="noopener"
               >
-                Print the {Math.min(rows.length, 100)} shown
+                Print the {Math.min(rows.length, 100)} matching
               </a>
               <form action={requestAcrPdf}>
                 <input
@@ -313,19 +360,14 @@ export default async function AcrBoardPage({
                 />
                 <input type="hidden" name="back" value={backTo} />
                 <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                  PDF of the {Math.min(rows.length, 100)} shown
+                  PDF of the {Math.min(rows.length, 100)} matching
                 </button>
               </form>
               <a
                 className="ep-btn ep-btn--secondary ep-btn--sm"
-                href={`/api/acr-excel?${new URLSearchParams({
-                  cycle: board.cycleId ?? '',
-                  status: sp.status ?? '',
-                  group: sp.group ?? '',
-                  q: sp.q ?? '',
-                }).toString()}`}
+                href={`/api/acr-excel?${params({ page: undefined, size: undefined })}`}
               >
-                Excel
+                Excel of the {rows.length} matching
               </a>
             </div>
           ) : null}
@@ -350,7 +392,7 @@ export default async function AcrBoardPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {pageRows.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <a href={`/people/acr/${r.id}`}>
@@ -423,7 +465,7 @@ export default async function AcrBoardPage({
                     </td>
                   </tr>
                 ))}
-                {!rows.length ? (
+                {!pageRows.length ? (
                   <tr>
                     <td colSpan={9}>
                       {total ? 'No ACR matches.' : 'No ACRs yet: start the cycle.'}
@@ -433,6 +475,42 @@ export default async function AcrBoardPage({
               </tbody>
             </table>
           </div>
+          {rows.length > size ? (
+            <nav
+              className="ep-pager"
+              aria-label="Pages of ACRs"
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-3)',
+                alignItems: 'center',
+                marginTop: 'var(--sp-3)',
+              }}
+            >
+              <span className="ep-field__help">
+                Showing {(page - 1) * size + 1}–{Math.min(page * size, rows.length)} of{' '}
+                {rows.length}
+              </span>
+              {page > 1 ? (
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`?${params({ page: page - 1 })}`}
+                >
+                  Previous
+                </a>
+              ) : null}
+              <span className="ep-field__help">
+                Page {page} of {pages}
+              </span>
+              {page < pages ? (
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`?${params({ page: page + 1 })}`}
+                >
+                  Next
+                </a>
+              ) : null}
+            </nav>
+          ) : null}
         </>
       )}
     </>

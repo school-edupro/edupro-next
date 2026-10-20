@@ -33,6 +33,8 @@ import {
   AcrSelfDto,
   AcrSettingsDto,
   AcrPdfDto,
+  AcrRemarksDto,
+  AcrRemarksImportDto,
 } from './acr.dto';
 import { CreateUploadDto } from '../files/files.dto';
 import { AcrFlowService } from './acr-flow.service';
@@ -90,6 +92,22 @@ export class AcrController {
     // the ACRs of the open cycles follow the set-up at once (chains still at the self-appraisal)
     await this.flow.refreshOpenCycles(ctx);
     return out;
+  }
+
+  @Put('setup/remarks')
+  @ApiOperation({
+    summary: 'Principal’s remarks: the standard lines per grade, the whole list at once',
+  })
+  @RequirePermission(PEOPLE.acrManage)
+  remarks(@ReqCtx() ctx: RequestContext, @Body() body: AcrRemarksDto) {
+    return this.setup.saveRemarks(ctx, body);
+  }
+
+  @Post('setup/remarks/import')
+  @ApiOperation({ summary: 'Principal’s remarks from a spreadsheet (grade, remark, status)' })
+  @RequirePermission(PEOPLE.acrManage)
+  importRemarks(@ReqCtx() ctx: RequestContext, @Body() body: AcrRemarksImportDto) {
+    return this.setup.importRemarks(ctx, body);
   }
 
   @Post('setup/forms')

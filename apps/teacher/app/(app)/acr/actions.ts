@@ -12,6 +12,7 @@ interface LevelBody {
   grade?: string | null;
   gradeReason?: string | null;
   agreement?: 'agree' | 'partly' | 'disagree' | null;
+  remarkIds?: string[];
 }
 const API =
   process.env.INTERNAL_API_BASE_URL ?? process.env.API_BASE_URL ?? 'http://localhost:4000';

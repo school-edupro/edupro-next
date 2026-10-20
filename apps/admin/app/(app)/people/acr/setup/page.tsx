@@ -4,10 +4,11 @@ import { AcrGradesEditor } from '@/components/acr/AcrGradesEditor';
 import { AcrAssessorsEditor } from '@/components/acr/AcrAssessorsEditor';
 import { AcrForms } from '@/components/acr/AcrForms';
 import { AcrLevelsEditor } from '@/components/acr/AcrLevelsEditor';
+import { AcrRemarksEditor } from '@/components/acr/AcrRemarksEditor';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { GROUP_LABEL, type AcrAssessors, type AcrSetup } from '@/lib/acr';
-import { importAcrAssessors, saveAcrCycle } from '@/lib/acr-actions';
+import { importAcrAssessors, importAcrRemarks, saveAcrCycle } from '@/lib/acr-actions';
 
 const TABS = [
   ['cycles', 'Cycles'],
@@ -15,6 +16,7 @@ const TABS = [
   ['assessors', 'Assessors'],
   ['questions', 'Forms and questions'],
   ['grades', 'Scale and grades'],
+  ['remarks', 'Principal remarks'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -97,6 +99,14 @@ export default async function AcrSetupPage({
         </div>
       ) : null}
       {tab === 'questions' ? <AcrForms s={s} sp={sp} canEdit={canEdit} /> : null}
+      {tab === 'remarks' ? (
+        <AcrRemarksEditor
+          lines={s.remarkLines}
+          grades={s.bands.map((b) => b.label)}
+          canEdit={canEdit}
+          importAction={importAcrRemarks}
+        />
+      ) : null}
       {tab === 'grades' ? (
         <AcrGradesEditor
           scaleLabels={s.settings.scaleLabels}

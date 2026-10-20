@@ -1283,4 +1283,81 @@ describe('employee ACR flow (e2e)', () => {
     });
     expect(done.statusCode).toBe(200);
   });
+  it('Principal’s remarks (0195): standard lines per grade in the set-up, uploaded from the legacy layout; the final level ticks them with the grade', async () => {
+    const s0 = (await call(admin, 'GET', '/people/acr/setup')).json();
+    // a school starts with a few lines per grade
+    expect(s0.remarkLines.length).toBeGreaterThanOrEqual(5);
+    const good = s0.remarkLines.find((l: { grade: string }) => l.grade === 'Good');
+    expect(good).toBeTruthy();
+    // the list saved at once: a line changed, one added, one left out switches off
+    const put = await call(admin, 'PUT', '/people/acr/setup/remarks', {
+      lines: [
+        { id: good.id, grade: 'Good', text: 'Knows the subject well; steady work.', sortOrder: 10 },
+        { grade: 'Outstanding', text: 'A model for the staff room.', sortOrder: 20 },
+      ],
+    });
+    expect(put.statusCode).toBe(200);
+    const s1 = (await call(admin, 'GET', '/people/acr/setup')).json();
+    const lines = s1.remarkLines as Array<{
+      id: string;
+      grade: string;
+      text: string;
+      active: boolean;
+    }>;
+    expect(lines.find((l) => l.id === good.id)).toMatchObject({
+      text: 'Knows the subject well; steady work.',
+      active: true,
+    });
+    expect(lines.filter((l) => l.active)).toHaveLength(2);
+    // the legacy spreadsheet's layout: the grade is read as the band, doubles and dashes skipped
+    const imp = await call(admin, 'POST', '/people/acr/setup/remarks/import', {
+      rows: [
+        { grade: '02/05 - Below Average', text: 'Needs to improve soft skills and team spirit.' },
+        { grade: 'Excellent', text: 'Respects work deadlines and prioritises well.' },
+        { grade: 'Very Bad', text: '-' },
+        { grade: 'Good', text: 'Knows the subject well; steady work.' },
+      ],
+    });
+    expect(imp.statusCode).toBe(201);
+    expect(imp.json()).toEqual({ added: 2, skipped: 2 });
+    const s2 = (await call(admin, 'GET', '/people/acr/setup')).json();
+    expect(
+      (s2.remarkLines as Array<{ grade: string; text: string }>)
+        .filter((l) => /improve soft skills|prioritises well/.test(l.text))
+        .map((l) => l.grade)
+        .sort(),
+    ).toEqual(['Below average', 'Outstanding']);
+    // Nisha's ACR waits on the Principal: the final level; Prem ticks a line for the grade given
+    const board = (await call(admin, 'GET', '/people/acr/board')).json();
+    const acr = board.rows.find((r: { employee: { code: string } }) => r.employee.code === 'N1')
+      .id as string;
+    const v0 = (await call(principal, 'GET', `/people/acr/reports/${acr}`)).json();
+    expect(v0.levels[1]).toMatchObject({ final: true, status: 'pending' });
+    expect(v0.remarkLines.map((l: { grade: string }) => l.grade)).toContain('Outstanding');
+    const star = v0.remarkLines.find((l: { grade: string }) => l.grade === 'Outstanding').id;
+    expect(
+      (
+        await call(principal, 'POST', `/people/acr/reports/${acr}/levels/2/submit`, {
+          answers: {},
+          grade: 'Outstanding',
+          agreement: 'agree',
+          remarkIds: ['999999999'],
+        })
+      ).statusCode,
+    ).toBe(400);
+    const done = await call(principal, 'POST', `/people/acr/reports/${acr}/levels/2/submit`, {
+      answers: {},
+      grade: 'Outstanding',
+      gradeReason: 'Exceptional year',
+      agreement: 'agree',
+      remarkIds: [star],
+    });
+    expect(done.statusCode).toBe(200);
+    const v1 = (await call(admin, 'GET', `/people/acr/reports/${acr}`)).json();
+    expect(v1.levels[1]).toMatchObject({
+      status: 'done',
+      remarkIds: [star],
+      remarkTexts: ['A model for the staff room.'],
+    });
+  });
 });

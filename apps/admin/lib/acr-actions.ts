@@ -117,6 +117,62 @@ export async function saveAcrSettings(input: {
   return { ok: true };
 }
 
+/** Principal's remarks (0195): the whole list from the client editor; lines left out switch off. */
+export async function saveAcrRemarks(
+  lines: Array<{ id?: string; grade: string; text: string; sortOrder: number; active: boolean }>,
+): Promise<Out> {
+  try {
+    await apiFetch(`${SETUP}/remarks`, { method: 'PUT', body: JSON.stringify({ lines }) });
+  } catch (e) {
+    return problem(e);
+  }
+  revalidatePath(SETUP);
+  return { ok: true };
+}
+
+/** Principal's remarks from a CSV (grade, remark, status), as the legacy export lays them out. */
+export async function importAcrRemarks(fd: FormData) {
+  const page = `${SETUP}?tab=remarks`;
+  const fail = (detail: string): never =>
+    redirect(`${page}&error=validation-failed&detail=${encodeURIComponent(detail)}`);
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0) fail('Choose the CSV file.');
+  const f = file as File;
+  if (f.size > 2 * 1024 * 1024) fail('The file is larger than 2 MB.');
+  const text = (await f.text()).replace(/^\uFEFF/, '');
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) fail('The file has no rows.');
+  const head = csvLine(lines[0]!).map((h) => h.trim().toLowerCase());
+  const col = (names: string[]) =>
+    head.findIndex((h) => names.some((n) => h === n || h.includes(n)));
+  const gi = col(['grade', 'category']);
+  const ti = col(['remark', 'text']);
+  const si = col(['status', 'active']);
+  if (gi < 0 || ti < 0) fail('The file needs a Grade column and a Remark column.');
+  const rows = lines.slice(1).map((l) => {
+    const c = csvLine(l);
+    const st = si >= 0 ? (c[si] ?? '').trim().toLowerCase() : '';
+    return {
+      grade: (c[gi] ?? '').trim(),
+      text: (c[ti] ?? '').trim(),
+      active: st ? !/^(inactive|no|off|0|false)$/.test(st) : true,
+    };
+  });
+  let out: { added: number; skipped: number } = { added: 0, skipped: 0 };
+  try {
+    out = await apiFetch(`${SETUP}/remarks/import`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(SETUP);
+  redirect(
+    `${page}&ok=1&detail=${encodeURIComponent(`${String(out.added)} lines added, ${String(out.skipped)} skipped (already there or empty).`)}`,
+  );
+}
+
 /** The levels of one staff group, in order (from the client editor). */
 export async function saveAcrLevels(staffGroup: StaffGroup, levels: AcrLevel[]): Promise<Out> {
   try {
@@ -345,6 +401,7 @@ interface LevelBody {
   grade?: string | null;
   gradeReason?: string | null;
   agreement?: 'agree' | 'partly' | 'disagree' | null;
+  remarkIds?: string[];
 }
 export async function acrSaveSelf(id: string, answers: AnswerMap) {
   return okId(id)

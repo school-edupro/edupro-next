@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
-import { ACR_STATUS, GROUP_LABEL, type AcrRow } from '@/lib/acr';
+import { ACR_STATUS, GROUP_LABEL, filterAcrRows, type AcrRow } from '@/lib/acr';
 
 /**
  * A cycle's ACRs as a spreadsheet (CSV that Excel opens), with the board's filters. The API checks the right
@@ -13,15 +13,14 @@ export async function GET(req: NextRequest) {
     const b = await apiFetch<{ rows: AcrRow[] }>(
       `/people/acr/board${/^\d{1,18}$/.test(cycle) ? `?cycle=${cycle}` : ''}`,
     );
-    const status = sp.get('status');
-    const group = sp.get('group');
-    const q = (sp.get('q') ?? '').trim().toLowerCase();
-    const rows = b.rows.filter(
-      (r) =>
-        (!status || r.status === status) &&
-        (!group || r.staffGroup === group) &&
-        (!q || `${r.employee.name} ${r.employee.code}`.toLowerCase().includes(q)),
-    );
+    const rows = filterAcrRows(b.rows, {
+      status: sp.get('status') ?? undefined,
+      group: sp.get('group') ?? undefined,
+      level: sp.get('level') ?? undefined,
+      dept: sp.get('dept') ?? undefined,
+      type: sp.get('type') ?? undefined,
+      q: sp.get('q') ?? undefined,
+    });
     const cell = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v);
       // a leading = + - @ would be read as a formula
@@ -34,6 +33,7 @@ export async function GET(req: NextRequest) {
       'Name',
       'Designation',
       'Department',
+      'Employee type',
       'Staff',
       'Status',
       'Waiting on',
@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
         r.employee.name,
         r.employee.designation,
         r.employee.department,
+        r.employee.type,
         GROUP_LABEL[r.staffGroup],
         ACR_STATUS[r.status],
         r.level ? `${r.level.label ?? ''}: ${r.level.waitingOn.join(', ')}` : '',

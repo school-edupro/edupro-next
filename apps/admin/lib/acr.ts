@@ -78,6 +78,13 @@ export interface AcrCycle {
   reports: number;
   closed: number;
 }
+export interface AcrRemarkLine {
+  id: string;
+  grade: string;
+  text: string;
+  sortOrder: number;
+  active: boolean;
+}
 export interface AcrSetup {
   settings: {
     scaleLabels: string[];
@@ -90,6 +97,8 @@ export interface AcrSetup {
   questions: AcrQuestion[];
   forms: AcrForm[];
   employeeTypes: Array<{ id: string; name: string; staffGroup: string }>;
+  /** Principal's remarks (0195): standard lines per grade */
+  remarkLines: AcrRemarkLine[];
   cycles: AcrCycle[];
   years: Array<{ id: string; code: string; status: string }>;
   roles: Array<{ code: string; name: string }>;
@@ -156,6 +165,8 @@ export interface AcrRow {
     code: string;
     department: string | null;
     designation: string | null;
+    /** the employee type on the record (Staff setup) */
+    type: string | null;
   };
   staffGroup: StaffGroup;
   status: 'self' | 'review' | 'disclosed' | 'represented' | 'closed';
@@ -201,6 +212,26 @@ export const ACR_PDF_LABELS = {
   stuck:
     'Still waiting after a minute: the workers service prepares files; check that it is running',
 };
+/** The board's filters, shared with the Excel export: status, staff, level now, department, type, search. */
+export function filterAcrRows(
+  rows: AcrRow[],
+  f: { status?: string; group?: string; level?: string; dept?: string; type?: string; q?: string },
+): AcrRow[] {
+  const q = (f.q ?? '').trim().toLowerCase();
+  return rows.filter(
+    (r) =>
+      (!f.status || r.status === f.status) &&
+      (!f.group || r.staffGroup === f.group) &&
+      (!f.level || r.level?.label === f.level) &&
+      (!f.dept || (r.employee.department ?? '') === f.dept) &&
+      (!f.type || (r.employee.type ?? '') === f.type) &&
+      (!q ||
+        `${r.employee.name} ${r.employee.code} ${r.employee.department ?? ''} ${r.employee.designation ?? ''} ${(r.levels ?? []).flatMap((l) => l.people).join(' ')}`
+          .toLowerCase()
+          .includes(q)),
+  );
+}
+export const ACR_PAGE_SIZES = [25, 50, 100] as const;
 export const ACR_STATUS: Record<AcrRow['status'], string> = {
   self: 'Self-appraisal',
   review: 'With the levels',

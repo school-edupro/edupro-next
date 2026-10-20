@@ -41,6 +41,11 @@ export interface AcrLevelView {
   status: 'waiting' | 'pending' | 'done' | 'skipped';
   /** 0190: why the level is skipped (the same person as the level before) */
   skippedNote?: string | null;
+  /** the last level that stands: the final approval, where the standard remarks are ticked (0195) */
+  final?: boolean;
+  remarkIds?: string[];
+  /** the standard remark lines ticked, as text */
+  remarkTexts?: string[];
   hidden?: boolean;
   /** the latest send-back, when this level must act on it */
   returned?: AcrReturned | null;
@@ -148,6 +153,8 @@ export interface AcrReportView {
   guidelines: string;
   /** the employee's record (20 Oct 2026) */
   records: AcrRecords;
+  /** Principal's remarks (0195): the standard lines per grade the final level picks from */
+  remarkLines: Array<{ id: string; grade: string; text: string }>;
   /** the forms this ACR was made with, by id: the self form and the levels' questionnaires one may see */
   forms: Record<string, AcrFormView>;
   self: {
@@ -212,6 +219,8 @@ export interface AcrLevelBody {
   grade?: string | null;
   gradeReason?: string | null;
   agreement?: 'agree' | 'partly' | 'disagree' | null;
+  /** the standard remark lines ticked at the final level (0195) */
+  remarkIds?: string[];
 }
 
 const STATUS: Record<AcrReportView['status'], string> = {
@@ -767,6 +776,7 @@ export function AcrSheet({
     grade: mine?.grade ?? null,
     gradeReason: mine?.gradeReason ?? '',
     agreement: mine?.agreement ?? null,
+    remarkIds: mine?.remarkIds ?? [],
   });
   const [back, setBack] = useState('');
   const [rep, setRep] = useState('');
@@ -1060,6 +1070,13 @@ export function AcrSheet({
                     ) : null}
                     {l.gradeReason ? <p>Why this grade: {l.gradeReason}</p> : null}
                     {l.agreement ? <p>{AGREE[l.agreement]}</p> : null}
+                    {l.remarkTexts?.length ? (
+                      <ul>
+                        {l.remarkTexts.map((t, i) => (
+                          <li key={i}>{t}</li>
+                        ))}
+                      </ul>
+                    ) : null}
                     {l.remarks ? <p>{l.remarks}</p> : null}
                   </div>
                 ) : null}
@@ -1118,6 +1135,40 @@ export function AcrSheet({
                           ))}
                         </fieldset>
                       </>
+                    ) : null}
+                    {l.final && r.remarkLines.length ? (
+                      <fieldset className="ep-field" style={{ border: 0, padding: 0 }}>
+                        <legend className="ep-field__label">Principal’s remarks</legend>
+                        <p className="ep-field__help" style={{ marginTop: 0 }}>
+                          Tick the standard lines that apply for the grade {grade ?? ''}; add your
+                          own words below.
+                        </p>
+                        {r.remarkLines.filter((x) => x.grade === grade).length ? (
+                          r.remarkLines
+                            .filter((x) => x.grade === grade)
+                            .map((x) => (
+                              <label key={x.id} className="ep-check">
+                                <input
+                                  type="checkbox"
+                                  checked={(lv.remarkIds ?? []).includes(x.id)}
+                                  onChange={(e) =>
+                                    setLv((cur) => ({
+                                      ...cur,
+                                      remarkIds: e.target.checked
+                                        ? [...(cur.remarkIds ?? []), x.id]
+                                        : (cur.remarkIds ?? []).filter((id) => id !== x.id),
+                                    }))
+                                  }
+                                />{' '}
+                                {x.text}
+                              </label>
+                            ))
+                        ) : (
+                          <p className="ep-field__help">
+                            No standard remarks for this grade in the set-up.
+                          </p>
+                        )}
+                      </fieldset>
                     ) : null}
                     <label className="ep-field" htmlFor="acr-remarks">
                       <span className="ep-field__label">

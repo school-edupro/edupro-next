@@ -18,6 +18,8 @@ import {
   type AcrQuestionDto,
   type AcrSettingsDto,
   type AssessorKind,
+  AcrRemarksDto,
+  AcrRemarksImportDto,
 } from './acr.dto';
 type Group = 'teaching' | 'non_teaching';
 const KIND_WORDS: Record<AssessorKind, string> = {
@@ -183,6 +185,17 @@ export class AcrSetupService {
                   (SELECT id FROM academic_years WHERE status::text = 'current' ORDER BY start_date DESC LIMIT 1)) AS id) y
           WHERE e.deleted_at IS NULL AND e.status = 'active' GROUP BY 1`,
       );
+      // Principal's remarks (0195): standard lines per grade
+      await this.seedRemarks(c);
+      const remarks = await c.query<{
+        id: string;
+        grade: string;
+        text: string;
+        sort_order: number;
+        active: boolean;
+      }>(
+        `SELECT id::text, grade, text, sort_order, active FROM acr_remarks ORDER BY grade, sort_order, id`,
+      );
       const typeName = new Map(types.rows.map((t) => [t.id, t.name]));
       const appliesTo = new Map(applies.rows.map((x) => [x.form_id, x.n]));
       const s = settings.rows[0];
@@ -249,6 +262,13 @@ export class AcrSetupService {
           id: t.id,
           name: t.name,
           staffGroup: t.staff_group,
+        })),
+        remarkLines: remarks.rows.map((x) => ({
+          id: x.id,
+          grade: x.grade,
+          text: x.text,
+          sortOrder: x.sort_order,
+          active: x.active,
         })),
         cycles: cycles.rows.map((y) => ({
           id: y.id,
@@ -465,6 +485,145 @@ export class AcrSetupService {
     );
     if (!r.rows[0]) throw new DomainError('not-found', 'Form not found', { status: 404 });
     return r.rows[0];
+  }
+
+  // ---- Principal's remarks (0195) ------------------------------------------------------------------
+
+  /** A school starts with a few plain lines per grade; the office rewrites them or uploads its own. */
+  private async seedRemarks(c: PoolClient) {
+    const n = await c.query<{ n: number }>('SELECT count(*)::int AS n FROM acr_remarks');
+    if (n.rows[0]!.n) return;
+    const bands = (
+      await c.query<{ label: string }>('SELECT label FROM acr_grade_bands ORDER BY min_pct DESC')
+    ).rows.map((b) => b.label);
+    const lines: Record<string, string[]> = {
+      [bands[0] ?? 'Outstanding']: [
+        'Has shown a consistently high level of performance; a positive attitude that encourages others.',
+        'Respects deadlines and delivers more than assigned; recommended for higher responsibility.',
+      ],
+      [bands[1] ?? 'Very good']: [
+        'Sincere and diligent; attends to assigned duties well and keeps good class control.',
+        'Communicates ideas clearly; a dependable member of the team.',
+      ],
+      [bands[2] ?? 'Good']: [
+        'Knows the subject well; can perform better with more initiative in school activities.',
+        'Completes assigned duties on time; improved use of technology in teaching recommended.',
+      ],
+      [bands[3] ?? 'Average']: [
+        'Has the potential to contribute more; needs to follow instructions more closely.',
+        'Needs to improve communication skills and adopt better classroom strategies.',
+      ],
+      [bands[bands.length - 1] ?? 'Below average']: [
+        'Needs to improve punctuality, attendance and adherence to school norms.',
+        'Loses instructional time; training and mentoring recommended.',
+      ],
+    };
+    let i = 0;
+    for (const [grade, texts] of Object.entries(lines))
+      for (const text of texts)
+        await c.query(
+          `INSERT INTO acr_remarks (school_id, grade, text, sort_order) VALUES (app.current_school_id(), $1, $2, $3)`,
+          [grade, text, (i++ + 1) * 10],
+        );
+  }
+
+  /** The whole list at once: lines with an id change, new lines are added, lines left out switch off. */
+  async saveRemarks(ctx: RequestContext, dto: AcrRemarksDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.seed(c);
+      const keep: string[] = [];
+      for (const l of dto.lines) {
+        if (l.id) {
+          const u = await c.query(
+            `UPDATE acr_remarks SET grade = $2, text = $3, sort_order = $4, active = $5 WHERE id = $1`,
+            [l.id, l.grade, l.text, l.sortOrder, l.active],
+          );
+          if (u.rowCount) keep.push(l.id);
+          continue;
+        }
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO acr_remarks (school_id, grade, text, sort_order, active, created_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id()) RETURNING id::text`,
+          [l.grade, l.text, l.sortOrder, l.active],
+        );
+        keep.push(r.rows[0]!.id);
+      }
+      await c.query(`UPDATE acr_remarks SET active = false WHERE NOT (id = ANY($1::bigint[]))`, [
+        keep,
+      ]);
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.remarks.save',
+        entityType: 'acr_remarks',
+        entityId: requireTenant(ctx).schoolId,
+        after: { lines: keep.length },
+      });
+      return { saved: keep.length };
+    });
+  }
+
+  /**
+   * Lines from a spreadsheet: the grade is matched to a band's label (a leading "02/05 -" is dropped;
+   * "Excellent" is the top band, "Very bad" the bottom); a line already there, or a dash, is skipped.
+   */
+  async importRemarks(ctx: RequestContext, dto: AcrRemarksImportDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.seed(c);
+      const bands = (
+        await c.query<{ label: string }>('SELECT label FROM acr_grade_bands ORDER BY min_pct DESC')
+      ).rows.map((b) => b.label);
+      const norm = (g: string) => {
+        const t = g
+          .replace(/^\s*\d+\s*\/\s*\d+\s*-\s*/, '')
+          .trim()
+          .toLowerCase();
+        const hit = bands.find((b) => b.toLowerCase() === t);
+        if (hit) return hit;
+        if (/^excellent$/.test(t)) return bands[0] ?? g.trim();
+        if (/^(very bad|poor)$/.test(t)) return bands[bands.length - 1] ?? g.trim();
+        return g.trim();
+      };
+      const have = new Set(
+        (
+          await c.query<{ k: string }>(`SELECT grade || '|' || lower(text) AS k FROM acr_remarks`)
+        ).rows.map((x) => x.k),
+      );
+      let added = 0;
+      let skipped = 0;
+      let order =
+        (
+          await c.query<{ m: number }>(
+            'SELECT COALESCE(max(sort_order), 0)::int AS m FROM acr_remarks',
+          )
+        ).rows[0]!.m + 10;
+      for (const row of dto.rows) {
+        const text = row.text.replace(/\s+/g, ' ').trim();
+        const grade = norm(row.grade);
+        if (!grade || text.length < 3 || /^[-–—.]+$/.test(text)) {
+          skipped++;
+          continue;
+        }
+        const k = `${grade}|${text.toLowerCase()}`;
+        if (have.has(k)) {
+          skipped++;
+          continue;
+        }
+        have.add(k);
+        await c.query(
+          `INSERT INTO acr_remarks (school_id, grade, text, sort_order, active, created_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())`,
+          [grade, text, order, row.active ?? true],
+        );
+        order += 10;
+        added++;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'people.acr.remarks.import',
+        entityType: 'acr_remarks',
+        entityId: requireTenant(ctx).schoolId,
+        after: { added, skipped },
+      });
+      return { added, skipped };
+    });
   }
 
   /** 0192: the employee types a self form is for, checked against Staff setup; null = leave as they are. */

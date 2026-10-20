@@ -345,6 +345,7 @@ const PAGES = [
   '/people/acr/setup?tab=assessors',
   '/people/acr/setup?tab=questions&part=rate&group=non_teaching',
   '/people/acr/setup?tab=grades',
+  '/people/acr/setup?tab=remarks',
   '/comms',
   '/comms/groups?new=1',
   '/comms/templates?channel=whatsapp',
