@@ -246,3 +246,7 @@ employee)` picks the most specific active form: for their side naming their type
   people.acr.view when the job runs.
 - Tests: `acr.e2e-spec.ts` "a person assesses once anywhere in the chain…"; workers
   `test/acr-report.test.ts`.
+- **Header approvals (20 Oct 2026):** the admin header's approvals icon and My approvals count the ACRs
+  at the signed-in person's level (`GET people/acr/to-assess`, asked for everyone, empty for those who
+  sit at no level) as the group "ACRs to assess", each item opening `/me/acr/:id`. An approver sees a
+  new ACR there the moment it reaches their level.

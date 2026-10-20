@@ -16,7 +16,8 @@ export interface ApprovalGroup {
     | 'transport'
     | 'leave'
     | 'fee'
-    | 'file';
+    | 'file'
+    | 'acr';
   title: string;
   help: string;
   href: string;
@@ -252,6 +253,36 @@ export async function myApprovals(
                 detail: `${p.kind.replace('_', ' ')} · ${p.onDate}${p.atTime ? `, ${p.atTime}` : ''} · ${p.reason}`,
                 href: `/engagement/gate-passes/${p.id}`,
                 since: p.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // ACRs at my level (docs/design/32-employee-acr.md): any staff member may sit at a level, so this is
+    // asked for everyone and is empty for those who do not
+    apiFetch<{
+      waiting: Array<{
+        id: string;
+        cycle: string;
+        employee: { name: string; code: string; designation: string | null };
+        level: { seq: number; label: string | null } | null;
+        updatedAt: string;
+      }>;
+    }>('/people/acr/to-assess')
+      .then((r): ApprovalGroup | null =>
+        r.waiting.length
+          ? {
+              key: 'acr',
+              title: 'ACRs to assess',
+              help: 'Annual confidential reports at your level, waiting for your rating or review',
+              href: '/me/acr',
+              count: r.waiting.length,
+              items: r.waiting.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.employee.name} · ${x.employee.code}`,
+                detail: `${x.level?.label ?? 'Your level'} · ${x.cycle}${x.employee.designation ? ` · ${x.employee.designation}` : ''}`,
+                href: `/me/acr/${x.id}`,
+                since: x.updatedAt,
               })),
             }
           : null,
