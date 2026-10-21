@@ -216,6 +216,10 @@ const PAGES = [
   // Sprint 18
   '/exams/board-results',
   '/library/stock',
+  '/masters/library',
+  '/masters/library?tab=library_accession_series',
+  '/masters/library?tab=library_borrow_rules&add=1',
+  '/masters/library?tab=library_vendors',
   '/insights/results',
   // Sprint 19
   '/engagement/appointments',

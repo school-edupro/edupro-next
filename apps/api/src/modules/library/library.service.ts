@@ -89,9 +89,47 @@ export class LibraryService {
     return Number.isFinite(n) && r.rows[0]?.v !== null ? n : fallback;
   }
 
+  /**
+   * The borrowing rule a borrower follows (docs/design/36-library.md, part 1): the most specific active
+   * rule of Library set-up → Borrowing rules; none, the school settings as before.
+   */
+  private async ruleFor(c: PoolClient, kind: 'student' | 'employee', id: string) {
+    const r = await c.query<{
+      max_books: number;
+      loan_days: number;
+      renewals: number;
+      fine_per_day: string;
+      max_fine: string | null;
+      grace_days: number;
+      label: string;
+    }>(`SELECT * FROM app.library_rule($1::library_borrower, $2)`, [kind, id]);
+    const x = r.rows[0];
+    if (x)
+      return {
+        maxBooks: x.max_books,
+        loanDays: x.loan_days,
+        renewals: x.renewals,
+        finePerDay: Number(x.fine_per_day),
+        maxFine: x.max_fine === null ? null : Number(x.max_fine),
+        graceDays: x.grace_days,
+        label: x.label,
+      };
+    return {
+      maxBooks: await this.setting(c, 'library.max_loans', 2),
+      loanDays: await this.setting(c, 'library.loan_days', 14),
+      renewals: 2,
+      finePerDay: await this.setting(c, 'library.fine_per_day', 2),
+      maxFine: null as number | null,
+      graceDays: 0,
+      label: 'the school settings',
+    };
+  }
+
   // ---- catalogue ---------------------------------------------------------------------------------
   async catalogue(ctx: RequestContext, q: CatalogueQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      // a school opened after 0206 gets the set-up's starting rows
+      await c.query(`SELECT app.library_seed(app.current_school_id())`);
       const where: string[] = ["t.status = 'active'"];
       const params: unknown[] = [];
       if (q.q) {
@@ -276,15 +314,23 @@ export class LibraryService {
       );
       if (!borrower.rowCount)
         throw new DomainError('not-found', 'Borrower not found', { status: 404 });
-      const maxLoans = await this.setting(c, 'library.max_loans', 2);
+      const rule = await this.ruleFor(c, dto.borrowerKind, dto.borrowerId);
+      if (rule.maxBooks === 0)
+        throw new DomainError(
+          'library.not_allowed',
+          `Borrowing is not allowed (${rule.label}: 0 books)`,
+          { status: 409 },
+        );
       const open = await c.query<{ n: string }>(
         `SELECT count(*)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND returned_on IS NULL`,
         [dto.borrowerKind, dto.borrowerId],
       );
-      if (Number(open.rows[0]!.n) >= maxLoans)
-        throw new DomainError('library.limit', `The borrower already holds ${maxLoans} copies`, {
-          status: 409,
-        });
+      if (Number(open.rows[0]!.n) >= rule.maxBooks)
+        throw new DomainError(
+          'library.limit',
+          `The borrower already holds ${rule.maxBooks} copies (${rule.label})`,
+          { status: 409 },
+        );
       const unpaid = await c.query<{ n: string }>(
         `SELECT COALESCE(sum(fine_amount - fine_waived), 0)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND fine_amount > fine_waived AND fine_paid_on IS NULL`,
         [dto.borrowerKind, dto.borrowerId],
@@ -295,7 +341,7 @@ export class LibraryService {
           `Fines of ₹${unpaid.rows[0]!.n} are pending`,
           { status: 409 },
         );
-      const loanDays = await this.setting(c, 'library.loan_days', 14);
+      const loanDays = rule.loanDays;
       const r = await c.query<{ id: string }>(
         `INSERT INTO library_loans (school_id, copy_id, borrower_kind, borrower_id, due_on, issued_by, note, request_id)
          VALUES (app.current_school_id(), $1, $2::library_borrower, $3, COALESCE($4::date, CURRENT_DATE + make_interval(days => $5)::interval), app.current_user_id(), $6, app.current_request_id())
@@ -319,15 +365,29 @@ export class LibraryService {
   async renew(ctx: RequestContext, dto: RenewDto): Promise<LoanRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const copy = await this.copyByAccession(c, dto.accessionNo);
-      const l = await c.query<{ id: string; renewed: number; due_on: string }>(
-        `SELECT id::text, renewed, due_on::text FROM library_loans WHERE copy_id = $1 AND returned_on IS NULL FOR UPDATE`,
+      const l = await c.query<{
+        id: string;
+        renewed: number;
+        due_on: string;
+        borrower_kind: 'student' | 'employee';
+        borrower_id: string;
+      }>(
+        `SELECT id::text, renewed, due_on::text, borrower_kind, borrower_id::text FROM library_loans
+          WHERE copy_id = $1 AND returned_on IS NULL FOR UPDATE`,
         [copy.id],
       );
       if (!l.rows[0])
         throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
-      if (l.rows[0].renewed >= 2)
-        throw new DomainError('library.renew_limit', 'Renewed twice already', { status: 409 });
-      const loanDays = await this.setting(c, 'library.loan_days', 14);
+      const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);
+      if (l.rows[0].renewed >= rule.renewals)
+        throw new DomainError(
+          'library.renew_limit',
+          rule.renewals
+            ? `Renewed ${rule.renewals === 1 ? 'once' : `${String(rule.renewals)} times`} already (${rule.label})`
+            : `Not renewed (${rule.label})`,
+          { status: 409 },
+        );
+      const loanDays = rule.loanDays;
       await c.query(
         `UPDATE library_loans SET due_on = GREATEST(due_on, CURRENT_DATE) + make_interval(days => $2)::interval, renewed = renewed + 1, updated_at = now() WHERE id = $1`,
         [l.rows[0].id, loanDays],
@@ -344,20 +404,38 @@ export class LibraryService {
   async returnCopy(ctx: RequestContext, dto: ReturnDto): Promise<LoanRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const copy = await this.copyByAccession(c, dto.accessionNo);
-      const l = await c.query<{ id: string; due_on: string }>(
-        `SELECT id::text, due_on::text FROM library_loans WHERE copy_id = $1 AND returned_on IS NULL FOR UPDATE`,
+      const l = await c.query<{
+        id: string;
+        due_on: string;
+        borrower_kind: 'student' | 'employee';
+        borrower_id: string;
+      }>(
+        `SELECT id::text, due_on::text, borrower_kind, borrower_id::text FROM library_loans
+          WHERE copy_id = $1 AND returned_on IS NULL FOR UPDATE`,
         [copy.id],
       );
       if (!l.rows[0])
         throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
-      const finePerDay = await this.setting(c, 'library.fine_per_day', 2);
+      const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);
+      // the fine: the days late after the grace days, at the rule's rate, up to its highest fine
+      const fine = `LEAST(COALESCE($7::numeric, 'Infinity'::numeric),
+                          GREATEST(0, (COALESCE($2::date, CURRENT_DATE) - due_on) - $6::int) * $3::numeric)`;
       await c.query(
+        // eslint-disable-next-line no-restricted-syntax -- a fixed expression; values are bound
         `UPDATE library_loans SET returned_on = COALESCE($2::date, CURRENT_DATE), returned_by = app.current_user_id(),
-                fine_amount = GREATEST(0, (COALESCE($2::date, CURRENT_DATE) - due_on)) * $3::numeric,
-                fine_waived = CASE WHEN $4::boolean THEN GREATEST(0, (COALESCE($2::date, CURRENT_DATE) - due_on)) * $3::numeric ELSE 0 END,
+                fine_amount = ${fine},
+                fine_waived = CASE WHEN $4::boolean THEN ${fine} ELSE 0 END,
                 note = COALESCE($5, note), updated_at = now()
           WHERE id = $1`,
-        [l.rows[0].id, dto.returnedOn ?? null, finePerDay, dto.waiveFine, dto.note ?? null],
+        [
+          l.rows[0].id,
+          dto.returnedOn ?? null,
+          rule.finePerDay,
+          dto.waiveFine,
+          dto.note ?? null,
+          rule.graceDays,
+          rule.maxFine,
+        ],
       );
       await c.query(
         `UPDATE library_copies SET status = $2::library_copy_status, updated_at = now() WHERE id = $1`,
