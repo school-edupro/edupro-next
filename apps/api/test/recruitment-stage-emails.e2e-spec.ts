@@ -25,8 +25,12 @@ describe('recruitment: stage emails and the Excel export (e2e)', () => {
   let admin: SeededUser;
   let hod: SeededUser;
   const h = (u: SeededUser) => headersFor(u.sub, school.id);
-  const call = (u: SeededUser, method: 'GET' | 'POST' | 'PUT', url: string, json?: unknown) =>
-    inject({ method, url, headers: h(u), ...(json === undefined ? {} : { json }) });
+  const call = (
+    u: SeededUser,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    url: string,
+    json?: unknown,
+  ) => inject({ method, url, headers: h(u), ...(json === undefined ? {} : { json }) });
   const R = '/people/recruitment';
   let vacancyId = '';
   const stage: Record<string, string> = {};
@@ -210,12 +214,12 @@ describe('recruitment: stage emails and the Excel export (e2e)', () => {
     expect(rowOf('BELA').getCell(head.indexOf('Status') + 1).value).toBe('Not taken forward');
     const about = wb.getWorksheet('About this export')!;
     const facts = Object.fromEntries(
-      [1, 2, 3, 4, 5, 6].map((i) => [
+      [1, 2, 3, 4, 5, 6, 7].map((i) => [
         about.getCell(`A${String(i)}`).value,
         about.getCell(`B${String(i)}`).value,
       ]),
     );
-    expect(facts).toMatchObject({ Rows: 3, 'Aadhaar and PAN': 'Masked' });
+    expect(facts).toMatchObject({ Rows: 3, Fields: 'Every field', 'Aadhaar and PAN': 'Masked' });
     expect(String(facts.Candidates)).toContain('PGT Chemistry');
     // the ticked ones only; a status filter
     expect((await out(hod, { ids: [ids.A, ids.C] })).j.rows).toBe(2);
@@ -230,5 +234,151 @@ describe('recruitment: stage emails and the Excel export (e2e)', () => {
       ),
     );
     expect(audit.rows[0]!.n).toBe(3);
+  });
+
+  it('the office picks the fields and their order, the list sheets, worked-out columns; the last choice is kept', async () => {
+    const setup = (await call(hod, 'GET', `${R}/export/setup`)).json();
+    const groupIds = setup.groups.map((g: { id: string }) => g.id);
+    expect(groupIds).toEqual(
+      expect.arrayContaining([
+        'application',
+        'worked',
+        'section.personal',
+        'lists',
+        'stages',
+        'decision',
+      ]),
+    );
+    const keys = setup.groups.flatMap((g: { columns: Array<{ key: string }> }) =>
+      g.columns.map((c) => c.key),
+    );
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'calc.age',
+        'calc.highest',
+        'calc.experience',
+        'calc.marks',
+        'list.education',
+        `stage.${stage.Interview}.result`,
+        'field.dob',
+      ]),
+    );
+    expect(setup.sheets.map((x: { kind: string }) => x.kind)).toEqual([
+      'education',
+      'experience',
+      'training',
+      'children',
+      'references',
+    ]);
+    expect(setup.last).toBeNull();
+    const columns = [
+      'app.name',
+      'calc.age',
+      `stage.${stage.Interview}.result`,
+      'app.number',
+      'list.education',
+      'calc.marks',
+      'nothing.here',
+    ];
+    const r = await call(hod, 'POST', `${R}/applications/export`, {
+      vacancy: vacancyId,
+      columns,
+      sheets: ['education'],
+      layout: 'Panel sheet',
+    });
+    expect(r.statusCode).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(r.json().base64, 'base64') as unknown as ArrayBuffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Candidates',
+      'Qualifications',
+      'About this export',
+    ]);
+    const ws = wb.getWorksheet('Candidates')!;
+    // in the order picked; an unknown field left out
+    expect((ws.getRow(1).values as string[]).slice(1)).toEqual([
+      'Name',
+      'Age (years)',
+      'Interview: result',
+      'Application no.',
+      'Qualifications',
+      'Total marks',
+    ]);
+    const anu = [2, 3, 4].map((i) => ws.getRow(i)).find((row) => row.getCell(1).value === 'ANU')!;
+    const born = new Date(Date.now() + 330 * 60_000);
+    const age =
+      born.getUTCFullYear() -
+      1991 -
+      (born.getUTCMonth() + 1 < 2 || (born.getUTCMonth() + 1 === 2 && born.getUTCDate() < 3)
+        ? 1
+        : 0);
+    expect(anu.getCell(2).value).toBe(age);
+    expect(anu.getCell(3).value).toBe('Passed');
+    const about = wb.getWorksheet('About this export')!;
+    expect(about.getCell('B6').value).toBe('6 picked (layout: Panel sheet)');
+    // nothing known picked: refused
+    expect(
+      (await call(hod, 'POST', `${R}/applications/export`, { columns: ['nothing.here'] }))
+        .statusCode,
+    ).toBe(400);
+    // the last choice comes back to the one who made it, not to another
+    const again = (await call(hod, 'GET', `${R}/export/setup`)).json();
+    expect(again.last).toEqual({ columns: columns.slice(0, 6), sheets: ['education'] });
+    expect((await call(admin, 'GET', `${R}/export/setup`)).json().last).toBeNull();
+  });
+
+  it('named layouts are the school’s: anyone in recruitment uses them; their maker or the manager changes them', async () => {
+    const save = (u: SeededUser, name: string, columns: string[]) =>
+      call(u, 'POST', `${R}/export/layouts`, { name, columns, sheets: ['experience'] });
+    const mine = await save(hod, 'Interview panel', ['app.name', 'calc.highest']);
+    expect(mine.statusCode).toBe(200);
+    expect(mine.json()).toMatchObject({ updated: false });
+    // the same name (any case) changes it
+    expect((await save(hod, 'interview PANEL', ['app.name'])).json()).toMatchObject({
+      id: mine.json().id,
+      updated: true,
+    });
+    const list = (await call(admin, 'GET', `${R}/export/setup`)).json().layouts;
+    expect(list).toEqual([
+      expect.objectContaining({
+        name: 'interview PANEL',
+        columns: ['app.name'],
+        sheets: ['experience'],
+        canEdit: true,
+      }),
+    ]);
+    expect((await call(hod, 'GET', `${R}/export/setup`)).json().layouts[0].canEdit).toBe(true);
+    // the manager may change and remove it; a field list of unknown keys is refused
+    expect((await save(admin, 'Interview panel', ['app.number'])).statusCode).toBe(200);
+    expect((await save(admin, 'Other', ['nothing.here'])).statusCode).toBe(400);
+    expect((await save(admin, 'x', ['app.number'])).statusCode).toBe(400);
+    expect(
+      (await call(admin, 'DELETE', `${R}/export/layouts/${mine.json().id as string}`)).statusCode,
+    ).toBe(200);
+    expect((await call(admin, 'GET', `${R}/export/setup`)).json().layouts).toEqual([]);
+  });
+
+  it('a layout of someone else is not theirs to change or remove', async () => {
+    const theirs = (
+      await call(admin, 'POST', `${R}/export/layouts`, {
+        name: 'Office sheet',
+        columns: ['app.name'],
+      })
+    ).json();
+    expect(
+      (
+        await call(hod, 'POST', `${R}/export/layouts`, {
+          name: 'office sheet',
+          columns: ['app.number'],
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (await call(hod, 'DELETE', `${R}/export/layouts/${theirs.id as string}`)).statusCode,
+    ).toBe(403);
+    expect((await call(hod, 'GET', `${R}/export/setup`)).json().layouts[0]).toMatchObject({
+      name: 'Office sheet',
+      canEdit: false,
+    });
   });
 });

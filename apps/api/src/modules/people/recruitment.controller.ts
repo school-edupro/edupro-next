@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
@@ -27,6 +38,7 @@ import {
   ApplicationBulkDto,
   ApplicationExportDto,
   ApplicationListDto,
+  ExportLayoutDto,
   ApplicationNoteDto,
   RecruitmentNoticesDto,
   StageResultDto,
@@ -249,6 +261,30 @@ export class RecruitmentController {
   @RequirePermission(PEOPLE.recruitmentView)
   exportApplications(@ReqCtx() ctx: RequestContext, @Body() body: ApplicationExportDto) {
     return this.exporter.export(ctx, body);
+  }
+
+  @Get('export/setup')
+  @ApiOperation({
+    summary: 'The export picker: the fields by group, the list sheets, the layouts, my last choice',
+  })
+  @RequirePermission(PEOPLE.recruitmentView)
+  exportSetup(@ReqCtx() ctx: RequestContext) {
+    return this.exporter.setup(ctx);
+  }
+
+  @Post('export/layouts')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Save a named export layout (the same name changes it)' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  saveExportLayout(@ReqCtx() ctx: RequestContext, @Body() body: ExportLayoutDto) {
+    return this.exporter.saveLayout(ctx, body);
+  }
+
+  @Delete('export/layouts/:id')
+  @ApiOperation({ summary: 'Remove an export layout (its maker or the recruitment manager)' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  deleteExportLayout(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.exporter.deleteLayout(ctx, id);
   }
 
   @Post('applications/bulk')

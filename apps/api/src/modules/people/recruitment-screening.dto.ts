@@ -33,10 +33,26 @@ export const ApplicationListSchema = z.object({
 export class ApplicationListDto extends createZodDto(ApplicationListSchema) {}
 
 /** The candidates as an Excel workbook: the list's filters, or the ticked ones. */
+const ExportKey = z.string().regex(/^[a-z0-9_.]{1,60}$/);
+const ListKind = z.enum(['education', 'experience', 'training', 'children', 'references']);
 export const ApplicationExportSchema = ApplicationListSchema.extend({
   ids: z.array(Id).max(2000).optional(),
+  /** the fields picked, in their order (part 10); none: every field and every list sheet */
+  columns: z.array(ExportKey).max(400).optional(),
+  /** the lists that come as sheets of their own */
+  sheets: z.array(ListKind).max(5).optional(),
+  /** the layout used, for the About sheet */
+  layout: txt(60).optional(),
 });
 export class ApplicationExportDto extends createZodDto(ApplicationExportSchema) {}
+
+/** A named set of export fields the school keeps (0205). */
+export const ExportLayoutSchema = z.object({
+  name: txt(60).min(2),
+  columns: z.array(ExportKey).min(1).max(400),
+  sheets: z.array(ListKind).max(5).default([]),
+});
+export class ExportLayoutDto extends createZodDto(ExportLayoutSchema) {}
 
 /** A stage of one application: when and where, the panel; once held, the marks and the result. */
 export const StageResultSchema = z.object({

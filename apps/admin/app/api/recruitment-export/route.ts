@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
 
 const ID = /^\d{1,18}$/;
+const KEY = /^[a-z0-9_.]{1,60}$/;
+const LISTS = ['education', 'experience', 'training', 'children', 'references'];
 const STATUS = [
   'submitted',
   'screening',
@@ -13,13 +15,20 @@ const STATUS = [
   'returned',
 ];
 
+/** The request's answers, whether from the address (GET) or a posted form (the export picker). */
+interface Input {
+  get: (k: string) => string | null;
+  getAll: (k: string) => string[];
+}
+
 /**
- * The candidates as an Excel workbook (docs/design/34-recruitment.md, part 9): the list's filters
- * (vacancy, stage, status, search, employee match), or the ticked ones (`ids`). The API checks the right
- * to see candidates, masks Aadhaar and PAN for those without the sensitive right and logs the export.
+ * The candidates as an Excel workbook (docs/design/34-recruitment.md, parts 9 and 10): the list's filters
+ * (vacancy, stage, status, search, employee match), or the ticked ones (`ids`); every field, or the
+ * fields picked in their order (`columns`) with the list sheets ticked (`sheets`), posted by the export
+ * picker. The API checks the right to see candidates, masks Aadhaar and PAN for those without the
+ * sensitive right, keeps the user's last choice and logs the export.
  */
-export async function GET(req: NextRequest) {
-  const sp = req.nextUrl.searchParams;
+async function workbook(req: NextRequest, sp: Input) {
   const id = (k: string) => {
     const v = sp.get(k) ?? '';
     return ID.test(v) ? v : undefined;
@@ -40,14 +49,26 @@ export async function GET(req: NextRequest) {
     to.searchParams.set('detail', 'Tick the candidates to export first.');
     return NextResponse.redirect(to, 303);
   }
+  const columns = sp
+    .getAll('columns')
+    .filter((x) => KEY.test(x))
+    .slice(0, 400);
+  const pick = columns.length
+    ? {
+        columns,
+        sheets: sp.getAll('sheets').filter((x) => LISTS.includes(x)),
+        layout: (sp.get('layout') ?? '').trim().slice(0, 60) || undefined,
+      }
+    : {};
   const body = ids.length
-    ? { ids }
+    ? { ids, ...pick }
     : {
         vacancy: id('vacancy'),
         stage: id('vacancy') ? id('stage') : undefined,
         status: STATUS.includes(status) ? status : undefined,
         q: (sp.get('q') ?? '').trim().slice(0, 80) || undefined,
         match: sp.get('match') ? '1' : undefined,
+        ...pick,
       };
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
@@ -67,4 +88,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(error.problem, { status: error.status });
     throw error;
   }
+}
+
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  return workbook(req, { get: (k) => sp.get(k), getAll: (k) => sp.getAll(k) });
+}
+
+/** The export picker posts its choice (a long field list does not fit an address). */
+export async function POST(req: NextRequest) {
+  // only this app's own pages may post here
+  const origin = req.headers.get('origin');
+  if (origin && origin !== req.nextUrl.origin) return new NextResponse(null, { status: 403 });
+  const fd = await req.formData();
+  const text = (v: FormDataEntryValue | null) => (typeof v === 'string' ? v : null);
+  return workbook(req, {
+    get: (k) => text(fd.get(k)),
+    getAll: (k) => fd.getAll(k).filter((v): v is string => typeof v === 'string'),
+  });
 }

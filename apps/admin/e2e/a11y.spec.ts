@@ -558,6 +558,35 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  test('no serious or critical violations on the candidates export picker', async ({ page }) => {
+    await page.goto('/people/recruitment/candidates');
+    await page.waitForLoadState('networkidle');
+    const open = page.getByRole('button', { name: 'Customise export' });
+    test.skip(!(await open.isVisible().catch(() => false)), 'no candidates in this school');
+    await open.click();
+    await page.getByRole('heading', { name: /^Columns in the file/ }).waitFor();
+    // the pointer off the buttons: a button under it is measured in its hover colours, half way
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    const results = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    const serious = results.violations.filter(
+      (v) => v.impact === 'serious' || v.impact === 'critical',
+    );
+    expect(
+      serious.map(
+        (v) =>
+          `${v.id}: ${v.help} ${v.nodes
+            .map((n) => n.target.join(' '))
+            .slice(0, 3)
+            .join(' | ')}`,
+      ),
+    ).toEqual([]);
+  });
+
   for (const path of PAGES) {
     test(`no serious or critical violations on ${path}`, async ({ page }) => {
       const res = await page.goto(path);

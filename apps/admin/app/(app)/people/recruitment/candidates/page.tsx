@@ -1,6 +1,7 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import { ExportPicker } from '@/components/recruitment/ExportPicker';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   APP_ORDER,
@@ -96,13 +97,19 @@ export default async function CandidatesPage({
         description="Every application and where it stands. Pick a vacancy and a stage to take its candidates on together."
         actions={
           list.data.length ? (
-            <a
-              className="ep-btn ep-btn--secondary"
-              href={`/api/recruitment-export${qs ? `?${qs}` : ''}`}
-              title="Every detail of the candidates shown, with their qualifications, experience and stages"
-            >
-              Export to Excel ({list.data.length})
-            </a>
+            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+              <a
+                className="ep-btn ep-btn--secondary"
+                href={`/api/recruitment-export${qs ? `?${qs}` : ''}`}
+                title="Every detail of the candidates shown, with their qualifications, experience and stages"
+              >
+                Export to Excel ({list.data.length})
+              </a>
+              <ExportPicker
+                filters={Object.fromEntries(new URLSearchParams(qs))}
+                count={list.data.length}
+              />
+            </span>
           ) : null
         }
       />

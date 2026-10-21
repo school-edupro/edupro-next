@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { ApprovalLevel, RecruitmentNotices, StageKind } from './recruitment';
+import type { ApprovalLevel, ExportSetup, RecruitmentNotices, StageKind } from './recruitment';
 
 const BASE = '/people/recruitment';
 const PAGE = '/people/recruitment';
@@ -462,4 +462,48 @@ export async function joinCandidate(fd: FormData) {
   }
   revalidatePath(page);
   redirect(`/people/employees/${out.employeeId}?ok=joined`);
+}
+
+// ---- part 10: the Excel export with the fields picked ----------------------------------------------------
+
+/** What the export picker shows; read when it opens. */
+export async function loadExportSetup(): Promise<ExportSetup> {
+  return apiFetch<ExportSetup>(`${BASE}/export/setup`);
+}
+
+function problem(e: unknown): string {
+  if (e instanceof ApiError) {
+    const list = e.problem.errors as Array<{ message?: string }> | undefined;
+    return list?.length
+      ? list.map((x) => x.message).join('; ')
+      : (e.problem.detail ?? e.problem.type);
+  }
+  throw e;
+}
+
+/** A named layout saved for the school (the same name changes it). */
+export async function saveExportLayout(input: {
+  name: string;
+  columns: string[];
+  sheets: string[];
+}): Promise<{ ok: true; id: string; updated: boolean } | { ok: false; error: string }> {
+  try {
+    const r = await apiFetch<{ id: string; updated: boolean }>(`${BASE}/export/layouts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return { ok: true, ...r };
+  } catch (e) {
+    return { ok: false, error: problem(e) };
+  }
+}
+
+export async function deleteExportLayout(id: string): Promise<Out> {
+  if (!okId(id)) return { ok: false, error: 'Not found' };
+  try {
+    await apiFetch(`${BASE}/export/layouts/${id}`, { method: 'DELETE' });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: problem(e) };
+  }
 }

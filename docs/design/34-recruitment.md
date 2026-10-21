@@ -341,3 +341,33 @@ result**; the switches are for **email only** (SMS and WhatsApp follow Notices t
 - Tests: `recruitment-stage-emails.e2e-spec.ts` (switches saved by the school admin only; emails only at
   the stages that tell; the workbook's sheets, columns, stage results, dates, masking, the ticked ones,
   a status filter, the audit rows); `recruitment-screening.e2e-spec.ts` (cleared emails now queued).
+
+## Part 10 — the Excel export with the fields picked (migration 0205, built)
+
+Decisions (21 Oct 2026): **named layouts the school shares, plus my last choice**; the lists come **as
+sheets of their own (ticked) and as one-cell summary columns**; worked-out columns **age, highest
+qualification, total experience, total marks**; the columns come **in the order arranged**.
+
+- **Customise export** on the candidates page opens a side panel: the candidates (as the list is
+  filtered, or only the ticked); start from my last choice, every field, nothing, or one of the school's
+  layouts; the fields by group (Application, Worked out, each section of the form, Lists in one cell,
+  Interests and documents, Stages, Decision and follow-up) with a search and All/None per group; the
+  columns in the file, numbered, each moved up or down or left out; the lists to add as sheets of their
+  own; save as a layout (a name; the same name changes it); Download Excel.
+- **Worked out:** age in years on the export date; highest qualification (the first listed, with year,
+  marks and division); total experience in years (the years and months given, or worked out from the
+  jobs listed, a job without an end running to today); total marks, out of, and per cent across the
+  stages with marks. **Stages** add a remarks column. **Lists in one cell:** each entry's answers,
+  entries split by ";".
+- **API:** `GET people/recruitment/export/setup` (the groups, the sheets, every field's key in order,
+  the layouts with `canEdit`, my last); `POST …/applications/export` takes `columns` (keys, in order;
+  unknown keys left out, none known refused), `sheets` and `layout` (named on the About sheet while
+  unchanged); without `columns` it is the full export of part 9. A custom export keeps the user's last
+  choice (`user_preferences`, `recruitment.export.last`). `POST …/export/layouts` (recruitment view;
+  the same name changes it, by its maker or the recruitment manager, else 409), `DELETE
+  …/export/layouts/:id` (its maker or the manager). Layouts: `recruitment_export_layouts` (0205). The
+  admin route `/api/recruitment-export` takes the picker's choice by POST (same-origin only).
+- Tests: `recruitment-stage-emails.e2e-spec.ts` (the picker's groups and sheets; columns in the order
+  picked, an unknown key left out, a list sheet, age worked out, the About sheet naming the layout; none
+  known refused; my last kept per user; layouts saved, changed by name, removed by the manager, another's
+  refused); `a11y.spec.ts` (the picker open).

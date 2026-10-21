@@ -411,3 +411,20 @@ export interface RecruitmentNotices {
   whatsapp: boolean;
   email: boolean;
 }
+/** The export picker (part 10): the fields by group, the list sheets, the school's layouts, my last. */
+export interface ExportSetup {
+  groups: Array<{ id: string; title: string; columns: Array<{ key: string; label: string }> }>;
+  sheets: Array<{ kind: string; title: string }>;
+  /** every field, in the order of the full export */
+  full: string[];
+  layouts: Array<{
+    id: string;
+    name: string;
+    columns: string[];
+    sheets: string[];
+    by: string | null;
+    updatedAt: string;
+    canEdit: boolean;
+  }>;
+  last: { columns: string[]; sheets: string[] } | null;
+}
