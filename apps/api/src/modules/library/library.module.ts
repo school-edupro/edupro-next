@@ -8,6 +8,7 @@ import { LibraryImportService } from './library-import.service';
 import { LibraryLabelsService } from './library-labels.service';
 import { LibraryPeriodicalsService } from './library-periodicals.service';
 import { LibraryRegisterService } from './library-register.service';
+import { LibraryAccessionService } from './library-accession.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
@@ -23,6 +24,7 @@ import { LibraryService } from './library.service';
     LibraryLabelsService,
     LibraryPeriodicalsService,
     LibraryRegisterService,
+    LibraryAccessionService,
     AuditService,
   ],
   exports: [LibraryService],

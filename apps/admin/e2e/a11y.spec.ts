@@ -217,6 +217,8 @@ const PAGES = [
   '/exams/board-results',
   '/library/stock',
   '/library?view=copies&sort=accession',
+  '/library/accession',
+  '/library/accession?preview=1&from=1001&start=1001',
   '/library?author=a&stock=never',
   '/library/import',
   '/library/import/14',

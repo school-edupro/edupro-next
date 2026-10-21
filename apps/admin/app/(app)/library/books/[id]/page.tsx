@@ -229,6 +229,9 @@ export default async function BookPage({
                     <tr key={c.id} id={`copy-${c.id}`}>
                       <td>
                         <strong>{c.accessionNo}</strong>
+                        {c.former.length ? (
+                          <div className="ep-field__help">formerly {c.former.join(', ')}</div>
+                        ) : null}
                         <div className="ep-field__help">
                           {dmy(c.accessionedOn)}
                           {c.barcode ? ` · barcode ${c.barcode}` : ''}

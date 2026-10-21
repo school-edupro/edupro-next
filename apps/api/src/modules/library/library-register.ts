@@ -104,6 +104,14 @@ export const REGISTER_FIELDS: RegisterField[] = [
       ],
     },
   }),
+  f(
+    'former_nos',
+    'Former accession nos.',
+    'copy',
+    'text',
+    copy(`(SELECT string_agg(h.old_no, ', ' ORDER BY h.changed_at, h.id) FROM library_accession_changes h
+            WHERE h.copy_id = x.id AND upper(h.old_no) <> upper(x.accession_no))`),
+  ),
   f('library', 'Library', 'copy', 'text', copy('l.name'), { options: 'library' }),
   f('shelf', 'Shelf', 'copy', 'text', copy('sh.code'), { options: 'shelf' }),
   f('rack', 'Rack', 'copy', 'text', copy('x.rack')),
@@ -248,11 +256,15 @@ export function registerWhere(level: RegisterLevel, v: RegisterView, args: unkno
       OR t.call_no ILIKE ${p} OR regexp_replace(COALESCE(t.isbn, ''), '[^0-9X]', '', 'g') = ${plain}`;
     where.push(
       level === 'copy'
-        ? `(${onTitle} OR x.accession_no ILIKE ${p} OR upper(x.barcode) = ${plain})`
+        ? // eslint-disable-next-line no-restricted-syntax -- fixed fragments of the register catalogue; values are bound
+          `(${onTitle} OR x.accession_no ILIKE ${p} OR upper(x.barcode) = ${plain}
+            OR EXISTS (SELECT 1 FROM library_accession_changes h WHERE h.copy_id = x.id AND h.old_no ILIKE ${p}))`
         : // eslint-disable-next-line no-restricted-syntax -- fixed fragments of the register catalogue; values are bound
           `(${onTitle} OR array_to_string(t.keywords, ' ') ILIKE ${p}
             OR EXISTS (SELECT 1 FROM library_copies a WHERE a.title_id = t.id
-                        AND (a.accession_no ILIKE ${p} OR upper(a.barcode) = ${plain})))`,
+                        AND (a.accession_no ILIKE ${p} OR upper(a.barcode) = ${plain}
+                             OR EXISTS (SELECT 1 FROM library_accession_changes h
+                                         WHERE h.copy_id = a.id AND h.old_no ILIKE ${p}))))`,
     );
   }
   const fields = byKey(level);

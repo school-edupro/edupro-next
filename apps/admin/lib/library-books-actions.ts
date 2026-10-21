@@ -383,3 +383,40 @@ export async function receiveIssues(
     return problem(e);
   }
 }
+
+/** Correcting accession numbers (part 2 of the register work): applied after the preview. */
+export async function applyAccessionChange(fd: FormData) {
+  const pick = (k: string) => String(fd.get(k) ?? '').trim();
+  const input = {
+    from: pick('from'),
+    to: pick('to') || undefined,
+    start: pick('start'),
+    reason: pick('reason'),
+  };
+  const again = new URLSearchParams(
+    Object.entries({ ...input, preview: '1' }).filter((e): e is [string, string] => Boolean(e[1])),
+  );
+  let done: { changed: number; numbers: string[] };
+  try {
+    done = await apiFetch<{ changed: number; numbers: string[] }>('/library/accession/apply', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      again.set('error', e.problem.type);
+      again.set('detail', String(e.problem.detail ?? '').slice(0, 600));
+      redirect(`/library/accession?${again.toString()}`);
+    }
+    throw e;
+  }
+  revalidatePath('/library');
+  const q = new URLSearchParams({
+    ok: '1',
+    detail: `Changed ${String(done.changed)} accession number${done.changed === 1 ? '' : 's'}. The old ${done.changed === 1 ? 'number is' : 'numbers are'} retired and still find the copies.`,
+    // the new numbers run in order: their labels as a range
+    lfrom: done.numbers[0] ?? '',
+    lto: done.numbers[done.numbers.length - 1] ?? '',
+  });
+  redirect(`/library/accession?${q.toString()}`);
+}

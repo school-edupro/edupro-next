@@ -29,7 +29,9 @@ export function bookFilter(q: BookFilter, start: unknown[] = []) {
                  OR t.call_no ILIKE ${p} OR array_to_string(t.keywords, ' ') ILIKE ${p}
                  OR regexp_replace(COALESCE(t.isbn, ''), '[^0-9X]', '', 'g') = ${digits}
                  OR EXISTS (SELECT 1 FROM library_copies a WHERE a.title_id = t.id
-                             AND (a.accession_no ILIKE ${p} OR a.barcode = ${digits})))`);
+                             AND (a.accession_no ILIKE ${p} OR a.barcode = ${digits}
+                                  OR EXISTS (SELECT 1 FROM library_accession_changes h
+                                              WHERE h.copy_id = a.id AND h.old_no ILIKE ${p}))))`);
   }
   if (q.materialTypeId) title.push(`t.material_type_id = ${arg(q.materialTypeId)}`);
   if (q.subjectId) title.push(`t.subject_id = ${arg(q.subjectId)}`);

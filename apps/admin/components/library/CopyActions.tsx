@@ -122,6 +122,13 @@ export function CopyActions({
           Status
         </button>
       ) : null}
+      <a
+        className="ep-btn ep-btn--ghost ep-btn--sm"
+        href={`/library/accession?from=${encodeURIComponent(copy.accessionNo)}`}
+        aria-label={`Correct the accession number ${copy.accessionNo}`}
+      >
+        Correct no.
+      </a>
       <Drawer
         open={open === 'edit'}
         title={`Copy ${copy.accessionNo}`}

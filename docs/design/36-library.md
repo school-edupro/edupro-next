@@ -339,9 +339,18 @@ stays). Not chosen: replacing the book with a copy, a waiver at the library desk
   pages run in the database. `GET library/register/:copies|titles/fields`, `POST library/register/:level`,
   `POST library/register/:level/export`. Customise export (named layouts) takes the list's filters at
   the same level (`view` on `POST library/books/export`).
-- **Part 2 — correcting an accession number.** On the copy, with a reason; the old number kept in the
-  copy's history and retired; search finds the copy by a former number; a range corrected with a preview;
-  the label reprinted.
+- **Part 2 — correcting an accession number (done, migration 0214).** Library → Correct accession nos.
+  (`/library/accession`, also from a copy's "Correct no." and the register's row menu): the number now
+  (or the first and last of a range) and the correct number (the first; the rest follow in order, padded
+  like it), a preview of each copy's old and new number with what stands in the way (another copy has
+  it, a copy had it before, it is the old number of another copy in the same correction, two copies would
+  get it), then applied with a reason, all or nothing (`POST library/accession/preview|apply`). Each change
+  is kept (`library_accession_changes`), in the copy's history ("Accession number corrected") and in the
+  audit log. The old number is retired: a trigger refuses it to any other copy, the series skip it, a
+  typed or imported number is refused; a copy may go back to a number it had. `app.library_copy_by_number`
+  finds a copy by its old number at the desk (issue, renew, return) and in a stock check; the search of
+  the lists finds it, the copies list has a Former accession nos. column and the book page says
+  "formerly …". After applying, the new labels are a click away.
 - **Part 3 — lost and damaged books, students.** Mark the loan lost (or return it damaged): the charge
   worked out, announced on the pupil as a misc fee at once; it stops new issues until paid, shows on the
   Fines page and in the library's leaving check; found again before paying: the change request.

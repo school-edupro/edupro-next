@@ -290,7 +290,8 @@ export class LibraryService {
       `SELECT c.id::text, c.status::text, (t.is_reference OR COALESCE(NOT m.issuable, false)) AS is_reference, t.title
          FROM library_copies c JOIN library_titles t ON t.id = c.title_id
          LEFT JOIN library_material_types m ON m.id = t.material_type_id
-        WHERE c.accession_no = $1`,
+        WHERE c.id = app.library_copy_by_number($1)`,
+      // a number the copy had before still names it (its old label)
       [accessionNo],
     );
     if (!r.rows[0])
@@ -698,14 +699,15 @@ export class LibraryService {
       const r = await c.query<{ n: string }>(
         `WITH hit AS (
            UPDATE library_stock_check_items i SET outcome = 'found', found_on = CURRENT_DATE
-             FROM library_copies c WHERE i.copy_id = c.id AND i.check_id = $1 AND c.accession_no = ANY($2::text[]) AND i.outcome <> 'found'
+             FROM library_copies c WHERE i.copy_id = c.id AND i.check_id = $1 AND i.outcome <> 'found'
+              AND c.id IN (SELECT app.library_copy_by_number(n) FROM unnest($2::text[]) AS n)
            RETURNING i.copy_id)
          UPDATE library_copies c SET last_verified_on = CURRENT_DATE, updated_at = now() FROM hit WHERE c.id = hit.copy_id
          RETURNING 1 AS n`,
         [id, dto.accessionNos],
       );
       const unknown = await c.query<{ no: string }>(
-        `SELECT x.no FROM unnest($1::text[]) AS x(no) WHERE NOT EXISTS (SELECT 1 FROM library_copies c WHERE c.accession_no = x.no)`,
+        `SELECT x.no FROM unnest($1::text[]) AS x(no) WHERE app.library_copy_by_number(x.no) IS NULL`,
         [dto.accessionNos],
       );
       await c.query(

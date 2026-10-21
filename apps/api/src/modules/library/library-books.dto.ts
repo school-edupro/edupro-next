@@ -359,3 +359,17 @@ export const DueIssuesSchema = z.object({
   ahead: z.coerce.number().int().min(0).max(30).default(0),
 });
 export class DueIssuesDto extends createZodDto(DueIssuesSchema) {}
+
+/**
+ * A wrong accession number corrected (docs/design/36-library.md, part 2): one copy (`from` becomes
+ * `start`) or a range (`from` to `to` become `start` on, in the same order).
+ */
+export const AccessionChangeSchema = z.object({
+  from: AccessionNo,
+  to: AccessionNo.optional(),
+  start: AccessionNo,
+  reason: txt(300).min(3).optional(),
+});
+export class AccessionChangeDto extends createZodDto(AccessionChangeSchema) {}
+export const AccessionApplySchema = AccessionChangeSchema.extend({ reason: txt(300).min(3) });
+export class AccessionApplyDto extends createZodDto(AccessionApplySchema) {}

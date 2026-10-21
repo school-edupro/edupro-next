@@ -85,6 +85,13 @@ const COPIES: PeopleListConfig<RegisterView, RegisterResult> = {
           </a>
         </li>
       ) : null}
+      {can.manage ? (
+        <li>
+          <a href={`/library/accession?from=${encodeURIComponent(text(r.accession_no))}`}>
+            Correct the accession no.
+          </a>
+        </li>
+      ) : null}
       {can.circulate ? (
         <li>
           <a href="/library/circulation">Circulation desk</a>

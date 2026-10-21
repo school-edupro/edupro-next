@@ -458,6 +458,11 @@ export const NAV: Array<{
       { href: '/library/import', label: 'libraryImport', permission: 'library.catalogue.manage' },
       { href: '/library/labels', label: 'libraryLabels', permission: 'library.catalogue.manage' },
       {
+        href: '/library/accession',
+        label: 'libraryAccession',
+        permission: 'library.catalogue.manage',
+      },
+      {
         href: '/library/periodicals',
         label: 'libraryPeriodicals',
         permission: 'library.catalogue.view',

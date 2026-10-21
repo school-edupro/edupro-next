@@ -41,6 +41,8 @@ export interface BookRow {
 export interface BookCopy {
   id: string;
   accessionNo: string;
+  /** numbers the copy had before (retired) */
+  former: string[];
   accessionedOn: string;
   libraryId: string;
   library: string;
@@ -150,6 +152,7 @@ export const COPY_EVENT: Record<string, string> = {
   found: 'Found again',
   damaged: 'Damaged',
   available: 'Back in use',
+  renumbered: 'Accession number corrected',
 };
 export const dmy = (d: string | null | undefined) =>
   d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : '';

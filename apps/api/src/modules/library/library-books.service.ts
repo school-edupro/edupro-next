@@ -296,6 +296,8 @@ export class LibraryBooksService {
                 x.shelf_id::text, sh.code AS shelf, sh.name AS shelf_holds, x.rack, x.barcode, x.status::text, x.status_on::text,
                 x.status_reason, x.acquisition, x.vendor_id::text, v.name AS vendor, x.donor, x.bill_no, x.bill_date::text, x.po_no,
                 x.price::text, x.remarks, x.last_verified_on::text,
+                (SELECT array_agg(h.old_no ORDER BY h.changed_at, h.id) FROM library_accession_changes h
+                  WHERE h.copy_id = x.id AND upper(h.old_no) <> upper(x.accession_no)) AS former,
                 (SELECT jsonb_build_object('dueOn', ln.due_on::text, 'borrower', COALESCE(st.display_name, e.display_name),
                                            'ref', COALESCE(st.admission_no, e.employee_code), 'kind', ln.borrower_kind::text)
                    FROM library_loans ln LEFT JOIN students st ON ln.borrower_kind = 'student' AND st.id = ln.borrower_id
@@ -358,6 +360,7 @@ export class LibraryBooksService {
         copies: copies.rows.map((x) => ({
           id: String(x.id),
           accessionNo: String(x.accession_no),
+          former: (x.former as string[] | null) ?? [],
           accessionedOn: x.accessioned_on as string,
           libraryId: String(x.library_id),
           library: `${String(x.library)} (${String(x.library_code)})`,
@@ -629,6 +632,16 @@ export class LibraryBooksService {
         throw new DomainError(
           'library.accession_taken',
           `Accession number already used: ${taken.rows.map((x) => x.accession_no).join(', ')}`,
+          { status: 409 },
+        );
+      const retired = await c.query<{ old_no: string }>(
+        `SELECT DISTINCT old_no FROM library_accession_changes WHERE upper(old_no) = ANY($1::text[])`,
+        [typed.map((x) => x.toUpperCase())],
+      );
+      if (retired.rowCount)
+        throw new DomainError(
+          'library.accession_taken',
+          `Used before and retired (a number is not given out again): ${retired.rows.map((x) => x.old_no).join(', ')}`,
           { status: 409 },
         );
       numbers = typed;

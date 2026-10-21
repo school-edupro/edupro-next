@@ -617,6 +617,17 @@ export class LibraryImportService {
           )
         ).rows.map((x) => [x.accession_no, x]),
       );
+      // numbers a copy had before (retired): not given to a new copy
+      const retired = new Map(
+        (
+          await c.query<{ n: string; now_no: string }>(
+            `SELECT upper(h.old_no) AS n, x.accession_no AS now_no FROM library_accession_changes h
+               JOIN library_copies x ON x.id = h.copy_id
+              WHERE upper(h.old_no) = ANY($1::text[]) AND upper(x.accession_no) <> upper(h.old_no)`,
+            [accs.map((a) => a.toUpperCase())],
+          )
+        ).rows.map((x) => [x.n, x.now_no]),
+      );
       const takenBarcodes = new Map(
         (
           await c.query<{ barcode: string; accession_no: string }>(
@@ -663,6 +674,11 @@ export class LibraryImportService {
       }> = [];
       for (const row of rows) {
         const was = existing.get(row.accession);
+        const gone = was ? undefined : retired.get(row.accession.toUpperCase());
+        if (gone)
+          row.errors.push(
+            `Accession number ${row.accession} was used before and is retired: that copy is now ${gone}`,
+          );
         const b = row.data.copy.barcode;
         if (b && takenBarcodes.has(b) && takenBarcodes.get(b) !== row.accession)
           row.errors.push(`Barcode already on copy ${takenBarcodes.get(b)!}`);

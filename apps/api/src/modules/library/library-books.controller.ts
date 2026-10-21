@@ -16,6 +16,8 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  AccessionApplyDto,
+  AccessionChangeDto,
   BookExportDto,
   BookLayoutDto,
   BookListDto,
@@ -44,6 +46,7 @@ import { LibraryImportService } from './library-import.service';
 import { LibraryLabelsService } from './library-labels.service';
 import { LibraryPeriodicalsService } from './library-periodicals.service';
 import { LibraryRegisterService } from './library-register.service';
+import { LibraryAccessionService } from './library-accession.service';
 import { LIBRARY } from './library.dto';
 
 /** The book master (docs/design/36-library.md, part 2): titles and their copies. */
@@ -58,6 +61,7 @@ export class LibraryBooksController {
     private readonly labeller: LibraryLabelsService,
     private readonly periodicals: LibraryPeriodicalsService,
     private readonly lists: LibraryRegisterService,
+    private readonly accessions: LibraryAccessionService,
   ) {}
 
   // ---- part 6: periodical subscriptions --------------------------------------------------------------
@@ -291,6 +295,34 @@ export class LibraryBooksController {
   @RequirePermission(LIBRARY.view)
   exportSetup(@ReqCtx() ctx: RequestContext) {
     return this.exporter.setup(ctx);
+  }
+
+  // ---- correcting accession numbers (part 2 of the register work) ---------------------------------------
+  @Post('accession/preview')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'What a correction of accession numbers would do: each copy, old and new',
+  })
+  @RequirePermission(LIBRARY.manage)
+  accessionPreview(@ReqCtx() ctx: RequestContext, @Body() body: AccessionChangeDto) {
+    return this.accessions.preview(ctx, body);
+  }
+
+  @Post('accession/apply')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Correct accession numbers (one copy or a range); the old ones retired',
+  })
+  @RequirePermission(LIBRARY.manage)
+  accessionApply(@ReqCtx() ctx: RequestContext, @Body() body: AccessionApplyDto) {
+    return this.accessions.apply(ctx, body);
+  }
+
+  @Get('accession/changes')
+  @ApiOperation({ summary: 'The latest accession number corrections' })
+  @RequirePermission(LIBRARY.view)
+  accessionChanges(@ReqCtx() ctx: RequestContext) {
+    return this.accessions.changes(ctx);
   }
 
   // ---- the Books page's lists, as the Employees list ---------------------------------------------------
