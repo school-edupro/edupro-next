@@ -351,8 +351,23 @@ stays). Not chosen: replacing the book with a copy, a waiver at the library desk
   finds a copy by its old number at the desk (issue, renew, return) and in a stock check; the search of
   the lists finds it, the copies list has a Former accession nos. column and the book page says
   "formerly …". After applying, the new labels are a click away.
-- **Part 3 — lost and damaged books, students.** Mark the loan lost (or return it damaged): the charge
-  worked out, announced on the pupil as a misc fee at once; it stops new issues until paid, shows on the
-  Fines page and in the library's leaving check; found again before paying: the change request.
+- **Part 3 — lost and damaged books, students (done, migration 0215).** Library → Lost and damaged
+  (`/library/charges`): the accession number of a book on loan (an old number too) and the day; the charge
+  worked out (`GET library/charges/preview`): lost = the copy's price (else the title's) + the processing
+  fee (setting `library.lost_processing_fee`, ₹50) + the late fine to that day by the borrower's rule;
+  damaged = a share of the price suggested (setting `library.damage_share_pct`, 25%), what is damaged
+  said, the late fine staying a library fine (it may be waived). A lost book's changed amount needs its
+  reason. Applied (`POST library/charges`): the loan closes, the copy is lost or damaged, and a misc fee is
+  announced at once on the pupil under the head LIBBOOK "Library: lost or damaged book" (no approval, as
+  hostel damages and bounce charges): the parent sees it, the fees counter collects it with a misc
+  receipt. `library_charges` keeps the library's record (breakdown, misc fee and line); the list shows due,
+  paid or cancelled from the misc line. `app.library_charges_due` stops new issues
+  (`library.charge_due`) and counts in the leaving check (which now also counts a fine collected at the
+  library as paid: it looked at the receipt only). A lost copy found again (its status on the book page)
+  while unpaid: `MiscFeesService.requestChangeIn` asks the fees office to bring the line down to the late
+  fine (or close the fee when there is none), the copy's history says so. A pupil's book marked lost at
+  Circulation or on the book page is refused with a pointer here; staff keep the old ways until part 4.
+  The Fines page lists the charges due; Circulation's conditions read Good / Damaged (no charge) / Lost
+  (staff).
 - **Part 4 — staff.** Misc fees for employees (the counter collects from an employee with a misc receipt);
   the same charges for staff borrowers.

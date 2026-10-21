@@ -420,3 +420,43 @@ export async function applyAccessionChange(fd: FormData) {
   });
   redirect(`/library/accession?${q.toString()}`);
 }
+
+/** A book on loan reported lost, or returned damaged, and charged (part 3 of the register work). */
+export async function chargeBook(fd: FormData) {
+  const pick = (k: string) => String(fd.get(k) ?? '').trim();
+  const kind = pick('kind') === 'damaged' ? 'damaged' : 'lost';
+  const amount = Number(pick('amount'));
+  const input = {
+    accessionNo: pick('accessionNo'),
+    kind,
+    on: /^\d{4}-\d{2}-\d{2}$/.test(pick('on')) ? pick('on') : undefined,
+    amount: pick('amount') !== '' && Number.isFinite(amount) ? amount : undefined,
+    reason: pick('reason') || undefined,
+    waiveFine: kind === 'damaged' ? fd.get('waiveFine') === 'on' : undefined,
+  };
+  let done: { amount: number; borrower: string; title: string };
+  try {
+    done = await apiFetch<{ amount: number; borrower: string; title: string }>('/library/charges', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const q = new URLSearchParams({
+        acc: input.accessionNo,
+        kind,
+        ...(input.on ? { on: input.on } : {}),
+        error: e.problem.type,
+        detail: String(e.problem.detail ?? '').slice(0, 600),
+      });
+      redirect(`/library/charges?${q.toString()}`);
+    }
+    throw e;
+  }
+  revalidatePath('/library/charges');
+  const q = new URLSearchParams({
+    ok: '1',
+    detail: `${done.title}: ${done.borrower} is charged ₹${done.amount.toFixed(2)}. It is announced as a misc fee, paid at the fees counter.`,
+  });
+  redirect(`/library/charges?${q.toString()}`);
+}

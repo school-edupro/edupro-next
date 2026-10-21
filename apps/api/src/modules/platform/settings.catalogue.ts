@@ -215,6 +215,18 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Fine per overdue day per copy (Sprint 17)',
     module: 'library',
   },
+  'library.lost_processing_fee': {
+    schema: money,
+    default: '50.00',
+    description: 'Processing fee charged with the price of a lost book (it goes on the misc fee)',
+    module: 'library',
+  },
+  'library.damage_share_pct': {
+    schema: z.coerce.number().int().min(0).max(100),
+    default: 25,
+    description: 'Share of the price suggested as the charge for a damaged book (per cent)',
+    module: 'library',
+  },
   'transport.gps_retention_days': {
     schema: z.coerce.number().int().min(1).max(365),
     default: 30,

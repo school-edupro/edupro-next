@@ -5,6 +5,9 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   AccessionDto,
   CatalogueQueryDto,
+  ChargeDto,
+  ChargeListDto,
+  ChargePreviewDto,
   CopyStatusDto,
   FineDto,
   IssueDto,
@@ -17,6 +20,7 @@ import {
   StockCheckScanDto,
   StockCheckStartDto,
 } from './library.dto';
+import { LibraryChargesService } from './library-charges.service';
 import { LibraryService } from './library.service';
 
 /** Sprint 17: library — catalogue and copies, circulation, fines; the family's loans. */
@@ -24,7 +28,10 @@ import { LibraryService } from './library.service';
 @ApiBearerAuth()
 @Controller('library')
 export class LibraryController {
-  constructor(private readonly library: LibraryService) {}
+  constructor(
+    private readonly library: LibraryService,
+    private readonly charges: LibraryChargesService,
+  ) {}
 
   @Get('catalogue')
   @RequirePermission(LIBRARY.view, { description: 'Search the catalogue, see copies and loans' })
@@ -75,6 +82,30 @@ export class LibraryController {
   @RequirePermission(LIBRARY.circulate)
   returnCopy(@ReqCtx() ctx: RequestContext, @Body() body: ReturnDto) {
     return this.library.returnCopy(ctx, body);
+  }
+
+  // ---- lost and damaged books, charged to the borrower (part 3 of the register work) -----------------
+  @Get('charges/preview')
+  @ApiOperation({ summary: 'What a lost or damaged book would be charged' })
+  @RequirePermission(LIBRARY.circulate)
+  chargePreview(@ReqCtx() ctx: RequestContext, @Query() q: ChargePreviewDto) {
+    return this.charges.preview(ctx, q);
+  }
+
+  @Post('charges')
+  @ApiOperation({
+    summary: 'A book reported lost or returned damaged; the charge announced as a misc fee',
+  })
+  @RequirePermission(LIBRARY.circulate)
+  charge(@ReqCtx() ctx: RequestContext, @Body() body: ChargeDto) {
+    return this.charges.charge(ctx, body);
+  }
+
+  @Get('charges')
+  @ApiOperation({ summary: 'Lost and damaged books charged, with what is paid' })
+  @RequirePermission(LIBRARY.circulate)
+  chargeList(@ReqCtx() ctx: RequestContext, @Query() q: ChargeListDto) {
+    return this.charges.list(ctx, q);
   }
 
   @Post('loans/:id/fine')

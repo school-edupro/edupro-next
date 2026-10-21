@@ -997,21 +997,27 @@ export class WithdrawalsService {
   }
 
   private async libraryDues(c: PoolClient, studentId: string) {
-    const r = await c.query<{ open: number; fines: string }>(
+    // a fine collected at the library (paid on a day) or on a receipt is paid; a lost or damaged book
+    // is charged as a misc fee until the fees counter takes it
+    const r = await c.query<{ open: number; fines: string; charges: string }>(
       `SELECT count(*) FILTER (WHERE returned_on IS NULL)::int AS open,
-              COALESCE(sum(fine_amount - fine_waived) FILTER (WHERE fine_amount > fine_waived AND fine_receipt_id IS NULL), 0)::text AS fines
+              COALESCE(sum(fine_amount - fine_waived) FILTER (WHERE fine_amount > fine_waived AND fine_receipt_id IS NULL
+                                                             AND fine_paid_on IS NULL), 0)::text AS fines,
+              app.library_charges_due('student', $1)::text AS charges
          FROM library_loans WHERE borrower_kind = 'student' AND borrower_id = $1`,
       [studentId],
     );
     const open = r.rows[0]?.open ?? 0;
     const fines = Number(r.rows[0]?.fines ?? 0);
+    const charges = Number(r.rows[0]?.charges ?? 0);
     const parts = [
       open ? `${String(open)} book${open === 1 ? '' : 's'} not returned` : null,
       fines ? `${money(fines)} fine unpaid` : null,
+      charges ? `${money(charges)} for a lost or damaged book unpaid (misc fee)` : null,
     ].filter(Boolean);
     return {
       kind: 'library',
-      due: open + fines,
+      due: open + fines + charges,
       detail: parts.length ? parts.join(', ') : 'No books out and no fines',
     };
   }

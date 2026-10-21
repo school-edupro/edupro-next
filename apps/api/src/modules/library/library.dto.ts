@@ -106,3 +106,25 @@ export const StockCheckCloseSchema = z.object({
   note: z.string().trim().max(300).optional(),
 });
 export class StockCheckCloseDto extends createZodDto(StockCheckCloseSchema) {}
+
+/** A book on loan reported lost, or returned damaged, and charged (part 3 of the register work). */
+export const ChargePreviewSchema = z.object({
+  accessionNo: z.string().trim().min(1).max(30),
+  kind: z.enum(['lost', 'damaged']),
+  /** the day it is reported lost or comes back (default today) */
+  on: DateSchema.optional(),
+});
+export class ChargePreviewDto extends createZodDto(ChargePreviewSchema) {}
+export const ChargeSchema = ChargePreviewSchema.extend({
+  /** what is charged; none: what is worked out */
+  amount: z.number().min(0).max(1_000_000).optional(),
+  /** a damaged book: what is damaged; a lost one: why the charge differs */
+  reason: z.string().trim().max(300).optional(),
+  /** a damaged book returned late: its late fine waived */
+  waiveFine: z.boolean().optional(),
+});
+export class ChargeDto extends createZodDto(ChargeSchema) {}
+export const ChargeListSchema = z.object({
+  status: z.enum(['due', 'paid', 'cancelled', 'all']).optional(),
+});
+export class ChargeListDto extends createZodDto(ChargeListSchema) {}

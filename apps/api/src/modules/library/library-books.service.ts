@@ -15,6 +15,7 @@ import type {
   TitleDto,
 } from './library-books.dto';
 import { bookFilter, bookSort } from './library-filter';
+import { LibraryChargesService } from './library-charges.service';
 import { LIBRARY } from './library.dto';
 
 type Copy = CopiesDto | CopyEditDto;
@@ -47,6 +48,7 @@ export class LibraryBooksService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly charges: LibraryChargesService,
   ) {}
 
   private can(ctx: RequestContext) {
@@ -854,6 +856,19 @@ export class LibraryBooksService {
         throw new DomainError('validation-failed', 'An amount is for lost and paid only', {
           status: 400,
         });
+      if (to === 'lost' && cur.status === 'issued') {
+        // a pupil's lost book is charged: Lost and damaged books
+        const who = await c.query<{ kind: string }>(
+          `SELECT borrower_kind::text AS kind FROM library_loans WHERE copy_id = $1 AND returned_on IS NULL`,
+          [id],
+        );
+        if (who.rows[0]?.kind === 'student')
+          throw refuse(
+            'A pupil has this book: report it lost at Library → Lost and damaged books, which charges its price',
+          );
+      }
+      // a lost copy found again: an unpaid charge comes down (the fees office approves)
+      const found = dto.status === 'found' ? await this.charges.foundIn(c, ctx, id, dto.on) : null;
       if (to === 'lost' && cur.status === 'issued')
         await c.query(
           `UPDATE library_loans SET returned_on = $2::date, returned_by = app.current_user_id(),
@@ -871,16 +886,16 @@ export class LibraryBooksService {
         from: cur.status,
         to,
         on: dto.on,
-        reason: dto.reason,
+        reason: found ? `${dto.reason}. ${found}` : dto.reason,
         amount: dto.amount ?? null,
       });
       await this.audit.stage(ctx, c, {
         action: 'library.copy.status',
         entityType: 'library_copies',
         entityId: id,
-        after: dto,
+        after: { ...dto, charge: found },
       });
-      return { id, status: to };
+      return found ? { id, status: to, charge: found } : { id, status: to };
     });
   }
 }

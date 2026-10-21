@@ -18,6 +18,21 @@ export default async function FinesPage({
     getTranslations('library'),
     apiFetch<Page<LibraryLoan>>('/library/loans?status=fines&size=200'),
   ]);
+  // lost and damaged books: charged as misc fees, paid at the fees counter
+  const charges = await apiFetch<{
+    rows: Array<{
+      id: string;
+      kind: string;
+      borrower: string;
+      borrowerRef: string;
+      accessionNo: string;
+      titleId: string;
+      title: string;
+      due: number;
+      state: string;
+    }>;
+    counts: { due: number; dueAmount: number };
+  }>('/library/charges?status=due').catch(() => null);
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
@@ -96,6 +111,55 @@ export default async function FinesPage({
           emptyTitle={l('noFines')}
         />
       </Card>
+      {charges ? (
+        <section className="ep-card" aria-labelledby="fn-ch-h" style={{ marginTop: 'var(--sp-4)' }}>
+          <h2 id="fn-ch-h" className="ep-card__title">
+            Lost and damaged books · {charges.counts.due} due (₹
+            {charges.counts.dueAmount.toFixed(2)})
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Charged as misc fees and paid at the fees counter, not here.{' '}
+            <a href="/library/charges">Lost and damaged books</a>
+          </p>
+          {charges.rows.length ? (
+            <div
+              className="ep-table-wrap"
+              tabIndex={0}
+              role="region"
+              aria-label="Lost and damaged books due (scrolls sideways)"
+            >
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">Borrower</th>
+                    <th scope="col">Book</th>
+                    <th scope="col">What</th>
+                    <th scope="col" className="is-numeric">
+                      Due
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {charges.rows.slice(0, 50).map((x) => (
+                    <tr key={x.id}>
+                      <td>
+                        {x.borrower}
+                        <div className="ep-kicker">{x.borrowerRef}</div>
+                      </td>
+                      <td>
+                        <a href={`/library/books/${x.titleId}`}>{x.title}</a>
+                        <div className="ep-kicker">{x.accessionNo}</div>
+                      </td>
+                      <td>{x.kind === 'lost' ? 'Lost' : 'Damaged'}</td>
+                      <td className="is-numeric">₹{x.due.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </>
   );
 }

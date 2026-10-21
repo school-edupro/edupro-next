@@ -445,6 +445,36 @@ export class MiscFeesService {
     return this.findRequest(c, id);
   }
 
+  /**
+   * A change asked for by another module inside its own transaction (the library: a lost book found
+   * again before it is paid): a pupil's amount, or the fee closed; it waits for Fee setup -> Approval
+   * levels like any other.
+   */
+  async requestChangeIn(
+    c: PoolClient,
+    ctx: RequestContext,
+    x: {
+      kind: 'pupil_change' | 'close';
+      miscFeeId: string;
+      lineId?: string;
+      amount?: number;
+      fromAmount?: string;
+      reason: string;
+      subject: string;
+    },
+  ): Promise<string> {
+    const r = await this.raise(c, ctx, {
+      kind: x.kind,
+      miscFeeId: x.miscFeeId,
+      lineId: x.kind === 'pupil_change' ? (x.lineId ?? null) : null,
+      payload:
+        x.kind === 'pupil_change' ? { amount: x.amount, fromAmount: x.fromAmount ?? null } : {},
+      reason: x.reason,
+      subject: x.subject,
+    });
+    return r.id;
+  }
+
   /** A new misc fee: kept as waiting, with its pupils, until the announcement is approved. */
   async announce(ctx: RequestContext, dto: AnnounceMiscFeeDto) {
     const yearId = this.year(ctx);

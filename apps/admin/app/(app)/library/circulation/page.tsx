@@ -95,7 +95,12 @@ export default async function CirculationPage({
                 id="r-cond"
                 name="condition"
                 label={l('condition')}
-                options={['available', 'damaged', 'lost'].map((v) => ({ value: v, label: v }))}
+                options={[
+                  { value: 'available', label: 'Good' },
+                  { value: 'damaged', label: 'Damaged (no charge)' },
+                  { value: 'lost', label: 'Lost (staff)' },
+                ]}
+                help="A pupil lost or damaged it: charge it at Lost and damaged books"
               />
               <label
                 style={{
@@ -108,7 +113,8 @@ export default async function CirculationPage({
                 <input type="checkbox" name="waiveFine" /> {l('waiveFine')}
               </label>
             </FormRow>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <a href="/library/charges">Lost and damaged books</a>
               <Button type="submit" variant="secondary">
                 {l('return')}
               </Button>

@@ -347,6 +347,17 @@ export class LibraryService {
           `Fines of ₹${unpaid.rows[0]!.n} are pending`,
           { status: 409 },
         );
+      // a lost or damaged book not yet paid for (a misc fee at the fees counter)
+      const charged = await c.query<{ n: string }>(
+        `SELECT app.library_charges_due($1::library_borrower, $2)::text AS n`,
+        [dto.borrowerKind, dto.borrowerId],
+      );
+      if (Number(charged.rows[0]!.n) > 0)
+        throw new DomainError(
+          'library.charge_due',
+          `₹${charged.rows[0]!.n} for a lost or damaged book is not paid yet: it is paid at the fees counter`,
+          { status: 409 },
+        );
       const loanDays = rule.loanDays;
       const r = await c.query<{ id: string }>(
         `INSERT INTO library_loans (school_id, copy_id, borrower_kind, borrower_id, due_on, issued_by, note, request_id)
@@ -422,6 +433,13 @@ export class LibraryService {
       );
       if (!l.rows[0])
         throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
+      // a pupil's lost book is charged: Lost and damaged books
+      if (dto.condition === 'lost' && l.rows[0].borrower_kind === 'student')
+        throw new DomainError(
+          'library.use_charges',
+          'A pupil lost the book: report it at Library → Lost and damaged books, which charges its price',
+          { status: 409 },
+        );
       const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);
       // the fine: the days late after the grace days, at the rule's rate, up to its highest fine
       const fine = `LEAST(COALESCE($7::numeric, 'Infinity'::numeric),
