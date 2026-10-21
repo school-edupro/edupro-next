@@ -9538,3 +9538,37 @@ a.ep-pub-foot__item {
 .ep-book__how a {
   text-decoration: underline;
 }
+/* the label sheet: where to start on a used sheet (library part 5) */
+.ep-book__choices {
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-book__sheet {
+  display: grid;
+  gap: var(--sp-1);
+  max-width: 22rem;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+.ep-book__cell {
+  aspect-ratio: 2 / 1;
+  min-height: 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  cursor: pointer;
+  padding: 0;
+}
+.ep-book__cell--used {
+  background: var(--border-default);
+}
+.ep-book__cell--start {
+  background: var(--mob-cyan-700);
+  border-color: var(--mob-cyan-700);
+}
+.ep-book__cell:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}

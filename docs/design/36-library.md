@@ -207,3 +207,27 @@ add, edit, active/inactive, Excel download and upload with the same checks):
   the series moved and the next copy continuing it, the rows not imported as a file; our template
   round trip with a status and a date cell; a discarded upload; a file without the two needed columns;
   650 rows in three batches with a title made in the first taking copies in the next); `a11y.spec.ts`.
+
+## Part 5 — barcode and spine labels
+
+- **Library → Labels** (`/library/labels`, library.catalogue.manage; also "Print labels" on a book's
+  copies and "Print their labels" after adding copies): which copies (accession numbers from–to of one
+  prefix, a list typed or scanned and printed in its order with the numbers not found named, the copies
+  added between two days, or a title's copies; a library; withdrawn copies only when asked), which
+  labels (a barcode label, a spine label, or both one after the other; the line above: the library's
+  name, the school's or nothing; the title when the label has room; one to three of each), the sheet (A4
+  3 × 8, A4 4 × 10, Avery L7651 5 × 13, A4 2 × 7, or one's own measurements, checked to fit A4) and the
+  label to start at on a used sheet (a grid of the sheet to click). **Count the labels** first (copies,
+  labels, sheets, first and last number), then **Open the PDF** (inline, in a new tab) or **Download**.
+  Each user's last settings come back.
+- **The barcode** is Code 128 of the accession number (bwip-js chooses the shortest code sets; a run of
+  digits goes two to a symbol), drawn as bars in the PDF with quiet zones; the issue desk reads the
+  accession number. The **spine label** gives the call number in lines (class, author mark…) and the
+  accession number under it. The PDF fonts carry Latin letters: a title in another script is left off.
+- **API:** `GET library/labels/setup` (the sheets, the libraries, my last settings), `POST
+  library/labels` (the choice; `dry` for the count; else the PDF in base64), at most 3,000 copies at a
+  time. Admin route `/api/library-labels` (POST from the form, same origin only; `save=1` downloads).
+- Tests: `library-labels.e2e-spec.ts` (the bars as bwip-js encodes them; counts for a range, both
+  labels, withdrawn copies, a used sheet, two of each; a list with a number not found, copies added
+  between days, a title's copies; the PDF's A4 pages; the settings kept; sheets that do not fit A4, a
+  start beyond the sheet, nothing to print and the right to print refused); `a11y.spec.ts`.

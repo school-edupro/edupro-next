@@ -221,6 +221,8 @@ const PAGES = [
   '/library/import',
   '/library/import/14',
   '/library/import/14?kind=warnings',
+  '/library/labels',
+  '/library/labels?title=1',
   '/library/books/new',
   '/library/books/1',
   '/library/books/1?tab=loans',

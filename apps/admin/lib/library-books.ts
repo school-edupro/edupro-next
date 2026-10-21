@@ -239,3 +239,36 @@ export const IMPORT_STATUS: Record<string, string> = {
   done: 'Imported',
   discarded: 'Discarded',
 };
+
+/** Labels (part 5): the sheets, the libraries, my last settings. */
+export interface LabelSetup {
+  presets: Array<{
+    id: string;
+    name: string;
+    cols: number;
+    rows: number;
+    width: number;
+    height: number;
+    top: number;
+    left: number;
+    gapX: number;
+    gapY: number;
+  }>;
+  libraries: Array<{ id: string; code: string; name: string }>;
+  last: {
+    kind?: 'barcode' | 'spine' | 'both';
+    preset?: string;
+    custom?: Record<string, number> | null;
+    copies?: number;
+    top?: 'library' | 'school' | 'none';
+    showTitle?: boolean;
+  } | null;
+}
+export interface LabelCount {
+  copies: number;
+  labels: number;
+  sheets: number;
+  first: string | null;
+  last: string | null;
+  missing: string[];
+}

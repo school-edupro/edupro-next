@@ -186,7 +186,15 @@ export default async function BookPage({
               Copies
             </h2>
             {book.can.manage ? (
-              <span>
+              <span className="ep-hero__actions">
+                {inUse.length ? (
+                  <a
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    href={`/library/labels?title=${book.id}`}
+                  >
+                    Print labels
+                  </a>
+                ) : null}
                 <AddCopies titleId={book.id} setup={setup} materialTypeId={book.materialTypeId} />
               </span>
             ) : null}

@@ -196,3 +196,40 @@ export const BookLayoutSchema = z.object({
   level: z.enum(['copy', 'title']).default('copy'),
 });
 export class BookLayoutDto extends createZodDto(BookLayoutSchema) {}
+
+/** Barcode and spine labels (part 5): which copies, what label, on what sheet. */
+export const LabelsSchema = z.object({
+  source: z.enum(['range', 'list', 'added', 'title']),
+  from: AccessionNo.optional(),
+  to: AccessionNo.optional(),
+  list: z.array(AccessionNo).min(1).max(3000).optional(),
+  addedFrom: DateSchema.optional(),
+  addedTo: DateSchema.optional(),
+  titleId: Id.optional(),
+  libraryId: Id.optional(),
+  kind: z.enum(['barcode', 'spine', 'both']).default('barcode'),
+  preset: z.enum(['a4-3x8', 'a4-4x10', 'l7651', 'a4-2x7', 'custom']).default('a4-3x8'),
+  custom: z
+    .object({
+      cols: z.number().int().min(1).max(10),
+      rows: z.number().int().min(1).max(30),
+      width: z.number().min(10).max(200),
+      height: z.number().min(8).max(150),
+      top: z.number().min(0).max(60),
+      left: z.number().min(0).max(60),
+      gapX: z.number().min(0).max(20),
+      gapY: z.number().min(0).max(20),
+    })
+    .optional(),
+  /** each label this many times */
+  copies: z.number().int().min(1).max(3).default(1),
+  /** labels of the first sheet already used */
+  skip: z.number().int().min(0).max(299).default(0),
+  /** the line above the title: the library's name, the school's, or none */
+  top: z.enum(['library', 'school', 'none']).default('library'),
+  showTitle: z.boolean().default(true),
+  includeWithdrawn: z.boolean().default(false),
+  /** count the labels only */
+  dry: z.boolean().default(false),
+});
+export class LabelsDto extends createZodDto(LabelsSchema) {}

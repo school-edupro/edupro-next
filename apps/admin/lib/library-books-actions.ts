@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import type { PickerSetup } from '@/components/FieldPicker';
 import { ApiError, apiFetch } from './api';
+import type { LabelCount } from './library-books';
 
 type Fail = { ok: false; error: string };
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -249,4 +250,21 @@ export async function discardImport(fd: FormData) {
   redirect(
     `/library/import/${id}?ok=1&detail=${encodeURIComponent('Discarded: nothing was imported.')}`,
   );
+}
+
+// ---- part 5: labels -----------------------------------------------------------------------------------
+
+/** How many labels and sheets the choice makes (nothing printed). */
+export async function countLabels(
+  input: Record<string, unknown>,
+): Promise<({ ok: true } & LabelCount) | Fail> {
+  try {
+    const r = await apiFetch<LabelCount>('/library/labels', {
+      method: 'POST',
+      body: JSON.stringify({ ...input, dry: true }),
+    });
+    return { ok: true, ...r };
+  } catch (e) {
+    return problem(e);
+  }
 }

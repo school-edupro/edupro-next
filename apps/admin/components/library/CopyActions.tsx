@@ -255,11 +255,13 @@ export function AddCopies({
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState<CopyState>(() => emptyCopy(setup));
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const [added, setAdded] = useState<string[]>([]);
   const [pending, start] = useTransition();
   const save = () =>
     start(async () => {
       const r = await addCopies(titleId, copyPayload(value, 'new'));
       if (!r.ok) return setMsg({ tone: 'danger', text: r.error });
+      setAdded(r.accessionNos);
       setMsg({ tone: 'success', text: `Added: ${r.accessionNos.join(', ')}.` });
       setOpen(false);
       setValue(emptyCopy(setup));
@@ -269,7 +271,14 @@ export function AddCopies({
     <>
       {msg ? (
         <p className={`ep-alert ep-alert--${msg.tone}`} role="status">
-          {msg.text}
+          <span>
+            {msg.text}{' '}
+            {msg.tone === 'success' && added.length ? (
+              <a href={`/library/labels?list=${encodeURIComponent(added.join(','))}`}>
+                Print their labels
+              </a>
+            ) : null}
+          </span>
         </p>
       ) : null}
       <button

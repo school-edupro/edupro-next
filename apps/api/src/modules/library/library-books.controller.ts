@@ -18,6 +18,7 @@ import {
   BookExportDto,
   BookLayoutDto,
   BookListDto,
+  LabelsDto,
   BookMatchDto,
   CopiesDto,
   CopyEditDto,
@@ -29,6 +30,7 @@ import {
 import { LibraryBooksService } from './library-books.service';
 import { LibraryExportService } from './library-export.service';
 import { LibraryImportService } from './library-import.service';
+import { LibraryLabelsService } from './library-labels.service';
 import { LIBRARY } from './library.dto';
 
 /** The book master (docs/design/36-library.md, part 2): titles and their copies. */
@@ -40,7 +42,25 @@ export class LibraryBooksController {
     private readonly books: LibraryBooksService,
     private readonly exporter: LibraryExportService,
     private readonly importer: LibraryImportService,
+    private readonly labeller: LibraryLabelsService,
   ) {}
+
+  // ---- part 5: barcode and spine labels -------------------------------------------------------------
+
+  @Get('labels/setup')
+  @ApiOperation({ summary: 'Label sheets, libraries and my last label settings' })
+  @RequirePermission(LIBRARY.manage)
+  labelSetup(@ReqCtx() ctx: RequestContext) {
+    return this.labeller.setup(ctx);
+  }
+
+  @Post('labels')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Barcode and spine labels as a PDF (base64), or their count (dry)' })
+  @RequirePermission(LIBRARY.manage)
+  labels(@ReqCtx() ctx: RequestContext, @Body() body: LabelsDto) {
+    return this.labeller.print(ctx, body);
+  }
 
   // ---- part 4: books from Excel ---------------------------------------------------------------------
 
