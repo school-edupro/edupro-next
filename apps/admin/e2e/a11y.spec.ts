@@ -216,6 +216,8 @@ const PAGES = [
   // Sprint 18
   '/exams/board-results',
   '/library/stock',
+  '/library?view=copies&sort=accession',
+  '/library?author=a&stock=never',
   '/library/books/new',
   '/library/books/1',
   '/library/books/1?tab=loans',
@@ -574,6 +576,31 @@ test.describe('accessibility (axe)', () => {
     test.skip(!(await status.isVisible().catch(() => false)), 'no copy to change in this school');
     await status.click();
     await page.getByRole('heading', { name: /^Status of copy/ }).waitFor();
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    const results = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map(
+          (v) =>
+            `${v.id}: ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+    ).toEqual([]);
+  });
+
+  test('no serious or critical violations on the book list export picker', async ({ page }) => {
+    await page.goto('/library?view=copies');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: 'Customise export' }).click();
+    await page.getByRole('heading', { name: /^Columns in the file/ }).waitFor();
     await page.mouse.move(0, 0);
     await page.waitForTimeout(400);
     const results = await new AxeBuilder({ page })

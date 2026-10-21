@@ -1,6 +1,7 @@
 'use server';
 /** The book master (docs/design/36-library.md, part 2): saving titles and copies. */
 import { revalidatePath } from 'next/cache';
+import type { PickerSetup } from '@/components/FieldPicker';
 import { ApiError, apiFetch } from './api';
 
 type Fail = { ok: false; error: string };
@@ -140,5 +141,44 @@ export async function matchBooks(input: {
     ).data;
   } catch {
     return [];
+  }
+}
+
+// ---- part 3: the book list's Excel export with the fields picked ---------------------------------------
+
+/** What the export picker shows; read when it opens. */
+export async function loadBookExportSetup(): Promise<PickerSetup> {
+  return apiFetch<PickerSetup>('/library/books/export/setup');
+}
+
+/** A named layout of the book list's export (the same name changes it). */
+export async function saveBookLayout(input: {
+  name: string;
+  columns: string[];
+  sheets: string[];
+  level?: string;
+}): Promise<{ ok: true; id: string; updated: boolean } | Fail> {
+  try {
+    const r = await apiFetch<{ id: string; updated: boolean }>('/library/books/export/layouts', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: input.name,
+        columns: input.columns,
+        level: input.level ?? 'copy',
+      }),
+    });
+    return { ok: true, ...r };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function deleteBookLayout(id: string): Promise<{ ok: true } | Fail> {
+  if (!okId(id)) return { ok: false, error: 'Not found' };
+  try {
+    await apiFetch(`/library/books/export/layouts/${id}`, { method: 'DELETE' });
+    return { ok: true };
+  } catch (e) {
+    return problem(e);
   }
 }

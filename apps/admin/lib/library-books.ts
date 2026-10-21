@@ -156,3 +156,23 @@ export const dmy = (d: string | null | undefined) =>
 /** An ISBN as people read it: 978-0-306-40615-7 stays digits, grouped only by the hyphen after 978. */
 export const isbnText = (s: string | null) =>
   !s ? '' : s.length === 13 ? `${s.slice(0, 3)}-${s.slice(3)}` : s;
+
+/** A copy in the accession register (part 3). */
+export interface RegisterRow {
+  id: string;
+  accessionNo: string;
+  titleId: string;
+  title: string;
+  author: string | null;
+  library: string;
+  shelf: string | null;
+  rack: string | null;
+  barcode: string | null;
+  status: CopyStatus;
+  accessionedOn: string;
+  acquisition: string | null;
+  price: string | null;
+  lastVerifiedOn: string | null;
+  borrower: string | null;
+  dueOn: string | null;
+}

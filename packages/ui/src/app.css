@@ -9500,3 +9500,13 @@ a.ep-pub-foot__item {
   gap: var(--sp-1);
   flex-wrap: nowrap;
 }
+/* the book list's further filters, folded until wanted */
+.ep-book__more {
+  margin-top: var(--sp-3);
+}
+.ep-book__more > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-link);
+  margin-bottom: var(--sp-2);
+}

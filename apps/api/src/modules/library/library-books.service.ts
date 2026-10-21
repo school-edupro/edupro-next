@@ -14,6 +14,7 @@ import type {
   SuggestDto,
   TitleDto,
 } from './library-books.dto';
+import { bookFilter, bookSort } from './library-filter';
 import { LIBRARY } from './library.dto';
 
 type Copy = CopiesDto | CopyEditDto;
@@ -54,35 +55,18 @@ export class LibraryBooksService {
 
   // ---- reading ---------------------------------------------------------------------------------------
 
-  /** The titles, with how many copies there are and how many are on the shelf. */
+  /** The titles, with how many of their copies (that match) there are, on the shelf and out. */
   async list(ctx: RequestContext, q: BookListDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(`SELECT app.library_seed(app.current_school_id())`);
-      const where: string[] = [`t.status = 'active'`];
-      const args: unknown[] = [];
-      const arg = (v: unknown) => {
-        args.push(v);
-        return `$${String(args.length)}`;
-      };
-      const copyIn: string[] = [`x.status NOT IN ('sold')`];
-      if (q.libraryId) copyIn.push(`x.library_id = ${arg(q.libraryId)}`);
-      if (q.q) {
-        const p = arg(`%${q.q}%`);
-        const digits = arg(q.q.replace(/[\s-]/g, '').toUpperCase());
-        // eslint-disable-next-line no-restricted-syntax -- placeholders only; values are bound
-        where.push(`(t.title ILIKE ${p} OR t.subtitle ILIKE ${p} OR t.author ILIKE ${p} OR t.code ILIKE ${p}
-                     OR t.call_no ILIKE ${p} OR regexp_replace(COALESCE(t.isbn, ''), '[^0-9X]', '', 'g') = ${digits}
-                     OR EXISTS (SELECT 1 FROM library_copies a WHERE a.title_id = t.id AND (a.accession_no ILIKE ${p} OR a.barcode = ${digits})))`);
-      }
-      if (q.materialTypeId) where.push(`t.material_type_id = ${arg(q.materialTypeId)}`);
-      if (q.subjectId) where.push(`t.subject_id = ${arg(q.subjectId)}`);
-      const inCopies = copyIn.join(' AND ');
-      if (q.libraryId || q.status)
-        where.push(
-          // eslint-disable-next-line no-restricted-syntax -- fixed fragments and placeholders; values are bound
-          `EXISTS (SELECT 1 FROM library_copies x WHERE x.title_id = t.id AND ${inCopies}${q.status ? ` AND x.status = ${arg(q.status)}::library_copy_status` : ''})`,
-        );
-      const size = q.size;
+      const f = bookFilter(q);
+      const inCopies = `x.status <> 'sold'${f.copy ? ` AND ${f.copy}` : ''}`;
+      const where = f.copy
+        ? // eslint-disable-next-line no-restricted-syntax -- fragments of bookFilter; values are bound
+          `${f.title} AND EXISTS (SELECT 1 FROM library_copies x WHERE x.title_id = t.id AND ${inCopies})`
+        : f.title;
+      const size = f.arg(q.size);
+      const offset = f.arg((q.page - 1) * q.size);
       const r = await c.query<{
         id: string;
         code: string;
@@ -100,7 +84,7 @@ export class LibraryBooksService {
         issued: number;
         total: string;
       }>(
-        // eslint-disable-next-line no-restricted-syntax -- fixed fragments chosen above; values are bound
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragments of bookFilter and bookSort; values are bound
         `SELECT t.id::text, t.code, t.title, t.subtitle, t.author, m.name AS material, s.name::text AS subject,
                 t.publisher, t.year, t.isbn, t.call_no,
                 (SELECT count(*) FROM library_copies x WHERE x.title_id = t.id AND ${inCopies} AND x.status <> 'withdrawn')::int AS copies,
@@ -110,14 +94,66 @@ export class LibraryBooksService {
            FROM library_titles t
            LEFT JOIN library_material_types m ON m.id = t.material_type_id
            LEFT JOIN library_subjects s ON s.id = t.subject_id
-          WHERE ${where.join(' AND ')}
-          ORDER BY lower(t.title), t.id
-          LIMIT ${arg(size)} OFFSET ${arg((q.page - 1) * size)}`,
-        args,
+          WHERE ${where}
+          ORDER BY ${bookSort(q, 'title')}
+          LIMIT ${size} OFFSET ${offset}`,
+        f.args,
       );
       return {
         data: r.rows.map(({ total: _t, call_no, ...x }) => ({ ...x, callNo: call_no })),
-        page: { number: q.page, size, total: Number(r.rows[0]?.total ?? 0) },
+        page: { number: q.page, size: q.size, total: Number(r.rows[0]?.total ?? 0) },
+        can: { manage: this.can(ctx) },
+      };
+    });
+  }
+
+  /** The copies (the accession register), each with its title, place, status and who has it. */
+  async register(ctx: RequestContext, q: BookListDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const f = bookFilter(q);
+      const size = f.arg(q.size);
+      const offset = f.arg((q.page - 1) * q.size);
+      const r = await c.query<Record<string, unknown>>(
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragments of bookFilter and bookSort; values are bound
+        `SELECT x.id::text, x.accession_no, t.id::text AS title_id, t.title, t.author, l.name AS library,
+                sh.code AS shelf, x.rack, x.barcode, x.status::text, x.accessioned_on::text, x.acquisition,
+                COALESCE(x.price, t.price)::text AS price, x.last_verified_on::text,
+                ln.borrower, ln.due_on::text AS due_on, count(*) OVER () AS total
+           FROM library_copies x
+           JOIN library_titles t ON t.id = x.title_id
+           JOIN library_libraries l ON l.id = x.library_id
+           LEFT JOIN library_shelves sh ON sh.id = x.shelf_id
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(st.display_name, e.display_name) AS borrower, lo.due_on
+               FROM library_loans lo
+               LEFT JOIN students st ON lo.borrower_kind = 'student' AND st.id = lo.borrower_id
+               LEFT JOIN employees e ON lo.borrower_kind = 'employee' AND e.id = lo.borrower_id
+              WHERE lo.copy_id = x.id AND lo.returned_on IS NULL LIMIT 1) ln ON true
+          WHERE ${f.title}${f.copy ? ` AND ${f.copy}` : ''}
+          ORDER BY ${bookSort(q, 'copy')}
+          LIMIT ${size} OFFSET ${offset}`,
+        f.args,
+      );
+      return {
+        data: r.rows.map((x) => ({
+          id: String(x.id),
+          accessionNo: String(x.accession_no),
+          titleId: String(x.title_id),
+          title: String(x.title),
+          author: x.author as string | null,
+          library: String(x.library),
+          shelf: x.shelf as string | null,
+          rack: x.rack as string | null,
+          barcode: x.barcode as string | null,
+          status: String(x.status),
+          accessionedOn: String(x.accessioned_on),
+          acquisition: x.acquisition as string | null,
+          price: x.price as string | null,
+          lastVerifiedOn: x.last_verified_on as string | null,
+          borrower: x.borrower as string | null,
+          dueOn: x.due_on as string | null,
+        })),
+        page: { number: q.page, size: q.size, total: Number(r.rows[0]?.total ?? 0) },
         can: { manage: this.can(ctx) },
       };
     });

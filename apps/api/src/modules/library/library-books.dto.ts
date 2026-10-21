@@ -113,12 +113,50 @@ export const CopyStatusChangeSchema = z.object({
 });
 export class CopyStatusChangeDto extends createZodDto(CopyStatusChangeSchema) {}
 
-export const BookListSchema = z.object({
+export const SORTS = [
+  'title',
+  'author',
+  'accession',
+  'callNo',
+  'year',
+  'publisher',
+  'price',
+  'accessioned',
+  'status',
+  'library',
+] as const;
+
+/** The book list's filters (part 3): the title's links and the copies' place, source, status and dates. */
+export const BookFilterSchema = z.object({
   q: txt(80).optional(),
   libraryId: Id.optional(),
   materialTypeId: Id.optional(),
   subjectId: Id.optional(),
-  status: z.enum(['available', 'issued', 'lost', 'damaged', 'withdrawn']).optional(),
+  languageId: Id.optional(),
+  classId: Id.optional(),
+  shelfId: Id.optional(),
+  rack: txt(20).optional(),
+  /** a name, or part of one */
+  author: txt(80).optional(),
+  publisher: txt(80).optional(),
+  status: z.enum(['available', 'issued', 'lost', 'damaged', 'withdrawn', 'sold']).optional(),
+  acquisition: z.enum(['Purchase', 'Donation']).optional(),
+  vendorId: Id.optional(),
+  accessionFrom: AccessionNo.optional(),
+  accessionTo: AccessionNo.optional(),
+  accessionedFrom: DateSchema.optional(),
+  accessionedTo: DateSchema.optional(),
+  yearFrom: z.coerce.number().int().min(1500).max(2100).optional(),
+  yearTo: z.coerce.number().int().min(1500).max(2100).optional(),
+  /** stock checking: never checked, or checked (since a day) */
+  stock: z.enum(['never', 'checked']).optional(),
+  checkedSince: DateSchema.optional(),
+  sort: z.enum(SORTS).default('title'),
+  dir: z.enum(['asc', 'desc']).default('asc'),
+});
+export type BookFilter = z.infer<typeof BookFilterSchema>;
+
+export const BookListSchema = BookFilterSchema.extend({
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(25),
 });
@@ -136,3 +174,25 @@ export const SuggestSchema = z.object({
   q: txt(60).default(''),
 });
 export class SuggestDto extends createZodDto(SuggestSchema) {}
+
+/** The book list as Excel (part 3): one row per copy or per title; every field, or the fields picked. */
+export const BookExportSchema = BookFilterSchema.extend({
+  level: z.enum(['copy', 'title']).default('copy'),
+  columns: z
+    .array(z.string().regex(/^[a-z0-9_.]{1,60}$/))
+    .max(400)
+    .optional(),
+  layout: txt(60).optional(),
+});
+export class BookExportDto extends createZodDto(BookExportSchema) {}
+
+/** A named set of the book list's export fields (0209). */
+export const BookLayoutSchema = z.object({
+  name: txt(60).min(2),
+  columns: z
+    .array(z.string().regex(/^[a-z0-9_.]{1,60}$/))
+    .min(1)
+    .max(400),
+  level: z.enum(['copy', 'title']).default('copy'),
+});
+export class BookLayoutDto extends createZodDto(BookLayoutSchema) {}

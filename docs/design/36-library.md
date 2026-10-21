@@ -127,3 +127,37 @@ add, edit, active/inactive, Excel download and upload with the same checks):
   typed number skipped; a copy moved and its barcode unique; the title changed and the names others show;
   copy status with the loan closed; a reference type not issued; the list's search and filters);
   `a11y.spec.ts` (the list, the form, the book's tabs, the edit page, a copy's status panel).
+
+## Part 3 — the book list's filters, the register of copies, custom report and Excel (migration 0209)
+
+- **Filters** (`bookFilter`, shared by every view and the export): find (title, subtitle, author, code,
+  call number, keywords, ISBN, accession number, barcode), library, material type, subject, language,
+  class, shelf and rack, author (part of a name, any of the title's people), publisher, copy status,
+  purchase or donation, vendor, accession numbers from–to (the same prefix; compared by their number, so
+  B00002–B00010 holds B00009), accessioned from–to, year from–to, stock check (never, or checked since a
+  day). A title is kept when one of its copies matches; its counts are of the copies that match.
+- **Sort** (`bookSort`): title, author, accession number (its prefix, then its number: 1, 2, 1001, B00001
+  …), call number, year, publisher, price, date of accession, status, library; up or down; 25, 50 or 100
+  a page.
+- **Books** (`/library`): tabs **Titles** and **Copies (accession register)** with their counts; the
+  main filters, "More filters" folded (open when one of them is set), sort, order, per page, Clear.
+  `GET library/books/copies` gives the register (each copy with its title, place, status and borrower
+  with the due date, how it came, the last stock check, the price).
+- **Excel:** "Export to Excel" gives every field of the tab's level, as filtered and sorted; "Customise
+  export" opens the shared field picker (`components/FieldPicker.tsx`, also behind the candidates'
+  export): one row per copy or per title (the fields of the other kind leave; "every field" follows the
+  kind), start from my last choice, every field, nothing or a school layout, the fields by group (the
+  book, publication, the copy, how it came, loan; for titles the copies counted: copies, on the shelf,
+  issued, lost, damaged, withdrawn, value of the copies, times issued), the order arranged, save as a
+  layout, download. The file: Copies or Titles (header frozen, a filter on every column, dates as dates)
+  and "About this export" (school, when, by whom, rows and their kind, the filters in words, the fields);
+  up to 20,000 rows. Every export is in the audit log (`library.export`).
+- **API:** `GET library/books/export/setup`, `POST library/books/export` (filters, sort, `level`,
+  `columns`, `layout`), `POST/DELETE library/books/export/layouts` (`report_layouts`, 0209, for any
+  report by name; the maker or the library manager changes or removes one, else 409/403); the user's
+  last choice is `user_preferences` `library.books.export.last`. Admin route `/api/library-export`
+  (GET for every field, POST from the picker, same origin only).
+- Tests: `library-report.e2e-spec.ts` (each filter, sort by author, counts of the matching copies,
+  accession ranges and their order, the register's borrower; Excel per copy and per title with the About
+  sheet; picked fields in order for the level; my last per user; layouts and their rights; audit);
+  `a11y.spec.ts` (the register, more filters, the picker open; the candidates' picker still).
