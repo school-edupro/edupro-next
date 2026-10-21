@@ -88,6 +88,22 @@ export class MiscFeesController {
     return this.misc.forStudent(ctx, studentId);
   }
 
+  @Get('staff')
+  @ApiOperation({ summary: 'Staff members found by name, code or mobile (the counter)' })
+  @RequirePermission(FEES.miscView)
+  staffSearch(@ReqCtx() ctx: RequestContext, @Query('q') q?: string) {
+    return this.misc.staffSearch(ctx, q ?? '');
+  }
+
+  @Get('employee/:employeeId')
+  @ApiOperation({
+    summary: 'The misc fees of a staff member and their misc receipts (the counter)',
+  })
+  @RequirePermission(FEES.miscView)
+  forEmployee(@ReqCtx() ctx: RequestContext, @Param('employeeId') employeeId: string) {
+    return this.misc.forEmployee(ctx, employeeId);
+  }
+
   @Post('collect')
   @ApiOperation({ summary: 'Receive misc fees of a pupil at the counter' })
   @RequirePermission(FEES.miscPost)

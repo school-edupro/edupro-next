@@ -36,11 +36,14 @@ const rupees = (v: string | number) =>
 export function MiscCollectForm({
   action,
   studentId,
+  employeeId,
   lines,
   today,
 }: {
   action: (fd: FormData) => Promise<void>;
-  studentId: string;
+  /** whose fees: a pupil, or a staff member (0216) */
+  studentId?: string;
+  employeeId?: string;
   lines: MiscPayLine[];
   today: string;
 }) {
@@ -58,10 +61,21 @@ export function MiscCollectForm({
   );
   return (
     <form action={action}>
-      <input type="hidden" name="studentId" value={studentId} />
-      <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Misc fees of the pupil">
+      {employeeId ? (
+        <input type="hidden" name="employeeId" value={employeeId} />
+      ) : (
+        <input type="hidden" name="studentId" value={studentId} />
+      )}
+      <div
+        className="ep-table-wrap"
+        tabIndex={0}
+        role="region"
+        aria-label={employeeId ? 'Misc fees of the staff member' : 'Misc fees of the pupil'}
+      >
         <table className="ep-table ep-table--dense">
-          <caption className="ep-sr-only">Misc fees of the pupil</caption>
+          <caption className="ep-sr-only">
+            {employeeId ? 'Misc fees of the staff member' : 'Misc fees of the pupil'}
+          </caption>
           <thead>
             <tr>
               <th scope="col">Fee</th>

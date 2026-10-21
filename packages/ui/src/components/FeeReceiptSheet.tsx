@@ -15,6 +15,8 @@ export interface FeeReceipt {
     admissionNo: string;
     section: string | null;
     guardian: string | null;
+    /** a staff member paying (a misc fee, 0216): the code and designation instead of the pupil's */
+    kind?: 'student' | 'employee';
   };
   year: string;
   receiptNo: string | null;
@@ -77,6 +79,7 @@ export function FeeReceiptSheet({
   /** Where the app serves the school's logo, if it can. */
   logoSrc?: string | null;
 }) {
+  const staff = r.student.kind === 'employee';
   if (r.layout === 'classic') return <FeeReceiptClassic r={r} label={label} />;
   const cancelled = r.status === 'reversed' || r.status === 'bounced';
   const fee = FEE[r.feeType] ?? 'Fee';
@@ -127,20 +130,28 @@ export function FeeReceiptSheet({
             ) : null}
           </p>
           <dl className="ep-rcpt__rows">
-            <dt>Parent’s Name</dt>
-            <dd>{r.parents ?? r.student.guardian ?? '—'}</dd>
+            {staff ? null : (
+              <>
+                <dt>Parent’s Name</dt>
+                <dd>{r.parents ?? r.student.guardian ?? '—'}</dd>
+              </>
+            )}
             <dt>Name</dt>
             <dd>{r.student.name}</dd>
-            <dt>Adm No</dt>
+            <dt>{staff ? 'Emp Code' : 'Adm No'}</dt>
             <dd>{r.student.admissionNo}</dd>
-            <dt>Class</dt>
+            <dt>{staff ? 'Designation' : 'Class'}</dt>
             <dd>{r.student.section ?? '—'}</dd>
             <dt>Mobile No</dt>
             <dd>{r.mobiles ?? '—'}</dd>
             <dt>Address</dt>
             <dd>{r.address ?? '—'}</dd>
-            <dt>Student Category/Bus Route/Bus Stop/Bus Slab</dt>
-            <dd>{r.transport ?? ''}</dd>
+            {staff ? null : (
+              <>
+                <dt>Student Category/Bus Route/Bus Stop/Bus Slab</dt>
+                <dd>{r.transport ?? ''}</dd>
+              </>
+            )}
           </dl>
           <p className="ep-rcpt__band">Pay Mode Information</p>
           <dl className="ep-rcpt__rows" style={{ gridTemplateColumns: 'auto 1fr auto 1fr' }}>

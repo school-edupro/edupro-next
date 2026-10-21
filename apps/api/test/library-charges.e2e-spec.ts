@@ -3,7 +3,8 @@
  * work): the charge worked out (price, processing fee, late fine; a share of the price for damage), a
  * changed amount needing its reason, the misc fee announced at once, new issues stopped until the fees
  * counter takes it, a lost book found again bringing the charge down through the fees office, the old
- * ways of marking a pupil's book lost pointing here, staff left for misc fees for staff.
+ * ways of marking a borrowed book lost pointing here; a staff borrower charged the same way and paying at
+ * the fees counter (misc fees for staff, 0216).
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -295,30 +296,110 @@ describe('library lost and damaged charges (e2e)', () => {
     });
   });
 
-  it('the old ways of marking a pupil’s book lost point here; staff wait for misc fees for staff', async () => {
-    // the pupil owes ₹20: issue to staff instead
+  it('staff: charged the same way, found at the counter, paid on a misc receipt that prints for staff (0216)', async () => {
+    // the pupil owes ₹20: the staff member borrows instead
     expect((await issue('B00004', 'employee', ids.employee!)).statusCode).toBe(201);
-    const staff = await call('GET', '/library/charges/preview?accessionNo=B00004&kind=lost');
-    expect(staff.json().canCharge).toBe(false);
-    expect(
-      (await call('POST', '/library/charges', { accessionNo: 'B00004', kind: 'lost' })).json().type,
-    ).toBe('library.staff_charge');
-    await withMigrator((c) =>
-      c.query(
-        `UPDATE library_loans SET borrower_kind = 'student', borrower_id = $2
-          WHERE returned_on IS NULL AND copy_id = (SELECT id FROM library_copies WHERE school_id = $1 AND accession_no = 'B00004')`,
-        [school.id, ids.pupil],
-      ),
+    await late('B00004');
+    const p = (await call('GET', '/library/charges/preview?accessionNo=B00004&kind=lost')).json();
+    expect(p).toMatchObject({ borrowerKind: 'employee', canCharge: true, price: 300 });
+    const r = await call('POST', '/library/charges', { accessionNo: 'B00004', kind: 'lost' });
+    expect(r.statusCode).toBe(201);
+    // the fee's lines name the staff member
+    const fee = (
+      await call('GET', `/fees/misc-fees/${r.json().miscFeeId as string}`, undefined, admin)
+    ).json();
+    expect(fee.lines).toEqual([
+      expect.objectContaining({
+        student: 'Meena',
+        admissionNo: `${s}-E1`,
+        class: 'Staff',
+        employeeId: ids.employee,
+      }),
+    ]);
+    // no more books until it is paid
+    expect((await issue('B00005', 'employee', ids.employee!)).json().type).toBe(
+      'library.charge_due',
     );
+    // the counter finds the staff member and takes it
+    const found = (
+      await call('GET', '/fees/misc-fees/staff?q=meena', undefined, accountant)
+    ).json();
+    expect(found.data).toEqual([
+      expect.objectContaining({ id: ids.employee, name: 'Meena', code: `${s}-E1` }),
+    ]);
+    const dues = (
+      await call('GET', `/fees/misc-fees/employee/${ids.employee!}`, undefined, accountant)
+    ).json();
+    expect(dues.employee).toMatchObject({ name: 'Meena', code: `${s}-E1` });
+    const line = (dues.lines as Array<{ id: string; title: string; balance: string }>)[0]!;
+    expect(line).toMatchObject({
+      title: 'Lost book: Malgudi Days (B00004)',
+      balance: String(p.suggested.toFixed(2)),
+    });
+    expect(
+      (
+        await call(
+          'POST',
+          '/fees/misc-fees/collect',
+          {
+            studentId: ids.pupil,
+            employeeId: ids.employee,
+            lines: [{ lineId: line.id, amount: 1 }],
+            mode: 'cash',
+          },
+          accountant,
+        )
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await call(
+          'POST',
+          '/fees/misc-fees/collect',
+          { studentId: ids.pupil, lines: [{ lineId: line.id, amount: 1 }], mode: 'cash' },
+          accountant,
+        )
+      ).statusCode,
+    ).toBe(404);
+    const paid = await call(
+      'POST',
+      '/fees/misc-fees/collect',
+      { employeeId: ids.employee, lines: [{ lineId: line.id, amount: p.suggested }], mode: 'cash' },
+      accountant,
+    );
+    expect(paid.statusCode).toBe(201);
+    const receiptId = paid.json().receipts[0].id as string;
+    const view = (
+      await call('GET', `/fees/misc-fees/receipts/${receiptId}/receipt-view`, undefined, accountant)
+    ).json();
+    expect(view.student).toMatchObject({
+      name: 'Meena',
+      admissionNo: `${s}-E1`,
+      kind: 'employee',
+      guardian: null,
+    });
+    expect(view.lines[0]).toMatchObject({ head: 'Lost book: Malgudi Days (B00004)' });
+    const again = (
+      await call('GET', `/fees/misc-fees/employee/${ids.employee!}`, undefined, accountant)
+    ).json();
+    expect(again.receipts[0]).toMatchObject({ id: receiptId, status: 'posted' });
+    expect((await charges('paid')).rows.find((x) => x.accessionNo === 'B00004')).toMatchObject({
+      borrowerKind: 'employee',
+      state: 'paid',
+    });
+    expect((await issue('B00005', 'employee', ids.employee!)).statusCode).toBe(201);
+  });
+
+  it('a book on loan is not marked lost elsewhere: Circulation and the copy’s status point here', async () => {
     const ret = await call('POST', '/library/loans/return', {
-      accessionNo: 'B00004',
+      accessionNo: 'B00005',
       condition: 'lost',
     });
     expect(ret.json().type).toBe('library.use_charges');
     const copy = (
       await withMigrator((c) =>
         c.query<{ id: string }>(
-          `SELECT id::text FROM library_copies WHERE school_id = $1 AND accession_no = 'B00004'`,
+          `SELECT id::text FROM library_copies WHERE school_id = $1 AND accession_no = 'B00005'`,
           [school.id],
         ),
       )

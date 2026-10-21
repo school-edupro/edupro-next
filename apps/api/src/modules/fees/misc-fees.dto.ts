@@ -69,21 +69,27 @@ export const MiscFeeChangeSchema = z
   });
 export type MiscFeeChangeDto = z.infer<typeof MiscFeeChangeSchema>;
 
-export const CollectMiscFeeSchema = z.object({
-  studentId: Id,
-  /** The pupil's fee lines being paid now, each with what is received on it. */
-  lines: z
-    .array(z.object({ lineId: Id, amount: z.number().min(0.01).max(10_000_000) }))
-    .min(1)
-    .max(40),
-  mode: z.enum(['cash', 'cheque', 'dd', 'upi', 'bank', 'card']),
-  receivedOn: Day.optional(),
-  reference: z.string().trim().max(80).optional(),
-  instrumentNo: z.string().trim().max(40).optional(),
-  instrumentDate: Day.optional(),
-  bankName: z.string().trim().max(80).optional(),
-  remarks: z.string().trim().max(300).optional(),
-});
+export const CollectMiscFeeSchema = z
+  .object({
+    /** whose fees: a pupil, or a staff member (0216) */
+    studentId: Id.optional(),
+    employeeId: Id.optional(),
+    /** The payer's fee lines being paid now, each with what is received on it. */
+    lines: z
+      .array(z.object({ lineId: Id, amount: z.number().min(0.01).max(10_000_000) }))
+      .min(1)
+      .max(40),
+    mode: z.enum(['cash', 'cheque', 'dd', 'upi', 'bank', 'card']),
+    receivedOn: Day.optional(),
+    reference: z.string().trim().max(80).optional(),
+    instrumentNo: z.string().trim().max(40).optional(),
+    instrumentDate: Day.optional(),
+    bankName: z.string().trim().max(80).optional(),
+    remarks: z.string().trim().max(300).optional(),
+  })
+  .refine((v) => Boolean(v.studentId) !== Boolean(v.employeeId), {
+    message: 'Give the pupil or the staff member, one of them',
+  });
 export class CollectMiscFeeDto extends createZodDto(CollectMiscFeeSchema) {}
 
 /** A misc receipt taken back: cancelled, a bounced cheque, or a refund of all or part of it. */

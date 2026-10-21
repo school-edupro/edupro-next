@@ -27,14 +27,6 @@ async function sequence<T extends unknown[]>(tasks: {
   for (const t of tasks) out.push(await t());
   return out as T;
 }
-const STATUS_WORD: Record<string, string> = {
-  withdrawn: 'Withdrawn',
-  lost: 'Lost',
-  lost_paid: 'Lost and paid',
-  found: 'Found again',
-  damaged: 'Damaged',
-  available: 'Back in use',
-};
 
 /**
  * The book master (docs/design/36-library.md, part 2): a title entered once and linked to the set-up
@@ -856,26 +848,13 @@ export class LibraryBooksService {
         throw new DomainError('validation-failed', 'An amount is for lost and paid only', {
           status: 400,
         });
-      if (to === 'lost' && cur.status === 'issued') {
-        // a pupil's lost book is charged: Lost and damaged books
-        const who = await c.query<{ kind: string }>(
-          `SELECT borrower_kind::text AS kind FROM library_loans WHERE copy_id = $1 AND returned_on IS NULL`,
-          [id],
+      // a book on loan that is lost is charged to its borrower: Lost and damaged books
+      if (to === 'lost' && cur.status === 'issued')
+        throw refuse(
+          'The book is on loan: report it lost at Library → Lost and damaged books, which charges its borrower',
         );
-        if (who.rows[0]?.kind === 'student')
-          throw refuse(
-            'A pupil has this book: report it lost at Library → Lost and damaged books, which charges its price',
-          );
-      }
       // a lost copy found again: an unpaid charge comes down (the fees office approves)
       const found = dto.status === 'found' ? await this.charges.foundIn(c, ctx, id, dto.on) : null;
-      if (to === 'lost' && cur.status === 'issued')
-        await c.query(
-          `UPDATE library_loans SET returned_on = $2::date, returned_by = app.current_user_id(),
-                  note = concat_ws(' · ', note, $3::text), updated_at = now()
-            WHERE copy_id = $1 AND returned_on IS NULL`,
-          [id, dto.on, `${STATUS_WORD[dto.status]!}: ${dto.reason}`],
-        );
       await c.query(
         `UPDATE library_copies SET status = $2::library_copy_status, status_on = $3::date, status_reason = $4,
                 updated_at = now(), updated_by = app.current_user_id()

@@ -71,10 +71,13 @@ const REQUEST = `SELECT r.id::text, r.misc_fee_id::text AS "miscFeeId", f.title 
         r.kind, r.payload, r.reason, r.status, r.workflow_instance_id::text AS "workflowInstanceId", ${WAITING_WITH('r.workflow_instance_id')} AS "waitingWith",
         ru.display_name AS "requestedBy", r.requested_at AS "requestedAt", du.display_name AS "decidedBy", r.decided_at AS "decidedAt", r.decision_note AS "decisionNote",
         r.voucher_no AS "voucherNo", r.result,
-        COALESCE(ls.display_name, ms.display_name) AS student, COALESCE(ls.admission_no, ms.admission_no) AS "admissionNo"
+        COALESCE(ls.display_name, le.display_name, ms.display_name, me.display_name) AS student,
+        COALESCE(ls.admission_no, le.employee_code, ms.admission_no, me.employee_code) AS "admissionNo"
    FROM misc_fee_requests r LEFT JOIN misc_fees f ON f.id = r.misc_fee_id
    LEFT JOIN misc_receipts m ON m.id = r.receipt_id LEFT JOIN students ms ON ms.id = m.student_id
+   LEFT JOIN employees me ON me.id = m.employee_id
    LEFT JOIN misc_fee_students l ON l.id = r.line_id LEFT JOIN students ls ON ls.id = l.student_id
+   LEFT JOIN employees le ON le.id = l.employee_id
    LEFT JOIN users ru ON ru.id = r.requested_by LEFT JOIN users du ON du.id = r.decided_by`;
 
 /**
@@ -269,13 +272,16 @@ export class MiscFeesService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const fee = await this.fee(c, id);
       const lines = await c.query<Record<string, unknown>>(
-        `SELECT l.id::text, l.student_id::text AS "studentId", s.display_name AS student, s.admission_no AS "admissionNo",
-                (SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
-                  WHERE e.student_id = s.id AND e.academic_year_id = f.academic_year_id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1) AS class,
+        `SELECT l.id::text, l.student_id::text AS "studentId", l.employee_id::text AS "employeeId",
+                COALESCE(s.display_name, emp.display_name) AS student, COALESCE(s.admission_no, emp.employee_code) AS "admissionNo",
+                COALESCE((SELECT k.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+                  WHERE e.student_id = s.id AND e.academic_year_id = f.academic_year_id ORDER BY (e.status = 'active') DESC, e.id DESC LIMIT 1),
+                  CASE WHEN emp.id IS NOT NULL THEN 'Staff' END) AS class,
                 l.amount::text, l.paid::text, (l.amount - l.paid)::text AS balance, COALESCE(l.last_date, f.last_date)::text AS "lastDate",
                 l.last_date IS NOT NULL AS "ownDate", l.amount <> f.amount AS "ownAmount", l.status, l.paid_at AS "paidAt"
-           FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id JOIN students s ON s.id = l.student_id
-          WHERE l.misc_fee_id = $1 ORDER BY (l.status = 'cancelled'), s.display_name LIMIT 5000`,
+           FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id LEFT JOIN students s ON s.id = l.student_id
+           LEFT JOIN employees emp ON emp.id = l.employee_id
+          WHERE l.misc_fee_id = $1 ORDER BY (l.status = 'cancelled'), COALESCE(s.display_name, emp.display_name) LIMIT 5000`,
         [id],
       );
       const requests = await c.query<Record<string, unknown>>(
@@ -284,6 +290,73 @@ export class MiscFeesService {
         [id],
       );
       return { fee, lines: lines.rows, requests: requests.rows };
+    });
+  }
+
+  /** Staff members found by name, code or mobile, for the counter (0216). */
+  async staffSearch(ctx: RequestContext, q: string) {
+    const term = q.trim();
+    if (term.length < 2) return { data: [] };
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        name: string;
+        code: string;
+        designation: string | null;
+      }>(
+        `SELECT e.id::text, e.display_name AS name, e.employee_code AS code, e.designation
+           FROM employees e
+          WHERE e.deleted_at IS NULL
+            AND (e.display_name ILIKE $1 OR e.employee_code ILIKE $1 OR e.mobile ILIKE $1 OR upper(e.employee_code) = upper($2))
+          ORDER BY (upper(e.employee_code) = upper($2)) DESC, e.display_name LIMIT 30`,
+        [`%${term.replace(/[\\%_]/g, (x) => `\\${x}`)}%`, term],
+      );
+      return { data: r.rows };
+    });
+  }
+
+  /** What a staff member can pay at the counter now, and the misc receipts they already hold (0216). */
+  async forEmployee(ctx: RequestContext, employeeId: string) {
+    const yearId = this.year(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const e = await c.query<{ name: string; code: string; designation: string | null }>(
+        `SELECT e.display_name AS name, e.employee_code AS code, e.designation FROM employees e WHERE e.id = $1 AND e.deleted_at IS NULL`,
+        [employeeId],
+      );
+      if (!e.rows[0]) throw new DomainError('not-found', 'Staff member not found', { status: 404 });
+      const lines = await c.query<Record<string, unknown>>(
+        `SELECT l.id::text, f.id::text AS "feeId", f.title, h.name AS head, f.mandatory, f.seats, f.remark,
+                l.amount::text, l.paid::text, (l.amount - l.paid)::text AS balance, COALESCE(l.last_date, f.last_date)::text AS "lastDate", l.status,
+                (SELECT count(*) FROM misc_fee_students x WHERE x.misc_fee_id = f.id AND x.status = 'paid')::int AS "seatsTaken",
+                CASE WHEN f.status = 'closed' THEN 'The fee is closed'
+                     WHEN NOT f.mandatory AND COALESCE(l.last_date, f.last_date) < CURRENT_DATE THEN 'The last date has passed'
+                END AS blocked
+           FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id JOIN fee_heads h ON h.id = f.head_id
+          WHERE l.employee_id = $1 AND f.academic_year_id = $2 AND f.status IN ('announced', 'closed') AND l.status <> 'cancelled'
+          ORDER BY (l.status = 'paid'), COALESCE(l.last_date, f.last_date), f.id`,
+        [employeeId, yearId],
+      );
+      const receipts = await c.query<Record<string, unknown>>(
+        `SELECT m.id::text, m.receipt_no AS "receiptNo", m.received_on::text AS "receivedOn", m.amount::text, m.refunded::text, m.mode, m.status,
+                m.instrument_no AS "instrumentNo", m.bank_name AS "bankName", m.reference, ru.display_name AS "receivedBy",
+                COALESCE(f.title, h.name) AS title, m.misc_fee_student_id IS NOT NULL AS announced,
+                (SELECT r.kind FROM misc_fee_requests r WHERE r.receipt_id = m.id AND r.status = 'pending' LIMIT 1) AS waiting
+           FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+           LEFT JOIN misc_fee_students l ON l.id = m.misc_fee_student_id LEFT JOIN misc_fees f ON f.id = l.misc_fee_id
+           LEFT JOIN users ru ON ru.id = m.received_by
+          WHERE m.employee_id = $1 AND m.academic_year_id = $2 ORDER BY m.id DESC LIMIT 200`,
+        [employeeId, yearId],
+      );
+      return {
+        employee: {
+          id: employeeId,
+          name: e.rows[0].name,
+          code: e.rows[0].code,
+          designation: e.rows[0].designation,
+        },
+        lines: lines.rows,
+        receipts: receipts.rows,
+      };
     });
   }
 
@@ -571,8 +644,9 @@ export class MiscFeesService {
         });
       if (dto.kind === 'pupil_change') {
         const l = await c.query<{ name: string; amount: string; paid: string; last: string }>(
-          `SELECT s.display_name AS name, l.amount::text, l.paid::text, COALESCE(l.last_date, f.last_date)::text AS last
-             FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id JOIN students s ON s.id = l.student_id
+          `SELECT COALESCE(s.display_name, emp.display_name) AS name, l.amount::text, l.paid::text, COALESCE(l.last_date, f.last_date)::text AS last
+             FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id LEFT JOIN students s ON s.id = l.student_id
+             LEFT JOIN employees emp ON emp.id = l.employee_id
             WHERE l.id = $1 AND l.misc_fee_id = $2 AND l.status <> 'cancelled'`,
           [dto.lineId, feeId],
         );
@@ -947,7 +1021,12 @@ export class MiscFeesService {
         action: 'fees.misc.collect',
         entityType: 'misc_receipts',
         entityId: out.receipts[0]!.id,
-        after: { studentId: dto.studentId, mode: dto.mode, receipts: out.receipts },
+        after: {
+          studentId: dto.studentId ?? null,
+          employeeId: dto.employeeId ?? null,
+          mode: dto.mode,
+          receipts: out.receipts,
+        },
       });
       return out;
     });
@@ -970,11 +1049,12 @@ export class MiscFeesService {
     },
   ) {
     if (!intent.entityId) return;
-    const line = await c.query<{ student_id: string; year: string }>(
+    const line = await c.query<{ student_id: string | null; year: string }>(
       `SELECT l.student_id::text, f.academic_year_id::text AS year FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id WHERE l.id = $1`,
       [intent.entityId],
     );
-    if (!line.rows[0]) return;
+    // a family pays its children's fees online; a staff member's are taken at the counter
+    if (!line.rows[0]?.student_id) return;
     const fee = Number(intent.amount) - Number(intent.charge);
     const out = await this.collectIn(
       c,
@@ -1013,12 +1093,20 @@ export class MiscFeesService {
           { status: 409 },
         );
       await assertPeriodOpen(c, 'misc', on);
+      // the payer: a pupil (the family's mobile) or a staff member (0216)
+      const staff = Boolean(dto.employeeId);
+      const payerId = (dto.employeeId ?? dto.studentId)!;
       const payer = await c.query<{ name: string; mobile: string | null }>(
-        `SELECT s.display_name AS name, (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1) AS mobile
-           FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL`,
-        [dto.studentId],
+        staff
+          ? `SELECT e.display_name AS name, e.mobile FROM employees e WHERE e.id = $1 AND e.deleted_at IS NULL`
+          : `SELECT s.display_name AS name, (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1) AS mobile
+               FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL`,
+        [payerId],
       );
-      if (!payer.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      if (!payer.rows[0])
+        throw new DomainError('not-found', staff ? 'Staff member not found' : 'Student not found', {
+          status: 404,
+        });
       const receipts: Array<{ id: string; receiptNo: string; title: string; amount: string }> = [];
       for (const want of dto.lines) {
         const l = await c.query<{
@@ -1036,12 +1124,16 @@ export class MiscFeesService {
           `SELECT f.id::text AS fee_id, f.title, f.head_id::text, f.mandatory, f.seats, f.status AS fee_status, l.amount::text, l.paid::text,
                   COALESCE(l.last_date, f.last_date)::text AS last, l.status
              FROM misc_fee_students l JOIN misc_fees f ON f.id = l.misc_fee_id
-            WHERE l.id = $1 AND l.student_id = $2 FOR UPDATE OF l`,
-          [want.lineId, dto.studentId],
+            WHERE l.id = $1 AND (CASE WHEN $3 THEN l.employee_id ELSE l.student_id END) = $2 FOR UPDATE OF l`,
+          [want.lineId, payerId, staff],
         );
         const line = l.rows[0];
         if (!line)
-          throw new DomainError('not-found', 'This fee is not on the pupil', { status: 404 });
+          throw new DomainError(
+            'not-found',
+            staff ? 'This fee is not on the staff member' : 'This fee is not on the pupil',
+            { status: 404 },
+          );
         const balance = Number(line.amount) - Number(line.paid);
         if (line.fee_status !== 'announced' || line.status === 'cancelled')
           throw new DomainError('misc.closed', `${line.title} is not open for collection`, {
@@ -1084,15 +1176,16 @@ export class MiscFeesService {
             );
         }
         const r = await c.query<{ id: string; receipt_no: string }>(
-          `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, payer_name, payer_mobile, head_id, amount,
+          `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, employee_id, payer_name, payer_mobile, head_id, amount,
                                       received_on, mode, reference, instrument_no, bank_name, remarks, received_by, request_id, misc_fee_student_id)
-           VALUES (app.current_school_id(), $1, $2, app.next_receipt_no('misc', $2), 'student', $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13,
+           VALUES (app.current_school_id(), $1, $2, app.next_receipt_no('misc', $2), CASE WHEN $15 THEN 'employee' ELSE 'student' END::payer_kind,
+                   CASE WHEN $15 THEN NULL ELSE $3::bigint END, CASE WHEN $15 THEN $3::bigint END, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13,
                    app.current_user_id(), app.current_request_id(), $14)
            RETURNING id::text, receipt_no`,
           [
             yearId,
             fy.rows[0].fy,
-            dto.studentId,
+            payerId,
             payer.rows[0].name,
             payer.rows[0].mobile,
             line.head_id,
@@ -1104,6 +1197,7 @@ export class MiscFeesService {
             dto.bankName ?? null,
             dto.remarks ?? line.title,
             want.lineId,
+            staff,
           ],
         );
         await c.query(

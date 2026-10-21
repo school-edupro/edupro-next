@@ -33,8 +33,9 @@ interface OpenLoan {
  * Lost and damaged books (docs/design/36-library.md, part 3 of the register work). A book on loan is
  * reported lost: its price (the copy's, else the title's) + the processing fee + the late fine to that
  * day, the librarian may change it with a reason; or it comes back damaged: what the librarian enters (a
- * share of the price suggested). The charge is announced at once as a misc fee on the pupil (no approval
- * step): the parent sees it, the fees counter collects it, the library sees it due or paid, and it stops
+ * share of the price suggested). The charge is announced at once as a misc fee on the pupil or the staff
+ * member (0216; no approval step): the parent sees a pupil's, the fees counter collects it, the library
+ * sees it due or paid, and it stops
  * new issues and the leaving check until paid. A lost book found again before it is paid: the price and
  * the fee come off through a misc fee change request the fees office approves.
  */
@@ -138,8 +139,8 @@ export class LibraryChargesService {
       lateFine: fine,
       sharePct: share,
       suggested,
-      // staff charges come with misc fees for staff (part 4)
-      canCharge: l.borrower_kind === 'student',
+      // a pupil or a staff member: both pay at the fees counter (misc fees for staff, 0216)
+      canCharge: true,
     };
   }
 
@@ -154,17 +155,11 @@ export class LibraryChargesService {
     return r.rows[0]!.id;
   }
 
-  /** The book reported lost, or returned damaged, and the charge announced on the pupil. */
+  /** The book reported lost, or returned damaged, and the charge announced on the borrower. */
   async charge(ctx: RequestContext, dto: ChargeDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const l = await this.openLoan(c, dto.accessionNo, true);
       const w = await this.work(c, dto.accessionNo, dto.kind, dto.on);
-      if (!w.canCharge)
-        throw new DomainError(
-          'library.staff_charge',
-          'A charge on staff comes with misc fees for staff: for now return or mark the copy as before',
-          { status: 409 },
-        );
       const amount = round(dto.amount ?? w.suggested);
       if (!(amount > 0))
         throw new DomainError('validation-failed', 'The charge must be more than ₹0', {
@@ -222,7 +217,7 @@ export class LibraryChargesService {
           reason ?? (dto.kind === 'lost' ? `Lost by ${l.borrower}` : null),
         ],
       );
-      // the misc fee, announced at once on the pupil
+      // the misc fee, announced at once on the pupil or the staff member
       const headId = await this.head(c);
       const title =
         `${dto.kind === 'lost' ? 'Lost book' : 'Damaged book'}: ${l.title} (${l.accession_no})`.slice(
@@ -240,9 +235,10 @@ export class LibraryChargesService {
         [yearId, headId, title, amount.toFixed(2), remark.slice(0, 300)],
       );
       const line = await c.query<{ id: string }>(
-        `INSERT INTO misc_fee_students (school_id, misc_fee_id, student_id, amount)
-         VALUES (app.current_school_id(), $1, $2, $3) RETURNING id::text`,
-        [fee.rows[0]!.id, l.borrower_id, amount.toFixed(2)],
+        `INSERT INTO misc_fee_students (school_id, misc_fee_id, student_id, employee_id, amount)
+         VALUES (app.current_school_id(), $1, CASE WHEN $4 = 'student' THEN $2::bigint END,
+                 CASE WHEN $4 = 'employee' THEN $2::bigint END, $3) RETURNING id::text`,
+        [fee.rows[0]!.id, l.borrower_id, amount.toFixed(2), l.borrower_kind],
       );
       const ch = await c.query<{ id: string }>(
         `INSERT INTO library_charges (school_id, loan_id, copy_id, borrower_kind, borrower_id, kind, on_date, price,

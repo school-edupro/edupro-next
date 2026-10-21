@@ -21,7 +21,6 @@ const MESSAGES: Record<string, string> = {
   'library.not_on_loan': 'The book is not on loan.',
   'library.charge_due': 'A lost or damaged book is not paid for yet.',
   'library.use_charges': 'Charge it at Lost and damaged books.',
-  'library.staff_charge': 'Charges on staff come with misc fees for staff.',
   'appointment.not_today': 'Not the day of this appointment.',
   'appointment.not_confirmed': 'This appointment is not confirmed yet.',
   'appointment.wrong_state': 'That cannot be done on this appointment now.',

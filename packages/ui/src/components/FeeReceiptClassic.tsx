@@ -11,6 +11,7 @@ const dmy = (iso: string | null | undefined) => {
 
 /** The classic receipt (one column, particulars by period), kept as a layout the school may choose. */
 export function FeeReceiptClassic({ r, label }: { r: FeeReceipt; label: string }) {
+  const staff = r.student.kind === 'employee';
   const cancelled = r.status === 'reversed' || r.status === 'bounced';
   return (
     <section className="ep-print-sheet ep-receipt" aria-label={`Fee receipt, ${label}`}>
@@ -32,17 +33,19 @@ export function FeeReceiptClassic({ r, label }: { r: FeeReceipt; label: string }
           Date: <strong>{dmy(r.receivedOn)}</strong>
         </div>
         <div>
-          Student: <strong>{r.student.name}</strong>
+          {staff ? 'Staff member' : 'Student'}: <strong>{r.student.name}</strong>
         </div>
         <div>
-          Admission no.: <strong>{r.student.admissionNo}</strong>
+          {staff ? 'Employee code' : 'Admission no.'}: <strong>{r.student.admissionNo}</strong>
         </div>
         <div>
-          Class: <strong>{r.student.section ?? '—'}</strong>
+          {staff ? 'Designation' : 'Class'}: <strong>{r.student.section ?? '—'}</strong>
         </div>
-        <div>
-          Father / guardian: <strong>{r.student.guardian ?? '—'}</strong>
-        </div>
+        {staff ? null : (
+          <div>
+            Father / guardian: <strong>{r.student.guardian ?? '—'}</strong>
+          </div>
+        )}
         <div>
           Session: <strong>{r.year}</strong>
         </div>

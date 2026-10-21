@@ -145,7 +145,7 @@ export default async function LibraryChargesPage({
       <PageHeader
         kicker="Library"
         title="Lost and damaged books"
-        description="A pupil who loses a book pays its price, the processing fee and the late fine; a damaged book, what you set. The charge is announced at once as a misc fee: the parent sees it and the fees counter collects it. Until it is paid, the pupil borrows no more books."
+        description="A borrower who loses a book pays its price, the processing fee and the late fine; a damaged book, what you set. The charge is announced at once as a misc fee, on the pupil (the parent sees it) or the staff member, and the fees counter collects it. Until it is paid, the borrower takes no more books."
       />
       <Notice params={sp} />
       <div
@@ -159,12 +159,12 @@ export default async function LibraryChargesPage({
         {finder(
           'lost',
           'A book reported lost',
-          'The book is on loan to the pupil; the loan closes and the copy is marked lost.',
+          'The book is on loan to a pupil or a staff member; the loan closes and the copy is marked lost.',
         )}
         {finder(
           'damaged',
           'A book returned damaged',
-          'The pupil brings it back damaged; the loan closes and the copy is marked damaged.',
+          'The borrower brings it back damaged; the loan closes and the copy is marked damaged.',
         )}
       </div>
 
@@ -223,62 +223,53 @@ export default async function LibraryChargesPage({
               </div>
             ))}
           </dl>
-          {!preview.canCharge ? (
-            <p className="ep-alert ep-alert--info" role="status">
-              Charges on staff come with misc fees for staff. For now return the book at
-              Circulation, or mark the copy lost on its book page.
-            </p>
-          ) : (
-            <form action={chargeBook} style={{ marginTop: 'var(--sp-3)' }}>
-              <input type="hidden" name="kind" value={preview.kind} />
-              <input type="hidden" name="accessionNo" value={preview.accessionNo} />
-              <input type="hidden" name="on" value={preview.on} />
-              <div className="ep-acr-filter">
-                <label className="ep-field" htmlFor="lc-amount" style={{ margin: 0 }}>
-                  <span className="ep-field__label">Charge (₹) *</span>
-                  <input
-                    id="lc-amount"
-                    name="amount"
-                    type="number"
-                    min={1}
-                    step="0.01"
-                    required
-                    className="ep-input"
-                    defaultValue={preview.suggested || ''}
-                  />
-                  <span className="ep-field__help">
-                    {preview.kind === 'lost'
-                      ? 'Change it only with the reason below'
-                      : 'What the repair or the loss of use is worth'}
-                  </span>
+          <form action={chargeBook} style={{ marginTop: 'var(--sp-3)' }}>
+            <input type="hidden" name="kind" value={preview.kind} />
+            <input type="hidden" name="accessionNo" value={preview.accessionNo} />
+            <input type="hidden" name="on" value={preview.on} />
+            <div className="ep-acr-filter">
+              <label className="ep-field" htmlFor="lc-amount" style={{ margin: 0 }}>
+                <span className="ep-field__label">Charge (₹) *</span>
+                <input
+                  id="lc-amount"
+                  name="amount"
+                  type="number"
+                  min={1}
+                  step="0.01"
+                  required
+                  className="ep-input"
+                  defaultValue={preview.suggested || ''}
+                />
+                <span className="ep-field__help">
+                  {preview.kind === 'lost'
+                    ? 'Change it only with the reason below'
+                    : 'What the repair or the loss of use is worth'}
+                </span>
+              </label>
+              <label className="ep-field" htmlFor="lc-reason" style={{ margin: 0 }}>
+                <span className="ep-field__label">
+                  {preview.kind === 'lost' ? 'Reason (if the charge differs)' : 'What is damaged *'}
+                </span>
+                <input
+                  id="lc-reason"
+                  name="reason"
+                  className="ep-input"
+                  maxLength={300}
+                  required={preview.kind === 'damaged'}
+                />
+              </label>
+              {preview.kind === 'damaged' && preview.lateFine ? (
+                <label className="ep-check" htmlFor="lc-waive" style={{ alignSelf: 'end' }}>
+                  <input id="lc-waive" type="checkbox" name="waiveFine" /> Waive the late fine
                 </label>
-                <label className="ep-field" htmlFor="lc-reason" style={{ margin: 0 }}>
-                  <span className="ep-field__label">
-                    {preview.kind === 'lost'
-                      ? 'Reason (if the charge differs)'
-                      : 'What is damaged *'}
-                  </span>
-                  <input
-                    id="lc-reason"
-                    name="reason"
-                    className="ep-input"
-                    maxLength={300}
-                    required={preview.kind === 'damaged'}
-                  />
-                </label>
-                {preview.kind === 'damaged' && preview.lateFine ? (
-                  <label className="ep-check" htmlFor="lc-waive" style={{ alignSelf: 'end' }}>
-                    <input id="lc-waive" type="checkbox" name="waiveFine" /> Waive the late fine
-                  </label>
-                ) : null}
-              </div>
-              <div style={{ marginTop: 'var(--sp-3)' }}>
-                <button type="submit" className="ep-btn ep-btn--primary">
-                  {preview.kind === 'lost' ? 'Mark lost and charge' : 'Return damaged and charge'}
-                </button>
-              </div>
-            </form>
-          )}
+              ) : null}
+            </div>
+            <div style={{ marginTop: 'var(--sp-3)' }}>
+              <button type="submit" className="ep-btn ep-btn--primary">
+                {preview.kind === 'lost' ? 'Mark lost and charge' : 'Return damaged and charge'}
+              </button>
+            </div>
+          </form>
         </section>
       ) : null}
 

@@ -41,12 +41,13 @@ const RECEIPT: Record<Receipt['status'], [string, 'success' | 'danger' | 'neutra
 /** One misc receipt, laid out as a fee receipt on the pupil's fee page: what it is, then what can be asked. */
 function MiscReceiptRow({
   r,
-  studentId,
+  payer,
   canAsk,
   bounceCharge,
 }: {
   r: Receipt;
-  studentId: string;
+  /** who paid: a pupil or a staff member (0216), for the way back to this page */
+  payer: { field: 'studentId' | 'employeeId'; id: string };
   canAsk: boolean;
   bounceCharge: number;
 }) {
@@ -57,7 +58,7 @@ function MiscReceiptRow({
   const untouched = Number(r.refunded) === 0;
   const hidden = (kind: string) => (
     <>
-      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name={payer.field} value={payer.id} />
       <input type="hidden" name="receiptId" value={r.id} />
       <input type="hidden" name="kind" value={kind} />
     </>
@@ -233,6 +234,24 @@ export default async function MiscCollectPage({
   const canPost = me.permissions.includes('fees.misc.post');
   const q = (sp.q ?? '').trim();
   const studentId = /^\d{1,18}$/.test(sp.studentId ?? '') ? sp.studentId! : '';
+  // a staff member (0216): found by name, code or mobile
+  const staffQ = (sp.staff ?? '').trim();
+  const employeeId = /^\d{1,18}$/.test(sp.employeeId ?? '') ? sp.employeeId! : '';
+  const staffFound =
+    !employeeId && staffQ.length >= 2
+      ? await apiFetch<{
+          data: Array<{ id: string; name: string; code: string; designation: string | null }>;
+        }>(`/fees/misc-fees/staff?q=${encodeURIComponent(staffQ)}`).then((r) => r.data)
+      : [];
+  const staffExact = staffFound.filter((f) => f.code.toLowerCase() === staffQ.toLowerCase());
+  if (staffExact.length === 1) redirect(`/fees/misc-fees/collect?employeeId=${staffExact[0]!.id}`);
+  const staff = employeeId
+    ? await apiFetch<{
+        employee: { id: string; name: string; code: string; designation: string | null };
+        lines: MiscPayLine[];
+        receipts: Receipt[];
+      }>(`/fees/misc-fees/employee/${employeeId}`)
+    : null;
   const found =
     !studentId && q.length >= 2
       ? await apiFetch<{ data: Found[] }>(`/fees/cashier/search?q=${encodeURIComponent(q)}`).then(
@@ -255,10 +274,10 @@ export default async function MiscCollectPage({
       <PageHeader
         kicker="Fees · Misc fees"
         title="Counter collection"
-        description="Find the pupil by name or admission number, receive the misc fees announced for them, and print the receipt."
+        description="Find the pupil by name or admission number, or the staff member by name or code; receive the misc fees announced for them, and print the receipt."
       />
       <Notice params={sp} />
-      <Card title="Find the pupil">
+      <Card title="Find the pupil or staff member">
         <form
           method="get"
           style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
@@ -274,6 +293,46 @@ export default async function MiscCollectPage({
             All misc fees
           </a>
         </form>
+        <form
+          method="get"
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            marginTop: 'var(--sp-3)',
+          }}
+        >
+          <label className="ep-field" htmlFor="staff" style={{ margin: 0 }}>
+            <span className="ep-field__label">Or a staff member: name, code or mobile</span>
+            <input
+              id="staff"
+              name="staff"
+              className="ep-input"
+              defaultValue={staffQ}
+              maxLength={60}
+            />
+          </label>
+          <button type="submit" className="ep-btn ep-btn--secondary">
+            Find staff
+          </button>
+        </form>
+        {!employeeId && staffQ.length >= 2 ? (
+          staffFound.length === 0 ? (
+            <p className="ep-field__help">No staff member found.</p>
+          ) : (
+            <ul>
+              {staffFound.map((f) => (
+                <li key={f.id}>
+                  <a href={`/fees/misc-fees/collect?employeeId=${f.id}`}>
+                    {f.name} · {f.code}
+                  </a>
+                  {f.designation ? ` · ${f.designation}` : ''}
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
         {!studentId && q.length >= 2 ? (
           found.length === 0 ? (
             <p className="ep-field__help">Nobody found.</p>
@@ -323,7 +382,7 @@ export default async function MiscCollectPage({
                   <MiscReceiptRow
                     key={r.id}
                     r={r}
-                    studentId={data.student.id}
+                    payer={{ field: 'studentId', id: data.student.id }}
                     canAsk={canPost}
                     bounceCharge={data.bounceCharge}
                   />
@@ -335,6 +394,44 @@ export default async function MiscCollectPage({
               approved through Fee setup → Approval levels (Misc fees → Requests, or My approvals).
               A receipt is never deleted: it stays in the list marked Cancelled or Cheque bounced.
             </p>
+          </Card>
+        </>
+      ) : null}
+      {staff ? (
+        <>
+          <Card
+            title={`${staff.employee.name} · ${staff.employee.code}${staff.employee.designation ? ` · ${staff.employee.designation}` : ''} · Staff`}
+            style={{ marginTop: 'var(--sp-4)' }}
+          >
+            {staff.lines.length === 0 ? (
+              <p className="ep-field__help">No misc fee is announced for this staff member.</p>
+            ) : canPost ? (
+              <MiscCollectForm
+                action={miscCollect}
+                employeeId={staff.employee.id}
+                lines={staff.lines}
+                today={today}
+              />
+            ) : (
+              <p className="ep-field__help">You can see the fees but not receive them.</p>
+            )}
+          </Card>
+          <Card title="Misc receipts of the staff member" style={{ marginTop: 'var(--sp-4)' }}>
+            {staff.receipts.length === 0 ? (
+              <p className="ep-field__help">No misc receipt yet.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+                {staff.receipts.map((r) => (
+                  <MiscReceiptRow
+                    key={r.id}
+                    r={r}
+                    payer={{ field: 'employeeId', id: staff.employee.id }}
+                    canAsk={canPost}
+                    bounceCharge={0}
+                  />
+                ))}
+              </div>
+            )}
           </Card>
         </>
       ) : null}

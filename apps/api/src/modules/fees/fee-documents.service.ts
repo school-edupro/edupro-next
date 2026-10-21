@@ -205,7 +205,7 @@ export class FeeDocumentsService {
    * board affiliation and school number), both parents, their mobiles, the pupil's address, category and
    * bus route / stop / slab, and the bounce charge of the pupil.
    */
-  private async receiptParticulars(c: PoolClient, studentId: string, yearId: string) {
+  private async receiptParticulars(c: PoolClient, studentId: string | null, yearId: string) {
     const r = await c.query<{
       phone: string | null;
       email: string | null;
@@ -242,8 +242,9 @@ export class FeeDocumentsService {
                 WHERE a.student_id = s.id AND a.academic_year_id = $2 ORDER BY (a.valid_to IS NULL) DESC, a.valid_from DESC NULLS LAST, a.id DESC LIMIT 1) AS stop,
               (SELECT sl.name FROM student_fee_profiles fp JOIN transport_slabs sl ON sl.id = fp.transport_slab_id
                 WHERE fp.student_id = s.id AND fp.academic_year_id = $2 AND NOT COALESCE(fp.transport_disabled, false)) AS slab
-         FROM students s JOIN schools sc ON sc.id = app.current_school_id() WHERE s.id = $1`,
-      [studentId, yearId],
+         FROM schools sc LEFT JOIN students s ON s.id = $1 WHERE sc.id = app.current_school_id()`,
+      // no pupil (a staff member paying a misc fee): the school's own letterhead only
+      [studentId ?? null, yearId],
     );
     const x = r.rows[0];
     return {
@@ -259,7 +260,9 @@ export class FeeDocumentsService {
       parents: [x?.father, x?.mother].filter(Boolean).join(' / ') || null,
       mobiles: x?.mobiles ?? null,
       address: x?.address ?? null,
-      transport: [x?.category, x?.route, x?.stop, x?.slab].map((v) => v ?? '').join(' / '),
+      transport: studentId
+        ? [x?.category, x?.route, x?.stop, x?.slab].map((v) => v ?? '').join(' / ')
+        : undefined,
     };
   }
 
@@ -331,6 +334,27 @@ export class FeeDocumentsService {
     if (prefix[x.plan]) return x.nos.map((n) => `${prefix[x.plan]}${n}`).join(', ');
     const m = x.months.map((v) => v.split(' ')[0]!.slice(0, 3));
     return m.length > 3 ? `${m[0]} – ${m[m.length - 1]}` : m.join(', ');
+  }
+
+  /** The payer block of a staff member's misc receipt. */
+  private async staffHead(c: PoolClient, employeeId: string) {
+    const r = await c.query<{ name: string; code: string; designation: string | null }>(
+      `SELECT display_name AS name, employee_code AS code, designation FROM employees WHERE id = $1`,
+      [employeeId],
+    );
+    const x = r.rows[0];
+    if (!x) throw new DomainError('not-found', 'Staff member not found', { status: 404 });
+    return {
+      school: await schoolHead(c),
+      student: {
+        id: employeeId,
+        name: x.name,
+        admissionNo: x.code,
+        section: x.designation,
+        guardian: null,
+        kind: 'employee' as const,
+      },
+    };
   }
 
   private async head(c: PoolClient, studentId: string, yearId: string) {
@@ -504,6 +528,7 @@ export class FeeDocumentsService {
       const p = await c.query<{
         id: string;
         student_id: string | null;
+        employee_id: string | null;
         academic_year_id: string;
         year: string;
         receipt_no: string;
@@ -520,7 +545,7 @@ export class FeeDocumentsService {
         head: string;
         title: string | null;
       }>(
-        `SELECT m.id::text, m.student_id::text, m.academic_year_id::text, y.code AS year, m.receipt_no, m.received_on::text, m.amount::text,
+        `SELECT m.id::text, m.student_id::text, m.employee_id::text, m.academic_year_id::text, y.code AS year, m.receipt_no, m.received_on::text, m.amount::text,
                 m.refunded::text, m.status, m.mode, m.reference, m.instrument_no, m.bank_name, m.remarks, u.display_name AS received_by,
                 h.name AS head, f.title
            FROM misc_receipts m JOIN academic_years y ON y.id = m.academic_year_id JOIN fee_heads h ON h.id = m.head_id
@@ -529,8 +554,12 @@ export class FeeDocumentsService {
         [receiptId],
       );
       const r = p.rows[0];
-      if (!r?.student_id) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
-      const head = await this.head(c, r.student_id, r.academic_year_id);
+      if (!r?.student_id && !r?.employee_id)
+        throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+      // a staff member's misc fee (0216): their code and designation in the pupil's place
+      const head = r.student_id
+        ? await this.head(c, r.student_id, r.academic_year_id)
+        : await this.staffHead(c, r.employee_id!);
       return {
         ...head,
         year: r.year,
@@ -555,6 +584,17 @@ export class FeeDocumentsService {
         depositAccount: null,
         lines: [{ head: r.title ?? r.head, period: r.title ? r.head : '', amount: r.amount }],
         ...(await this.receiptParticulars(c, r.student_id, r.academic_year_id)),
+        ...(r.student_id
+          ? {}
+          : {
+              mobiles:
+                (
+                  await c.query<{ m: string | null }>(
+                    `SELECT mobile AS m FROM employees WHERE id = $1`,
+                    [r.employee_id],
+                  )
+                ).rows[0]?.m ?? null,
+            }),
         instalment: r.title ?? null,
         bounceCharge: '0.00',
         ...(await this.layoutOf(c).then((l) => ({ layout: l.receipt, copies: l.copies }))),

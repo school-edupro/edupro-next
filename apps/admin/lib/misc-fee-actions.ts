@@ -148,9 +148,16 @@ export async function miscReject(fd: FormData) {
 }
 
 /** Misc fees of a pupil received at the counter: a receipt for each fee paid. */
+/** The counter page of the payer: a pupil, or a staff member (0216). */
+const counterOf = (fd: FormData) =>
+  str(fd, 'employeeId')
+    ? `/fees/misc-fees/collect?employeeId=${str(fd, 'employeeId')}`
+    : `/fees/misc-fees/collect?studentId=${str(fd, 'studentId')}`;
+
 export async function miscCollect(fd: FormData) {
   const studentId = str(fd, 'studentId');
-  const path = `/fees/misc-fees/collect?studentId=${studentId}`;
+  const employeeId = str(fd, 'employeeId');
+  const path = counterOf(fd);
   const lines = fd
     .getAll('lineIds')
     .map(String)
@@ -165,7 +172,7 @@ export async function miscCollect(fd: FormData) {
       {
         method: 'POST',
         body: JSON.stringify({
-          studentId,
+          ...(employeeId ? { employeeId } : { studentId }),
           lines,
           mode: str(fd, 'mode'),
           receivedOn: str(fd, 'receivedOn') || undefined,
@@ -191,7 +198,7 @@ export async function miscCollect(fd: FormData) {
 
 /** Cancel, bounce or refund a misc receipt: a request that goes for approval. */
 export async function miscReceiptRequest(fd: FormData) {
-  const path = `/fees/misc-fees/collect?studentId=${str(fd, 'studentId')}`;
+  const path = counterOf(fd);
   const kind = str(fd, 'kind');
   let waiting = false;
   try {

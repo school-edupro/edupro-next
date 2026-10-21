@@ -433,11 +433,11 @@ export class LibraryService {
       );
       if (!l.rows[0])
         throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
-      // a pupil's lost book is charged: Lost and damaged books
-      if (dto.condition === 'lost' && l.rows[0].borrower_kind === 'student')
+      // a lost book is charged to its borrower: Lost and damaged books
+      if (dto.condition === 'lost')
         throw new DomainError(
           'library.use_charges',
-          'A pupil lost the book: report it at Library → Lost and damaged books, which charges its price',
+          'The borrower lost the book: report it at Library → Lost and damaged books, which charges its price',
           { status: 409 },
         );
       const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);

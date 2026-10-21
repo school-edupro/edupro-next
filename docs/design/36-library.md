@@ -369,5 +369,11 @@ stays). Not chosen: replacing the book with a copy, a waiver at the library desk
   Circulation or on the book page is refused with a pointer here; staff keep the old ways until part 4.
   The Fines page lists the charges due; Circulation's conditions read Good / Damaged (no charge) / Lost
   (staff).
-- **Part 4 — staff.** Misc fees for employees (the counter collects from an employee with a misc receipt);
-  the same charges for staff borrowers.
+- **Part 4 — staff (done, migration 0216).** A misc fee line names a pupil or an employee (exactly one;
+  `misc_fee_students.employee_id`). Fees → Misc fees → Counter collection finds a staff member by name,
+  code or mobile (`GET fees/misc-fees/staff`, `GET fees/misc-fees/employee/:id`) and takes the fee on a
+  misc receipt paid by the employee (`POST fees/misc-fees/collect {employeeId}`); the receipt prints with
+  the employee code and designation in the pupil's place (all four receipt layouts); a fee's lines and the
+  requests name staff too; online payment stays for families. The library charges a staff borrower exactly
+  as a pupil, and a book on loan is now marked lost only at Lost and damaged books, for every borrower
+  (Circulation's Lost and the copy's lost-on-loan status are refused with a pointer there).

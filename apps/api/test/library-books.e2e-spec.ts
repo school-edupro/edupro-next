@@ -256,7 +256,7 @@ describe('library book master (e2e)', () => {
     });
   });
 
-  it('copy status: withdrawn needs it back; lost on loan closes the loan; lost and paid with the amount; found again', async () => {
+  it('copy status: withdrawn needs it back; lost on loan goes to Lost and damaged books; lost and paid with the amount; found again', async () => {
     const issue = await call('POST', '/library/loans/issue', {
       accessionNo: 'B00001',
       borrowerKind: 'employee',
@@ -274,10 +274,20 @@ describe('library book master (e2e)', () => {
     );
     expect((await status(ids.b1!, { status: 'lost_paid' })).statusCode).toBe(400);
     expect((await status(ids.b1!, { status: 'lost', amount: 10 })).statusCode).toBe(400);
-    const lost = await status(ids.b1!, {
+    // a book on loan is charged to its borrower at Lost and damaged books (part 3 of the register work)
+    const onLoan = await status(ids.b1!, {
       status: 'lost_paid',
       amount: 300,
       reason: 'Lost by the borrower; paid the price',
+    });
+    expect(onLoan.json().detail).toContain('Lost and damaged books');
+    expect(
+      (await call('POST', '/library/loans/return', { accessionNo: 'B00001' })).statusCode,
+    ).toBe(201);
+    const lost = await status(ids.b1!, {
+      status: 'lost_paid',
+      amount: 300,
+      reason: 'Lost from the shelf; the finder paid the price',
     });
     expect(lost.json()).toEqual({ id: ids.b1, status: 'lost' });
     const loans = (await call('GET', '/library/loans?status=open')).json();
@@ -296,7 +306,7 @@ describe('library book master (e2e)', () => {
       statusOn: today,
     });
     expect(v.events.find((e: { what: string }) => e.what === 'lost_paid')).toMatchObject({
-      fromStatus: 'issued',
+      fromStatus: 'available',
       toStatus: 'lost',
       amount: '300.00',
     });

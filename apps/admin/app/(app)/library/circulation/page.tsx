@@ -98,9 +98,8 @@ export default async function CirculationPage({
                 options={[
                   { value: 'available', label: 'Good' },
                   { value: 'damaged', label: 'Damaged (no charge)' },
-                  { value: 'lost', label: 'Lost (staff)' },
                 ]}
-                help="A pupil lost or damaged it: charge it at Lost and damaged books"
+                help="Lost, or damaged and charged: Lost and damaged books"
               />
               <label
                 style={{

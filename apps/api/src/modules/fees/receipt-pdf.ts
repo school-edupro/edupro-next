@@ -3,7 +3,14 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf
 /** What FeeDocumentsService.receiptView returns: the receipt as it prints. */
 export interface ReceiptPaper {
   school: { name: string; address: string };
-  student: { name: string; admissionNo: string; section: string | null; guardian: string | null };
+  student: {
+    name: string;
+    admissionNo: string;
+    section: string | null;
+    guardian: string | null;
+    /** a staff member paying a misc fee (0216) */
+    kind?: 'student' | 'employee';
+  };
   year: string;
   receiptNo: string | null;
   receivedOn: string;
@@ -112,10 +119,18 @@ export async function receiptPdf(
     const facts: Array<[string, string]> = [
       [paper.numberLabel, r.receiptNo ?? '-'],
       ['Date', dmy(r.receivedOn)],
-      ['Student', r.student.name],
-      ['Admission no.', r.student.admissionNo],
-      ['Class', r.student.section ?? '-'],
-      ['Father / guardian', r.student.guardian ?? '-'],
+      ...((r.student.kind === 'employee'
+        ? [
+            ['Staff member', r.student.name],
+            ['Employee code', r.student.admissionNo],
+            ['Designation', r.student.section ?? '-'],
+          ]
+        : [
+            ['Student', r.student.name],
+            ['Admission no.', r.student.admissionNo],
+            ['Class', r.student.section ?? '-'],
+            ['Father / guardian', r.student.guardian ?? '-'],
+          ]) as Array<[string, string]>),
       ['Session', r.year],
       ['Fee type', r.feeType === 'hostel' ? 'Hostel' : 'Regular'],
     ];

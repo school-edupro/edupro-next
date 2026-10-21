@@ -219,6 +219,8 @@ const PAGES = [
   '/library?view=copies&sort=accession',
   '/library/accession',
   '/library/charges',
+  '/fees/misc-fees/collect?staff=riya',
+  '/fees/misc-fees/collect?employeeId=31',
   '/library/charges?kind=lost&acc=1001',
   '/library/charges?kind=damaged&acc=1001',
   '/library/accession?preview=1&from=1001&start=1001',
