@@ -377,3 +377,25 @@ stays). Not chosen: replacing the book with a copy, a waiver at the library desk
   requests name staff too; online payment stays for families. The library charges a staff borrower exactly
   as a pupil, and a book on loan is now marked lost only at Lost and damaged books, for every borrower
   (Circulation's Lost and the copy's lost-on-loan status are refused with a pointer there).
+
+## The circulation desk (21 Oct 2026)
+
+Asked: rebuild Library → Circulation on the functions of the legacy desk (Issue Book, Return Book, Return
+by Adm/Emp, Return by Class), in the Mobilise design. Decisions (asked): the desk has Issue · Return ·
+Return by borrower · Return by class, with Lost and damaged, Fines and Stock verification and sales linked
+from the tab row; a late fine shows on return and is collected (receipt reference), waived (note) or left
+for the Fines page; the due date is the rule's, changeable for the whole batch; no messages to families
+now (due reminders stay on the list for later).
+
+- **Issue**: the borrower by admission no. or employee code (any case) or by name (pupils and staff to
+  pick from); the card shows the class and roll no. or designation, the rule, the books held against the
+  limit, unpaid fines and lost-book charges, and what blocks an issue. Books are scanned or typed one
+  after another and checked as each is added (`GET library/desk/book?for=issue`: on the shelf, not
+  reference only, an old number found too); Issue all issues them together, all or none, the failing book
+  named (`POST library/desk/issue`, `LibraryService.issueIn` per book in one transaction).
+- **Return**: a scanned book shows its borrower, class, dates, days late and the fine to today
+  (`for=return`); returned good or damaged (no charge), the fine waived or settled after, renewed instead,
+  or sent to Lost and damaged; "Return as soon as scanned" returns a book with nothing to settle on the
+  scan. **Return by borrower** lists a borrower's books (return, renew, return all); **Return by class**
+  lists the books a class or section holds (`GET library/desk/class-loans`, filter, ticks, return ticked
+  or all shown; `POST library/desk/return`).

@@ -9584,3 +9584,73 @@ a.ep-pub-foot__item {
   outline: 2px solid var(--border-accent);
   outline-offset: 2px;
 }
+
+/* ---- the library's circulation desk (docs/design/36-library.md, "The circulation desk") ---------- */
+.ep-desk__grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  align-items: start;
+}
+.ep-desk__who {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.ep-desk__who strong {
+  display: block;
+  font-size: var(--fs-body-lg);
+  color: var(--text-heading);
+}
+.ep-desk__photo {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+}
+.ep-desk__scan {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.ep-desk__scan .ep-field {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+.ep-desk__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--sp-3);
+}
+.ep-desk__tabs {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.ep-desk__links {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  font-size: var(--fs-small);
+}
+.ep-desk__matches {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}

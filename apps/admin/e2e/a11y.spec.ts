@@ -212,6 +212,9 @@ const PAGES = [
   '/transport/gps',
   '/library',
   '/library/circulation',
+  '/library/circulation?tab=return',
+  '/library/circulation?tab=borrower',
+  '/library/circulation?tab=class',
   '/library/fines',
   // Sprint 18
   '/exams/board-results',

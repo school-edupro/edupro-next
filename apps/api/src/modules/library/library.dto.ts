@@ -128,3 +128,31 @@ export const ChargeListSchema = z.object({
   status: z.enum(['due', 'paid', 'cancelled', 'all']).optional(),
 });
 export class ChargeListDto extends createZodDto(ChargeListSchema) {}
+
+// ---- the circulation desk (docs/design/36-library.md, "The circulation desk") ----
+const DeskNo = z.string().trim().min(1).max(30);
+export const DeskBorrowerSchema = z.object({ q: z.string().trim().min(1).max(80) });
+export class DeskBorrowerDto extends createZodDto(DeskBorrowerSchema) {}
+export const DeskBookSchema = z.object({
+  accessionNo: DeskNo,
+  for: z.enum(['issue', 'return']),
+});
+export class DeskBookDto extends createZodDto(DeskBookSchema) {}
+export const DeskIssueSchema = z.object({
+  borrowerKind: z.enum(['student', 'employee']),
+  borrowerId: IdSchema,
+  accessionNos: z.array(DeskNo).min(1).max(20),
+  /** one due date for the batch; none: each by the borrower's rule */
+  dueOn: DateSchema.optional(),
+});
+export class DeskIssueDto extends createZodDto(DeskIssueSchema) {}
+export const DeskReturnSchema = z.object({
+  accessionNos: z.array(DeskNo).min(1).max(300),
+  returnedOn: DateSchema.optional(),
+});
+export class DeskReturnDto extends createZodDto(DeskReturnSchema) {}
+export const DeskClassSchema = z.object({
+  classId: IdSchema,
+  sectionId: IdSchema.optional(),
+});
+export class DeskClassDto extends createZodDto(DeskClassSchema) {}

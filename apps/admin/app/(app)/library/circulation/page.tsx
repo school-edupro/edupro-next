@@ -1,233 +1,76 @@
-import {
-  Badge,
-  Button,
-  Card,
-  DataTable,
-  FormRow,
-  InputField,
-  PageHeader,
-  SelectField,
-} from '@edupro/ui';
-import { getTranslations } from 'next-intl/server';
+import { PageHeader } from '@edupro/ui';
+import { notFound } from 'next/navigation';
+import { BorrowerReturns } from '@/components/library/desk/BorrowerReturns';
+import { ClassReturns } from '@/components/library/desk/ClassReturns';
+import { IssueDesk } from '@/components/library/desk/IssueDesk';
+import { ReturnDesk } from '@/components/library/desk/ReturnDesk';
 import { Notice } from '@/components/Notice';
-import { libraryIssue, libraryRenew, libraryReturn } from '@/lib/actions';
-import { apiFetch } from '@/lib/api';
-import type { LibraryLoan, Page } from '@/lib/types';
+import { apiFetch, getMe } from '@/lib/api';
+import type { DeskClass } from '@/lib/library-desk';
 
-/** Sprint 17: issue / renew / return by accession number; open and overdue loans. */
+const TABS = [
+  ['issue', 'Issue'],
+  ['return', 'Return'],
+  ['borrower', 'Return by borrower'],
+  ['class', 'Return by class'],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+/**
+ * The circulation desk (docs/design/36-library.md, "The circulation desk"): issue several books to a
+ * borrower found by admission no., employee code or name; return by scanning a book, by borrower or by
+ * class; renew; the late fine collected, waived or left for later. Lost and damaged books, the fines and
+ * the stock checks and sales are linked from the tab row.
+ */
 export default async function CirculationPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    status?: string;
-    q?: string;
-    ok?: string;
-    error?: string;
-    detail?: string;
-  }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const status = sp.status === 'overdue' || sp.status === 'returned' ? sp.status : 'open';
-  const [t, l, loans] = await Promise.all([
-    getTranslations('pages.library_circulation'),
-    getTranslations('library'),
-    apiFetch<Page<LibraryLoan>>(
-      `/library/loans?status=${status}&size=100${sp.q ? `&q=${encodeURIComponent(sp.q)}` : ''}`,
-    ),
-  ]);
+  const me = await getMe();
+  if (!me.permissions.includes('library.loan.circulate')) notFound();
+  const tab: Tab = TABS.some(([v]) => v === sp.tab) ? (sp.tab as Tab) : 'issue';
+  const classes =
+    tab === 'class'
+      ? (await apiFetch<{ classes: DeskClass[] }>('/library/desk/sections')).classes
+      : [];
+  const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker="Library"
+        title="Circulation"
+        description="Issue and return at the desk: find the borrower by admission no., employee code or name, scan the books, and settle a late fine on the spot."
+      />
       <Notice params={sp} />
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--sp-4)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          marginBottom: 'var(--sp-4)',
-        }}
-      >
-        <Card title={l('issue')}>
-          <form action={libraryIssue}>
-            <FormRow columns={2}>
-              <InputField
-                id="i-acc"
-                name="accessionNo"
-                label={l('accessionNo')}
-                required
-                maxLength={30}
-              />
-              <SelectField
-                id="i-kind"
-                name="borrowerKind"
-                label={l('borrowerKind')}
-                options={[
-                  { value: 'student', label: l('student') },
-                  { value: 'employee', label: l('employee') },
-                ]}
-              />
-              <InputField
-                id="i-bid"
-                name="borrowerId"
-                label={l('borrowerId')}
-                required
-                pattern="\\d+"
-              />
-              <InputField id="i-due" name="dueOn" label={l('dueOn')} type="date" />
-            </FormRow>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button type="submit">{l('issue')}</Button>
-            </div>
-          </form>
-        </Card>
-        <Card title={l('return')}>
-          <form action={libraryReturn}>
-            <FormRow columns={2}>
-              <InputField
-                id="r-acc"
-                name="accessionNo"
-                label={l('accessionNo')}
-                required
-                maxLength={30}
-              />
-              <InputField id="r-on" name="returnedOn" label={l('returnedOn')} type="date" />
-              <SelectField
-                id="r-cond"
-                name="condition"
-                label={l('condition')}
-                options={[
-                  { value: 'available', label: 'Good' },
-                  { value: 'damaged', label: 'Damaged (no charge)' },
-                ]}
-                help="Lost, or damaged and charged: Lost and damaged books"
-              />
-              <label
-                style={{
-                  display: 'inline-flex',
-                  gap: 'var(--sp-1)',
-                  alignItems: 'center',
-                  alignSelf: 'end',
-                }}
+      <div className="ep-desk__tabs">
+        <nav className="ep-tabs" aria-label="Circulation desk">
+          <div className="ep-tabs__list">
+            {TABS.map(([v, label]) => (
+              <a
+                key={v}
+                className="ep-tabs__tab"
+                href={v === 'issue' ? '/library/circulation' : `/library/circulation?tab=${v}`}
+                aria-current={tab === v ? 'page' : undefined}
               >
-                <input type="checkbox" name="waiveFine" /> {l('waiveFine')}
-              </label>
-            </FormRow>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <a href="/library/charges">Lost and damaged books</a>
-              <Button type="submit" variant="secondary">
-                {l('return')}
-              </Button>
-            </div>
-          </form>
-        </Card>
-        <Card title={l('renew')}>
-          <form action={libraryRenew}>
-            <FormRow columns={1}>
-              <InputField
-                id="n-acc"
-                name="accessionNo"
-                label={l('accessionNo')}
-                required
-                maxLength={30}
-              />
-            </FormRow>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button type="submit" variant="secondary">
-                {l('renew')}
-              </Button>
-            </div>
-          </form>
-        </Card>
+                {label}
+              </a>
+            ))}
+          </div>
+        </nav>
+        <nav className="ep-desk__links" aria-label="More at the library">
+          <a href="/library/charges">Lost and damaged</a>
+          <a href="/library/fines">Fines</a>
+          {me.permissions.includes('library.stock.verify') ? (
+            <a href="/library/stock">Stock verification and sales</a>
+          ) : null}
+        </nav>
       </div>
-      <Card
-        title={status === 'overdue' ? l('overdue') : l('openLoans')}
-        actions={
-          <form
-            method="get"
-            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
-          >
-            <SelectField
-              id="status"
-              name="status"
-              label={l('status')}
-              defaultValue={status}
-              options={[
-                { value: 'open', label: l('openLoans') },
-                { value: 'overdue', label: l('overdue') },
-                { value: 'returned', label: l('return') },
-              ]}
-            />
-            <InputField
-              id="q"
-              name="q"
-              label={l('search')}
-              defaultValue={sp.q ?? ''}
-              maxLength={80}
-            />
-            <Button type="submit" variant="secondary" size="sm">
-              {l('apply')}
-            </Button>
-          </form>
-        }
-      >
-        <DataTable<LibraryLoan>
-          caption={`${l('openLoans')} · ${loans.page.total}`}
-          density="dense"
-          columns={[
-            { key: 'a', header: l('accessionNo'), render: (x) => <strong>{x.accessionNo}</strong> },
-            {
-              key: 't',
-              header: l('title'),
-              render: (x) => (
-                <>
-                  {x.title}
-                  <div className="ep-kicker">{x.author ?? ''}</div>
-                </>
-              ),
-            },
-            {
-              key: 'b',
-              header: l('borrower'),
-              render: (x) => (
-                <>
-                  {x.borrower}
-                  <div className="ep-kicker">
-                    {x.borrowerKind} · {x.borrowerRef}
-                  </div>
-                </>
-              ),
-            },
-            { key: 'i', header: l('issuedOn'), render: (x) => x.issuedOn },
-            {
-              key: 'd',
-              header: l('dueOn'),
-              render: (x) => (
-                <>
-                  {x.dueOn}
-                  {x.daysOverdue > 0 && !x.returnedOn ? (
-                    <>
-                      {' '}
-                      <Badge tone="danger">
-                        {x.daysOverdue} {l('days')}
-                      </Badge>
-                    </>
-                  ) : null}
-                </>
-              ),
-            },
-            { key: 'r', header: l('returnedOn'), render: (x) => x.returnedOn ?? '' },
-            {
-              key: 'f',
-              header: l('fine'),
-              numeric: true,
-              render: (x) => (Number(x.fineAmount) > 0 ? `₹${x.fineAmount}` : ''),
-            },
-          ]}
-          rows={loans.data}
-          rowKey={(x) => x.id}
-          emptyTitle={l('noLoans')}
-        />
-      </Card>
+      {tab === 'issue' ? <IssueDesk today={today} /> : null}
+      {tab === 'return' ? <ReturnDesk /> : null}
+      {tab === 'borrower' ? <BorrowerReturns /> : null}
+      {tab === 'class' ? <ClassReturns classes={classes} /> : null}
     </>
   );
 }

@@ -93,7 +93,7 @@ export class LibraryService {
    * The borrowing rule a borrower follows (docs/design/36-library.md, part 1): the most specific active
    * rule of Library set-up → Borrowing rules; none, the school settings as before.
    */
-  private async ruleFor(c: PoolClient, kind: 'student' | 'employee', id: string) {
+  async ruleFor(c: PoolClient, kind: 'student' | 'employee', id: string) {
     const r = await c.query<{
       max_books: number;
       loan_days: number;
@@ -302,81 +302,81 @@ export class LibraryService {
   }
 
   async issue(ctx: RequestContext, dto: IssueDto): Promise<LoanRow> {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const copy = await this.copyByAccession(c, dto.accessionNo);
-      if (copy.is_reference)
-        throw new DomainError('library.reference_only', 'Reference copies are not issued', {
-          status: 409,
-        });
-      if (copy.status !== 'available')
-        throw new DomainError('library.copy_unavailable', `The copy is ${copy.status}`, {
-          status: 409,
-        });
-      const borrower = await c.query(
-        dto.borrowerKind === 'student'
-          ? `SELECT 1 FROM students WHERE id = $1 AND deleted_at IS NULL`
-          : `SELECT 1 FROM employees WHERE id = $1 AND deleted_at IS NULL`,
-        [dto.borrowerId],
-      );
-      if (!borrower.rowCount)
-        throw new DomainError('not-found', 'Borrower not found', { status: 404 });
-      const rule = await this.ruleFor(c, dto.borrowerKind, dto.borrowerId);
-      if (rule.maxBooks === 0)
-        throw new DomainError(
-          'library.not_allowed',
-          `Borrowing is not allowed (${rule.label}: 0 books)`,
-          { status: 409 },
-        );
-      const open = await c.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND returned_on IS NULL`,
-        [dto.borrowerKind, dto.borrowerId],
-      );
-      if (Number(open.rows[0]!.n) >= rule.maxBooks)
-        throw new DomainError(
-          'library.limit',
-          `The borrower already holds ${rule.maxBooks} copies (${rule.label})`,
-          { status: 409 },
-        );
-      const unpaid = await c.query<{ n: string }>(
-        `SELECT COALESCE(sum(fine_amount - fine_waived), 0)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND fine_amount > fine_waived AND fine_paid_on IS NULL`,
-        [dto.borrowerKind, dto.borrowerId],
-      );
-      if (Number(unpaid.rows[0]!.n) > 0)
-        throw new DomainError(
-          'library.fine_pending',
-          `Fines of ₹${unpaid.rows[0]!.n} are pending`,
-          { status: 409 },
-        );
-      // a lost or damaged book not yet paid for (a misc fee at the fees counter)
-      const charged = await c.query<{ n: string }>(
-        `SELECT app.library_charges_due($1::library_borrower, $2)::text AS n`,
-        [dto.borrowerKind, dto.borrowerId],
-      );
-      if (Number(charged.rows[0]!.n) > 0)
-        throw new DomainError(
-          'library.charge_due',
-          `₹${charged.rows[0]!.n} for a lost or damaged book is not paid yet: it is paid at the fees counter`,
-          { status: 409 },
-        );
-      const loanDays = rule.loanDays;
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO library_loans (school_id, copy_id, borrower_kind, borrower_id, due_on, issued_by, note, request_id)
-         VALUES (app.current_school_id(), $1, $2::library_borrower, $3, COALESCE($4::date, CURRENT_DATE + make_interval(days => $5)::interval), app.current_user_id(), $6, app.current_request_id())
-         RETURNING id::text`,
-        [copy.id, dto.borrowerKind, dto.borrowerId, dto.dueOn ?? null, loanDays, dto.note ?? null],
-      );
-      await c.query(
-        `UPDATE library_copies SET status = 'issued', updated_at = now() WHERE id = $1`,
-        [copy.id],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'library.issue',
-        entityType: 'library_loans',
-        entityId: r.rows[0]!.id,
-        after: dto,
+    return this.db.tenant(requireTenant(ctx), (c) => this.issueIn(c, ctx, dto));
+  }
+
+  /** An issue inside the caller's transaction (the desk issues several books as one). */
+  async issueIn(c: PoolClient, ctx: RequestContext, dto: IssueDto): Promise<LoanRow> {
+    const copy = await this.copyByAccession(c, dto.accessionNo);
+    if (copy.is_reference)
+      throw new DomainError('library.reference_only', 'Reference copies are not issued', {
+        status: 409,
       });
-      return (await this.loan(c, r.rows[0]!.id))!;
+    if (copy.status !== 'available')
+      throw new DomainError('library.copy_unavailable', `The copy is ${copy.status}`, {
+        status: 409,
+      });
+    const borrower = await c.query(
+      dto.borrowerKind === 'student'
+        ? `SELECT 1 FROM students WHERE id = $1 AND deleted_at IS NULL`
+        : `SELECT 1 FROM employees WHERE id = $1 AND deleted_at IS NULL`,
+      [dto.borrowerId],
+    );
+    if (!borrower.rowCount)
+      throw new DomainError('not-found', 'Borrower not found', { status: 404 });
+    const rule = await this.ruleFor(c, dto.borrowerKind, dto.borrowerId);
+    if (rule.maxBooks === 0)
+      throw new DomainError(
+        'library.not_allowed',
+        `Borrowing is not allowed (${rule.label}: 0 books)`,
+        { status: 409 },
+      );
+    const open = await c.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND returned_on IS NULL`,
+      [dto.borrowerKind, dto.borrowerId],
+    );
+    if (Number(open.rows[0]!.n) >= rule.maxBooks)
+      throw new DomainError(
+        'library.limit',
+        `The borrower already holds ${rule.maxBooks} copies (${rule.label})`,
+        { status: 409 },
+      );
+    const unpaid = await c.query<{ n: string }>(
+      `SELECT COALESCE(sum(fine_amount - fine_waived), 0)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND fine_amount > fine_waived AND fine_paid_on IS NULL`,
+      [dto.borrowerKind, dto.borrowerId],
+    );
+    if (Number(unpaid.rows[0]!.n) > 0)
+      throw new DomainError('library.fine_pending', `Fines of ₹${unpaid.rows[0]!.n} are pending`, {
+        status: 409,
+      });
+    // a lost or damaged book not yet paid for (a misc fee at the fees counter)
+    const charged = await c.query<{ n: string }>(
+      `SELECT app.library_charges_due($1::library_borrower, $2)::text AS n`,
+      [dto.borrowerKind, dto.borrowerId],
+    );
+    if (Number(charged.rows[0]!.n) > 0)
+      throw new DomainError(
+        'library.charge_due',
+        `₹${charged.rows[0]!.n} for a lost or damaged book is not paid yet: it is paid at the fees counter`,
+        { status: 409 },
+      );
+    const loanDays = rule.loanDays;
+    const r = await c.query<{ id: string }>(
+      `INSERT INTO library_loans (school_id, copy_id, borrower_kind, borrower_id, due_on, issued_by, note, request_id)
+       VALUES (app.current_school_id(), $1, $2::library_borrower, $3, COALESCE($4::date, CURRENT_DATE + make_interval(days => $5)::interval), app.current_user_id(), $6, app.current_request_id())
+       RETURNING id::text`,
+      [copy.id, dto.borrowerKind, dto.borrowerId, dto.dueOn ?? null, loanDays, dto.note ?? null],
+    );
+    await c.query(`UPDATE library_copies SET status = 'issued', updated_at = now() WHERE id = $1`, [
+      copy.id,
+    ]);
+    await this.audit.stage(ctx, c, {
+      action: 'library.issue',
+      entityType: 'library_loans',
+      entityId: r.rows[0]!.id,
+      after: dto,
     });
+    return (await this.loan(c, r.rows[0]!.id))!;
   }
 
   async renew(ctx: RequestContext, dto: RenewDto): Promise<LoanRow> {
@@ -419,60 +419,63 @@ export class LibraryService {
   }
 
   async returnCopy(ctx: RequestContext, dto: ReturnDto): Promise<LoanRow> {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const copy = await this.copyByAccession(c, dto.accessionNo);
-      const l = await c.query<{
-        id: string;
-        due_on: string;
-        borrower_kind: 'student' | 'employee';
-        borrower_id: string;
-      }>(
-        `SELECT id::text, due_on::text, borrower_kind, borrower_id::text FROM library_loans
-          WHERE copy_id = $1 AND returned_on IS NULL FOR UPDATE`,
-        [copy.id],
+    return this.db.tenant(requireTenant(ctx), (c) => this.returnIn(c, ctx, dto));
+  }
+
+  /** A return inside the caller's transaction (the desk returns several books as one). */
+  async returnIn(c: PoolClient, ctx: RequestContext, dto: ReturnDto): Promise<LoanRow> {
+    const copy = await this.copyByAccession(c, dto.accessionNo);
+    const l = await c.query<{
+      id: string;
+      due_on: string;
+      borrower_kind: 'student' | 'employee';
+      borrower_id: string;
+    }>(
+      `SELECT id::text, due_on::text, borrower_kind, borrower_id::text FROM library_loans
+        WHERE copy_id = $1 AND returned_on IS NULL FOR UPDATE`,
+      [copy.id],
+    );
+    if (!l.rows[0])
+      throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
+    // a lost book is charged to its borrower: Lost and damaged books
+    if (dto.condition === 'lost')
+      throw new DomainError(
+        'library.use_charges',
+        'The borrower lost the book: report it at Library → Lost and damaged books, which charges its price',
+        { status: 409 },
       );
-      if (!l.rows[0])
-        throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
-      // a lost book is charged to its borrower: Lost and damaged books
-      if (dto.condition === 'lost')
-        throw new DomainError(
-          'library.use_charges',
-          'The borrower lost the book: report it at Library → Lost and damaged books, which charges its price',
-          { status: 409 },
-        );
-      const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);
-      // the fine: the days late after the grace days, at the rule's rate, up to its highest fine
-      const fine = `LEAST(COALESCE($7::numeric, 'Infinity'::numeric),
-                          GREATEST(0, (COALESCE($2::date, CURRENT_DATE) - due_on) - $6::int) * $3::numeric)`;
-      await c.query(
-        // eslint-disable-next-line no-restricted-syntax -- a fixed expression; values are bound
-        `UPDATE library_loans SET returned_on = COALESCE($2::date, CURRENT_DATE), returned_by = app.current_user_id(),
-                fine_amount = ${fine},
-                fine_waived = CASE WHEN $4::boolean THEN ${fine} ELSE 0 END,
-                note = COALESCE($5, note), updated_at = now()
-          WHERE id = $1`,
-        [
-          l.rows[0].id,
-          dto.returnedOn ?? null,
-          rule.finePerDay,
-          dto.waiveFine,
-          dto.note ?? null,
-          rule.graceDays,
-          rule.maxFine,
-        ],
-      );
-      await c.query(
-        `UPDATE library_copies SET status = $2::library_copy_status, updated_at = now() WHERE id = $1`,
-        [copy.id, dto.condition],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'library.return',
-        entityType: 'library_loans',
-        entityId: l.rows[0].id,
-        after: dto,
-      });
-      return (await this.loan(c, l.rows[0].id))!;
+    const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);
+    // the fine: the days late after the grace days, at the rule's rate, up to its highest fine
+    const fine = `LEAST(COALESCE($7::numeric, 'Infinity'::numeric),
+                        GREATEST(0, (COALESCE($2::date, CURRENT_DATE) - due_on) - $6::int) * $3::numeric)`;
+    await c.query(
+      // eslint-disable-next-line no-restricted-syntax -- a fixed expression; values are bound
+      `UPDATE library_loans SET returned_on = COALESCE($2::date, CURRENT_DATE), returned_by = app.current_user_id(),
+              fine_amount = ${fine},
+              fine_waived = CASE WHEN $4::boolean THEN ${fine} ELSE 0 END,
+              note = COALESCE($5, note), updated_at = now()
+        WHERE id = $1`,
+      [
+        l.rows[0].id,
+        dto.returnedOn ?? null,
+        rule.finePerDay,
+        dto.waiveFine,
+        dto.note ?? null,
+        rule.graceDays,
+        rule.maxFine,
+      ],
+    );
+    await c.query(
+      `UPDATE library_copies SET status = $2::library_copy_status, updated_at = now() WHERE id = $1`,
+      [copy.id, dto.condition],
+    );
+    await this.audit.stage(ctx, c, {
+      action: 'library.return',
+      entityType: 'library_loans',
+      entityId: l.rows[0].id,
+      after: dto,
     });
+    return (await this.loan(c, l.rows[0].id))!;
   }
 
   async fine(ctx: RequestContext, loanId: string, dto: FineDto): Promise<LoanRow> {
@@ -566,7 +569,18 @@ export class LibraryService {
     });
   }
 
-  private async loan(c: PoolClient, id: string): Promise<LoanRow | null> {
+  /** A borrower's books not yet returned (the desk). */
+  async loansOf(c: PoolClient, kind: 'student' | 'employee', id: string): Promise<LoanRow[]> {
+    const r = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- LOAN_SELECT is a constant; values are bound
+      `${LOAN_SELECT} WHERE l.borrower_kind = $1::library_borrower AND l.borrower_id = $2 AND l.returned_on IS NULL
+        ORDER BY l.due_on, c.accession_no`,
+      [kind, id],
+    );
+    return r.rows.map(toLoan);
+  }
+
+  async loan(c: PoolClient, id: string): Promise<LoanRow | null> {
     // eslint-disable-next-line no-restricted-syntax -- LOAN_SELECT is a constant; values are bound
     const r = await c.query<Record<string, unknown>>(`${LOAN_SELECT} WHERE l.id = $1`, [id]);
     return r.rows[0] ? toLoan(r.rows[0]) : null;

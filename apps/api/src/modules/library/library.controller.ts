@@ -8,6 +8,11 @@ import {
   ChargeDto,
   ChargeListDto,
   ChargePreviewDto,
+  DeskBookDto,
+  DeskBorrowerDto,
+  DeskClassDto,
+  DeskIssueDto,
+  DeskReturnDto,
   CopyStatusDto,
   FineDto,
   IssueDto,
@@ -21,6 +26,8 @@ import {
   StockCheckStartDto,
 } from './library.dto';
 import { LibraryChargesService } from './library-charges.service';
+import { LibraryDeskService } from './library-desk.service';
+import { DomainError } from '../../common/errors/domain-error';
 import { LibraryService } from './library.service';
 
 /** Sprint 17: library — catalogue and copies, circulation, fines; the family's loans. */
@@ -31,7 +38,68 @@ export class LibraryController {
   constructor(
     private readonly library: LibraryService,
     private readonly charges: LibraryChargesService,
+    private readonly desk: LibraryDeskService,
   ) {}
+
+  // ---- the circulation desk ------------------------------------------------------------------------
+  @Get('desk/borrowers')
+  @ApiOperation({
+    summary: 'A borrower by admission no. or employee code, else pupils and staff by name',
+  })
+  @RequirePermission(LIBRARY.circulate)
+  deskBorrowers(@ReqCtx() ctx: RequestContext, @Query() q: DeskBorrowerDto) {
+    return this.desk.findBorrower(ctx, q.q);
+  }
+
+  @Get('desk/borrowers/:kind/:id')
+  @ApiOperation({ summary: 'A borrower with their rule, books, fines and charges' })
+  @RequirePermission(LIBRARY.circulate)
+  deskBorrower(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+  ) {
+    if ((kind !== 'student' && kind !== 'employee') || !/^\d{1,18}$/.test(id))
+      throw new DomainError('not-found', 'Borrower not found', { status: 404 });
+    return this.desk.borrower(ctx, kind, id);
+  }
+
+  @Get('desk/book')
+  @ApiOperation({
+    summary: 'A book by its number: for issue, what stands in the way; for return, its loan',
+  })
+  @RequirePermission(LIBRARY.circulate)
+  deskBook(@ReqCtx() ctx: RequestContext, @Query() q: DeskBookDto) {
+    return this.desk.book(ctx, q);
+  }
+
+  @Post('desk/issue')
+  @ApiOperation({ summary: 'Several books issued to one borrower, all or none' })
+  @RequirePermission(LIBRARY.circulate)
+  deskIssue(@ReqCtx() ctx: RequestContext, @Body() body: DeskIssueDto) {
+    return this.desk.issueMany(ctx, body);
+  }
+
+  @Post('desk/return')
+  @ApiOperation({ summary: 'Several books returned in good condition, all or none' })
+  @RequirePermission(LIBRARY.circulate)
+  deskReturn(@ReqCtx() ctx: RequestContext, @Body() body: DeskReturnDto) {
+    return this.desk.returnMany(ctx, body);
+  }
+
+  @Get('desk/sections')
+  @ApiOperation({ summary: 'The classes and sections of the working year' })
+  @RequirePermission(LIBRARY.circulate)
+  deskSections(@ReqCtx() ctx: RequestContext) {
+    return this.desk.sections(ctx);
+  }
+
+  @Get('desk/class-loans')
+  @ApiOperation({ summary: 'The books the pupils of a class or section hold now' })
+  @RequirePermission(LIBRARY.circulate)
+  deskClassLoans(@ReqCtx() ctx: RequestContext, @Query() q: DeskClassDto) {
+    return this.desk.classLoans(ctx, q);
+  }
 
   @Get('catalogue')
   @RequirePermission(LIBRARY.view, { description: 'Search the catalogue, see copies and loans' })
