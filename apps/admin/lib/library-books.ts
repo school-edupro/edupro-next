@@ -272,3 +272,128 @@ export interface LabelCount {
   last: string | null;
   missing: string[];
 }
+
+// ---- part 6: periodical subscriptions -------------------------------------------------------------------
+
+export const FREQUENCIES = [
+  'Daily',
+  'Weekly',
+  'Fortnightly',
+  'Monthly',
+  'Bi-monthly',
+  'Quarterly',
+  'Half-yearly',
+  'Yearly',
+] as const;
+export interface SubscriptionSetup {
+  periodicals: Array<{
+    id: string;
+    name: string;
+    kind: string | null;
+    frequency: string | null;
+    vendorId: string | null;
+    vendor: string | null;
+  }>;
+  libraries: Array<{ id: string; code: string; name: string }>;
+  vendors: Array<{ id: string; code: string; name: string }>;
+  can: { manage: boolean };
+}
+export type SubscriptionState = 'current' | 'upcoming' | 'ending' | 'ended' | 'cancelled';
+export const SUBSCRIPTION_STATE: Record<SubscriptionState, string> = {
+  current: 'Current',
+  upcoming: 'Not started',
+  ending: 'Ending soon',
+  ended: 'Ended',
+  cancelled: 'Cancelled',
+};
+export const SUBSCRIPTION_TONE: Record<
+  SubscriptionState,
+  'success' | 'info' | 'warning' | 'neutral'
+> = {
+  current: 'success',
+  upcoming: 'info',
+  ending: 'warning',
+  ended: 'neutral',
+  cancelled: 'neutral',
+};
+export interface SubscriptionRow {
+  id: string;
+  periodical: string;
+  kind: string | null;
+  frequency: string;
+  library: string;
+  vendor: string | null;
+  startsOn: string;
+  endsOn: string;
+  copies: number;
+  cost: string | null;
+  state: SubscriptionState;
+  due: number;
+  received: number;
+  missing: number;
+  late: number;
+  issues: number;
+  nextOn: string | null;
+}
+export interface SubscriptionList {
+  figures: { current: number; ending: number; late: number; toReceive: number; cost: number };
+  data: SubscriptionRow[];
+  can: { manage: boolean };
+}
+export interface PeriodicalIssue {
+  id: string;
+  expectedOn: string;
+  label: string;
+  special: boolean;
+  status: 'expected' | 'received' | 'missing';
+  late: boolean;
+  receivedOn: string | null;
+  copiesReceived: number | null;
+  volume: string | null;
+  issueNo: string | null;
+  remarks: string | null;
+  by: string | null;
+}
+export interface SubscriptionView {
+  id: string;
+  periodicalId: string;
+  periodical: string;
+  kind: string | null;
+  issn: string | null;
+  frequency: string;
+  libraryId: string;
+  library: string;
+  vendorId: string | null;
+  vendor: string | null;
+  startsOn: string;
+  endsOn: string;
+  firstIssueOn: string;
+  copies: number;
+  cost: string | null;
+  orderNo: string | null;
+  billNo: string | null;
+  billDate: string | null;
+  graceDays: number;
+  notes: string | null;
+  status: string;
+  state: SubscriptionState;
+  cancelledOn: string | null;
+  cancelReason: string | null;
+  renewedFrom: string | null;
+  renewedBy: string | null;
+  issues: PeriodicalIssue[];
+  can: { manage: boolean };
+}
+export interface DueIssue {
+  id: string;
+  expectedOn: string;
+  label: string;
+  special: boolean;
+  subscriptionId: string;
+  periodical: string;
+  library: string;
+  vendor: string | null;
+  copies: number;
+  late: boolean;
+  days: number;
+}

@@ -268,3 +268,118 @@ export async function countLabels(
     return problem(e);
   }
 }
+
+// ---- part 6: periodical subscriptions -------------------------------------------------------------------
+
+export async function saveSubscription(
+  input: Record<string, unknown>,
+  id?: string,
+): Promise<{ ok: true; id: string } | Fail> {
+  try {
+    if (id) {
+      if (!okId(id)) return { ok: false, error: 'Not found' };
+      await apiFetch(`/library/subscriptions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      });
+      revalidatePath(`/library/periodicals/${id}`);
+      return { ok: true, id };
+    }
+    const r = await apiFetch<{ id: string }>('/library/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/library/periodicals');
+    return { ok: true, id: r.id };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+/** The next period of a subscription; its page opens. */
+export async function renewSubscription(fd: FormData) {
+  const id = String(fd.get('id') ?? '');
+  if (!okId(id)) redirect('/library/periodicals');
+  let next = '';
+  try {
+    next = (
+      await apiFetch<{ id: string }>(`/library/subscriptions/${id}/renew`, { method: 'POST' })
+    ).id;
+  } catch (e) {
+    redirect(
+      `/library/periodicals/${id}?error=validation-failed&detail=${encodeURIComponent(problem(e).error.slice(0, 300))}`,
+    );
+  }
+  redirect(
+    `/library/periodicals/${next}?ok=1&detail=${encodeURIComponent('Renewed for the next period.')}`,
+  );
+}
+
+export async function cancelSubscription(
+  id: string,
+  input: { on: string; reason: string },
+): Promise<{ ok: true } | Fail> {
+  if (!okId(id)) return { ok: false, error: 'Not found' };
+  try {
+    await apiFetch(`/library/subscriptions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath(`/library/periodicals/${id}`);
+    return { ok: true };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function addSpecialIssue(
+  id: string,
+  input: { expectedOn: string; label: string },
+): Promise<{ ok: true } | Fail> {
+  if (!okId(id)) return { ok: false, error: 'Not found' };
+  try {
+    await apiFetch(`/library/subscriptions/${id}/issues`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath(`/library/periodicals/${id}`);
+    return { ok: true };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+/** An issue received, marked missing, or put back to expected. */
+export async function markIssue(
+  issueId: string,
+  what: 'receive' | 'missing' | 'undo',
+  input: Record<string, unknown> = {},
+): Promise<{ ok: true } | Fail> {
+  if (!okId(issueId)) return { ok: false, error: 'Not found' };
+  try {
+    await apiFetch(`/library/issues/${issueId}/${what}`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/library/periodicals', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function receiveIssues(
+  ids: string[],
+  on: string,
+): Promise<{ ok: true; received: number } | Fail> {
+  try {
+    const r = await apiFetch<{ received: number }>('/library/issues/receive', {
+      method: 'POST',
+      body: JSON.stringify({ ids: ids.filter(okId), on }),
+    });
+    revalidatePath('/library/periodicals', 'layout');
+    return { ok: true, ...r };
+  } catch (e) {
+    return problem(e);
+  }
+}

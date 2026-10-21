@@ -233,3 +233,72 @@ export const LabelsSchema = z.object({
   dry: z.boolean().default(false),
 });
 export class LabelsDto extends createZodDto(LabelsSchema) {}
+
+// ---- part 6: periodical subscriptions ----------------------------------------------------------------
+
+export const FREQUENCIES = [
+  'Daily',
+  'Weekly',
+  'Fortnightly',
+  'Monthly',
+  'Bi-monthly',
+  'Quarterly',
+  'Half-yearly',
+  'Yearly',
+] as const;
+
+/** A periodical taken in a library for a period. */
+export const SubscriptionSchema = z.object({
+  periodicalId: Id,
+  libraryId: Id,
+  vendorId: Id.optional(),
+  /** none: the periodical's own */
+  frequency: z.enum(FREQUENCIES).optional(),
+  startsOn: DateSchema,
+  endsOn: DateSchema,
+  /** none: the first day */
+  firstIssueOn: DateSchema.optional(),
+  copies: z.number().int().min(1).max(50).default(1),
+  cost: z.number().min(0).max(10_000_000).optional(),
+  orderNo: txt(40).optional(),
+  billNo: txt(40).optional(),
+  billDate: DateSchema.optional(),
+  graceDays: z.number().int().min(0).max(90).default(7),
+  notes: txt(500).optional(),
+});
+export class SubscriptionDto extends createZodDto(SubscriptionSchema) {}
+
+export const SubscriptionListSchema = z.object({
+  status: z.enum(['current', 'upcoming', 'ending', 'ended', 'cancelled', 'all']).default('current'),
+  libraryId: Id.optional(),
+  q: txt(80).optional(),
+});
+export class SubscriptionListDto extends createZodDto(SubscriptionListSchema) {}
+
+export const CancelSubscriptionSchema = z.object({ on: DateSchema, reason: txt(300).min(3) });
+export class CancelSubscriptionDto extends createZodDto(CancelSubscriptionSchema) {}
+
+export const SpecialIssueSchema = z.object({ expectedOn: DateSchema, label: txt(80).min(2) });
+export class SpecialIssueDto extends createZodDto(SpecialIssueSchema) {}
+
+export const ReceiveIssueSchema = z.object({
+  on: DateSchema,
+  copies: z.number().int().min(0).max(50).optional(),
+  volume: txt(20).optional(),
+  issueNo: txt(20).optional(),
+  remarks: txt(300).optional(),
+});
+export class ReceiveIssueDto extends createZodDto(ReceiveIssueSchema) {}
+
+export const MissingIssueSchema = z.object({ remarks: txt(300).min(3) });
+export class MissingIssueDto extends createZodDto(MissingIssueSchema) {}
+
+export const ReceiveManySchema = z.object({ ids: z.array(Id).min(1).max(500), on: DateSchema });
+export class ReceiveManyDto extends createZodDto(ReceiveManySchema) {}
+
+export const DueIssuesSchema = z.object({
+  libraryId: Id.optional(),
+  /** issues expected up to this many days ahead too */
+  ahead: z.coerce.number().int().min(0).max(30).default(0),
+});
+export class DueIssuesDto extends createZodDto(DueIssuesSchema) {}

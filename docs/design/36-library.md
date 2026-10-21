@@ -231,3 +231,52 @@ add, edit, active/inactive, Excel download and upload with the same checks):
   labels, withdrawn copies, a used sheet, two of each; a list with a number not found, copies added
   between days, a title's copies; the PDF's A4 pages; the settings kept; sheets that do not fit A4, a
   start beyond the sheet, nothing to print and the right to print refused); `a11y.spec.ts`.
+
+## Part 6 — periodical subscriptions (migration 0211)
+
+- **A subscription** (`library_subscriptions`): a periodical of Library setup taken in a library from a
+  day to a day (at most five years), its frequency (the periodical's unless another is chosen) and first
+  issue (the first day unless another), the copies of each issue, the vendor (the periodical's unless
+  another), the cost, the order no., the bill no. and date, the grace days before an issue is late, notes.
+  Current, not started, ending (30 days left), ended or cancelled.
+- **Its issues** (`library_periodical_issues`, `app.library_issue_dates`): expected from the first issue at
+  the frequency to the end, each step counted from the first so a monthly issue keeps its day (31 January,
+  28 February, 31 March …); named by the day (daily, weekly, fortnightly), the month (monthly to
+  half-yearly) or the year. An issue is received (the day, not a day to come; the copies, the subscribed
+  number unless another; volume, number, remarks), marked missing (what happened), or put back to expected
+  (undo). Late: still expected after its grace days. A special issue can be added on a day of the period.
+- **Changes:** a subscription changed (dates, frequency, first issue …) rebuilds its expected issues and
+  keeps the received and missing ones (a new day that falls on one of them is not doubled); new dates that
+  leave a received or missing issue outside are refused. **Renew** makes the next period from the day
+  after the end, as long (whole months kept as months), with the same frequency, copies, vendor, cost and
+  grace, its first issue as far from its start as before; once. **Cancel** from a day within the period,
+  with the reason: the issues expected after it go; a cancelled subscription is not changed.
+- **Library → Periodicals** (`/library/periodicals`, library.catalogue.view; changes need
+  library.catalogue.manage): the figures (to receive, late, current subscriptions, ending in 30 days,
+  cost of the current); **To receive** (the morning's check-in: the issues expected by today or the next
+  seven days, late first with how late, by library; tick and "Received today", or Received / Missing on a
+  row); **Subscriptions** (current, ending, not started, ended, cancelled or all; by library and name;
+  received of those due so far, late and missing, the next issue, copies, cost). **Subscribe** and the
+  subscription's page (its facts and counts, Edit, Renew, + Special issue, Cancel; every issue with its
+  status and Received / Missing / Undo). **Issues to claim (Excel)**: the late and missing issues by vendor
+  with the periodical, ISSN, library, issue, day, order no. and remarks.
+- **API:** `GET library/subscriptions/setup`, `GET library/subscriptions` (status, library, q; with the
+  figures), `GET library/subscriptions/:id`, `POST library/subscriptions`, `PUT library/subscriptions/:id`,
+  `POST …/:id/renew`, `POST …/:id/cancel`, `POST …/:id/issues` (special), `GET library/issues/due`
+  (`ahead` days), `POST library/issues/receive` (many), `POST library/issues/:id/receive|missing|undo`,
+  `GET library/subscriptions/claims` (`vendorId`; base64 .xlsx; admin route `/api/library-claims`).
+- Tests: `library-periodicals.e2e-spec.ts` (twelve monthly issues and the periodical's vendor; received,
+  many at once, missing, undone, a day to come refused; the issues to receive and the figures; the claims
+  file; a longer period and then quarterly keeping the issues received; dates leaving one out refused; a
+  special issue, twice or outside refused; renewal once; cancellation; a daily newspaper; a periodical
+  without a frequency; the first issue outside, five years, the wrong order of days; the rights);
+  `a11y.spec.ts`.
+
+## The library, rebuilt (parts 1–6)
+
+Set-up masters of the school with borrowing rules the issue desk follows; the book master as titles and
+copies with accession series; the book list with its filters, the accession register, a custom report and
+Excel; Excel import in our layout or the legacy one; barcode and spine labels; periodical subscriptions.
+Left for later (not asked in this round): the circulation desk's own screen redesign (it already follows
+the rules), due-date reminders by email and SMS, reservations, the library dashboard, per-library staff
+rights (the legacy's per-library permissions), and labels with titles in Indian scripts (a Unicode font).

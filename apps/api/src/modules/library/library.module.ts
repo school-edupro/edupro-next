@@ -6,6 +6,7 @@ import { LibraryBooksService } from './library-books.service';
 import { LibraryExportService } from './library-export.service';
 import { LibraryImportService } from './library-import.service';
 import { LibraryLabelsService } from './library-labels.service';
+import { LibraryPeriodicalsService } from './library-periodicals.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
@@ -19,6 +20,7 @@ import { LibraryService } from './library.service';
     LibraryExportService,
     LibraryImportService,
     LibraryLabelsService,
+    LibraryPeriodicalsService,
     AuditService,
   ],
   exports: [LibraryService],

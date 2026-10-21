@@ -18,7 +18,15 @@ import {
   BookExportDto,
   BookLayoutDto,
   BookListDto,
+  CancelSubscriptionDto,
+  DueIssuesDto,
   LabelsDto,
+  MissingIssueDto,
+  ReceiveIssueDto,
+  ReceiveManyDto,
+  SpecialIssueDto,
+  SubscriptionDto,
+  SubscriptionListDto,
   BookMatchDto,
   CopiesDto,
   CopyEditDto,
@@ -31,6 +39,7 @@ import { LibraryBooksService } from './library-books.service';
 import { LibraryExportService } from './library-export.service';
 import { LibraryImportService } from './library-import.service';
 import { LibraryLabelsService } from './library-labels.service';
+import { LibraryPeriodicalsService } from './library-periodicals.service';
 import { LIBRARY } from './library.dto';
 
 /** The book master (docs/design/36-library.md, part 2): titles and their copies. */
@@ -43,7 +52,129 @@ export class LibraryBooksController {
     private readonly exporter: LibraryExportService,
     private readonly importer: LibraryImportService,
     private readonly labeller: LibraryLabelsService,
+    private readonly periodicals: LibraryPeriodicalsService,
   ) {}
+
+  // ---- part 6: periodical subscriptions --------------------------------------------------------------
+
+  @Get('subscriptions/setup')
+  @ApiOperation({ summary: 'The periodicals, libraries and vendors a subscription picks from' })
+  @RequirePermission(LIBRARY.view)
+  subscriptionSetup(@ReqCtx() ctx: RequestContext) {
+    return this.periodicals.setup(ctx);
+  }
+
+  @Get('subscriptions')
+  @ApiOperation({ summary: 'Periodical subscriptions with their issues so far, and the figures' })
+  @RequirePermission(LIBRARY.view)
+  subscriptions(@ReqCtx() ctx: RequestContext, @Query() q: SubscriptionListDto) {
+    return this.periodicals.list(ctx, q);
+  }
+
+  @Get('subscriptions/claims')
+  @ApiOperation({ summary: 'Late and missing issues by vendor, to claim (base64 .xlsx)' })
+  @RequirePermission(LIBRARY.view)
+  claims(@ReqCtx() ctx: RequestContext, @Query('vendorId') vendorId: string | undefined) {
+    return this.periodicals.claims(ctx, vendorId);
+  }
+
+  @Get('subscriptions/:id')
+  @ApiOperation({ summary: 'A subscription and its issues' })
+  @RequirePermission(LIBRARY.view)
+  subscription(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.periodicals.view(ctx, id);
+  }
+
+  @Post('subscriptions')
+  @ApiOperation({ summary: 'A subscription, its issues expected from the frequency' })
+  @RequirePermission(LIBRARY.manage)
+  subscribe(@ReqCtx() ctx: RequestContext, @Body() body: SubscriptionDto) {
+    return this.periodicals.create(ctx, body);
+  }
+
+  @Put('subscriptions/:id')
+  @ApiOperation({ summary: 'A subscription changed (the expected issues follow)' })
+  @RequirePermission(LIBRARY.manage)
+  updateSubscription(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: SubscriptionDto,
+  ) {
+    return this.periodicals.update(ctx, id, body);
+  }
+
+  @Post('subscriptions/:id/renew')
+  @ApiOperation({
+    summary: 'The next period of a subscription, as long, from the day after it ends',
+  })
+  @RequirePermission(LIBRARY.manage)
+  renew(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.periodicals.renew(ctx, id);
+  }
+
+  @Post('subscriptions/:id/cancel')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'A subscription cancelled from a day' })
+  @RequirePermission(LIBRARY.manage)
+  cancelSubscription(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: CancelSubscriptionDto,
+  ) {
+    return this.periodicals.cancel(ctx, id, body);
+  }
+
+  @Post('subscriptions/:id/issues')
+  @ApiOperation({ summary: 'A special issue of a subscription' })
+  @RequirePermission(LIBRARY.manage)
+  specialIssue(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: SpecialIssueDto,
+  ) {
+    return this.periodicals.special(ctx, id, body);
+  }
+
+  @Get('issues/due')
+  @ApiOperation({
+    summary: 'Issues to receive: expected by today (or a few days ahead), late first',
+  })
+  @RequirePermission(LIBRARY.view)
+  dueIssues(@ReqCtx() ctx: RequestContext, @Query() q: DueIssuesDto) {
+    return this.periodicals.due(ctx, q);
+  }
+
+  @Post('issues/receive')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Many issues received on one day' })
+  @RequirePermission(LIBRARY.manage)
+  receiveMany(@ReqCtx() ctx: RequestContext, @Body() body: ReceiveManyDto) {
+    return this.periodicals.receiveMany(ctx, body);
+  }
+
+  @Post('issues/:id/receive')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'An issue received' })
+  @RequirePermission(LIBRARY.manage)
+  receive(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReceiveIssueDto) {
+    return this.periodicals.receive(ctx, id, body);
+  }
+
+  @Post('issues/:id/missing')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'An issue marked missing (to claim)' })
+  @RequirePermission(LIBRARY.manage)
+  missing(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: MissingIssueDto) {
+    return this.periodicals.missing(ctx, id, body);
+  }
+
+  @Post('issues/:id/undo')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'A receipt or a missing mark undone' })
+  @RequirePermission(LIBRARY.manage)
+  undoIssue(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.periodicals.undo(ctx, id);
+  }
 
   // ---- part 5: barcode and spine labels -------------------------------------------------------------
 
