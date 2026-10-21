@@ -13,6 +13,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   BookExportDto,
@@ -32,6 +33,8 @@ import {
   CopyEditDto,
   CopyStatusChangeDto,
   NewBookDto,
+  RegisterExportDto,
+  RegisterGridDto,
   SuggestDto,
   TitleDto,
 } from './library-books.dto';
@@ -40,6 +43,7 @@ import { LibraryExportService } from './library-export.service';
 import { LibraryImportService } from './library-import.service';
 import { LibraryLabelsService } from './library-labels.service';
 import { LibraryPeriodicalsService } from './library-periodicals.service';
+import { LibraryRegisterService } from './library-register.service';
 import { LIBRARY } from './library.dto';
 
 /** The book master (docs/design/36-library.md, part 2): titles and their copies. */
@@ -53,6 +57,7 @@ export class LibraryBooksController {
     private readonly importer: LibraryImportService,
     private readonly labeller: LibraryLabelsService,
     private readonly periodicals: LibraryPeriodicalsService,
+    private readonly lists: LibraryRegisterService,
   ) {}
 
   // ---- part 6: periodical subscriptions --------------------------------------------------------------
@@ -288,6 +293,42 @@ export class LibraryBooksController {
     return this.exporter.setup(ctx);
   }
 
+  // ---- the Books page's lists, as the Employees list ---------------------------------------------------
+  @Get('register/:level/fields')
+  @ApiOperation({
+    summary: 'Every field of the titles or the copies that can be a column or a filter',
+  })
+  @RequirePermission(LIBRARY.view)
+  registerFields(@ReqCtx() ctx: RequestContext, @Param('level') level: string) {
+    return this.lists.fields(ctx, levelOf(level));
+  }
+
+  @Post('register/:level')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'A page of the titles or the copies: columns, filters, search, status, sort',
+  })
+  @RequirePermission(LIBRARY.view)
+  registerGrid(
+    @ReqCtx() ctx: RequestContext,
+    @Param('level') level: string,
+    @Body() body: RegisterGridDto,
+  ) {
+    return this.lists.grid(ctx, levelOf(level), body);
+  }
+
+  @Post('register/:level/export')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'The list as on screen, as Excel or PDF (base64)' })
+  @RequirePermission(LIBRARY.view)
+  registerExport(
+    @ReqCtx() ctx: RequestContext,
+    @Param('level') level: string,
+    @Body() body: RegisterExportDto,
+  ) {
+    return this.lists.export(ctx, levelOf(level), body);
+  }
+
   @Post('books/export')
   @HttpCode(200)
   @ApiOperation({
@@ -384,4 +425,11 @@ export class LibraryBooksController {
   ) {
     return this.books.changeStatus(ctx, id, body);
   }
+}
+
+/** The list a path names: the copies (the accession register) or the titles. */
+function levelOf(level: string): 'copy' | 'title' {
+  if (level === 'copies') return 'copy';
+  if (level === 'titles') return 'title';
+  throw new DomainError('not-found', 'No such list', { status: 404 });
 }

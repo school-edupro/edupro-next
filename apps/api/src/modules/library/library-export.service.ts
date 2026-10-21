@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { BookExportDto, BookFilter, BookLayoutDto } from './library-books.dto';
 import { bookFilter, bookSort } from './library-filter';
+import { REGISTER_FROM, registerViewText, registerWhere } from './library-register';
 import { LIBRARY } from './library.dto';
 
 const REPORT = 'library.books';
@@ -291,8 +292,16 @@ export class LibraryExportService {
   }
 
   /** The rows of a level, as filtered and sorted. */
-  private async rows(c: import('pg').PoolClient, q: BookFilter, level: Level) {
+  private async rows(c: import('pg').PoolClient, q: BookExportDto, level: Level) {
     const f = bookFilter(q);
+    // the Books page's list: its filters, search and status choose the rows
+    if (q.view) {
+      const where = registerWhere(level, { ...q.view, columns: [], sort: [] }, f.args);
+      // eslint-disable-next-line no-restricted-syntax -- the register catalogue's fragments; values are bound
+      const ids = `(SELECT ${level === 'copy' ? 'x.id' : 't.id'} FROM ${REGISTER_FROM[level]} WHERE ${where})`;
+      if (level === 'copy') f.copy = f.copy ? `${f.copy} AND x.id IN ${ids}` : `x.id IN ${ids}`;
+      else f.title = `${f.title} AND t.id IN ${ids}`;
+    }
     if (level === 'copy')
       return (
         await c.query<Row>(
@@ -432,7 +441,9 @@ export class LibraryExportService {
           `SELECT name FROM schools WHERE id = app.current_school_id()`,
         )
       ).rows[0]!.name;
-      const filters = await this.filtersText(c, q);
+      const filters = q.view
+        ? `As on the Books page: ${registerViewText(level, q.view)}`
+        : await this.filtersText(c, q);
       const about = wb.addWorksheet('About this export');
       (
         [

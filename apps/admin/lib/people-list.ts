@@ -56,14 +56,21 @@ export interface PeopleListConfig<V extends PeopleListView, R extends PeopleList
   viewToSpec: (v: V) => ReportSpec;
   /** The counts line: label and number. */
   counts: (r: R) => Array<[string, number]>;
-  rowHref: (id: string) => string;
+  rowHref: (id: string, row: PeopleRow) => string;
+  /** The first column (default the person: photo and full name). */
+  primary?: { key: string; avatar: boolean };
+  /** The header of the status column (default Status). */
+  statusHeader?: string;
+  /** What More filters says, and the field a new condition starts on. */
+  filtersHelp?: string;
+  newFilterKey?: string;
   /** The lines under the name in the first column. */
   identity: (row: PeopleRow) => ReactNode;
   statusCell: (row: PeopleRow) => ReactNode;
   /** The row's Actions menu items (<li>…</li>). */
   menu: (id: string, row: PeopleRow, can: Record<string, boolean>) => ReactNode;
-  /** Buttons after Export / Save as report / Report builder. */
-  tools: (can: Record<string, boolean>) => ReactNode;
+  /** Buttons after Export / Save as report / Report builder (the view on screen given). */
+  tools: (can: Record<string, boolean>, view: V) => ReactNode;
   /** Once on the first render (e.g. dropping an old browser copy of the view). */
   onMount?: () => void;
 }

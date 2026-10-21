@@ -1,26 +1,32 @@
 'use client';
 import { FieldPicker } from '@/components/FieldPicker';
 import { deleteBookLayout, loadBookExportSetup, saveBookLayout } from '@/lib/library-books-actions';
+import type { RegisterView } from '@/lib/library-register';
 
 /**
  * The book list's Excel export with the fields picked (docs/design/36-library.md, part 3): one row per
- * copy (the accession register) or per title, as the list is filtered and sorted.
+ * copy (the accession register) or per title. At the level of the list on screen it takes that list's
+ * filters, search and status; at the other level, every book.
  */
 export function BookExportPicker({
-  filters,
-  titles,
-  copies,
+  level,
+  view,
 }: {
-  filters: Record<string, string>;
-  titles: number;
-  copies: number;
+  level: 'copy' | 'title';
+  view: Pick<RegisterView, 'status' | 'search' | 'filters'>;
 }) {
   return (
     <FieldPicker
       noun="Books"
-      filters={filters}
-      count={copies}
-      countByLevel={{ copy: copies, title: titles }}
+      filters={{
+        view: JSON.stringify({
+          status: view.status,
+          search: view.search ?? '',
+          filters: view.filters,
+        }),
+        viewLevel: level,
+      }}
+      startLevel={level}
       action="/api/library-export"
       load={loadBookExportSetup}
       save={saveBookLayout}

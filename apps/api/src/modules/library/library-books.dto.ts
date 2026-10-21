@@ -176,6 +176,61 @@ export const SuggestSchema = z.object({
 export class SuggestDto extends createZodDto(SuggestSchema) {}
 
 /** The book list as Excel (part 3): one row per copy or per title; every field, or the fields picked. */
+/** The Books page's lists as the Employees list: the view (columns, filters, sort, search, status) and a page. */
+const RegisterKey = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9_]{2,60}$/, 'unknown field');
+export const RegisterViewSchema = z.object({
+  columns: z
+    .array(z.object({ key: RegisterKey, label: z.string().trim().max(80).nullable().optional() }))
+    .max(60)
+    .default([]),
+  filters: z
+    .array(
+      z.object({
+        key: RegisterKey,
+        op: z.enum([
+          'eq',
+          'neq',
+          'in',
+          'not_in',
+          'contains',
+          'starts',
+          'empty',
+          'not_empty',
+          'between',
+          'gte',
+          'lte',
+        ]),
+        values: z.array(z.string().trim().max(120)).max(200).optional(),
+      }),
+    )
+    .max(30)
+    .default([]),
+  sort: z
+    .array(z.object({ key: RegisterKey, dir: z.enum(['asc', 'desc']).default('asc') }))
+    .max(3)
+    .default([]),
+  search: z.string().trim().max(80).optional(),
+  status: z
+    .string()
+    .regex(/^[a-z_]{2,20}$/)
+    .default('all'),
+});
+export const RegisterGridSchema = RegisterViewSchema.extend({
+  size: z.coerce
+    .number()
+    .int()
+    .refine((n) => [25, 50, 100, 200].includes(n), 'one of 25, 50, 100, 200')
+    .default(50),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+});
+export class RegisterGridDto extends createZodDto(RegisterGridSchema) {}
+export const RegisterExportSchema = RegisterViewSchema.extend({ format: z.enum(['xlsx', 'pdf']) });
+export class RegisterExportDto extends createZodDto(RegisterExportSchema) {}
+export const RegisterLevelSchema = z.enum(['copy', 'title']);
+
 export const BookExportSchema = BookFilterSchema.extend({
   level: z.enum(['copy', 'title']).default('copy'),
   columns: z
@@ -183,6 +238,8 @@ export const BookExportSchema = BookFilterSchema.extend({
     .max(400)
     .optional(),
   layout: txt(60).optional(),
+  /** the Books page's list: its filters, search and status choose the rows (instead of the above) */
+  view: RegisterViewSchema.omit({ columns: true, sort: true }).optional(),
 });
 export class BookExportDto extends createZodDto(BookExportSchema) {}
 

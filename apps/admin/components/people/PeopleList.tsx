@@ -71,10 +71,15 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   actions: {
     load: (q: PeopleListQuery<V>) => Promise<Result<R>>;
     saveView: (v: V) => Promise<void>;
-    exportFile: (
+    /** the view as a file made by the workers (watched until ready) … */
+    exportFile?: (
       q: PeopleListQuery<V> & { format: 'xlsx' | 'pdf' },
     ) => Promise<Result<{ exportId: string; format: string; spec: ReportSpec }>>;
-    saveReport: (
+    /** … or made at once and downloaded */
+    download?: (
+      q: PeopleListQuery<V> & { format: 'xlsx' | 'pdf' },
+    ) => Promise<Result<{ filename: string; contentType: string; base64: string }>>;
+    saveReport?: (
       id: null,
       input: { name: string; description: string | null; spec: ReportSpec },
     ) => Promise<Result<SavedReport>>;
@@ -86,6 +91,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   };
 }) {
   const router = useRouter();
+  const primary = config.primary ?? { key: 'full_name', avatar: true };
+  const statusHeader = config.statusHeader ?? 'Status';
   const byKey = useMemo(() => new Map(fields.fields.map((f) => [f.key, f])), [fields]);
   const byLabel = useMemo(
     () => new Map(fields.fields.map((f) => [f.label.toLowerCase(), f])),
@@ -169,6 +176,21 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
 
   const doExport = (format: 'xlsx' | 'pdf') =>
     start(async () => {
+      if (actions.download) {
+        const d = await actions.download({ ...view, page: 1, format });
+        if (!d.ok) return setError(d.errors?.join('; ') ?? d.error);
+        setError(null);
+        // the file straight to the browser's downloads
+        const bytes = Uint8Array.from(atob(d.data.base64), (ch) => ch.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: d.data.contentType }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = d.data.filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        return;
+      }
+      if (!actions.exportFile) return;
       const r = await actions.exportFile({ ...view, page: 1, format });
       if (r.ok) {
         setRunLabel('');
@@ -200,6 +222,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
     start(async () => {
       if (saveName.trim().length < 3)
         return setError('Give the report a name of at least 3 characters.');
+      if (!actions.saveReport) return;
       const r = await actions.saveReport(null, {
         name: saveName.trim(),
         description: config.report.description,
@@ -367,7 +390,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
               Report builder
             </a>
           ) : null}
-          {config.tools(can)}
+          {config.tools(can, view)}
         </div>
       </div>
       {error ? (
@@ -403,10 +426,10 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
         <table className="ep-table">
           <thead>
             <tr>
-              <th scope="col" className="ep-sl__sticky" aria-sort={ariaSort('full_name')}>
-                <button type="button" className="ep-sl__sort" onClick={() => sortBy('full_name')}>
+              <th scope="col" className="ep-sl__sticky" aria-sort={ariaSort(primary.key)}>
+                <button type="button" className="ep-sl__sort" onClick={() => sortBy(primary.key)}>
                   {config.noun.heading}
-                  {sortMark('full_name')}
+                  {sortMark(primary.key)}
                 </button>
               </th>
               {data.columns.map((c) => (
@@ -417,7 +440,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
                   </button>
                 </th>
               ))}
-              <th scope="col">Status</th>
+              <th scope="col">{statusHeader}</th>
               <th scope="col">
                 <span className="ep-sr-only">Actions</span>
               </th>
@@ -426,12 +449,12 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
           <tbody>
             {data.rows.map((r) => {
               const id = String(r.__id);
-              const name = String(r.full_name ?? '');
+              const name = String(r[primary.key] ?? '');
               return (
                 <tr key={id}>
                   <td className="ep-sl__sticky">
-                    <a href={config.rowHref(id)} className="ep-sl__who">
-                      {r.__photo ? (
+                    <a href={config.rowHref(id, r)} className="ep-sl__who">
+                      {!primary.avatar ? null : r.__photo ? (
                         // photos pass through the admin's own origin
                         <img
                           src={`/api/files/${String(r.__photo)}/view`}
@@ -632,6 +655,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
         <FiltersDialog
           initial={moreFilters}
           byKey={byKey}
+          help={config.filtersHelp}
+          newKey={config.newFilterKey ?? 'religion'}
           resolve={(l) => byLabel.get(l.trim().toLowerCase())}
           fieldListId={fieldListId}
           onClose={() => setFiltersOpen(false)}
@@ -652,6 +677,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
           defaults={config.defaultView.columns}
           placeholder={config.columnSearchPlaceholder}
           heading={config.noun.heading}
+          primaryKey={primary.key}
+          statusHeader={statusHeader}
           onClose={() => setColumnsOpen(false)}
           onApply={(columns) => {
             setColumnsOpen(false);
@@ -666,6 +693,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
 function FiltersDialog({
   initial,
   byKey,
+  help,
+  newKey,
   resolve,
   fieldListId,
   onClose,
@@ -673,6 +702,8 @@ function FiltersDialog({
 }: {
   initial: PeopleListView['filters'];
   byKey: Map<string, PeopleListFields['fields'][number]>;
+  help?: string;
+  newKey: string;
   resolve: (label: string) => PeopleListFields['fields'][number] | undefined;
   fieldListId: string;
   onClose: () => void;
@@ -700,8 +731,8 @@ function FiltersDialog({
       }
     >
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        Add conditions on any field of the profile, fees or transport. They work together with the
-        quick filters above the list; all must match. A condition without a value is ignored.
+        {help ??
+          'Add conditions on any field of the profile, fees or transport. They work together with the quick filters above the list; all must match. A condition without a value is ignored.'}
       </p>
       {filters.map((f, i) => (
         <FilterRow
@@ -720,7 +751,7 @@ function FiltersDialog({
       <button
         type="button"
         className="ep-btn ep-btn--secondary ep-btn--sm"
-        onClick={() => setFilters((p) => [...p, { key: 'religion', op: 'in', values: [] }])}
+        onClick={() => setFilters((p) => [...p, { key: newKey, op: 'in', values: [] }])}
       >
         + Add a condition
       </button>
@@ -734,6 +765,8 @@ function ColumnsDialog({
   defaults,
   placeholder,
   heading,
+  primaryKey,
+  statusHeader,
   onClose,
   onApply,
 }: {
@@ -742,6 +775,8 @@ function ColumnsDialog({
   defaults: PeopleListView['columns'];
   placeholder: string;
   heading: string;
+  primaryKey: string;
+  statusHeader: string;
   onClose: () => void;
   onApply: (columns: PeopleListView['columns']) => void;
 }) {
@@ -801,7 +836,7 @@ function ColumnsDialog({
               const list = fields.fields.filter(
                 (f) =>
                   f.section === s.id &&
-                  f.key !== 'full_name' &&
+                  f.key !== primaryKey &&
                   (!needle || f.label.toLowerCase().includes(needle)),
               );
               if (!list.length) return null;
@@ -837,8 +872,8 @@ function ColumnsDialog({
             Shown, in order
           </p>
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            Drag or use the arrows. Type a header to rename a column. {heading} and Status always
-            show.
+            Drag or use the arrows. Type a header to rename a column. {heading} and {statusHeader}{' '}
+            always show.
           </p>
           <ol className="ep-sl__chosen">
             {cols.map((c, i) => {

@@ -315,3 +315,35 @@ employee type; periodical kinds as a tab.
 - **Where a list comes from**: under every drop-down that points at another tab, "List from <setup> ›
   <tab>" with a Manage list link (a new tab) when the user may open it; fixed lists say so.
 - The edit form opens its row by id (`GET /masters/:master/rows?id=`), not from the first 500 rows.
+
+## The register, accession corrections and lost-book recovery (21 Oct 2026)
+
+Asked: the copies register with the Employees list's tools; a way to correct a wrong accession number; a
+way to recover a lost or damaged book from the student or employee. Decisions (asked): both tabs get the
+list; a corrected accession number retires the old one (never given out again, still found by search), a
+wrongly entered range is corrected in one go with a preview; a lost book charges the copy's price (else
+the title's) + a processing fee (Library settings) + the late fine to that day, the librarian may change
+it with a reason, a damaged book is charged what the librarian enters (a share of the price suggested);
+the charge is announced at once as a misc fee (no approval step) for students and for staff (misc fees
+extended to employees) and the librarian sees it due or paid; a lost book found before the charge is paid:
+the price and fee come off through a misc fee change request the fees office approves (the late fine
+stays). Not chosen: replacing the book with a copy, a waiver at the library desk.
+
+- **Part 1 — the list (done).** The Books page's Titles and Copies tabs are the shared list of the
+  Students and Employees pages (`PeopleList`, now with a first column of its own, a direct download and
+  the view passed to its tools): status, quick filters (library, material, subject / language), search,
+  More filters on any field with conditions, Columns (choose, order, rename; kept per user under
+  `library.copies.list` / `library.titles.list`), Reset view, the school's counts, sortable headers,
+  pages, Export Excel / PDF of exactly the view (made at once, no workers). The field catalogue is SQL
+  (`library-register.ts`): every filter, the sort (accession numbers in their natural order) and the
+  pages run in the database. `GET library/register/:copies|titles/fields`, `POST library/register/:level`,
+  `POST library/register/:level/export`. Customise export (named layouts) takes the list's filters at
+  the same level (`view` on `POST library/books/export`).
+- **Part 2 — correcting an accession number.** On the copy, with a reason; the old number kept in the
+  copy's history and retired; search finds the copy by a former number; a range corrected with a preview;
+  the label reprinted.
+- **Part 3 — lost and damaged books, students.** Mark the loan lost (or return it damaged): the charge
+  worked out, announced on the pupil as a misc fee at once; it stops new issues until paid, shows on the
+  Fines page and in the library's leaving check; found again before paying: the change request.
+- **Part 4 — staff.** Misc fees for employees (the counter collects from an employee with a misc receipt);
+  the same charges for staff borrowers.

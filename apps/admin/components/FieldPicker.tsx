@@ -43,6 +43,7 @@ export function FieldPicker({
   filters,
   count,
   countByLevel,
+  startLevel,
   action,
   load,
   save: saveLayout,
@@ -55,9 +56,11 @@ export function FieldPicker({
   noun: string;
   /** the list's filters, as the download sends them */
   filters: Record<string, string>;
-  /** how many rows the list has */
-  count: number;
+  /** how many rows the list has (left out when the list does not say) */
+  count?: number;
   countByLevel?: Record<string, number>;
+  /** the row kind it opens on (the list on screen) when no choice says otherwise */
+  startLevel?: string;
   /** where the choice is posted for the file */
   action: string;
   load: () => Promise<PickerSetup>;
@@ -121,7 +124,8 @@ export function FieldPicker({
   const apply = (s: PickerSetup, pick: string) => {
     setFrom(pick);
     setMsg(null);
-    const lvOf = (x?: string) => x ?? (s.levels?.length ? level || s.levels[0]!.value : '');
+    const lvOf = (x?: string) =>
+      x ?? (s.levels?.length ? level || startLevel || s.levels[0]!.value : '');
     const take = (cols: string[], lv: string) => {
       const ok = allowedFor(s, lv);
       setLevel(lv);
@@ -264,8 +268,11 @@ export function FieldPicker({
               disabled={!chosen.length || !setup}
               onClick={download}
             >
-              Download Excel (
-              {scope === 'ticked' ? ticked.length : (countByLevel?.[level] ?? count)})
+              Download Excel
+              {(() => {
+                const n = scope === 'ticked' ? ticked.length : (countByLevel?.[level] ?? count);
+                return n === undefined ? '' : ` (${String(n)})`;
+              })()}
             </button>
           </div>
         }
@@ -311,7 +318,7 @@ export function FieldPicker({
                     onChange={() => setScope('filtered')}
                   />{' '}
                   As the list is filtered
-                  {setup.levels?.length ? '' : ` (${String(count)})`}
+                  {setup.levels?.length || count === undefined ? '' : ` (${String(count)})`}
                 </label>
                 {canTick ? (
                   <label className="ep-check" htmlFor="xp-scope-t">

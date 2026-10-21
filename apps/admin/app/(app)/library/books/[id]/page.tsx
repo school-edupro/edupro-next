@@ -226,7 +226,7 @@ export default async function BookPage({
                 </thead>
                 <tbody>
                   {book.copies.map((c) => (
-                    <tr key={c.id}>
+                    <tr key={c.id} id={`copy-${c.id}`}>
                       <td>
                         <strong>{c.accessionNo}</strong>
                         <div className="ep-field__help">

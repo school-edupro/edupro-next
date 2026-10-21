@@ -47,6 +47,15 @@ async function workbook(sp: Input) {
     if (v && re.test(v)) body[k] = v;
   }
   body.level = sp.get('level') === 'title' ? 'title' : 'copy';
+  // the Books page's list: its filters choose the rows when the export is of the same kind of row
+  const view = sp.get('view');
+  if (view && view.length <= 20_000 && sp.get('viewLevel') === body.level) {
+    try {
+      body.view = JSON.parse(view) as unknown;
+    } catch {
+      // a view that does not read is left out: every book
+    }
+  }
   const columns = sp
     .getAll('columns')
     .filter((x) => KEY.test(x))
