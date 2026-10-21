@@ -48,7 +48,7 @@ export class LibraryPeriodicalsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(`SELECT app.library_seed(app.current_school_id())`);
       const periodicals = await c.query<Record<string, unknown>>(
-        `SELECT p.id::text, p.name::text, p.kind, p.frequency, p.vendor_id::text AS "vendorId", v.name AS vendor
+        `SELECT p.id::text, p.name::text, (SELECT k.name::text FROM library_periodical_kinds k WHERE k.id = p.kind_id) AS kind, p.frequency, p.vendor_id::text AS "vendorId", v.name AS vendor
            FROM library_periodicals p LEFT JOIN library_vendors v ON v.id = p.vendor_id
           WHERE p.status = 'active' ORDER BY p.name`,
       );
@@ -84,7 +84,7 @@ export class LibraryPeriodicalsService {
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
       const r = await c.query<Record<string, unknown>>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments chosen above; values are bound
-        `SELECT s.id::text, p.name::text AS periodical, p.kind, s.frequency, l.name AS library, v.name AS vendor,
+        `SELECT s.id::text, p.name::text AS periodical, (SELECT k.name::text FROM library_periodical_kinds k WHERE k.id = p.kind_id) AS kind, s.frequency, l.name AS library, v.name AS vendor,
                 s.starts_on::text, s.ends_on::text, s.copies, s.cost::text, ${STATE} AS state,
                 (SELECT count(*) FROM library_periodical_issues i WHERE i.subscription_id = s.id AND i.expected_on <= CURRENT_DATE)::int AS due,
                 (SELECT count(*) FROM library_periodical_issues i WHERE i.subscription_id = s.id AND i.status = 'received')::int AS received,
@@ -152,7 +152,7 @@ export class LibraryPeriodicalsService {
       const s = (
         await c.query<Record<string, unknown>>(
           // eslint-disable-next-line no-restricted-syntax -- the fixed STATE and LATE fragments; values are bound
-          `SELECT s.id::text, s.periodical_id::text, p.name::text AS periodical, p.kind, p.issn, s.frequency,
+          `SELECT s.id::text, s.periodical_id::text, p.name::text AS periodical, (SELECT k.name::text FROM library_periodical_kinds k WHERE k.id = p.kind_id) AS kind, p.issn, s.frequency,
                   s.library_id::text, l.name AS library, s.vendor_id::text, v.name AS vendor, s.starts_on::text,
                   s.ends_on::text, s.first_issue_on::text, s.copies, s.cost::text, s.order_no, s.bill_no,
                   s.bill_date::text, s.grace_days, s.notes, s.status, s.cancelled_on::text, s.cancel_reason,

@@ -289,3 +289,29 @@ labels, periodicals, circulation and fines, stock checks (`library.catalogue.vie
 (to pick a borrower), file upload and view, and the privacy and hypercare reports every staff role has.
 Nothing in fees, recruitment, exams or administration. On a development machine, sign in as
 `dev-librarian · Librarian` (Lata Librarian, Alpha) to test the module.
+
+## Set-up review (migration 0213, 21 Oct 2026)
+
+The librarian could not correct a name on the set-up tabs: the field that tells rows apart (an author's,
+subject's, language's, publisher's or periodical's name; a series' library and material type; a shelf's
+library and code) was locked on edit. Books point at these rows by id, so a name is now put right in
+place; the names a title keeps for its list and search (author, publisher, language, subject) follow
+through a trigger. Decisions (asked): rename and merge; keys change until first use; staff rules by
+employee type; periodical kinds as a tab.
+
+- **Merge a duplicate** (authors, subjects, languages, publishers, periodicals): on the edit panel, pick
+  the duplicate; `app.library_merge` moves every row that points at it (any foreign key), keeps one line
+  when a title named both authors, joins a subject's sub-subjects, refreshes the titles' names and removes
+  the duplicate (audited as `masters.row.merge`). `POST /masters/:master/rows/:id/merge {from}`.
+- **Until first use**: an accession series keeps its library and material type once a copy of that library
+  and type exists; a shelf keeps its library once copies sit on it (its code can always change). The grid
+  shows the counts (Copies numbered, Copies) and the edit form locks the field with the reason; triggers
+  refuse it too. Authors, subjects, languages and publishers show a Books count; periodicals,
+  Subscriptions.
+- **Periodical kinds**: a tab of the school's own list (Magazine, Newspaper, Journal, Bulletin to start);
+  `library_periodicals.kind` became `kind_id`. Frequency stays a fixed list: it sets the issues expected.
+- **Staff borrowing rules** may name an employee type (Staff setup › Employee types, matched by the type
+  on the employee record) or a staff group, not both; the employee type wins over the group, then all staff.
+- **Where a list comes from**: under every drop-down that points at another tab, "List from <setup> ›
+  <tab>" with a Manage list link (a new tab) when the user may open it; fixed lists say so.
+- The edit form opens its row by id (`GET /masters/:master/rows?id=`), not from the first 500 rows.

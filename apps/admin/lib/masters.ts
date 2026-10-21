@@ -8,6 +8,10 @@ export interface MasterField {
   required?: boolean;
   identity?: boolean;
   readOnly?: boolean;
+  /** a column worked out per row (a count): shown, never typed */
+  expr?: string;
+  /** this key may change only while that count of the row is 0; `help` says why it is locked */
+  lockedWhen?: { field: string; help: string };
   options?: string[];
   lookup?: {
     table: string;
@@ -56,6 +60,19 @@ export interface MasterMeta {
   order?: number;
   /** a row opens its own screen */
   detail?: { path: string; label: string } | null;
+  /** a duplicate can be merged into a row; `note` says what moves */
+  merge?: { note: string } | null;
+  /** where each drop-down that points at another master gets its list */
+  sources?: Record<string, MasterSource>;
+}
+
+/** The setup page and tab a drop-down's list is kept on. */
+export interface MasterSource {
+  id: string;
+  group: string;
+  title: string;
+  groupTitle: string;
+  canView: boolean;
 }
 
 export interface MasterRow extends Record<string, string | null> {

@@ -55,12 +55,12 @@ describe('library periodical subscriptions (e2e)', () => {
     await m('library_vendors', { code: 'NA', name: 'News Agency' });
     await m('library_periodicals', {
       name: 'Science Reporter',
-      kind: 'Magazine',
+      kind_id: 'Magazine',
       frequency: 'Monthly',
       vendor_id: 'NA',
     });
-    await m('library_periodicals', { name: 'The Hindu', kind: 'Newspaper', frequency: 'Daily' });
-    await m('library_periodicals', { name: 'Nature', kind: 'Journal' });
+    await m('library_periodicals', { name: 'The Hindu', kind_id: 'Newspaper', frequency: 'Daily' });
+    await m('library_periodicals', { name: 'Nature', kind_id: 'Journal' });
     const setup = (await call('GET', '/library/subscriptions/setup')).json();
     ids.main = setup.libraries[0].id;
     for (const p of setup.periodicals as Array<{ id: string; name: string }>) ids[p.name] = p.id;

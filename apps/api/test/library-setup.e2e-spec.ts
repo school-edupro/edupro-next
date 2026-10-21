@@ -56,7 +56,7 @@ describe('library set-up and borrowing rules (e2e)', () => {
     const list = (await inject({ method: 'GET', url: '/masters', headers: h() })).json();
     const library = (list.data ?? list) as Array<{ id: string; group: string }>;
     const ids = library.filter((m) => m.group === 'library').map((m) => m.id);
-    expect(ids.slice(0, 11)).toEqual([
+    expect(ids.slice(0, 12)).toEqual([
       'library_libraries',
       'library_material_types',
       'library_accession_series',
@@ -65,6 +65,7 @@ describe('library set-up and borrowing rules (e2e)', () => {
       'library_languages',
       'library_publishers',
       'library_periodicals',
+      'library_periodical_kinds',
       'library_shelves',
       'library_vendors',
       'library_borrow_rules',

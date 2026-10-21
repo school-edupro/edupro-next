@@ -25,6 +25,10 @@ export interface MasterField {
   identity?: boolean;
   /** Not accepted from the grid or uploads (derived or system-owned). */
   readOnly?: boolean;
+  /** A read-only column worked out per row: an SQL expression over the master's row (alias `t`), e.g. a count of the copies on a shelf. */
+  expr?: string;
+  /** A key the edit form may change only while that read-only count of the row is 0 (a shelf's library, once copies sit on it); `help` says why it is locked. */
+  lockedWhen?: { field: string; help: string };
   /** Allowed values for `select`. */
   options?: readonly string[];
   /** For `ref`: the value in files and on screen is `lookup.column` of `lookup.table` (e.g. a class code); the stored value is its id. */
@@ -128,6 +132,11 @@ export interface MasterDefinition {
   order?: number;
   /** A row opens its own screen: the path with `{id}` (a route's stops and pupils, a vehicle's log). */
   detail?: { path: string; label: string };
+  /**
+   * A duplicate row can be merged into the row kept: the SQL function `fn(table, keep, drop)` moves what
+   * pointed at the duplicate and removes it; `note` tells the user what moves.
+   */
+  merge?: { fn: string; note: string };
   /**
    * Not listed on its setup page because a dedicated screen owns the data (communication templates:
    * the Template master); the grid stays reachable from that screen for Excel import and export.
@@ -270,7 +279,8 @@ function buildList(spec: ListSpec): (p: MasterListParams) => DatasetQuery {
               ? `concat_ws(' · ', ${a}.${f.lookup.column}::text, ${label}) AS ${f.key}`
               : `${a}.${f.lookup.column}::text AS ${f.key}`,
         );
-      } else if (f.array) cols.push(`array_to_string(t.${f.key}, ',') AS ${f.key}`);
+      } else if (f.expr) cols.push(`(${f.expr})::text AS ${f.key}`);
+      else if (f.array) cols.push(`array_to_string(t.${f.key}, ',') AS ${f.key}`);
       else if (f.type === 'date') cols.push(`t.${f.key}::text AS ${f.key}`);
       else cols.push(`t.${f.key}::text AS ${f.key}`);
     });
@@ -288,7 +298,7 @@ function buildList(spec: ListSpec): (p: MasterListParams) => DatasetQuery {
     }
     for (const [k, v] of Object.entries(p.filters)) {
       const f = spec.fields.find((x) => x.key === k);
-      if (!f || v === '' || v === undefined) continue;
+      if (!f || f.expr || v === '' || v === undefined) continue;
       where.push(`t.${f.key}::text = ${bind(String(v))}`);
     }
     return {
@@ -406,6 +416,18 @@ const crew = (key: string, header: string, role: string, required = false): Mast
   required,
   width: 22,
 });
+
+/** Library set-up: a duplicate merged into the row kept (0213), and the books that name a row. */
+const libraryMerge = (note: string) => ({ fn: 'app.library_merge', note });
+const titlesWith = (column: string): MasterField => ({
+  key: 'titles',
+  header: 'Books',
+  type: 'number',
+  readOnly: true,
+  expr: `SELECT count(*) FROM library_titles x WHERE x.${column} = t.id`,
+  width: 8,
+});
+const SERIES_USED = 'Copies are numbered from this series, so it stays; add a new series instead';
 
 const master = (
   d: Omit<MasterDefinition, 'list' | 'search'> & { search: string[]; orderBy: string },
@@ -2080,7 +2102,7 @@ export const MASTERS: MasterDefinition[] = [
     search: ['t.code', 't.name'],
     orderBy: 't.code',
   }),
-  // ---- library set-up (docs/design/36-library.md, part 1) ----
+  // ---- library set-up (docs/design/36-library.md, part 1; corrections in 0213) ----
   master({
     id: 'library_libraries',
     title: 'Libraries',
@@ -2144,6 +2166,7 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['library_id', 'material_type_id'],
     conflict: '(school_id, library_id, material_type_id)',
+    rekey: true,
     fields: [
       {
         key: 'library_id',
@@ -2153,6 +2176,7 @@ export const MASTERS: MasterDefinition[] = [
         required: true,
         identity: true,
         width: 16,
+        lockedWhen: { field: 'copies', help: SERIES_USED },
       },
       {
         key: 'material_type_id',
@@ -2162,6 +2186,7 @@ export const MASTERS: MasterDefinition[] = [
         required: true,
         identity: true,
         width: 16,
+        lockedWhen: { field: 'copies', help: SERIES_USED },
       },
       {
         key: 'prefix',
@@ -2192,6 +2217,14 @@ export const MASTERS: MasterDefinition[] = [
         width: 10,
         help: 'the number the next new copy gets (one running series across the years)',
       },
+      {
+        key: 'copies',
+        header: 'Copies numbered',
+        type: 'number',
+        readOnly: true,
+        expr: 'SELECT count(*) FROM library_copies c JOIN library_titles x ON x.id = c.title_id WHERE c.library_id = t.library_id AND x.material_type_id = t.material_type_id',
+        width: 10,
+      },
     ],
     status: STATUS,
     search: ['t.prefix'],
@@ -2208,6 +2241,8 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['name'],
     conflict: '(school_id, name)',
+    rekey: true,
+    merge: libraryMerge('Its books and sub-subjects move to this subject'),
     fields: [
       { ...aname('Subject', 80), identity: true },
       {
@@ -2227,6 +2262,7 @@ export const MASTERS: MasterDefinition[] = [
         width: 30,
         help: 'comma separated, e.g. Algebra, Geometry',
       },
+      titlesWith('subject_id'),
     ],
     status: STATUS,
     search: ['t.name', 't.class_no'],
@@ -2241,9 +2277,19 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['name'],
     conflict: '(school_id, name)',
+    rekey: true,
+    merge: libraryMerge('Its books move to this author'),
     fields: [
       { ...aname('Author', 120), identity: true, help: 'as on the title page, e.g. R. K. Narayan' },
       { key: 'note', header: 'Note', type: 'text', maxLength: 200, width: 30 },
+      {
+        key: 'titles',
+        header: 'Books',
+        type: 'number',
+        readOnly: true,
+        expr: 'SELECT count(DISTINCT ta.title_id) FROM library_title_authors ta WHERE ta.author_id = t.id',
+        width: 8,
+      },
     ],
     status: STATUS,
     search: ['t.name'],
@@ -2258,6 +2304,8 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['name'],
     conflict: '(school_id, name)',
+    rekey: true,
+    merge: libraryMerge('Its books and periodicals move to this language'),
     fields: [
       { ...aname('Language', 40), identity: true },
       {
@@ -2269,6 +2317,7 @@ export const MASTERS: MasterDefinition[] = [
         pattern: '^[a-z]{2,3}$',
         patternHelp: 'two or three small letters, e.g. hi',
       },
+      titlesWith('language_id'),
     ],
     status: STATUS,
     search: ['t.name', 't.code'],
@@ -2283,9 +2332,12 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['name'],
     conflict: '(school_id, name)',
+    rekey: true,
+    merge: libraryMerge('Its books and periodicals move to this publisher'),
     fields: [
       { ...aname('Publisher', 120), identity: true },
       { key: 'place', header: 'Place of publication', type: 'text', maxLength: 80, width: 18 },
+      titlesWith('publisher_id'),
     ],
     status: STATUS,
     search: ['t.name', 't.place'],
@@ -2300,19 +2352,22 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['name'],
     conflict: '(school_id, name)',
+    rekey: true,
+    merge: libraryMerge('Its subscriptions and issues move to this periodical'),
     fields: [
       { ...aname('Periodical', 120), identity: true },
       {
-        key: 'kind',
+        key: 'kind_id',
         header: 'Kind',
-        type: 'select',
-        options: ['Magazine', 'Newspaper', 'Journal', 'Bulletin'],
+        type: 'ref',
+        lookup: { table: 'library_periodical_kinds', column: 'name' },
         width: 12,
         bulk: true,
       },
       {
         key: 'frequency',
         header: 'Frequency',
+        help: 'A fixed list: it sets which issues are expected',
         type: 'select',
         options: [
           'Daily',
@@ -2358,10 +2413,49 @@ export const MASTERS: MasterDefinition[] = [
         pattern: '^[0-9]{4}-[0-9]{3}[0-9X]$',
         patternHelp: 'eight characters as 1234-567X',
       },
+      {
+        key: 'subscriptions',
+        header: 'Subscriptions',
+        type: 'number',
+        readOnly: true,
+        expr: 'SELECT count(*) FROM library_subscriptions x WHERE x.periodical_id = t.id',
+        width: 10,
+      },
     ],
     status: STATUS,
     search: ['t.name', 't.issn'],
     orderBy: 't.name',
+  }),
+  master({
+    id: 'library_periodical_kinds',
+    title: 'Periodical kinds',
+    group: 'library',
+    order: 85,
+    table: 'library_periodical_kinds',
+    permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
+    naturalKey: ['name'],
+    conflict: '(school_id, name)',
+    rekey: true,
+    fields: [
+      {
+        ...aname('Kind', 40),
+        identity: true,
+        help: 'e.g. Magazine, Newspaper, Children’s magazine',
+      },
+      order(),
+      {
+        key: 'periodicals',
+        header: 'Periodicals',
+        type: 'number',
+        readOnly: true,
+        expr: 'SELECT count(*) FROM library_periodicals x WHERE x.kind_id = t.id',
+        width: 10,
+      },
+    ],
+    status: STATUS,
+    search: ['t.name'],
+    orderBy: 't.sort_order, t.name',
+    uploadHelp: 'The kinds a periodical may be: the Kind list of the Periodicals tab.',
   }),
   master({
     id: 'library_shelves',
@@ -2372,6 +2466,7 @@ export const MASTERS: MasterDefinition[] = [
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
     naturalKey: ['library_id', 'code'],
     conflict: '(school_id, library_id, code)',
+    rekey: true,
     fields: [
       {
         key: 'library_id',
@@ -2381,6 +2476,10 @@ export const MASTERS: MasterDefinition[] = [
         required: true,
         identity: true,
         width: 16,
+        lockedWhen: {
+          field: 'copies',
+          help: 'Copies sit on this shelf, so its library stays; move them first or add a shelf there',
+        },
       },
       { ...acode('Shelf'), help: 'the almirah or shelf as marked, e.g. A3' },
       {
@@ -2399,6 +2498,14 @@ export const MASTERS: MasterDefinition[] = [
         maxLength: 20,
         width: 22,
         help: 'comma separated, e.g. R1, R2, R3',
+      },
+      {
+        key: 'copies',
+        header: 'Copies',
+        type: 'number',
+        readOnly: true,
+        expr: 'SELECT count(*) FROM library_copies c WHERE c.shelf_id = t.id',
+        width: 8,
       },
     ],
     status: STATUS,
@@ -2469,8 +2576,8 @@ export const MASTERS: MasterDefinition[] = [
     order: 110,
     table: 'library_borrow_rules',
     permission: { view: 'library.catalogue.view', manage: 'library.catalogue.manage' },
-    naturalKey: ['applies_to', 'class_id', 'staff_group'],
-    conflict: '(school_id, applies_to, class_id, staff_group)',
+    naturalKey: ['applies_to', 'class_id', 'staff_group', 'employee_type_id'],
+    conflict: '(school_id, applies_to, class_id, staff_group, employee_type_id)',
     rekey: true,
     fields: [
       {
@@ -2481,6 +2588,7 @@ export const MASTERS: MasterDefinition[] = [
         required: true,
         identity: true,
         width: 14,
+        help: 'A fixed list: the issue desk finds the rule by these',
       },
       {
         ...classRef('class_id', 'Class'),
@@ -2489,13 +2597,22 @@ export const MASTERS: MasterDefinition[] = [
         help: 'students: empty for every class',
       },
       {
+        key: 'employee_type_id',
+        header: 'Employee type',
+        type: 'ref',
+        lookup: { table: 'employee_types', column: 'code', nameFirst: true },
+        identity: true,
+        width: 18,
+        help: 'staff: a type from the employee record; or leave it empty and pick a staff group',
+      },
+      {
         key: 'staff_group',
         header: 'Staff group',
         type: 'select',
         options: ['Teaching', 'Non-teaching', 'Contract', 'Visiting'],
         identity: true,
         width: 14,
-        help: 'staff: empty for all staff',
+        help: 'A fixed list (the group on the employee record); both empty: all staff',
       },
       {
         key: 'max_books',
@@ -2564,9 +2681,9 @@ export const MASTERS: MasterDefinition[] = [
     status: STATUS,
     search: ['t.applies_to', 't.staff_group'],
     orderBy:
-      "CASE t.applies_to WHEN 'Student' THEN 1 WHEN 'Hostel student' THEN 2 ELSE 3 END, t.class_id NULLS FIRST, t.staff_group NULLS FIRST",
+      "CASE t.applies_to WHEN 'Student' THEN 1 WHEN 'Hostel student' THEN 2 ELSE 3 END, t.class_id NULLS FIRST, t.staff_group NULLS FIRST, t.employee_type_id NULLS FIRST",
     uploadHelp:
-      'The legacy Book limit. A rule with no class is for every class; with no staff group, for all staff. The most specific rule applies; a hostel rule before a student rule for a hostel student.',
+      'The legacy Book limit. A rule with no class is for every class; a staff rule names an employee type, a staff group or neither (all staff). The most specific rule applies: a hostel rule before a student rule for a hostel student; an employee type before a staff group.',
   }),
   // ---- library (Sprint 17) ----
   master({

@@ -8,6 +8,8 @@ export const RowsQuerySchema = z.object({
   status: z.enum(['active', 'inactive']).optional(),
   /** filter[field]=value pairs arrive flattened by the query parser as `filters` */
   filters: z.record(z.string().max(40), z.string().max(120)).optional(),
+  /** one row by its id (the edit form) */
+  id: z.string().regex(/^\d+$/).optional(),
 });
 export class RowsQueryDto extends createZodDto(RowsQuerySchema) {}
 
@@ -29,6 +31,12 @@ export const SaveRowSchema = z.object({
   values: z.record(z.string().max(40), z.union([z.string(), z.number(), z.boolean(), z.null()])),
 });
 export class SaveRowDto extends createZodDto(SaveRowSchema) {}
+
+export const MergeSchema = z.object({
+  /** the duplicate: its id or its name */
+  from: z.string().trim().min(1).max(200),
+});
+export class MergeDto extends createZodDto(MergeSchema) {}
 
 export const SetStatusSchema = z.object({ status: z.enum(['active', 'inactive']) });
 export class SetStatusDto extends createZodDto(SetStatusSchema) {}

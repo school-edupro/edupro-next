@@ -6,6 +6,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   BulkUpdateDto,
   CloneDto,
+  MergeDto,
   RowsQueryDto,
   ExportQueryDto,
   SaveRowDto,
@@ -47,8 +48,12 @@ export class MastersController {
   @ApiOperation({
     summary: 'Datalist options of every ref field (value, id, parent value for dependent lists)',
   })
-  lookups(@ReqCtx() ctx: RequestContext, @Param('master') master: string) {
-    return this.masters.lookups(ctx, master);
+  lookups(
+    @ReqCtx() ctx: RequestContext,
+    @Param('master') master: string,
+    @Query('merge') merge?: string,
+  ) {
+    return this.masters.lookups(ctx, master, merge === '1');
   }
 
   @Get(':master/template')
@@ -112,6 +117,18 @@ export class MastersController {
   @ApiOperation({ summary: 'Create or update one row from the grid form' })
   save(@ReqCtx() ctx: RequestContext, @Param('master') master: string, @Body() body: SaveRowDto) {
     return this.masters.save(ctx, master, body);
+  }
+
+  @Post(':master/rows/:id/merge')
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Merge a duplicate row into this one (what pointed at it moves here)' })
+  merge(
+    @ReqCtx() ctx: RequestContext,
+    @Param('master') master: string,
+    @Param('id') id: string,
+    @Body() body: MergeDto,
+  ) {
+    return this.masters.merge(ctx, master, id, body);
   }
 
   @Put(':master/rows/:id/status')

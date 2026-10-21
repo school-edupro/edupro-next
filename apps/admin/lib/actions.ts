@@ -3213,6 +3213,39 @@ export async function masterSave(fd: FormData) {
   back(path, 'ok');
 }
 
+/** A duplicate merged into the row being edited (what pointed at it moves there; it is removed). */
+export async function masterMerge(fd: FormData) {
+  const master = str(fd, 'master');
+  const id = str(fd, 'id');
+  const path = masterBack(fd);
+  let done: { kept: string; merged: string; moved: number } | null = null;
+  try {
+    done = await apiFetch<{ kept: string; merged: string; moved: number }>(
+      `/masters/${master}/rows/${id}/merge`,
+      { method: 'POST', body: JSON.stringify({ from: str(fd, 'from') }) },
+    );
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(path)}`);
+    if (error instanceof ApiError) {
+      // refused: the row stays open, with what to correct
+      const url = new URL(path, 'http://edupro.local');
+      for (const k of ['ok', 'error', 'detail', 'add', 'edit', 'vals']) url.searchParams.delete(k);
+      url.searchParams.set('edit', id);
+      url.searchParams.set('error', error.problem.type);
+      if (error.problem.detail) url.searchParams.set('detail', error.problem.detail.slice(0, 600));
+      url.searchParams.set('r', Date.now().toString(36));
+      redirect(`${url.pathname}${url.search}`);
+    }
+    throw error;
+  }
+  back(
+    path,
+    'ok',
+    `Merged “${done.merged}” into “${done.kept}”: ${done.moved} ${done.moved === 1 ? 'record' : 'records'} moved.`,
+  );
+}
+
 export async function masterStatus(fd: FormData) {
   // the row's toggle button carries "<id>:<next status>" (it sits inside the bulk form with the ticks)
   const [id, status] = str(fd, 'toggle').split(':');

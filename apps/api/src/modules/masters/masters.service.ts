@@ -3,6 +3,7 @@ import type { PoolClient, TenantContext } from '@edupro/db';
 import {
   editableKeys,
   hasSoftDelete,
+  MASTER_GROUPS,
   MASTERS,
   masterOrNull,
   masterColumns,
@@ -19,7 +20,14 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { tablePdf } from '../engagement/table-pdf';
 import { parseCsv } from '../people/csv';
-import type { BulkUpdateDto, CloneDto, RowsQueryDto, SaveRowDto, UploadDto } from './masters.dto';
+import type {
+  BulkUpdateDto,
+  CloneDto,
+  MergeDto,
+  RowsQueryDto,
+  SaveRowDto,
+  UploadDto,
+} from './masters.dto';
 
 export interface MasterRow extends Record<string, unknown> {
   id: string;
@@ -125,6 +133,8 @@ export class MastersService {
       order: m.order ?? 500,
       detail: m.detail ?? null,
       dataset: `master_${m.id}`,
+      merge: m.merge ? { note: m.merge.note } : null,
+      sources: listSources(m, held),
     }));
   }
 
@@ -146,10 +156,11 @@ export class MastersService {
     const offset = (query.page - 1) * query.size;
     return this.db.tenant(tenant, async (c) => {
       const n = inner.values.length;
+      // `id`: the one row the edit form opens, wherever it falls in the list
       const r = await c.query<MasterRow & { __total: string }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragment from the registry or a constant column list; values are bound
-        `SELECT t.*, count(*) OVER () AS __total FROM (${inner.text}) t LIMIT $${n + 1} OFFSET $${n + 2}`,
-        [...inner.values, query.size, offset],
+        `SELECT t.*, count(*) OVER () AS __total FROM (${inner.text}) t WHERE ($${n + 3}::text IS NULL OR t.id = $${n + 3}) LIMIT $${n + 1} OFFSET $${n + 2}`,
+        [...inner.values, query.size, offset, query.id ?? null],
       );
       const total = Number(r.rows[0]?.__total ?? 0);
       return {
@@ -683,6 +694,73 @@ export class MastersService {
     );
   }
 
+  // ---- merge ------------------------------------------------------------------------------------------
+  /**
+   * A duplicate merged into the row kept: what pointed at the duplicate moves to the row kept and the
+   * duplicate is removed (the master's merge function). The duplicate is named by its id or its name.
+   */
+  async merge(
+    ctx: RequestContext,
+    id: string,
+    keepId: string,
+    dto: MergeDto,
+  ): Promise<{ kept: string; merged: string; moved: number; titles: number }> {
+    const def = this.def(id);
+    this.assertPermission(ctx, def, true);
+    if (!def.merge)
+      throw new DomainError('validation-failed', `${def.title}: rows cannot be merged`, {
+        status: 400,
+      });
+    const key = def.naturalKey[0]!;
+    return this.changed(
+      ctx,
+      def.id,
+      this.db.tenant(requireTenant(ctx), async (c) => {
+        const rows = await c.query<{ id: string; name: string }>(
+          // eslint-disable-next-line no-restricted-syntax -- table and key column come from the registry; values are bound
+          `SELECT id::text, ${key}::text AS name FROM ${def.table}
+            WHERE id = $1 OR lower(${key}::text) = lower($2) OR id::text = $2`,
+          [keepId, dto.from.trim()],
+        );
+        const keep = rows.rows.find((x) => x.id === keepId);
+        if (!keep) throw new DomainError('not-found', 'Row not found', { status: 404 });
+        const drop = rows.rows.find((x) => x.id !== keepId);
+        if (!drop)
+          throw new DomainError(
+            'validation-failed',
+            rows.rows.length === 1 && dto.from.trim().toLowerCase() === keep.name.toLowerCase()
+              ? `${def.title}: pick another row; a row cannot be merged into itself`
+              : `${def.title}: no row named “${dto.from.trim()}”`,
+            { status: 400 },
+          );
+        let out: { moved: number; titles: number };
+        try {
+          const r = await c.query<{ out: { moved: number; titles: number } }>(
+            // eslint-disable-next-line no-restricted-syntax -- the merge function name comes from the registry; values are bound
+            `SELECT ${def.merge!.fn}($1, $2, $3) AS out`,
+            [def.table, keep.id, drop.id],
+          );
+          out = r.rows[0]!.out;
+        } catch (error) {
+          const e = error as { code?: string; message?: string };
+          if (e.code && e.code.startsWith('23'))
+            throw new DomainError('validation-failed', `${def.title}: ${e.message ?? 'refused'}`, {
+              status: 400,
+            });
+          throw error;
+        }
+        await this.audit.stage(ctx, c, {
+          action: 'masters.row.merge',
+          entityType: def.table,
+          entityId: keep.id,
+          before: { merged: { id: drop.id, [key]: drop.name } },
+          after: { kept: { id: keep.id, [key]: keep.name }, moved: out.moved, titles: out.titles },
+        });
+        return { kept: keep.name, merged: drop.name, moved: out.moved, titles: out.titles };
+      }),
+    );
+  }
+
   // ---- bulk update -------------------------------------------------------------------------------
   async bulk(ctx: RequestContext, id: string, dto: BulkUpdateDto): Promise<{ updated: number }> {
     const def = this.def(id);
@@ -785,12 +863,25 @@ export class MastersService {
   }
 
   /** Datalist options per ref field: value, id and the parent's value when the lookup declares one. */
-  async lookups(ctx: RequestContext, id: string): Promise<Record<string, MasterLookupOption[]>> {
+  async lookups(
+    ctx: RequestContext,
+    id: string,
+    withMerge = false,
+  ): Promise<Record<string, MasterLookupOption[]>> {
     const def = this.def(id);
     this.assertPermission(ctx, def, false);
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const out: Record<string, MasterLookupOption[]> = {};
+      if (withMerge && def.merge) {
+        // the rows a duplicate may be: every row of this master, by its name
+        const key = def.naturalKey[0]!;
+        const r = await c.query<MasterLookupOption>(
+          // eslint-disable-next-line no-restricted-syntax -- table and key column come from the registry
+          `SELECT id::text, ${key}::text AS value, NULL AS parent, NULL AS label FROM ${def.table} ORDER BY 2 LIMIT 5000`,
+        );
+        out.__merge = r.rows;
+      }
       for (const f of def.fields) {
         if (f.type !== 'ref' || !f.lookup) continue;
         const l = f.lookup;
@@ -916,6 +1007,38 @@ function refReadings(text: string): string[] {
 }
 
 /** Rules across two fields of a row: a date that may not be before another. */
+/**
+ * Where each drop-down of a master gets its list: for a field that points at another master, that
+ * master's setup page and tab (and whether the caller may open it).
+ */
+function listSources(
+  def: MasterDefinition,
+  held: ReadonlySet<string>,
+): Record<
+  string,
+  { id: string; group: string; title: string; groupTitle: string; canView: boolean }
+> {
+  const out: Record<
+    string,
+    { id: string; group: string; title: string; groupTitle: string; canView: boolean }
+  > = {};
+  for (const f of def.fields) {
+    if (f.type !== 'ref' || !f.lookup) continue;
+    const table = f.lookup.table;
+    const src =
+      MASTERS.find((m) => m.table === table && !m.hidden) ?? MASTERS.find((m) => m.table === table);
+    if (!src || src.id === def.id) continue;
+    out[f.key] = {
+      id: src.id,
+      group: src.group,
+      title: src.title,
+      groupTitle: MASTER_GROUPS[src.group].title,
+      canView: held.has(src.permission.view) && !src.hidden,
+    };
+  }
+  return out;
+}
+
 function crossChecks(
   fields: MasterField[],
   out: Record<string, unknown>,

@@ -1,4 +1,13 @@
-import { Badge, Button, Card, FormRow, InputField, PageHeader, SelectField } from '@edupro/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  FormRow,
+  InputField,
+  PageHeader,
+  SelectField,
+} from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
@@ -11,6 +20,7 @@ import { Icon } from '@/components/nav-icons';
 import {
   masterBulk,
   masterClone,
+  masterMerge,
   masterSave,
   masterStatus,
   masterUploadCommit,
@@ -25,6 +35,7 @@ import {
   type MasterLookupOption,
   type MasterMeta,
   type MasterRow,
+  type MasterSource,
 } from '@/lib/masters';
 import type { Page } from '@/lib/types';
 
@@ -109,8 +120,8 @@ export default async function MasterGroupPage({
       ? apiFetch<{ data: MasterImport[] }>(`/masters/${master.id}/imports`).then((r) => r.data)
       : Promise.resolve([] as MasterImport[]),
     sp.edit && /^\d+$/.test(sp.edit)
-      ? apiFetch<Page<MasterRow>>(`/masters/${master.id}/rows?size=500&page=1`).then(
-          (r) => r.data.find((x) => x.id === sp.edit) ?? null,
+      ? apiFetch<Page<MasterRow>>(`/masters/${master.id}/rows?id=${sp.edit}&size=1&page=1`).then(
+          (r) => r.data[0] ?? null,
         )
       : Promise.resolve(null),
     sp.export && /^\d+$/.test(sp.export)
@@ -119,10 +130,13 @@ export default async function MasterGroupPage({
           download: { url: string } | null;
         }>(`/reports/exports/${sp.export}`).catch(() => null)
       : Promise.resolve(null),
-    wantsForm && master.fields.some((f) => f.type === 'ref')
-      ? apiFetch<Record<string, MasterLookupOption[]>>(`/masters/${master.id}/lookups`).catch(
-          () => ({}) as Record<string, MasterLookupOption[]>,
-        )
+    wantsForm &&
+    (master.fields.some((f) => f.type === 'ref') ||
+      Boolean(sp.edit && master.merge && master.canManage))
+      ? apiFetch<Record<string, MasterLookupOption[]>>(
+          // editing a row that can take a duplicate: the rows it may be, too
+          `/masters/${master.id}/lookups${sp.edit && master.merge && master.canManage ? '?merge=1' : ''}`,
+        ).catch(() => ({}) as Record<string, MasterLookupOption[]>)
       : Promise.resolve({} as Record<string, MasterLookupOption[]>),
   ]);
   const total = rows.page.total;
@@ -663,21 +677,38 @@ function RowForm({
           {fields
             // the map picker of the latitude field carries the longitude too
             .filter((f) => !(f.key === 'lng' && fields.some((x) => x.widget === 'map')))
-            .map((f) => (
-              <FieldInput
-                key={f.key}
-                f={f}
-                lookups={lookups}
-                value={
-                  typed && f.key in typed ? (typed[f.key] ?? '') : row ? (row[f.key] ?? '') : ''
-                }
-                lng={typed && 'lng' in typed ? (typed.lng ?? '') : row ? (row.lng ?? '') : ''}
-                locked={Boolean(row && f.identity && !master.editableKeys?.includes(f.key))}
-                lockedHelp={t('identityLocked')}
-                yes={t('yes')}
-                no={t('no')}
-              />
-            ))}
+            .map((f) => {
+              // a key that may change only until the row is in use (copies on a shelf)
+              const used = Boolean(row && f.lockedWhen && Number(row[f.lockedWhen.field] ?? 0) > 0);
+              const locked = Boolean(
+                row && f.identity && (!master.editableKeys?.includes(f.key) || used),
+              );
+              const input = (
+                <FieldInput
+                  key={f.key}
+                  f={f}
+                  lookups={lookups}
+                  value={
+                    typed && f.key in typed ? (typed[f.key] ?? '') : row ? (row[f.key] ?? '') : ''
+                  }
+                  lng={typed && 'lng' in typed ? (typed.lng ?? '') : row ? (row.lng ?? '') : ''}
+                  locked={locked}
+                  lockedHelp={used ? f.lockedWhen!.help : t('identityLocked')}
+                  fixedList={t('fixedList')}
+                  yes={t('yes')}
+                  no={t('no')}
+                />
+              );
+              const source = master.sources?.[f.key];
+              return source && !locked ? (
+                <div key={f.key}>
+                  {input}
+                  <ListSource source={source} t={t} />
+                </div>
+              ) : (
+                input
+              );
+            })}
         </FormRow>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', justifyContent: 'flex-end' }}>
           <a className="ep-btn ep-btn--ghost" href={back}>
@@ -686,7 +717,60 @@ function RowForm({
           <Button type="submit">{t('save')}</Button>
         </div>
       </form>
+      {row && master.merge && lookups.__merge ? (
+        <form action={masterMerge} className="ep-master__merge">
+          <h4 className="ep-master__panel-title">{t('mergeTitle')}</h4>
+          <input type="hidden" name="master" value={master.id} />
+          <input type="hidden" name="back" value={back} />
+          <input type="hidden" name="id" value={row.id} />
+          <FormRow columns={2}>
+            <RefDatalist
+              id="merge-from"
+              name="from"
+              label={t('mergeFrom')}
+              required
+              help={t('mergeHelp', { note: master.merge.note })}
+              options={lookups.__merge
+                .filter((o) => o.id !== row.id)
+                .map((o) => ({ value: o.value }))}
+            />
+            <Checkbox id="merge-sure" name="sure" required label={t('mergeSure')} />
+          </FormRow>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button type="submit" variant="secondary">
+              {t('mergeButton')}
+            </Button>
+          </div>
+        </form>
+      ) : null}
     </section>
+  );
+}
+
+/** Under a drop-down kept on another tab: where its list is, and a link to keep it (a new tab). */
+function ListSource({
+  source,
+  t,
+}: {
+  source: MasterSource;
+  t: Awaited<ReturnType<typeof getTranslations<'masters'>>>;
+}) {
+  return (
+    <p className="ep-field__help ep-master__source">
+      {t('listFrom', { group: source.groupTitle, tab: source.title })}
+      {source.canView ? (
+        <>
+          {' · '}
+          <a
+            href={`/masters/${source.group}?tab=${source.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t('manageList')}
+          </a>
+        </>
+      ) : null}
+    </p>
   );
 }
 
@@ -695,6 +779,7 @@ function FieldInput({
   value,
   locked,
   lockedHelp,
+  fixedList,
   yes,
   no,
   lookups,
@@ -707,6 +792,8 @@ function FieldInput({
   lng: string;
   locked: boolean;
   lockedHelp: string;
+  /** the help of a drop-down whose choices are fixed */
+  fixedList: string;
   yes: string;
   no: string;
 }) {
@@ -736,7 +823,7 @@ function FieldInput({
         label={f.header}
         required={f.required}
         defaultValue={value}
-        help={help}
+        help={help ?? fixedList}
         options={f.options.map((o) => ({ value: o }))}
       />
     );

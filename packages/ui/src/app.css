@@ -1360,6 +1360,18 @@
   margin: 0 0 var(--sp-3);
 }
 
+/* the edit panel's second form: a duplicate merged into the row */
+.ep-master__merge {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-default);
+}
+
+/* under a drop-down: the setup tab its list is kept on */
+.ep-master__source {
+  margin: var(--sp-1) 0 0;
+}
+
 .ep-master__report {
   margin-top: var(--sp-3);
 }
