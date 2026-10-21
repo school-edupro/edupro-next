@@ -94,6 +94,17 @@ export default async function CandidatesPage({
         kicker="Recruitment"
         title="Candidates"
         description="Every application and where it stands. Pick a vacancy and a stage to take its candidates on together."
+        actions={
+          list.data.length ? (
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/api/recruitment-export${qs ? `?${qs}` : ''}`}
+              title="Every detail of the candidates shown, with their qualifications, experience and stages"
+            >
+              Export to Excel ({list.data.length})
+            </a>
+          ) : null
+        }
       />
       <Notice params={sp} />
       <div className="ep-dash-kpis" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -235,6 +246,17 @@ export default async function CandidatesPage({
               </button>
               <button type="submit" formAction={bulkFail} className="ep-btn ep-btn--ghost">
                 Not taken forward
+              </button>
+              <button
+                type="submit"
+                formAction="/api/recruitment-export"
+                formMethod="get"
+                name="ticked"
+                value="1"
+                formNoValidate
+                className="ep-btn ep-btn--ghost"
+              >
+                Export ticked to Excel
               </button>
             </div>
             <p className="ep-field__help" style={{ marginBottom: 0 }}>

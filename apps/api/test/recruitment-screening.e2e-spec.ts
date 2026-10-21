@@ -258,7 +258,8 @@ describe('recruitment: candidates and screening (e2e)', () => {
       ['Interview', 1],
       ['Final round', 0],
     ]);
-    // the notices that had an address were queued through the school's templates (email; SMS needs DLT ids)
+    // the notices that had an address were queued through the school's templates (email; SMS needs DLT
+    // ids): received, shortlisting and the interview cleared (each stage tells its result, 0204), selected
     const sent = await withMigrator((c) =>
       c.query<{ code: string }>(
         `SELECT t.code FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
@@ -266,7 +267,12 @@ describe('recruitment: candidates and screening (e2e)', () => {
         [school.id],
       ),
     );
-    expect(sent.rows.map((x) => x.code)).toEqual(['recruitment_applied', 'recruitment_selected']);
+    expect(sent.rows.map((x) => x.code)).toEqual([
+      'recruitment_applied',
+      'recruitment_passed',
+      'recruitment_passed',
+      'recruitment_selected',
+    ]);
   });
 
   it('the notices are the school’s to set; rejection notices start off', async () => {

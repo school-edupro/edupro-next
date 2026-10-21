@@ -25,6 +25,7 @@ import { MastersService } from '../masters/masters.service';
 import { RecruitmentApprovalService } from './recruitment-approval.service';
 import { ApplicationPdfService } from './application-pdf.service';
 import { RecruitmentCorrectionsService } from './recruitment-corrections.service';
+import { RecruitmentExportService } from './recruitment-export.service';
 import { CandidateAuthService } from './candidate-auth.service';
 import { CandidateGuard } from './candidate.guard';
 import { RecruitmentPublicController } from './recruitment-public.controller';
@@ -80,6 +81,7 @@ import { StudentsService } from './students.service';
     RecruitmentApprovalService,
     ApplicationPdfService,
     RecruitmentCorrectionsService,
+    RecruitmentExportService,
     RecruitmentPublicService,
     RecruitmentScreeningService,
     RecruitmentJoinService,

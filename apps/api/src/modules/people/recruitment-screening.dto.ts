@@ -32,6 +32,12 @@ export const ApplicationListSchema = z.object({
 });
 export class ApplicationListDto extends createZodDto(ApplicationListSchema) {}
 
+/** The candidates as an Excel workbook: the list's filters, or the ticked ones. */
+export const ApplicationExportSchema = ApplicationListSchema.extend({
+  ids: z.array(Id).max(2000).optional(),
+});
+export class ApplicationExportDto extends createZodDto(ApplicationExportSchema) {}
+
 /** A stage of one application: when and where, the panel; once held, the marks and the result. */
 export const StageResultSchema = z.object({
   scheduledAt: When.nullable().optional(),

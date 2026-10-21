@@ -72,3 +72,37 @@ export const nameOf = (a: Pick<AppRow, 'snapshot' | 'c_name'>) =>
   [a.snapshot.values.first_name, a.snapshot.values.last_name].filter(Boolean).join(' ') ||
   a.c_name ||
   'Candidate';
+
+/** The candidates list's filters (vacancy, status, stage, search, employee match, ticked ids) as SQL. */
+export function appFilter(q: {
+  vacancy?: string;
+  status?: AppStatus;
+  stage?: string;
+  q?: string;
+  match?: boolean;
+  ids?: string[];
+}) {
+  const where: string[] = [];
+  const args: unknown[] = [];
+  const arg = (v: unknown) => {
+    args.push(v);
+    return `$${String(args.length)}`;
+  };
+  if (q.vacancy) where.push(`a.vacancy_id = ${arg(q.vacancy)}`);
+  if (q.status) where.push(`a.status = ${arg(q.status)}`);
+  if (q.stage)
+    where.push(
+      `a.current_stage_id = ${arg(q.stage)} AND a.status IN ('submitted', 'screening', 'on_hold')`,
+    );
+  if (q.q) {
+    const p = arg(`%${q.q.toLowerCase()}%`);
+    where.push(
+      `(lower(a.number) LIKE ${p} OR lower(COALESCE(c.name, '')) LIKE ${p}
+        OR lower(COALESCE(a.snapshot->'values'->>'first_name', '') || ' ' || COALESCE(a.snapshot->'values'->>'last_name', '')) LIKE ${p}
+        OR COALESCE(c.mobile, '') LIKE ${p} OR lower(COALESCE(c.email::text, '')) LIKE ${p})`,
+    );
+  }
+  if (q.match) where.push(`a.employee_match IS NOT NULL`);
+  if (q.ids?.length) where.push(`a.id = ANY(${arg(q.ids)}::bigint[])`);
+  return { sql: where.length ? `WHERE ${where.join(' AND ')}` : '', args };
+}

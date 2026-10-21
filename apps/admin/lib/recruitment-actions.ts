@@ -34,6 +34,8 @@ export async function saveRecruitmentStages(
     kind: StageKind;
     maxMarks: number | null;
     active: boolean;
+    emailScheduled: boolean;
+    emailResult: boolean;
   }>,
 ): Promise<Out> {
   try {
@@ -326,7 +328,12 @@ async function correct(fd: FormData, path: string, body: unknown, ok: string) {
   done(page, ok);
 }
 export async function undoDecision(fd: FormData) {
-  await correct(fd, 'undo', { reason: str(fd, 'reason') }, 'Undone: the application is back where it was.');
+  await correct(
+    fd,
+    'undo',
+    { reason: str(fd, 'reason') },
+    'Undone: the application is back where it was.',
+  );
 }
 export async function moveStage(fd: FormData) {
   await correct(
@@ -371,7 +378,9 @@ export async function saveCorrectionSettings(s: {
       const list = e.problem.errors as Array<{ message?: string }> | undefined;
       return {
         ok: false,
-        error: list?.length ? list.map((x) => x.message).join('; ') : (e.problem.detail ?? e.problem.type),
+        error: list?.length
+          ? list.map((x) => x.message).join('; ')
+          : (e.problem.detail ?? e.problem.type),
       };
     }
     throw e;

@@ -25,6 +25,7 @@ import {
 import { RecruitmentCorrectionsService } from './recruitment-corrections.service';
 import {
   ApplicationBulkDto,
+  ApplicationExportDto,
   ApplicationListDto,
   ApplicationNoteDto,
   RecruitmentNoticesDto,
@@ -32,6 +33,7 @@ import {
   WalkInDto,
 } from './recruitment-screening.dto';
 import { RecruitmentScreeningService } from './recruitment-screening.service';
+import { RecruitmentExportService } from './recruitment-export.service';
 import { JoinDto } from './recruitment-join.dto';
 import { RecruitmentJoinService } from './recruitment-join.service';
 import { PEOPLE } from './people.permissions';
@@ -48,6 +50,7 @@ export class RecruitmentController {
     private readonly joining: RecruitmentJoinService,
     private readonly approval: RecruitmentApprovalService,
     private readonly corrections: RecruitmentCorrectionsService,
+    private readonly exporter: RecruitmentExportService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -236,6 +239,16 @@ export class RecruitmentController {
   @RequirePermission(PEOPLE.recruitmentManage)
   walkIn(@ReqCtx() ctx: RequestContext, @Body() body: WalkInDto) {
     return this.screening.walkIn(ctx, body);
+  }
+
+  @Post('applications/export')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'The candidates as filtered (or the ticked ones) as an Excel workbook (base64)',
+  })
+  @RequirePermission(PEOPLE.recruitmentView)
+  exportApplications(@ReqCtx() ctx: RequestContext, @Body() body: ApplicationExportDto) {
+    return this.exporter.export(ctx, body);
   }
 
   @Post('applications/bulk')

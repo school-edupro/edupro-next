@@ -19,6 +19,10 @@ export const RecruitmentStagesSchema = z.object({
         kind: z.enum(['shortlist', 'test', 'interview', 'final']),
         maxMarks: z.number().min(1).max(1000).nullable().optional(),
         active: z.boolean().default(true),
+        /** an email to the candidate when this stage is scheduled (0204) */
+        emailScheduled: z.boolean().default(true),
+        /** an email of this stage's result: cleared (with the next stage) or not through */
+        emailResult: z.boolean().default(true),
       }),
     )
     .min(1)

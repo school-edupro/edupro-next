@@ -133,8 +133,11 @@ export class RecruitmentService {
       max_marks: string | null;
       sort_order: number;
       active: boolean;
+      email_scheduled: boolean;
+      email_result: boolean;
     }>(
-      `SELECT id::text, name, kind, max_marks::text, sort_order, active FROM recruitment_stages ORDER BY sort_order, id`,
+      `SELECT id::text, name, kind, max_marks::text, sort_order, active, email_scheduled, email_result
+         FROM recruitment_stages ORDER BY sort_order, id`,
     );
   }
 
@@ -160,6 +163,8 @@ export class RecruitmentService {
           kind: x.kind,
           maxMarks: x.max_marks === null ? null : Number(x.max_marks),
           active: x.active,
+          emailScheduled: x.email_scheduled,
+          emailResult: x.email_result,
         })),
         departments: lists.Department ?? [],
         designations: lists.Designation ?? [],
@@ -188,8 +193,18 @@ export class RecruitmentService {
         const order = (i + 1) * 10;
         if (s.id) {
           const u = await c.query(
-            `UPDATE recruitment_stages SET name = $2, kind = $3, max_marks = $4, sort_order = $5, active = $6 WHERE id = $1`,
-            [s.id, s.name, s.kind, s.maxMarks ?? null, order, s.active],
+            `UPDATE recruitment_stages SET name = $2, kind = $3, max_marks = $4, sort_order = $5, active = $6,
+                    email_scheduled = $7, email_result = $8 WHERE id = $1`,
+            [
+              s.id,
+              s.name,
+              s.kind,
+              s.maxMarks ?? null,
+              order,
+              s.active,
+              s.emailScheduled,
+              s.emailResult,
+            ],
           );
           if (u.rowCount) {
             keep.push(s.id);
@@ -197,9 +212,9 @@ export class RecruitmentService {
           }
         }
         const r = await c.query<{ id: string }>(
-          `INSERT INTO recruitment_stages (school_id, name, kind, max_marks, sort_order, active)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5) RETURNING id::text`,
-          [s.name, s.kind, s.maxMarks ?? null, order, s.active],
+          `INSERT INTO recruitment_stages (school_id, name, kind, max_marks, sort_order, active, email_scheduled, email_result)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7) RETURNING id::text`,
+          [s.name, s.kind, s.maxMarks ?? null, order, s.active, s.emailScheduled, s.emailResult],
         );
         keep.push(r.rows[0]!.id);
       }

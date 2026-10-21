@@ -312,3 +312,32 @@ a reminder a day before).
 - Tests: `recruitment-corrections.e2e-spec.ts` (settings; undo refused and done; the window and who may;
   move forward, undo, move back from not taken forward with the email; send back, reminder, resend with
   only the marked part changed, take back); `a11y.spec.ts` (the application page's tabs).
+
+## Part 9 — the candidates in Excel; which stages tell the candidate by email (migration 0204, built)
+
+Decisions (21 Oct 2026): the export takes the candidates **as filtered** (the ticked ones when some are
+ticked); a **main sheet plus a sheet per list**; each stage has **two email switches: scheduled and
+result**; the switches are for **email only** (SMS and WhatsApp follow Notices to candidates).
+
+- **Excel** (`POST people/recruitment/applications/export`, recruitment view; `RecruitmentExportService`;
+  admin `/api/recruitment-export`): "Export to Excel (n)" on the candidates page takes the list's filters
+  (vacancy, stage, status, search, employee match); "Export ticked to Excel" beside the bulk actions
+  takes the ticked ones (nothing ticked: back to the list with a message). The workbook:
+  **Candidates** (one row per application: number, name, post, vacancy, source, applied on, status,
+  current stage; each stage's date, result and marks; every answer of the form; interests; documents
+  given; decision note and date; a correction asked; the employee it matches; the employee code it
+  joined as), **Qualifications, Experience, Training and workshops, Children, References** (one row per
+  entry, with the application number and name), **About this export** (school, when, by whom, the
+  filters, rows, whether Aadhaar and PAN are in full). Dates are Excel dates (India time); header frozen
+  with a filter on every column. Aadhaar and PAN in full only with `people.sensitive.view`; up to 5,000
+  rows (the latest; the About sheet says so when cut). Every export is in the audit log
+  (`people.recruitment.export`).
+- **Stage emails** (`recruitment_stages.email_scheduled`, `email_result`, both on to start; Recruitment
+  set-up → Screening stages, two columns): "Email when scheduled" (date, time, venue) and "Email the
+  result": cleared (a new email, `recruitment_passed`, naming the next stage) or not through (the
+  "not taken forward" notice, also when the office ends an application at that stage). Selection is the
+  "selected" notice. The school's notices (Notices to candidates) still decide whether a kind of notice
+  goes at all and by which channels; a stage switched off stops only its emails.
+- Tests: `recruitment-stage-emails.e2e-spec.ts` (switches saved by the school admin only; emails only at
+  the stages that tell; the workbook's sheets, columns, stage results, dates, masking, the ticked ones,
+  a status filter, the audit rows); `recruitment-screening.e2e-spec.ts` (cleared emails now queued).

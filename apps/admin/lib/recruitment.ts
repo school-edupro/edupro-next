@@ -9,6 +9,10 @@ export interface RecruitmentStage {
   kind: StageKind;
   maxMarks: number | null;
   active: boolean;
+  /** an email to the candidate when the stage is scheduled (0204) */
+  emailScheduled: boolean;
+  /** an email of the stage's result: cleared (with the next stage) or not through */
+  emailResult: boolean;
 }
 export interface RecruitmentSetup {
   stages: RecruitmentStage[];

@@ -8,7 +8,9 @@ type Row = RecruitmentStage & { key: string };
 /**
  * The school's screening stages, in order (0197): each vacancy ticks the ones it uses. A stage records a
  * yes/no on the papers (shortlisting), marks (a test, an interview) or the selection (the final round).
- * A stage switched off stays on the vacancies that already use it.
+ * A stage switched off stays on the vacancies that already use it. Each stage says whether the candidate
+ * gets an email when it is scheduled and an email of its result (0204); SMS and WhatsApp follow the
+ * notices below.
  */
 export function StagesEditor({
   stages,
@@ -40,6 +42,8 @@ export function StagesEditor({
         kind: 'interview',
         maxMarks: null,
         active: true,
+        emailScheduled: true,
+        emailResult: true,
       },
     ]);
   const save = () =>
@@ -53,6 +57,8 @@ export function StagesEditor({
             kind: x.kind,
             maxMarks: x.kind === 'test' || x.kind === 'interview' ? x.maxMarks : null,
             active: x.active,
+            emailScheduled: x.emailScheduled,
+            emailResult: x.emailResult,
           })),
       );
       setMsg(r.ok ? { tone: 'success', text: 'Saved.' } : { tone: 'danger', text: r.error });
@@ -63,7 +69,10 @@ export function StagesEditor({
         Screening stages
       </h2>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        The order candidates go through. Each vacancy ticks the stages it uses.
+        The order candidates go through. Each vacancy ticks the stages it uses. The email columns
+        say what the candidate is told by email at each stage: its date, time and venue when it is
+        scheduled; its result (cleared, with the next stage, or not through). Selection is told by
+        the notice below.
       </p>
       {msg ? (
         <p className={`ep-alert ep-alert--${msg.tone}`} role="status">
@@ -78,6 +87,8 @@ export function StagesEditor({
               <th scope="col">Stage</th>
               <th scope="col">What it records</th>
               <th scope="col">Out of (marks)</th>
+              <th scope="col">Email when scheduled</th>
+              <th scope="col">Email the result</th>
               <th scope="col">On</th>
               <th scope="col">
                 <span className="ep-sr-only">Order</span>
@@ -129,6 +140,24 @@ export function StagesEditor({
                   ) : (
                     <span className="ep-field__help">—</span>
                   )}
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Email when stage ${String(i + 1)} is scheduled`}
+                    checked={r.emailScheduled}
+                    disabled={!canEdit}
+                    onChange={(e) => set(r.key, { emailScheduled: e.target.checked })}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Email the result of stage ${String(i + 1)}`}
+                    checked={r.emailResult}
+                    disabled={!canEdit}
+                    onChange={(e) => set(r.key, { emailResult: e.target.checked })}
+                  />
                 </td>
                 <td>
                   <input

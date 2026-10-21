@@ -22,6 +22,7 @@ import { PEOPLE } from './people.permissions';
 import {
   APP_COLS,
   OPEN,
+  appFilter,
   nameOf,
   type AppRow,
   type AppStatus,
@@ -102,35 +103,11 @@ export class RecruitmentScreeningService {
 
   async list(ctx: RequestContext, q: ApplicationListDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const where: string[] = [];
-      const args: unknown[] = [];
-      if (q.vacancy) {
-        args.push(q.vacancy);
-        where.push(`a.vacancy_id = $${String(args.length)}`);
-      }
-      if (q.status) {
-        args.push(q.status);
-        where.push(`a.status = $${String(args.length)}`);
-      }
-      if (q.stage) {
-        args.push(q.stage);
-        where.push(
-          `a.current_stage_id = $${String(args.length)} AND a.status IN ('submitted', 'screening', 'on_hold')`,
-        );
-      }
-      if (q.q) {
-        args.push(`%${q.q.toLowerCase()}%`);
-        where.push(
-          `(lower(a.number) LIKE $${String(args.length)} OR lower(COALESCE(c.name, '')) LIKE $${String(args.length)}
-            OR lower(COALESCE(a.snapshot->'values'->>'first_name', '') || ' ' || COALESCE(a.snapshot->'values'->>'last_name', '')) LIKE $${String(args.length)}
-            OR COALESCE(c.mobile, '') LIKE $${String(args.length)} OR lower(COALESCE(c.email::text, '')) LIKE $${String(args.length)})`,
-        );
-      }
-      if (q.match) where.push(`a.employee_match IS NOT NULL`);
+      const f = appFilter(q);
       const r = await c.query<AppRow>(
-        // eslint-disable-next-line no-restricted-syntax -- fixed fragments chosen above; values are bound
-        `${APP_COLS} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY a.submitted_at DESC, a.id DESC LIMIT 2000`,
-        args,
+        // eslint-disable-next-line no-restricted-syntax -- fixed fragments chosen in appFilter; values are bound
+        `${APP_COLS} ${f.sql} ORDER BY a.submitted_at DESC, a.id DESC LIMIT 2000`,
+        f.args,
       );
       const counts = await c.query<{ status: AppStatus; n: number }>(
         `SELECT status, count(*)::int AS n FROM job_applications WHERE ($1::bigint IS NULL OR vacancy_id = $1) GROUP BY status`,
@@ -440,6 +417,7 @@ export class RecruitmentScreeningService {
       await c.query(`SELECT app.recruitment_notify($1, 'scheduled', $2::jsonb)`, [
         a.id,
         JSON.stringify({
+          stageId,
           stage: st.name,
           date: istDate(sched),
           time: istTime(sched),
@@ -481,7 +459,10 @@ export class RecruitmentScreeningService {
         `${st.name}${dto.remarks ? `: ${dto.remarks}` : ''}`,
         { stageId, prevStatus: a.status === 'submitted' ? 'screening' : a.status },
       );
-      await c.query(`SELECT app.recruitment_notify($1, 'not_selected')`, [a.id]);
+      await c.query(`SELECT app.recruitment_notify($1, 'not_selected', $2::jsonb)`, [
+        a.id,
+        JSON.stringify({ stageId }),
+      ]);
       return;
     }
     const i = a.stage_ids.indexOf(stageId);
@@ -492,6 +473,19 @@ export class RecruitmentScreeningService {
         [a.id, next],
       );
       await this.event(c, ctx, a.id, 'passed', st.name, { stageId });
+      // the stage cleared, by email when the stage tells its result (0204)
+      const nextName = await c.query<{ name: string }>(
+        `SELECT name FROM recruitment_stages WHERE id = $1`,
+        [next],
+      );
+      await c.query(`SELECT app.recruitment_notify($1, 'passed', $2::jsonb)`, [
+        a.id,
+        JSON.stringify({
+          stageId,
+          stage: st.name,
+          next: nextName.rows[0]?.name ?? 'the next stage',
+        }),
+      ]);
       return;
     }
     await c.query(
@@ -563,7 +557,11 @@ export class RecruitmentScreeningService {
         stageId: null,
         prevStatus: a.status,
       });
-      await c.query(`SELECT app.recruitment_notify($1, 'not_selected')`, [id]);
+      // told as the result of the stage it was at (that stage's email switch, 0204)
+      await c.query(`SELECT app.recruitment_notify($1, 'not_selected', $2::jsonb)`, [
+        id,
+        JSON.stringify(a.current_stage_id ? { stageId: a.current_stage_id } : {}),
+      ]);
       return { status: 'rejected' };
     });
   }
