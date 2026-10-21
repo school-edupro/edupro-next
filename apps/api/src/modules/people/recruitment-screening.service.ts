@@ -19,6 +19,15 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { FilesService } from '../files/files.service';
 import { ApplicationPdfService } from './application-pdf.service';
 import { PEOPLE } from './people.permissions';
+import {
+  APP_COLS,
+  OPEN,
+  nameOf,
+  type AppRow,
+  type AppStatus,
+  type Snapshot,
+} from './recruitment-app';
+import { RecruitmentCorrectionsService } from './recruitment-corrections.service';
 import type {
   ApplicationBulkDto,
   ApplicationListDto,
@@ -28,52 +37,6 @@ import type {
   WalkInDto,
 } from './recruitment-screening.dto';
 
-type AppStatus =
-  'submitted' | 'screening' | 'selected' | 'rejected' | 'on_hold' | 'withdrawn' | 'joined';
-const OPEN: AppStatus[] = ['submitted', 'screening', 'on_hold'];
-interface Snapshot {
-  values: Record<string, unknown>;
-  rows: Partial<Record<CandidateRowKind, Array<Record<string, string | null>>>>;
-  activities: string[];
-  files: Array<{ id: string; kind: string; fileId: string; contentType: string }>;
-}
-interface AppRow {
-  id: string;
-  number: string;
-  vacancy_id: string;
-  vacancy: string;
-  vacancy_code: string;
-  stage_ids: string[];
-  candidate_id: string;
-  status: AppStatus;
-  current_stage_id: string | null;
-  stage: string | null;
-  source: 'online' | 'office';
-  snapshot: Snapshot;
-  snapshot_secure: Record<string, string>;
-  employee_match: Array<{ id: string; code: string; name: string }> | null;
-  decision_note: string | null;
-  submitted_at: Date;
-  decided_at: Date | null;
-  c_mobile: string | null;
-  c_email: string | null;
-  c_name: string | null;
-  employee_id: string | null;
-  joined_at: Date | null;
-}
-const APP_COLS = `SELECT a.id::text, a.number, a.vacancy_id::text, v.title AS vacancy, v.code AS vacancy_code,
-       v.stage_ids::text[] AS stage_ids, a.candidate_id::text, a.status, a.current_stage_id::text, st.name AS stage,
-       a.source, a.snapshot, a.snapshot_secure, a.employee_match, a.decision_note, a.submitted_at, a.decided_at,
-       c.mobile AS c_mobile, c.email::text AS c_email, c.name AS c_name, a.employee_id::text, a.joined_at
-  FROM job_applications a
-  JOIN vacancies v ON v.id = a.vacancy_id
-  JOIN candidates c ON c.id = a.candidate_id
-  LEFT JOIN recruitment_stages st ON st.id = a.current_stage_id`;
-
-const nameOf = (a: Pick<AppRow, 'snapshot' | 'c_name'>) =>
-  [a.snapshot.values.first_name, a.snapshot.values.last_name].filter(Boolean).join(' ') ||
-  a.c_name ||
-  'Candidate';
 const istDate = (d: Date) =>
   new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kolkata',
@@ -103,23 +66,26 @@ export class RecruitmentScreeningService {
     private readonly audit: AuditService,
     private readonly files: FilesService,
     private readonly pdf: ApplicationPdfService,
+    private readonly corrections: RecruitmentCorrectionsService,
   ) {}
 
   private manage(ctx: RequestContext) {
     return ctx.permissions?.has(PEOPLE.recruitmentManage) ?? false;
   }
 
+  /** A step of the application's history; a decision keeps who made it and what it changed (to undo it). */
   private async event(
     c: PoolClient,
     ctx: RequestContext,
     id: string,
     what: string,
     note?: string | null,
+    detail: Record<string, unknown> = {},
   ) {
     await c.query(
-      `INSERT INTO job_application_events (school_id, application_id, what, note, by_name)
-       VALUES (app.current_school_id(), $1, $2, $3, $4)`,
-      [id, what, note ?? null, ctx.user.displayName],
+      `INSERT INTO job_application_events (school_id, application_id, what, note, by_name, by_user, detail)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id(), $5::jsonb)`,
+      [id, what, note ?? null, ctx.user.displayName, JSON.stringify(detail)],
     );
   }
 
@@ -294,8 +260,10 @@ export class RecruitmentScreeningService {
         what: string;
         note: string | null;
         by_name: string | null;
+        revoked: boolean;
       }>(
-        `SELECT at, what, note, by_name FROM job_application_events WHERE application_id = $1 ORDER BY at, id`,
+        `SELECT at, what, note, by_name, revoked_at IS NOT NULL AS revoked FROM job_application_events
+          WHERE application_id = $1 ORDER BY at, id`,
         [id],
       );
       const stageById = new Map(stages.rows.map((x) => [x.id, x]));
@@ -355,6 +323,10 @@ export class RecruitmentScreeningService {
               .then((x) => x.rows[0] ?? null)
           : null,
         joinedAt: a.joined_at?.toISOString() ?? null,
+        photoFileId: a.snapshot.files.find((f) => f.kind === 'photo')?.fileId ?? null,
+        // a correction asked of the candidate (part 8) and what the signed-in person may put right
+        correction: a.correction,
+        corrections: await this.corrections.rights(c, ctx, a),
         can: {
           join:
             a.status === 'selected' &&
@@ -492,6 +464,7 @@ export class RecruitmentScreeningService {
         a.id,
         'on_hold',
         `${st.name}${dto.remarks ? `: ${dto.remarks}` : ''}`,
+        { stageId, prevStatus: a.status === 'submitted' ? 'screening' : a.status },
       );
       return;
     }
@@ -506,6 +479,7 @@ export class RecruitmentScreeningService {
         a.id,
         'not_taken_forward',
         `${st.name}${dto.remarks ? `: ${dto.remarks}` : ''}`,
+        { stageId, prevStatus: a.status === 'submitted' ? 'screening' : a.status },
       );
       await c.query(`SELECT app.recruitment_notify($1, 'not_selected')`, [a.id]);
       return;
@@ -517,14 +491,14 @@ export class RecruitmentScreeningService {
         `UPDATE job_applications SET status = 'screening', current_stage_id = $2, updated_at = now() WHERE id = $1`,
         [a.id, next],
       );
-      await this.event(c, ctx, a.id, 'passed', st.name);
+      await this.event(c, ctx, a.id, 'passed', st.name, { stageId });
       return;
     }
     await c.query(
       `UPDATE job_applications SET status = 'selected', decision_note = $2, decided_at = now(), updated_at = now() WHERE id = $1`,
       [a.id, dto.remarks ?? null],
     );
-    await this.event(c, ctx, a.id, 'selected', st.name);
+    await this.event(c, ctx, a.id, 'selected', st.name, { stageId });
     await c.query(`SELECT app.recruitment_notify($1, 'selected')`, [a.id]);
   }
 
@@ -585,7 +559,10 @@ export class RecruitmentScreeningService {
         `UPDATE job_applications SET status = 'rejected', decision_note = $2, decided_at = now(), updated_at = now() WHERE id = $1`,
         [id, dto.note ?? null],
       );
-      await this.event(c, ctx, id, 'not_taken_forward', dto.note ?? null);
+      await this.event(c, ctx, id, 'not_taken_forward', dto.note ?? null, {
+        stageId: null,
+        prevStatus: a.status,
+      });
       await c.query(`SELECT app.recruitment_notify($1, 'not_selected')`, [id]);
       return { status: 'rejected' };
     });

@@ -184,6 +184,12 @@ async function main(): Promise<void> {
     { every: 10 * 60 * 1000 },
     { name: 'hostel.leave_tick', data: SYSTEM_ENVELOPE('hostel.leave_tick') },
   );
+  // recruitment: candidates reminded a day before the last date of a correction, every hour
+  await maintenance.upsertJobScheduler(
+    'recruitment.tick',
+    { every: 60 * 60 * 1000 },
+    { name: 'recruitment.tick', data: SYSTEM_ENVELOPE('recruitment.tick') },
+  );
   // appointments: reminders, no-shows and wiping expired one-time codes, every five minutes
   await maintenance.upsertJobScheduler(
     'appointments.tick',

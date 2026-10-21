@@ -1,9 +1,11 @@
 import { Card, PageHeader } from '@edupro/ui';
+import { redirect } from 'next/navigation';
 import { CandidateSignIn } from '@/components/CandidateSignIn';
 import { CareerForm } from '@/components/CareerForm';
 import {
   careersFetch,
   careersMe,
+  dmy,
   istText,
   type CareerForm as Form,
   type CareerSignIn,
@@ -19,12 +21,13 @@ export default async function CareerFormPage({
   searchParams,
 }: {
   params: Promise<{ school: string }>;
-  searchParams: Promise<{ apply?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ apply?: string; correct?: string; error?: string; detail?: string }>;
 }) {
   const { school } = await params;
   const sp = await searchParams;
   const apply = sp.apply && /^\d{1,18}$/.test(sp.apply) ? sp.apply : '';
-  const here = `/${school}/careers/form${apply ? `?apply=${apply}` : ''}`;
+  const correctId = sp.correct && /^\d{1,18}$/.test(sp.correct) ? sp.correct : '';
+  const here = `/${school}/careers/form${apply ? `?apply=${apply}` : correctId ? `?correct=${correctId}` : ''}`;
   const me = await careersMe(school);
   if (!me) {
     const channels = await careersFetch<CareerSignIn>(`/${school}/sign-in`, {}, null);
@@ -37,9 +40,21 @@ export default async function CareerFormPage({
       </>
     );
   }
+  // a correction the school asked for (part 8): only the parts marked, then sent again
+  const returned = correctId ? me.applications.find((a) => a.id === correctId) : undefined;
+  if (correctId && !returned?.correction) redirect(`/${school}/careers/mine`);
+  const correct = returned?.correction
+    ? {
+        id: returned.id,
+        number: returned.number,
+        title: returned.title,
+        ...returned.correction,
+        dueText: dmy(returned.correction.dueOn),
+      }
+    : null;
   const [form, vacancy] = await Promise.all([
     careersFetch<Form>(`/${school}/form`, {}, null),
-    apply
+    apply && !correct
       ? careersFetch<CareerVacancy>(`/${school}/vacancies/${apply}`, {}, null).catch(() => null)
       : null,
   ]);
@@ -48,8 +63,18 @@ export default async function CareerFormPage({
     <>
       <PageHeader
         kicker="Careers"
-        title={vacancy ? `Apply for ${vacancy.title}` : 'Your application'}
-        description="Fill it once; the same form is used for every post you apply to."
+        title={
+          correct
+            ? `Correct application ${correct.number}`
+            : vacancy
+              ? `Apply for ${vacancy.title}`
+              : 'Your application'
+        }
+        description={
+          correct
+            ? `${correct.title}: change the parts the school marked, then send the application again.`
+            : 'Fill it once; the same form is used for every post you apply to.'
+        }
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/${school}/careers/mine`}>
             My applications
@@ -65,6 +90,7 @@ export default async function CareerFormPage({
             : null
         }
         applied={applied?.number ?? null}
+        correct={correct}
         form={form}
         me={me}
         problem={sp.error ? (sp.detail ?? 'Not done') : null}

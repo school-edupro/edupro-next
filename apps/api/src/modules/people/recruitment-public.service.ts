@@ -226,11 +226,13 @@ export class RecruitmentPublicService {
         next_stage: string | null;
         next_at: Date | null;
         next_venue: string | null;
+        correction: { remark: string; steps: string[]; partsText: string; dueOn: string } | null;
       }>(
         `SELECT a.id::text, a.number, a.vacancy_id::text, v.title, v.code, a.status, a.submitted_at,
                 v.department, v.subject, v.employee_type, cp.name AS campus,
                 (v.status = 'published' AND v.opens_at <= now() AND v.closes_at > now()) AS open,
-                st.name AS next_stage, r.scheduled_at AS next_at, NULLIF(btrim(r.venue), '') AS next_venue
+                st.name AS next_stage, r.scheduled_at AS next_at, NULLIF(btrim(r.venue), '') AS next_venue,
+                CASE WHEN a.status = 'returned' THEN a.correction END AS correction
            FROM job_applications a JOIN vacancies v ON v.id = a.vacancy_id
            LEFT JOIN campuses cp ON cp.id = v.campus_id
            LEFT JOIN application_stage_results r ON r.application_id = a.id AND r.stage_id = a.current_stage_id
@@ -269,6 +271,16 @@ export class RecruitmentPublicService {
                 stage: a.next_stage,
                 at: a.next_at!.toISOString(),
                 venue: a.next_venue,
+              }
+            : null,
+          // the school asks for a correction (part 8): what, why, by when
+          correction: a.correction
+            ? {
+                remark: a.correction.remark,
+                steps: a.correction.steps,
+                parts: a.correction.partsText,
+                dueOn: a.correction.dueOn,
+                overdue: a.correction.dueOn < todayIst(),
               }
             : null,
         })),
@@ -662,6 +674,149 @@ export class RecruitmentPublicService {
         contentType: 'application/pdf',
         base64: out.bytes.toString('base64'),
       };
+    });
+  }
+
+  /**
+   * The corrected application sent again (part 8): only the parts the school asked for are taken from the
+   * candidate's form as it now stands; the rest stays as first sent. The application goes back where it
+   * was, with what changed in its history, a new PDF, and an email with it.
+   */
+  async resend(cand: Candidate, id: string, dto: CandidateApplyDto) {
+    if (!dto.declaration)
+      throw new DomainError('validation-failed', 'Tick the declaration to send it', {
+        status: 400,
+      });
+    if (!/^\d{1,18}$/.test(id))
+      throw new DomainError('not-found', 'Application not found', { status: 404 });
+    return this.db.tenant(publicTenant(cand.schoolId), async (c) => {
+      const a = (
+        await c.query<{
+          status: string;
+          snapshot: Profile & {
+            files: Array<{ id: string; kind: string; fileId: string; contentType: string }>;
+          };
+          snapshot_secure: Record<string, string> | null;
+          correction: { steps: string[]; prevStatus: string } | null;
+        }>(
+          `SELECT status, snapshot, snapshot_secure, correction FROM job_applications
+            WHERE id = $1 AND candidate_id = $2 FOR UPDATE`,
+          [id, cand.id],
+        )
+      ).rows[0];
+      if (!a) throw new DomainError('not-found', 'Application not found', { status: 404 });
+      if (a.status !== 'returned' || !a.correction)
+        throw new DomainError(
+          'recruitment.not_returned',
+          'The school has not asked for a correction',
+          {
+            status: 409,
+          },
+        );
+      const row = await c.query<{ profile: unknown; secure: Record<string, string> }>(
+        `SELECT profile, secure FROM candidates WHERE id = $1`,
+        [cand.id],
+      );
+      const p = this.profileOf(row.rows[0]?.profile);
+      const secure = row.rows[0]?.secure ?? {};
+      const files = await this.filesOf(c, cand.id);
+      const missing = this.missing(p, secure, files);
+      if (missing.length)
+        throw new DomainError('validation-failed', `Still needed: ${missing.join(', ')}`, {
+          status: 400,
+          extra: { missing },
+        });
+      const old = a.snapshot;
+      const next = {
+        values: { ...old.values },
+        rows: { ...old.rows },
+        activities: [...(old.activities ?? [])],
+        files: [...(old.files ?? [])],
+      };
+      const nextSecure = { ...(a.snapshot_secure ?? {}) };
+      const changed: string[] = [];
+      const plain = (enc: string | undefined) => {
+        try {
+          return enc ? decryptField(enc) : '';
+        } catch {
+          return '';
+        }
+      };
+      const PARTS: Record<
+        string,
+        { sections?: string[]; rows?: CandidateRowKind[]; activities?: boolean; files?: boolean }
+      > = {
+        personal: { sections: ['personal', 'family'] },
+        contact: { sections: ['contact', 'address'] },
+        education: { rows: ['education', 'experience', 'training'] },
+        more: { sections: ['job', 'skills'], rows: ['children', 'references'], activities: true },
+        documents: { files: true },
+      };
+      for (const step of a.correction.steps) {
+        const part = PARTS[step];
+        if (!part) continue;
+        for (const f of CANDIDATE_FIELDS.filter((x) => part.sections?.includes(x.section))) {
+          if (f.sensitive) {
+            if (plain(secure[f.key]) !== plain(a.snapshot_secure?.[f.key])) changed.push(f.label);
+            if (secure[f.key]) nextSecure[f.key] = secure[f.key]!;
+            else delete nextSecure[f.key];
+            continue;
+          }
+          const nv = p.values[f.key];
+          const ov = old.values[f.key];
+          if (String(nv ?? '') !== String(ov ?? '')) changed.push(f.label);
+          if (nv === null || nv === undefined || nv === '') delete next.values[f.key];
+          else next.values[f.key] = nv;
+        }
+        for (const kind of part.rows ?? []) {
+          const nr = p.rows[kind] ?? [];
+          if (JSON.stringify(nr) !== JSON.stringify(old.rows?.[kind] ?? []))
+            changed.push(CANDIDATE_ROWS[kind].title);
+          next.rows[kind] = nr;
+        }
+        if (part.activities) {
+          if ([...p.activities].sort().join('|') !== [...(old.activities ?? [])].sort().join('|'))
+            changed.push('Interests');
+          next.activities = p.activities;
+        }
+        if (part.files) {
+          for (const d of CANDIDATE_DOCUMENTS) {
+            const was = (old.files ?? [])
+              .filter((x) => x.kind === d.kind)
+              .map((x) => x.fileId)
+              .sort();
+            const now = files
+              .filter((x) => x.kind === d.kind)
+              .map((x) => x.fileId)
+              .sort();
+            if (was.join('|') !== now.join('|')) changed.push(d.label);
+          }
+          next.files = files;
+        }
+      }
+      const status = a.correction.prevStatus || 'submitted';
+      await c.query(
+        `UPDATE job_applications SET snapshot = $2::jsonb, snapshot_secure = $3::jsonb, status = $4,
+                correction = correction || jsonb_build_object('resentAt', now(), 'changed', $5::jsonb), updated_at = now()
+          WHERE id = $1`,
+        [id, JSON.stringify(next), JSON.stringify(nextSecure), status, JSON.stringify(changed)],
+      );
+      await c.query(
+        `INSERT INTO job_application_events (school_id, application_id, what, note, by_name)
+         VALUES (app.current_school_id(), $1, 'corrected', $2, $3)`,
+        [
+          id,
+          changed.length ? `Changed: ${changed.join(', ')}` : 'Sent again without changes',
+          cand.name ?? 'The candidate',
+        ],
+      );
+      // the application as it now stands, as a PDF the email carries
+      const pdf = await this.pdf.store(c, id);
+      await c.query(`SELECT app.recruitment_notify($1, 'corrected', $2::jsonb)`, [
+        id,
+        JSON.stringify(pdf ? { attachments: [pdf] } : {}),
+      ]);
+      return { status, changed };
     });
   }
 }

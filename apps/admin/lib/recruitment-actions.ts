@@ -307,6 +307,79 @@ export async function resumeApplication(fd: FormData) {
   done(page, 'Taken up again at the same stage.');
 }
 
+// ---- part 8: putting an application right ----------------------------------------------------------------
+
+/** One correction action on an application, back to its page with what happened. */
+async function correct(fd: FormData, path: string, body: unknown, ok: string) {
+  const id = str(fd, 'id');
+  const page = `${APP_PAGE}/${id}`;
+  if (!okId(id)) redirect(CANDIDATES);
+  try {
+    await apiFetch(`${BASE}/applications/${id}/${path}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    back(page, error);
+  }
+  revalidatePath(page);
+  done(page, ok);
+}
+export async function undoDecision(fd: FormData) {
+  await correct(fd, 'undo', { reason: str(fd, 'reason') }, 'Undone: the application is back where it was.');
+}
+export async function moveStage(fd: FormData) {
+  await correct(
+    fd,
+    'move',
+    { stageId: str(fd, 'stageId'), reason: str(fd, 'reason') },
+    'The application is at the stage chosen.',
+  );
+}
+export async function sendBackApplication(fd: FormData) {
+  await correct(
+    fd,
+    'send-back',
+    {
+      remark: str(fd, 'remark'),
+      steps: fd.getAll('steps').map(String),
+      dueOn: str(fd, 'dueOn'),
+    },
+    'Sent back to the candidate, with an email. Screening waits until it comes back.',
+  );
+}
+export async function cancelCorrection(fd: FormData) {
+  await correct(
+    fd,
+    'send-back/cancel',
+    { reason: str(fd, 'reason') || undefined },
+    'The request is taken back; the application goes on as it was.',
+  );
+}
+
+/** Who may undo decisions and change stages, and the time to correct (Recruitment set-up). */
+export async function saveCorrectionSettings(s: {
+  undoHours: number;
+  undoRoles: string[];
+  undoEmployeeIds: string[];
+  correctionDays: number;
+}): Promise<Out> {
+  try {
+    await apiFetch(`${BASE}/setup/corrections`, { method: 'PUT', body: JSON.stringify(s) });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const list = e.problem.errors as Array<{ message?: string }> | undefined;
+      return {
+        ok: false,
+        error: list?.length ? list.map((x) => x.message).join('; ') : (e.problem.detail ?? e.problem.type),
+      };
+    }
+    throw e;
+  }
+  revalidatePath(`${PAGE}/setup`);
+  return { ok: true };
+}
+
 /** A candidate the office met (walk-in, referral), added to a vacancy. */
 export async function addWalkIn(fd: FormData) {
   const page = backTo(fd, CANDIDATES);

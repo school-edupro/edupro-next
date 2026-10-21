@@ -70,3 +70,31 @@ export async function applyCareer(fd: FormData) {
   }
   redirect(`/${school}/careers/mine?applied=${encodeURIComponent(number)}`);
 }
+
+/**
+ * The application sent again, corrected as the school asked (part 8): the parts the school marked are
+ * taken from the form as it now stands; the rest stays as first sent.
+ */
+export async function resendCareer(fd: FormData) {
+  const school = String(fd.get('school') ?? '');
+  const id = String(fd.get('id') ?? '');
+  if (!/^[a-z0-9-]{1,40}$/i.test(school)) redirect('/');
+  if (!okId(id)) redirect(`/${school}/careers/mine`);
+  let changed: string[] = [];
+  try {
+    changed = (
+      await careersFetch<{ status: string; changed: string[] }>(`/me/applications/${id}/resend`, {
+        method: 'POST',
+        body: JSON.stringify({ declaration: fd.get('declaration') === 'yes' }),
+      })
+    ).changed;
+  } catch (error) {
+    const detail = problemOf(error);
+    redirect(
+      `/${school}/careers/form?correct=${id}&error=1&detail=${encodeURIComponent(detail.slice(0, 600))}`,
+    );
+  }
+  redirect(
+    `/${school}/careers/mine?corrected=${id}&changed=${encodeURIComponent(changed.join(', ').slice(0, 300))}`,
+  );
+}

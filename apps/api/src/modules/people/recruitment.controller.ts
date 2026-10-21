@@ -16,6 +16,14 @@ import {
 } from './recruitment.dto';
 import { RecruitmentApprovalService } from './recruitment-approval.service';
 import {
+  CancelCorrectionDto,
+  CorrectionSettingsDto,
+  MoveStageDto,
+  SendBackDto,
+  UndoDto,
+} from './recruitment-corrections.dto';
+import { RecruitmentCorrectionsService } from './recruitment-corrections.service';
+import {
   ApplicationBulkDto,
   ApplicationListDto,
   ApplicationNoteDto,
@@ -39,6 +47,7 @@ export class RecruitmentController {
     private readonly screening: RecruitmentScreeningService,
     private readonly joining: RecruitmentJoinService,
     private readonly approval: RecruitmentApprovalService,
+    private readonly corrections: RecruitmentCorrectionsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -289,6 +298,68 @@ export class RecruitmentController {
   @RequirePermission(PEOPLE.recruitmentManage)
   resume(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.screening.resume(ctx, id);
+  }
+
+  // ---- part 8: putting an application right ----
+
+  @Get('setup/corrections')
+  @ApiOperation({ summary: 'Who may undo decisions and change stages; the time to correct' })
+  @RequirePermission(PEOPLE.recruitmentView)
+  correctionSettings(@ReqCtx() ctx: RequestContext) {
+    return this.corrections.settings(ctx);
+  }
+
+  @Put('setup/corrections')
+  @ApiOperation({
+    summary: 'Set who may undo decisions and change stages, and the time to correct',
+  })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  saveCorrectionSettings(@ReqCtx() ctx: RequestContext, @Body() body: CorrectionSettingsDto) {
+    return this.corrections.saveSettings(ctx, body);
+  }
+
+  @Post('applications/:id/undo')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Undo the last decision on an application, with the reason' })
+  // who may is set in Recruitment set-up (checked in the service)
+  @RequirePermission(PEOPLE.recruitmentView)
+  undo(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: UndoDto) {
+    return this.corrections.undo(ctx, id, body);
+  }
+
+  @Post('applications/:id/move')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Move an application to another stage of its vacancy, with the reason' })
+  // who may is set in Recruitment set-up (checked in the service)
+  @RequirePermission(PEOPLE.recruitmentView)
+  move(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: MoveStageDto) {
+    return this.corrections.move(ctx, id, body);
+  }
+
+  @Post('applications/:id/send-back')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Send the application back to the candidate to correct the parts marked',
+  })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  sendApplicationBack(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: SendBackDto,
+  ) {
+    return this.corrections.sendBack(ctx, id, body);
+  }
+
+  @Post('applications/:id/send-back/cancel')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Take back the request for a correction' })
+  @RequirePermission(PEOPLE.recruitmentManage)
+  cancelCorrection(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: CancelCorrectionDto,
+  ) {
+    return this.corrections.cancelCorrection(ctx, id, body);
   }
 
   // ---- part 4: from selected candidate to employee ----

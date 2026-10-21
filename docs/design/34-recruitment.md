@@ -273,3 +273,42 @@ email and downloaded by the office**. The sign-in asks **no name** (step 1 of th
 - Tests: `recruitment-public.e2e-spec.ts` (the kept PDF on the designed email, the code email's design,
   the candidate's and the office's downloads, another candidate refused, the next step on My
   applications); `public-a11y.spec.ts` (My applications signed in).
+
+## Part 8 — the application page rebuilt; undo, change stage, send back for correction (migration 0203, built)
+
+Decisions (20 Oct 2026): who may put an application right is **set in Recruitment set-up** (roles and
+named employees at any time; the one who recorded a decision within a window of hours); after an undo
+the candidate gets a **correction email** ("reopened") when the first decision was told to them; a
+correction covers **only the parts the office marks**; the office **sets the date** (7 days by default,
+a reminder a day before).
+
+- **The application page** (`/people/recruitment/applications/:id`), laid out as the employee page: the
+  candidate at the top (photo or initials, name, status and source, application number, the post,
+  stage, date of birth and age, gender, highest qualification, experience, present pay, when they can
+  join; contact, received, the PDF, the vacancy), the stages as a stepper (passed, not through, on hold,
+  skipped, now), then tabs: **Screening** (the stage at hand with its schedule and result, what each
+  stage found, take up again or do not take forward, "Put a mistake right", "Send back for
+  correction", move to the employee master), **Application** (every section; interests, children,
+  references), **Education and experience**, **Documents** (the PDF and each upload, View and Download)
+  and **History** (newest first, an undone decision struck through and marked).
+- **Undo the last decision** (`POST …/applications/:id/undo`, reason): passed, selected, not taken
+  forward, on hold, a stage moved or a send-back. The decision stays in the history, marked undone
+  (`job_application_events.revoked_at`); a candidate told they were selected or not taken forward gets
+  the "reopened" email.
+- **Change the stage** (`POST …/applications/:id/move`, stage and reason): forward marks the stages
+  between "skipped"; back opens the stage again; from not taken forward or selected it reopens the
+  application. Undoable like any decision.
+- **Send back for correction** (`POST …/applications/:id/send-back`: parts, remark, date; `…/send-back/
+  cancel`): status "Correction needed" (`returned`), screening waits; the candidate gets an email with
+  the remark, the parts and the date, and a link to My applications; a reminder goes a day before the
+  date (`app.recruitment_tick`, hourly from the workers).
+- **The candidate's correction:** My applications shows the request (remark, parts, date; red once the
+  date has passed) with "Correct and send again" → the step form with only the marked steps and a
+  review → "Send the corrected application" (`POST public/careers/me/applications/:id/resend`,
+  declaration). Only the marked parts of the application change (the rest stays as first sent); the
+  office sees what changed; a new PDF goes with the "corrected" email.
+- **Set-up** ("Putting an application right"): roles, named employees, hours the one who decided may
+  undo it (0: only those named), days a candidate gets to correct (1–60).
+- Tests: `recruitment-corrections.e2e-spec.ts` (settings; undo refused and done; the window and who may;
+  move forward, undo, move back from not taken forward with the email; send back, reminder, resend with
+  only the marked part changed, take back); `a11y.spec.ts` (the application page's tabs).

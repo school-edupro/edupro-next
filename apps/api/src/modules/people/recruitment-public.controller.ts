@@ -113,6 +113,16 @@ export class RecruitmentPublicController {
     return this.svc.fileUrl(req.candidate!, fileId);
   }
 
+  @Post('me/applications/:id/resend')
+  @HttpCode(200)
+  @Public()
+  @UseGuards(CandidateGuard)
+  @PublicThrottle(20)
+  @ApiOperation({ summary: 'Send my application again, corrected as the school asked' })
+  resend(@Req() req: CandidateRequest, @Param('id') id: string, @Body() body: CandidateApplyDto) {
+    return this.svc.resend(req.candidate!, id, body);
+  }
+
   @Get('me/applications/:id/pdf')
   @Public()
   @UseGuards(CandidateGuard)

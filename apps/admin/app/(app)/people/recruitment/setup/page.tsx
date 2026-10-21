@@ -1,23 +1,30 @@
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ApprovalLevelsEditor } from '@/components/recruitment/ApprovalLevelsEditor';
+import { CorrectionsEditor } from '@/components/recruitment/CorrectionsEditor';
 import { NoticesEditor } from '@/components/recruitment/NoticesEditor';
 import { StagesEditor } from '@/components/recruitment/StagesEditor';
 import { VacancyShare } from '@/components/recruitment/VacancyShare';
 import { apiFetch, getMe } from '@/lib/api';
-import type { ApprovalSetup, RecruitmentNotices, RecruitmentSetup } from '@/lib/recruitment';
+import type {
+  ApprovalSetup,
+  CorrectionSettings,
+  RecruitmentNotices,
+  RecruitmentSetup,
+} from '@/lib/recruitment';
 
 /**
  * Recruitment set-up (docs/design/34-recruitment.md): who approves a vacancy, the school's careers page,
- * the screening stages candidates go through and the notices they get.
+ * the screening stages candidates go through, the notices they get, and who may put an application right.
  */
 export default async function RecruitmentSetupPage() {
-  const [me, s, notices, approval, careers] = await Promise.all([
+  const [me, s, notices, approval, careers, corrections] = await Promise.all([
     getMe(),
     apiFetch<RecruitmentSetup>('/people/recruitment/setup'),
     apiFetch<RecruitmentNotices>('/people/recruitment/setup/notices'),
     apiFetch<ApprovalSetup>('/people/recruitment/setup/approval'),
     apiFetch<{ url: string; open: number }>('/people/recruitment/setup/careers'),
+    apiFetch<CorrectionSettings>('/people/recruitment/setup/corrections'),
   ]).catch(() => notFound());
   if (!me.permissions.includes('people.recruitment.view')) notFound();
   const school =
@@ -34,7 +41,7 @@ export default async function RecruitmentSetupPage() {
       <PageHeader
         kicker="Recruitment"
         title="Recruitment set-up"
-        description="Who approves a vacancy, the school’s careers page, the screening stages candidates go through and the notices they get."
+        description="Who approves a vacancy, the school’s careers page, the screening stages candidates go through, the notices they get and who may put an application right."
       />
       <ApprovalLevelsEditor setup={approval} />
       <section
@@ -66,6 +73,7 @@ export default async function RecruitmentSetupPage() {
         <StagesEditor stages={s.stages} canEdit={s.can.manage} />
       </div>
       <NoticesEditor initial={notices} canEdit={s.can.manage} />
+      <CorrectionsEditor initial={corrections} />
     </>
   );
 }

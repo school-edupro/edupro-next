@@ -1,6 +1,11 @@
 'use client';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
-import { applyCareer, removeCareerFile, saveCareerStep } from '@/app/[school]/careers/form/actions';
+import {
+  applyCareer,
+  removeCareerFile,
+  resendCareer,
+  saveCareerStep,
+} from '@/app/[school]/careers/form/actions';
 import {
   INPUT,
   applies,
@@ -110,6 +115,7 @@ export function CareerForm({
   form,
   me: first,
   problem: firstProblem,
+  correct = null,
 }: {
   school: string;
   apply: string;
@@ -118,9 +124,20 @@ export function CareerForm({
   form: Form;
   me: CareerMe;
   problem: string | null;
+  /** a correction the school asked for: only the parts it marked, then the application sent again */
+  correct?: {
+    id: string;
+    number: string;
+    title: string;
+    remark: string;
+    steps: string[];
+    parts: string;
+    dueText: string;
+    overdue: boolean;
+  } | null;
 }) {
-  const steps: Step[] = useMemo(
-    () => [
+  const steps: Step[] = useMemo(() => {
+    const all: Step[] = [
       {
         id: 'personal',
         title: 'About you',
@@ -155,13 +172,17 @@ export function CareerForm({
       },
       {
         id: 'review',
-        title: vacancy ? 'Review and apply' : 'Review',
-        help: 'Check your answers; change any step before you apply.',
+        title: correct ? 'Review and send again' : vacancy ? 'Review and apply' : 'Review',
+        help: correct
+          ? 'Check the parts you corrected, then send the application again.'
+          : 'Check your answers; change any step before you apply.',
         kind: 'review',
       },
-    ],
-    [vacancy],
-  );
+    ];
+    return correct ? all.filter((s) => s.id === 'review' || correct.steps.includes(s.id)) : all;
+  }, [vacancy, correct]);
+  /** where a step is in this form (a correction holds only the parts marked) */
+  const at = (id: string) => steps.findIndex((s) => s.id === id);
   const [me, setMe] = useState<CareerMe>(first);
   const [answers, setAnswers] = useState<Answers>(() => answersOf(form, first));
   const [typed, setTyped] = useState<Set<string>>(new Set());
@@ -169,8 +190,10 @@ export function CareerForm({
   const [activities, setActivities] = useState<string[]>(first.activities);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const returning = Boolean(first.values.first_name);
-  const [step, setStep] = useState(returning && !first.missing.length ? steps.length - 1 : 0);
-  const [reached, setReached] = useState(returning ? steps.length - 1 : 0);
+  const [step, setStep] = useState(
+    !correct && returning && !first.missing.length ? steps.length - 1 : 0,
+  );
+  const [reached, setReached] = useState(returning || correct ? steps.length - 1 : 0);
   const [dirty, setDirty] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ tone: 'danger' | 'success'; text: string } | null>(
@@ -889,9 +912,9 @@ export function CareerForm({
   const stepOfMissing = (label: string) => {
     const f = form.fields.find((x) => x.label === label);
     if (f) return steps.findIndex((s) => s.sections?.includes(f.section));
-    if (/qualification/i.test(label)) return 2;
-    if (form.documents.some((d) => d.label === label)) return 4;
-    return 0;
+    if (/qualification/i.test(label)) return at('education');
+    if (form.documents.some((d) => d.label === label)) return at('documents');
+    return correct ? -1 : 0;
   };
   const shown = (f: CareerField): string => {
     const v = me.values[f.key];
@@ -907,145 +930,188 @@ export function CareerForm({
             <div>
               <strong>Still needed before you apply:</strong>
               <ul className="ep-wiz__missing">
-                {me.missing.map((m) => (
-                  <li key={m}>
-                    <button
-                      type="button"
-                      className="ep-wiz__link"
-                      onClick={() => void go(stepOfMissing(m))}
-                    >
-                      {m}
-                    </button>
-                  </li>
-                ))}
+                {me.missing.map((m) => {
+                  const i = stepOfMissing(m);
+                  return (
+                    <li key={m}>
+                      {i < 0 ? (
+                        <>
+                          {m} (<a href={`/${school}/careers/form`}>in the full form</a>)
+                        </>
+                      ) : (
+                        <button type="button" className="ep-wiz__link" onClick={() => void go(i)}>
+                          {m}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>
         ) : null}
-        {steps.slice(0, 4).map((s, i) => (
-          <section key={s.id} className="ep-wiz__review" aria-labelledby={`rv-${s.id}`}>
+        {steps
+          .filter((s) => !s.kind)
+          .map((s) => (
+            <section key={s.id} className="ep-wiz__review" aria-labelledby={`rv-${s.id}`}>
+              <div className="ep-wiz__review-head">
+                <h3 id={`rv-${s.id}`} className="ep-wiz__subhead">
+                  {s.title}
+                </h3>
+                <button
+                  type="button"
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  aria-label={`Change ${s.title.toLowerCase()}`}
+                  onClick={() => void go(at(s.id))}
+                >
+                  Change
+                </button>
+              </div>
+              {s.sections ? (
+                <dl className="ep-wiz__dl">
+                  {form.fields
+                    // what was answered, and what is needed but not given
+                    .filter(
+                      (f) =>
+                        s.sections!.includes(f.section) &&
+                        applies(f, answers) &&
+                        (f.required || shown(f) !== '—'),
+                    )
+                    .map((f) => (
+                      <div key={f.key}>
+                        <dt>{f.label}</dt>
+                        <dd>{shown(f) === '—' ? 'Not given yet' : shown(f)}</dd>
+                      </div>
+                    ))}
+                  {s.activities ? (
+                    <div>
+                      <dt>Interests</dt>
+                      <dd>{me.activities.join(', ') || '—'}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
+              {(s.rows ?? []).map((kind) => (
+                <div key={kind} className="ep-wiz__review-list">
+                  <h4 className="ep-field__label">{form.rows[kind]!.title}</h4>
+                  {(me.rows[kind] ?? []).length ? (
+                    <ul>
+                      {(me.rows[kind] ?? []).map((r, j) => (
+                        <li key={j}>
+                          {form.rows[kind]!.columns.map((c) =>
+                            r[c.key] ? (c.type === 'date' ? dmy(r[c.key]) : r[c.key]) : null,
+                          )
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="ep-field__help" style={{ margin: 0 }}>
+                      None
+                    </p>
+                  )}
+                </div>
+              ))}
+            </section>
+          ))}
+        {at('documents') < 0 ? null : (
+          <section className="ep-wiz__review" aria-labelledby="rv-docs">
             <div className="ep-wiz__review-head">
-              <h3 id={`rv-${s.id}`} className="ep-wiz__subhead">
-                {s.title}
+              <h3 id="rv-docs" className="ep-wiz__subhead">
+                Photo and documents
               </h3>
               <button
                 type="button"
                 className="ep-btn ep-btn--ghost ep-btn--sm"
-                aria-label={`Change ${s.title.toLowerCase()}`}
-                onClick={() => void go(i)}
+                aria-label="Change photo and documents"
+                onClick={() => void go(at('documents'))}
               >
                 Change
               </button>
             </div>
-            {s.sections ? (
-              <dl className="ep-wiz__dl">
-                {form.fields
-                  // what was answered, and what is needed but not given
-                  .filter(
-                    (f) =>
-                      s.sections!.includes(f.section) &&
-                      applies(f, answers) &&
-                      (f.required || shown(f) !== '—'),
-                  )
-                  .map((f) => (
-                    <div key={f.key}>
-                      <dt>{f.label}</dt>
-                      <dd>{shown(f) === '—' ? 'Not given yet' : shown(f)}</dd>
-                    </div>
-                  ))}
-                {s.activities ? (
-                  <div>
-                    <dt>Interests</dt>
-                    <dd>{me.activities.join(', ') || '—'}</dd>
-                  </div>
-                ) : null}
-              </dl>
-            ) : null}
-            {(s.rows ?? []).map((kind) => (
-              <div key={kind} className="ep-wiz__review-list">
-                <h4 className="ep-field__label">{form.rows[kind]!.title}</h4>
-                {(me.rows[kind] ?? []).length ? (
-                  <ul>
-                    {(me.rows[kind] ?? []).map((r, j) => (
-                      <li key={j}>
-                        {form.rows[kind]!.columns.map((c) =>
-                          r[c.key] ? (c.type === 'date' ? dmy(r[c.key]) : r[c.key]) : null,
-                        )
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="ep-field__help" style={{ margin: 0 }}>
-                    None
-                  </p>
-                )}
-              </div>
-            ))}
+            <ul className="ep-wiz__review-docs">
+              {form.documents.map((d) => {
+                const have = me.files.filter((x) => x.kind === d.kind);
+                return (
+                  <li key={d.kind}>
+                    <span className="ep-wiz__review-doc-label">
+                      {d.label}
+                      <span className="ep-field__help">
+                        {have.length
+                          ? have.length > 1
+                            ? `${String(have.length)} uploaded`
+                            : 'Uploaded'
+                          : d.required
+                            ? 'Needed'
+                            : 'Not given'}
+                      </span>
+                    </span>
+                    {have.length ? (
+                      <span className="ep-wiz__thumbs">
+                        {have.map((x, i) => (
+                          <a
+                            key={x.id}
+                            href={`/api/careers/file/${x.fileId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ep-wiz__thumb ep-wiz__thumb--link"
+                            aria-label={`View ${d.label}${have.length > 1 ? ` ${String(i + 1)}` : ''}`}
+                            title={`View ${d.label}`}
+                          >
+                            {IMAGE.test(x.contentType) ? (
+                              <img src={`/api/careers/file/${x.fileId}`} alt="" />
+                            ) : (
+                              <span className="ep-wiz__pdf" aria-hidden="true">
+                                PDF
+                              </span>
+                            )}
+                            {EYE}
+                          </a>
+                        ))}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
           </section>
-        ))}
-        <section className="ep-wiz__review" aria-labelledby="rv-docs">
-          <div className="ep-wiz__review-head">
-            <h3 id="rv-docs" className="ep-wiz__subhead">
-              Photo and documents
+        )}
+        {correct ? (
+          <section className="ep-wiz__apply" aria-labelledby="rv-apply">
+            <h3 id="rv-apply" className="ep-wiz__subhead">
+              Send application {correct.number} again
             </h3>
-            <button
-              type="button"
-              className="ep-btn ep-btn--ghost ep-btn--sm"
-              aria-label="Change photo and documents"
-              onClick={() => void go(4)}
-            >
-              Change
-            </button>
-          </div>
-          <ul className="ep-wiz__review-docs">
-            {form.documents.map((d) => {
-              const have = me.files.filter((x) => x.kind === d.kind);
-              return (
-                <li key={d.kind}>
-                  <span className="ep-wiz__review-doc-label">
-                    {d.label}
-                    <span className="ep-field__help">
-                      {have.length
-                        ? have.length > 1
-                          ? `${String(have.length)} uploaded`
-                          : 'Uploaded'
-                        : d.required
-                          ? 'Needed'
-                          : 'Not given'}
-                    </span>
-                  </span>
-                  {have.length ? (
-                    <span className="ep-wiz__thumbs">
-                      {have.map((x, i) => (
-                        <a
-                          key={x.id}
-                          href={`/api/careers/file/${x.fileId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ep-wiz__thumb ep-wiz__thumb--link"
-                          aria-label={`View ${d.label}${have.length > 1 ? ` ${String(i + 1)}` : ''}`}
-                          title={`View ${d.label}`}
-                        >
-                          {IMAGE.test(x.contentType) ? (
-                            <img src={`/api/careers/file/${x.fileId}`} alt="" />
-                          ) : (
-                            <span className="ep-wiz__pdf" aria-hidden="true">
-                              PDF
-                            </span>
-                          )}
-                          {EYE}
-                        </a>
-                      ))}
-                    </span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-        {vacancy ? (
+            <form action={resendCareer} className="ep-wiz__applyform">
+              <input type="hidden" name="school" value={school} />
+              <input type="hidden" name="id" value={correct.id} />
+              <label className="ep-check">
+                <input
+                  type="checkbox"
+                  name="declaration"
+                  value="yes"
+                  required
+                  disabled={me.missing.length > 0}
+                />{' '}
+                I declare that the details given are true; a false statement may end my candidature
+                or employment.
+              </label>
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                Only {correct.parts.toLowerCase()} change on the application; the rest stays as you
+                first sent it. Please send it by {correct.dueText}.
+              </p>
+              <div>
+                <button
+                  type="submit"
+                  className="ep-btn ep-btn--primary"
+                  disabled={me.missing.length > 0}
+                >
+                  Send the corrected application
+                </button>
+              </div>
+            </form>
+          </section>
+        ) : vacancy ? (
           <section className="ep-wiz__apply" aria-labelledby="rv-apply">
             <h3 id="rv-apply" className="ep-wiz__subhead">
               Apply for {vacancy.title}
@@ -1138,6 +1204,23 @@ export function CareerForm({
 
   return (
     <div className="ep-wiz">
+      {correct ? (
+        <div
+          className={`ep-alert ep-alert--${correct.overdue ? 'danger' : 'warning'} ep-wiz__correct`}
+          role="status"
+        >
+          <div>
+            <strong>
+              The school asks you to correct application {correct.number} ({correct.title})
+            </strong>
+            <p style={{ margin: 'var(--sp-1) 0 0' }}>“{correct.remark}”</p>
+            <p style={{ margin: 'var(--sp-1) 0 0' }}>
+              To correct: {correct.parts}. Send it again by {correct.dueText}
+              {correct.overdue ? ' (the date has passed; send it as soon as you can)' : ''}.
+            </p>
+          </div>
+        </div>
+      ) : null}
       <nav className="ep-wiz__progress" aria-label="Steps of the application">
         <p className="ep-wiz__count">
           Step {step + 1} of {steps.length}

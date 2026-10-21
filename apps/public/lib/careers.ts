@@ -134,10 +134,19 @@ export interface CareerMe {
     open: boolean;
     /** the next step the school has set: the stage, when, where */
     next: { stage: string; at: string; venue: string | null } | null;
+    /** the school asks for a correction (part 8): why, which parts, by when */
+    correction: {
+      remark: string;
+      steps: string[];
+      parts: string;
+      dueOn: string;
+      overdue: boolean;
+    } | null;
   }>;
 }
 export const APPLICATION_STATUS: Record<string, string> = {
   submitted: 'Received',
+  returned: 'Correction needed',
   screening: 'Under screening',
   selected: 'Selected',
   rejected: 'Not taken forward',

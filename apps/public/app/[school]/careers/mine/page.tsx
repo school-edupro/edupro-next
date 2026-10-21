@@ -4,12 +4,14 @@ import {
   APPLICATION_STATUS,
   careersFetch,
   careersMe,
+  dmy,
   istText,
   type CareerSignIn,
 } from '@/lib/careers';
 
 const TONE: Record<string, 'info' | 'success' | 'warning' | 'neutral'> = {
   submitted: 'info',
+  returned: 'warning',
   screening: 'info',
   on_hold: 'warning',
   selected: 'success',
@@ -40,7 +42,7 @@ export default async function MyApplicationsPage({
   searchParams,
 }: {
   params: Promise<{ school: string }>;
-  searchParams: Promise<{ applied?: string }>;
+  searchParams: Promise<{ applied?: string; corrected?: string; changed?: string }>;
 }) {
   const { school } = await params;
   const sp = await searchParams;
@@ -86,6 +88,17 @@ export default async function MyApplicationsPage({
               shortlisted.
             </div>
           ) : null}
+          {sp.corrected ? (
+            <div
+              className="ep-alert ep-alert--success"
+              role="status"
+              style={{ marginBottom: 'var(--sp-3)' }}
+            >
+              Your corrected application is sent
+              {sp.changed ? ` (changed: ${sp.changed.slice(0, 300)})` : ''}. A copy is on its way to
+              your email.
+            </div>
+          ) : null}
           {me.applications.length ? (
             <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
               {me.applications.map((a) => (
@@ -114,6 +127,32 @@ export default async function MyApplicationsPage({
                   <p style={{ margin: 0 }}>
                     Application <strong>{a.number}</strong> · sent {istText(a.submittedAt)}
                   </p>
+                  {a.correction ? (
+                    <div
+                      className={`ep-alert ep-alert--${a.correction.overdue ? 'danger' : 'warning'} ep-career-app__fix`}
+                      role="status"
+                    >
+                      <div>
+                        <strong>The school asks you to correct your application</strong>
+                        <p style={{ margin: 'var(--sp-1) 0 0' }}>“{a.correction.remark}”</p>
+                        <p style={{ margin: 'var(--sp-1) 0 0' }}>
+                          To correct: {a.correction.parts}. Please send it again by{' '}
+                          <strong>{dmy(a.correction.dueOn)}</strong>
+                          {a.correction.overdue
+                            ? ' (the date has passed; send it as soon as you can)'
+                            : ''}
+                          .
+                        </p>
+                        <a
+                          className="ep-btn ep-btn--primary ep-btn--sm"
+                          style={{ marginTop: 'var(--sp-2)' }}
+                          href={`/${school}/careers/form?correct=${a.id}`}
+                        >
+                          Correct and send again
+                        </a>
+                      </div>
+                    </div>
+                  ) : null}
                   {a.next ? (
                     <p className="ep-alert ep-alert--info" role="status" style={{ margin: 0 }}>
                       <span>

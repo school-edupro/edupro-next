@@ -12,7 +12,16 @@ const When = z
 export const ApplicationListSchema = z.object({
   vacancy: Id.optional(),
   status: z
-    .enum(['submitted', 'screening', 'selected', 'rejected', 'on_hold', 'withdrawn', 'joined'])
+    .enum([
+      'submitted',
+      'screening',
+      'selected',
+      'rejected',
+      'on_hold',
+      'withdrawn',
+      'joined',
+      'returned',
+    ])
     .optional(),
   stage: Id.optional(),
   q: txt(80).optional(),

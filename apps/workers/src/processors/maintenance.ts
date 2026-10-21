@@ -521,6 +521,23 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       if (done) log.info({ done }, 'hostel leave tick');
       return;
     }
+    if (kind === 'recruitment.tick') {
+      // Recruitment (0203): a candidate asked to correct an application is reminded a day before the date
+      const schools = { rows: await schoolsFor(db, job) };
+      let done = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) =>
+            c.query<{ n: number }>('SELECT app.recruitment_tick($1) AS n', [
+              process.env.PUBLIC_APP_URL ?? 'http://localhost:3003',
+            ]),
+        );
+        done += r.rows[0]?.n ?? 0;
+      }
+      if (done) log.info({ done }, 'recruitment tick');
+      return;
+    }
     if (kind === 'appointments.tick') {
       // Appointments (0059): the database function sends the reminders, marks the visits nobody came to
       // and wipes expired one-time codes from the message log.

@@ -9289,3 +9289,81 @@ a.ep-pub-foot__item {
   outline: 2px solid var(--border-accent);
   outline-offset: 2px;
 }
+
+/* ---- a job application (recruitment part 8): the screening tab, the stages, the history ------------ */
+.ep-app-layout {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .ep-app-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ep-app-layout > div {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.ep-app-stages .ep-app-stage {
+  cursor: default;
+}
+.ep-app-stage--pass .ep-stepbar__n {
+  background: var(--status-success-bg);
+  border-color: var(--status-success);
+  color: var(--status-success-text);
+}
+.ep-app-stage--fail .ep-stepbar__n {
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger);
+  color: var(--status-danger-text);
+}
+.ep-app-stage--hold .ep-stepbar__n {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning);
+  color: var(--status-warning-text);
+}
+.ep-app-stage--skipped {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.ep-app-stage--now .ep-stepbar__n {
+  background: var(--surface-band);
+  border-color: var(--border-accent);
+}
+.ep-app-correction {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.ep-app-parts {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
+  margin: var(--sp-1) 0 var(--sp-2);
+}
+.ep-app-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-app-history > li {
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--border-default);
+}
+.ep-app-history--revoked strong {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+/* the contact column of the candidate's hero: one fact to a line */
+.ep-app-contact {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* a link in running text is told apart by more than its colour */
+.ep-hero__line a {
+  text-decoration: underline;
+}

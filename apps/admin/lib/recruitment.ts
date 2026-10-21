@@ -185,10 +185,18 @@ export const istInput = (iso: string | null | undefined) =>
 // ---- part 3: candidates and screening -----------------------------------------------------------------
 
 export type AppStatus =
-  'submitted' | 'screening' | 'selected' | 'rejected' | 'on_hold' | 'withdrawn' | 'joined';
+  | 'submitted'
+  | 'screening'
+  | 'selected'
+  | 'rejected'
+  | 'on_hold'
+  | 'withdrawn'
+  | 'joined'
+  | 'returned';
 export const APP_ORDER: AppStatus[] = [
   'submitted',
   'screening',
+  'returned',
   'on_hold',
   'selected',
   'rejected',
@@ -202,6 +210,7 @@ export const APP_STATUS: Record<AppStatus, string> = {
   on_hold: 'On hold',
   withdrawn: 'Withdrawn',
   joined: 'Joined',
+  returned: 'Correction needed',
 };
 export const APP_TONE: Record<AppStatus, string> = {
   submitted: 'info',
@@ -211,8 +220,14 @@ export const APP_TONE: Record<AppStatus, string> = {
   on_hold: 'warning',
   withdrawn: 'neutral',
   joined: 'success',
+  returned: 'warning',
 };
-export const RESULT_WORD = { pass: 'Passed', fail: 'Not through', hold: 'On hold' } as const;
+export const RESULT_WORD = {
+  pass: 'Passed',
+  fail: 'Not through',
+  hold: 'On hold',
+  skipped: 'Skipped',
+} as const;
 export const APP_EVENT: Record<string, string> = {
   applied: 'Applied',
   added: 'Added by the office',
@@ -223,7 +238,21 @@ export const APP_EVENT: Record<string, string> = {
   not_taken_forward: 'Not taken forward',
   selected: 'Selected',
   joined: 'Joined the staff',
+  moved: 'Stage changed',
+  revoked: 'Decision undone',
+  returned: 'Sent back for correction',
+  reminded: 'Reminded to correct',
+  corrected: 'Corrected by the candidate',
+  correction_withdrawn: 'Correction request taken back',
 };
+/** The parts of the careers form a correction may ask for (the candidate's steps). */
+export const CORRECTION_STEPS: Array<[string, string]> = [
+  ['personal', 'About you'],
+  ['contact', 'Contact and address'],
+  ['education', 'Education and experience'],
+  ['more', 'Present job and more'],
+  ['documents', 'Photo and documents'],
+];
 export interface ApplicationRow {
   id: string;
   number: string;
@@ -250,7 +279,7 @@ export interface ApplicationStage {
   venue: string | null;
   panel: string | null;
   marks: number | null;
-  result: 'pass' | 'fail' | 'hold' | null;
+  result: 'pass' | 'fail' | 'hold' | 'skipped' | null;
   remarks: string | null;
   recordedBy: string | null;
   recordedAt: string | null;
@@ -286,11 +315,51 @@ export interface ApplicationView {
     contentType: string;
   }>;
   stages: ApplicationStage[];
-  events: Array<{ at: string; what: string; note: string | null; by_name: string | null }>;
+  events: Array<{
+    at: string;
+    what: string;
+    note: string | null;
+    by_name: string | null;
+    /** a decision later undone */
+    revoked: boolean;
+  }>;
   /** the employee the candidate became (part 4) */
   employee: { id: string; code: string; name: string } | null;
   joinedAt: string | null;
+  photoFileId: string | null;
+  /** a correction asked of the candidate (part 8) */
+  correction: {
+    remark: string;
+    steps: string[];
+    partsText: string;
+    dueOn: string;
+    at: string;
+    byName: string | null;
+    resentAt?: string;
+    changed?: string[];
+    cancelledAt?: string;
+  } | null;
+  /** what the signed-in person may put right (who may is set in Recruitment set-up) */
+  corrections: {
+    last: { what: string; label: string; at: string; by: string | null } | null;
+    undo: boolean;
+    move: boolean;
+    sendBack: boolean;
+    cancelCorrection: boolean;
+    correctionDays: number;
+    undoHours: number;
+  };
   can: { record: boolean; reject: boolean; resume: boolean; sensitive: boolean; join: boolean };
+}
+/** Who may undo decisions and change stages; the time a candidate gets to correct (Recruitment set-up). */
+export interface CorrectionSettings {
+  undoHours: number;
+  undoRoles: string[];
+  undoEmployeeIds: string[];
+  correctionDays: number;
+  roles: Array<{ code: string; name: string }>;
+  staff: Array<{ id: string; code: string; name: string; designation: string | null }>;
+  can: { manage: boolean };
 }
 /** What moving a selected candidate to the employee master will make (part 4). */
 export interface JoinPreview {
