@@ -1,19 +1,32 @@
-import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
+import { Badge, DataTable, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { libraryAccession, libraryCopyStatus } from '@/lib/actions';
-import { apiFetch, getMe } from '@/lib/api';
-import type { LibraryCopy, LibraryTitle, Page } from '@/lib/types';
+import { apiFetch } from '@/lib/api';
+import { isbnText, type BookRow, type BookSetup } from '@/lib/library-books';
 
-/** Sprint 17: the catalogue with copies and accession. */
-export default async function LibraryPage({
+const STATUSES = [
+  ['', 'Any'],
+  ['available', 'On the shelf'],
+  ['issued', 'Issued'],
+  ['damaged', 'Damaged'],
+  ['lost', 'Lost'],
+  ['withdrawn', 'Withdrawn'],
+] as const;
+
+/**
+ * The book master (docs/design/36-library.md, part 2): every title with its copies on the shelf and
+ * out, searched by title, author, accession number, barcode, ISBN or call number, and filtered by
+ * library, material, subject and copy status. A title opens its page (copies, loans, history).
+ */
+export default async function LibraryBooksPage({
   searchParams,
 }: {
   searchParams: Promise<{
     q?: string;
-    category?: string;
-    available?: string;
-    title?: string;
+    library?: string;
+    material?: string;
+    subject?: string;
+    status?: string;
     page?: string;
     ok?: string;
     error?: string;
@@ -21,26 +34,39 @@ export default async function LibraryPage({
   }>;
 }) {
   const sp = await searchParams;
-  const q = new URLSearchParams({ page: sp.page ?? '1', size: '50' });
-  if (sp.q) q.set('q', sp.q);
-  if (sp.category) q.set('category', sp.category);
-  if (sp.available) q.set('available', 'true');
-  const [t, l, me, titles] = await Promise.all([
+  const id = (x?: string) => (x && /^\d{1,18}$/.test(x) ? x : '');
+  const status = STATUSES.some(([k]) => k === sp.status) ? (sp.status ?? '') : '';
+  const page = Math.max(1, Number(sp.page) || 1);
+  const qs = new URLSearchParams({ page: String(page), size: '25' });
+  if (sp.q) qs.set('q', sp.q.slice(0, 80));
+  if (id(sp.library)) qs.set('libraryId', id(sp.library));
+  if (id(sp.material)) qs.set('materialTypeId', id(sp.material));
+  if (id(sp.subject)) qs.set('subjectId', id(sp.subject));
+  if (status) qs.set('status', status);
+  const [t, setup, list] = await Promise.all([
     getTranslations('pages.library'),
-    getTranslations('library'),
-    getMe(),
-    apiFetch<Page<LibraryTitle>>(`/library/catalogue?${q.toString()}`),
+    apiFetch<BookSetup>('/library/books/setup'),
+    apiFetch<{
+      data: BookRow[];
+      page: { number: number; size: number; total: number };
+      can: { manage: boolean };
+    }>(`/library/books?${qs.toString()}`),
   ]);
-  const canManage = me.permissions.includes('library.catalogue.manage');
-  const current = sp.title
-    ? (titles.data.find((x) => x.id === sp.title) ??
-      (await apiFetch<Page<LibraryTitle>>(`/library/catalogue?size=1&q=`).then(() => null)))
-    : null;
-  const copies = sp.title
-    ? await apiFetch<{ data: LibraryCopy[] }>(`/library/titles/${sp.title}/copies`).then(
-        (x) => x.data,
-      )
-    : [];
+  const pages = Math.max(1, Math.ceil(list.page.total / list.page.size));
+  const link = (n: number) => {
+    const p = new URLSearchParams();
+    const keep = {
+      q: sp.q,
+      library: sp.library,
+      material: sp.material,
+      subject: sp.subject,
+      status,
+    };
+    for (const [k, v] of Object.entries(keep)) if (v) p.set(k, v);
+    p.set('page', String(n));
+    return `?${p.toString()}`;
+  };
+  const filtered = Boolean(sp.q || status || sp.library || sp.material || sp.subject);
   return (
     <>
       <PageHeader
@@ -48,176 +74,170 @@ export default async function LibraryPage({
         title={t('title')}
         description={t('description')}
         actions={
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/masters/library">
-            Library setup
-          </a>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            {list.can.manage ? (
+              <a className="ep-btn ep-btn--primary" href="/library/books/new">
+                + Add a book
+              </a>
+            ) : null}
+            <a className="ep-btn ep-btn--ghost" href="/masters/library">
+              Library setup
+            </a>
+          </span>
         }
       />
       <Notice params={sp} />
-      <Card>
-        <form method="get" className="ep-master__filter">
-          <InputField
-            id="q"
+      <form
+        method="get"
+        className="ep-card ep-acr-filter"
+        style={{ padding: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}
+      >
+        <label className="ep-field" htmlFor="lb-q" style={{ margin: 0 }}>
+          <span className="ep-field__label">Find</span>
+          <input
+            id="lb-q"
             name="q"
-            label={l('search')}
-            defaultValue={sp.q ?? ''}
+            type="search"
+            className="ep-input"
             maxLength={80}
+            defaultValue={sp.q ?? ''}
+            placeholder="Title, author, accession no., barcode, ISBN"
           />
-          <InputField
-            id="category"
-            name="category"
-            label={l('category')}
-            defaultValue={sp.category ?? ''}
-            maxLength={60}
-          />
-          <label style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              name="available"
-              value="1"
-              defaultChecked={Boolean(sp.available)}
-            />{' '}
-            {l('onlyAvailable')}
-          </label>
-          <Button type="submit" variant="secondary" size="sm">
-            {l('apply')}
-          </Button>
-        </form>
-        <DataTable<LibraryTitle>
-          caption={`${t('title')} · ${titles.page.total}`}
-          density="dense"
-          columns={[
-            {
-              key: 't',
-              header: l('title'),
-              render: (x) => (
-                <a href={`/library?title=${x.id}${sp.q ? `&q=${encodeURIComponent(sp.q)}` : ''}`}>
-                  <strong>{x.title}</strong>
-                  <div className="ep-kicker">
-                    {x.code}
-                    {x.category ? ` · ${x.category}` : ''}
-                    {x.isReference ? ` · ${l('reference')}` : ''}
-                  </div>
+        </label>
+        <label className="ep-field" htmlFor="lb-library" style={{ margin: 0 }}>
+          <span className="ep-field__label">Library</span>
+          <select
+            id="lb-library"
+            name="library"
+            className="ep-select"
+            defaultValue={id(sp.library)}
+          >
+            <option value="">All</option>
+            {setup.libraries.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ep-field" htmlFor="lb-material" style={{ margin: 0 }}>
+          <span className="ep-field__label">Material</span>
+          <select
+            id="lb-material"
+            name="material"
+            className="ep-select"
+            defaultValue={id(sp.material)}
+          >
+            <option value="">All</option>
+            {setup.materialTypes.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ep-field" htmlFor="lb-subject" style={{ margin: 0 }}>
+          <span className="ep-field__label">Subject</span>
+          <select
+            id="lb-subject"
+            name="subject"
+            className="ep-select"
+            defaultValue={id(sp.subject)}
+          >
+            <option value="">All</option>
+            {setup.subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ep-field" htmlFor="lb-status" style={{ margin: 0 }}>
+          <span className="ep-field__label">A copy that is</span>
+          <select id="lb-status" name="status" className="ep-select" defaultValue={status}>
+            {STATUSES.map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="ep-btn ep-btn--secondary">
+          Show
+        </button>
+      </form>
+      <DataTable<BookRow>
+        caption={`Books · ${String(list.page.total)}`}
+        density="dense"
+        emptyTitle={filtered ? 'No book matches' : 'No book yet'}
+        emptyHint={
+          list.can.manage && !filtered ? (
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/library/books/new">
+              + Add a book
+            </a>
+          ) : undefined
+        }
+        columns={[
+          {
+            key: 'title',
+            header: 'Title',
+            render: (b) => (
+              <>
+                <a href={`/library/books/${b.id}`}>
+                  <strong>{b.title}</strong>
                 </a>
-              ),
-            },
-            { key: 'a', header: l('author'), render: (x) => x.author ?? '' },
-            { key: 'c', header: l('copies'), numeric: true, render: (x) => x.copies },
-            {
-              key: 'v',
-              header: l('available'),
-              numeric: true,
-              render: (x) => (
-                <Badge tone={x.available > 0 ? 'success' : 'neutral'}>{x.available}</Badge>
-              ),
-            },
-            { key: 'l', header: l('location'), render: (x) => x.location ?? '' },
-          ]}
-          rows={titles.data}
-          rowKey={(x) => x.id}
-          emptyTitle="—"
-        />
-      </Card>
-      {sp.title ? (
-        <Card
-          title={l('copiesOf', { title: current?.title ?? sp.title })}
-          style={{ marginTop: 'var(--sp-4)' }}
+                {b.subtitle ? <div className="ep-field__help">{b.subtitle}</div> : null}
+                <div className="ep-field__help">{b.author ?? '—'}</div>
+              </>
+            ),
+          },
+          {
+            key: 'kind',
+            header: 'Material · subject',
+            render: (b) => [b.material, b.subject].filter(Boolean).join(' · ') || '—',
+          },
+          {
+            key: 'pub',
+            header: 'Publisher · year',
+            render: (b) => [b.publisher, b.year].filter(Boolean).join(' · ') || '—',
+          },
+          {
+            key: 'ids',
+            header: 'Call no. · ISBN',
+            render: (b) => [b.callNo, isbnText(b.isbn)].filter(Boolean).join(' · ') || '—',
+          },
+          { key: 'copies', header: 'Copies', numeric: true, render: (b) => b.copies },
+          {
+            key: 'shelf',
+            header: 'On the shelf',
+            numeric: true,
+            render: (b) => <Badge tone={b.available ? 'success' : 'neutral'}>{b.available}</Badge>,
+          },
+          { key: 'out', header: 'Issued', numeric: true, render: (b) => b.issued },
+        ]}
+        rows={list.data}
+        rowKey={(b) => b.id}
+      />
+      {pages > 1 ? (
+        <nav
+          aria-label="Pages"
+          className="ep-hero__actions"
+          style={{ marginTop: 'var(--sp-3)', alignItems: 'center' }}
         >
-          {canManage ? (
-            <form action={libraryAccession} className="ep-master__filter">
-              <input type="hidden" name="titleId" value={sp.title} />
-              <InputField
-                id="accessionNos"
-                name="accessionNos"
-                label={l('accessionNos')}
-                maxLength={400}
-              />
-              <InputField
-                id="count"
-                name="count"
-                label={l('count')}
-                type="number"
-                min={1}
-                max={200}
-              />
-              <InputField
-                id="accessionedOn"
-                name="accessionedOn"
-                label={l('accessionedOn')}
-                type="date"
-              />
-              <InputField id="source" name="source" label={l('source')} maxLength={60} />
-              <Button type="submit" size="sm">
-                {l('add')}
-              </Button>
-            </form>
+          {page > 1 ? (
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page - 1)}>
+              ← Previous
+            </a>
           ) : null}
-          <DataTable<LibraryCopy>
-            caption={l('copies')}
-            density="dense"
-            columns={[
-              {
-                key: 'n',
-                header: l('accessionNo'),
-                render: (c) => <strong>{c.accessionNo}</strong>,
-              },
-              { key: 'd', header: l('accessionedOn'), render: (c) => c.accessionedOn },
-              { key: 's', header: l('source'), render: (c) => c.source ?? '' },
-              {
-                key: 'st',
-                header: l('status'),
-                render: (c) => (
-                  <Badge
-                    tone={
-                      c.status === 'available'
-                        ? 'success'
-                        : c.status === 'issued'
-                          ? 'info'
-                          : 'danger'
-                    }
-                  >
-                    {c.status}
-                  </Badge>
-                ),
-              },
-              {
-                key: 'l',
-                header: l('loan'),
-                render: (c) => (c.loan ? `${c.loan.borrower} · ${l('dueOn')} ${c.loan.dueOn}` : ''),
-              },
-              {
-                key: 'a',
-                header: '',
-                render: (c) =>
-                  canManage && c.status !== 'issued' ? (
-                    <form
-                      action={libraryCopyStatus}
-                      style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'flex-end' }}
-                    >
-                      <input type="hidden" name="titleId" value={sp.title} />
-                      <input type="hidden" name="copyId" value={c.id} />
-                      <SelectField
-                        id={`s-${c.id}`}
-                        name="status"
-                        label={l('markStatus')}
-                        defaultValue={c.status === 'issued' ? 'available' : c.status}
-                        options={['available', 'damaged', 'lost', 'withdrawn'].map((v) => ({
-                          value: v,
-                          label: v,
-                        }))}
-                      />
-                      <Button type="submit" size="sm" variant="ghost">
-                        {l('markStatus')}
-                      </Button>
-                    </form>
-                  ) : null,
-              },
-            ]}
-            rows={copies}
-            rowKey={(c) => c.id}
-            emptyTitle="—"
-          />
-        </Card>
+          <span className="ep-field__help">
+            Page {page} of {pages} · {list.page.total} books
+          </span>
+          {page < pages ? (
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page + 1)}>
+              Next →
+            </a>
+          ) : null}
+        </nav>
       ) : null}
     </>
   );

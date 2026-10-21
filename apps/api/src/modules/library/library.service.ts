@@ -221,6 +221,7 @@ export class LibraryService {
       const created: string[] = [];
       for (const no of numbers) {
         try {
+          // no library named: the school's Main library (a trigger, 0208)
           const r = await c.query<{ id: string }>(
             `INSERT INTO library_copies (school_id, title_id, accession_no, accessioned_on, source, price)
              VALUES (app.current_school_id(), $1, $2, COALESCE($3::date, CURRENT_DATE), $4, $5) RETURNING id::text`,
@@ -284,8 +285,12 @@ export class LibraryService {
 
   // ---- circulation -------------------------------------------------------------------------------
   private async copyByAccession(c: PoolClient, accessionNo: string) {
+    // a material type that cannot be issued (reference, maps) reads as a reference title
     const r = await c.query<{ id: string; status: string; is_reference: boolean; title: string }>(
-      `SELECT c.id::text, c.status::text, t.is_reference, t.title FROM library_copies c JOIN library_titles t ON t.id = c.title_id WHERE c.accession_no = $1`,
+      `SELECT c.id::text, c.status::text, (t.is_reference OR COALESCE(NOT m.issuable, false)) AS is_reference, t.title
+         FROM library_copies c JOIN library_titles t ON t.id = c.title_id
+         LEFT JOIN library_material_types m ON m.id = t.material_type_id
+        WHERE c.accession_no = $1`,
       [accessionNo],
     );
     if (!r.rows[0])

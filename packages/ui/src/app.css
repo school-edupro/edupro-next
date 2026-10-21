@@ -9459,3 +9459,44 @@ a.ep-pub-foot__item {
   flex: 1 1 12rem;
   min-width: 0;
 }
+
+/* ---- the book master (library part 2) ----------------------------------------------------------- */
+.ep-book__hero {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
+}
+@media (max-width: 1100px) {
+  .ep-book__hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ep-book__subtitle {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-body);
+  font-size: var(--fs-h5);
+}
+.ep-book__counts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ep-book__counts dd {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-book__person {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .ep-book__person {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ep-book__moves,
+.ep-book__copy-actions {
+  display: inline-flex;
+  gap: var(--sp-1);
+  flex-wrap: nowrap;
+}

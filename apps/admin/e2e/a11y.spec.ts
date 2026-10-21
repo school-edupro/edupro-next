@@ -216,6 +216,11 @@ const PAGES = [
   // Sprint 18
   '/exams/board-results',
   '/library/stock',
+  '/library/books/new',
+  '/library/books/1',
+  '/library/books/1?tab=loans',
+  '/library/books/1?tab=history',
+  '/library/books/1/edit',
   '/masters/library',
   '/masters/library?tab=library_accession_series',
   '/masters/library?tab=library_borrow_rules&add=1',
@@ -559,6 +564,33 @@ test.describe('accessibility (axe)', () => {
             .slice(0, 3)
             .join(' | ')}`,
       ),
+    ).toEqual([]);
+  });
+
+  test('no serious or critical violations on a book copy’s status panel', async ({ page }) => {
+    await page.goto('/library/books/1');
+    await page.waitForLoadState('networkidle');
+    const status = page.getByRole('button', { name: /^Change the status of copy/ }).first();
+    test.skip(!(await status.isVisible().catch(() => false)), 'no copy to change in this school');
+    await status.click();
+    await page.getByRole('heading', { name: /^Status of copy/ }).waitFor();
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    const results = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map(
+          (v) =>
+            `${v.id}: ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
     ).toEqual([]);
   });
 

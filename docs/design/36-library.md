@@ -79,3 +79,51 @@ add, edit, active/inactive, Excel download and upload with the same checks):
   change the set-up; a class rule, a hostel rule before it, a staff group that may not borrow, the
   all-staff rule, no renewal, a fine after grace days held at the highest fine); `a11y.spec.ts` (the
   set-up tabs and the rule form).
+
+## Part 2 — the book master (migrations 0207, 0208)
+
+- **Data:** `library_titles` gains its links (material type, subject and sub-subject, publisher and
+  place, language, class), subtitle, volume, call number and keywords; the title code is given
+  (`T000001`) when none is typed. `library_title_authors` holds the people in the order printed (author,
+  editor, translator, illustrator). `library_copies` gains library (every copy has one; an older call or
+  an upload without one goes to the Main library), shelf and rack, barcode (unique in the school), how it
+  came (purchase from a vendor with bill no., bill date and PO no.; or a donation and the donor), and the
+  status date and reason. `library_copy_events` keeps each copy's history (accessioned, details changed,
+  moved, withdrawn, lost, lost and paid with the amount, found again, damaged, back in use). The titles
+  and copies already there were linked: their author, publisher, language and category (the old
+  subject) became master rows; reference titles became the Reference type; copies went to the Main
+  library. The text columns (author, publisher, language, category) stay as the names of the links.
+- **Accession numbers:** `app.library_take_accessions(series, n)` locks the series of the copy's library
+  and the title's material type, gives the next n numbers padded to its digits, skips any number a copy
+  already has (one typed by hand) and moves the series on. Typed numbers are taken as written
+  (capitals, no spaces) and refused when used. No series for the library and type: refused with the way
+  to add one.
+- **Checks:** ISBN 10 or 13 with the right check digit (kept without hyphens); the sub-subject one of the
+  subject's; a shelf of the copy's library and a rack of that shelf; vendor and bill for a purchase only,
+  donor for a donation only; bill date on or before the date of accession; a barcode for one copy at a
+  time; masters that are switched off refused. A new author or publisher name joins its master.
+- **API (library.catalogue.view / .manage):** `GET library/books` (search title, subtitle, author, code,
+  call number, ISBN, accession number, barcode; filters library, material type, subject, copy status;
+  copies, on the shelf, issued), `GET library/books/setup` (the form's lists and each series' next
+  number), `GET library/books/suggest` (author or publisher names), `GET library/books/match` (the same
+  ISBN or title), `GET library/books/:id`, `POST library/books` (a title with its first copies), `PUT
+  library/books/:id`, `POST library/books/:id/copies`, `PUT library/copies/:id`, `POST
+  library/copies/:id/status`.
+- **Copy status:** withdrawn and damaged need the copy back; lost or lost and paid (the amount) while on
+  loan closes the loan with the reason; found again only from lost; back in use from damaged or
+  withdrawn; a sold copy stays sold. At the issue desk a title whose material type cannot be issued is
+  refused as a reference title.
+- **Screens:** Library → **Books** (`/library`): search and filters, the counts, Add a book. **Add a
+  book** (`/library/books/new`, `?from=` clones another title without its ISBN): the book, authors and
+  others in order (names suggested from the masters), publication, and the first copies (the number from
+  the series shown, or the numbers typed; shelf and rack of the library; purchase or donation); a title
+  already in the catalogue is shown before it is entered twice. **The book's page**
+  (`/library/books/:id`): the book with its copies on the shelf, issued, lost and damaged; Edit, Clone;
+  tabs Copies (where, status or who has it and when due, how it came, price; Edit and Status in a side
+  panel; Add copies), Loans and History. The old Titles and Copies tabs of Library setup are hidden (the
+  grid stays for Excel until part 4).
+- Tests: `library-books.e2e-spec.ts` (a title with people and links and three copies from the series;
+  the new names in the masters; the checks; the same book found; copies typed and from the series with a
+  typed number skipped; a copy moved and its barcode unique; the title changed and the names others show;
+  copy status with the loan closed; a reference type not issued; the list's search and filters);
+  `a11y.spec.ts` (the list, the form, the book's tabs, the edit page, a copy's status panel).

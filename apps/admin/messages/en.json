@@ -806,8 +806,8 @@
     },
     "library": {
       "kicker": "Library",
-      "title": "Catalogue",
-      "description": "Titles with their copies. Add copies (accession) here; titles come from Library setup or an Excel upload."
+      "title": "Books",
+      "description": "Every title with its copies on the shelf and out. Add a book once with its copies; open a title for its copies, loans and history."
     },
     "library_circulation": {
       "kicker": "Library",

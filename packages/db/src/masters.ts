@@ -2572,6 +2572,9 @@ export const MASTERS: MasterDefinition[] = [
   master({
     id: 'library_titles',
     title: 'Titles',
+    // the book master owns titles and copies (docs/design/36-library.md, part 2); the grid stays
+    // reachable for Excel until part 4's import
+    hidden: true,
     group: 'library',
     order: 200,
     table: 'library_titles',
@@ -2609,6 +2612,9 @@ export const MASTERS: MasterDefinition[] = [
   master({
     id: 'library_copies',
     title: 'Copies (accession register)',
+    // the book master owns titles and copies (docs/design/36-library.md, part 2); the grid stays
+    // reachable for Excel until part 4's import
+    hidden: true,
     group: 'library',
     order: 210,
     table: 'library_copies',
