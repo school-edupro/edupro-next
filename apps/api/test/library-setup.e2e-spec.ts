@@ -24,6 +24,7 @@ describe('library set-up and borrowing rules (e2e)', () => {
   let school: SeededSchool;
   let admin: SeededUser;
   let coordinator: SeededUser;
+  let librarian: SeededUser;
   const h = (u?: SeededUser) => headersFor((u ?? admin).sub, school.id);
   const save = (master: string, values: Record<string, unknown>, who?: SeededUser) =>
     inject({ method: 'POST', url: `/masters/${master}/rows`, headers: h(who), json: { values } });
@@ -40,6 +41,7 @@ describe('library set-up and borrowing rules (e2e)', () => {
       school = await seedSchool(c, s);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       coordinator = await seedUser(c, school, `${s}-coord`, 'academic_coordinator');
+      librarian = await seedUser(c, school, `${s}-lib`, 'librarian');
     });
     app = await createApp();
     inject = injector(app);
@@ -349,5 +351,26 @@ describe('library set-up and borrowing rules (e2e)', () => {
     const n = await issue(7, 'employee', people.clerk!);
     expect(n.statusCode).toBe(201);
     expect(n.json().dueOn).toBe(day(30));
+  });
+
+  it('the Librarian role (0212) runs the library and nothing else', async () => {
+    const get = (url: string) => inject({ method: 'GET', url, headers: h(librarian) });
+    for (const url of [
+      '/library/catalogue',
+      '/library/books',
+      '/library/books/setup',
+      '/library/labels/setup',
+      '/library/subscriptions',
+      '/masters/library_vendors/rows',
+    ]) {
+      expect([url, (await get(url)).statusCode]).toEqual([url, 200]);
+    }
+    expect(
+      (await save('library_vendors', { code: 'LIBDESK', name: 'Library Desk Supplies' }, librarian))
+        .statusCode,
+    ).toBe(201);
+    for (const url of ['/people/recruitment/setup', '/fees/dashboard']) {
+      expect([url, (await get(url)).statusCode]).toEqual([url, 403]);
+    }
   });
 });

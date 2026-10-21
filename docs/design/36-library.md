@@ -280,3 +280,12 @@ Excel; Excel import in our layout or the legacy one; barcode and spine labels; p
 Left for later (not asked in this round): the circulation desk's own screen redesign (it already follows
 the rules), due-date reminders by email and SMS, reservations, the library dashboard, per-library staff
 rights (the legacy's per-library permissions), and labels with titles in Indian scripts (a Unicode font).
+
+## The Librarian role (migration 0212)
+
+A system role `librarian` (kind module) for the library staff: library set-up, books and copies, import,
+labels, periodicals, circulation and fines, stock checks (`library.catalogue.view`/`manage`,
+`library.loan.circulate`, `library.stock.verify`), with finding a person and viewing students and staff
+(to pick a borrower), file upload and view, and the privacy and hypercare reports every staff role has.
+Nothing in fees, recruitment, exams or administration. On a development machine, sign in as
+`dev-librarian · Librarian` (Lata Librarian, Alpha) to test the module.

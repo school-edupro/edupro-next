@@ -15,6 +15,10 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
   { sub: 'dev-accounts', label: 'Accountant (fees; last approval of transport requests)' },
   { sub: 'dev-hostel', label: 'Hostel Clerk (set-up, beds, registers, hostel withdrawals)' },
   { sub: 'dev-warden', label: 'Warden (head warden of a hostel; roll-call in the staff app)' },
+  {
+    sub: 'dev-librarian',
+    label: 'Librarian (set-up, books, import, labels, periodicals, circulation)',
+  },
   { sub: 'dev-parent', label: 'Parent (guardian of two children; opens the parent app)' },
   { sub: 'dev-student', label: 'Student (VI-A; opens the parent app)' },
   { sub: 'dev-nobody', label: 'Member with no roles' },

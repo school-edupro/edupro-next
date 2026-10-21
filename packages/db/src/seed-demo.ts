@@ -93,6 +93,16 @@ const DEMO_USERS: DemoUser[] = [
       'Hostel Clerk: hostel set-up, allot / transfer / vacate, registers, hostel withdrawals (start, complete, cancel)',
   },
   {
+    sub: 'dev-librarian',
+    name: 'Lata Librarian',
+    mobile: '9999999920',
+    email: 'library@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['librarian'] },
+    description:
+      'Librarian: library set-up, books and copies, import, labels, periodicals, circulation and fines, stock checks',
+  },
+  {
     sub: 'dev-group',
     name: 'Gita Group Admin',
     mobile: '9999999901',
