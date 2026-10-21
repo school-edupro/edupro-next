@@ -176,3 +176,66 @@ export interface RegisterRow {
   borrower: string | null;
   dueOn: string | null;
 }
+
+/** A book upload (part 4): what it holds and how far it has gone. */
+export interface ImportSummary {
+  rows: number;
+  newTitles: number;
+  newCopies: number;
+  updates: number;
+  unchanged: number;
+  errors: number;
+  warnings: number;
+  masters: {
+    authors: number;
+    publishers: number;
+    subjects: number;
+    languages: number;
+    vendors: number;
+    shelves: number;
+  };
+  done?: number;
+  failed?: number;
+  series?: Array<{ prefix: string; next: string }>;
+}
+export interface ImportListRow {
+  id: string;
+  fileName: string;
+  layout: 'edupro' | 'legacy';
+  status: 'checked' | 'importing' | 'done' | 'discarded';
+  total: number;
+  summary: ImportSummary;
+  by: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+export interface ImportView extends ImportListRow {
+  ignoredColumns: string[];
+  progress: { pending: number; done: number; failed: number; skipped: number };
+  rows: Array<{
+    line: number;
+    kind: 'new_title' | 'new_copy' | 'update' | 'unchanged' | 'error';
+    accessionNo: string | null;
+    title: string | null;
+    library: string | null;
+    errors: string[];
+    warnings: string[];
+    changes: string[];
+    state: 'pending' | 'done' | 'failed' | 'skipped';
+    result: string | null;
+  }>;
+  page: { number: number; size: number; total: number };
+}
+export const IMPORT_KIND: Record<string, string> = {
+  new_title: 'New title',
+  new_copy: 'New copy',
+  update: 'Update',
+  unchanged: 'No change',
+  error: 'Refused',
+};
+export const IMPORT_STATUS: Record<string, string> = {
+  checked: 'Checked, not imported',
+  importing: 'Importing',
+  done: 'Imported',
+  discarded: 'Discarded',
+};

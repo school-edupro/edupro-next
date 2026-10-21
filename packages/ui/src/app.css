@@ -9510,3 +9510,31 @@ a.ep-pub-foot__item {
   color: var(--text-link);
   margin-bottom: var(--sp-2);
 }
+/* the book import (library part 4) */
+.ep-book__upload {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-book__how {
+  margin: 0;
+  padding-left: var(--sp-4);
+  display: grid;
+  gap: var(--sp-1);
+  font-size: var(--fs-small);
+}
+.ep-book__runner {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: min(100%, 20rem);
+}
+.ep-book__runner progress {
+  width: 100%;
+  block-size: 0.5rem;
+  accent-color: var(--mob-cyan-700);
+}
+.ep-book__err {
+  color: var(--status-danger-text);
+}
+.ep-book__how a {
+  text-decoration: underline;
+}

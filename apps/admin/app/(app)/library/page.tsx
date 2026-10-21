@@ -199,6 +199,11 @@ export default async function LibraryBooksPage({
               titles={titles}
               copies={copies}
             />
+            {list.can.manage ? (
+              <a className="ep-btn ep-btn--ghost" href="/library/import">
+                Import
+              </a>
+            ) : null}
             <a className="ep-btn ep-btn--ghost" href="/masters/library">
               Library setup
             </a>

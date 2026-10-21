@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+} from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -16,6 +28,7 @@ import {
 } from './library-books.dto';
 import { LibraryBooksService } from './library-books.service';
 import { LibraryExportService } from './library-export.service';
+import { LibraryImportService } from './library-import.service';
 import { LIBRARY } from './library.dto';
 
 /** The book master (docs/design/36-library.md, part 2): titles and their copies. */
@@ -26,7 +39,80 @@ export class LibraryBooksController {
   constructor(
     private readonly books: LibraryBooksService,
     private readonly exporter: LibraryExportService,
+    private readonly importer: LibraryImportService,
   ) {}
+
+  // ---- part 4: books from Excel ---------------------------------------------------------------------
+
+  @Get('imports')
+  @ApiOperation({ summary: 'The book uploads of the school, latest first' })
+  @RequirePermission(LIBRARY.manage)
+  imports(@ReqCtx() ctx: RequestContext) {
+    return this.importer.list(ctx);
+  }
+
+  @Get('imports/template')
+  @ApiOperation({ summary: 'The book upload template (base64 .xlsx)' })
+  @RequirePermission(LIBRARY.manage)
+  template(@ReqCtx() ctx: RequestContext) {
+    return this.importer.template(ctx);
+  }
+
+  @Post('imports')
+  @ApiOperation({
+    summary:
+      'Check an .xlsx or .csv of books (the file as the body; ours or the legacy layout); nothing saved yet',
+  })
+  @RequirePermission(LIBRARY.manage)
+  check(
+    @ReqCtx() ctx: RequestContext,
+    @Query('fileName') fileName: string | undefined,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.importer.check(
+      ctx,
+      (fileName ?? 'books.xlsx').slice(0, 200),
+      req.body,
+      String(req.headers['content-type'] ?? ''),
+    );
+  }
+
+  @Get('imports/:id')
+  @ApiOperation({
+    summary: 'A checked upload: what each row does, the masters it adds, its progress',
+  })
+  @RequirePermission(LIBRARY.manage)
+  importView(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('kind') kind: string | undefined,
+    @Query('page') page: string | undefined,
+  ) {
+    return this.importer.view(ctx, id, kind, Math.max(1, Number(page) || 1));
+  }
+
+  @Post('imports/:id/run')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Import the next batch of rows (call again until nothing is pending)' })
+  @RequirePermission(LIBRARY.manage)
+  run(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.importer.run(ctx, id);
+  }
+
+  @Post('imports/:id/discard')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Leave a checked upload unimported' })
+  @RequirePermission(LIBRARY.manage)
+  discard(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.importer.discard(ctx, id);
+  }
+
+  @Get('imports/:id/problems')
+  @ApiOperation({ summary: 'The rows not imported and why (base64 .xlsx)' })
+  @RequirePermission(LIBRARY.manage)
+  problems(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.importer.problems(ctx, id);
+  }
 
   @Get('books')
   @ApiOperation({ summary: 'The book master: titles with their copies on the shelf and out' })

@@ -1075,6 +1075,8 @@ function dmy(s: string): RegExpExecArray | null {
 export interface ReadFileOptions {
   /** Sheets to try in order (e.g. ['Students', 'Student Data Entry']); otherwise the first sheet. */
   sheets?: string[];
+  /** The largest .xlsx taken (default 4 MB; the library's book import takes more). */
+  maxBytes?: number;
   /**
    * Picks the header row among the first rows (a sheet with a title or a section band above the
    * field names); row 1 when absent or when nothing matches.
@@ -1095,8 +1097,13 @@ export async function readFile(
   if (!dto.contentBase64)
     throw new DomainError('validation-failed', 'Send csv text or an xlsx file', { status: 400 });
   const buf = Buffer.from(dto.contentBase64, 'base64');
-  if (buf.length > 4 * 1024 * 1024)
-    throw new DomainError('validation-failed', 'File larger than 4 MB', { status: 400 });
+  const max = o.maxBytes ?? 4 * 1024 * 1024;
+  if (buf.length > max)
+    throw new DomainError(
+      'validation-failed',
+      `File larger than ${String(Math.round(max / 1024 / 1024))} MB`,
+      { status: 400 },
+    );
   let wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(buf as unknown as ArrayBuffer);

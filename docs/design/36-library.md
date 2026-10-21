@@ -161,3 +161,49 @@ add, edit, active/inactive, Excel download and upload with the same checks):
   accession ranges and their order, the register's borrower; Excel per copy and per title with the About
   sheet; picked fields in order for the level; my last per user; layouts and their rights; audit);
   `a11y.spec.ts` (the register, more filters, the picker open; the candidates' picker still).
+
+## Part 4 — books from Excel, our layout or the legacy one (migration 0210)
+
+- **Library → Import books** (`/library/import`, library.catalogue.manage): upload an .xlsx or .csv
+  (up to 15 MB, 50,000 rows), our template (`/api/library-import/template`: the columns, drop-downs for
+  library, reference, purchase or donation and status, a "How to fill" sheet) or the legacy library's
+  book file as it is. The file goes to the API as its bytes (`POST library/imports?fileName=`), not as
+  JSON, so a large file fits.
+- **Columns** are read by their names (no case, spaces, signs or a bracketed note): ours and the legacy
+  import template's and book export's (BookCode or Book Id, BookName, Author, Author 2, Editors,
+  Booktype, Category, Subject, Subject Subcategory, Publisher, Publisher Place, Publication Year, Call
+  No, Keyword, Vendor/Source, Source Name, Procurement Type, DonatedBook, IsBorrowable, Location,
+  ShelfRack, ShelfRow, Language/Langugage, ISBNNo, Date of Accession, BillDate, BillNo,
+  PurchaseOrderNo, EditionNo, Volume, Pages, Price, Barcode, Remarks, Status and Status1). S.No, Class
+  No, Book No, Source Code, Copy/Set and the verification columns are not read; other unknown columns
+  are listed.
+- **Each row is one copy.** Checked: an accession number (capitals, no spaces; once in the file); a
+  title; the library by code or name (none: the only library, or the Main one); the material type
+  (legacy BOOK and Text/TEXTBOOK, or a code or name; none: Book); a barcode once. Left out with a
+  warning: an ISBN with a wrong check digit, a year, pages or price that are not numbers ("Rs.199",
+  "₹ 1,250" read as numbers), a date that is not a day or is in the future, an unknown class. Legacy:
+  Donated Yes or Procurement "Donation" is a donation (Source Name the donor), a vendor or bill a
+  purchase, IsBorrowable No or Category Reference is reference only, other categories become keywords,
+  Location goes to the copy's remarks, ShelfRack and ShelfRow are the shelf and rack, Discard is
+  withdrawn, LAP lost, Sold withdrawn ("Sold (the old library)"), a copy Issued comes in on the shelf
+  with a warning.
+- **What a row does:** an accession number already in the library updates that copy and its title,
+  only the cells given (or no change); else a new copy of the title found by ISBN, or by title, first
+  author, edition and volume, already there or made by an earlier row of the file (a row without the
+  ISBN joins the title an earlier row of it gave one); else a new title. Refused rows stay out.
+- **The preview** (`/library/import/:id`): new titles, new copies, updates, no change, refused, with
+  warnings; the names it adds to Library setup (authors, publishers, subjects, languages, vendors,
+  shelves); the columns not read; the rows by what they do, with the reasons, the changes and the
+  warnings. **Import** runs batch after batch (300 rows a call, with a progress bar; stopped, it
+  carries on), each row on its own: one that fails keeps its reason and the rest go on. New names join
+  the masters (a vendor by its name or code, a new one with a code made from its name; a shelf of the
+  library with its racks; a sub-subject added to its subject). When all is done the accession series
+  move past the highest number that came in with their prefix. **Discard** leaves a checked upload out.
+  **Download the rows not imported** gives them with the reason, to correct and upload again.
+- Every copy that comes in has its history (accessioned, "Imported from <file>"; an update "Updated
+  from <file>: the changes"); the check and the import are audited.
+- Tests: `library-import.e2e-spec.ts` (a legacy file: grouping, a copy of a title already there, an
+  update with only the cells given, no change, refusals and warnings; the import, the masters filled,
+  the series moved and the next copy continuing it, the rows not imported as a file; our template
+  round trip with a status and a date cell; a discarded upload; a file without the two needed columns;
+  650 rows in three batches with a title made in the first taking copies in the next); `a11y.spec.ts`.

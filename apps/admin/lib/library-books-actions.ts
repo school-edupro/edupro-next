@@ -1,6 +1,7 @@
 'use server';
 /** The book master (docs/design/36-library.md, part 2): saving titles and copies. */
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import type { PickerSetup } from '@/components/FieldPicker';
 import { ApiError, apiFetch } from './api';
 
@@ -181,4 +182,71 @@ export async function deleteBookLayout(id: string): Promise<{ ok: true } | Fail>
   } catch (e) {
     return problem(e);
   }
+}
+
+// ---- part 4: books from Excel ----------------------------------------------------------------------------
+
+/** A file of books checked (nothing saved yet); its preview opens. */
+export async function uploadBooks(fd: FormData) {
+  const file = fd.get('file');
+  const back = (detail: string) =>
+    redirect(
+      `/library/import?error=validation-failed&detail=${encodeURIComponent(detail.slice(0, 300))}`,
+    );
+  if (!(file instanceof File) || file.size === 0) back('Choose an .xlsx or .csv file');
+  const f = file as File;
+  if (!/\.(xlsx|csv)$/i.test(f.name)) back('An .xlsx or .csv file, please');
+  if (f.size > 15 * 1024 * 1024) back('The file is larger than 15 MB: split it');
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>(
+      `/library/imports?fileName=${encodeURIComponent(f.name.slice(0, 200))}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': /\.csv$/i.test(f.name)
+            ? 'text/csv'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        body: Buffer.from(await f.arrayBuffer()),
+      },
+    );
+    id = r.id;
+  } catch (e) {
+    back(problem(e).error);
+  }
+  redirect(`/library/import/${id}`);
+}
+
+/** The next batch of an upload imported; the page calls again until nothing is pending. */
+export async function runImport(
+  id: string,
+): Promise<{ ok: true; status: string; pending: number; done: number; failed: number } | Fail> {
+  if (!okId(id)) return { ok: false, error: 'Not found' };
+  try {
+    const r = await apiFetch<{ status: string; pending: number; done: number; failed: number }>(
+      `/library/imports/${id}/run`,
+      { method: 'POST' },
+    );
+    if (r.status === 'done') revalidatePath(`/library/import/${id}`);
+    return { ok: true, ...r };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function discardImport(fd: FormData) {
+  const id = String(fd.get('id') ?? '');
+  if (!okId(id)) redirect('/library/import');
+  try {
+    await apiFetch(`/library/imports/${id}/discard`, { method: 'POST' });
+  } catch (e) {
+    redirect(
+      `/library/import/${id}?error=validation-failed&detail=${encodeURIComponent(problem(e).error.slice(0, 300))}`,
+    );
+  }
+  revalidatePath('/library/import');
+  redirect(
+    `/library/import/${id}?ok=1&detail=${encodeURIComponent('Discarded: nothing was imported.')}`,
+  );
 }

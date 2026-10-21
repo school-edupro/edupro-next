@@ -4,6 +4,7 @@ import { DailyAcademicsModule } from '../academics/daily/daily.module';
 import { LibraryBooksController } from './library-books.controller';
 import { LibraryBooksService } from './library-books.service';
 import { LibraryExportService } from './library-export.service';
+import { LibraryImportService } from './library-import.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
@@ -11,7 +12,13 @@ import { LibraryService } from './library.service';
 @Module({
   imports: [DailyAcademicsModule],
   controllers: [LibraryController, LibraryBooksController],
-  providers: [LibraryService, LibraryBooksService, LibraryExportService, AuditService],
+  providers: [
+    LibraryService,
+    LibraryBooksService,
+    LibraryExportService,
+    LibraryImportService,
+    AuditService,
+  ],
   exports: [LibraryService],
 })
 export class LibraryModule {}
