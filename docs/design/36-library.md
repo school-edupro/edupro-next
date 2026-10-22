@@ -525,3 +525,20 @@ waiver requests + the per-person sheet, 2 update from Excel, 3 library staff, 4 
   **Books by pupil** / **Books by staff member**: a heading row a person (name, number, class or
   designation, how many books) and their books held between the days (issued, due, renewed, returned,
   days late, how it ended, the fine and where it is); `libraryFile` takes more sheets with heading rows.
+- **Part 2 — update existing books from Excel (done).** Library → Import books has two tabs, **Add new
+  books** (as before) and **Update existing books** (`?mode=update`), the employees' bulk upload's way:
+  1. the template (`GET library/books/update/template`, through `/api/library-import/update-template`) is
+  filled with the copies of the library, shelf and material type chosen (up to 5,000), one row per
+  accession no., in the columns ticked by section (the book, publication, the copy, how it came; none
+  ticked: all), list columns with drop-downs of Library setup's names; 2. the filled .xlsx or .csv is
+  checked (`POST library/books/update`, kept in `master_imports` as `library_books_update`): Accession No.
+  finds the copy (an old number too), a blank cell is no change, CLEAR empties a field (not Title,
+  Material type, Library, Reference only, Date of accession), names are matched to Library setup, dates
+  as DD-MM-YYYY, Authors as names separated by ; (editors and the rest kept); each row is tried with the
+  book form's own rules and undone (a savepoint), so a shelf of another library, a vendor without a
+  purchase, a taken barcode are caught; the same copy twice, a sold copy, one title given two values are
+  refused; a copy moved to another library leaves its shelf unless the file gives one; old → new by row,
+  and a note when a book field reaches copies not in the file; 3. applied all together (`POST
+  library/books/update/:id/apply`): each title once over what it has now, then each copy (its history
+  says moved or edited), all or nothing; the update files so far. Status and the accession no. keep
+  their own screens.

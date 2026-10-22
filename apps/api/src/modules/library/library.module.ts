@@ -10,6 +10,7 @@ import { LibraryLabelsService } from './library-labels.service';
 import { LibraryPeriodicalsService } from './library-periodicals.service';
 import { LibraryRegisterService } from './library-register.service';
 import { LibraryAccessionService } from './library-accession.service';
+import { LibraryBooksUpdateService } from './library-books-update.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { LibraryFinesService } from './library-fines.service';
@@ -32,6 +33,7 @@ import { LibraryService } from './library.service';
     LibraryPeriodicalsService,
     LibraryRegisterService,
     LibraryAccessionService,
+    LibraryBooksUpdateService,
     LibraryChargesService,
     LibraryDeskService,
     LibraryFinesService,

@@ -460,3 +460,50 @@ export async function chargeBook(fd: FormData) {
   });
   redirect(`/library/charges?${q.toString()}`);
 }
+
+/** A file updating books by accession no. checked (nothing saved yet); its check opens on Import. */
+export async function uploadBooksUpdate(fd: FormData) {
+  const file = fd.get('file');
+  const back = (detail: string): never =>
+    redirect(
+      `/library/import?mode=update&error=validation-failed&detail=${encodeURIComponent(detail.slice(0, 300))}`,
+    );
+  if (!(file instanceof File) || file.size === 0) back('Choose an .xlsx or .csv file');
+  const f = file as File;
+  if (!/\.(xlsx|csv)$/i.test(f.name)) back('An .xlsx or .csv file, please');
+  if (f.size > 8 * 1024 * 1024) back('The file is larger than 8 MB: split it');
+  let id = '';
+  try {
+    const r = await apiFetch<{ id: string }>(
+      `/library/books/update?fileName=${encodeURIComponent(f.name.slice(0, 200))}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': /\.csv$/i.test(f.name) ? 'text/csv' : 'application/octet-stream',
+        },
+        body: Buffer.from(await f.arrayBuffer()),
+      },
+    );
+    id = r.id;
+  } catch (e) {
+    back(problem(e).error);
+  }
+  redirect(`/library/import?mode=update&check=${id}`);
+}
+
+/** A checked update file applied, all or nothing. */
+export async function applyBooksUpdate(fd: FormData) {
+  const id = String(fd.get('id') ?? '');
+  if (!okId(id)) redirect('/library/import?mode=update');
+  try {
+    await apiFetch(`/library/books/update/${id}/apply`, { method: 'POST' });
+  } catch (e) {
+    redirect(
+      `/library/import?mode=update&check=${id}&error=validation-failed&detail=${encodeURIComponent(problem(e).error.slice(0, 600))}`,
+    );
+  }
+  revalidatePath('/library');
+  redirect(
+    `/library/import?mode=update&check=${id}&ok=1&detail=${encodeURIComponent('The changes are saved')}`,
+  );
+}

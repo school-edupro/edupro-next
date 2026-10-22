@@ -2,7 +2,13 @@ import { Badge, Breadcrumbs, DataTable, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { IMPORT_STATUS, type ImportListRow } from '@/lib/library-books';
+import {
+  BooksUpdate,
+  type UpdateCheck,
+  type UpdateFields,
+  type UpdateListRow,
+} from '@/components/library/BooksUpdate';
+import { IMPORT_STATUS, type BookSetup, type ImportListRow } from '@/lib/library-books';
 import { uploadBooks } from '@/lib/library-books-actions';
 
 const when = (iso: string) =>
@@ -22,21 +28,76 @@ const when = (iso: string) =>
 export default async function LibraryImportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    mode?: string;
+    check?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('library.catalogue.manage')) notFound();
-  const list = await apiFetch<{ data: ImportListRow[] }>('/library/imports');
-  return (
+  const update = sp.mode === 'update';
+  const tabs = (
+    <div className="ep-tabs" style={{ marginBottom: 'var(--sp-4)' }}>
+      <div role="tablist" aria-label="Upload type" className="ep-tabs__list">
+        {(
+          [
+            [false, 'Add new books', '/library/import'],
+            [true, 'Update existing books', '/library/import?mode=update'],
+          ] as const
+        ).map(([u, label, href]) => (
+          <a
+            key={href}
+            className="ep-tabs__tab"
+            role="tab"
+            aria-selected={update === u}
+            href={href}
+          >
+            {label}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+  const header = (
     <>
       <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Import books' }]} />
       <PageHeader
         kicker="Library"
         title="Import books"
-        description="Bring books in from Excel: one row per copy. The file is checked first and nothing is saved until you import it."
+        description={
+          update
+            ? 'Update many books at once by accession no.: download the template with what they have now, change the cells, and check the file. Nothing is saved until you apply it.'
+            : 'Bring books in from Excel: one row per copy. The file is checked first and nothing is saved until you import it.'
+        }
       />
+      {tabs}
       <Notice params={sp} />
+    </>
+  );
+  if (update) {
+    const [fields, setup, updates, check] = await Promise.all([
+      apiFetch<UpdateFields>('/library/books/update/fields'),
+      apiFetch<BookSetup>('/library/books/setup').catch(() => null),
+      apiFetch<{ data: UpdateListRow[] }>('/library/books/update').then((x) => x.data),
+      /^\d{1,18}$/.test(sp.check ?? '')
+        ? apiFetch<UpdateCheck>(`/library/books/update/${sp.check!}`).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    return (
+      <>
+        {header}
+        <BooksUpdate fields={fields} setup={setup} check={check} list={updates} />
+      </>
+    );
+  }
+  const list = await apiFetch<{ data: ImportListRow[] }>('/library/imports');
+  return (
+    <>
+      {header}
       <div className="ep-grid-2">
         <section className="ep-card ep-acr-card" aria-labelledby="im-up-h">
           <h2 id="im-up-h" className="ep-card__title">

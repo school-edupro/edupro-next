@@ -249,6 +249,7 @@ const PAGES = [
   '/library/accession?preview=1&from=1001&start=1001',
   '/library?author=a&stock=never',
   '/library/import',
+  '/library/import?mode=update',
   '/library/import/14',
   '/library/import/14?kind=warnings',
   '/library/labels',

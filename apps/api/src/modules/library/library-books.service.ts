@@ -410,7 +410,8 @@ export class LibraryBooksService {
   // ---- writing ---------------------------------------------------------------------------------------
 
   /** The title's links checked (each in this school and on); people and the publisher by name. */
-  private async saveTitle(c: PoolClient, ctx: RequestContext, dto: TitleDto, id?: string) {
+  /** A title saved inside the caller's transaction (the book form, and updates from Excel). */
+  async saveTitle(c: PoolClient, ctx: RequestContext, dto: TitleDto, id?: string) {
     const exists = async (table: string, val: string | undefined, what: string) => {
       if (!val) return;
       const r = await c.query(
@@ -750,67 +751,70 @@ export class LibraryBooksService {
   async editCopy(ctx: RequestContext, id: string, dto: CopyEditDto) {
     if (!/^\d{1,18}$/.test(id))
       throw new DomainError('not-found', 'Copy not found', { status: 404 });
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const was = (
-        await c.query<{
-          library_id: string;
-          shelf_id: string | null;
-          rack: string | null;
-          status: string;
-        }>(
-          `SELECT library_id::text, shelf_id::text, rack, status::text FROM library_copies WHERE id = $1 FOR UPDATE`,
-          [id],
-        )
-      ).rows[0];
-      if (!was) throw new DomainError('not-found', 'Copy not found', { status: 404 });
-      if (was.status === 'sold')
-        throw new DomainError('library.copy_sold', 'A sold copy is no longer in the register', {
-          status: 409,
-        });
-      await this.checkCopy(c, dto);
-      try {
-        await c.query(
-          `UPDATE library_copies SET library_id = $2, shelf_id = $3, rack = $4, barcode = $5, acquisition = $6, source = lower($6),
+    return this.db.tenant(requireTenant(ctx), (c) => this.editCopyIn(c, ctx, id, dto));
+  }
+
+  /** A copy's place and source saved inside the caller's transaction (the copy form, updates from Excel). */
+  async editCopyIn(c: PoolClient, ctx: RequestContext, id: string, dto: CopyEditDto) {
+    const was = (
+      await c.query<{
+        library_id: string;
+        shelf_id: string | null;
+        rack: string | null;
+        status: string;
+      }>(
+        `SELECT library_id::text, shelf_id::text, rack, status::text FROM library_copies WHERE id = $1 FOR UPDATE`,
+        [id],
+      )
+    ).rows[0];
+    if (!was) throw new DomainError('not-found', 'Copy not found', { status: 404 });
+    if (was.status === 'sold')
+      throw new DomainError('library.copy_sold', 'A sold copy is no longer in the register', {
+        status: 409,
+      });
+    await this.checkCopy(c, dto);
+    try {
+      await c.query(
+        `UPDATE library_copies SET library_id = $2, shelf_id = $3, rack = $4, barcode = $5, acquisition = $6, source = lower($6),
                   vendor_id = $7, donor = $8, bill_no = $9, bill_date = $10, po_no = $11, price = $12, remarks = $13,
                   accessioned_on = COALESCE($14::date, accessioned_on), updated_at = now(), updated_by = app.current_user_id()
             WHERE id = $1`,
-          [
-            id,
-            dto.libraryId,
-            dto.shelfId ?? null,
-            dto.rack ?? null,
-            dto.barcode ?? null,
-            dto.acquisition ?? null,
-            dto.vendorId ?? null,
-            dto.donor ?? null,
-            dto.billNo ?? null,
-            dto.billDate ?? null,
-            dto.poNo ?? null,
-            dto.price ?? null,
-            dto.remarks ?? null,
-            dto.accessionedOn ?? null,
-          ],
-        );
-      } catch (error) {
-        if ((error as { code?: string }).code === '23505')
-          throw new DomainError('library.barcode_taken', 'The barcode is already on another copy', {
-            status: 409,
-          });
-        throw error;
-      }
-      const moved =
-        was.library_id !== dto.libraryId ||
-        (was.shelf_id ?? null) !== (dto.shelfId ?? null) ||
-        (was.rack ?? null) !== (dto.rack ?? null);
-      await this.event(c, ctx, id, moved ? 'moved' : 'edited');
-      await this.audit.stage(ctx, c, {
-        action: 'library.copy.update',
-        entityType: 'library_copies',
-        entityId: id,
-        after: dto,
-      });
-      return { id };
+        [
+          id,
+          dto.libraryId,
+          dto.shelfId ?? null,
+          dto.rack ?? null,
+          dto.barcode ?? null,
+          dto.acquisition ?? null,
+          dto.vendorId ?? null,
+          dto.donor ?? null,
+          dto.billNo ?? null,
+          dto.billDate ?? null,
+          dto.poNo ?? null,
+          dto.price ?? null,
+          dto.remarks ?? null,
+          dto.accessionedOn ?? null,
+        ],
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505')
+        throw new DomainError('library.barcode_taken', 'The barcode is already on another copy', {
+          status: 409,
+        });
+      throw error;
+    }
+    const moved =
+      was.library_id !== dto.libraryId ||
+      (was.shelf_id ?? null) !== (dto.shelfId ?? null) ||
+      (was.rack ?? null) !== (dto.rack ?? null);
+    await this.event(c, ctx, id, moved ? 'moved' : 'edited');
+    await this.audit.stage(ctx, c, {
+      action: 'library.copy.update',
+      entityType: 'library_copies',
+      entityId: id,
+      after: dto,
     });
+    return { id };
   }
 
   /**

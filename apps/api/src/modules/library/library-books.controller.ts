@@ -47,6 +47,7 @@ import { LibraryLabelsService } from './library-labels.service';
 import { LibraryPeriodicalsService } from './library-periodicals.service';
 import { LibraryRegisterService } from './library-register.service';
 import { LibraryAccessionService } from './library-accession.service';
+import { LibraryBooksUpdateService } from './library-books-update.service';
 import { LIBRARY } from './library.dto';
 
 /** The book master (docs/design/36-library.md, part 2): titles and their copies. */
@@ -62,6 +63,7 @@ export class LibraryBooksController {
     private readonly periodicals: LibraryPeriodicalsService,
     private readonly lists: LibraryRegisterService,
     private readonly accessions: LibraryAccessionService,
+    private readonly updater: LibraryBooksUpdateService,
   ) {}
 
   // ---- part 6: periodical subscriptions --------------------------------------------------------------
@@ -216,6 +218,70 @@ export class LibraryBooksController {
   @RequirePermission(LIBRARY.manage)
   template(@ReqCtx() ctx: RequestContext) {
     return this.importer.template(ctx);
+  }
+
+  // ---- books updated from Excel by accession no. (library round 3, part 2) ---------------------------
+  @Get('books/update/fields')
+  @ApiOperation({ summary: 'The fields an update file may change, by section' })
+  @RequirePermission(LIBRARY.manage)
+  updateFields() {
+    return this.updater.fields();
+  }
+
+  @Get('books/update/template')
+  @ApiOperation({
+    summary:
+      'The update template filled with the copies chosen and the columns ticked (base64 .xlsx)',
+  })
+  @RequirePermission(LIBRARY.manage)
+  updateTemplate(
+    @ReqCtx() ctx: RequestContext,
+    @Query('fields') fields: string | undefined,
+    @Query('libraryId') libraryId: string | undefined,
+    @Query('shelfId') shelfId: string | undefined,
+    @Query('materialTypeId') materialTypeId: string | undefined,
+  ) {
+    return this.updater.template(ctx, { fields, libraryId, shelfId, materialTypeId });
+  }
+
+  @Get('books/update')
+  @ApiOperation({ summary: 'The update files checked so far' })
+  @RequirePermission(LIBRARY.manage)
+  async updates(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.updater.list(ctx) };
+  }
+
+  @Post('books/update')
+  @ApiOperation({
+    summary:
+      'An update file (.xlsx or .csv as the body) checked: old against new; nothing saved yet',
+  })
+  @RequirePermission(LIBRARY.manage)
+  updateCheck(
+    @ReqCtx() ctx: RequestContext,
+    @Query('fileName') fileName: string | undefined,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.updater.check(
+      ctx,
+      (fileName ?? 'books-update.xlsx').slice(0, 200),
+      req.body,
+      String(req.headers['content-type'] ?? ''),
+    );
+  }
+
+  @Get('books/update/:id')
+  @RequirePermission(LIBRARY.manage)
+  updateOne(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.updater.summary(ctx, id);
+  }
+
+  @Post('books/update/:id/apply')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'A checked update file applied, all or nothing' })
+  @RequirePermission(LIBRARY.manage)
+  updateApply(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.updater.apply(ctx, id);
   }
 
   @Post('imports')
