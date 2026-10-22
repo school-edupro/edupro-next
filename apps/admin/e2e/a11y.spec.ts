@@ -228,6 +228,12 @@ const PAGES = [
   // Sprint 18
   '/exams/board-results',
   '/library/stock',
+  '/library/stock?new=1',
+  '/library/stock/1',
+  '/library/stock/1?state=extras',
+  '/library/stock/1?state=all&q=a',
+  '/library/sales',
+  '/library?view=copies&status=stock_missing',
   '/library?view=copies&sort=accession',
   '/library/accession',
   '/library/charges',

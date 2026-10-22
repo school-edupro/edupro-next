@@ -89,6 +89,14 @@ export class LibraryRegisterService {
         acquisition: ['Purchase', 'Donation'],
         yesno: ['Yes', 'No'],
         borrower: ['Student', 'Staff'],
+        stockstate: [
+          'Verified',
+          'Pending',
+          'On loan',
+          'Missing',
+          'Lost, withdrawn or sold since',
+          'Not in a cycle',
+        ],
       };
       const fields = fieldsOf(level);
       return {

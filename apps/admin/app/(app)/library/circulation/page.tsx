@@ -64,7 +64,10 @@ export default async function CirculationPage({
           <a href="/library/charges">Lost and damaged</a>
           <a href="/library/fines">Late fines</a>
           {me.permissions.includes('library.stock.verify') ? (
-            <a href="/library/stock">Stock verification and sales</a>
+            <>
+              <a href="/library/stock">Stock verification</a>
+              <a href="/library/sales">Book sales</a>
+            </>
           ) : null}
         </nav>
       </div>

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Req } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -31,17 +32,24 @@ import {
   RenewDto,
   ReturnDto,
   SaleDto,
-  StockCheckCloseDto,
-  StockCheckScanDto,
-  StockCheckStartDto,
+  StockCancelDto,
+  StockCloseDto,
+  StockCycleDto,
+  StockItemsExportDto,
+  StockItemsQueryDto,
+  StockVerifyDto,
   WaiveRequestDto,
 } from './library.dto';
 import { LibraryFinesService } from './library-fines.service';
 import { LibraryHistoryService } from './library-history.service';
+import { LibraryStockService } from './library-stock.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { LibraryService } from './library.service';
+
+/** Stock verification is its own right (the Librarian role has it). */
+const STOCK = 'library.stock.verify';
 
 /** Sprint 17: library — catalogue and copies, circulation, fines; the family's loans. */
 @ApiTags('library')
@@ -54,6 +62,7 @@ export class LibraryController {
     private readonly desk: LibraryDeskService,
     private readonly fines: LibraryFinesService,
     private readonly history: LibraryHistoryService,
+    private readonly stock: LibraryStockService,
   ) {}
 
   // ---- the circulation desk ------------------------------------------------------------------------
@@ -333,36 +342,146 @@ export class LibraryController {
     return { data: await this.library.digital(ctx, LIBRARY.familyView) };
   }
 
-  @Get('stock-checks')
-  @RequirePermission(LIBRARY.view)
-  async stockChecks(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.library.stockChecks(ctx) };
+  // ---- stock verification in cycles (library reports, part 3) -----------------------------------------
+  @Get('stock/cycles')
+  @ApiOperation({
+    summary: 'The stock cycles, open first, with what is verified, pending and missing',
+  })
+  @RequirePermission(STOCK)
+  async stockCycles(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.stock.cycles(ctx) };
   }
 
-  @Post('stock-checks')
-  @RequirePermission('library.stock.verify')
-  startStockCheck(@ReqCtx() ctx: RequestContext, @Body() body: StockCheckStartDto) {
-    return this.library.startStockCheck(ctx, body);
+  @Post('stock/cycles')
+  @ApiOperation({ summary: 'A stock cycle over the libraries, shelves and material types chosen' })
+  @RequirePermission(STOCK)
+  stockCycle(@ReqCtx() ctx: RequestContext, @Body() body: StockCycleDto) {
+    return this.stock.create(ctx, body);
   }
 
-  @Post('stock-checks/:id/scan')
-  @ApiOperation({ summary: 'Record scanned accession numbers as found' })
-  @RequirePermission('library.stock.verify')
-  scanStockCheck(
+  @Get('stock/template')
+  @ApiOperation({ summary: 'The stock check upload layout (base64 .xlsx)' })
+  @RequirePermission(STOCK)
+  stockTemplate() {
+    return this.stock.template();
+  }
+
+  @Get('stock/cycles/:id')
+  @RequirePermission(STOCK)
+  stockCycleOne(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.stock.get(ctx, id);
+  }
+
+  @Get('stock/cycles/:id/items')
+  @ApiOperation({
+    summary:
+      'A cycle’s copies by state (verified, pending, on loan, missing), or the numbers outside it',
+  })
+  @RequirePermission(STOCK)
+  stockItems(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
-    @Body() body: StockCheckScanDto,
+    @Query() q: StockItemsQueryDto,
   ) {
-    return this.library.scanStockCheck(ctx, id, body);
+    return this.stock.items(ctx, id, q);
   }
 
-  @Post('stock-checks/:id/close')
-  @RequirePermission('library.stock.verify')
-  closeStockCheck(
+  @Get('stock/cycles/:id/items/export')
+  @ApiOperation({ summary: 'A cycle’s list as Excel or PDF' })
+  @RequirePermission(STOCK)
+  stockItemsExport(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
-    @Body() body: StockCheckCloseDto,
+    @Query() q: StockItemsExportDto,
   ) {
-    return this.library.closeStockCheck(ctx, id, body);
+    return this.stock.itemsExport(ctx, id, q);
+  }
+
+  @Post('stock/cycles/:id/verify')
+  @ApiOperation({
+    summary: 'Book numbers scanned or typed: verified, or kept as outside the cycle',
+  })
+  @RequirePermission(STOCK)
+  stockVerify(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StockVerifyDto,
+  ) {
+    return this.stock.verify(ctx, id, body.accessionNos, body.remark);
+  }
+
+  @Post('stock/cycles/:id/items/:copyId/verify')
+  @ApiOperation({ summary: 'One copy verified by hand' })
+  @RequirePermission(STOCK)
+  stockMark(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('copyId') copyId: string,
+    @Body() body: { remark?: string },
+  ) {
+    const remark = typeof body?.remark === 'string' ? body.remark.trim().slice(0, 200) : undefined;
+    return this.stock.mark(ctx, id, copyId, true, remark || undefined);
+  }
+
+  @Post('stock/cycles/:id/items/:copyId/unverify')
+  @ApiOperation({ summary: 'A copy verified by mistake taken back to pending' })
+  @RequirePermission(STOCK)
+  stockUnmark(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('copyId') copyId: string,
+  ) {
+    return this.stock.mark(ctx, id, copyId, false);
+  }
+
+  @Post('stock/cycles/:id/uploads')
+  @ApiOperation({
+    summary: 'A file of book numbers (.xlsx, .csv or .txt as the body) checked against the cycle',
+  })
+  @RequirePermission(STOCK)
+  stockUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('fileName') fileName: string | undefined,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.stock.upload(ctx, id, (fileName ?? 'stock.xlsx').slice(0, 200), req.body);
+  }
+
+  @Get('stock/uploads/:id')
+  @RequirePermission(STOCK)
+  stockUploadOne(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.stock.getUpload(ctx, id);
+  }
+
+  @Post('stock/uploads/:id/apply')
+  @ApiOperation({ summary: 'A checked file applied: its copies verified' })
+  @RequirePermission(STOCK)
+  stockUploadApply(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.stock.applyUpload(ctx, id);
+  }
+
+  @Post('stock/uploads/:id/discard')
+  @RequirePermission(STOCK)
+  stockUploadDiscard(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.stock.discardUpload(ctx, id);
+  }
+
+  @Post('stock/cycles/:id/close')
+  @ApiOperation({ summary: 'A cycle closed: copies not found are missing (marked lost if asked)' })
+  @RequirePermission(STOCK)
+  stockClose(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: StockCloseDto) {
+    return this.stock.close(ctx, id, body);
+  }
+
+  @Post('stock/cycles/:id/cancel')
+  @ApiOperation({ summary: 'An open cycle made by mistake cancelled, with the reason' })
+  @RequirePermission(STOCK)
+  stockCancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StockCancelDto,
+  ) {
+    return this.stock.cancel(ctx, id, body);
   }
 }

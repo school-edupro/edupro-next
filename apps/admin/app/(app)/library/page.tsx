@@ -7,6 +7,8 @@ import {
   DEFAULT_VIEW,
   PREF,
   sanitizeRegisterView,
+  STATUSES,
+  STOCK_COLUMNS,
   type RegisterFields,
   type RegisterLevel,
   type RegisterResult,
@@ -35,11 +37,22 @@ export default async function LibraryBooksPage({
     // the view this user saved for this list; other users keep their own
     apiFetch<{ value: unknown }>(`/me/preferences/${PREF[level]}`).catch(() => ({ value: null })),
   ]);
-  let view: RegisterView = sanitizeRegisterView(
-    level,
-    saved.value,
-    new Set(fields.fields.map((f) => f.key)),
-  );
+  const known = new Set(fields.fields.map((f) => f.key));
+  let view: RegisterView = sanitizeRegisterView(level, saved.value, known);
+  // a link may open the list on a status (the stock page: verified, pending or missing copies)
+  if (sp.status && STATUSES[level].includes(sp.status)) {
+    view = { ...view, status: sp.status } as RegisterView;
+    if (sp.status.startsWith('stock_'))
+      view = {
+        ...view,
+        columns: [
+          ...view.columns,
+          ...STOCK_COLUMNS.filter(
+            (k) => known.has(k) && !view.columns.some((c) => c.key === k),
+          ).map((key) => ({ key })),
+        ],
+      } as RegisterView;
+  }
   const load = (v: RegisterView) =>
     apiFetch<RegisterResult>(`/library/register/${level}`, {
       method: 'POST',

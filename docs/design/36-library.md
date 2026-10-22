@@ -451,3 +451,29 @@ shelves and material types chosen; a book sold to someone outside the school is 
   (returned, returned damaged, lost, out, overdue, with any charge) and the fine and where it is now
   (`GET library/history/borrowers/:kind/:id`). Each list as Excel or PDF (`…/export`, through
   `/api/library-report`).
+- **Part 3 — stock verification in cycles (done, migration 0219).** **Stock verification**
+  (`/library/stock`): the cycles, open first with how far each has come, and a new cycle over the
+  libraries, shelves and material types ticked (none ticked in a group: all of it). A cycle takes the
+  copies on the shelves, damaged or on loan in its scope; a copy can be in one open cycle at a time
+  (`library.stock_overlap`), several cycles may run side by side (`POST library/stock/cycles`). A cycle's
+  page (`/library/stock/:id`): four figures (verified; pending, or missing once closed; on loan; numbers
+  not in the cycle) and the share accounted for; while open, a scan box (a number and Enter verifies it at
+  once and says what it was: verified, verified already, from another shelf or library, no such book,
+  scanned twice, on the shelf though issued; several may be pasted; `POST …/verify`) and a file of book
+  numbers (.xlsx with a column headed Accession no., Book no. or Barcode and an optional Remarks; or a
+  scanner's .csv / .txt, one number a line; checked first, kept in `library_stock_uploads`, then applied
+  or discarded; the layout from `GET library/stock/template`). A number is found by its accession number
+  in any case, an old number or, now, the barcode (`app.library_copy_by_number`). Each verified copy keeps
+  the day, who and how (scan, file, by hand) and the remark, and its last check date; numbers outside the
+  cycle are kept (`library_stock_check_extras`). The lists by state (pending, verified, on loan, missing,
+  lost/withdrawn/sold since, not in the cycle, every copy) by library, shelf, material type and search,
+  with Excel or PDF; a pending copy verified by hand, a verified one taken back. Close: pending copies
+  become missing (marked lost with the reason and the copy's history, if ticked), those issued then are
+  counted on loan; a cycle started by mistake is cancelled with its reason. A book on loan is counted at
+  the close, not at the start (an open cycle's earlier on-loan rows were reset). **The copies register**
+  has a Stock verification section (the copy's latest cycle, not cancelled: Stock check — Verified,
+  Pending, On loan, Missing, Lost/withdrawn/sold since, Not in a cycle; cycle; verified on and by;
+  remarks), Stock check is a default column, and the Status box takes Stock check: verified, pending or
+  missing; the cycle's lists open it (`/library?view=copies&status=stock_pending`). The old single stock
+  check routes (`library/stock-checks`) are replaced; book sales moved to their own page
+  (`/library/sales`) until part 4 rebuilds them.

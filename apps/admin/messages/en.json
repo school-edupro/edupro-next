@@ -146,7 +146,8 @@
     "reportBuilder": "Report builder",
     "groupView": "Group view",
     "boardResults": "Board results",
-    "stock": "Stock and sales",
+    "stock": "Stock verification",
+    "librarySales": "Book sales",
     "resultsAnalytics": "Results analytics",
     "library": "Library",
     "reportCards": "Report cards",
@@ -846,8 +847,8 @@
     },
     "library_stock": {
       "kicker": "Library",
-      "title": "Stock verification and sales",
-      "description": "Open a stock check, paste or scan accession numbers as they are found, close it to list the missing copies (optionally marking them lost). Withdrawn or damaged copies can be sold with a receipt reference."
+      "title": "Stock verification",
+      "description": "Stock cycles over the libraries, shelves and material types chosen; books verified by scan, a file or by hand; what is missing at the close."
     },
     "insights_results": {
       "kicker": "Insights",

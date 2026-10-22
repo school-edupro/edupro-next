@@ -18,7 +18,10 @@ export type CopyListStatus =
   | 'damaged'
   | 'lost'
   | 'withdrawn'
-  | 'sold';
+  | 'sold'
+  | 'stock_verified'
+  | 'stock_pending'
+  | 'stock_missing';
 export type TitleListStatus = 'all' | 'available' | 'out' | 'none';
 export type CopiesView = PeopleListView<CopyListStatus>;
 export type TitlesView = PeopleListView<TitleListStatus>;
@@ -37,6 +40,7 @@ export const DEFAULT_COPIES_VIEW: CopiesView = {
     { key: 'copy_price' },
     { key: 'issued_to' },
     { key: 'due_on' },
+    { key: 'stock_state' },
   ],
   filters: [],
   sort: [{ key: 'accession_no', dir: 'asc' }],
@@ -78,6 +82,9 @@ export const STATUSES: Record<RegisterLevel, string[]> = {
     'lost',
     'withdrawn',
     'sold',
+    'stock_verified',
+    'stock_pending',
+    'stock_missing',
   ],
   titles: ['all', 'available', 'out', 'none'],
 };
@@ -117,3 +124,11 @@ export function sanitizeRegisterView(
     size: [25, 50, 100, 200].includes(Number(v.size)) ? Number(v.size) : d.size,
   } as RegisterView;
 }
+
+/** The stock-check columns a link to the copies on a stock status brings into view (docs/design/36, part 3). */
+export const STOCK_COLUMNS = [
+  'stock_state',
+  'stock_cycle',
+  'stock_verified_on',
+  'stock_verified_by',
+];

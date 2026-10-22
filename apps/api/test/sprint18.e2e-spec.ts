@@ -326,35 +326,43 @@ describe('all bands and boards, library completion, partitioning (e2e, Sprint 18
         .json()
         .data.map((d: { code: string }) => d.code),
     ).toEqual(['D1']);
-    // stock check
+    // stock check (a cycle over every library since 0219)
     const chk = await inject({
       method: 'POST',
-      url: '/library/stock-checks',
+      url: '/library/stock/cycles',
       headers: h(),
       json: { name: 'Autumn' },
     });
-    expect(chk.json()).toMatchObject({ status: 'open', expected: 2 });
+    expect(chk.json()).toMatchObject({ status: 'open', counts: { total: 2, pending: 2 } });
     const again = await inject({
       method: 'POST',
-      url: '/library/stock-checks',
+      url: '/library/stock/cycles',
       headers: h(),
       json: { name: 'Twice' },
     });
     expect(again.statusCode).toBe(409);
+    expect(again.json().type).toBe('library.stock_overlap');
     const scan = await inject({
       method: 'POST',
-      url: `/library/stock-checks/${chk.json().id}/scan`,
+      url: `/library/stock/cycles/${chk.json().id}/verify`,
       headers: h(),
       json: { accessionNos: [`${s}-1`, 'nope'] },
     });
-    expect(scan.json()).toMatchObject({ found: 1, marked: 1, unknown: ['nope'] });
+    expect(scan.json()).toMatchObject({
+      verified: [expect.objectContaining({ accessionNo: `${s}-1` })],
+      unknown: [expect.objectContaining({ no: 'nope' })],
+      cycle: { counts: { verified: 1, pending: 1, unknown: 1 } },
+    });
     const closed = await inject({
       method: 'POST',
-      url: `/library/stock-checks/${chk.json().id}/close`,
+      url: `/library/stock/cycles/${chk.json().id}/close`,
       headers: h(),
       json: { markMissingLost: true },
     });
-    expect(closed.json()).toMatchObject({ status: 'closed', found: 1, missing: 1 });
+    expect(closed.json()).toMatchObject({
+      status: 'closed',
+      counts: { verified: 1, missing: 1 },
+    });
     const copies = (
       await inject({
         method: 'GET',

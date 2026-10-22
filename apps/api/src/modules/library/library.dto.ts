@@ -91,23 +91,50 @@ export const SaleSchema = z.object({
 });
 export class SaleDto extends createZodDto(SaleSchema) {}
 
-export const StockCheckStartSchema = z.object({
+/** A stock cycle (part 3 of the library reports): the libraries, shelves and material types it covers. */
+export const StockCycleSchema = z.object({
   name: z.string().trim().min(2).max(120),
+  /** none: every library (or shelf, or material type) */
+  libraryIds: z.array(IdSchema).max(50).default([]),
+  shelfIds: z.array(IdSchema).max(1000).default([]),
+  materialTypeIds: z.array(IdSchema).max(50).default([]),
   note: z.string().trim().max(300).optional(),
 });
-export class StockCheckStartDto extends createZodDto(StockCheckStartSchema) {}
+export class StockCycleDto extends createZodDto(StockCycleSchema) {}
 
-export const StockCheckScanSchema = z.object({
-  /** scanned or pasted accession numbers */
-  accessionNos: z.array(z.string().trim().min(1).max(30)).min(1).max(5000),
+/** Book numbers scanned or typed (accession, old number or barcode). */
+export const StockVerifySchema = z.object({
+  accessionNos: z.array(z.string().trim().min(1).max(40)).min(1).max(5000),
+  remark: z.string().trim().max(200).optional(),
 });
-export class StockCheckScanDto extends createZodDto(StockCheckScanSchema) {}
+export class StockVerifyDto extends createZodDto(StockVerifySchema) {}
 
-export const StockCheckCloseSchema = z.object({
+export const StockItemsQuerySchema = z.object({
+  state: z
+    .enum(['all', 'verified', 'pending', 'on_loan', 'missing', 'gone', 'extras'])
+    .default('pending'),
+  libraryId: IdSchema.optional(),
+  shelfId: IdSchema.optional(),
+  materialTypeId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class StockItemsQueryDto extends createZodDto(StockItemsQuerySchema) {}
+export const StockItemsExportSchema = StockItemsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class StockItemsExportDto extends createZodDto(StockItemsExportSchema) {}
+
+export const StockCloseSchema = z.object({
+  /** the copies not found are marked lost (else they stay as they are, listed as missing) */
   markMissingLost: z.boolean().default(false),
   note: z.string().trim().max(300).optional(),
 });
-export class StockCheckCloseDto extends createZodDto(StockCheckCloseSchema) {}
+export class StockCloseDto extends createZodDto(StockCloseSchema) {}
+
+export const StockCancelSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class StockCancelDto extends createZodDto(StockCancelSchema) {}
 
 /** A book on loan reported lost, or returned damaged, and charged (part 3 of the register work). */
 export const ChargePreviewSchema = z.object({

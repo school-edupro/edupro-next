@@ -174,11 +174,14 @@ describe('library accession corrections (e2e)', () => {
   });
 
   it('a stock check takes the old labels; the latest corrections are listed', async () => {
-    const chk = await call('POST', '/library/stock-checks', { name: 'Term check' });
-    const scan = await call('POST', `/library/stock-checks/${chk.json().id as string}/scan`, {
+    const chk = await call('POST', '/library/stock/cycles', { name: 'Term check' });
+    const scan = await call('POST', `/library/stock/cycles/${chk.json().id as string}/verify`, {
       accessionNos: ['B00006', 'ZZZ1'],
     });
-    expect(scan.json()).toMatchObject({ marked: 1, unknown: ['ZZZ1'] });
+    expect(scan.json()).toMatchObject({
+      verified: [expect.objectContaining({ no: 'B00006', accessionNo: 'B00206' })],
+      unknown: [expect.objectContaining({ no: 'ZZZ1' })],
+    });
     const list = (await call('GET', '/library/accession/changes')).json();
     expect(list.slice(0, 3).map((x: { old: string; now: string }) => `${x.old}>${x.now}`)).toEqual([
       'B00008>B00208',

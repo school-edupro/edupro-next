@@ -5,7 +5,7 @@ import { DomainError } from '../../common/errors/domain-error';
  * field of a title or a copy that can be a column, a filter or the sort, each an SQL expression over the
  * level's rows, so a large register is filtered, sorted and paged in the database. The copies level reads
  * `x` (the copy), `t` (its title), `l` (library), `sh` (shelf), `v` (vendor), `m` (material type),
- * `s` (subject), `cl` (class) and `ln` (the open loan); the titles level reads `t`, `m`, `s`, `cl` and
+ * `s` (subject), `cl` (class), `ln` (the open loan) and `sc` (the copy in its latest stock cycle); the titles level reads `t`, `m`, `s`, `cl` and
  * `k` (the copies counted).
  */
 export type RegisterLevel = 'copy' | 'title';
@@ -30,6 +30,7 @@ export const REGISTER_SECTIONS = [
   { id: 'copy', title: 'The copy' },
   { id: 'source', title: 'How it came' },
   { id: 'loan', title: 'On loan' },
+  { id: 'stock', title: 'Stock verification' },
   { id: 'counts', title: 'Copies of the title' },
 ];
 
@@ -150,6 +151,13 @@ export const REGISTER_FIELDS: RegisterField[] = [
     'number',
     copy('CASE WHEN ln.due_on < CURRENT_DATE THEN CURRENT_DATE - ln.due_on END'),
   ),
+  f('stock_cycle', 'Stock cycle', 'stock', 'text', copy('sc.cycle')),
+  f('stock_state', 'Stock check', 'stock', 'text', copy(`COALESCE(sc.state, 'Not in a cycle')`), {
+    options: 'stockstate',
+  }),
+  f('stock_verified_on', 'Verified on', 'stock', 'date', copy('sc.found_on')),
+  f('stock_verified_by', 'Verified by', 'stock', 'text', copy('sc.found_by')),
+  f('stock_remark', 'Stock check remarks', 'stock', 'text', copy('sc.remark')),
   f('times_issued', 'Times issued', 'loan', 'number', {
     copy: '(SELECT count(*) FROM library_loans z WHERE z.copy_id = x.id)',
     title:
@@ -188,7 +196,16 @@ export const REGISTER_FROM: Record<RegisterLevel, string> = {
         FROM library_loans lo
         LEFT JOIN students st ON lo.borrower_kind = 'student' AND st.id = lo.borrower_id
         LEFT JOIN employees e ON lo.borrower_kind = 'employee' AND e.id = lo.borrower_id
-       WHERE lo.copy_id = x.id AND lo.returned_on IS NULL LIMIT 1) ln ON true`,
+       WHERE lo.copy_id = x.id AND lo.returned_on IS NULL LIMIT 1) ln ON true
+    LEFT JOIN LATERAL (
+      SELECT k.name AS cycle, i.found_on, i.found_by_name AS found_by, i.remark,
+             CASE WHEN i.outcome = 'found' THEN 'Verified' WHEN i.outcome = 'missing' THEN 'Missing'
+                  WHEN i.outcome = 'on_loan' OR (i.outcome = 'pending' AND x.status = 'issued') THEN 'On loan'
+                  WHEN i.outcome = 'gone' OR (i.outcome = 'pending' AND x.status IN ('lost', 'withdrawn', 'sold'))
+                    THEN 'Lost, withdrawn or sold since'
+                  ELSE 'Pending' END AS state
+        FROM library_stock_check_items i JOIN library_stock_checks k ON k.id = i.check_id AND k.status <> 'cancelled'
+       WHERE i.copy_id = x.id ORDER BY k.started_on DESC, k.id DESC LIMIT 1) sc ON true`,
   // eslint-disable-next-line no-restricted-syntax -- fixed fragments of the register catalogue; values are bound
   title: `library_titles t
     ${TITLE_JOINS}
@@ -215,6 +232,10 @@ export const REGISTER_STATUSES: Record<RegisterLevel, Record<string, string | nu
     lost: `x.status = 'lost'`,
     withdrawn: `x.status = 'withdrawn'`,
     sold: `x.status = 'sold'`,
+    // the copy's latest stock cycle
+    stock_verified: `sc.state = 'Verified'`,
+    stock_pending: `sc.state = 'Pending'`,
+    stock_missing: `sc.state = 'Missing'`,
   },
   title: {
     all: null,

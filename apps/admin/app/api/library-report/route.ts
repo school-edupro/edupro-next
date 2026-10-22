@@ -61,6 +61,22 @@ const REPORTS: Record<
       sort: (v) => ['name', 'holding', 'borrowed'].includes(v),
     },
   },
+  stock: {
+    path: (sp) => {
+      const id = sp.get('id') ?? '';
+      return ID.test(id) ? `/library/stock/cycles/${id}/items/export` : null;
+    },
+    keys: {
+      state: (v) =>
+        ['all', 'verified', 'pending', 'on_loan', 'missing', 'gone', 'extras'].includes(v),
+      libraryId: (v) => ID.test(v),
+      shelfId: (v) => ID.test(v),
+      materialTypeId: (v) => ID.test(v),
+      q: (v) => v.length <= 80,
+    },
+  },
+  // the stock check upload layout (no filters, no format)
+  'stock-template': { path: '/library/stock/template', keys: {} },
   borrower: {
     path: (sp) => {
       const kind = sp.get('kind') ?? '';
@@ -80,14 +96,18 @@ export async function GET(req: NextRequest) {
   const r = REPORTS[sp.get('report') ?? ''];
   const path = r ? (typeof r.path === 'string' ? r.path : r.path(sp)) : null;
   if (!r || !path) return new NextResponse('No such report', { status: 404 });
-  const q = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
+  const q = new URLSearchParams(
+    sp.get('report') === 'stock-template'
+      ? {}
+      : { format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' },
+  );
   for (const [k, ok] of Object.entries(r.keys)) {
     const v = (sp.get(k) ?? '').trim();
     if (v && ok(v)) q.set(k, v);
   }
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
-      `${path}?${q.toString()}`,
+      q.size ? `${path}?${q.toString()}` : path,
     );
     return new NextResponse(Buffer.from(f.base64, 'base64'), {
       headers: {

@@ -3590,43 +3590,8 @@ export async function boardImportCommit(fd: FormData) {
   );
 }
 
-export async function libraryStartStockCheck(fd: FormData) {
-  return run('/library/stock', () =>
-    apiFetch('/library/stock-checks', {
-      method: 'POST',
-      body: JSON.stringify({ name: str(fd, 'name'), note: opt(fd, 'note') }),
-    }),
-  );
-}
-
-export async function libraryScanStockCheck(fd: FormData) {
-  const nos = str(fd, 'accessionNos')
-    .split(/[\s,;]+/)
-    .filter(Boolean);
-  if (nos.length === 0)
-    back_('/library/stock', 'validation-failed', 'Paste at least one accession number');
-  return run('/library/stock', () =>
-    apiFetch(`/library/stock-checks/${str(fd, 'checkId')}/scan`, {
-      method: 'POST',
-      body: JSON.stringify({ accessionNos: nos }),
-    }),
-  );
-}
-
-export async function libraryCloseStockCheck(fd: FormData) {
-  return run('/library/stock', () =>
-    apiFetch(`/library/stock-checks/${str(fd, 'checkId')}/close`, {
-      method: 'POST',
-      body: JSON.stringify({
-        markMissingLost: fd.get('markMissingLost') === 'on',
-        note: opt(fd, 'note'),
-      }),
-    }),
-  );
-}
-
 export async function librarySell(fd: FormData) {
-  return run('/library/stock', () =>
+  return run('/library/sales', () =>
     apiFetch('/library/sales', {
       method: 'POST',
       body: JSON.stringify({
