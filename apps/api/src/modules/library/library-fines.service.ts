@@ -3,6 +3,7 @@ import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { borrowerLateral, likeEscape } from './library-borrower-sql';
 import { libraryFile, type FileColumn, type FileCell } from './library-file';
 import type { FinesExportDto, FinesQueryDto } from './library.dto';
 
@@ -103,7 +104,7 @@ export class LibraryFinesService {
     if (q.classId) where.push(`b.class_id = ${arg(q.classId)}::bigint`);
     if (q.sectionId) where.push(`b.section_id = ${arg(q.sectionId)}::bigint`);
     if (q.q) {
-      const p = arg(`%${q.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+      const p = arg(likeEscape(q.q));
       where.push(
         `(b.name ILIKE ${p} OR b.ref ILIKE ${p} OR t.title ILIKE ${p} OR x.accession_no ILIKE ${p})`,
       );
@@ -115,16 +116,7 @@ export class LibraryFinesService {
               FROM (${SOURCES[tab]}) s
               JOIN library_loans l ON l.id = s.loan_id
               JOIN library_copies x ON x.id = l.copy_id JOIN library_titles t ON t.id = x.title_id
-              LEFT JOIN LATERAL (
-                SELECT COALESCE(st.display_name, e.display_name) AS name, COALESCE(st.admission_no, e.employee_code) AS ref,
-                       COALESCE(en.place, NULLIF(e.designation, '')) AS place, en.class_id, en.section_id
-                  FROM (SELECT 1) one
-                  LEFT JOIN students st ON s.bkind = 'student' AND st.id = s.borrower_id
-                  LEFT JOIN employees e ON s.bkind = 'employee' AND e.id = s.borrower_id
-                  LEFT JOIN LATERAL (
-                    SELECT k.name || '-' || cs.name AS place, k.id AS class_id, cs.id AS section_id
-                      FROM enrolments ee JOIN class_sections cs ON cs.id = ee.class_section_id JOIN classes k ON k.id = cs.class_id
-                     WHERE ee.student_id = st.id AND ee.status = 'active' ORDER BY ee.id DESC LIMIT 1) en ON true) b ON true
+              ${borrowerLateral('s.bkind', 's.borrower_id')}
              ${filter}`;
   }
 

@@ -202,7 +202,7 @@ export default async function FinesPage({
         </div>
       ) : null}
 
-      <div className="ep-cdash__kpis" style={{ marginBottom: 'var(--sp-4)' }}>
+      <div className="ep-dash-kpis ep-dash-kpis--3">
         {TABS.map(([v, label]) => (
           <a
             key={v}

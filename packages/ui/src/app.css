@@ -8690,6 +8690,17 @@ a.db-list__main:hover strong {
 .ep-field__help a {
   text-decoration: underline;
 }
+/* a group of three figures: one under another, then three in a row (never two and one) */
+@media (min-width: 40rem) {
+  .ep-dash-kpis--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 39.99rem) {
+  .ep-dash-kpis--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 /* a group of four figures: two by two, then four in a row (never three and one) */
 @media (min-width: 40rem) {
   .ep-dash-kpis--4 {
@@ -9951,4 +9962,9 @@ a.ep-pub-foot__item {
   font-size: var(--fs-h4);
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
+}
+.ep-desk__history {
+  display: inline-block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
 }

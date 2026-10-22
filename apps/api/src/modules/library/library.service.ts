@@ -411,6 +411,12 @@ export class LibraryService {
         `UPDATE library_loans SET due_on = GREATEST(due_on, CURRENT_DATE) + make_interval(days => $2)::interval, renewed = renewed + 1, updated_at = now() WHERE id = $1`,
         [l.rows[0].id, loanDays],
       );
+      // each renewal kept with its day and due dates, for the circulation history
+      await c.query(
+        `INSERT INTO library_loan_renewals (school_id, loan_id, from_due, to_due, by_user, by_name)
+         SELECT app.current_school_id(), id, $2::date, due_on, app.current_user_id(), $3 FROM library_loans WHERE id = $1`,
+        [l.rows[0].id, l.rows[0].due_on, ctx.user.displayName],
+      );
       await this.audit.stage(ctx, c, {
         action: 'library.renew',
         entityType: 'library_loans',

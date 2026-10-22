@@ -4,11 +4,17 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   AccessionDto,
+  BorrowerHistoryDto,
+  BorrowerHistoryExportDto,
+  BorrowersExportDto,
+  BorrowersQueryDto,
   CatalogueQueryDto,
   ChargeDto,
   ChargeExportDto,
   ChargeListDto,
   ChargePreviewDto,
+  CirculationExportDto,
+  CirculationQueryDto,
   DeskBookDto,
   DeskBorrowerDto,
   DeskClassDto,
@@ -31,6 +37,7 @@ import {
   WaiveRequestDto,
 } from './library.dto';
 import { LibraryFinesService } from './library-fines.service';
+import { LibraryHistoryService } from './library-history.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -46,6 +53,7 @@ export class LibraryController {
     private readonly charges: LibraryChargesService,
     private readonly desk: LibraryDeskService,
     private readonly fines: LibraryFinesService,
+    private readonly history: LibraryHistoryService,
   ) {}
 
   // ---- the circulation desk ------------------------------------------------------------------------
@@ -223,6 +231,61 @@ export class LibraryController {
   @RequirePermission(LIBRARY.circulate)
   finesSend(@ReqCtx() ctx: RequestContext, @Body() body: FinesSendDto) {
     return this.charges.sendUnsent(ctx, body.loanIds);
+  }
+
+  // ---- library reports: circulation and borrowers' history (part 2) ---------------------------------
+  @Get('history/circulation')
+  @ApiOperation({
+    summary: 'Issues, returns and renewals between two days; the books out or overdue now',
+  })
+  @RequirePermission(LIBRARY.circulate)
+  circulationHistory(@ReqCtx() ctx: RequestContext, @Query() q: CirculationQueryDto) {
+    return this.history.circulation(ctx, q);
+  }
+
+  @Get('history/circulation/export')
+  @ApiOperation({ summary: 'The circulation list as filtered, as Excel or PDF' })
+  @RequirePermission(LIBRARY.circulate)
+  circulationExport(@ReqCtx() ctx: RequestContext, @Query() q: CirculationExportDto) {
+    return this.history.circulationExport(ctx, q);
+  }
+
+  @Get('history/borrowers')
+  @ApiOperation({ summary: 'Pupils or staff with what they borrowed and returned, and hold now' })
+  @RequirePermission(LIBRARY.circulate)
+  borrowersHistory(@ReqCtx() ctx: RequestContext, @Query() q: BorrowersQueryDto) {
+    return this.history.borrowers(ctx, q);
+  }
+
+  @Get('history/borrowers/export')
+  @ApiOperation({ summary: 'The borrowers list as filtered, as Excel or PDF' })
+  @RequirePermission(LIBRARY.circulate)
+  borrowersExport(@ReqCtx() ctx: RequestContext, @Query() q: BorrowersExportDto) {
+    return this.history.borrowersExport(ctx, q);
+  }
+
+  @Get('history/borrowers/:kind/:id')
+  @ApiOperation({ summary: 'One borrower’s books held between two days, with fines and charges' })
+  @RequirePermission(LIBRARY.circulate)
+  borrowerHistory(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Query() q: BorrowerHistoryDto,
+  ) {
+    return this.history.borrower(ctx, kind, id, q);
+  }
+
+  @Get('history/borrowers/:kind/:id/export')
+  @ApiOperation({ summary: 'One borrower’s history as Excel or PDF' })
+  @RequirePermission(LIBRARY.circulate)
+  borrowerHistoryExport(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Query() q: BorrowerHistoryExportDto,
+  ) {
+    return this.history.borrowerExport(ctx, kind, id, q);
   }
 
   @Post('loans/:id/fine')

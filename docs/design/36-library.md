@@ -433,3 +433,21 @@ shelves and material types chosen; a book sold to someone outside the school is 
   (`GET library/charges/export`). The files are made at once by `libraryFile` (Excel with an "About this
   report" sheet; PDF A4 landscape, Rs. for ₹) through `/api/library-report`. The desk says the fine went
   to the counter instead of collecting it.
+- **Part 2 — circulation and borrowers' history (done, migration 0218).** Each renewal is now kept
+  (`library_loan_renewals`: the day, the due date before and after, who; the renewals made before were
+  copied from the audit log, without their due dates). **Circulation history** (`/library/history`, in
+  the Library menu and on the desk's links), three tabs. *Circulation*: four figures (issued, returned,
+  renewed between the days; out now with how many are overdue) that also pick the list; every issue,
+  return and renewal between two days (this month until days are chosen; both empty: every day), or
+  the books out or overdue now (not by day); by pupils or staff, class or section, library (when there
+  are several) and a search over book, book no., author, borrower and admission or employee no.
+  (`GET library/history/circulation`). *Pupils* and *Staff*: each borrower with the books borrowed,
+  returned and returned late between the days, held and overdue now, the late fines and the last issue
+  (`GET library/history/borrowers?kind=`): those active between the days or holding now, holding now,
+  overdue now, or everyone who ever borrowed; pupils by class and section; in class order and roll no.,
+  most held or most borrowed; totals. A borrower's own page (`/library/history/student|employee/:id`,
+  also from the desk's borrower card): the desk card (rule, books held, dues), four figures, and every
+  book held between two days (or every loan) with the dates, renewals, days late, how the loan ended
+  (returned, returned damaged, lost, out, overdue, with any charge) and the fine and where it is now
+  (`GET library/history/borrowers/:kind/:id`). Each list as Excel or PDF (`…/export`, through
+  `/api/library-report`).

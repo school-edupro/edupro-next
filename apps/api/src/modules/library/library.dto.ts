@@ -192,3 +192,53 @@ export const DeskClassSchema = z.object({
   sectionId: IdSchema.optional(),
 });
 export class DeskClassDto extends createZodDto(DeskClassSchema) {}
+
+/** Circulation between two days (part 2): issues, returns, renewals; or the books out (overdue) now. */
+export const CirculationQuerySchema = z.object({
+  what: z.enum(['all', 'issued', 'returned', 'renewed', 'out', 'overdue']).default('all'),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  borrower: z.enum(['student', 'employee']).optional(),
+  classId: IdSchema.optional(),
+  sectionId: IdSchema.optional(),
+  libraryId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class CirculationQueryDto extends createZodDto(CirculationQuerySchema) {}
+export const CirculationExportSchema = CirculationQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class CirculationExportDto extends createZodDto(CirculationExportSchema) {}
+
+/** Pupils or staff, each with what they borrowed and returned between two days and hold now. */
+export const BorrowersQuerySchema = z.object({
+  kind: z.enum(['student', 'employee']),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  /** active: borrowed or returned between the days, or holding now; all: any loan ever */
+  show: z.enum(['active', 'holding', 'overdue', 'all']).default('active'),
+  classId: IdSchema.optional(),
+  sectionId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  sort: z.enum(['name', 'holding', 'borrowed']).default('name'),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class BorrowersQueryDto extends createZodDto(BorrowersQuerySchema) {}
+export const BorrowersExportSchema = BorrowersQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BorrowersExportDto extends createZodDto(BorrowersExportSchema) {}
+
+/** One borrower's books held between two days (none: every loan). */
+export const BorrowerHistorySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+});
+export class BorrowerHistoryDto extends createZodDto(BorrowerHistorySchema) {}
+export const BorrowerHistoryExportSchema = BorrowerHistorySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BorrowerHistoryExportDto extends createZodDto(BorrowerHistoryExportSchema) {}

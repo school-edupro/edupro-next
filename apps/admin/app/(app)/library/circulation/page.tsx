@@ -41,7 +41,7 @@ export default async function CirculationPage({
       <PageHeader
         kicker="Library"
         title="Circulation"
-        description="Issue and return at the desk: find the borrower by admission no., employee code or name, scan the books, and settle a late fine on the spot."
+        description="Issue and return at the desk: find the borrower by admission no., employee code or name, scan the books; a book back late puts its fine at the fees counter."
       />
       <Notice params={sp} />
       <div className="ep-desk__tabs">
@@ -60,8 +60,9 @@ export default async function CirculationPage({
           </div>
         </nav>
         <nav className="ep-desk__links" aria-label="More at the library">
+          <a href="/library/history">History</a>
           <a href="/library/charges">Lost and damaged</a>
-          <a href="/library/fines">Fines</a>
+          <a href="/library/fines">Late fines</a>
           {me.permissions.includes('library.stock.verify') ? (
             <a href="/library/stock">Stock verification and sales</a>
           ) : null}

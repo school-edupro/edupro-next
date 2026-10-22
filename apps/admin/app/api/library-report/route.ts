@@ -4,7 +4,15 @@ import { ApiError, apiFetch } from '@/lib/api';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const ID = /^\d{1,18}$/;
 /** each report: its API path and the filters it takes, with what each may be */
-const REPORTS: Record<string, { path: string; keys: Record<string, (v: string) => boolean> }> = {
+const KIND = (v: string) => v === 'student' || v === 'employee';
+const REPORTS: Record<
+  string,
+  {
+    /** the API path; a borrower's own report takes the kind and id from the query */
+    path: string | ((sp: URLSearchParams) => string | null);
+    keys: Record<string, (v: string) => boolean>;
+  }
+> = {
   fines: {
     path: '/library/fines/export',
     keys: {
@@ -27,6 +35,40 @@ const REPORTS: Record<string, { path: string; keys: Record<string, (v: string) =
       q: (v) => v.length <= 80,
     },
   },
+  circulation: {
+    path: '/library/history/circulation/export',
+    keys: {
+      what: (v) => ['all', 'issued', 'returned', 'renewed', 'out', 'overdue'].includes(v),
+      from: (v) => DAY.test(v),
+      to: (v) => DAY.test(v),
+      borrower: KIND,
+      classId: (v) => ID.test(v),
+      sectionId: (v) => ID.test(v),
+      libraryId: (v) => ID.test(v),
+      q: (v) => v.length <= 80,
+    },
+  },
+  borrowers: {
+    path: '/library/history/borrowers/export',
+    keys: {
+      kind: KIND,
+      from: (v) => DAY.test(v),
+      to: (v) => DAY.test(v),
+      show: (v) => ['active', 'holding', 'overdue', 'all'].includes(v),
+      classId: (v) => ID.test(v),
+      sectionId: (v) => ID.test(v),
+      q: (v) => v.length <= 80,
+      sort: (v) => ['name', 'holding', 'borrowed'].includes(v),
+    },
+  },
+  borrower: {
+    path: (sp) => {
+      const kind = sp.get('kind') ?? '';
+      const id = sp.get('id') ?? '';
+      return KIND(kind) && ID.test(id) ? `/library/history/borrowers/${kind}/${id}/export` : null;
+    },
+    keys: { from: (v) => DAY.test(v), to: (v) => DAY.test(v) },
+  },
 };
 
 /**
@@ -36,7 +78,8 @@ const REPORTS: Record<string, { path: string; keys: Record<string, (v: string) =
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const r = REPORTS[sp.get('report') ?? ''];
-  if (!r) return new NextResponse('No such report', { status: 404 });
+  const path = r ? (typeof r.path === 'string' ? r.path : r.path(sp)) : null;
+  if (!r || !path) return new NextResponse('No such report', { status: 404 });
   const q = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
   for (const [k, ok] of Object.entries(r.keys)) {
     const v = (sp.get(k) ?? '').trim();
@@ -44,7 +87,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
-      `${r.path}?${q.toString()}`,
+      `${path}?${q.toString()}`,
     );
     return new NextResponse(Buffer.from(f.base64, 'base64'), {
       headers: {

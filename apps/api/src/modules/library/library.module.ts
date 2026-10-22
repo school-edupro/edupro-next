@@ -13,6 +13,7 @@ import { LibraryAccessionService } from './library-accession.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { LibraryFinesService } from './library-fines.service';
+import { LibraryHistoryService } from './library-history.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
@@ -32,6 +33,7 @@ import { LibraryService } from './library.service';
     LibraryChargesService,
     LibraryDeskService,
     LibraryFinesService,
+    LibraryHistoryService,
     AuditService,
   ],
   exports: [LibraryService],

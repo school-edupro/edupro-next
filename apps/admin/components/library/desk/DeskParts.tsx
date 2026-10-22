@@ -114,7 +114,7 @@ export function BorrowerPicker({
 }
 
 /** Who borrows: the photo, the numbers, the rule, what they hold and owe, what blocks an issue. */
-export function BorrowerCard({ b }: { b: DeskBorrower }) {
+export function BorrowerCard({ b, history = true }: { b: DeskBorrower; history?: boolean }) {
   const staff = b.kind === 'employee';
   return (
     <section className="ep-card" aria-label={`Borrower ${b.name}`}>
@@ -136,6 +136,11 @@ export function BorrowerCard({ b }: { b: DeskBorrower }) {
             {b.place ? ` · ${b.place}` : ''}
             {b.rollNo !== null ? ` · Roll no. ${String(b.rollNo)}` : ''}
           </span>
+          {history ? (
+            <a className="ep-desk__history" href={`/library/history/${b.kind}/${b.id}`}>
+              Library history
+            </a>
+          ) : null}
         </div>
       </div>
       <dl className="ep-sheet__grid">
