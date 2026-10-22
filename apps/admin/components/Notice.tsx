@@ -19,7 +19,10 @@ const MESSAGES: Record<string, string> = {
   'year.stage_locked': 'That stage of the year is locked.',
   'not-found': 'Not found.',
   'library.not_on_loan': 'The book is not on loan.',
-  'library.charge_due': 'A lost or damaged book is not paid for yet.',
+  'library.charge_due': 'Library dues (a late fine, a lost or damaged book) are not paid yet.',
+  'library.fines_at_counter': 'Late fines are paid at the fees counter, not at the library.',
+  'library.fine_pending':
+    'An old fine is still at the library: send it to the fees counter or waive it.',
   'library.use_charges': 'Charge it at Lost and damaged books.',
   'appointment.not_today': 'Not the day of this appointment.',
   'appointment.not_confirmed': 'This appointment is not confirmed yet.',

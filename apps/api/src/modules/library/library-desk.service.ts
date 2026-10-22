@@ -74,9 +74,8 @@ export class LibraryDeskService {
     if (!x) throw new DomainError('not-found', 'Borrower not found', { status: 404 });
     const rule = await this.library.ruleFor(c, kind, id);
     const owed = await c.query<{ fines: string; charges: string }>(
-      `SELECT COALESCE((SELECT sum(fine_amount - fine_waived) FROM library_loans
-                         WHERE borrower_kind = $1::library_borrower AND borrower_id = $2
-                           AND fine_amount > fine_waived AND fine_paid_on IS NULL), 0)::text AS fines,
+      // old fines still at the library; late fines, lost and damaged books at the fees counter
+      `SELECT app.library_fines_unsent($1::library_borrower, $2)::text AS fines,
               app.library_charges_due($1::library_borrower, $2)::text AS charges`,
       [kind, id],
     );
@@ -94,7 +93,7 @@ export class LibraryDeskService {
         : finesDue > 0
           ? `₹${finesDue.toFixed(2)} of fines to pay first`
           : chargesDue > 0
-            ? `₹${chargesDue.toFixed(2)} for a lost or damaged book to pay at the fees counter first`
+            ? `₹${chargesDue.toFixed(2)} of library dues (late fines, lost or damaged books) to pay at the fees counter first`
             : loans.length >= rule.maxBooks
               ? `Already holds ${String(loans.length)} of ${String(rule.maxBooks)} books`
               : null;

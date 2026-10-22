@@ -197,6 +197,9 @@ describe('library circulation desk (e2e)', () => {
     const back = await call('POST', '/library/desk/return', { accessionNos: ['B00001', 'B00002'] });
     expect(back.statusCode).toBe(201);
     expect(back.json()).toMatchObject({ fines: 20 });
+    // each late fine is announced at the fees counter at once
+    const card = (await call('GET', `/library/desk/borrowers/student/${ids.a!}`)).json();
+    expect(card).toMatchObject({ finesDue: 0, chargesDue: 20 });
     expect(
       (await call('POST', '/library/desk/return', { accessionNos: ['B00001'] })).json().detail,
     ).toMatch(/^B00001: .*nothing was returned$/);
@@ -214,9 +217,9 @@ describe('library circulation desk (e2e)', () => {
         ],
       }),
     ]);
-    // the fines are paid so both pupils may borrow
+    // the late fines are misc fees at the fees counter (0217); paid there, both pupils may borrow
     await withMigrator((c) =>
-      c.query(`UPDATE library_loans SET fine_paid_on = CURRENT_DATE WHERE school_id = $1`, [
+      c.query(`UPDATE misc_fee_students SET paid = amount, status = 'paid' WHERE school_id = $1`, [
         school.id,
       ]),
     );

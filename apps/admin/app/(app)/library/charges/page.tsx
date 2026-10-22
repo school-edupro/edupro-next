@@ -43,6 +43,8 @@ type Charge = {
   reason: string | null;
   foundOn: string | null;
   state: 'due' | 'paid' | 'found_pending' | 'cancelled';
+  paidOn: string | null;
+  receipts: string | null;
   by: string | null;
 };
 const rupees = (n: number) =>
@@ -79,6 +81,16 @@ export default async function LibraryChargesPage({
   const kind = sp.kind === 'damaged' ? 'damaged' : sp.kind === 'lost' ? 'lost' : null;
   const on = /^\d{4}-\d{2}-\d{2}$/.test(sp.on ?? '') ? sp.on! : '';
   const status = TABS.some(([v]) => v === sp.status) ? sp.status! : 'due';
+  // the list's filters: the days charged (paid: the days paid), pupils or staff, a search
+  const f: Record<string, string> = {};
+  for (const k of ['from', 'to'] as const)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sp[k] ?? '')) f[k] = sp[k]!;
+  if (sp.borrower === 'student' || sp.borrower === 'employee') f.borrower = sp.borrower;
+  const search = (sp.q ?? '').trim().slice(0, 80);
+  if (search) f.q = search;
+  const qs = (x: Record<string, string>) => new URLSearchParams(x).toString();
+  const file = (format: 'xlsx' | 'pdf') =>
+    `/api/library-report?${qs({ report: 'charges', status, ...f, format })}`;
   let preview: Preview | null = null;
   let previewError: string | null = null;
   // a refused charge comes back with its own error; the preview is not asked again then
@@ -93,8 +105,10 @@ export default async function LibraryChargesPage({
   }
   const list = await apiFetch<{
     rows: Charge[];
+    total: number;
+    totals: { charged: number; paid: number; due: number };
     counts: { due: number; paid: number; cancelled: number; dueAmount: number };
-  }>(`/library/charges?status=${status}`);
+  }>(`/library/charges?${qs({ status, ...f })}`);
   const finder = (k: 'lost' | 'damaged', title: string, help: string) => (
     <section className="ep-card" aria-labelledby={`lc-${k}-h`}>
       <h2 id={`lc-${k}-h`} className="ep-card__title">
@@ -209,7 +223,7 @@ export default async function LibraryChargesPage({
                         ? [
                             [
                               `Late fine to ${dmy(preview.on)}`,
-                              `${rupees(preview.lateFine)} (a library fine, collected here)`,
+                              `${rupees(preview.lateFine)} (announced on its own as a misc fee)`,
                             ],
                           ]
                         : []),
@@ -274,9 +288,27 @@ export default async function LibraryChargesPage({
       ) : null}
 
       <section className="ep-card" aria-labelledby="lc-list-h">
-        <h2 id="lc-list-h" className="ep-card__title">
-          Charges · {list.counts.due} due ({rupees(list.counts.dueAmount)})
-        </h2>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 'var(--sp-2)',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+          }}
+        >
+          <h2 id="lc-list-h" className="ep-card__title">
+            Charges · {list.counts.due} due ({rupees(list.counts.dueAmount)})
+          </h2>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href={file('xlsx')}>
+              Excel
+            </a>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href={file('pdf')}>
+              PDF
+            </a>
+          </span>
+        </div>
         <nav
           className="ep-tabs"
           aria-label="Charges by state"
@@ -287,7 +319,7 @@ export default async function LibraryChargesPage({
               <a
                 key={v}
                 className="ep-tabs__tab"
-                href={`/library/charges?status=${v}`}
+                href={`/library/charges?${qs({ status: v, ...f })}#lc-list-h`}
                 aria-current={status === v ? 'page' : undefined}
               >
                 {label}
@@ -303,6 +335,64 @@ export default async function LibraryChargesPage({
             ))}
           </div>
         </nav>
+        <form method="get" action="/library/charges" className="ep-dlog__filters ep-filter-band">
+          <input type="hidden" name="status" value={status} />
+          <label className="ep-field" htmlFor="lc-from" style={{ margin: 0 }}>
+            <span className="ep-field__label">
+              {status === 'paid' ? 'Paid from' : 'Charged from'}
+            </span>
+            <input
+              id="lc-from"
+              name="from"
+              type="date"
+              className="ep-input"
+              defaultValue={f.from ?? ''}
+            />
+          </label>
+          <label className="ep-field" htmlFor="lc-to" style={{ margin: 0 }}>
+            <span className="ep-field__label">To</span>
+            <input
+              id="lc-to"
+              name="to"
+              type="date"
+              className="ep-input"
+              defaultValue={f.to ?? ''}
+            />
+          </label>
+          <label className="ep-field" htmlFor="lc-borrower" style={{ margin: 0 }}>
+            <span className="ep-field__label">Borrowers</span>
+            <select
+              id="lc-borrower"
+              name="borrower"
+              className="ep-select"
+              defaultValue={f.borrower ?? ''}
+            >
+              <option value="">Pupils and staff</option>
+              <option value="student">Pupils</option>
+              <option value="employee">Staff</option>
+            </select>
+          </label>
+          <label className="ep-field ep-dlog__search" htmlFor="lc-q" style={{ margin: 0 }}>
+            <span className="ep-field__label">Search</span>
+            <input
+              id="lc-q"
+              name="q"
+              type="search"
+              className="ep-input"
+              maxLength={80}
+              placeholder="Name, admission or employee no., book or book no."
+              defaultValue={search}
+            />
+          </label>
+          <button type="submit" className="ep-btn ep-btn--primary">
+            Show
+          </button>
+          {Object.keys(f).length ? (
+            <a className="ep-btn ep-btn--secondary" href={`/library/charges?status=${status}`}>
+              Clear
+            </a>
+          ) : null}
+        </form>
         {list.rows.length ? (
           <div
             className="ep-table-wrap"
@@ -313,7 +403,7 @@ export default async function LibraryChargesPage({
             <table className="ep-table ep-table--dense">
               <thead>
                 <tr>
-                  <th scope="col">Day</th>
+                  <th scope="col">Charged on</th>
                   <th scope="col">Borrower</th>
                   <th scope="col">Book</th>
                   <th scope="col">What</th>
@@ -357,7 +447,15 @@ export default async function LibraryChargesPage({
                         <div className="ep-field__help">was {rupees(x.charged)}</div>
                       ) : null}
                     </td>
-                    <td className="is-numeric">{rupees(x.paid)}</td>
+                    <td className="is-numeric">
+                      {rupees(x.paid)}
+                      {x.paidOn ? (
+                        <div className="ep-field__help">
+                          {dmy(x.paidOn)}
+                          {x.receipts ? ` · ${x.receipts}` : ''}
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="is-numeric">{rupees(x.due)}</td>
                     <td>
                       <span className={`ep-badge ep-badge--${STATE[x.state][1]}`}>
@@ -367,10 +465,32 @@ export default async function LibraryChargesPage({
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" colSpan={4}>
+                    Total · {list.total} charge{list.total === 1 ? '' : 's'}
+                    {list.total > list.rows.length
+                      ? ` (the first ${String(list.rows.length)} shown; the file has all)`
+                      : ''}
+                  </th>
+                  <td className="is-numeric">
+                    <strong>{rupees(list.totals.charged)}</strong>
+                  </td>
+                  <td className="is-numeric">
+                    <strong>{rupees(list.totals.paid)}</strong>
+                  </td>
+                  <td className="is-numeric">
+                    <strong>{rupees(list.totals.due)}</strong>
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
             </table>
           </div>
         ) : (
-          <p className="ep-field__help">Nothing here.</p>
+          <p className="ep-field__help">
+            {Object.keys(f).length ? 'Nothing here for these filters.' : 'Nothing here.'}
+          </p>
         )}
       </section>
     </>

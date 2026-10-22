@@ -9929,3 +9929,26 @@ a.ep-pub-foot__item {
   gap: var(--sp-2);
   align-items: baseline;
 }
+
+/* ---- Library: late fines (the Fines page's row actions) ---------------------------------------- */
+.ep-fine-acts {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  white-space: nowrap;
+}
+.ep-fine-acts form {
+  margin: 0;
+}
+.ep-fine-act {
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--surface-band);
+  border-radius: var(--radius-md);
+}
+.ep-fine-act__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}

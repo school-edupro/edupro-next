@@ -490,7 +490,7 @@ describe('workflow GA, report cards, GPS and library (e2e, Sprint 17)', () => {
   });
 
   // ---- library ----
-  it('accession, issue with limits, renew, return with a fine, waive; the family sees its loans', async () => {
+  it('accession, issue with limits, renew, return with a fine at the fees counter, waived there; the family sees its loans', async () => {
     const title = await inject({
       method: 'POST',
       url: '/masters/library_titles/rows',
@@ -557,14 +557,43 @@ describe('workflow GA, report cards, GPS and library (e2e, Sprint 17)', () => {
       headers: h(),
       json: { accessionNo: `${s}-3`, borrowerKind: 'student', borrowerId: studentId },
     });
-    expect(blocked.json().type).toBe('library.fine_pending');
-    const waive = await inject({
+    // the late fine is announced at the fees counter (0217): it is waived there, through the fees office
+    expect(blocked.json().type).toBe('library.charge_due');
+    const atDesk = await inject({
       method: 'POST',
       url: `/library/loans/${ret.json().id}/fine`,
       headers: h(),
       json: { action: 'waive', note: 'first offence' },
     });
-    expect(Number(waive.json().fineWaived)).toBe(Number(ret.json().fineAmount));
+    expect(atDesk.json().type).toBe('library.fines_at_counter');
+    const owed = await inject({
+      method: 'GET',
+      url: '/library/fines/report?tab=outstanding',
+      headers: h(),
+    });
+    const row = owed.json().rows.find((x: { loanId: string }) => x.loanId === ret.json().id);
+    expect(row).toMatchObject({ due: Number(ret.json().fineAmount), how: 'counter' });
+    const ask = await inject({
+      method: 'POST',
+      url: `/library/charges/${row.chargeId as string}/waive-request`,
+      headers: h(),
+      json: { reason: 'first offence' },
+    });
+    expect(ask.statusCode).toBe(201);
+    const decide = await inject({
+      method: 'POST',
+      url: `/fees/misc-fees/requests/${ask.json().requestId as string}/decide`,
+      headers: h(),
+      json: { outcome: 'approved' },
+    });
+    expect(decide.statusCode).toBe(200);
+    const issued = await inject({
+      method: 'POST',
+      url: '/library/loans/issue',
+      headers: h(),
+      json: { accessionNo: `${s}-3`, borrowerKind: 'student', borrowerId: studentId },
+    });
+    expect(issued.statusCode).toBe(201);
     const mine = await inject({ method: 'GET', url: '/library/mine', headers: h(parent) });
     expect(mine.json().children[0].loans.length).toBeGreaterThanOrEqual(2);
     const fines = await inject({ method: 'GET', url: '/library/loans?status=fines', headers: h() });

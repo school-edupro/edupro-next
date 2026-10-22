@@ -3557,19 +3557,6 @@ export async function libraryRenew(fd: FormData) {
   );
 }
 
-export async function libraryFine(fd: FormData) {
-  return run('/library/fines', () =>
-    apiFetch(`/library/loans/${str(fd, 'loanId')}/fine`, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: str(fd, 'action') === 'waive' ? 'waive' : 'collect',
-        reference: opt(fd, 'reference'),
-        note: opt(fd, 'note'),
-      }),
-    }),
-  );
-}
-
 // ---- Sprint 18 ----------------------------------------------------------------------------------
 export async function boardImportValidate(fd: FormData) {
   const back = '/exams/board-results';

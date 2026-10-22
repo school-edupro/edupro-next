@@ -1001,8 +1001,7 @@ export class WithdrawalsService {
     // is charged as a misc fee until the fees counter takes it
     const r = await c.query<{ open: number; fines: string; charges: string }>(
       `SELECT count(*) FILTER (WHERE returned_on IS NULL)::int AS open,
-              COALESCE(sum(fine_amount - fine_waived) FILTER (WHERE fine_amount > fine_waived AND fine_receipt_id IS NULL
-                                                             AND fine_paid_on IS NULL), 0)::text AS fines,
+              app.library_fines_unsent('student', $1)::text AS fines,
               app.library_charges_due('student', $1)::text AS charges
          FROM library_loans WHERE borrower_kind = 'student' AND borrower_id = $1`,
       [studentId],
@@ -1013,7 +1012,9 @@ export class WithdrawalsService {
     const parts = [
       open ? `${String(open)} book${open === 1 ? '' : 's'} not returned` : null,
       fines ? `${money(fines)} fine unpaid` : null,
-      charges ? `${money(charges)} for a lost or damaged book unpaid (misc fee)` : null,
+      charges
+        ? `${money(charges)} of library dues unpaid (late fines, lost or damaged books; misc fees)`
+        : null,
     ].filter(Boolean);
     return {
       kind: 'library',

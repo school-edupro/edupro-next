@@ -6,6 +6,7 @@ import {
   AccessionDto,
   CatalogueQueryDto,
   ChargeDto,
+  ChargeExportDto,
   ChargeListDto,
   ChargePreviewDto,
   DeskBookDto,
@@ -15,6 +16,9 @@ import {
   DeskReturnDto,
   CopyStatusDto,
   FineDto,
+  FinesExportDto,
+  FinesQueryDto,
+  FinesSendDto,
   IssueDto,
   LIBRARY,
   LoansQueryDto,
@@ -24,7 +28,9 @@ import {
   StockCheckCloseDto,
   StockCheckScanDto,
   StockCheckStartDto,
+  WaiveRequestDto,
 } from './library.dto';
+import { LibraryFinesService } from './library-fines.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -39,6 +45,7 @@ export class LibraryController {
     private readonly library: LibraryService,
     private readonly charges: LibraryChargesService,
     private readonly desk: LibraryDeskService,
+    private readonly fines: LibraryFinesService,
   ) {}
 
   // ---- the circulation desk ------------------------------------------------------------------------
@@ -176,7 +183,50 @@ export class LibraryController {
     return this.charges.list(ctx, q);
   }
 
+  @Get('charges/export')
+  @ApiOperation({ summary: 'The charges list as filtered, as Excel or PDF' })
+  @RequirePermission(LIBRARY.circulate)
+  chargeExport(@ReqCtx() ctx: RequestContext, @Query() q: ChargeExportDto) {
+    return this.charges.export(ctx, q);
+  }
+
+  @Post('charges/:id/waive-request')
+  @ApiOperation({
+    summary: 'A late fine at the fees counter waived in part or in full (the fees office approves)',
+  })
+  @RequirePermission(LIBRARY.circulate)
+  waiveRequest(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: WaiveRequestDto,
+  ) {
+    return this.charges.askWaiver(ctx, id, body);
+  }
+
+  // ---- library reports: fines (docs/design/36-library.md, "Library reports") -------------------------
+  @Get('fines/report')
+  @ApiOperation({ summary: 'Late fines outstanding, collected or waived, between two days' })
+  @RequirePermission(LIBRARY.circulate)
+  finesReport(@ReqCtx() ctx: RequestContext, @Query() q: FinesQueryDto) {
+    return this.fines.report(ctx, q);
+  }
+
+  @Get('fines/export')
+  @ApiOperation({ summary: 'A fines tab as filtered, as Excel or PDF' })
+  @RequirePermission(LIBRARY.circulate)
+  finesExport(@ReqCtx() ctx: RequestContext, @Query() q: FinesExportDto) {
+    return this.fines.export(ctx, q);
+  }
+
+  @Post('fines/send')
+  @ApiOperation({ summary: 'Old fines not yet at the fees counter announced there as misc fees' })
+  @RequirePermission(LIBRARY.circulate)
+  finesSend(@ReqCtx() ctx: RequestContext, @Body() body: FinesSendDto) {
+    return this.charges.sendUnsent(ctx, body.loanIds);
+  }
+
   @Post('loans/:id/fine')
+  @ApiOperation({ summary: 'An old fine not yet at the fees counter waived (with a reason)' })
   @RequirePermission(LIBRARY.circulate)
   fine(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: FineDto) {
     return this.library.fine(ctx, id, body);

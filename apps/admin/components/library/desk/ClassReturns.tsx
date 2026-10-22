@@ -8,8 +8,8 @@ const ALL = 'All sections';
 
 /**
  * Return by class: the books the pupils of a class (or one section) hold, filtered by book no.,
- * admission no. or name, returned by ticks or all at once (in good condition); the fines go to the
- * Fines page.
+ * admission no. or name, returned by ticks or all at once (in good condition); the late fines go to
+ * the fees counter as misc fees.
  */
 export function ClassReturns({ classes }: { classes: DeskClass[] }) {
   const [klass, setKlass] = useState('');
@@ -58,7 +58,7 @@ export function ClassReturns({ classes }: { classes: DeskClass[] }) {
       setRows((x) => (x ?? []).filter((y) => !back.has(y.loanId)));
       setTicked(new Set());
       setMessage(
-        `${String(r.data.loans.length)} book${r.data.loans.length === 1 ? '' : 's'} returned${r.data.fines ? `; late fines ${rupees(r.data.fines)} are on the Fines page` : ''}`,
+        `${String(r.data.loans.length)} book${r.data.loans.length === 1 ? '' : 's'} returned${r.data.fines ? `; late fines of ${rupees(r.data.fines)} are sent to the fees counter as misc fees` : ''}`,
       );
     });
   const toggle = (id: string) =>
@@ -115,7 +115,7 @@ export function ClassReturns({ classes }: { classes: DeskClass[] }) {
           role="status"
           style={{ marginTop: 'var(--sp-2)' }}
         >
-          {message} · <a href="/library/fines">Fines</a>
+          {message} · <a href="/library/fines">Late fines</a>
         </p>
       ) : null}
       {rows ? (

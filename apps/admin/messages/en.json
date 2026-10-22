@@ -836,7 +836,7 @@
     "library_fines": {
       "kicker": "Library",
       "title": "Fines",
-      "description": "Fines computed on return; collect (with a receipt reference) or waive with a note. A pending fine blocks new issues."
+      "description": "Late fines go to the fees counter as misc fees when a book comes back; what is due, collected and waived, by day."
     },
     "exams_board_results": {
       "kicker": "Exams",

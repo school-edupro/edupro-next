@@ -42,11 +42,12 @@ export async function deskIssue(input: {
   return call<{ loans: LibraryLoan[] }>('/library/desk/issue', post(input));
 }
 
-/** One book back, in the condition given, its fine waived if asked. */
+/** One book back, in the condition given, its fine waived (with the reason) if asked. */
 export async function deskReturnOne(input: {
   accessionNo: string;
   condition: 'available' | 'damaged';
   waiveFine?: boolean;
+  waiveReason?: string;
   note?: string;
 }) {
   return call<LibraryLoan>('/library/loans/return', post({ waiveFine: false, ...input }));
@@ -62,15 +63,6 @@ export async function deskReturnMany(accessionNos: string[]) {
 
 export async function deskRenew(accessionNo: string) {
   return call<LibraryLoan>('/library/loans/renew', post({ accessionNo }));
-}
-
-/** A returned book's fine collected (with the receipt reference) or waived (with a note). */
-export async function deskSettleFine(
-  loanId: string,
-  input: { action: 'collect' | 'waive'; reference?: string; note?: string },
-) {
-  if (!/^\d{1,18}$/.test(loanId)) return { ok: false as const, error: 'Loan not found' };
-  return call<LibraryLoan>(`/library/loans/${loanId}/fine`, post(input));
 }
 
 export async function deskClassLoans(classId: string, sectionId?: string) {

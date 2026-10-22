@@ -52,6 +52,8 @@ export const ReturnSchema = z.object({
   /** mark the copy on return */
   condition: z.enum(['available', 'damaged', 'lost']).default('available'),
   waiveFine: z.boolean().default(false),
+  /** why the fine is waived (needed when there is one) */
+  waiveReason: z.string().trim().max(300).optional(),
   note: z.string().trim().max(300).optional(),
 });
 export class ReturnDto extends createZodDto(ReturnSchema) {}
@@ -126,8 +128,42 @@ export const ChargeSchema = ChargePreviewSchema.extend({
 export class ChargeDto extends createZodDto(ChargeSchema) {}
 export const ChargeListSchema = z.object({
   status: z.enum(['due', 'paid', 'cancelled', 'all']).optional(),
+  /** the days charged between (paid: the days paid) */
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  borrower: z.enum(['student', 'employee']).optional(),
+  q: z.string().trim().max(80).optional(),
 });
 export class ChargeListDto extends createZodDto(ChargeListSchema) {}
+export const ChargeExportSchema = ChargeListSchema.extend({ format: z.enum(['xlsx', 'pdf']) });
+export class ChargeExportDto extends createZodDto(ChargeExportSchema) {}
+
+// ---- library reports (docs/design/36-library.md, "Library reports") ----
+export const FinesQuerySchema = z.object({
+  tab: z.enum(['outstanding', 'collected', 'waived']).default('outstanding'),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  borrower: z.enum(['student', 'employee']).optional(),
+  classId: IdSchema.optional(),
+  sectionId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class FinesQueryDto extends createZodDto(FinesQuerySchema) {}
+export const FinesExportSchema = FinesQuerySchema.extend({ format: z.enum(['xlsx', 'pdf']) });
+export class FinesExportDto extends createZodDto(FinesExportSchema) {}
+export const FinesSendSchema = z.object({
+  /** the loans whose old fines go to the fees counter; none: every one */
+  loanIds: z.array(IdSchema).max(500).optional(),
+});
+export class FinesSendDto extends createZodDto(FinesSendSchema) {}
+export const WaiveRequestSchema = z.object({
+  /** how much to waive; none: all that is due */
+  amount: z.number().positive().max(1_000_000).optional(),
+  reason: z.string().trim().min(3).max(300),
+});
+export class WaiveRequestDto extends createZodDto(WaiveRequestSchema) {}
 
 // ---- the circulation desk (docs/design/36-library.md, "The circulation desk") ----
 const DeskNo = z.string().trim().min(1).max(30);

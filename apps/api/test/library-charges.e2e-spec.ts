@@ -208,7 +208,7 @@ describe('library lost and damaged charges (e2e)', () => {
     expect((await issue('B00002', 'student', ids.pupil!)).statusCode).toBe(201);
   });
 
-  it('a damaged book: a share of the price suggested, what is damaged said; the late fine stays a library fine', async () => {
+  it('a damaged book: a share of the price suggested, what is damaged said; the late fine goes to the fees counter on its own', async () => {
     await late('B00002');
     const p = (
       await call('GET', '/library/charges/preview?accessionNo=B00002&kind=damaged')
@@ -224,9 +224,18 @@ describe('library lost and damaged charges (e2e)', () => {
       reason: 'Cover torn, pages 40–60 wet',
     });
     expect(r.json()).toMatchObject({ amount: 75 });
-    const loans = (await call('GET', '/library/loans?status=fines&size=10')).json().data;
-    expect(loans[0]).toMatchObject({ accessionNo: 'B00002', fineAmount: '20.00' });
-    expect((await charges('due')).rows[0]).toMatchObject({ kind: 'damaged', due: 75 });
+    // the late fine is a misc fee of its own (0217): nothing is left to collect at the library
+    expect((await call('GET', '/library/loans?status=fines&size=10')).json().data).toEqual([]);
+    const lines = (
+      await call('GET', `/fees/misc-fees/student/${ids.pupil!}`, undefined, accountant)
+    ).json().lines as Array<{ title: string; balance: string }>;
+    expect(lines.find((l) => l.title === 'Late fine: Malgudi Days (B00002)')).toMatchObject({
+      balance: '20.00',
+    });
+    // the charges list keeps lost and damaged books; late fines are on the Fines page
+    const due = await charges('due');
+    expect(due.rows.map((x) => x.kind)).toEqual(['damaged']);
+    expect(due.rows[0]).toMatchObject({ kind: 'damaged', due: 75 });
   });
 
   it('a lost book found again before it is paid: the fees office brings the charge down to the late fine', async () => {
@@ -235,17 +244,28 @@ describe('library lost and damaged charges (e2e)', () => {
       await call('GET', `/fees/misc-fees/student/${ids.pupil!}`, undefined, accountant)
     ).json().lines as Array<{ id: string; title: string; balance: string }>;
     const dmg = due.find((l) => l.title.startsWith('Damaged book'))!;
-    await call(
-      'POST',
-      '/fees/misc-fees/collect',
-      { studentId: ids.pupil, lines: [{ lineId: dmg.id, amount: 75 }], mode: 'cash' },
-      accountant,
-    );
-    const loan = (await call('GET', '/library/loans?status=fines&size=10')).json().data[0];
-    await call('POST', `/library/loans/${loan.id as string}/fine`, {
+    const fine = due.find((l) => l.title.startsWith('Late fine'))!;
+    // the library takes no fine money
+    const loan = (await call('GET', '/library/loans?status=returned&size=10')).json().data[0];
+    const refused = await call('POST', `/library/loans/${loan.id as string}/fine`, {
       action: 'collect',
       reference: 'R-1',
     });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().type).toBe('library.fines_at_counter');
+    await call(
+      'POST',
+      '/fees/misc-fees/collect',
+      {
+        studentId: ids.pupil,
+        lines: [
+          { lineId: dmg.id, amount: 75 },
+          { lineId: fine.id, amount: 20 },
+        ],
+        mode: 'cash',
+      },
+      accountant,
+    );
     expect((await issue('B00003', 'student', ids.pupil!)).statusCode).toBe(201);
     await late('B00003');
     expect(

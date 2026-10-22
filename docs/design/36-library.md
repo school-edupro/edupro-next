@@ -399,3 +399,37 @@ now (due reminders stay on the list for later).
   scan. **Return by borrower** lists a borrower's books (return, renew, return all); **Return by class**
   lists the books a class or section holds (`GET library/desk/class-loans`, filter, ticks, return ticked
   or all shown; `POST library/desk/return`).
+
+## Library reports (22 Oct 2026)
+
+Asked: on Fines, the waivers and the late fines collected, a date filter, Excel and PDF; on Lost and
+damaged books (Paid), a date filter, Excel and PDF; Stock verification rebuilt (cycles, an Excel upload,
+verified and pending copies shown on the copies register); selling books (one or from Excel) with the sale
+amount as a misc fee and a report; circulation history between two days; each pupil's and staff member's
+borrowing history; each with Excel and PDF. Decisions (asked): a late fine goes to the fees counter as a
+misc fee when the book comes back (the library takes no fine money); a stock cycle covers the libraries,
+shelves and material types chosen; a book sold to someone outside the school is paid on a misc receipt
+(payer "other"); fines and charges first, then circulation history, stock, sales.
+
+- **Part 1 — fines at the fees counter; fines and charges history (done, migration 0217).** A book
+  returned late announces its fine at once as a misc fee on the borrower, pupil or staff, under the head
+  LIBFINE "Library: late fine" (`library_charges` kind `late`, one per loan; "Late fine: title (book no.)",
+  the days late in its remark), so the parent sees it and the fees counter collects it on a misc receipt;
+  a damaged book returned late gets its damage charge and its late fine as two fees. A fine waived at the
+  desk needs its reason and is kept with who and when (`library_fine_waivers`; the waivers made before
+  were copied from the loans). Collecting at the library is refused (`library.fines_at_counter`); a fine
+  already at the counter is waived through the fees office (`POST library/charges/:id/waive-request`: a
+  misc fee change request for part, the fee closed for all). Old fines left at the library before 0217
+  still stop issues (`app.library_fines_unsent`, `library.fine_pending`) until sent to the counter
+  (`POST library/fines/send`, one or all) or waived with a reason; a fine at the counter stops issues as a
+  lost book does (`library.charge_due`), and both count in the leaving check. **Late fines**
+  (`/library/fines`): three figures that are also the tabs, Outstanding (due at the counter, a waiver the
+  fees office is deciding, old fines not sent), Collected (the counter's receipts: day, amount, receipt
+  no., mode, who; old fines collected at the library) and Waived (at the desk with the reason and who, or
+  by the fees office); between two days (the day returned, paid or waived), pupils or staff, a class or
+  section, a search; totals; the tab as Excel or PDF (`GET library/fines/report|export`). **Lost and
+  damaged books**: late fines left the list (they are on Late fines); a date filter (the day charged; on
+  Paid, the day paid, with the receipt nos.), pupils or staff, a search, totals, Excel or PDF
+  (`GET library/charges/export`). The files are made at once by `libraryFile` (Excel with an "About this
+  report" sheet; PDF A4 landscape, Rs. for ₹) through `/api/library-report`. The desk says the fine went
+  to the counter instead of collecting it.

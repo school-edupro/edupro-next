@@ -1,0 +1,65 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { ApiError, apiFetch } from '@/lib/api';
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const ID = /^\d{1,18}$/;
+/** each report: its API path and the filters it takes, with what each may be */
+const REPORTS: Record<string, { path: string; keys: Record<string, (v: string) => boolean> }> = {
+  fines: {
+    path: '/library/fines/export',
+    keys: {
+      tab: (v) => ['outstanding', 'collected', 'waived'].includes(v),
+      from: (v) => DAY.test(v),
+      to: (v) => DAY.test(v),
+      borrower: (v) => v === 'student' || v === 'employee',
+      classId: (v) => ID.test(v),
+      sectionId: (v) => ID.test(v),
+      q: (v) => v.length <= 80,
+    },
+  },
+  charges: {
+    path: '/library/charges/export',
+    keys: {
+      status: (v) => ['due', 'paid', 'cancelled', 'all'].includes(v),
+      from: (v) => DAY.test(v),
+      to: (v) => DAY.test(v),
+      borrower: (v) => v === 'student' || v === 'employee',
+      q: (v) => v.length <= 80,
+    },
+  },
+};
+
+/**
+ * A library report as on screen, as Excel or PDF (docs/design/36-library.md, "Library reports"):
+ * `report` names it, the page's filters come along, `format` is xlsx or pdf; the file is saved.
+ */
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  const r = REPORTS[sp.get('report') ?? ''];
+  if (!r) return new NextResponse('No such report', { status: 404 });
+  const q = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
+  for (const [k, ok] of Object.entries(r.keys)) {
+    const v = (sp.get(k) ?? '').trim();
+    if (v && ok(v)) q.set(k, v);
+  }
+  try {
+    const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
+      `${r.path}?${q.toString()}`,
+    );
+    return new NextResponse(Buffer.from(f.base64, 'base64'), {
+      headers: {
+        'content-type': f.contentType,
+        'content-disposition': `attachment; filename="${f.filename}"`,
+        'cache-control': 'private, no-store',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      return new NextResponse(`Not made: ${String(error.problem.detail ?? error.problem.type)}`, {
+        status: error.status,
+        headers: { 'content-type': 'text/plain; charset=utf-8' },
+      });
+    throw error;
+  }
+}

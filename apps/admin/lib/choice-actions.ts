@@ -16,7 +16,6 @@ import {
   decideRefund,
   decideVariance,
   dsrSetStatus,
-  libraryFine,
   requestDepartmentExport,
   requestFeeReportExport,
 } from './actions';
@@ -72,10 +71,6 @@ export async function decideVariance__status(value: string, fd: FormData) {
 export async function requestDepartmentExport__format(value: string, fd: FormData) {
   fd.set('format', value);
   return requestDepartmentExport(fd);
-}
-export async function libraryFine__action(value: string, fd: FormData) {
-  fd.set('action', value);
-  return libraryFine(fd);
 }
 export async function cutoverStep__status(value: string, fd: FormData) {
   fd.set('status', value);

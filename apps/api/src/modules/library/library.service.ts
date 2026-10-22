@@ -5,6 +5,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
+import { LibraryChargesService } from './library-charges.service';
 import type {
   AccessionDto,
   CatalogueQueryDto,
@@ -81,6 +82,7 @@ export class LibraryService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
+    private readonly charges: LibraryChargesService,
   ) {}
 
   private async setting(c: PoolClient, key: string, fallback: number): Promise<number> {
@@ -342,7 +344,7 @@ export class LibraryService {
         { status: 409 },
       );
     const unpaid = await c.query<{ n: string }>(
-      `SELECT COALESCE(sum(fine_amount - fine_waived), 0)::text AS n FROM library_loans WHERE borrower_kind = $1::library_borrower AND borrower_id = $2 AND fine_amount > fine_waived AND fine_paid_on IS NULL`,
+      `SELECT app.library_fines_unsent($1::library_borrower, $2)::text AS n`,
       [dto.borrowerKind, dto.borrowerId],
     );
     if (Number(unpaid.rows[0]!.n) > 0)
@@ -357,7 +359,7 @@ export class LibraryService {
     if (Number(charged.rows[0]!.n) > 0)
       throw new DomainError(
         'library.charge_due',
-        `₹${charged.rows[0]!.n} for a lost or damaged book is not paid yet: it is paid at the fees counter`,
+        `₹${charged.rows[0]!.n} of library dues (late fines, lost or damaged books) is not paid yet: it is paid at the fees counter`,
         { status: 409 },
       );
     const loanDays = rule.loanDays;
@@ -469,6 +471,23 @@ export class LibraryService {
       `UPDATE library_copies SET status = $2::library_copy_status, updated_at = now() WHERE id = $1`,
       [copy.id, dto.condition],
     );
+    // a fine waived at the desk is kept with its reason; what is left goes to the fees counter at once
+    const back = await c.query<{ fine: string }>(
+      `SELECT fine_amount::text AS fine FROM library_loans WHERE id = $1`,
+      [l.rows[0].id],
+    );
+    const fined = Number(back.rows[0]!.fine);
+    if (dto.waiveFine && fined > 0) {
+      const why = (dto.waiveReason ?? dto.note ?? '').trim();
+      if (why.length < 3)
+        throw new DomainError('validation-failed', 'Say why the fine is waived', { status: 400 });
+      await c.query(
+        `INSERT INTO library_fine_waivers (school_id, loan_id, amount, reason, waived_on, by_user, by_name)
+         VALUES (app.current_school_id(), $1, $2, $3, COALESCE($4::date, CURRENT_DATE), app.current_user_id(), $5)`,
+        [l.rows[0].id, fined, why, dto.returnedOn ?? null, ctx.user.displayName],
+      );
+    }
+    await this.charges.raiseLateIn(c, ctx, l.rows[0].id);
     await this.audit.stage(ctx, c, {
       action: 'library.return',
       entityType: 'library_loans',
@@ -478,36 +497,56 @@ export class LibraryService {
     return (await this.loan(c, l.rows[0].id))!;
   }
 
+  /**
+   * An old fine still at the library (from before late fines went to the fees counter, 0217): waived with
+   * its reason, kept in the history. Collecting money is the fees counter's: send the fine there.
+   */
   async fine(ctx: RequestContext, loanId: string, dto: FineDto): Promise<LoanRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (dto.action === 'collect')
+        throw new DomainError(
+          'library.fines_at_counter',
+          'Late fines are paid at the fees counter: send this fine there from the Fines page',
+          { status: 409 },
+        );
       const l = await c.query<{
         fine_amount: string;
         fine_waived: string;
         fine_paid_on: string | null;
+        sent: boolean;
       }>(
-        `SELECT fine_amount::text, fine_waived::text, fine_paid_on::text FROM library_loans WHERE id = $1 FOR UPDATE`,
+        `SELECT fine_amount::text, fine_waived::text, fine_paid_on::text,
+                EXISTS (SELECT 1 FROM library_charges ch WHERE ch.loan_id = l.id AND ch.kind = 'late') AS sent
+           FROM library_loans l WHERE id = $1 FOR UPDATE`,
         [loanId],
       );
       if (!l.rows[0]) throw new DomainError('not-found', 'Loan not found', { status: 404 });
+      if (l.rows[0].sent)
+        throw new DomainError(
+          'library.fines_at_counter',
+          'This fine is at the fees counter: ask the fees office to waive it from the Fines page',
+          { status: 409 },
+        );
       const outstanding = Number(l.rows[0].fine_amount) - Number(l.rows[0].fine_waived);
       if (outstanding <= 0 || l.rows[0].fine_paid_on)
         throw new DomainError('library.no_fine', 'Nothing outstanding on this loan', {
           status: 409,
         });
-      if (dto.action === 'waive') {
-        const amount = Math.min(dto.amount ?? outstanding, outstanding);
-        await c.query(
-          `UPDATE library_loans SET fine_waived = fine_waived + $2, note = COALESCE($3, note), updated_at = now() WHERE id = $1`,
-          [loanId, amount, dto.note ?? null],
-        );
-      } else {
-        await c.query(
-          `UPDATE library_loans SET fine_paid_on = CURRENT_DATE, note = COALESCE($2, note), updated_at = now() WHERE id = $1`,
-          [loanId, dto.reference ? `paid · ${dto.reference}` : (dto.note ?? null)],
-        );
-      }
+      const why = (dto.note ?? '').trim();
+      if (why.length < 3)
+        throw new DomainError('validation-failed', 'Say why the fine is waived', { status: 400 });
+      const amount = Math.min(dto.amount ?? outstanding, outstanding);
+      await c.query(
+        `UPDATE library_loans SET fine_waived = fine_waived + $2, updated_at = now() WHERE id = $1`,
+        [loanId, amount],
+      );
+      await c.query(
+        `INSERT INTO library_fine_waivers (school_id, loan_id, amount, reason, by_user, by_name)
+         VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id(), $4)`,
+        [loanId, amount, why, ctx.user.displayName],
+      );
       await this.audit.stage(ctx, c, {
-        action: `library.fine.${dto.action}`,
+        action: 'library.fine.waive',
         entityType: 'library_loans',
         entityId: loanId,
         after: dto,
@@ -523,8 +562,12 @@ export class LibraryService {
       if (q.status === 'open') where.push('l.returned_on IS NULL');
       if (q.status === 'overdue') where.push('l.returned_on IS NULL AND l.due_on < CURRENT_DATE');
       if (q.status === 'returned') where.push('l.returned_on IS NOT NULL');
+      // old fines still at the library (not yet sent to the fees counter)
       if (q.status === 'fines')
-        where.push('l.fine_amount > l.fine_waived AND l.fine_paid_on IS NULL');
+        where.push(
+          `l.fine_amount > l.fine_waived AND l.fine_paid_on IS NULL AND l.fine_receipt_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM library_charges ch WHERE ch.loan_id = l.id AND ch.kind = 'late')`,
+        );
       if (q.borrowerKind && q.borrowerId) {
         params.push(q.borrowerKind, q.borrowerId);
         where.push(

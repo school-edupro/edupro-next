@@ -1,13 +1,13 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { BorrowerCard, BorrowerPicker, FineSettle } from './DeskParts';
+import { BorrowerCard, BorrowerPicker, FineAtCounter } from './DeskParts';
 import { deskBorrower, deskRenew, deskReturnMany } from '@/lib/library-desk-actions';
 import { dmy, fineOf, type DeskBorrower } from '@/lib/library-desk';
 import type { LibraryLoan } from '@/lib/types';
 
 /**
  * Return by borrower: every book a pupil or staff member holds, each returned or renewed, or all at
- * once; the fines of what came back late settled after.
+ * once; the late fines of what came back late go to the fees counter as misc fees.
  */
 export function BorrowerReturns() {
   const [borrower, setBorrower] = useState<DeskBorrower | null>(null);
@@ -79,7 +79,7 @@ export function BorrowerReturns() {
           </p>
         ) : null}
         {owed.map((l) => (
-          <FineSettle
+          <FineAtCounter
             key={l.id}
             loan={l}
             onDone={(m) => {

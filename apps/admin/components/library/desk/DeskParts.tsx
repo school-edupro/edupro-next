@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { deskBorrower, deskFindBorrower, deskSettleFine } from '@/lib/library-desk-actions';
+import { deskBorrower, deskFindBorrower } from '@/lib/library-desk-actions';
 import { rupees, type DeskBorrower, type DeskMatch } from '@/lib/library-desk';
 import type { LibraryLoan } from '@/lib/types';
 
@@ -146,8 +146,10 @@ export function BorrowerCard({ b }: { b: DeskBorrower }) {
               `${b.rule.label}: ${String(b.rule.maxBooks)} at a time, ${String(b.rule.loanDays)} days`,
             ],
             ['Holding', `${String(b.holding)} of ${String(b.rule.maxBooks)}`],
-            ...(b.finesDue ? [['Fines unpaid', rupees(b.finesDue)]] : []),
-            ...(b.chargesDue ? [['Lost or damaged, unpaid', rupees(b.chargesDue)]] : []),
+            ...(b.finesDue ? [['Old fines at the library', rupees(b.finesDue)]] : []),
+            ...(b.chargesDue
+              ? [['Due at the fees counter (late fines, lost or damaged)', rupees(b.chargesDue)]]
+              : []),
           ] as Array<[string, string]>
         ).map(([k, v]) => (
           <div key={k}>
@@ -166,12 +168,17 @@ export function BorrowerCard({ b }: { b: DeskBorrower }) {
           {b.finesDue ? (
             <>
               {' '}
-              · <a href="/library/fines">Fines</a>
+              · <a href="/library/fines">Late fines</a>
             </>
           ) : null}
           {b.chargesDue ? (
             <>
-              {' '}
+              {b.finesDue ? null : (
+                <>
+                  {' '}
+                  · <a href="/library/fines">Late fines</a>
+                </>
+              )}{' '}
               · <a href="/library/charges">Lost and damaged</a>
             </>
           ) : null}
@@ -181,8 +188,11 @@ export function BorrowerCard({ b }: { b: DeskBorrower }) {
   );
 }
 
-/** A returned book's late fine: collected now with the receipt reference, waived with a note, or later. */
-export function FineSettle({
+/**
+ * A book back late: its fine is announced at once as a misc fee on the borrower and paid at the fees
+ * counter (0217); the desk only says so.
+ */
+export function FineAtCounter({
   loan,
   onDone,
 }: {
@@ -190,81 +200,27 @@ export function FineSettle({
   onDone: (message: string) => void;
 }) {
   const fine = Math.max(0, Number(loan.fineAmount) - Number(loan.fineWaived));
-  const [reference, setReference] = useState('');
-  const [note, setNote] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const settle = (action: 'collect' | 'waive') =>
-    start(async () => {
-      if (action === 'waive' && note.trim().length < 3) return setError('Say why it is waived');
-      const r = await deskSettleFine(loan.id, {
-        action,
-        reference: reference.trim() || undefined,
-        note: note.trim() || undefined,
-      });
-      if (!r.ok) return setError(r.error);
-      onDone(
-        action === 'collect'
-          ? `${rupees(fine)} collected for ${loan.accessionNo}`
-          : `${rupees(fine)} waived for ${loan.accessionNo}`,
-      );
-    });
   if (!fine) return null;
   return (
-    <div className="ep-alert ep-alert--warning" role="status" style={{ marginTop: 'var(--sp-3)' }}>
+    <div className="ep-alert ep-alert--info" role="status" style={{ marginTop: 'var(--sp-3)' }}>
       <strong>
         Late fine {rupees(fine)} on {loan.accessionNo} ({loan.daysOverdue} days late)
       </strong>
+      <p style={{ margin: 'var(--sp-1) 0 0' }}>
+        It is announced as a misc fee on {loan.borrower}: paid at the fees counter, not here. To
+        waive it now, ask the fees office from <a href="/library/fines">Late fines</a>.
+      </p>
       <div className="ep-desk__actions">
-        <label className="ep-field" htmlFor={`fs-ref-${loan.id}`} style={{ margin: 0 }}>
-          <span className="ep-field__label">Receipt reference</span>
-          <input
-            id={`fs-ref-${loan.id}`}
-            className="ep-input"
-            maxLength={60}
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="ep-btn ep-btn--primary ep-btn--sm"
-          disabled={pending}
-          onClick={() => settle('collect')}
-        >
-          Collect now
-        </button>
-        <label className="ep-field" htmlFor={`fs-note-${loan.id}`} style={{ margin: 0 }}>
-          <span className="ep-field__label">Why waived</span>
-          <input
-            id={`fs-note-${loan.id}`}
-            className="ep-input"
-            maxLength={300}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </label>
         <button
           type="button"
           className="ep-btn ep-btn--secondary ep-btn--sm"
-          disabled={pending}
-          onClick={() => settle('waive')}
+          onClick={() =>
+            onDone(`${loan.accessionNo}: late fine ${rupees(fine)} sent to the fees counter`)
+          }
         >
-          Waive
-        </button>
-        <button
-          type="button"
-          className="ep-btn ep-btn--ghost ep-btn--sm"
-          onClick={() => onDone(`${rupees(fine)} left on the Fines page for ${loan.accessionNo}`)}
-        >
-          Later
+          OK
         </button>
       </div>
-      {error ? (
-        <p className="ep-field__error" role="alert">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

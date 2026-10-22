@@ -5,9 +5,11 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { MiscFeesService } from '../fees/misc-fees.service';
-import type { ChargeDto, ChargeListDto, ChargePreviewDto } from './library.dto';
+import type { ChargeDto, ChargeExportDto, ChargeListDto, ChargePreviewDto } from './library.dto';
+import { libraryFile } from './library-file';
 
 const HEAD = { code: 'LIBBOOK', name: 'Library: lost or damaged book', order: 920 };
+const FINE_HEAD = { code: 'LIBFINE', name: 'Library: late fine', order: 921 };
 const rupees = (n: number) =>
   `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -144,13 +146,13 @@ export class LibraryChargesService {
     };
   }
 
-  /** The library's misc head (made the first time). */
-  private async head(c: PoolClient) {
+  /** A library misc head (made the first time): lost or damaged books, late fines. */
+  private async head(c: PoolClient, h: { code: string; name: string; order: number }) {
     const r = await c.query<{ id: string }>(
       `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
        VALUES (app.current_school_id(), $1, $2, 'misc', 'school', $3, app.current_user_id(), app.current_user_id())
        ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now() RETURNING id::text`,
-      [HEAD.code, HEAD.name, HEAD.order],
+      [h.code, h.name, h.order],
     );
     return r.rows[0]!.id;
   }
@@ -175,12 +177,7 @@ export class LibraryChargesService {
           `The charge differs from ${rupees(w.suggested)}: give the reason`,
           { status: 400 },
         );
-      const year = await c.query<{ id: string }>(
-        `SELECT id::text FROM academic_years WHERE status = 'active' ORDER BY start_date DESC LIMIT 1`,
-      );
-      const yearId = year.rows[0]?.id ?? requireTenant(ctx).academicYearId;
-      if (!yearId)
-        throw new DomainError('year.not_selected', 'No academic year is active', { status: 409 });
+      const yearId = await this.yearOf(c, ctx);
       // the loan closes: a lost book on the day reported (its late fine goes on the charge), a damaged
       // one on its return (its late fine stays a library fine)
       if (dto.kind === 'lost') {
@@ -205,6 +202,18 @@ export class LibraryChargesService {
             `Damaged: charged ${rupees(amount)} as a misc fee`,
           ],
         );
+        if (dto.waiveFine && rule.fine > 0)
+          await c.query(
+            `INSERT INTO library_fine_waivers (school_id, loan_id, amount, reason, waived_on, by_user, by_name)
+             VALUES (app.current_school_id(), $1, $2, $3, $4::date, app.current_user_id(), $5)`,
+            [
+              l.loan_id,
+              rule.fine,
+              `Waived when returned damaged: ${reason!}`,
+              w.on,
+              ctx.user.displayName,
+            ],
+          );
       }
       await c.query(
         `UPDATE library_copies SET status = $2::library_copy_status, status_on = $3::date, status_reason = $4,
@@ -218,52 +227,30 @@ export class LibraryChargesService {
         ],
       );
       // the misc fee, announced at once on the pupil or the staff member
-      const headId = await this.head(c);
-      const title =
-        `${dto.kind === 'lost' ? 'Lost book' : 'Damaged book'}: ${l.title} (${l.accession_no})`.slice(
-          0,
-          120,
-        );
       const remark =
         dto.kind === 'lost'
           ? `Price ${rupees(w.price)} + processing fee ${rupees(w.processingFee)} + late fine ${rupees(w.lateFine)}${changed ? `; charged ${rupees(amount)}: ${reason!}` : ''}`
           : `Damage: ${reason!}`;
-      const fee = await c.query<{ id: string }>(
-        `INSERT INTO misc_fees (school_id, academic_year_id, head_id, title, amount, last_date, remark, mandatory, status, requested_by, announced_at)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, CURRENT_DATE, $5, true, 'announced', app.current_user_id(), now())
-         RETURNING id::text`,
-        [yearId, headId, title, amount.toFixed(2), remark.slice(0, 300)],
-      );
-      const line = await c.query<{ id: string }>(
-        `INSERT INTO misc_fee_students (school_id, misc_fee_id, student_id, employee_id, amount)
-         VALUES (app.current_school_id(), $1, CASE WHEN $4 = 'student' THEN $2::bigint END,
-                 CASE WHEN $4 = 'employee' THEN $2::bigint END, $3) RETURNING id::text`,
-        [fee.rows[0]!.id, l.borrower_id, amount.toFixed(2), l.borrower_kind],
-      );
-      const ch = await c.query<{ id: string }>(
-        `INSERT INTO library_charges (school_id, loan_id, copy_id, borrower_kind, borrower_id, kind, on_date, price,
-                                      processing_fee, late_fine, amount, reason, misc_fee_id, misc_line_id,
-                                      created_by, created_by_name)
-         VALUES (app.current_school_id(), $1, $2, $3::library_borrower, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13,
-                 app.current_user_id(), $14)
-         RETURNING id::text`,
-        [
-          l.loan_id,
-          l.copy_id,
-          l.borrower_kind,
-          l.borrower_id,
-          dto.kind,
-          w.on,
-          w.price,
-          w.processingFee,
-          w.lateFine,
-          amount,
-          reason,
-          fee.rows[0]!.id,
-          line.rows[0]!.id,
-          ctx.user.displayName,
-        ],
-      );
+      const made = await this.announce(c, ctx, {
+        kind: dto.kind,
+        loanId: l.loan_id,
+        copyId: l.copy_id,
+        borrowerKind: l.borrower_kind,
+        borrowerId: l.borrower_id,
+        on: w.on,
+        price: w.price,
+        processingFee: w.processingFee,
+        lateFine: w.lateFine,
+        amount,
+        reason,
+        title: `${dto.kind === 'lost' ? 'Lost book' : 'Damaged book'}: ${l.title} (${l.accession_no})`,
+        remark,
+        yearId,
+      });
+      const fee = { rows: [{ id: made.miscFeeId }] };
+      const ch = { rows: [{ id: made.chargeId }] };
+      // a damaged book returned late: its late fine goes to the fees counter too
+      if (dto.kind === 'damaged') await this.raiseLateIn(c, ctx, l.loan_id);
       await c.query(
         `INSERT INTO library_copy_events (school_id, copy_id, what, from_status, to_status, on_date, reason, amount, by_user, by_name)
          VALUES (app.current_school_id(), $1, $2, 'issued', $2, $3::date, $4, $5, app.current_user_id(), $6)`,
@@ -292,79 +279,427 @@ export class LibraryChargesService {
     });
   }
 
-  /** The charges, with what the fees counter has taken. */
-  async list(ctx: RequestContext, q: ChargeListDto) {
+  /**
+   * A library charge announced at once as a misc fee on the pupil or the staff member (no approval step):
+   * the misc fee under the library's head, the borrower's line, the library's record of it.
+   */
+  private async announce(
+    c: PoolClient,
+    ctx: RequestContext,
+    x: {
+      kind: 'lost' | 'damaged' | 'late';
+      loanId: string;
+      copyId: string;
+      borrowerKind: 'student' | 'employee';
+      borrowerId: string;
+      on: string;
+      price: number;
+      processingFee: number;
+      lateFine: number;
+      amount: number;
+      reason: string | null;
+      title: string;
+      remark: string;
+      yearId: string;
+    },
+  ): Promise<{ chargeId: string; miscFeeId: string; lineId: string }> {
+    const headId = await this.head(c, x.kind === 'late' ? FINE_HEAD : HEAD);
+    const fee = await c.query<{ id: string }>(
+      `INSERT INTO misc_fees (school_id, academic_year_id, head_id, title, amount, last_date, remark, mandatory, status, requested_by, announced_at)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, CURRENT_DATE, $5, true, 'announced', app.current_user_id(), now())
+       RETURNING id::text`,
+      [x.yearId, headId, x.title.slice(0, 120), x.amount.toFixed(2), x.remark.slice(0, 300)],
+    );
+    const line = await c.query<{ id: string }>(
+      `INSERT INTO misc_fee_students (school_id, misc_fee_id, student_id, employee_id, amount)
+       VALUES (app.current_school_id(), $1, CASE WHEN $4 = 'student' THEN $2::bigint END,
+               CASE WHEN $4 = 'employee' THEN $2::bigint END, $3) RETURNING id::text`,
+      [fee.rows[0]!.id, x.borrowerId, x.amount.toFixed(2), x.borrowerKind],
+    );
+    const ch = await c.query<{ id: string }>(
+      `INSERT INTO library_charges (school_id, loan_id, copy_id, borrower_kind, borrower_id, kind, on_date, price,
+                                    processing_fee, late_fine, amount, reason, misc_fee_id, misc_line_id,
+                                    created_by, created_by_name)
+       VALUES (app.current_school_id(), $1, $2, $3::library_borrower, $4, $5, $6::date, $7, $8, $9, $10, $11, $12, $13,
+               app.current_user_id(), $14)
+       RETURNING id::text`,
+      [
+        x.loanId,
+        x.copyId,
+        x.borrowerKind,
+        x.borrowerId,
+        x.kind,
+        x.on,
+        x.price,
+        x.processingFee,
+        x.lateFine,
+        x.amount,
+        x.reason,
+        fee.rows[0]!.id,
+        line.rows[0]!.id,
+        ctx.user.displayName,
+      ],
+    );
+    return { chargeId: ch.rows[0]!.id, miscFeeId: fee.rows[0]!.id, lineId: line.rows[0]!.id };
+  }
+
+  /** The year a charge is announced in: the active one, else the working one. */
+  private async yearOf(c: PoolClient, ctx: RequestContext) {
+    const year = await c.query<{ id: string }>(
+      `SELECT id::text FROM academic_years WHERE status = 'active' ORDER BY start_date DESC LIMIT 1`,
+    );
+    const yearId = year.rows[0]?.id ?? requireTenant(ctx).academicYearId;
+    if (!yearId)
+      throw new DomainError('year.not_selected', 'No academic year is active', { status: 409 });
+    return yearId;
+  }
+
+  /**
+   * A returned book's late fine (what is left after a waiver at the desk) announced as a misc fee on the
+   * borrower; nothing when there is none, it is paid or it is already announced. Returns the amount.
+   */
+  async raiseLateIn(c: PoolClient, ctx: RequestContext, loanId: string): Promise<number> {
+    const r = await c.query<{
+      copy_id: string;
+      borrower_kind: 'student' | 'employee';
+      borrower_id: string;
+      left: string;
+      returned_on: string | null;
+      due_on: string;
+      title: string;
+      accession_no: string;
+    }>(
+      `SELECT l.copy_id::text, l.borrower_kind::text AS borrower_kind, l.borrower_id::text,
+              (l.fine_amount - l.fine_waived)::text AS left, l.returned_on::text, l.due_on::text, t.title, x.accession_no
+         FROM library_loans l JOIN library_copies x ON x.id = l.copy_id JOIN library_titles t ON t.id = x.title_id
+        WHERE l.id = $1 AND l.fine_paid_on IS NULL AND l.fine_receipt_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM library_charges ch WHERE ch.loan_id = l.id AND ch.kind = 'late')`,
+      [loanId],
+    );
+    const l = r.rows[0];
+    const amount = round(Number(l?.left ?? 0));
+    if (!l || !(amount > 0)) return 0;
+    const on = l.returned_on ?? today();
+    const late = Math.max(0, Math.round((Date.parse(on) - Date.parse(l.due_on)) / 86_400_000));
+    await this.announce(c, ctx, {
+      kind: 'late',
+      loanId,
+      copyId: l.copy_id,
+      borrowerKind: l.borrower_kind,
+      borrowerId: l.borrower_id,
+      on,
+      price: 0,
+      processingFee: 0,
+      lateFine: amount,
+      amount,
+      reason: null,
+      title: `Late fine: ${l.title} (${l.accession_no})`,
+      remark: `Returned on ${dmy(on)}, ${String(late)} days after ${dmy(l.due_on)}`,
+      yearId: await this.yearOf(c, ctx),
+    });
+    return amount;
+  }
+
+  /** Old fines not yet sent to the fees counter (from before 0217): announced now, the ones given or all. */
+  async sendUnsent(ctx: RequestContext, loanIds?: string[]) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<Record<string, unknown>>(
-        `SELECT ch.id::text, ch.kind, ch.on_date::text, ch.price::text, ch.processing_fee::text, ch.late_fine::text,
-                ch.amount::text, ch.reason, ch.found_on::text, ch.borrower_kind::text,
-                COALESCE(st.display_name, e.display_name) AS borrower, COALESCE(st.admission_no, e.employee_code) AS borrower_ref,
-                x.accession_no, t.id::text AS title_id, t.title, l.amount::text AS due_amount, l.paid::text, l.status AS line_status,
-                f.status AS fee_status, rq.status AS request_status, ch.created_by_name
+      const r = await c.query<{ id: string }>(
+        `SELECT l.id::text FROM library_loans l
+          WHERE l.fine_amount > l.fine_waived AND l.fine_paid_on IS NULL AND l.fine_receipt_id IS NULL
+            AND l.returned_on IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM library_charges ch WHERE ch.loan_id = l.id AND ch.kind = 'late')
+            AND ($1::bigint[] IS NULL OR l.id = ANY($1::bigint[]))
+          ORDER BY l.id`,
+        [loanIds?.length ? loanIds : null],
+      );
+      let sent = 0;
+      let total = 0;
+      for (const x of r.rows) {
+        const a = await this.raiseLateIn(c, ctx, x.id);
+        if (a > 0) {
+          sent += 1;
+          total += a;
+        }
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'library.fines.send',
+        entityType: 'library_loans',
+        entityId: r.rows[0]?.id ?? requireTenant(ctx).schoolId,
+        after: { sent, total: round(total) },
+      });
+      return { sent, total: round(total) };
+    });
+  }
+
+  /**
+   * A late fine already at the fees counter waived in part or in full: a misc fee change request the fees
+   * office approves (nothing paid and all waived: the fee is closed).
+   */
+  async askWaiver(ctx: RequestContext, chargeId: string, dto: { amount?: number; reason: string }) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        misc_fee_id: string;
+        misc_line_id: string;
+        line_amount: string;
+        paid: string;
+        title: string;
+        borrower: string;
+        pending: boolean;
+      }>(
+        `SELECT ch.misc_fee_id::text, ch.misc_line_id::text, l.amount::text AS line_amount, l.paid::text, f.title,
+                COALESCE(st.display_name, e.display_name) AS borrower,
+                EXISTS (SELECT 1 FROM misc_fee_requests q WHERE q.misc_fee_id = ch.misc_fee_id AND q.status = 'pending') AS pending
            FROM library_charges ch
-           JOIN library_copies x ON x.id = ch.copy_id JOIN library_titles t ON t.id = x.title_id
+           JOIN misc_fee_students l ON l.id = ch.misc_line_id JOIN misc_fees f ON f.id = ch.misc_fee_id
            LEFT JOIN students st ON ch.borrower_kind = 'student' AND st.id = ch.borrower_id
            LEFT JOIN employees e ON ch.borrower_kind = 'employee' AND e.id = ch.borrower_id
-           LEFT JOIN misc_fee_students l ON l.id = ch.misc_line_id
-           LEFT JOIN misc_fees f ON f.id = ch.misc_fee_id
-           LEFT JOIN misc_fee_requests rq ON rq.id = ch.found_request_id
-          ORDER BY ch.on_date DESC, ch.id DESC LIMIT 500`,
+          WHERE ch.id = $1 AND l.status = 'open' AND f.status = 'announced'`,
+        [chargeId],
       );
-      const rows = r.rows.map((x) => {
-        const amount = Number(x.due_amount ?? x.amount);
-        const paid = Number(x.paid ?? 0);
-        const state =
-          x.fee_status === 'closed' || x.line_status === 'cancelled'
-            ? 'cancelled'
-            : paid >= amount - 0.005
-              ? 'paid'
-              : x.request_status === 'pending'
-                ? 'found_pending'
-                : 'due';
-        return {
-          id: String(x.id),
-          kind: String(x.kind),
-          on: String(x.on_date),
-          borrowerKind: String(x.borrower_kind),
-          borrower: String(x.borrower ?? ''),
-          borrowerRef: String(x.borrower_ref ?? ''),
-          accessionNo: String(x.accession_no),
-          titleId: String(x.title_id),
-          title: String(x.title),
-          price: Number(x.price),
-          processingFee: Number(x.processing_fee),
-          lateFine: Number(x.late_fine),
-          charged: Number(x.amount),
-          amount,
-          paid,
-          due: Math.max(0, round(amount - paid)),
-          reason: x.reason as string | null,
-          foundOn: x.found_on as string | null,
-          state,
-          by: x.created_by_name as string | null,
-        };
+      const x = r.rows[0];
+      if (!x)
+        throw new DomainError('library.no_fine', 'Nothing is due on this charge', { status: 409 });
+      if (x.pending)
+        throw new DomainError(
+          'misc.request_open',
+          'A change is already waiting for the fees office',
+          {
+            status: 409,
+          },
+        );
+      const due = round(Number(x.line_amount) - Number(x.paid));
+      const waive = round(Math.min(dto.amount ?? due, due));
+      if (!(waive > 0))
+        throw new DomainError('validation-failed', 'Give the amount to waive', { status: 400 });
+      const keep = round(Number(x.line_amount) - waive);
+      const requestId =
+        keep > 0
+          ? await this.misc.requestChangeIn(c, ctx, {
+              kind: 'pupil_change',
+              miscFeeId: x.misc_fee_id,
+              lineId: x.misc_line_id,
+              amount: keep,
+              fromAmount: x.line_amount,
+              reason: dto.reason,
+              subject: `${x.title}: ${x.borrower}: amount Rs. ${x.line_amount} to Rs. ${keep.toFixed(2)}`,
+            })
+          : await this.misc.requestChangeIn(c, ctx, {
+              kind: 'close',
+              miscFeeId: x.misc_fee_id,
+              reason: dto.reason,
+              subject: `${x.title}: waived`,
+            });
+      await this.audit.stage(ctx, c, {
+        action: 'library.fine.waive_request',
+        entityType: 'library_charges',
+        entityId: chargeId,
+        after: { waive, reason: dto.reason, requestId },
       });
-      const want = q.status ?? 'due';
+      return { requestId, waive };
+    });
+  }
+
+  /** The lost and damaged books charged, with what the fees counter has taken (late fines: the Fines page). */
+  private async rowsOf(c: PoolClient, q: ChargeListDto) {
+    const r = await c.query<Record<string, unknown>>(
+      `SELECT ch.id::text, ch.kind, ch.on_date::text, ch.price::text, ch.processing_fee::text, ch.late_fine::text,
+              ch.amount::text, ch.reason, ch.found_on::text, ch.borrower_kind::text,
+              COALESCE(st.display_name, e.display_name) AS borrower, COALESCE(st.admission_no, e.employee_code) AS borrower_ref,
+              x.accession_no, t.id::text AS title_id, t.title, l.amount::text AS due_amount, l.paid::text, l.status AS line_status,
+              f.status AS fee_status, rq.status AS request_status, ch.created_by_name,
+              pr.paid_on::text, pr.receipts
+         FROM library_charges ch
+         JOIN library_copies x ON x.id = ch.copy_id JOIN library_titles t ON t.id = x.title_id
+         LEFT JOIN students st ON ch.borrower_kind = 'student' AND st.id = ch.borrower_id
+         LEFT JOIN employees e ON ch.borrower_kind = 'employee' AND e.id = ch.borrower_id
+         LEFT JOIN misc_fee_students l ON l.id = ch.misc_line_id
+         LEFT JOIN misc_fees f ON f.id = ch.misc_fee_id
+         LEFT JOIN misc_fee_requests rq ON rq.id = ch.found_request_id
+         LEFT JOIN LATERAL (
+           SELECT max(m.received_on) AS paid_on, string_agg(m.receipt_no, ', ' ORDER BY m.received_on) AS receipts
+             FROM misc_receipts m WHERE m.misc_fee_student_id = ch.misc_line_id AND m.status = 'posted') pr ON true
+        WHERE ch.kind <> 'late'
+          AND ($1::library_borrower IS NULL OR ch.borrower_kind = $1)
+          AND ($2::text IS NULL OR COALESCE(st.display_name, e.display_name) ILIKE $2 OR COALESCE(st.admission_no, e.employee_code) ILIKE $2
+               OR t.title ILIKE $2 OR x.accession_no ILIKE $2)
+        ORDER BY ch.on_date DESC, ch.id DESC`,
+      [q.borrower ?? null, q.q ? `%${q.q.replace(/[\\%_]/g, (k) => `\\${k}`)}%` : null],
+    );
+    const rows = r.rows.map((x) => {
+      const amount = Number(x.due_amount ?? x.amount);
+      const paid = Number(x.paid ?? 0);
+      const state =
+        x.fee_status === 'closed' || x.line_status === 'cancelled'
+          ? 'cancelled'
+          : paid >= amount - 0.005
+            ? 'paid'
+            : x.request_status === 'pending'
+              ? 'found_pending'
+              : 'due';
       return {
-        rows:
-          want === 'all'
-            ? rows
-            : rows.filter((x) =>
-                want === 'due'
-                  ? x.state === 'due' || x.state === 'found_pending'
-                  : x.state === want,
-              ),
+        id: String(x.id),
+        kind: String(x.kind),
+        on: String(x.on_date),
+        borrowerKind: String(x.borrower_kind),
+        borrower: String(x.borrower ?? ''),
+        borrowerRef: String(x.borrower_ref ?? ''),
+        accessionNo: String(x.accession_no),
+        titleId: String(x.title_id),
+        title: String(x.title),
+        price: Number(x.price),
+        processingFee: Number(x.processing_fee),
+        lateFine: Number(x.late_fine),
+        charged: Number(x.amount),
+        amount,
+        paid,
+        due: Math.max(0, round(amount - paid)),
+        paidOn: x.paid_on as string | null,
+        receipts: x.receipts as string | null,
+        reason: x.reason as string | null,
+        foundOn: x.found_on as string | null,
+        state,
+        by: x.created_by_name as string | null,
+      };
+    });
+    const want = q.status ?? 'due';
+    // the days: charged on, or for what is paid the day it was paid
+    const day = (x: (typeof rows)[number]) => (want === 'paid' ? (x.paidOn ?? x.on) : x.on);
+    const dated = rows.filter((x) => (!q.from || day(x) >= q.from) && (!q.to || day(x) <= q.to));
+    const shown =
+      want === 'all'
+        ? dated
+        : dated.filter((x) =>
+            want === 'due' ? x.state === 'due' || x.state === 'found_pending' : x.state === want,
+          );
+    return { rows: shown, dated, want };
+  }
+
+  async list(ctx: RequestContext, q: ChargeListDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { rows, dated } = await this.rowsOf(c, q);
+      return {
+        rows: rows.slice(0, 500),
+        total: rows.length,
+        totals: {
+          charged: round(rows.reduce((n, x) => n + x.amount, 0)),
+          paid: round(rows.reduce((n, x) => n + x.paid, 0)),
+          due: round(rows.reduce((n, x) => n + (x.state === 'cancelled' ? 0 : x.due), 0)),
+        },
         counts: {
-          due: rows.filter((x) => x.state === 'due' || x.state === 'found_pending').length,
-          paid: rows.filter((x) => x.state === 'paid').length,
-          cancelled: rows.filter((x) => x.state === 'cancelled').length,
+          due: dated.filter((x) => x.state === 'due' || x.state === 'found_pending').length,
+          paid: dated.filter((x) => x.state === 'paid').length,
+          cancelled: dated.filter((x) => x.state === 'cancelled').length,
           dueAmount: round(
-            rows
+            dated
               .filter((x) => x.state !== 'paid' && x.state !== 'cancelled')
               .reduce((n, x) => n + x.due, 0),
           ),
         },
       };
+    });
+  }
+
+  /** The charges list as filtered, as Excel or PDF. */
+  async export(ctx: RequestContext, q: ChargeExportDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { rows, want } = await this.rowsOf(c, q);
+      const school = (
+        await c.query<{ name: string }>(
+          `SELECT name FROM schools WHERE id = app.current_school_id()`,
+        )
+      ).rows[0]!.name;
+      const STATE: Record<string, string> = {
+        due: 'Due at the fees counter',
+        found_pending: 'Found again: the fees office is deciding',
+        paid: 'Paid',
+        cancelled: 'Cancelled',
+      };
+      const NAME: Record<string, string> = {
+        due: 'Lost and damaged books: due',
+        paid: 'Lost and damaged books: paid',
+        cancelled: 'Lost and damaged books: cancelled',
+        all: 'Lost and damaged books charged',
+      };
+      const words =
+        [
+          q.from || q.to
+            ? `${want === 'paid' ? 'Paid' : 'Charged'} ${q.from ?? '…'} to ${q.to ?? '…'}`
+            : null,
+          q.borrower ? (q.borrower === 'student' ? 'Pupils' : 'Staff') : null,
+          q.q ? `search "${q.q}"` : null,
+        ]
+          .filter(Boolean)
+          .join('; ') || 'Every charge';
+      await this.audit.stage(ctx, c, {
+        action: 'library.charges.export',
+        entityType: 'library_charges',
+        entityId: requireTenant(ctx).schoolId,
+        after: { status: want, format: q.format, rows: rows.length, words },
+      });
+      const sum = (f: (x: (typeof rows)[number]) => number) =>
+        round(rows.reduce((n, x) => n + f(x), 0));
+      return libraryFile({
+        format: q.format,
+        name: NAME[want]!,
+        slug: `Library-charges-${want}`,
+        school,
+        by: ctx.user.displayName,
+        words,
+        columns: [
+          { label: 'Charged on', type: 'date' },
+          { label: 'Lost / damaged', width: 1.4 },
+          { label: 'Borrower' },
+          { label: 'Adm./emp. no.', width: 1.6 },
+          { label: 'Book' },
+          { label: 'Book no.', width: 1.4 },
+          { label: 'Price (₹)', type: 'money' },
+          { label: 'Processing fee (₹)', type: 'money' },
+          { label: 'Late fine (₹)', type: 'money' },
+          { label: 'Charged (₹)', type: 'money' },
+          { label: 'Paid (₹)', type: 'money' },
+          { label: 'Due (₹)', type: 'money' },
+          { label: 'Paid on', type: 'date' },
+          { label: 'Receipts', width: 1.8 },
+          { label: 'State', width: 2.2 },
+          { label: 'Reason', width: 2.4 },
+        ],
+        rows: rows.map((x) => [
+          x.on,
+          x.kind === 'lost' ? 'Lost' : 'Damaged',
+          x.borrower,
+          x.borrowerRef,
+          x.title,
+          x.accessionNo,
+          x.price,
+          x.processingFee,
+          x.lateFine,
+          x.amount,
+          x.paid,
+          x.state === 'cancelled' ? 0 : x.due,
+          x.state === 'paid' ? x.paidOn : null,
+          x.receipts,
+          STATE[x.state] ?? x.state,
+          x.reason,
+        ]),
+        totals: [
+          'Total',
+          '',
+          '',
+          '',
+          '',
+          '',
+          sum((x) => x.price),
+          sum((x) => x.processingFee),
+          sum((x) => x.lateFine),
+          sum((x) => x.amount),
+          sum((x) => x.paid),
+          sum((x) => (x.state === 'cancelled' ? 0 : x.due)),
+          '',
+          '',
+          '',
+          '',
+        ],
+      });
     });
   }
 

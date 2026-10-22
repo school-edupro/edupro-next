@@ -1,20 +1,22 @@
 'use client';
 import { useRef, useState, useTransition } from 'react';
-import { FineSettle } from './DeskParts';
+import { FineAtCounter } from './DeskParts';
 import { deskBook, deskRenew, deskReturnOne } from '@/lib/library-desk-actions';
 import { dmy, rupees, type DeskLookup } from '@/lib/library-desk';
 import type { LibraryLoan } from '@/lib/types';
 
 /**
  * Return: the book scanned shows its borrower, the dates and the late fine to today; returned in good
- * condition or damaged (no charge), the fine waived or settled after; renewed instead when the rule
- * allows. With "Return as soon as scanned", a book with nothing to settle goes back on the scan.
+ * condition or damaged (no charge), the fine waived with its reason or sent to the fees counter as a misc
+ * fee; renewed instead when the rule allows. With "Return as soon as scanned", a book with no fine goes
+ * back on the scan.
  */
 export function ReturnDesk() {
   const [no, setNo] = useState('');
   const [look, setLook] = useState<DeskLookup | null>(null);
   const [condition, setCondition] = useState<'available' | 'damaged'>('available');
   const [waive, setWaive] = useState(false);
+  const [why, setWhy] = useState('');
   const [quick, setQuick] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settle, setSettle] = useState<LibraryLoan | null>(null);
@@ -27,14 +29,17 @@ export function ReturnDesk() {
     setNo('');
     setCondition('available');
     setWaive(false);
+    setWhy('');
     setTimeout(() => scan.current?.focus(), 0);
   };
   const giveBack = (l: DeskLookup) =>
     start(async () => {
+      if (waive && why.trim().length < 3) return setError('Say why the fine is waived');
       const r = await deskReturnOne({
         accessionNo: l.book.accessionNo,
         condition,
         waiveFine: waive,
+        waiveReason: waive ? why.trim() : undefined,
       });
       if (!r.ok) return setError(r.error);
       setError(null);
@@ -117,7 +122,7 @@ export function ReturnDesk() {
             checked={quick}
             onChange={(e) => setQuick(e.target.checked)}
           />{' '}
-          Return as soon as scanned (a book with a fine still stops for it)
+          Return as soon as scanned (a book with a late fine still stops for it)
         </label>
         {error ? (
           <p
@@ -129,7 +134,7 @@ export function ReturnDesk() {
           </p>
         ) : null}
         {settle ? (
-          <FineSettle
+          <FineAtCounter
             loan={settle}
             onDone={(m) => {
               setSettle(null);
@@ -192,6 +197,20 @@ export function ReturnDesk() {
                     onChange={(e) => setWaive(e.target.checked)}
                   />{' '}
                   Waive the fine
+                </label>
+              ) : null}
+              {look.fine && waive ? (
+                <label className="ep-field" htmlFor="ds-ret-why" style={{ margin: 0 }}>
+                  <span className="ep-field__label">Why waived *</span>
+                  <input
+                    id="ds-ret-why"
+                    className="ep-input"
+                    required
+                    minLength={3}
+                    maxLength={300}
+                    value={why}
+                    onChange={(e) => setWhy(e.target.value)}
+                  />
                 </label>
               ) : null}
               <button

@@ -24,6 +24,8 @@ export interface TablePdf {
   wrap?: boolean;
   /** Rows (by position) printed in bold: subtotals and totals. */
   strong?: number[];
+  /** The rows the footer counts (default all; a totals line is not one) */
+  rowCount?: number;
   /**
    * Rows (by position) with a shaded band: a heading across the table (its words are the row's first
    * filled cell, written from the left edge), a subtotal, or the grand total (dark, white letters).
@@ -346,7 +348,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   }
   pages.forEach((p, i) =>
     p.drawText(
-      `Page ${String(i + 1)} of ${String(pages.length)} · ${String(t.rows.length)} row(s)`,
+      `Page ${String(i + 1)} of ${String(pages.length)} · ${String(t.rowCount ?? t.rows.length)} row(s)`,
       {
         x: M,
         y: 18,
