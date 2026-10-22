@@ -151,7 +151,12 @@ export default async function TaxCertificatePage({
             </p>
           ) : (
             <>
-              <div className="ep-table-wrap">
+              <div
+                className="ep-table-wrap"
+                tabIndex={0}
+                role="region"
+                aria-label="Fee received in the financial year (scrolls sideways)"
+              >
                 <table className="ep-table ep-table--dense">
                   <caption className="ep-sr-only">Fee received in the financial year</caption>
                   <thead>
