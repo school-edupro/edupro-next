@@ -2738,6 +2738,47 @@ a.ep-tabs__tab {
   font-size: var(--fs-small);
   white-space: nowrap;
 }
+/* a book in the portals' library: what it is, its state, an action; wraps on a phone */
+.fp-books {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+}
+.fp-books > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.fp-books > li:last-child {
+  border-bottom: 0;
+}
+.fp-books__what {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.fp-books__note {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.fp-books__state {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.fp-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.fp-search .ep-field {
+  flex: 1 1 14rem;
+  margin: 0;
+}
 .fp-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));

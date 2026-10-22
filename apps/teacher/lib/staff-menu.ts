@@ -164,6 +164,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (_can, w) => (w.profileChanges ?? 0) > 0,
       },
       {
+        href: '/library',
+        label: 'My library books',
+        help: 'Books with me, when due, my reservations; find a book on the shelf',
+        allowed: always,
+      },
+      {
         href: '/acr',
         label: 'My ACR',
         help: 'My annual confidential report, and the reports waiting on me',

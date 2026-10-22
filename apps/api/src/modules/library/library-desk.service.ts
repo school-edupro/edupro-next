@@ -5,8 +5,11 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { DeskBookDto, DeskClassDto, DeskIssueDto, DeskReturnDto } from './library.dto';
+import { LibraryReservationsService } from './library-reservations.service';
 import { withEveryLibrary } from './library-staff.service';
 import { LibraryService, type LoanRow } from './library.service';
+
+const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 
 type Kind = 'student' | 'employee';
 const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
@@ -44,6 +47,7 @@ export class LibraryDeskService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly library: LibraryService,
+    private readonly reservations: LibraryReservationsService,
   ) {}
 
   private async borrowerIn(c: PoolClient, kind: Kind, id: string): Promise<DeskBorrower> {
@@ -225,6 +229,12 @@ export class LibraryDeskService {
     );
     const loan = open.rows[0] ? await this.library.loan(c, open.rows[0].id) : null;
     if (dto.for === 'issue') {
+      // a copy kept for someone's reservation: theirs only
+      const held = await this.reservations.heldIn(c, x.id);
+      const forThem =
+        held !== null &&
+        held.borrowerKind === dto.borrowerKind &&
+        held.borrowerId === dto.borrowerId;
       const problem = !x.mine
         ? `It belongs to ${x.library}: issue it there`
         : x.not_issued
@@ -233,7 +243,9 @@ export class LibraryDeskService {
             ? `On loan to ${loan.borrower} (${loan.borrowerRef}) till ${loan.dueOn}`
             : x.status !== 'available'
               ? `The copy is ${x.status}`
-              : null;
+              : held && !forThem
+                ? `Kept for ${held.borrower} (${held.ref}), who reserved it, until ${dmy(held.until)}`
+                : null;
       return { book, problem, loan: null, fine: 0 };
     }
     if (!loan) return { book, problem: 'The book is not on loan', loan: null, fine: 0 };

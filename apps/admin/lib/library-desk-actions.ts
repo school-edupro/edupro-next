@@ -27,9 +27,18 @@ export async function deskBorrower(kind: 'student' | 'employee', id: string) {
   return call<DeskBorrower>(`/library/desk/borrowers/${kind}/${id}`);
 }
 
-export async function deskBook(accessionNo: string, purpose: 'issue' | 'return') {
+export async function deskBook(
+  accessionNo: string,
+  purpose: 'issue' | 'return',
+  /** the borrower at the desk: a copy kept for their reservation is theirs */
+  borrower?: { kind: 'student' | 'employee'; id: string },
+) {
+  const who =
+    borrower && /^\d{1,18}$/.test(borrower.id)
+      ? `&borrowerKind=${borrower.kind}&borrowerId=${borrower.id}`
+      : '';
   return call<DeskLookup>(
-    `/library/desk/book?accessionNo=${encodeURIComponent(accessionNo.trim().slice(0, 30))}&for=${purpose}`,
+    `/library/desk/book?accessionNo=${encodeURIComponent(accessionNo.trim().slice(0, 30))}&for=${purpose}${who}`,
   );
 }
 

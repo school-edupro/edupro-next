@@ -2,7 +2,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { FineAtCounter } from './DeskParts';
 import { deskBook, deskRenew, deskReturnOne } from '@/lib/library-desk-actions';
-import { dmy, rupees, type DeskLookup } from '@/lib/library-desk';
+import { holdNote, dmy, rupees, type DeskLookup } from '@/lib/library-desk';
 import type { LibraryLoan } from '@/lib/types';
 
 /**
@@ -20,6 +20,8 @@ export function ReturnDesk() {
   const [quick, setQuick] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settle, setSettle] = useState<LibraryLoan | null>(null);
+  /** the copy just returned is kept for someone's reservation */
+  const [kept, setKept] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
   const [pending, start] = useTransition();
   const scan = useRef<HTMLInputElement>(null);
@@ -43,6 +45,7 @@ export function ReturnDesk() {
       });
       if (!r.ok) return setError(r.error);
       setError(null);
+      setKept(holdNote(r.data));
       const fine = Math.max(0, Number(r.data.fineAmount) - Number(r.data.fineWaived));
       const message = `${r.data.accessionNo} returned by ${r.data.borrower}${condition === 'damaged' ? ' (damaged)' : ''}${waive && Number(r.data.fineAmount) ? ` · fine ${rupees(Number(r.data.fineAmount))} waived` : ''}`;
       if (fine > 0) {
@@ -131,6 +134,15 @@ export function ReturnDesk() {
             style={{ marginTop: 'var(--sp-2)' }}
           >
             {error}
+          </p>
+        ) : null}
+        {kept ? (
+          <p
+            className="ep-alert ep-alert--warning"
+            role="status"
+            style={{ marginTop: 'var(--sp-2)' }}
+          >
+            <strong>{kept}</strong>
           </p>
         ) : null}
         {settle ? (

@@ -2,7 +2,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import { RefDatalist } from '@/components/RefDatalist';
 import { deskClassLoans, deskReturnMany } from '@/lib/library-desk-actions';
-import { dmy, rupees, type DeskClass, type DeskClassRow } from '@/lib/library-desk';
+import { dmy, holdNote, rupees, type DeskClass, type DeskClassRow } from '@/lib/library-desk';
 
 const ALL = 'All sections';
 
@@ -57,8 +57,9 @@ export function ClassReturns({ classes }: { classes: DeskClass[] }) {
       const back = new Set(list.map((x) => x.loanId));
       setRows((x) => (x ?? []).filter((y) => !back.has(y.loanId)));
       setTicked(new Set());
+      const kept = r.data.loans.map(holdNote).filter(Boolean);
       setMessage(
-        `${String(r.data.loans.length)} book${r.data.loans.length === 1 ? '' : 's'} returned${r.data.fines ? `; late fines of ${rupees(r.data.fines)} are sent to the fees counter as misc fees` : ''}`,
+        `${String(r.data.loans.length)} book${r.data.loans.length === 1 ? '' : 's'} returned${r.data.fines ? `; late fines of ${rupees(r.data.fines)} are sent to the fees counter as misc fees` : ''}${kept.length ? `. ${kept.join('. ')}` : ''}`,
       );
     });
   const toggle = (id: string) =>

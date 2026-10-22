@@ -18,6 +18,8 @@ import { LibraryHistoryService } from './library-history.service';
 import { LibraryStockService } from './library-stock.service';
 import { LibrarySalesService } from './library-sales.service';
 import { LibraryStaffService } from './library-staff.service';
+import { LibraryReservationsService } from './library-reservations.service';
+import { LibraryPortalService } from './library-portal.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
@@ -42,6 +44,8 @@ import { LibraryService } from './library.service';
     LibraryStockService,
     LibrarySalesService,
     LibraryStaffService,
+    LibraryReservationsService,
+    LibraryPortalService,
     AuditService,
   ],
   exports: [LibraryService],

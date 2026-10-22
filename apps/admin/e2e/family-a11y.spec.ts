@@ -40,6 +40,10 @@ const PAGES = [
   '/gate-passes/60',
   '/appointments?st=open&q=progress',
   '/appointments?view=calendar',
+  '/library',
+  '/library?view=history',
+  '/library?view=find',
+  '/library?view=find&q=a',
 ];
 
 for (const sub of ['dev-parent', 'dev-student']) {

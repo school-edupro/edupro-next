@@ -243,6 +243,9 @@ export class DeskBorrowerDto extends createZodDto(DeskBorrowerSchema) {}
 export const DeskBookSchema = z.object({
   accessionNo: DeskNo,
   for: z.enum(['issue', 'return']),
+  /** the borrower at the desk (a copy kept for their reservation is theirs to take) */
+  borrowerKind: z.enum(['student', 'employee']).optional(),
+  borrowerId: IdSchema.optional(),
 });
 export class DeskBookDto extends createZodDto(DeskBookSchema) {}
 export const DeskIssueSchema = z.object({
@@ -317,3 +320,13 @@ export class BorrowerHistoryExportDto extends createZodDto(BorrowerHistoryExport
 /** A staff member named on a library (library round 3, part 3). */
 export const LibraryStaffSchema = z.object({ libraryId: IdSchema, employeeId: IdSchema });
 export class LibraryStaffDto extends createZodDto(LibraryStaffSchema) {}
+
+/** A reservation placed from the portal, for one of the caller's borrowers (library round 3, part 4). */
+export const PortalReserveSchema = z.object({
+  borrowerKind: z.enum(['student', 'employee']),
+  borrowerId: IdSchema,
+  titleId: IdSchema,
+});
+export class PortalReserveDto extends createZodDto(PortalReserveSchema) {}
+export const ReservationCancelSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class ReservationCancelDto extends createZodDto(ReservationCancelSchema) {}

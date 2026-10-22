@@ -66,6 +66,12 @@ export const dmy = (d: string | null | undefined) =>
   d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : '';
 export const rupees = (n: number) =>
   `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** A returned copy kept for someone's reservation, in words for the desk. */
+export const holdNote = (l: Pick<LibraryLoan, 'accessionNo' | 'hold'>) =>
+  l.hold
+    ? `Keep ${l.accessionNo} aside: ${l.hold.borrower} (${l.hold.ref}) reserved it, until ${dmy(l.hold.until)}`
+    : null;
+
 /** A loan's fine still to settle. */
 export const fineOf = (l: Pick<LibraryLoan, 'fineAmount' | 'fineWaived' | 'finePaidOn'>) =>
   l.finePaidOn ? 0 : Math.max(0, Number(l.fineAmount) - Number(l.fineWaived));

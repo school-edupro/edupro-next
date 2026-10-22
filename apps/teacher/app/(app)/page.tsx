@@ -17,6 +17,14 @@ interface HostelToday {
   rollsTaken: number;
 }
 
+interface LibraryToday {
+  kind: string;
+  holding: number;
+  late: number;
+  dueSoon: number;
+  ready: Array<{ title: string }>;
+}
+
 /**
  * Staff home: who I am here (designation and roles), today's figures for what I do, then only the
  * screens I may open, grouped as in the menu. Nothing I cannot use is shown.
@@ -27,7 +35,7 @@ export default async function HomePage() {
   const can = (p: string) => me.permissions.includes(p);
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
   const quiet = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
-  const [card, unread, approvals, leaves, passes, hostel] = await Promise.all([
+  const [card, unread, approvals, leaves, passes, hostel, library] = await Promise.all([
     quiet(bff.api.fetch<MeCard>('/me/card'), { roles: [], designation: null }),
     quiet(
       bff.api.fetch<{ unread: number }>('/comms/inbox/unread').then((r) => r.unread),
@@ -52,6 +60,13 @@ export default async function HomePage() {
     can('hostel.rollcall.mark') || can('hostel.leave.view')
       ? quiet(bff.api.fetch<HostelToday>('/hostel/today'), null)
       : Promise.resolve(null),
+    // my library books (docs/design/36-library.md, "Library round 3", part 4)
+    quiet(
+      bff.api
+        .fetch<{ people: LibraryToday[] }>('/library/portal/summary')
+        .then((r) => r.people.find((p) => p.kind === 'employee') ?? null),
+      null,
+    ),
   ]);
   const groups = staffMenu(me, { approvals });
 
@@ -92,6 +107,19 @@ export default async function HomePage() {
       label: t(lang, 'Gate passes waiting'),
       value: String(passes),
       href: '/gate-passes',
+    });
+  if (library && (library.holding || library.ready.length))
+    today.push({
+      label: t(lang, 'Library books with me'),
+      value: String(library.holding),
+      href: '/library',
+      hint: library.ready.length
+        ? `${String(library.ready.length)} ${t(lang, 'ready to collect')}`
+        : library.late
+          ? `${String(library.late)} ${t(lang, 'overdue')}`
+          : library.dueSoon
+            ? `${String(library.dueSoon)} ${t(lang, 'due in the next 3 days')}`
+            : undefined,
     });
   today.push({ label: t(lang, 'New messages'), value: String(unread), href: '/messages' });
 

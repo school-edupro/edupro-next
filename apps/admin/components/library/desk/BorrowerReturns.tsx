@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { BorrowerCard, BorrowerPicker, FineAtCounter } from './DeskParts';
 import { deskBorrower, deskRenew, deskReturnMany } from '@/lib/library-desk-actions';
-import { dmy, fineOf, type DeskBorrower } from '@/lib/library-desk';
+import { dmy, fineOf, holdNote, type DeskBorrower } from '@/lib/library-desk';
 import type { LibraryLoan } from '@/lib/types';
 
 /**
@@ -25,8 +25,9 @@ export function BorrowerReturns() {
       const r = await deskReturnMany(accessionNos);
       if (!r.ok) return setError(r.error);
       setError(null);
+      const kept = r.data.loans.map(holdNote).filter(Boolean);
       setMessage(
-        `${String(r.data.loans.length)} book${r.data.loans.length === 1 ? '' : 's'} returned by ${borrower.name}`,
+        `${String(r.data.loans.length)} book${r.data.loans.length === 1 ? '' : 's'} returned by ${borrower.name}${kept.length ? `. ${kept.join('. ')}` : ''}`,
       );
       setOwed((o) => [...o, ...r.data.loans.filter((l) => fineOf(l) > 0)]);
       await refresh(borrower);

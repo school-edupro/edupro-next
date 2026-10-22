@@ -2418,6 +2418,8 @@ export interface LibraryLoan {
   fineWaived: string;
   finePaidOn: string | null;
   note: string | null;
+  /** on return: the copy is kept for the first in line of its reservations */
+  hold?: { borrower: string; ref: string; until: string } | null;
 }
 
 /** A transfer between schools of the group, seen from the sending or the receiving school. */

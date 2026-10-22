@@ -557,3 +557,31 @@ waiver requests + the per-person sheet, 2 update from Excel, 3 library staff, 4 
   in its history. A cycle over every library made by a limited user covers their libraries; cycles of
   other libraries are not listed. The library defaults are seeded only by someone who works in every
   library. Pages a limited user opens say which libraries they work in (`GET library/staff/me`).
+- **Part 4 — the library in the portals; reservations (done, migration 0222).** The family portal's
+  **Library** (`/library`) and the staff app's **My library books** (`/library`, under Office): **Books
+  now** (each book with the due day, late days and the fine to today; a book kept for them on top; what
+  is due at the fees counter and old fines at the library), **Read before** (returned, late days, fine),
+  **Reservations** (place in line, kept until a day, collected, not collected in time, cancelled with the
+  library's reason; cancel an open one), **Find a book** (the catalogue by title, author, subject, ISBN or
+  publisher: on the shelf and in which libraries, all copies out and the next due back, read in the
+  library only, how many wait; never who has it) with **Reserve** when every copy is out; the family
+  portal's digital library stays. The family home has a **Library books** tile (held, overdue or ready to
+  collect, next due) and the staff home a figure when they hold or have a book kept. API (any signed-in
+  person, their own borrowers only: a parent's children, a pupil, a staff member): `GET
+  library/portal/summary`, `GET library/portal/borrowers/:kind/:id`, `GET library/portal/catalogue`,
+  `POST library/portal/reservations`, `POST library/portal/reservations/:id/cancel`. **Reservations**
+  (`library_reservations`: waiting → ready → collected, or cancelled or lapsed): a title, not a copy; only
+  when no copy is on the shelf (`library.on_shelf`), never a reference book, not one held already, one open
+  per title a borrower, `library.reservations_per_borrower` (2) at a time. A copy taken back is kept for
+  the first in line for `library.hold_days` (3) days: the desk says "Keep … aside: … reserved it, until
+  …" (return, a borrower's returns, a class's returns); the desk will not issue it to anyone else
+  (`library.copy_held`, and the desk's book check says so), issuing the title to them collects the
+  reservation (and frees another copy kept for them); a renewal is refused while anyone waits
+  (`library.reserved`). A hold past its day lapses when anyone looks (the portals, the list, the desk)
+  and the copy goes to the next in line or back to the shelf; this works across libraries
+  (`withEveryLibrary`, now safe inside itself). **Reservations** at the library (`/library/reservations`,
+  Library menu and the desk's links; `GET library/reservations`, `POST library/reservations/:id/cancel`
+  with a reason): open, kept for collection (the copy and the day), waiting (place in line), ended in
+  the last 60 days; by title or borrower. A librarian tied to some libraries sees the reservations of
+  titles with copies there, not copies kept at another library, and cancels only those. Told in the
+  portal only: no SMS or e-mail.

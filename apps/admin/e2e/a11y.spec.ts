@@ -264,6 +264,8 @@ const PAGES = [
   '/library/books/1/edit',
   '/masters/library',
   '/library/staff',
+  '/library/reservations',
+  '/library/reservations?status=ended',
   '/masters/library?tab=library_accession_series',
   '/masters/library?tab=library_borrow_rules&add=1',
   '/masters/library?tab=library_periodicals&add=1',

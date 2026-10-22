@@ -227,6 +227,18 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Share of the price suggested as the charge for a damaged book (per cent)',
     module: 'library',
   },
+  'library.reservations_per_borrower': {
+    schema: z.coerce.number().int().min(0).max(10),
+    default: 2,
+    description: 'Books a pupil or staff member may have reserved at once (0: no reservations)',
+    module: 'library',
+  },
+  'library.hold_days': {
+    schema: z.coerce.number().int().min(1).max(30),
+    default: 3,
+    description: 'Days a returned book is kept for the first in line of its reservations',
+    module: 'library',
+  },
   'transport.gps_retention_days': {
     schema: z.coerce.number().int().min(1).max(365),
     default: 30,

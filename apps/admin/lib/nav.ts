@@ -459,6 +459,11 @@ export const NAV: Array<{
         permission: 'library.loan.circulate',
       },
       { href: '/library/fines', label: 'fines', permission: 'library.loan.circulate' },
+      {
+        href: '/library/reservations',
+        label: 'libraryReservations',
+        permission: 'library.loan.circulate',
+      },
       { href: '/library/charges', label: 'libraryCharges', permission: 'library.loan.circulate' },
       { href: '/library/stock', label: 'stock', permission: 'library.stock.verify' },
       { href: '/library/sales', label: 'librarySales', permission: 'library.stock.verify' },

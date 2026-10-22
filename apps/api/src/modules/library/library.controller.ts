@@ -29,6 +29,8 @@ import {
   IssueDto,
   LIBRARY,
   LibraryStaffDto,
+  PortalReserveDto,
+  ReservationCancelDto,
   LoansQueryDto,
   RenewDto,
   ReturnDto,
@@ -50,6 +52,9 @@ import { LibraryHistoryService } from './library-history.service';
 import { LibraryStockService } from './library-stock.service';
 import { LibrarySalesService } from './library-sales.service';
 import { LibraryStaffService } from './library-staff.service';
+import { LibraryPortalService } from './library-portal.service';
+import { LibraryReservationsService } from './library-reservations.service';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -72,7 +77,78 @@ export class LibraryController {
     private readonly stock: LibraryStockService,
     private readonly sales: LibrarySalesService,
     private readonly staff: LibraryStaffService,
+    private readonly portal: LibraryPortalService,
+    private readonly reservations: LibraryReservationsService,
   ) {}
+
+  // ---- the library in the portals: my books, the catalogue, reservations (library round 3, part 4) -------
+  @Get('portal/summary')
+  @ApiOperation({
+    summary: 'For the portal home: each of my borrowers with books held, due soon, late, kept',
+  })
+  @AuthenticatedOnly()
+  portalSummary(@ReqCtx() ctx: RequestContext) {
+    return this.portal.summary(ctx);
+  }
+
+  @Get('portal/borrowers/:kind/:id')
+  @ApiOperation({ summary: 'One of my borrowers: books held, history, reservations, dues' })
+  @AuthenticatedOnly()
+  portalBorrower(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+  ) {
+    return this.portal.borrower(ctx, kind, id);
+  }
+
+  @Get('portal/catalogue')
+  @ApiOperation({ summary: 'The catalogue with each book on the shelf or out (never who has it)' })
+  @AuthenticatedOnly()
+  portalCatalogue(
+    @ReqCtx() ctx: RequestContext,
+    @Query('q') q: string | undefined,
+    @Query('page') page: string | undefined,
+  ) {
+    return this.portal.catalogue(ctx, q ?? '', Math.max(1, Math.min(500, Number(page) || 1)));
+  }
+
+  @Post('portal/reservations')
+  @ApiOperation({ summary: 'A book reserved for one of my borrowers (every copy is out)' })
+  @AuthenticatedOnly()
+  portalReserve(@ReqCtx() ctx: RequestContext, @Body() body: PortalReserveDto) {
+    return this.portal.reserve(ctx, body.borrowerKind, body.borrowerId, body.titleId);
+  }
+
+  @Post('portal/reservations/:id/cancel')
+  @ApiOperation({ summary: 'One of my reservations cancelled' })
+  @AuthenticatedOnly()
+  portalCancel(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.portal.cancel(ctx, id);
+  }
+
+  // ---- reservations at the library ------------------------------------------------------------------
+  @Get('reservations')
+  @ApiOperation({ summary: 'Reservations waiting or kept (or ended), by title or borrower' })
+  @RequirePermission(LIBRARY.circulate)
+  reservationList(
+    @ReqCtx() ctx: RequestContext,
+    @Query('status') status: string | undefined,
+    @Query('q') q: string | undefined,
+  ) {
+    return this.reservations.list(ctx, { status, q: q?.trim().slice(0, 80) || undefined });
+  }
+
+  @Post('reservations/:id/cancel')
+  @ApiOperation({ summary: 'A reservation cancelled by the library, with the reason' })
+  @RequirePermission(LIBRARY.circulate)
+  reservationCancel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: ReservationCancelDto,
+  ) {
+    return this.reservations.cancelByLibrary(ctx, id, body.reason);
+  }
 
   // ---- library staff: who works in which library (library round 3, part 3) -------------------------------
   @Get('staff')

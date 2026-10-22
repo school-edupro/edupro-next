@@ -65,6 +65,7 @@ export default async function CirculationPage({
           <a href="/library/history">History</a>
           <a href="/library/charges">Lost and damaged</a>
           <a href="/library/fines">Late fines</a>
+          <a href="/library/reservations">Reservations</a>
           {me.permissions.includes('library.stock.verify') ? (
             <>
               <a href="/library/stock">Stock verification</a>

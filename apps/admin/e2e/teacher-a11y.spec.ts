@@ -30,6 +30,9 @@ const PAGES = [
   '/leaves',
   '/gate-passes',
   '/gate-passes/new',
+  '/library',
+  '/library?view=history',
+  '/library?view=find&q=a',
 ];
 
 for (const sub of ['dev-teacher']) {

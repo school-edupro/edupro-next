@@ -19,9 +19,14 @@ export async function myLibraries(c: PoolClient) {
 
 /**
  * Runs `fn` with the limit to my libraries off (a book of another library taken back, or looked up to
- * say whose it is), then puts it back on (docs/design/36-library.md, "Library round 3", part 3).
+ * say whose it is), then puts it back on (docs/design/36-library.md, "Library round 3", part 3). Called
+ * inside itself, the inner call leaves the limit off.
  */
 export async function withEveryLibrary<T>(c: PoolClient, fn: () => Promise<T>): Promise<T> {
+  const was = await c.query<{ v: string | null }>(
+    `SELECT current_setting('app.library_all', true) AS v`,
+  );
+  if (was.rows[0]?.v === 'on') return fn();
   await c.query(`SELECT set_config('app.library_all', 'on', true)`);
   try {
     return await fn();

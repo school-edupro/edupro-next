@@ -84,6 +84,17 @@ const dayLabel = (iso: string) =>
 const rupees = (v: string | number) =>
   `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
+interface LibraryGlance {
+  kind: string;
+  id: string;
+  holding: number;
+  late: number;
+  dueSoon: number;
+  nextDue: string | null;
+  ready: Array<{ title: string; until: string; library: string | null }>;
+  waiting: number;
+}
+
 function Glance({
   icon,
   label,
@@ -123,7 +134,7 @@ export async function HomeDashboard({
 }) {
   const today = istToday();
   const tomorrow = addDays(today, 1);
-  const [att, fees, viewer, notices, cal, birthdays, dayOf, consents] = await Promise.all([
+  const [att, fees, viewer, notices, cal, birthdays, dayOf, consents, library] = await Promise.all([
     bff.api.fetch<Attendance>(`/attendance/mine?month=${today.slice(0, 7)}`).catch(() => null),
     audience === 'parent' ? bff.api.fetch<Fees>('/fees/mine').catch(() => null) : null,
     bff.api.fetch<Viewer>('/academics/daily-work/viewer').catch(() => null),
@@ -154,6 +165,11 @@ export async function HomeDashboard({
           .then((r) => r.forms.filter((x) => x.people.some((p) => p.id === childId && p.canAnswer)))
           .catch(() => [])
       : [],
+    // the child's library books: held, due soon, late, kept for them (docs/design/36-library.md)
+    bff.api
+      .fetch<{ people: LibraryGlance[] }>('/library/portal/summary')
+      .then((r) => r.people.find((p) => p.kind === 'student' && p.id === childId) ?? null)
+      .catch(() => null),
   ]);
   const section = viewer?.students.find((s) => s.id === childId)?.classSectionId ?? null;
   const work = section
@@ -320,6 +336,37 @@ export async function HomeDashboard({
             }
             href={`/homework?child=${childId}`}
           />
+          {library ? (
+            <Glance
+              icon="book"
+              label={t(lang, 'Library books')}
+              value={
+                library.ready.length ? (
+                  <Badge tone="warning">
+                    {library.ready.length} {t(lang, 'ready to collect')}
+                  </Badge>
+                ) : library.late ? (
+                  <Badge tone="danger">
+                    {library.late} {t(lang, 'overdue')}
+                  </Badge>
+                ) : (
+                  library.holding
+                )
+              }
+              note={
+                library.ready.length
+                  ? `${library.ready[0]!.title} · ${t(lang, 'until')} ${dayLabel(library.ready[0]!.until)}`
+                  : library.holding
+                    ? library.dueSoon
+                      ? `${library.dueSoon} ${t(lang, 'due in the next 3 days')}`
+                      : library.nextDue
+                        ? `${t(lang, 'Next due')} ${dayLabel(library.nextDue)}`
+                        : `${library.holding} ${t(lang, 'on loan')}`
+                    : t(lang, 'No books on loan.')
+              }
+              href="/library"
+            />
+          ) : null}
           <Glance
             icon="clipboard"
             label={t(lang, 'Next holiday')}

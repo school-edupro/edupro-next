@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { LibraryChargesService } from './library-charges.service';
+import { LibraryReservationsService, type Hold } from './library-reservations.service';
 import { withEveryLibrary } from './library-staff.service';
 import type {
   AccessionDto,
@@ -36,6 +37,8 @@ export interface LoanRow {
   fineWaived: string;
   finePaidOn: string | null;
   note: string | null;
+  /** on return: the copy kept for the first in line of its reservations (0222) */
+  hold?: Hold | null;
 }
 
 const LOAN_SELECT = `SELECT l.id::text, c.accession_no, t.title, t.author, l.borrower_kind::text, l.borrower_id::text,
@@ -80,6 +83,7 @@ export class LibraryService {
     private readonly audit: AuditService,
     private readonly viewer: ViewerService,
     private readonly charges: LibraryChargesService,
+    private readonly reservations: LibraryReservationsService,
   ) {}
 
   private async setting(c: PoolClient, key: string, fallback: number): Promise<number> {
@@ -287,8 +291,15 @@ export class LibraryService {
   // ---- circulation -------------------------------------------------------------------------------
   private async copyByAccession(c: PoolClient, accessionNo: string) {
     // a material type that cannot be issued (reference, maps) reads as a reference title
-    const r = await c.query<{ id: string; status: string; is_reference: boolean; title: string }>(
-      `SELECT c.id::text, c.status::text, (t.is_reference OR COALESCE(NOT m.issuable, false)) AS is_reference, t.title
+    const r = await c.query<{
+      id: string;
+      status: string;
+      is_reference: boolean;
+      title: string;
+      title_id: string;
+    }>(
+      `SELECT c.id::text, c.status::text, (t.is_reference OR COALESCE(NOT m.issuable, false)) AS is_reference, t.title,
+              t.id::text AS title_id
          FROM library_copies c JOIN library_titles t ON t.id = c.title_id
          LEFT JOIN library_material_types m ON m.id = t.material_type_id
         WHERE c.id = app.library_copy_by_number($1)`,
@@ -317,6 +328,8 @@ export class LibraryService {
       throw new DomainError('library.copy_unavailable', `The copy is ${copy.status}`, {
         status: 409,
       });
+    // a copy kept for someone's reservation goes to them only
+    await this.reservations.beforeIssueIn(c, copy.id, dto.borrowerKind, dto.borrowerId);
     const borrower = await c.query(
       dto.borrowerKind === 'student'
         ? `SELECT 1 FROM students WHERE id = $1 AND deleted_at IS NULL`
@@ -371,6 +384,15 @@ export class LibraryService {
     await c.query(`UPDATE library_copies SET status = 'issued', updated_at = now() WHERE id = $1`, [
       copy.id,
     ]);
+    // their reservation of the title, if any, is collected
+    await this.reservations.collectIn(
+      c,
+      copy.title_id,
+      copy.id,
+      dto.borrowerKind,
+      dto.borrowerId,
+      r.rows[0]!.id,
+    );
     await this.audit.stage(ctx, c, {
       action: 'library.issue',
       entityType: 'library_loans',
@@ -397,6 +419,14 @@ export class LibraryService {
       if (!l.rows[0])
         throw new DomainError('library.not_on_loan', 'The copy is not on loan', { status: 409 });
       const rule = await this.ruleFor(c, l.rows[0].borrower_kind, l.rows[0].borrower_id);
+      // others are waiting for this book: it comes back on its day
+      const waiting = await this.reservations.waitingIn(c, copy.title_id);
+      if (waiting)
+        throw new DomainError(
+          'library.reserved',
+          `${String(waiting)} reader${waiting === 1 ? ' is' : 's are'} waiting for this book: it is not renewed`,
+          { status: 409 },
+        );
       if (l.rows[0].renewed >= rule.renewals)
         throw new DomainError(
           'library.renew_limit',
@@ -524,7 +554,10 @@ export class LibraryService {
       entityId: l.rows[0].id,
       after: dto,
     });
-    return (await this.loan(c, l.rows[0].id))!;
+    // back on the shelf: kept for the first in line of its reservations, the desk is told
+    await this.reservations.tidyIn(c);
+    const hold = await this.reservations.offerIn(c, copy.id);
+    return { ...(await this.loan(c, l.rows[0].id))!, hold };
   }
 
   /**

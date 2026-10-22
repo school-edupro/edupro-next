@@ -84,7 +84,9 @@ describe('library staff working in their own libraries (e2e)', () => {
     const main = await add('Malgudi Days', ids.main!, 3);
     ids.malgudi = main.id;
     expect(main.accessionNos).toEqual(['B00001', 'B00002', 'B00003']);
-    expect((await add('Panchatantra', ids.junior!, 2)).accessionNos).toEqual(['JB00001', 'JB00002']);
+    const junior = await add('Panchatantra', ids.junior!, 2);
+    ids.panch = junior.id;
+    expect(junior.accessionNos).toEqual(['JB00001', 'JB00002']);
     const cls = await call(
       'POST',
       '/academics/classes',
@@ -284,6 +286,63 @@ describe('library staff working in their own libraries (e2e)', () => {
       canSell: false,
       problem: 'It belongs to Main library: sell it there',
     });
+  });
+
+  it('reservations: the librarian sees those of the Junior books; a lapsed Main hold still goes on', async () => {
+    const r: Record<string, string> = {};
+    await withMigrator(async (c) => {
+      const copy = (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM library_copies WHERE school_id = $1 AND accession_no = 'B00001'`,
+          [school.id],
+        )
+      ).rows[0]!.id;
+      const put = async (sql: string, args: unknown[]) =>
+        (await c.query<{ id: string }>(sql, args)).rows[0]!.id;
+      // the pupil's hold on a Main copy ran out yesterday; the librarian waits next for the title
+      r.lapsing = await put(
+        `INSERT INTO library_reservations (school_id, title_id, borrower_kind, borrower_id, status, placed_at, copy_id, ready_at, ready_until)
+         VALUES ($1, $2, 'student', $3, 'ready', now() - interval '10 days', $4, now() - interval '4 days', CURRENT_DATE - 1)
+         RETURNING id::text`,
+        [school.id, ids.malgudi, ids.pupil, copy],
+      );
+      r.main = await put(
+        `INSERT INTO library_reservations (school_id, title_id, borrower_kind, borrower_id, placed_at)
+         VALUES ($1, $2, 'employee', $3, now() - interval '5 days') RETURNING id::text`,
+        [school.id, ids.malgudi, ids.employee],
+      );
+      r.junior = await put(
+        `INSERT INTO library_reservations (school_id, title_id, borrower_kind, borrower_id)
+         VALUES ($1, $2, 'employee', $3) RETURNING id::text`,
+        [school.id, ids.panch, ids.employee],
+      );
+    });
+    const mine = (await call('GET', '/library/reservations')).json();
+    expect(mine.counts).toEqual({ waiting: 1, ready: 0 });
+    expect(mine.rows.map((x: { id: string }) => x.id)).toEqual([r.junior]);
+    // the hold lapsed while the librarian looked, and the Main copy went on to the next in line
+    const all = (await call('GET', '/library/reservations', undefined, admin)).json();
+    expect(all.counts).toEqual({ waiting: 1, ready: 1 });
+    expect(all.rows[0]).toMatchObject({
+      id: r.main,
+      status: 'ready',
+      accessionNo: 'B00001',
+      library: 'Main library',
+    });
+    const ended = (
+      await call('GET', '/library/reservations?status=ended', undefined, admin)
+    ).json();
+    expect(ended.rows).toEqual([expect.objectContaining({ id: r.lapsing, status: 'lapsed' })]);
+    // a reservation of another library's book is not the librarian's to cancel
+    const away = await call('POST', `/library/reservations/${r.main!}/cancel`, {
+      reason: 'Not ours',
+    });
+    expect(away.statusCode).toBe(404);
+    for (const id of [r.main, r.junior])
+      expect(
+        (await call('POST', `/library/reservations/${id!}/cancel`, { reason: 'Test over' }, admin))
+          .statusCode,
+      ).toBe(201);
   });
 
   it('taken off the library, the librarian works in every library again', async () => {

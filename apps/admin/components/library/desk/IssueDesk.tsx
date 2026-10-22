@@ -47,7 +47,7 @@ export function IssueDesk({ today }: { today: string }) {
         return setError(
           `${borrower.name} may hold ${String(borrower.rule.maxBooks)} books (${borrower.rule.label})`,
         );
-      const r = await deskBook(typed, 'issue');
+      const r = await deskBook(typed, 'issue', { kind: borrower.kind, id: borrower.id });
       if (!r.ok) return setError(r.error);
       if (r.data.problem)
         return setError(
