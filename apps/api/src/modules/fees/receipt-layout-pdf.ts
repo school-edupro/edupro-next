@@ -182,13 +182,17 @@ export async function receiptLayoutPdf(
     };
     y -= 2;
     const staff = r.student.kind === 'employee';
-    if (!staff) field("Parent's Name", r.parents ?? r.student.guardian ?? '-');
+    const outsider = r.student.kind === 'other';
+    if (!staff && !outsider) field("Parent's Name", r.parents ?? r.student.guardian ?? '-');
     field('Name', r.student.name, 1);
-    field(staff ? 'Emp Code' : 'Adm No', r.student.admissionNo, 1);
-    field(staff ? 'Designation' : 'Class', r.student.section ?? '-', 1);
+    if (!outsider) {
+      field(staff ? 'Emp Code' : 'Adm No', r.student.admissionNo, 1);
+      field(staff ? 'Designation' : 'Class', r.student.section ?? '-', 1);
+    }
     field('Mobile No', r.mobiles ?? '-', 1);
     field('Address', r.address ?? '-');
-    if (!staff) field('Student Category/Bus Route/Bus Stop/Bus Slab', r.transport ?? '');
+    if (!staff && !outsider)
+      field('Student Category/Bus Route/Bus Stop/Bus Slab', r.transport ?? '');
     y -= 8;
     band(x0, x1, y, 16);
     centre('Pay Mode Information', x0, x1, y - 12, 10, bold);

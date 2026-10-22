@@ -544,8 +544,12 @@ export class FeeDocumentsService {
         received_by: string | null;
         head: string;
         title: string | null;
+        payer_kind: string;
+        payer_name: string;
+        payer_mobile: string | null;
       }>(
         `SELECT m.id::text, m.student_id::text, m.employee_id::text, m.academic_year_id::text, y.code AS year, m.receipt_no, m.received_on::text, m.amount::text,
+                m.payer_kind::text, m.payer_name, m.payer_mobile,
                 m.refunded::text, m.status, m.mode, m.reference, m.instrument_no, m.bank_name, m.remarks, u.display_name AS received_by,
                 h.name AS head, f.title
            FROM misc_receipts m JOIN academic_years y ON y.id = m.academic_year_id JOIN fee_heads h ON h.id = m.head_id
@@ -554,12 +558,25 @@ export class FeeDocumentsService {
         [receiptId],
       );
       const r = p.rows[0];
-      if (!r?.student_id && !r?.employee_id)
-        throw new DomainError('not-found', 'Receipt not found', { status: 404 });
-      // a staff member's misc fee (0216): their code and designation in the pupil's place
+      if (!r) throw new DomainError('not-found', 'Receipt not found', { status: 404 });
+      // a staff member's misc fee (0216): their code and designation in the pupil's place; someone outside
+      // the school (a library book sale, 0220): the name and mobile only
+      const outsider = !r.student_id && !r.employee_id;
       const head = r.student_id
         ? await this.head(c, r.student_id, r.academic_year_id)
-        : await this.staffHead(c, r.employee_id!);
+        : r.employee_id
+          ? await this.staffHead(c, r.employee_id)
+          : {
+              school: await schoolHead(c),
+              student: {
+                id: '',
+                name: r.payer_name,
+                admissionNo: '',
+                section: null,
+                guardian: null,
+                kind: 'other' as const,
+              },
+            };
       return {
         ...head,
         year: r.year,
@@ -586,15 +603,17 @@ export class FeeDocumentsService {
         ...(await this.receiptParticulars(c, r.student_id, r.academic_year_id)),
         ...(r.student_id
           ? {}
-          : {
-              mobiles:
-                (
-                  await c.query<{ m: string | null }>(
-                    `SELECT mobile AS m FROM employees WHERE id = $1`,
-                    [r.employee_id],
-                  )
-                ).rows[0]?.m ?? null,
-            }),
+          : outsider
+            ? { mobiles: r.payer_mobile, address: null }
+            : {
+                mobiles:
+                  (
+                    await c.query<{ m: string | null }>(
+                      `SELECT mobile AS m FROM employees WHERE id = $1`,
+                      [r.employee_id],
+                    )
+                  ).rows[0]?.m ?? null,
+              }),
         instalment: r.title ?? null,
         bounceCharge: '0.00',
         ...(await this.layoutOf(c).then((l) => ({ layout: l.receipt, copies: l.copies }))),

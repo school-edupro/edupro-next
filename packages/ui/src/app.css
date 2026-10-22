@@ -10090,3 +10090,16 @@ a.ep-pub-foot__item {
   color: var(--text-muted);
   font-size: var(--fs-small);
 }
+
+/* ---- Library: the sale desk ---------------------------------------------------------------------- */
+.ep-sale {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-tabs__tab[aria-checked='true'] {
+  color: var(--text-heading);
+  border-bottom-color: var(--border-accent);
+}
+.ep-sale__price {
+  max-width: 9rem;
+}

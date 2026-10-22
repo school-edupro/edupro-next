@@ -7,9 +7,10 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { MiscFeesService } from '../fees/misc-fees.service';
 import type { ChargeDto, ChargeExportDto, ChargeListDto, ChargePreviewDto } from './library.dto';
 import { libraryFile } from './library-file';
+import { announceMiscFee, LIBRARY_HEADS, libraryHead, libraryYear } from './library-misc';
 
-const HEAD = { code: 'LIBBOOK', name: 'Library: lost or damaged book', order: 920 };
-const FINE_HEAD = { code: 'LIBFINE', name: 'Library: late fine', order: 921 };
+const HEAD = LIBRARY_HEADS.book;
+const FINE_HEAD = LIBRARY_HEADS.fine;
 const rupees = (n: number) =>
   `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -147,14 +148,8 @@ export class LibraryChargesService {
   }
 
   /** A library misc head (made the first time): lost or damaged books, late fines. */
-  private async head(c: PoolClient, h: { code: string; name: string; order: number }) {
-    const r = await c.query<{ id: string }>(
-      `INSERT INTO fee_heads (school_id, code, name, kind, ledger, sort_order, created_by, updated_by)
-       VALUES (app.current_school_id(), $1, $2, 'misc', 'school', $3, app.current_user_id(), app.current_user_id())
-       ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET updated_at = now() RETURNING id::text`,
-      [h.code, h.name, h.order],
-    );
-    return r.rows[0]!.id;
+  private head(c: PoolClient, h: { code: string; name: string; order: number }) {
+    return libraryHead(c, h);
   }
 
   /** The book reported lost, or returned damaged, and the charge announced on the borrower. */
@@ -304,18 +299,16 @@ export class LibraryChargesService {
     },
   ): Promise<{ chargeId: string; miscFeeId: string; lineId: string }> {
     const headId = await this.head(c, x.kind === 'late' ? FINE_HEAD : HEAD);
-    const fee = await c.query<{ id: string }>(
-      `INSERT INTO misc_fees (school_id, academic_year_id, head_id, title, amount, last_date, remark, mandatory, status, requested_by, announced_at)
-       VALUES (app.current_school_id(), $1, $2, $3, $4, CURRENT_DATE, $5, true, 'announced', app.current_user_id(), now())
-       RETURNING id::text`,
-      [x.yearId, headId, x.title.slice(0, 120), x.amount.toFixed(2), x.remark.slice(0, 300)],
-    );
-    const line = await c.query<{ id: string }>(
-      `INSERT INTO misc_fee_students (school_id, misc_fee_id, student_id, employee_id, amount)
-       VALUES (app.current_school_id(), $1, CASE WHEN $4 = 'student' THEN $2::bigint END,
-               CASE WHEN $4 = 'employee' THEN $2::bigint END, $3) RETURNING id::text`,
-      [fee.rows[0]!.id, x.borrowerId, x.amount.toFixed(2), x.borrowerKind],
-    );
+    const made = await announceMiscFee(c, {
+      yearId: x.yearId,
+      headId,
+      title: x.title,
+      amount: x.amount,
+      remark: x.remark,
+      kind: x.borrowerKind,
+      personId: x.borrowerId,
+    });
+
     const ch = await c.query<{ id: string }>(
       `INSERT INTO library_charges (school_id, loan_id, copy_id, borrower_kind, borrower_id, kind, on_date, price,
                                     processing_fee, late_fine, amount, reason, misc_fee_id, misc_line_id,
@@ -335,23 +328,17 @@ export class LibraryChargesService {
         x.lateFine,
         x.amount,
         x.reason,
-        fee.rows[0]!.id,
-        line.rows[0]!.id,
+        made.miscFeeId,
+        made.lineId,
         ctx.user.displayName,
       ],
     );
-    return { chargeId: ch.rows[0]!.id, miscFeeId: fee.rows[0]!.id, lineId: line.rows[0]!.id };
+    return { chargeId: ch.rows[0]!.id, miscFeeId: made.miscFeeId, lineId: made.lineId };
   }
 
   /** The year a charge is announced in: the active one, else the working one. */
-  private async yearOf(c: PoolClient, ctx: RequestContext) {
-    const year = await c.query<{ id: string }>(
-      `SELECT id::text FROM academic_years WHERE status = 'active' ORDER BY start_date DESC LIMIT 1`,
-    );
-    const yearId = year.rows[0]?.id ?? requireTenant(ctx).academicYearId;
-    if (!yearId)
-      throw new DomainError('year.not_selected', 'No academic year is active', { status: 409 });
-    return yearId;
+  private yearOf(c: PoolClient, ctx: RequestContext) {
+    return libraryYear(c, ctx);
   }
 
   /**

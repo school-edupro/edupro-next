@@ -31,7 +31,9 @@ import {
   LoansQueryDto,
   RenewDto,
   ReturnDto,
-  SaleDto,
+  BookSaleDto,
+  SalesExportDto,
+  SalesQueryDto,
   StockCancelDto,
   StockCloseDto,
   StockCycleDto,
@@ -43,6 +45,7 @@ import {
 import { LibraryFinesService } from './library-fines.service';
 import { LibraryHistoryService } from './library-history.service';
 import { LibraryStockService } from './library-stock.service';
+import { LibrarySalesService } from './library-sales.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -63,6 +66,7 @@ export class LibraryController {
     private readonly fines: LibraryFinesService,
     private readonly history: LibraryHistoryService,
     private readonly stock: LibraryStockService,
+    private readonly sales: LibrarySalesService,
   ) {}
 
   // ---- the circulation desk ------------------------------------------------------------------------
@@ -313,20 +317,90 @@ export class LibraryController {
     return this.library.mine(ctx);
   }
 
-  // ---- Sprint 18 ----
+  // ---- books sold (library reports, part 4) ---------------------------------------------------------
   @Post('sales')
-  @ApiOperation({ summary: 'Sell a withdrawn or damaged copy' })
-  @RequirePermission('library.stock.verify', {
-    description: 'Run stock verification and record sales',
+  @ApiOperation({
+    summary:
+      'Books sold to one buyer: a pupil or staff member owes a misc fee, someone outside pays on a misc receipt',
   })
-  sell(@ReqCtx() ctx: RequestContext, @Body() body: SaleDto) {
-    return this.library.sell(ctx, body);
+  @RequirePermission(STOCK, { description: 'Run stock verification and record sales' })
+  sell(@ReqCtx() ctx: RequestContext, @Body() body: BookSaleDto) {
+    return this.sales.sell(ctx, body);
   }
 
   @Get('sales')
-  @RequirePermission(LIBRARY.view)
-  async sales(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.library.sales(ctx) };
+  @ApiOperation({ summary: 'The books sold between two days, with what is paid' })
+  @RequirePermission(STOCK)
+  salesReport(@ReqCtx() ctx: RequestContext, @Query() q: SalesQueryDto) {
+    return this.sales.report(ctx, q);
+  }
+
+  @Get('sales/export')
+  @ApiOperation({ summary: 'The books sold as filtered, as Excel or PDF' })
+  @RequirePermission(STOCK)
+  salesExport(@ReqCtx() ctx: RequestContext, @Query() q: SalesExportDto) {
+    return this.sales.export(ctx, q);
+  }
+
+  @Get('sales/book')
+  @ApiOperation({ summary: 'A book as the sale desk sees it: can it be sold, its price as bought' })
+  @RequirePermission(STOCK)
+  saleBook(@ReqCtx() ctx: RequestContext, @Query('accessionNo') accessionNo: string) {
+    return this.sales.book(ctx, accessionNo);
+  }
+
+  @Get('sales/template')
+  @ApiOperation({ summary: 'The sales upload layout (base64 .xlsx)' })
+  @RequirePermission(STOCK)
+  salesTemplate() {
+    return this.sales.template();
+  }
+
+  @Get('sales/orders/:id')
+  @RequirePermission(STOCK)
+  saleOrder(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.sales.order(ctx, id);
+  }
+
+  @Get('sales/orders/:id/receipt')
+  @ApiOperation({ summary: 'The misc receipt of a sale to someone outside, as it prints' })
+  @RequirePermission(STOCK)
+  saleReceipt(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.sales.receipt(ctx, id);
+  }
+
+  @Post('sales/uploads')
+  @ApiOperation({
+    summary: 'A file of sales (.xlsx or .csv as the body) checked; nothing sold yet',
+  })
+  @RequirePermission(STOCK)
+  salesUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Query('fileName') fileName: string | undefined,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.sales.upload(ctx, (fileName ?? 'sales.xlsx').slice(0, 200), req.body);
+  }
+
+  @Get('sales/uploads/:id')
+  @RequirePermission(STOCK)
+  salesUploadOne(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.sales.getUpload(ctx, id);
+  }
+
+  @Post('sales/uploads/:id/apply')
+  @ApiOperation({
+    summary: 'A checked file of sales applied: its good rows sold, one sale a buyer',
+  })
+  @RequirePermission(STOCK)
+  salesUploadApply(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.sales.applyUpload(ctx, id);
+  }
+
+  @Post('sales/uploads/:id/discard')
+  @RequirePermission(STOCK)
+  salesUploadDiscard(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.sales.discardUpload(ctx, id);
   }
 
   @Get('digital')

@@ -477,3 +477,25 @@ shelves and material types chosen; a book sold to someone outside the school is 
   missing; the cycle's lists open it (`/library?view=copies&status=stock_pending`). The old single stock
   check routes (`library/stock-checks`) are replaced; book sales moved to their own page
   (`/library/sales`) until part 4 rebuilds them.
+- **Part 4 — books sold (done, migration 0220).** A sale is one buyer and one or more books, numbered
+  LS-0001 on (`library_sale_orders`; each book in `library_sales` with its price, its price as bought and
+  the status it was sold from; the sales made before became one sale each, LS-OLD-<id>). Only copies on
+  the shelf, damaged or withdrawn are sold (`library.cannot_sell` names the book: on loan, sold already,
+  lost); the copy becomes sold with the reason and its history. A pupil or a staff member owes the total
+  as a misc fee announced at once under the head LIBSALE "Library: book sale" (one book: "Book bought:
+  title (book no.)", several: "Books bought: N books (LS-…)"), paid at the fees counter; someone outside
+  pays at the library on a numbered misc receipt (payer "other", head LIBSALE, the mode and reference;
+  `FeeAdjustmentsService.postMiscReceiptIn` in the sale's transaction), printed from the sale's page
+  (`GET library/sales/orders/:id/receipt`; the receipt layouts now print a payer outside the school by
+  name and mobile); a book given for nothing has neither. **Book sales** (`/library/sales`): four figures
+  (books sold, sold for, paid, due), the books sold between two days (this month until days are chosen)
+  by buyer, payment (due at the fees counter, paid, no price, cancelled) and a search; totals; Excel or PDF
+  (`GET library/sales`, `…/export`). **Sell books** (`/library/sales/new`): the buyer (a pupil or staff
+  member found as at the desk, or someone outside by name and mobile), the books scanned with the price of
+  each (the price as bought shown), the mode and reference for someone outside, the day and a note
+  (`GET library/sales/book`, `POST library/sales`). **Upload sales** (`/library/sales/upload`): an .xlsx
+  or .csv (Accession no., Buyer: Pupil/Staff/Outside, Admission or employee no., Buyer name, Mobile, Price,
+  Pay mode, Reference, Remarks; the layout from `GET library/sales/template`) checked row by row and kept
+  (`library_sale_uploads`); the good rows are sold together, one sale a buyer (someone outside: the same
+  name, mobile, mode and reference), the rows with a problem listed and left out. Not built: taking a
+  sale back (a misc fee is cancelled, a receipt reversed, by the fees office).

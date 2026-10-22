@@ -15,7 +15,6 @@ import type {
   LoansQueryDto,
   RenewDto,
   ReturnDto,
-  SaleDto,
 } from './library.dto';
 
 export interface LoanRow {
@@ -630,74 +629,6 @@ export class LibraryService {
     // eslint-disable-next-line no-restricted-syntax -- LOAN_SELECT is a constant; values are bound
     const r = await c.query<Record<string, unknown>>(`${LOAN_SELECT} WHERE l.id = $1`, [id]);
     return r.rows[0] ? toLoan(r.rows[0]) : null;
-  }
-
-  // ---- Sprint 18: sale --------------------------------------------------------------------------
-  /** Sells a withdrawn or damaged copy (old stock, duplicates): the copy becomes `sold`. */
-  async sell(ctx: RequestContext, dto: SaleDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const copy = await this.copyByAccession(c, dto.accessionNo);
-      if (!['withdrawn', 'damaged', 'available'].includes(copy.status))
-        throw new DomainError('library.copy_unavailable', `The copy is ${copy.status}`, {
-          status: 409,
-        });
-      if (copy.status === 'available' && copy.is_reference)
-        throw new DomainError('library.reference_only', 'Reference copies are not sold', {
-          status: 409,
-        });
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO library_sales (school_id, copy_id, buyer_kind, buyer_id, buyer_name, price, receipt_ref, sold_by, note)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id(), $7) RETURNING id::text`,
-        [
-          copy.id,
-          dto.buyerKind,
-          dto.buyerId ?? null,
-          dto.buyerName ?? null,
-          dto.price,
-          dto.receiptRef ?? null,
-          dto.note ?? null,
-        ],
-      );
-      await c.query(`UPDATE library_copies SET status = 'sold', updated_at = now() WHERE id = $1`, [
-        copy.id,
-      ]);
-      await this.audit.stage(ctx, c, {
-        action: 'library.sale',
-        entityType: 'library_sales',
-        entityId: r.rows[0]!.id,
-        after: dto,
-      });
-      return {
-        id: r.rows[0]!.id,
-        accessionNo: dto.accessionNo,
-        title: copy.title,
-        price: dto.price,
-      };
-    });
-  }
-
-  async sales(ctx: RequestContext) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<Record<string, unknown>>(
-        `SELECT s.id::text, c.accession_no, t.title, s.buyer_kind, COALESCE(s.buyer_name, st.display_name, e.display_name) AS buyer, s.price::text, s.receipt_ref, s.sold_on::text, u.display_name AS sold_by
-           FROM library_sales s JOIN library_copies c ON c.id = s.copy_id JOIN library_titles t ON t.id = c.title_id
-           LEFT JOIN students st ON s.buyer_kind = 'student' AND st.id = s.buyer_id
-           LEFT JOIN employees e ON s.buyer_kind = 'employee' AND e.id = s.buyer_id
-           LEFT JOIN users u ON u.id = s.sold_by
-          ORDER BY s.sold_on DESC, s.id DESC LIMIT 200`,
-      );
-      return r.rows.map((x) => ({
-        id: String(x.id),
-        accessionNo: String(x.accession_no),
-        title: String(x.title),
-        buyerKind: String(x.buyer_kind),
-        buyer: (x.buyer as string | null) ?? null,
-        price: String(x.price),
-        receiptRef: (x.receipt_ref as string | null) ?? null,
-        soldOn: String(x.sold_on),
-        soldBy: (x.sold_by as string | null) ?? null,
-      }));
-    });
   }
 
   // ---- Sprint 18: digital library --------------------------------------------------------------

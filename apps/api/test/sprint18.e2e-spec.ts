@@ -278,9 +278,14 @@ describe('all bands and boards, library completion, partitioning (e2e, Sprint 18
       method: 'POST',
       url: '/library/sales',
       headers: h(),
-      json: { accessionNo: `${s}-3`, buyerKind: 'other', buyerName: 'Book drive', price: 50 },
+      json: {
+        buyerKind: 'other',
+        buyerName: 'Book drive',
+        books: [{ accessionNo: `${s}-3`, price: 50 }],
+        mode: 'cash',
+      },
     });
-    expect(notYet.statusCode).toBe(201); // available copies may be sold when not reference
+    expect(notYet.statusCode).toBe(201); // copies on the shelf may be sold too (0220: a sale, a receipt)
     await inject({
       method: 'PUT',
       url: `/library/copies/${copyId}/status`,
@@ -288,7 +293,8 @@ describe('all bands and boards, library completion, partitioning (e2e, Sprint 18
       json: { status: 'withdrawn' },
     }).then((r) => expect(r.statusCode).toBe(409)); // already sold
     const sales = await inject({ method: 'GET', url: '/library/sales', headers: h() });
-    expect(sales.json().data[0]).toMatchObject({ accessionNo: `${s}-3`, price: '50.00' });
+    expect(sales.json().rows[0]).toMatchObject({ accessionNo: `${s}-3`, price: 50, state: 'paid' });
+    expect(sales.json().rows[0].receiptNo).toBeTruthy();
     // digital library: staff see everything, families only everyone/students
     await inject({
       method: 'POST',

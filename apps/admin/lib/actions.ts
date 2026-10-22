@@ -3590,25 +3590,6 @@ export async function boardImportCommit(fd: FormData) {
   );
 }
 
-export async function librarySell(fd: FormData) {
-  return run('/library/sales', () =>
-    apiFetch('/library/sales', {
-      method: 'POST',
-      body: JSON.stringify({
-        accessionNo: str(fd, 'accessionNo'),
-        buyerKind: ['student', 'employee', 'other'].includes(str(fd, 'buyerKind'))
-          ? str(fd, 'buyerKind')
-          : 'other',
-        buyerId: opt(fd, 'buyerId'),
-        buyerName: opt(fd, 'buyerName'),
-        price: Number(str(fd, 'price') || 0),
-        receiptRef: opt(fd, 'receiptRef'),
-        note: opt(fd, 'note'),
-      }),
-    }),
-  );
-}
-
 // ---- Sprint 19 ----------------------------------------------------------------------------------
 const decideBody = (fd: FormData, back: string) => ({
   outcome: decisionOf(fd, 'outcome', ['approved', 'rejected'] as const, back),

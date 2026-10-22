@@ -15,6 +15,7 @@ import { LibraryDeskService } from './library-desk.service';
 import { LibraryFinesService } from './library-fines.service';
 import { LibraryHistoryService } from './library-history.service';
 import { LibraryStockService } from './library-stock.service';
+import { LibrarySalesService } from './library-sales.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
@@ -36,6 +37,7 @@ import { LibraryService } from './library.service';
     LibraryFinesService,
     LibraryHistoryService,
     LibraryStockService,
+    LibrarySalesService,
     AuditService,
   ],
   exports: [LibraryService],

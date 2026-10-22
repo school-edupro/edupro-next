@@ -80,16 +80,51 @@ export const LoansQuerySchema = z.object({
 export class LoansQueryDto extends createZodDto(LoansQuerySchema) {}
 
 // ---- Sprint 18 ----
-export const SaleSchema = z.object({
-  accessionNo: z.string().trim().min(1).max(30),
-  buyerKind: z.enum(['student', 'employee', 'other']),
-  buyerId: IdSchema.optional(),
-  buyerName: z.string().trim().max(120).optional(),
-  price: z.number().min(0),
-  receiptRef: z.string().trim().max(60).optional(),
-  note: z.string().trim().max(300).optional(),
+/** Books sold to one buyer (part 4 of the library reports): a pupil or staff member owes a misc fee; someone
+ * outside the school pays on a misc receipt. */
+export const BookSaleSchema = z
+  .object({
+    buyerKind: z.enum(['student', 'employee', 'other']),
+    buyerId: IdSchema.optional(),
+    buyerName: z.string().trim().min(2).max(120).optional(),
+    buyerMobile: z
+      .string()
+      .trim()
+      .regex(/^[6-9]\d{9}$/, 'a 10-digit mobile number')
+      .optional(),
+    books: z
+      .array(
+        z.object({
+          accessionNo: z.string().trim().min(1).max(40),
+          price: z.number().min(0).max(1_000_000),
+        }),
+      )
+      .min(1)
+      .max(200),
+    soldOn: DateSchema.optional(),
+    /** how someone outside the school paid */
+    mode: z.enum(['cash', 'upi', 'card', 'bank']).optional(),
+    reference: z.string().trim().max(80).optional(),
+    note: z.string().trim().max(300).optional(),
+  })
+  .refine((v) => (v.buyerKind === 'other' ? !!v.buyerName : !!v.buyerId), {
+    message: 'name the buyer, or pick the pupil or staff member',
+  });
+export class BookSaleDto extends createZodDto(BookSaleSchema) {}
+
+export const SalesQuerySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  buyer: z.enum(['student', 'employee', 'other']).optional(),
+  /** due: a misc fee not paid yet; paid: paid at the counter or on a receipt; free: no price */
+  state: z.enum(['all', 'due', 'paid', 'cancelled', 'free']).default('all'),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
 });
-export class SaleDto extends createZodDto(SaleSchema) {}
+export class SalesQueryDto extends createZodDto(SalesQuerySchema) {}
+export const SalesExportSchema = SalesQuerySchema.extend({ format: z.enum(['xlsx', 'pdf']) });
+export class SalesExportDto extends createZodDto(SalesExportSchema) {}
 
 /** A stock cycle (part 3 of the library reports): the libraries, shelves and material types it covers. */
 export const StockCycleSchema = z.object({

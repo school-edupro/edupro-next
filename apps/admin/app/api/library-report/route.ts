@@ -77,6 +77,17 @@ const REPORTS: Record<
   },
   // the stock check upload layout (no filters, no format)
   'stock-template': { path: '/library/stock/template', keys: {} },
+  sales: {
+    path: '/library/sales/export',
+    keys: {
+      from: (v) => DAY.test(v),
+      to: (v) => DAY.test(v),
+      buyer: (v) => ['student', 'employee', 'other'].includes(v),
+      state: (v) => ['all', 'due', 'paid', 'cancelled', 'free'].includes(v),
+      q: (v) => v.length <= 80,
+    },
+  },
+  'sales-template': { path: '/library/sales/template', keys: {} },
   borrower: {
     path: (sp) => {
       const kind = sp.get('kind') ?? '';
@@ -97,7 +108,7 @@ export async function GET(req: NextRequest) {
   const path = r ? (typeof r.path === 'string' ? r.path : r.path(sp)) : null;
   if (!r || !path) return new NextResponse('No such report', { status: 404 });
   const q = new URLSearchParams(
-    sp.get('report') === 'stock-template'
+    ['stock-template', 'sales-template'].includes(sp.get('report') ?? '')
       ? {}
       : { format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' },
   );

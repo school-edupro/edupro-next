@@ -15,8 +15,9 @@ export interface FeeReceipt {
     admissionNo: string;
     section: string | null;
     guardian: string | null;
-    /** a staff member paying (a misc fee, 0216): the code and designation instead of the pupil's */
-    kind?: 'student' | 'employee';
+    /** a staff member paying (a misc fee, 0216): the code and designation instead of the pupil's; someone
+     * outside the school (a library book sale, 0220): the name and mobile only */
+    kind?: 'student' | 'employee' | 'other';
   };
   year: string;
   receiptNo: string | null;
@@ -80,6 +81,7 @@ export function FeeReceiptSheet({
   logoSrc?: string | null;
 }) {
   const staff = r.student.kind === 'employee';
+  const outsider = r.student.kind === 'other';
   if (r.layout === 'classic') return <FeeReceiptClassic r={r} label={label} />;
   const cancelled = r.status === 'reversed' || r.status === 'bounced';
   const fee = FEE[r.feeType] ?? 'Fee';
@@ -130,7 +132,7 @@ export function FeeReceiptSheet({
             ) : null}
           </p>
           <dl className="ep-rcpt__rows">
-            {staff ? null : (
+            {staff || outsider ? null : (
               <>
                 <dt>Parent’s Name</dt>
                 <dd>{r.parents ?? r.student.guardian ?? '—'}</dd>
@@ -138,15 +140,19 @@ export function FeeReceiptSheet({
             )}
             <dt>Name</dt>
             <dd>{r.student.name}</dd>
-            <dt>{staff ? 'Emp Code' : 'Adm No'}</dt>
-            <dd>{r.student.admissionNo}</dd>
-            <dt>{staff ? 'Designation' : 'Class'}</dt>
-            <dd>{r.student.section ?? '—'}</dd>
+            {outsider ? null : (
+              <>
+                <dt>{staff ? 'Emp Code' : 'Adm No'}</dt>
+                <dd>{r.student.admissionNo}</dd>
+                <dt>{staff ? 'Designation' : 'Class'}</dt>
+                <dd>{r.student.section ?? '—'}</dd>
+              </>
+            )}
             <dt>Mobile No</dt>
             <dd>{r.mobiles ?? '—'}</dd>
             <dt>Address</dt>
             <dd>{r.address ?? '—'}</dd>
-            {staff ? null : (
+            {staff || outsider ? null : (
               <>
                 <dt>Student Category/Bus Route/Bus Stop/Bus Slab</dt>
                 <dd>{r.transport ?? ''}</dd>

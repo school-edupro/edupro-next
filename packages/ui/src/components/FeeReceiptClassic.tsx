@@ -12,6 +12,7 @@ const dmy = (iso: string | null | undefined) => {
 /** The classic receipt (one column, particulars by period), kept as a layout the school may choose. */
 export function FeeReceiptClassic({ r, label }: { r: FeeReceipt; label: string }) {
   const staff = r.student.kind === 'employee';
+  const outsider = r.student.kind === 'other';
   const cancelled = r.status === 'reversed' || r.status === 'bounced';
   return (
     <section className="ep-print-sheet ep-receipt" aria-label={`Fee receipt, ${label}`}>
@@ -33,15 +34,24 @@ export function FeeReceiptClassic({ r, label }: { r: FeeReceipt; label: string }
           Date: <strong>{dmy(r.receivedOn)}</strong>
         </div>
         <div>
-          {staff ? 'Staff member' : 'Student'}: <strong>{r.student.name}</strong>
+          {outsider ? 'Received from' : staff ? 'Staff member' : 'Student'}:{' '}
+          <strong>{r.student.name}</strong>
         </div>
-        <div>
-          {staff ? 'Employee code' : 'Admission no.'}: <strong>{r.student.admissionNo}</strong>
-        </div>
-        <div>
-          {staff ? 'Designation' : 'Class'}: <strong>{r.student.section ?? '—'}</strong>
-        </div>
-        {staff ? null : (
+        {outsider ? (
+          <div>
+            Mobile: <strong>{r.mobiles ?? '—'}</strong>
+          </div>
+        ) : (
+          <>
+            <div>
+              {staff ? 'Employee code' : 'Admission no.'}: <strong>{r.student.admissionNo}</strong>
+            </div>
+            <div>
+              {staff ? 'Designation' : 'Class'}: <strong>{r.student.section ?? '—'}</strong>
+            </div>
+          </>
+        )}
+        {staff || outsider ? null : (
           <div>
             Father / guardian: <strong>{r.student.guardian ?? '—'}</strong>
           </div>

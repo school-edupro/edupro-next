@@ -1434,88 +1434,96 @@ export class FeeAdjustmentsService {
 
   async postMiscReceipt(ctx: RequestContext, dto: PostMiscReceiptDto): Promise<MiscReceiptRow> {
     const yearId = this.year(ctx);
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
-      const head = await c.query<{ id: string; ledger: string }>(
-        `SELECT id::text, ledger::text FROM fee_heads WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
-        [dto.headId],
+    return this.db.tenant(requireTenant(ctx), (c) => this.postMiscReceiptIn(c, ctx, dto, yearId));
+  }
+
+  /** A misc receipt posted inside the caller's transaction (a library book sale to someone outside). */
+  async postMiscReceiptIn(
+    c: PoolClient,
+    ctx: RequestContext,
+    dto: PostMiscReceiptDto,
+    yearId: string,
+  ): Promise<MiscReceiptRow> {
+    await c.query(`SELECT app.assert_year_open($1, 'fees')`, [yearId]);
+    const head = await c.query<{ id: string; ledger: string }>(
+      `SELECT id::text, ledger::text FROM fee_heads WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+      [dto.headId],
+    );
+    if (!head.rows[0]) throw new DomainError('not-found', 'Fee head not found', { status: 404 });
+    if (['cheque', 'dd'].includes(dto.mode) && !dto.instrumentNo)
+      throw new DomainError(
+        'fees.instrument_required',
+        'Cheque and DD receipts need the instrument number',
+        { status: 400 },
       );
-      if (!head.rows[0]) throw new DomainError('not-found', 'Fee head not found', { status: 404 });
-      if (['cheque', 'dd'].includes(dto.mode) && !dto.instrumentNo)
-        throw new DomainError(
-          'fees.instrument_required',
-          'Cheque and DD receipts need the instrument number',
-          { status: 400 },
-        );
-      await this.setup.assertModeFields(c, dto);
-      let payerName = dto.payerName ?? '';
-      let payerMobile = dto.payerMobile ?? null;
-      if (dto.payerKind === 'student') {
-        const s = await c.query<{ name: string; mobile: string | null }>(
-          `SELECT s.display_name AS name, (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1) AS mobile
+    await this.setup.assertModeFields(c, dto);
+    let payerName = dto.payerName ?? '';
+    let payerMobile = dto.payerMobile ?? null;
+    if (dto.payerKind === 'student') {
+      const s = await c.query<{ name: string; mobile: string | null }>(
+        `SELECT s.display_name AS name, (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC LIMIT 1) AS mobile
              FROM students s WHERE s.id = $1 AND s.deleted_at IS NULL`,
-          [dto.studentId],
-        );
-        if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
-        payerName = s.rows[0].name;
-        payerMobile = payerMobile ?? s.rows[0].mobile;
-      } else if (dto.payerKind === 'employee') {
-        const e = await c.query<{ name: string; mobile: string | null }>(
-          `SELECT display_name AS name, mobile FROM employees WHERE id = $1 AND deleted_at IS NULL`,
-          [dto.employeeId],
-        );
-        if (!e.rows[0]) throw new DomainError('not-found', 'Employee not found', { status: 404 });
-        payerName = e.rows[0].name;
-        payerMobile = payerMobile ?? e.rows[0].mobile;
-      }
-      const fy = await c.query<{ fy: string | null }>(
-        `SELECT app.financial_year_for(COALESCE($1::date, CURRENT_DATE))::text AS fy`,
-        [dto.receivedOn ?? null],
+        [dto.studentId],
       );
-      if (!fy.rows[0]?.fy)
-        throw new DomainError(
-          'fees.no_financial_year',
-          'No financial year covers the receipt date; create it under System → Years',
-          {
-            status: 409,
-          },
-        );
-      await assertPeriodOpen(c, 'misc', dto.receivedOn ?? null); // Sprint 23 month-end lock
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, employee_id, payer_name, payer_mobile, head_id, amount, received_on, mode, reference, instrument_no, bank_name, remarks, received_by, request_id)
+      if (!s.rows[0]) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      payerName = s.rows[0].name;
+      payerMobile = payerMobile ?? s.rows[0].mobile;
+    } else if (dto.payerKind === 'employee') {
+      const e = await c.query<{ name: string; mobile: string | null }>(
+        `SELECT display_name AS name, mobile FROM employees WHERE id = $1 AND deleted_at IS NULL`,
+        [dto.employeeId],
+      );
+      if (!e.rows[0]) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      payerName = e.rows[0].name;
+      payerMobile = payerMobile ?? e.rows[0].mobile;
+    }
+    const fy = await c.query<{ fy: string | null }>(
+      `SELECT app.financial_year_for(COALESCE($1::date, CURRENT_DATE))::text AS fy`,
+      [dto.receivedOn ?? null],
+    );
+    if (!fy.rows[0]?.fy)
+      throw new DomainError(
+        'fees.no_financial_year',
+        'No financial year covers the receipt date; create it under System → Years',
+        {
+          status: 409,
+        },
+      );
+    await assertPeriodOpen(c, 'misc', dto.receivedOn ?? null); // Sprint 23 month-end lock
+    const r = await c.query<{ id: string }>(
+      `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, student_id, employee_id, payer_name, payer_mobile, head_id, amount, received_on, mode, reference, instrument_no, bank_name, remarks, received_by, request_id)
          VALUES (app.current_school_id(), $1, $2, app.next_receipt_no('misc', $2), $3::payer_kind, $4, $5, $6, $7, $8, $9, COALESCE($10::date, CURRENT_DATE), $11, $12, $13, $14, $15, app.current_user_id(), app.current_request_id())
          RETURNING id::text`,
-        [
-          yearId,
-          fy.rows[0].fy,
-          dto.payerKind,
-          dto.payerKind === 'student' ? dto.studentId : null,
-          dto.payerKind === 'employee' ? dto.employeeId : null,
-          payerName,
-          payerMobile,
-          dto.headId,
-          dto.amount.toFixed(2),
-          dto.receivedOn ?? null,
-          dto.mode,
-          dto.reference ?? null,
-          dto.instrumentNo ?? null,
-          dto.bankName ?? null,
-          dto.remarks ?? null,
-        ],
-      );
-      const row = await c.query<MiscReceiptRow>(
-        // eslint-disable-next-line no-restricted-syntax -- MISC_SELECT is a constant; the id is a bound parameter
-        `${MISC_SELECT} WHERE m.id = $1`,
-        [r.rows[0]!.id],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'fees.misc.post',
-        entityType: 'misc_receipts',
-        entityId: r.rows[0]!.id,
-        after: { ...dto, receiptNo: row.rows[0]!.receiptNo, payerName },
-      });
-      return row.rows[0]!;
+      [
+        yearId,
+        fy.rows[0].fy,
+        dto.payerKind,
+        dto.payerKind === 'student' ? dto.studentId : null,
+        dto.payerKind === 'employee' ? dto.employeeId : null,
+        payerName,
+        payerMobile,
+        dto.headId,
+        dto.amount.toFixed(2),
+        dto.receivedOn ?? null,
+        dto.mode,
+        dto.reference ?? null,
+        dto.instrumentNo ?? null,
+        dto.bankName ?? null,
+        dto.remarks ?? null,
+      ],
+    );
+    const row = await c.query<MiscReceiptRow>(
+      // eslint-disable-next-line no-restricted-syntax -- MISC_SELECT is a constant; the id is a bound parameter
+      `${MISC_SELECT} WHERE m.id = $1`,
+      [r.rows[0]!.id],
+    );
+    await this.audit.stage(ctx, c, {
+      action: 'fees.misc.post',
+      entityType: 'misc_receipts',
+      entityId: r.rows[0]!.id,
+      after: { ...dto, receiptNo: row.rows[0]!.receiptNo, payerName },
     });
+    return row.rows[0]!;
   }
 
   // ---- reconciliation ----------------------------------------------------------------------------
