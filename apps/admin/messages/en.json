@@ -231,7 +231,21 @@
     "toggleSidebar": "Show or hide the menu",
     "notifications": "{count, plural, =0 {No open alerts} one {# open alert} other {# open alerts}}",
     "help": "Help centre",
-    "approvals": "{count, plural, =0 {Approvals: nothing waiting} one {# approval waiting for you} other {# approvals waiting for you}}"
+    "approvals": "{count, plural, =0 {Approvals: nothing waiting} one {# approval waiting for you} other {# approvals waiting for you}}",
+    "switchContext": "Switch school or year",
+    "schoolHeading": "School",
+    "yearHeading": "Academic year",
+    "viewingYear": "viewing a {status} year",
+    "account": "My account",
+    "myProfile": "My profile",
+    "security": "Security and sign-in",
+    "lastSignIn": "Last sign-in",
+    "signedInNow": "Signed in now",
+    "role": "Role",
+    "mobile": "Mobile",
+    "email": "Email",
+    "firstSignIn": "This is the first recorded sign-in",
+    "searchHint": "Press / to search"
   },
   "login": {
     "kicker": "Mobilise",

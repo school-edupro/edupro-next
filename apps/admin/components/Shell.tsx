@@ -7,7 +7,8 @@ import { myApprovals } from '@/lib/approvals';
 import { tourFor } from '@/lib/tours';
 import { Icon, SECTION_ICON } from './nav-icons';
 import { Tour } from './Tour';
-import { SchoolYearSwitcher } from './SchoolYearSwitcher';
+import { AccountMenu, ContextMenu, LanguageMenu } from './HeaderMenus';
+import { HeaderKeys } from './HeaderKeys';
 import { SidebarToggle } from './SidebarToggle';
 import { NAV } from '@/lib/nav';
 
@@ -20,10 +21,9 @@ export async function Shell({
   currentPath: string;
   children: ReactNode;
 }) {
-  const [t, nav, common, banner, locale] = await Promise.all([
+  const [t, nav, banner, locale] = await Promise.all([
     getTranslations('shell'),
     getTranslations('nav'),
-    getTranslations('common'),
     getTranslations('impersonationBanner'),
     getLocale(),
   ]);
@@ -138,7 +138,14 @@ export async function Shell({
       lastLogin: { at: string; device: string | null; app: string | null } | null;
     }>('/me/card').catch(() => null),
   ]);
-  const roleLabel = card?.roles.length ? card.roles.join(' · ') : t('portal');
+  // the main role, "+N" for the others (all of them on hover and in the account menu)
+  const roleLabel = card?.roles.length
+    ? `${card.roles[0]!}${card.roles.length > 1 ? ` +${String(card.roles.length - 1)}` : ''}`
+    : t('portal');
+  const allRoles = card?.roles.length ? card.roles.join(' · ') : t('portal');
+  // the header menus take plain keys
+  const tt = (key: string, values?: Record<string, string | number>) =>
+    t(key as never, values as never) as string;
   const at = (v: string) =>
     new Date(v).toLocaleString('en-IN', {
       day: '2-digit',
@@ -200,7 +207,7 @@ export async function Shell({
           </span>
           <span className="ep-sidebar__brand-text">
             <small>EduPro Next</small>
-            <b className="ep-sidebar__role" title={roleLabel}>
+            <b className="ep-sidebar__role" title={allRoles}>
               {roleLabel}
             </b>
           </span>
@@ -268,10 +275,7 @@ export async function Shell({
           <SidebarToggle className="ep-header__icon-btn" label={t('toggleSidebar')}>
             <Icon name="menu" size={22} />
           </SidebarToggle>
-          <div className="ep-header__module">
-            <SchoolYearSwitcher me={me} />
-          </div>
-          <span className="ep-header__crumb">{portal}</span>
+          <ContextMenu me={me} t={tt} />
           {canSearch ? (
             <form method="get" action="/people/search" role="search" className="ep-header__search">
               <Icon name="search" size={18} />
@@ -284,24 +288,28 @@ export async function Shell({
                 minLength={2}
                 required
               />
+              <kbd className="ep-header__kbd" title={t('searchHint')}>
+                /
+              </kbd>
             </form>
+          ) : null}
+          {canSearch ? (
+            // a narrow screen: search opens its own page
+            <a
+              className="ep-header__icon-btn ep-header__search-link"
+              href="/people/search"
+              aria-label={t('search')}
+              title={t('search')}
+            >
+              <Icon name="search" size={20} />
+            </a>
           ) : null}
         </div>
         <div className="ep-header__context">
-          <form method="post" action="/api/locale" className="ep-header__locale">
-            <label className="ep-sr-only" htmlFor="locale">
-              {t('language')}
-            </label>
-            <select id="locale" name="locale" className="ep-select" defaultValue={locale}>
-              <option value="en">English</option>
-              <option value="hi">हिन्दी</option>
-            </select>
-            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-              {common('apply')}
-            </button>
-          </form>
+          <HeaderKeys />
+          <LanguageMenu locale={locale} t={tt} />
           <a className="ep-header__icon-btn" href="/help" aria-label={t('help')} title={t('help')}>
-            <Icon name="book" size={20} />
+            <Icon name="help" size={21} />
           </a>
           {tour ? (
             <Tour
@@ -318,7 +326,7 @@ export async function Shell({
             />
           ) : null}
           {queries ? (
-            <details className="ep-qmenu">
+            <details className="ep-qmenu ep-hmenu">
               <summary
                 className="ep-header__icon-btn ep-header__bell"
                 aria-label={`Queries with me: ${String(queries.total)}${queries.overdue ? `, ${String(queries.overdue)} past due` : ''}`}
@@ -394,7 +402,7 @@ export async function Shell({
             >
               <Icon name="clipboard" size={22} />
               {formsToAnswer > 0 ? (
-                <span className="ep-header__badge">
+                <span className="ep-header__badge ep-header__badge--calm">
                   {formsToAnswer > 99 ? '99+' : formsToAnswer}
                 </span>
               ) : null}
@@ -409,7 +417,9 @@ export async function Shell({
             >
               <Icon name="inbox" size={22} />
               {waiting > 0 ? (
-                <span className="ep-header__badge">{waiting > 99 ? '99+' : waiting}</span>
+                <span className="ep-header__badge ep-header__badge--calm">
+                  {waiting > 99 ? '99+' : waiting}
+                </span>
               ) : null}
             </a>
           ) : null}
@@ -422,79 +432,21 @@ export async function Shell({
             >
               <Icon name="bell" size={22} />
               {openAlerts > 0 ? (
-                <span className="ep-header__badge">{openAlerts > 99 ? '99+' : openAlerts}</span>
+                <span className="ep-header__badge ep-header__badge--calm">
+                  {openAlerts > 99 ? '99+' : openAlerts}
+                </span>
               ) : null}
             </a>
           ) : null}
-          <div className="ep-usercard">
-            <a
-              className="ep-header__user"
-              href={isStaff ? '/me/profile' : '/system/security'}
-              aria-label={`My account: ${me.user.displayName}`}
-              aria-describedby="ep-usercard-panel"
-            >
-              <Icon name="user" size={20} />
-              <span className="ep-header__user-name">{me.user.displayName}</span>
-            </a>
-            <div className="ep-usercard__panel" id="ep-usercard-panel" role="tooltip">
-              <div className="ep-usercard__name">{card?.name ?? me.user.displayName}</div>
-              {card?.designation ? (
-                <div className="ep-usercard__muted">{card.designation}</div>
-              ) : null}
-              <dl className="ep-usercard__facts">
-                <div>
-                  <dt>Role</dt>
-                  <dd>{card?.roles.length ? card.roles.join(', ') : '—'}</dd>
-                </div>
-                <div>
-                  <dt>School</dt>
-                  <dd>
-                    {card?.school ?? portal}
-                    {card?.academicYear ? ` · ${card.academicYear}` : ''}
-                  </dd>
-                </div>
-                {card?.mobile ? (
-                  <div>
-                    <dt>Mobile</dt>
-                    <dd>{card.mobile}</dd>
-                  </div>
-                ) : null}
-                {card?.email ? (
-                  <div>
-                    <dt>Email</dt>
-                    <dd>{card.email}</dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt>Last sign-in</dt>
-                  <dd>
-                    {card?.lastLogin
-                      ? `${at(card.lastLogin.at)}${card.lastLogin.device ? ` · ${card.lastLogin.device}` : ''}`
-                      : 'This is the first recorded sign-in'}
-                  </dd>
-                </div>
-                {card?.thisLogin ? (
-                  <div>
-                    <dt>Signed in now</dt>
-                    <dd>
-                      {at(card.thisLogin.at)}
-                      {card.thisLogin.device ? ` · ${card.thisLogin.device}` : ''}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            </div>
-          </div>
-          <form method="post" action="/api/auth/logout">
-            <button
-              type="submit"
-              className="ep-header__icon-btn"
-              aria-label={t('signOut')}
-              title={t('signOut')}
-            >
-              <Icon name="logout" size={22} />
-            </button>
-          </form>
+          <AccountMenu
+            me={me}
+            card={card}
+            school={portal}
+            isStaff={isStaff}
+            roleLabel={roleLabel}
+            t={tt}
+            at={at}
+          />
         </div>
       </header>
       <main className="ep-main">

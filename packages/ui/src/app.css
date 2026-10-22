@@ -356,6 +356,12 @@
   text-overflow: ellipsis;
 }
 
+.ep-header__locale {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
 .ep-header__search {
   display: flex;
   align-items: center;
@@ -363,11 +369,11 @@
   color: var(--text-muted);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-pill);
-  padding: 0 var(--sp-3);
+  padding: 0 var(--sp-2) 0 var(--sp-3);
   min-height: 40px;
-  min-width: 160px;
-  max-width: 320px;
-  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: 420px;
+  flex: 1 1 320px;
   background: var(--surface-subtle);
 }
 
@@ -384,12 +390,6 @@
   color: var(--text-body);
   width: 100%;
   outline: none;
-}
-
-.ep-header__locale {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
 }
 
 .ep-header__badge {
@@ -4146,10 +4146,13 @@ a.ep-tabs__tab {
   color: var(--text-heading);
 }
 .ep-sidebar__brand-text b.ep-sidebar__role {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   max-width: 11rem;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  line-height: 1.25;
   font-size: var(--fs-small);
 }
 .ep-header__badge--calm {
@@ -9653,4 +9656,276 @@ a.ep-pub-foot__item {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-1);
+}
+
+/* ---- the header: the school and year chip, menus, the account (Shell) --------------------------- */
+.ep-header__kbd {
+  font-family: var(--font-body);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--sp-1);
+  line-height: 1.4;
+  flex: none;
+}
+.ep-header__search-link {
+  display: none;
+}
+.ep-hmenu {
+  position: relative;
+  flex: none;
+}
+.ep-hmenu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ep-hmenu > summary::-webkit-details-marker {
+  display: none;
+}
+.ep-hmenu[open] > summary .ep-icon:last-child {
+  transform: rotate(180deg);
+}
+.ep-hmenu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--sp-2));
+  z-index: 60;
+  width: min(20rem, calc(100vw - 2rem));
+  max-height: min(32rem, calc(100vh - 6rem));
+  overflow-y: auto;
+  background: var(--surface-card);
+  color: var(--text-body);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--sp-2);
+}
+.ep-hmenu--left .ep-hmenu__panel {
+  left: 0;
+  right: auto;
+}
+.ep-hmenu__panel--narrow {
+  width: 12rem;
+}
+.ep-hmenu__heading {
+  margin: var(--sp-2) var(--sp-2) var(--sp-1);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ep-hmenu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ep-hmenu__list--rule {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-hmenu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-heading);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ep-hmenu__item:hover,
+.ep-hmenu__item:focus-visible {
+  background: var(--surface-subtle);
+}
+.ep-hmenu__item[aria-current='true'] {
+  font-weight: var(--fw-semibold);
+  color: var(--action-primary);
+}
+.ep-hmenu__item--danger {
+  color: var(--status-danger);
+}
+.ep-hmenu__tag {
+  margin-left: var(--sp-2);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-hmenu__tag--active {
+  color: var(--status-success);
+}
+.ep-hmenu__title {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-hmenu__muted {
+  display: block;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-hchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 26rem;
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-page);
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+.ep-hchip:hover {
+  background: var(--surface-subtle);
+}
+.ep-hchip--static {
+  cursor: default;
+}
+.ep-hchip__school {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-hchip__year {
+  flex: none;
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--border-default);
+  color: var(--text-body);
+  font-weight: var(--fw-medium);
+}
+.ep-hchip__status {
+  color: var(--status-warning);
+}
+.ep-haccount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1);
+  border-radius: var(--radius-pill);
+  color: var(--text-heading);
+}
+.ep-haccount:hover {
+  background: var(--surface-subtle);
+}
+.ep-haccount__avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--surface-dark);
+  color: var(--text-inverse);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+.ep-haccount__avatar--lg {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.ep-haccount__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 11rem;
+  line-height: 1.2;
+}
+.ep-haccount__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-small);
+}
+.ep-haccount__role {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-haccount__head {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-2);
+}
+/* the left group gives way (the chip shortens, the search becomes an icon); the icons keep their room */
+.ep-header > .ep-header__context:first-child {
+  flex: 1 1 auto;
+}
+.ep-header > .ep-header__context:last-child {
+  flex: none;
+  gap: var(--sp-1);
+}
+.ep-header .ep-header__search {
+  min-width: 0;
+}
+.ep-hchip {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+/* a wide header: the chip keeps its size (a long school name capped) and the search gives way first */
+.ep-hmenu--left {
+  flex: none;
+  min-width: 0;
+}
+.ep-hchip__school {
+  max-width: 16rem;
+}
+.ep-header .ep-header__search {
+  flex: 1 1 240px;
+}
+@media (max-width: 1280px) {
+  /* the search is an icon now: the chip may shorten instead */
+  .ep-hmenu--left {
+    flex: 0 1 auto;
+  }
+  .ep-haccount__text {
+    display: none;
+  }
+  .ep-header .ep-header__search {
+    display: none;
+  }
+  .ep-header__search-link {
+    display: inline-flex;
+  }
+}
+@media (max-width: 900px) {
+  .ep-hchip__school {
+    max-width: 8rem;
+  }
+}
+@media (max-width: 600px) {
+  .ep-header {
+    padding: 0 var(--sp-3);
+    gap: var(--sp-2);
+  }
+  .ep-hchip__school {
+    display: none;
+  }
+}
+.ep-hmenu .ep-usercard__facts {
+  gap: var(--sp-1);
+  margin: 0 var(--sp-2);
+  font-size: var(--fs-small);
+}
+.ep-hmenu .ep-usercard__facts div {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: var(--sp-2);
+  align-items: baseline;
 }

@@ -120,9 +120,14 @@ export class MeController {
         email: string | null;
         designation: string | null;
       }>(
-        `SELECT (SELECT array_agg(DISTINCT r.name ORDER BY r.name) FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-                  WHERE ur.user_id = app.current_user_id() AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
-                    AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)) AS roles,
+        // the roles, the one that says most first (the header shows it with "+N" for the rest)
+        `SELECT (SELECT array_agg(x.name ORDER BY x.rank, x.name) FROM (
+                   SELECT DISTINCT r.name,
+                          CASE r.code WHEN 'group_admin' THEN 0 WHEN 'school_admin' THEN 1 WHEN 'principal' THEN 2
+                                      WHEN 'vice_principal' THEN 3 WHEN 'academic_coordinator' THEN 4 ELSE 9 END AS rank
+                     FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                    WHERE ur.user_id = app.current_user_id() AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
+                      AND ur.valid_from <= CURRENT_DATE AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)) x) AS roles,
                 (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
                 (SELECT name FROM academic_years WHERE id = app.current_academic_year_id()) AS year,
                 COALESCE((SELECT e.mobile FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1), u.mobile) AS mobile,

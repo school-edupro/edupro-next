@@ -75,9 +75,9 @@ export function Tour({
           strokeWidth="1.8"
           aria-hidden="true"
         >
+          {/* a compass: the tour of the page (Help keeps the question mark) */}
           <circle cx="12" cy="12" r="9" />
-          <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.4" />
-          <circle cx="12" cy="17" r=".6" fill="currentColor" />
+          <path d="M15.5 8.5l-2 5-5 2 2-5 5-2Z" />
         </svg>
       </button>
       {open ? (
