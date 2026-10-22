@@ -499,3 +499,29 @@ shelves and material types chosen; a book sold to someone outside the school is 
   (`library_sale_uploads`); the good rows are sold together, one sale a buyer (someone outside: the same
   name, mobile, mode and reference), the rows with a problem listed and left out. Not built: taking a
   sale back (a misc fee is cancelled, a receipt reversed, by the fees office).
+
+## Library round 3 (22 Oct 2026)
+
+Asked: how "Ask to waive" works; Import to update existing books by accession number like the employee
+bulk page; the pupil/parent portal and the staff app to show the books held, the history, a home tile and
+a book's status; staff tied to particular libraries working only there; the Pupils/Staff history Excel to
+carry each person's books. Decisions (asked): the library staff are set on each library (Library setup),
+a tied user works only in those libraries, an untied one (the admin) in all; a book of another library may
+be returned at any desk (noted), everything else is limited; the Excel update may change copy and title
+fields (a title change reaches every copy of the title, warned), never the status or the accession no.;
+the portals get my books and history, a home tile, the catalogue with each book's status (borrowers never
+named) and reservations (pupils and staff, 2 at a time by a setting, only when every copy is issued, the
+returned book kept for the first in line for a setting of 3 days, told in the portal only). Parts: 1
+waiver requests + the per-person sheet, 2 update from Excel, 3 library staff, 4 portals and reservations.
+
+- **Part 1 — waiver requests; each person's books in the history Excel (done).** "Ask to waive" (Late
+  fines → Outstanding, a fine at the fees counter) makes a misc fee change request: it follows Fee setup →
+  Approval levels (or waits under Fees → Misc fees → Requests), the fine stays due meanwhile, and once
+  approved the misc fee comes down (all of it: the fee closes) and the fine moves to Waived as "Waived by
+  the fees office". Late fines now has a fourth figure, **Waiver requests** (waiting), opening their list:
+  all, waiting, approved, rejected; asked on and by, the borrower, the book, the fine and what is to be
+  waived, the reason, who it waits with or who decided and the note; the same filters; Excel or PDF
+  (`GET library/fines/requests`, `…/export`). The Pupils and Staff history Excel has a second sheet,
+  **Books by pupil** / **Books by staff member**: a heading row a person (name, number, class or
+  designation, how many books) and their books held between the days (issued, due, renewed, returned,
+  days late, how it ended, the fine and where it is); `libraryFile` takes more sheets with heading rows.

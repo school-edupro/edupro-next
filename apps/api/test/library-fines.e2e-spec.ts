@@ -255,6 +255,19 @@ describe('library fines at the fees counter (e2e)', () => {
         })
       ).json().type,
     ).toBe('misc.request_open');
+    // the library sees what it asked, and that it waits with the fees office
+    const asked = (await call('GET', '/library/fines/requests?status=pending')).json();
+    expect(asked).toMatchObject({ total: 1, pending: 1 });
+    expect(asked.rows[0]).toMatchObject({
+      status: 'pending',
+      borrower: 'Meena Iyer',
+      accessionNo: 'B00003',
+      fine,
+      waive: 5,
+      reason: 'Away on election duty',
+      askedBy: expect.any(String),
+      decidedBy: null,
+    });
     const decided = await call(
       'POST',
       `/fees/misc-fees/requests/${ask.json().requestId as string}/decide`,
@@ -262,6 +275,12 @@ describe('library fines at the fees counter (e2e)', () => {
       admin,
     );
     expect(decided.statusCode).toBe(200);
+    const after = (await call('GET', '/library/fines/requests?status=approved')).json();
+    expect(after).toMatchObject({ total: 1, pending: 0 });
+    expect(after.rows[0]).toMatchObject({ status: 'approved', decidedBy: expect.any(String) });
+    expect((await call('GET', '/library/fines/requests?status=rejected')).json().total).toBe(0);
+    const rx = (await call('GET', '/library/fines/requests/export?format=xlsx')).json();
+    expect(rx).toMatchObject({ filename: `Library-fine-waiver-requests-${day(0)}.xlsx`, rows: 1 });
     expect((await tab('outstanding', '&borrower=employee')).rows[0]).toMatchObject({
       due: fine - 5,
       state: 'Due at the fees counter',

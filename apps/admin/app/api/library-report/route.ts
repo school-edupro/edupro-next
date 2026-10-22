@@ -25,6 +25,18 @@ const REPORTS: Record<
       q: (v) => v.length <= 80,
     },
   },
+  waivers: {
+    path: '/library/fines/requests/export',
+    keys: {
+      status: (v) => ['all', 'pending', 'approved', 'rejected'].includes(v),
+      from: (v) => DAY.test(v),
+      to: (v) => DAY.test(v),
+      borrower: (v) => v === 'student' || v === 'employee',
+      classId: (v) => ID.test(v),
+      sectionId: (v) => ID.test(v),
+      q: (v) => v.length <= 80,
+    },
+  },
   charges: {
     path: '/library/charges/export',
     keys: {

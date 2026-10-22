@@ -215,6 +215,15 @@ export const FinesQuerySchema = z.object({
 export class FinesQueryDto extends createZodDto(FinesQuerySchema) {}
 export const FinesExportSchema = FinesQuerySchema.extend({ format: z.enum(['xlsx', 'pdf']) });
 export class FinesExportDto extends createZodDto(FinesExportSchema) {}
+/** The waivers the library asked of the fees office (Late fines → Waiver requests). */
+export const WaiverRequestsQuerySchema = FinesQuerySchema.omit({ tab: true }).extend({
+  status: z.enum(['all', 'pending', 'approved', 'rejected']).default('all'),
+});
+export class WaiverRequestsQueryDto extends createZodDto(WaiverRequestsQuerySchema) {}
+export const WaiverRequestsExportSchema = WaiverRequestsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class WaiverRequestsExportDto extends createZodDto(WaiverRequestsExportSchema) {}
 export const FinesSendSchema = z.object({
   /** the loans whose old fines go to the fees counter; none: every one */
   loanIds: z.array(IdSchema).max(500).optional(),

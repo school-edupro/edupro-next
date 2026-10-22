@@ -39,6 +39,39 @@ type Report = {
   totals: { rows: number; amount: number };
   unsent: { count: number; amount: number };
 };
+type WaiverRequest = {
+  id: string;
+  askedOn: string;
+  askedBy: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reason: string;
+  waitingWith: string | null;
+  decidedOn: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  borrowerKind: string;
+  borrower: string;
+  ref: string;
+  place: string | null;
+  title: string;
+  accessionNo: string;
+  fine: number;
+  waive: number;
+};
+type Requests = {
+  rows: WaiverRequest[];
+  total: number;
+  page: number;
+  pages: number;
+  pending: number;
+};
+const REQUEST_STATES: Array<[string, string]> = [
+  ['all', 'All'],
+  ['pending', 'Waiting'],
+  ['approved', 'Approved'],
+  ['rejected', 'Rejected'],
+];
+const REQUEST_TONE = { pending: 'warning', approved: 'success', rejected: 'danger' } as const;
 type Sections = {
   classes: Array<{ id: string; name: string; sections: Array<{ id: string; name: string }> }>;
 };
@@ -68,6 +101,11 @@ export default async function FinesPage({
   if (!me.permissions.includes('library.loan.circulate')) notFound();
   const t = await getTranslations('pages.library_fines');
   const tab: Tab = TABS.some(([v]) => v === sp.tab) ? (sp.tab as Tab) : 'outstanding';
+  // the waivers asked of the fees office: their own list, with the same filters
+  const requestsView = sp.tab === 'requests';
+  const rstatus = ['pending', 'approved', 'rejected'].includes(sp.rstatus ?? '')
+    ? sp.rstatus!
+    : 'all';
   // the filters, checked; they carry over between the tabs
   const f: Record<string, string> = {};
   for (const k of ['from', 'to'] as const) if (DAY.test(sp[k] ?? '')) f[k] = sp[k]!;
@@ -90,6 +128,9 @@ export default async function FinesPage({
     ),
     apiFetch<Sections>('/library/desk/sections').catch(() => ({ classes: [] }) as Sections),
   ]);
+  const requests = await apiFetch<Requests>(
+    `/library/fines/requests?${qs({ ...f, status: rstatus, page: requestsView ? String(page) : '1', size: requestsView ? '50' : '1' })}`,
+  );
   const totals = Object.fromEntries([...others, [tab, report.totals] as const]) as Record<
     Tab,
     Report['totals']
@@ -104,8 +145,11 @@ export default async function FinesPage({
   };
   const here = `/library/fines?${qs({ ...keep, tab, ...(page > 1 ? { page: String(page) } : {}) })}`;
   const file = (format: 'xlsx' | 'pdf') =>
-    `/api/library-report?${qs({ report: 'fines', ...f, tab, format })}`;
-  const [, tabLabel, dayWord] = TABS.find(([v]) => v === tab)!;
+    requestsView
+      ? `/api/library-report?${qs({ report: 'waivers', ...f, status: rstatus, format })}`
+      : `/api/library-report?${qs({ report: 'fines', ...f, tab, format })}`;
+  const [, tabLabel, tabDayWord] = TABS.find(([v]) => v === tab)!;
+  const dayWord = requestsView ? 'Asked on' : tabDayWord;
   const filtered = Object.keys(keep).length > 0;
   const who = (x: Row) => (
     <>
@@ -159,6 +203,110 @@ export default async function FinesPage({
     </>
   );
 
+  const requestsSection = (
+    <section className="ep-card" id="list" aria-labelledby="lf-req-h">
+      <nav
+        className="ep-tabs"
+        aria-label="Waiver requests by state"
+        style={{ marginBottom: 'var(--sp-3)' }}
+      >
+        <div className="ep-tabs__list">
+          {REQUEST_STATES.map(([v, label]) => (
+            <a
+              key={v}
+              className="ep-tabs__tab"
+              href={`/library/fines?${qs({ ...keep, tab: 'requests', rstatus: v })}#list`}
+              aria-current={rstatus === v ? 'page' : undefined}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+      </nav>
+      <h2 id="lf-req-h" className="ep-card__title">
+        Waiver requests · {requests.total}
+      </h2>
+      <p className="ep-field__help" style={{ marginTop: 0 }}>
+        A fine at the fees counter is waived by the fees office: the library asks (Outstanding → Ask
+        to waive), the request follows Fee setup → Approval levels (or waits under Fees → Misc fees
+        → Requests), and the misc fee comes down once it is approved. Until then the fine stays due.
+      </p>
+      {requests.rows.length === 0 ? (
+        <p className="ep-field__help">No waiver asked for these filters.</p>
+      ) : (
+        <div
+          className="ep-table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label="Waiver requests (scrolls sideways)"
+        >
+          <table className="ep-table ep-table--dense">
+            <thead>
+              <tr>
+                <th scope="col">Asked on</th>
+                <th scope="col">Borrower</th>
+                <th scope="col">Book</th>
+                <th scope="col" className="is-numeric">
+                  Fine
+                </th>
+                <th scope="col" className="is-numeric">
+                  To waive
+                </th>
+                <th scope="col">Reason</th>
+                <th scope="col">State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.rows.map((x) => (
+                <tr key={x.id}>
+                  <td>
+                    {dmy(x.askedOn)}
+                    {x.askedBy ? <div className="ep-field__help">by {x.askedBy}</div> : null}
+                  </td>
+                  <td>
+                    {x.borrower}
+                    <div className="ep-field__help">
+                      {x.borrowerKind === 'student' ? 'Pupil' : 'Staff'} · {x.ref}
+                      {x.place ? ` · ${x.place}` : ''}
+                    </div>
+                  </td>
+                  <td>
+                    {x.title}
+                    <div className="ep-field__help">{x.accessionNo}</div>
+                  </td>
+                  <td className="is-numeric">{rupees(x.fine)}</td>
+                  <td className="is-numeric">{rupees(x.waive)}</td>
+                  <td>{x.reason}</td>
+                  <td>
+                    <Badge tone={REQUEST_TONE[x.status]}>
+                      {x.status === 'pending'
+                        ? 'Waiting'
+                        : x.status === 'approved'
+                          ? 'Approved'
+                          : 'Rejected'}
+                    </Badge>
+                    <div className="ep-field__help">
+                      {x.status === 'pending'
+                        ? `with ${x.waitingWith ?? 'the fees office (Fees → Misc fees → Requests)'}`
+                        : `${dmy(x.decidedOn)}${x.decidedBy ? ` by ${x.decidedBy}` : ''}${x.decisionNote ? ` · ${x.decisionNote}` : ''}`}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Pager
+        page={requests.page}
+        pages={requests.pages}
+        hrefFor={(n) =>
+          `/library/fines?${qs({ ...keep, tab: 'requests', rstatus, page: String(n) })}#list`
+        }
+      />
+    </section>
+  );
+
   return (
     <>
       <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: t('title') }]} />
@@ -202,13 +350,13 @@ export default async function FinesPage({
         </div>
       ) : null}
 
-      <div className="ep-dash-kpis ep-dash-kpis--3">
+      <div className="ep-dash-kpis ep-dash-kpis--4">
         {TABS.map(([v, label]) => (
           <a
             key={v}
             href={`/library/fines?${qs({ ...keep, tab: v })}#list`}
             className="ep-tile-link"
-            aria-current={tab === v ? 'true' : undefined}
+            aria-current={!requestsView && tab === v ? 'true' : undefined}
             aria-label={`${label}: ${rupees(totals[v].amount)}, ${String(totals[v].rows)} fines. Show the list`}
           >
             <Card title={label}>
@@ -220,11 +368,25 @@ export default async function FinesPage({
             </Card>
           </a>
         ))}
+        <a
+          href={`/library/fines?${qs({ ...keep, tab: 'requests', rstatus: 'pending' })}#list`}
+          className="ep-tile-link"
+          aria-current={requestsView ? 'true' : undefined}
+          aria-label={`Waiver requests: ${String(requests.pending)} waiting with the fees office. Show the list`}
+        >
+          <Card title="Waiver requests">
+            <div className="ep-cdash__big">{requests.pending}</div>
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              waiting with the fees office
+            </p>
+          </Card>
+        </a>
       </div>
 
       <div className="ep-filter-band">
         <form method="get" action="/library/fines" className="ep-dlog__filters">
-          <input type="hidden" name="tab" value={tab} />
+          <input type="hidden" name="tab" value={requestsView ? 'requests' : tab} />
+          {requestsView ? <input type="hidden" name="rstatus" value={rstatus} /> : null}
           <InputField
             id="lf-from"
             name="from"
@@ -270,234 +432,241 @@ export default async function FinesPage({
           </div>
           <Button type="submit">Show</Button>
           {filtered ? (
-            <a className="ep-btn ep-btn--secondary" href={`/library/fines?tab=${tab}`}>
+            <a
+              className="ep-btn ep-btn--secondary"
+              href={`/library/fines?tab=${requestsView ? 'requests' : tab}`}
+            >
               Clear
             </a>
           ) : null}
         </form>
       </div>
 
-      <section className="ep-card" id="list" aria-labelledby="lf-list-h">
-        <h2 id="lf-list-h" className="ep-card__title">
-          {tabLabel} · {report.total} · {rupees(report.totals.amount)}
-        </h2>
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          {tab === 'outstanding'
-            ? 'A late fine is a misc fee on the pupil (the parent sees it) or the staff member, paid at the fees counter. To waive one there, ask the fees office: it decides under Fee setup → Approval levels.'
-            : tab === 'collected'
-              ? 'Paid at the fees counter on misc receipts; old fines collected at the library before are listed too.'
-              : 'Waived at the desk when the book came back (with the reason and who waived it), or by the fees office.'}
-        </p>
-        {acting ? (
-          <div className="ep-fine-act" id="lf-act" role="region" aria-labelledby="lf-act-h">
-            <h3 id="lf-act-h" className="ep-fine-act__title">
-              {acting.how === 'library'
-                ? 'Waive an old fine'
-                : 'Ask the fees office to waive a late fine'}
-            </h3>
-            <p className="ep-field__help" style={{ marginTop: 0 }}>
-              {acting.borrower} ({acting.ref}) · {acting.title} ({acting.accessionNo}) ·{' '}
-              {acting.daysLate} days late · {rupees(acting.due)} due.{' '}
-              {acting.how === 'library'
-                ? 'The waiver is kept with the reason and your name.'
-                : 'The fine stays due until the fees office approves; then the misc fee comes down.'}
-            </p>
-            <form
-              action={acting.how === 'library' ? waiveOldFine : askFineWaiver}
-              className="ep-dlog__filters"
-            >
-              {backField}
-              {acting.how === 'library' ? (
-                <input type="hidden" name="loanId" value={acting.loanId} />
-              ) : (
-                <input type="hidden" name="chargeId" value={acting.chargeId ?? ''} />
-              )}
-              {waiveFields(act, acting.due)}
-              <Button type="submit" variant="secondary">
-                {acting.how === 'library' ? 'Waive the fine' : 'Ask the fees office'}
-              </Button>
-              <a className="ep-btn ep-btn--secondary" href={`${here}#list`}>
-                Cancel
-              </a>
-            </form>
-          </div>
-        ) : null}
-        {report.rows.length === 0 ? (
-          <p className="ep-field__help">
-            {tab === 'outstanding' && !filtered
-              ? 'No fine is due.'
-              : 'Nothing here for these filters.'}
+      {requestsView ? (
+        requestsSection
+      ) : (
+        <section className="ep-card" id="list" aria-labelledby="lf-list-h">
+          <h2 id="lf-list-h" className="ep-card__title">
+            {tabLabel} · {report.total} · {rupees(report.totals.amount)}
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {tab === 'outstanding'
+              ? 'A late fine is a misc fee on the pupil (the parent sees it) or the staff member, paid at the fees counter. To waive one there, ask the fees office: it decides under Fee setup → Approval levels.'
+              : tab === 'collected'
+                ? 'Paid at the fees counter on misc receipts; old fines collected at the library before are listed too.'
+                : 'Waived at the desk when the book came back (with the reason and who waived it), or by the fees office.'}
           </p>
-        ) : (
-          <div
-            className="ep-table-wrap"
-            tabIndex={0}
-            role="region"
-            aria-label={`${tabLabel} fines (scrolls sideways)`}
-          >
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">{dayWord}</th>
-                  <th scope="col">Borrower</th>
-                  <th scope="col">Book</th>
-                  {tab === 'outstanding' ? (
-                    <>
-                      <th scope="col">Due on</th>
-                      <th scope="col" className="is-numeric">
-                        Fine
-                      </th>
-                      <th scope="col" className="is-numeric">
-                        Due
-                      </th>
-                      <th scope="col">State</th>
-                      <th scope="col">
-                        <span className="ep-sr-only">Actions</span>
-                      </th>
-                    </>
-                  ) : tab === 'collected' ? (
-                    <>
-                      <th scope="col" className="is-numeric">
-                        Amount
-                      </th>
-                      <th scope="col">Receipt</th>
-                      <th scope="col">Received by</th>
-                      <th scope="col">Where</th>
-                    </>
-                  ) : (
-                    <>
-                      <th scope="col" className="is-numeric">
-                        Fine
-                      </th>
-                      <th scope="col" className="is-numeric">
-                        Waived
-                      </th>
-                      <th scope="col">Reason</th>
-                      <th scope="col">By</th>
-                      <th scope="col">Where</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {report.rows.map((x, i) => (
-                  <tr key={`${x.how}-${x.loanId}-${x.chargeId ?? ''}-${String(i)}`}>
-                    <td>{dmy(x.day)}</td>
-                    <td>{who(x)}</td>
-                    <td>{book(x)}</td>
+          {acting ? (
+            <div className="ep-fine-act" id="lf-act" role="region" aria-labelledby="lf-act-h">
+              <h3 id="lf-act-h" className="ep-fine-act__title">
+                {acting.how === 'library'
+                  ? 'Waive an old fine'
+                  : 'Ask the fees office to waive a late fine'}
+              </h3>
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                {acting.borrower} ({acting.ref}) · {acting.title} ({acting.accessionNo}) ·{' '}
+                {acting.daysLate} days late · {rupees(acting.due)} due.{' '}
+                {acting.how === 'library'
+                  ? 'The waiver is kept with the reason and your name.'
+                  : 'The fine stays due until the fees office approves; then the misc fee comes down. Follow it under Waiver requests.'}
+              </p>
+              <form
+                action={acting.how === 'library' ? waiveOldFine : askFineWaiver}
+                className="ep-dlog__filters"
+              >
+                {backField}
+                {acting.how === 'library' ? (
+                  <input type="hidden" name="loanId" value={acting.loanId} />
+                ) : (
+                  <input type="hidden" name="chargeId" value={acting.chargeId ?? ''} />
+                )}
+                {waiveFields(act, acting.due)}
+                <Button type="submit" variant="secondary">
+                  {acting.how === 'library' ? 'Waive the fine' : 'Ask the fees office'}
+                </Button>
+                <a className="ep-btn ep-btn--secondary" href={`${here}#list`}>
+                  Cancel
+                </a>
+              </form>
+            </div>
+          ) : null}
+          {report.rows.length === 0 ? (
+            <p className="ep-field__help">
+              {tab === 'outstanding' && !filtered
+                ? 'No fine is due.'
+                : 'Nothing here for these filters.'}
+            </p>
+          ) : (
+            <div
+              className="ep-table-wrap"
+              tabIndex={0}
+              role="region"
+              aria-label={`${tabLabel} fines (scrolls sideways)`}
+            >
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">{dayWord}</th>
+                    <th scope="col">Borrower</th>
+                    <th scope="col">Book</th>
                     {tab === 'outstanding' ? (
                       <>
-                        <td>
-                          {dmy(x.dueOn)}
-                          <div className="ep-field__help">{x.daysLate} days late</div>
-                        </td>
-                        <td className="is-numeric">{rupees(x.fine)}</td>
-                        <td className="is-numeric">
-                          <strong>{rupees(x.due)}</strong>
-                          {x.amount ? (
-                            <div className="ep-field__help">{rupees(x.amount)} paid</div>
-                          ) : null}
-                        </td>
-                        <td>
-                          <Badge
-                            tone={
-                              x.how === 'library'
-                                ? 'danger'
-                                : x.state.startsWith('The fees office')
-                                  ? 'info'
-                                  : 'warning'
-                            }
-                          >
-                            {x.state}
-                          </Badge>
-                        </td>
-                        <td>
-                          <div className="ep-fine-acts">
-                            {x.how === 'library' ? (
-                              <form action={sendFinesToCounter}>
-                                {backField}
-                                <input type="hidden" name="loanId" value={x.loanId} />
-                                <Button type="submit" size="sm">
-                                  Send to the fees counter
-                                </Button>
-                              </form>
-                            ) : null}
-                            {x.how === 'library' ||
-                            (x.chargeId && !x.state.startsWith('The fees office')) ? (
-                              <a
-                                className="ep-btn ep-btn--ghost ep-btn--sm"
-                                href={`${withAct(x.how === 'library' ? `l${x.loanId}` : `c${x.chargeId ?? ''}`)}#lf-act`}
-                              >
-                                {x.how === 'library' ? 'Waive' : 'Ask to waive'}
-                              </a>
-                            ) : null}
-                          </div>
-                        </td>
+                        <th scope="col">Due on</th>
+                        <th scope="col" className="is-numeric">
+                          Fine
+                        </th>
+                        <th scope="col" className="is-numeric">
+                          Due
+                        </th>
+                        <th scope="col">State</th>
+                        <th scope="col">
+                          <span className="ep-sr-only">Actions</span>
+                        </th>
                       </>
                     ) : tab === 'collected' ? (
                       <>
-                        <td className="is-numeric">{rupees(x.amount)}</td>
-                        <td>
-                          {x.receiptNo ?? '—'}
-                          {x.mode ? (
-                            <div className="ep-field__help">{x.mode.toUpperCase()}</div>
-                          ) : null}
-                        </td>
-                        <td>{x.by ?? '—'}</td>
-                        <td>{x.how === 'counter' ? 'Fees counter' : 'Library (old fine)'}</td>
+                        <th scope="col" className="is-numeric">
+                          Amount
+                        </th>
+                        <th scope="col">Receipt</th>
+                        <th scope="col">Received by</th>
+                        <th scope="col">Where</th>
                       </>
                     ) : (
                       <>
-                        <td className="is-numeric">{rupees(x.fine)}</td>
-                        <td className="is-numeric">{rupees(x.amount)}</td>
-                        <td>{x.reason ?? '—'}</td>
-                        <td>{x.by ?? '—'}</td>
-                        <td>{x.how === 'counter' ? 'Fees office' : 'Library'}</td>
+                        <th scope="col" className="is-numeric">
+                          Fine
+                        </th>
+                        <th scope="col" className="is-numeric">
+                          Waived
+                        </th>
+                        <th scope="col">Reason</th>
+                        <th scope="col">By</th>
+                        <th scope="col">Where</th>
                       </>
                     )}
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row" colSpan={3}>
-                    Total · {report.total} fine{report.total === 1 ? '' : 's'}
-                  </th>
-                  {tab === 'outstanding' ? (
-                    <>
-                      <td colSpan={2} />
-                      <td className="is-numeric">
-                        <strong>{rupees(report.totals.amount)}</strong>
-                      </td>
-                      <td colSpan={2} />
-                    </>
-                  ) : tab === 'collected' ? (
-                    <>
-                      <td className="is-numeric">
-                        <strong>{rupees(report.totals.amount)}</strong>
-                      </td>
-                      <td colSpan={3} />
-                    </>
-                  ) : (
-                    <>
-                      <td />
-                      <td className="is-numeric">
-                        <strong>{rupees(report.totals.amount)}</strong>
-                      </td>
-                      <td colSpan={3} />
-                    </>
-                  )}
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-        <Pager
-          page={report.page}
-          pages={report.pages}
-          hrefFor={(n) => `/library/fines?${qs({ ...keep, tab, page: String(n) })}#list`}
-        />
-      </section>
+                </thead>
+                <tbody>
+                  {report.rows.map((x, i) => (
+                    <tr key={`${x.how}-${x.loanId}-${x.chargeId ?? ''}-${String(i)}`}>
+                      <td>{dmy(x.day)}</td>
+                      <td>{who(x)}</td>
+                      <td>{book(x)}</td>
+                      {tab === 'outstanding' ? (
+                        <>
+                          <td>
+                            {dmy(x.dueOn)}
+                            <div className="ep-field__help">{x.daysLate} days late</div>
+                          </td>
+                          <td className="is-numeric">{rupees(x.fine)}</td>
+                          <td className="is-numeric">
+                            <strong>{rupees(x.due)}</strong>
+                            {x.amount ? (
+                              <div className="ep-field__help">{rupees(x.amount)} paid</div>
+                            ) : null}
+                          </td>
+                          <td>
+                            <Badge
+                              tone={
+                                x.how === 'library'
+                                  ? 'danger'
+                                  : x.state.startsWith('The fees office')
+                                    ? 'info'
+                                    : 'warning'
+                              }
+                            >
+                              {x.state}
+                            </Badge>
+                          </td>
+                          <td>
+                            <div className="ep-fine-acts">
+                              {x.how === 'library' ? (
+                                <form action={sendFinesToCounter}>
+                                  {backField}
+                                  <input type="hidden" name="loanId" value={x.loanId} />
+                                  <Button type="submit" size="sm">
+                                    Send to the fees counter
+                                  </Button>
+                                </form>
+                              ) : null}
+                              {x.how === 'library' ||
+                              (x.chargeId && !x.state.startsWith('The fees office')) ? (
+                                <a
+                                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                                  href={`${withAct(x.how === 'library' ? `l${x.loanId}` : `c${x.chargeId ?? ''}`)}#lf-act`}
+                                >
+                                  {x.how === 'library' ? 'Waive' : 'Ask to waive'}
+                                </a>
+                              ) : null}
+                            </div>
+                          </td>
+                        </>
+                      ) : tab === 'collected' ? (
+                        <>
+                          <td className="is-numeric">{rupees(x.amount)}</td>
+                          <td>
+                            {x.receiptNo ?? '—'}
+                            {x.mode ? (
+                              <div className="ep-field__help">{x.mode.toUpperCase()}</div>
+                            ) : null}
+                          </td>
+                          <td>{x.by ?? '—'}</td>
+                          <td>{x.how === 'counter' ? 'Fees counter' : 'Library (old fine)'}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="is-numeric">{rupees(x.fine)}</td>
+                          <td className="is-numeric">{rupees(x.amount)}</td>
+                          <td>{x.reason ?? '—'}</td>
+                          <td>{x.by ?? '—'}</td>
+                          <td>{x.how === 'counter' ? 'Fees office' : 'Library'}</td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th scope="row" colSpan={3}>
+                      Total · {report.total} fine{report.total === 1 ? '' : 's'}
+                    </th>
+                    {tab === 'outstanding' ? (
+                      <>
+                        <td colSpan={2} />
+                        <td className="is-numeric">
+                          <strong>{rupees(report.totals.amount)}</strong>
+                        </td>
+                        <td colSpan={2} />
+                      </>
+                    ) : tab === 'collected' ? (
+                      <>
+                        <td className="is-numeric">
+                          <strong>{rupees(report.totals.amount)}</strong>
+                        </td>
+                        <td colSpan={3} />
+                      </>
+                    ) : (
+                      <>
+                        <td />
+                        <td className="is-numeric">
+                          <strong>{rupees(report.totals.amount)}</strong>
+                        </td>
+                        <td colSpan={3} />
+                      </>
+                    )}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+          <Pager
+            page={report.page}
+            pages={report.pages}
+            hrefFor={(n) => `/library/fines?${qs({ ...keep, tab, page: String(n) })}#list`}
+          />
+        </section>
+      )}
     </>
   );
 }

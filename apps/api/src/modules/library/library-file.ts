@@ -13,6 +13,57 @@ export type FileCell = string | number | null | undefined;
 const ist = (d: Date) => new Date(d.getTime() + 330 * 60_000);
 const dmy = (s: string) => `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`;
 
+/** A sheet of a report file: its columns and rows; `headings` are rows written across the sheet in bold. */
+export interface FileSheet {
+  name: string;
+  columns: FileColumn[];
+  rows: FileCell[][];
+  totals?: FileCell[];
+  /** the rows (by position) that are a heading across the sheet: their first cell is the words */
+  headings?: number[];
+}
+
+const cellOf = (c: FileColumn, v: FileCell) =>
+  v === null || v === undefined || v === ''
+    ? null
+    : c.type === 'date' && /^\d{4}-\d{2}-\d{2}/.test(String(v))
+      ? new Date(`${String(v).slice(0, 10)}T00:00:00Z`)
+      : c.type === 'number' || c.type === 'money'
+        ? Number(v)
+        : v;
+
+function addSheet(wb: ExcelJS.Workbook, x: FileSheet) {
+  // a sheet's name may not have * ? : \ / [ ] and is at most 31 characters
+  const ws = wb.addWorksheet(
+    x.name
+      .replace(/[*?:\\/[\]]/g, ' -')
+      .replace(/\s+/g, ' ')
+      .slice(0, 31),
+  );
+  ws.columns = x.columns.map((c) => ({
+    header: c.label,
+    width: c.width ? c.width * 7 : c.type === 'text' || !c.type ? 24 : 12,
+  }));
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  if (!x.headings?.length)
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: x.columns.length } };
+  const headings = new Set(x.headings ?? []);
+  x.rows.forEach((r, i) => {
+    if (headings.has(i)) {
+      const row = ws.addRow([r[0] ?? '']);
+      row.font = { bold: true };
+      ws.mergeCells(row.number, 1, row.number, x.columns.length);
+      row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF6' } };
+    } else ws.addRow(x.columns.map((c, j) => cellOf(c, r[j])));
+  });
+  if (x.totals) ws.addRow(x.columns.map((c, i) => cellOf(c, x.totals![i]))).font = { bold: true };
+  x.columns.forEach((c, i) => {
+    if (c.type === 'date') ws.getColumn(i + 1).numFmt = 'dd-mm-yyyy';
+    if (c.type === 'money') ws.getColumn(i + 1).numFmt = '#,##0.00';
+  });
+}
+
 /**
  * A library report as Excel (the rows, then "About this report": the school, when, who, the filters in
  * words) or as a PDF (A4 landscape, the school band, the filters under the title); made at once.
@@ -30,6 +81,8 @@ export async function libraryFile(x: {
   rows: FileCell[][];
   /** a last line of totals, by column (empty where none) */
   totals?: FileCell[];
+  /** more sheets after the first (Excel only), e.g. each person's books under a heading row */
+  more?: FileSheet[];
 }): Promise<{ filename: string; contentType: string; base64: string; rows: number }> {
   const stamp = ist(new Date());
   const day = stamp.toISOString().slice(0, 10);
@@ -74,34 +127,8 @@ export async function libraryFile(x: {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'EduPro';
   wb.created = new Date();
-  // a sheet's name may not have * ? : \ / [ ] and is at most 31 characters
-  const ws = wb.addWorksheet(
-    x.name
-      .replace(/[*?:\\/[\]]/g, ' -')
-      .replace(/\s+/g, ' ')
-      .slice(0, 31),
-  );
-  ws.columns = x.columns.map((c) => ({
-    header: c.label,
-    width: c.width ? c.width * 7 : c.type === 'text' || !c.type ? 24 : 12,
-  }));
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: 'frozen', ySplit: 1 }];
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: x.columns.length } };
-  const cell = (c: FileColumn, v: FileCell) =>
-    v === null || v === undefined || v === ''
-      ? null
-      : c.type === 'date' && /^\d{4}-\d{2}-\d{2}/.test(String(v))
-        ? new Date(`${String(v).slice(0, 10)}T00:00:00Z`)
-        : c.type === 'number' || c.type === 'money'
-          ? Number(v)
-          : v;
-  for (const r of x.rows) ws.addRow(x.columns.map((c, i) => cell(c, r[i])));
-  if (x.totals) ws.addRow(x.columns.map((c, i) => cell(c, x.totals![i]))).font = { bold: true };
-  x.columns.forEach((c, i) => {
-    if (c.type === 'date') ws.getColumn(i + 1).numFmt = 'dd-mm-yyyy';
-    if (c.type === 'money') ws.getColumn(i + 1).numFmt = '#,##0.00';
-  });
+  addSheet(wb, { name: x.name, columns: x.columns, rows: x.rows, totals: x.totals });
+  for (const m of x.more ?? []) addSheet(wb, m);
   const about = wb.addWorksheet('About this report');
   (
     [

@@ -5,7 +5,13 @@ import { DbService } from '../../common/db/db.service';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { borrowerLateral, likeEscape } from './library-borrower-sql';
 import { libraryFile, type FileColumn, type FileCell } from './library-file';
-import type { FinesExportDto, FinesQueryDto } from './library.dto';
+import { WAITING_WITH } from '../fees/fee-approval';
+import type {
+  FinesExportDto,
+  FinesQueryDto,
+  WaiverRequestsExportDto,
+  WaiverRequestsQueryDto,
+} from './library.dto';
 
 type Tab = 'outstanding' | 'collected' | 'waived';
 type Row = Record<string, string | number | null>;
@@ -290,6 +296,164 @@ export class LibraryFinesService {
         columns,
         rows: cells,
         totals,
+      });
+    });
+  }
+
+  // ---- the waivers asked of the fees office ----------------------------------------------------------
+  private async requestRows(c: PoolClient, q: WaiverRequestsQueryDto, limit: number, offset = 0) {
+    const args: unknown[] = [];
+    const arg = (v: unknown) => {
+      args.push(v);
+      return `$${String(args.length)}`;
+    };
+    const where: string[] = [`r.kind IN ('pupil_change', 'close')`];
+    if (q.status !== 'all') where.push(`r.status = ${arg(q.status)}`);
+    if (q.from) where.push(`r.requested_at::date >= ${arg(q.from)}::date`);
+    if (q.to) where.push(`r.requested_at::date <= ${arg(q.to)}::date`);
+    if (q.borrower) where.push(`ch.borrower_kind = ${arg(q.borrower)}::library_borrower`);
+    if (q.classId) where.push(`b.class_id = ${arg(q.classId)}::bigint`);
+    if (q.sectionId) where.push(`b.section_id = ${arg(q.sectionId)}::bigint`);
+    if (q.q) {
+      const p = arg(likeEscape(q.q));
+      where.push(
+        `(b.name ILIKE ${p} OR b.ref ILIKE ${p} OR t.title ILIKE ${p} OR x.accession_no ILIKE ${p} OR r.reason ILIKE ${p})`,
+      );
+    }
+    const n = args.length;
+    const r = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- fixed fragments of this service; values are bound
+      `SELECT r.id::text, r.requested_at::date::text AS asked_on, r.status, r.kind, r.reason, r.decision_note,
+              r.decided_at::date::text AS decided_on, du.display_name AS decided_by, ru.display_name AS asked_by,
+              ${WAITING_WITH('r.workflow_instance_id')} AS waiting_with, ch.id::text AS charge_id, ch.amount AS fine,
+              CASE WHEN r.kind = 'pupil_change'
+                   THEN COALESCE((r.payload->>'fromAmount')::numeric, ch.amount) - (r.payload->>'amount')::numeric
+                   ELSE GREATEST(ch.amount - COALESCE(ml.paid, 0), 0) END AS waive,
+              ch.loan_id::text, ch.borrower_kind::text AS bkind, b.name, b.ref, b.place, t.title, x.accession_no,
+              count(*) OVER () AS __total,
+              count(*) FILTER (WHERE r.status = 'pending') OVER () AS __pending
+         FROM misc_fee_requests r
+         JOIN library_charges ch ON ch.misc_fee_id = r.misc_fee_id AND ch.kind = 'late'
+         LEFT JOIN misc_fee_students ml ON ml.id = ch.misc_line_id
+         JOIN library_copies x ON x.id = ch.copy_id JOIN library_titles t ON t.id = x.title_id
+         ${borrowerLateral('ch.borrower_kind::text', 'ch.borrower_id')}
+         LEFT JOIN users ru ON ru.id = r.requested_by LEFT JOIN users du ON du.id = r.decided_by
+        WHERE ${where.join(' AND ')}
+        ORDER BY r.requested_at DESC, r.id DESC LIMIT $${n + 1} OFFSET $${n + 2}`,
+      [...args, limit, offset],
+    );
+    return {
+      rows: r.rows.map((x) => ({
+        id: String(x.id),
+        askedOn: String(x.asked_on),
+        askedBy: x.asked_by as string | null,
+        status: String(x.status) as 'pending' | 'approved' | 'rejected',
+        reason: String(x.reason),
+        waitingWith: x.waiting_with as string | null,
+        decidedOn: x.decided_on as string | null,
+        decidedBy: x.decided_by as string | null,
+        decisionNote: x.decision_note as string | null,
+        chargeId: String(x.charge_id),
+        loanId: String(x.loan_id),
+        borrowerKind: String(x.bkind),
+        borrower: String(x.name ?? ''),
+        ref: String(x.ref ?? ''),
+        place: x.place as string | null,
+        title: String(x.title),
+        accessionNo: String(x.accession_no),
+        fine: round(Number(x.fine ?? 0)),
+        waive: round(Number(x.waive ?? 0)),
+      })),
+      total: Number(r.rows[0]?.__total ?? 0),
+      pending: Number(r.rows[0]?.__pending ?? 0),
+    };
+  }
+
+  async requests(ctx: RequestContext, q: WaiverRequestsQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const page = await this.requestRows(c, q, q.size, (q.page - 1) * q.size);
+      // the pending ones whatever the filters, for the page's figure
+      const pending = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM misc_fee_requests r
+           JOIN library_charges ch ON ch.misc_fee_id = r.misc_fee_id AND ch.kind = 'late'
+          WHERE r.kind IN ('pupil_change', 'close') AND r.status = 'pending'`,
+      );
+      return {
+        rows: page.rows,
+        total: page.total,
+        page: q.page,
+        pages: Math.max(1, Math.ceil(page.total / q.size)),
+        pending: Number(pending.rows[0]!.n),
+      };
+    });
+  }
+
+  async requestsExport(ctx: RequestContext, q: WaiverRequestsExportDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { rows } = await this.requestRows(c, q, 20000);
+      const school = (
+        await c.query<{ name: string }>(
+          `SELECT name FROM schools WHERE id = app.current_school_id()`,
+        )
+      ).rows[0]!.name;
+      const STATUS: Record<string, string> = {
+        pending: 'Waiting',
+        approved: 'Approved',
+        rejected: 'Rejected',
+      };
+      const words =
+        [
+          q.status !== 'all' ? STATUS[q.status] : null,
+          q.from || q.to ? `Asked ${q.from ?? '…'} to ${q.to ?? '…'}` : null,
+          q.borrower ? (q.borrower === 'student' ? 'Pupils' : 'Staff') : null,
+          q.classId || q.sectionId ? 'one class or section' : null,
+          q.q ? `search "${q.q}"` : null,
+        ]
+          .filter(Boolean)
+          .join('; ') || 'Every request';
+      await this.audit.stage(ctx, c, {
+        action: 'library.fines.requests.export',
+        entityType: 'misc_fee_requests',
+        entityId: requireTenant(ctx).schoolId,
+        after: { format: q.format, rows: rows.length, words },
+      });
+      return libraryFile({
+        format: q.format,
+        name: 'Library fine waiver requests',
+        slug: 'Library-fine-waiver-requests',
+        school,
+        by: ctx.user.displayName,
+        words,
+        columns: [
+          { label: 'Asked on', type: 'date' },
+          { label: 'Borrower' },
+          { label: 'Adm./emp. no.', width: 1.6 },
+          { label: 'Book' },
+          { label: 'Book no.', width: 1.4 },
+          { label: 'Fine (₹)', type: 'money' },
+          { label: 'To waive (₹)', type: 'money' },
+          { label: 'Reason', width: 2.6 },
+          { label: 'Asked by', width: 1.6 },
+          { label: 'State', width: 1.2 },
+          { label: 'Waiting with / decided by', width: 2.2 },
+          { label: 'Decided on', type: 'date' },
+          { label: 'Decision note', width: 2.2 },
+        ],
+        rows: rows.map((r): FileCell[] => [
+          r.askedOn,
+          r.borrower,
+          r.ref,
+          r.title,
+          r.accessionNo,
+          r.fine,
+          r.waive,
+          r.reason,
+          r.askedBy,
+          STATUS[r.status] ?? r.status,
+          r.status === 'pending' ? r.waitingWith : r.decidedBy,
+          r.decidedOn,
+          r.decisionNote,
+        ]),
       });
     });
   }

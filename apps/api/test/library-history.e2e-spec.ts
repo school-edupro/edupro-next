@@ -325,6 +325,31 @@ describe('library circulation and borrowers history (e2e)', () => {
     // the totals: borrowed 4, holding 2
     expect(ps.getRow(4).getCell(5).value).toBe(4);
     expect(ps.getRow(4).getCell(8).value).toBe(2);
+    // the second sheet: each pupil's books under a heading row
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(pupils.base64, 'base64') as unknown as ArrayBuffer);
+    const books = wb.getWorksheet('Books by pupil')!;
+    expect(books.getRow(1).getCell(1).value).toBe('Book no.');
+    expect(String(books.getRow(2).getCell(1).value)).toBe(
+      `Asha Reader · ${s}-a · Class VI-A · 2 books`,
+    );
+    expect(books.getRow(3).getCell(1).value).toBe('B00001');
+    expect(books.getRow(3).getCell(9).value).toBe('Returned');
+    expect(books.getRow(3).getCell(11).value).toBe('Paid at the fees counter');
+    expect(books.getRow(4).getCell(1).value).toBe('B00002');
+    expect(String(books.getRow(5).getCell(1).value)).toBe(
+      `Bina Reader · ${s}-b · Class VI-B · 2 books`,
+    );
+    expect(books.rowCount).toBe(7);
+    // staff over October only: Meena's one book
+    const staffX = await fileOf(
+      `/library/history/borrowers/export?kind=employee&format=xlsx&from=${day(-3)}&to=${day(0)}`,
+    );
+    const swb = new ExcelJS.Workbook();
+    await swb.xlsx.load(Buffer.from(staffX.base64, 'base64') as unknown as ArrayBuffer);
+    const staffBooks = swb.getWorksheet('Books by staff member')!;
+    expect(staffBooks.rowCount).toBe(3);
+    expect(staffBooks.getRow(3).getCell(1).value).toBe('B00004');
     const staff = await fileOf('/library/history/borrowers/export?kind=employee&format=pdf');
     expect(staff.filename).toBe(`Library-staff-books-${day(0)}.pdf`);
     const one = await fileOf(`/library/history/borrowers/student/${ids.a!}/export?format=xlsx`);

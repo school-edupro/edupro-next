@@ -5,7 +5,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { borrowerLateral, likeEscape } from './library-borrower-sql';
-import { libraryFile, type FileCell, type FileColumn } from './library-file';
+import { libraryFile, type FileCell, type FileColumn, type FileSheet } from './library-file';
 import type {
   BorrowerHistoryDto,
   BorrowerHistoryExportDto,
@@ -397,7 +397,10 @@ export class LibraryHistoryService {
         entityId: requireTenant(ctx).schoolId,
         after: { kind: q.kind, format: q.format, rows: rows.length, words },
       });
+      // Excel: a second sheet with each person's books held between the days, a heading row each
+      const more = q.format === 'xlsx' ? [await this.booksSheet(c, q, rows, pupils)] : undefined;
       return libraryFile({
+        more,
         format: q.format,
         name: pupils ? 'Library: pupils and their books' : 'Library: staff and their books',
         slug: `Library-${pupils ? 'pupils' : 'staff'}-books`,
@@ -448,6 +451,75 @@ export class LibraryHistoryService {
         ],
       });
     });
+  }
+
+  /** Each listed person's books held between the days (every loan when none), under a heading row. */
+  private async booksSheet(
+    c: PoolClient,
+    q: BorrowersQueryDto,
+    people: Array<{ id: string; name: string; ref: string; place: string | null }>,
+    pupils: boolean,
+  ): Promise<FileSheet> {
+    const r = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- fixed expressions of this service; values are bound
+      `SELECT l.borrower_id::text AS bid, x.accession_no, t.title, t.author, l.issued_on::text AS issued_on,
+              l.due_on::text AS due_on, l.renewed, l.returned_on::text AS returned_on,
+              GREATEST(0, COALESCE(l.returned_on, CURRENT_DATE) - l.due_on) AS days_late,
+              l.fine_amount, ${FINE_STATE} AS fine_state, ${OUTCOME} AS outcome
+         FROM library_loans l
+         JOIN library_copies x ON x.id = l.copy_id JOIN library_titles t ON t.id = x.title_id
+         ${LOAN_CHARGES}
+        WHERE l.borrower_kind = $1::library_borrower AND l.borrower_id = ANY($2::bigint[])
+          AND ($3::date IS NULL OR l.returned_on IS NULL OR l.returned_on >= $3::date)
+          AND ($4::date IS NULL OR l.issued_on <= $4::date)
+        ORDER BY l.issued_on, l.id`,
+      [q.kind, people.map((p) => p.id), q.from ?? null, q.to ?? null],
+    );
+    const byPerson = new Map<string, Array<Record<string, unknown>>>();
+    for (const x of r.rows)
+      byPerson.set(String(x.bid), [...(byPerson.get(String(x.bid)) ?? []), x]);
+    const rows: FileCell[][] = [];
+    const headings: number[] = [];
+    for (const p of people) {
+      const loans = byPerson.get(p.id) ?? [];
+      if (!loans.length) continue;
+      headings.push(rows.length);
+      rows.push([
+        `${p.name} · ${p.ref}${p.place ? ` · ${p.place}` : ''} · ${String(loans.length)} book${loans.length === 1 ? '' : 's'}`,
+      ]);
+      for (const x of loans)
+        rows.push([
+          x.accession_no as string,
+          x.title as string,
+          x.author as string | null,
+          x.issued_on as string,
+          x.due_on as string,
+          Number(x.renewed ?? 0) || null,
+          x.returned_on as string | null,
+          Number(x.days_late ?? 0) || null,
+          x.outcome as string,
+          Number(x.fine_amount ?? 0) || null,
+          x.fine_state as string | null,
+        ]);
+    }
+    return {
+      name: pupils ? 'Books by pupil' : 'Books by staff member',
+      columns: [
+        { label: 'Book no.', width: 1.4 },
+        { label: 'Book' },
+        { label: 'Author', width: 2 },
+        { label: 'Issued on', type: 'date' },
+        { label: 'Due on', type: 'date' },
+        { label: 'Renewed', type: 'number', width: 1.4 },
+        { label: 'Returned on', type: 'date' },
+        { label: 'Days late', type: 'number', width: 1.2 },
+        { label: 'How it ended', width: 1.8 },
+        { label: 'Fine (₹)', type: 'money' },
+        { label: 'Fine now', width: 2.4 },
+      ],
+      rows,
+      headings,
+    };
   }
 
   // ---- one borrower ------------------------------------------------------------------------------

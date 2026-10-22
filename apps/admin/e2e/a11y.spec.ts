@@ -222,6 +222,7 @@ const PAGES = [
   '/library/history/student/12261',
   '/library/history/student/12261?from=2026-08-01&to=2026-08-31',
   '/library/fines',
+  '/library/fines?tab=requests&rstatus=pending',
   '/library/fines?tab=collected&from=2026-04-01',
   '/library/fines?tab=waived&borrower=student',
   '/library/fines?tab=outstanding&act=l302',

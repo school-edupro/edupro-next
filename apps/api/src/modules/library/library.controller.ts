@@ -41,6 +41,8 @@ import {
   StockItemsQueryDto,
   StockVerifyDto,
   WaiveRequestDto,
+  WaiverRequestsExportDto,
+  WaiverRequestsQueryDto,
 } from './library.dto';
 import { LibraryFinesService } from './library-fines.service';
 import { LibraryHistoryService } from './library-history.service';
@@ -237,6 +239,22 @@ export class LibraryController {
   @RequirePermission(LIBRARY.circulate)
   finesExport(@ReqCtx() ctx: RequestContext, @Query() q: FinesExportDto) {
     return this.fines.export(ctx, q);
+  }
+
+  @Get('fines/requests')
+  @ApiOperation({
+    summary: 'The fine waivers asked of the fees office: waiting, approved or rejected',
+  })
+  @RequirePermission(LIBRARY.circulate)
+  fineRequests(@ReqCtx() ctx: RequestContext, @Query() q: WaiverRequestsQueryDto) {
+    return this.fines.requests(ctx, q);
+  }
+
+  @Get('fines/requests/export')
+  @ApiOperation({ summary: 'The waiver requests as filtered, as Excel or PDF' })
+  @RequirePermission(LIBRARY.circulate)
+  fineRequestsExport(@ReqCtx() ctx: RequestContext, @Query() q: WaiverRequestsExportDto) {
+    return this.fines.requestsExport(ctx, q);
   }
 
   @Post('fines/send')
