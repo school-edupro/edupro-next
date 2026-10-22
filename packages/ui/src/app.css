@@ -10103,3 +10103,28 @@ a.ep-pub-foot__item {
 .ep-sale__price {
   max-width: 9rem;
 }
+
+/* ---- Library staff: each library with its staff ---------------------------------------------------- */
+.ep-staff-libs {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+}
+.ep-staff-libs__list {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+.ep-staff-libs__list li {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-staff-libs__list form {
+  margin: 0;
+}

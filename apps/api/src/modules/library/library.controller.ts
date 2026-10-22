@@ -28,6 +28,7 @@ import {
   FinesSendDto,
   IssueDto,
   LIBRARY,
+  LibraryStaffDto,
   LoansQueryDto,
   RenewDto,
   ReturnDto,
@@ -48,6 +49,7 @@ import { LibraryFinesService } from './library-fines.service';
 import { LibraryHistoryService } from './library-history.service';
 import { LibraryStockService } from './library-stock.service';
 import { LibrarySalesService } from './library-sales.service';
+import { LibraryStaffService } from './library-staff.service';
 import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -69,7 +71,37 @@ export class LibraryController {
     private readonly history: LibraryHistoryService,
     private readonly stock: LibraryStockService,
     private readonly sales: LibrarySalesService,
+    private readonly staff: LibraryStaffService,
   ) {}
+
+  // ---- library staff: who works in which library (library round 3, part 3) -------------------------------
+  @Get('staff')
+  @ApiOperation({ summary: 'Each library with its staff; who may name them' })
+  @RequirePermission(LIBRARY.manage)
+  staffList(@ReqCtx() ctx: RequestContext) {
+    return this.staff.list(ctx);
+  }
+
+  @Get('staff/me')
+  @ApiOperation({ summary: 'The libraries the signed-in user works in (null: every library)' })
+  @RequirePermission(LIBRARY.view)
+  staffMe(@ReqCtx() ctx: RequestContext) {
+    return this.staff.me(ctx);
+  }
+
+  @Post('staff')
+  @ApiOperation({ summary: 'A staff member named on a library: they work only in their libraries' })
+  @RequirePermission(LIBRARY.manage)
+  staffAdd(@ReqCtx() ctx: RequestContext, @Body() body: LibraryStaffDto) {
+    return this.staff.add(ctx, body.libraryId, body.employeeId);
+  }
+
+  @Post('staff/remove')
+  @ApiOperation({ summary: 'A staff member taken off a library' })
+  @RequirePermission(LIBRARY.manage)
+  staffRemove(@ReqCtx() ctx: RequestContext, @Body() body: LibraryStaffDto) {
+    return this.staff.remove(ctx, body.libraryId, body.employeeId);
+  }
 
   // ---- the circulation desk ------------------------------------------------------------------------
   @Get('desk/borrowers')

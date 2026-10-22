@@ -542,3 +542,18 @@ waiver requests + the per-person sheet, 2 update from Excel, 3 library staff, 4 
   library/books/update/:id/apply`): each title once over what it has now, then each copy (its history
   says moved or edited), all or nothing; the update files so far. Status and the accession no. keep
   their own screens.
+- **Part 3 — library staff (done, migration 0221).** **Library staff** (`/library/staff`, a tab of
+  Library setup and in the Library menu): each library with its staff (employees), added from a list
+  and taken off (`GET/POST library/staff`, `POST library/staff/remove`); only someone who works in every
+  library names them (`library.staff_limited`). A signed-in user whose employee record is named on one or
+  more libraries works only in those, kept by the database: `app.my_libraries()` (the user's libraries,
+  worked out once a transaction; none: all) and restrictive row rules on libraries, shelves, accession
+  series, copies and subscriptions, so everything reached through a copy follows (the register and the
+  book page, adding and editing copies, Import, labels, accession corrections, the desk, fines and
+  charges, stock checks, sales, the history and reports). A book of another library: the desk says "It
+  belongs to … : issue it there" (sales: "sell it there"), a stock scan names its library, and it is taken
+  back at any desk (`withEveryLibrary` turns the rule off for the return's transaction; the borrower's
+  card and a class's books show every library's) with "Taken back at …, not at …: to be sent back there"
+  in its history. A cycle over every library made by a limited user covers their libraries; cycles of
+  other libraries are not listed. The library defaults are seeded only by someone who works in every
+  library. Pages a limited user opens say which libraries they work in (`GET library/staff/me`).

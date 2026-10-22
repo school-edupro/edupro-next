@@ -5,6 +5,7 @@ import { ClassReturns } from '@/components/library/desk/ClassReturns';
 import { IssueDesk } from '@/components/library/desk/IssueDesk';
 import { ReturnDesk } from '@/components/library/desk/ReturnDesk';
 import { Notice } from '@/components/Notice';
+import { LibraryScopeNote } from '@/components/library/LibraryScopeNote';
 import { apiFetch, getMe } from '@/lib/api';
 import type { DeskClass } from '@/lib/library-desk';
 
@@ -44,6 +45,7 @@ export default async function CirculationPage({
         description="Issue and return at the desk: find the borrower by admission no., employee code or name, scan the books; a book back late puts its fine at the fees counter."
       />
       <Notice params={sp} />
+      <LibraryScopeNote />
       <div className="ep-desk__tabs">
         <nav className="ep-tabs" aria-label="Circulation desk">
           <div className="ep-tabs__list">

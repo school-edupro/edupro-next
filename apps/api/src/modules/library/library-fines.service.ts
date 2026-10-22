@@ -174,7 +174,7 @@ export class LibraryFinesService {
       const unsent = (
         await c.query<{ n: string; amount: string }>(
           `SELECT count(*)::text AS n, COALESCE(sum(l.fine_amount - l.fine_waived), 0)::text AS amount
-             FROM library_loans l
+             FROM library_loans l JOIN library_copies x ON x.id = l.copy_id
             WHERE l.fine_amount > l.fine_waived AND l.fine_paid_on IS NULL AND l.fine_receipt_id IS NULL
               AND l.returned_on IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM library_charges ch WHERE ch.loan_id = l.id AND ch.kind = 'late')`,
@@ -376,6 +376,7 @@ export class LibraryFinesService {
       const pending = await c.query<{ n: string }>(
         `SELECT count(*)::text AS n FROM misc_fee_requests r
            JOIN library_charges ch ON ch.misc_fee_id = r.misc_fee_id AND ch.kind = 'late'
+           JOIN library_copies x ON x.id = ch.copy_id
           WHERE r.kind IN ('pupil_change', 'close') AND r.status = 'pending'`,
       );
       return {

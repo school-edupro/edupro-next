@@ -5,6 +5,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { DeskBookDto, DeskClassDto, DeskIssueDto, DeskReturnDto } from './library.dto';
+import { withEveryLibrary } from './library-staff.service';
 import { LibraryService, type LoanRow } from './library.service';
 
 type Kind = 'student' | 'employee';
@@ -160,7 +161,10 @@ export class LibraryDeskService {
   }
 
   async borrower(ctx: RequestContext, kind: Kind, id: string) {
-    return this.db.tenant(requireTenant(ctx), (c) => this.borrowerIn(c, kind, id));
+    // every book held, of any library (the limits count them all; any desk takes them back)
+    return this.db.tenant(requireTenant(ctx), (c) =>
+      withEveryLibrary(c, () => this.borrowerIn(c, kind, id)),
+    );
   }
 
   /**
@@ -168,82 +172,91 @@ export class LibraryDeskService {
    * its open loan with the borrower and the late fine to today.
    */
   async book(ctx: RequestContext, dto: DeskBookDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<{
-        id: string;
-        accession_no: string;
-        status: string;
-        title: string;
-        author: string | null;
-        subject: string | null;
-        material: string | null;
-        not_issued: boolean;
-        library: string;
-      }>(
-        `SELECT x.id::text, x.accession_no, x.status::text, t.title, t.author, s.name::text AS subject, m.name AS material,
-                (t.is_reference OR NOT COALESCE(m.issuable, true)) AS not_issued, l.name AS library
+    // a book of another library is found too: taken back here, or said to be issued at its library
+    return this.db.tenant(requireTenant(ctx), (c) =>
+      withEveryLibrary(c, () => this.bookIn(c, dto)),
+    );
+  }
+
+  private async bookIn(c: PoolClient, dto: DeskBookDto) {
+    const r = await c.query<{
+      id: string;
+      accession_no: string;
+      status: string;
+      title: string;
+      author: string | null;
+      subject: string | null;
+      material: string | null;
+      not_issued: boolean;
+      library: string;
+      mine: boolean;
+    }>(
+      `SELECT x.id::text, x.accession_no, x.status::text, t.title, t.author, s.name::text AS subject, m.name AS material,
+                (t.is_reference OR NOT COALESCE(m.issuable, true)) AS not_issued, l.name AS library,
+                app.library_mine(x.library_id) AS mine
            FROM library_copies x JOIN library_titles t ON t.id = x.title_id JOIN library_libraries l ON l.id = x.library_id
            LEFT JOIN library_subjects s ON s.id = t.subject_id LEFT JOIN library_material_types m ON m.id = t.material_type_id
           WHERE x.id = app.library_copy_by_number($1)`,
-        [dto.accessionNo],
-      );
-      const x = r.rows[0];
-      if (!x)
-        throw new DomainError('not-found', `No book has the number ${dto.accessionNo}`, {
-          status: 404,
-        });
-      const book = {
-        copyId: x.id,
-        accessionNo: x.accession_no,
-        title: x.title,
-        author: x.author,
-        subject: x.subject,
-        material: x.material,
-        library: x.library,
-        status: x.status,
-        // the number typed was an old one: the copy's own now
-        formerly:
-          x.accession_no.toUpperCase() !== dto.accessionNo.trim().toUpperCase()
-            ? dto.accessionNo.trim()
-            : null,
-      };
-      const open = await c.query<{ id: string }>(
-        `SELECT id::text FROM library_loans WHERE copy_id = $1 AND returned_on IS NULL`,
-        [x.id],
-      );
-      const loan = open.rows[0] ? await this.library.loan(c, open.rows[0].id) : null;
-      if (dto.for === 'issue') {
-        const problem = x.not_issued
+      [dto.accessionNo],
+    );
+    const x = r.rows[0];
+    if (!x)
+      throw new DomainError('not-found', `No book has the number ${dto.accessionNo}`, {
+        status: 404,
+      });
+    const book = {
+      copyId: x.id,
+      accessionNo: x.accession_no,
+      title: x.title,
+      author: x.author,
+      subject: x.subject,
+      material: x.material,
+      library: x.library,
+      status: x.status,
+      // the number typed was an old one: the copy's own now
+      formerly:
+        x.accession_no.toUpperCase() !== dto.accessionNo.trim().toUpperCase()
+          ? dto.accessionNo.trim()
+          : null,
+    };
+    const open = await c.query<{ id: string }>(
+      `SELECT id::text FROM library_loans WHERE copy_id = $1 AND returned_on IS NULL`,
+      [x.id],
+    );
+    const loan = open.rows[0] ? await this.library.loan(c, open.rows[0].id) : null;
+    if (dto.for === 'issue') {
+      const problem = !x.mine
+        ? `It belongs to ${x.library}: issue it there`
+        : x.not_issued
           ? 'Reference only: read in the library, not issued'
           : loan
             ? `On loan to ${loan.borrower} (${loan.borrowerRef}) till ${loan.dueOn}`
             : x.status !== 'available'
               ? `The copy is ${x.status}`
               : null;
-        return { book, problem, loan: null, fine: 0 };
-      }
-      if (!loan) return { book, problem: 'The book is not on loan', loan: null, fine: 0 };
-      const rule = await this.library.ruleFor(c, loan.borrowerKind as Kind, loan.borrowerId);
-      const late = Math.max(
-        0,
-        Math.round((Date.parse(today()) - Date.parse(loan.dueOn)) / 86_400_000),
-      );
-      const fine = round(
-        Math.min(Math.max(0, late - rule.graceDays) * rule.finePerDay, rule.maxFine ?? Infinity),
-      );
-      const who = await this.borrowerIn(c, loan.borrowerKind as Kind, loan.borrowerId);
-      return {
-        book,
-        problem: null,
-        loan: {
-          ...loan,
-          place: who.place,
-          rollNo: who.rollNo,
-          renewalsLeft: rule.renewals - loan.renewed,
-        },
-        fine,
-      };
-    });
+      return { book, problem, loan: null, fine: 0 };
+    }
+    if (!loan) return { book, problem: 'The book is not on loan', loan: null, fine: 0 };
+    const rule = await this.library.ruleFor(c, loan.borrowerKind as Kind, loan.borrowerId);
+    const late = Math.max(
+      0,
+      Math.round((Date.parse(today()) - Date.parse(loan.dueOn)) / 86_400_000),
+    );
+    const fine = round(
+      Math.min(Math.max(0, late - rule.graceDays) * rule.finePerDay, rule.maxFine ?? Infinity),
+    );
+    const who = await this.borrowerIn(c, loan.borrowerKind as Kind, loan.borrowerId);
+    return {
+      book,
+      problem: null,
+      loan: {
+        ...loan,
+        place: who.place,
+        rollNo: who.rollNo,
+        renewalsLeft: rule.renewals - loan.renewed,
+      },
+      fine,
+    };
   }
 
   /** Several books issued to one borrower, all or none; each failure names its book. */
@@ -343,7 +356,9 @@ export class LibraryDeskService {
   /** The books the pupils of a class (or one section) hold now, by pupil. */
   async classLoans(ctx: RequestContext, dto: DeskClassDto) {
     const yearId = requireTenant(ctx).academicYearId;
+    // the books the class holds, of every library (any desk takes them back)
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT set_config('app.library_all', 'on', true)`);
       const r = await c.query<Record<string, unknown>>(
         `SELECT l.id::text, x.accession_no, x.barcode, t.title, t.author, st.id::text AS student_id, st.display_name AS student,
                 st.admission_no, k.name || '-' || cs.name AS place, e.roll_no, l.issued_on::text, l.due_on::text,

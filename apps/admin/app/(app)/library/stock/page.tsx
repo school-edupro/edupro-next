@@ -1,6 +1,7 @@
 import { Badge, Breadcrumbs, Button, Card, InputField, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import { LibraryScopeNote } from '@/components/library/LibraryScopeNote';
 import { apiFetch, getMe } from '@/lib/api';
 import { dmy, type BookSetup } from '@/lib/library-books';
 import type { StockCycle } from '@/lib/library-stock';
@@ -64,6 +65,7 @@ export default async function StockPage({
         }
       />
       <Notice params={sp} />
+      <LibraryScopeNote />
 
       {making ? (
         <section

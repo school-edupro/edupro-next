@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { LibraryChargesService } from './library-charges.service';
+import { withEveryLibrary } from './library-staff.service';
 import type {
   AccessionDto,
   CatalogueQueryDto,
@@ -127,7 +128,9 @@ export class LibraryService {
   async catalogue(ctx: RequestContext, q: CatalogueQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       // a school opened after 0206 gets the set-up's starting rows
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       const where: string[] = ["t.status = 'active'"];
       const params: unknown[] = [];
       if (q.q) {
@@ -428,6 +431,11 @@ export class LibraryService {
 
   /** A return inside the caller's transaction (the desk returns several books as one). */
   async returnIn(c: PoolClient, ctx: RequestContext, dto: ReturnDto): Promise<LoanRow> {
+    // a book of any library is taken back at any desk (0221): the limit to my libraries is off for it
+    return withEveryLibrary(c, () => this.returnHere(c, ctx, dto));
+  }
+
+  private async returnHere(c: PoolClient, ctx: RequestContext, dto: ReturnDto): Promise<LoanRow> {
     const copy = await this.copyByAccession(c, dto.accessionNo);
     const l = await c.query<{
       id: string;
@@ -490,6 +498,26 @@ export class LibraryService {
       );
     }
     await this.charges.raiseLateIn(c, ctx, l.rows[0].id);
+    // taken back at another library's desk: said in the copy's history
+    const away = await c.query<{ library: string; mine: boolean; here: string | null }>(
+      `SELECT l.name AS library, app.library_mine(x.library_id) AS mine,
+              (SELECT string_agg(m.name, ', ' ORDER BY m.name) FROM library_libraries m
+                WHERE m.id = ANY (app.my_libraries())) AS here
+         FROM library_copies x JOIN library_libraries l ON l.id = x.library_id WHERE x.id = $1`,
+      [copy.id],
+    );
+    if (away.rows[0] && !away.rows[0].mine)
+      await c.query(
+        `INSERT INTO library_copy_events (school_id, copy_id, what, on_date, reason, by_user, by_name)
+         VALUES (app.current_school_id(), $1, 'returned elsewhere', COALESCE($2::date, CURRENT_DATE), $3,
+                 app.current_user_id(), $4)`,
+        [
+          copy.id,
+          dto.returnedOn ?? null,
+          `Taken back at ${away.rows[0].here ?? 'another library'}, not at ${away.rows[0].library}: to be sent back there`,
+          ctx.user.displayName,
+        ],
+      );
     await this.audit.stage(ctx, c, {
       action: 'library.return',
       entityType: 'library_loans',

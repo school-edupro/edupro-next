@@ -269,7 +269,9 @@ export class LibraryImportService {
   /** Our template: the columns, drop-downs for the lists, and how to fill it. */
   async template(ctx: RequestContext) {
     const libraries = await this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       return (
         await c.query<{ code: string }>(
           `SELECT code FROM library_libraries WHERE status = 'active' ORDER BY code`,
@@ -369,7 +371,9 @@ export class LibraryImportService {
       ? 'legacy'
       : 'edupro';
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       const lists = await this.lists(c);
       const cell = (r: Cell[], f: Field) => (at[f] === undefined ? '' : text(r[at[f]!] ?? null));
       const raw = (r: Cell[], f: Field): Cell => (at[f] === undefined ? null : (r[at[f]!] ?? null));

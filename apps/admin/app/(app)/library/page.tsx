@@ -2,6 +2,7 @@ import { PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { LibraryRegister } from '@/components/library/LibraryRegister';
 import { Notice } from '@/components/Notice';
+import { LibraryScopeNote } from '@/components/library/LibraryScopeNote';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   DEFAULT_VIEW,
@@ -102,6 +103,7 @@ export default async function LibraryBooksPage({
         }
       />
       <Notice params={sp} />
+      <LibraryScopeNote />
       <nav
         className="ep-tabs"
         aria-label="Titles or copies"

@@ -391,7 +391,7 @@ export class LibraryChargesService {
   async sendUnsent(ctx: RequestContext, loanIds?: string[]) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{ id: string }>(
-        `SELECT l.id::text FROM library_loans l
+        `SELECT l.id::text FROM library_loans l JOIN library_copies x ON x.id = l.copy_id
           WHERE l.fine_amount > l.fine_waived AND l.fine_paid_on IS NULL AND l.fine_receipt_id IS NULL
             AND l.returned_on IS NOT NULL
             AND NOT EXISTS (SELECT 1 FROM library_charges ch WHERE ch.loan_id = l.id AND ch.kind = 'late')

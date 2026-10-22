@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { likeEscape } from './library-borrower-sql';
+import { withEveryLibrary } from './library-staff.service';
 import { libraryFile, type FileCell, type FileColumn } from './library-file';
 import type {
   StockCancelDto,
@@ -34,6 +35,8 @@ type Classified = {
 const MAX_FILE = 5 * 1024 * 1024;
 const MAX_ROWS = 20000;
 /** A copy's place in a cycle: verified, still to find, on loan, lost, withdrawn or sold since, missing. */
+/** A cycle of my libraries (one over every library, or another's, is not there for someone limited). */
+const MINE = `(app.my_libraries() IS NULL OR (cardinality(k.library_ids) > 0 AND k.library_ids <@ app.my_libraries()))`;
 const STATE = `CASE WHEN i.outcome = 'found' THEN 'verified'
   WHEN i.outcome IN ('missing', 'on_loan', 'gone') THEN i.outcome
   WHEN x.status = 'issued' THEN 'on_loan'
@@ -102,6 +105,7 @@ export class LibraryStockService {
     if (!/^\d{1,18}$/.test(id))
       throw new DomainError('not-found', 'Stock cycle not found', { status: 404 });
     const r = await c.query<Record<string, unknown>>(
+      // eslint-disable-next-line no-restricted-syntax -- MINE is a fixed fragment; values are bound
       `SELECT k.id::text, k.name, k.status, k.started_on::text, k.finished_on::text, k.note, k.cancel_reason,
               k.missing_marked_lost, COALESCE(k.started_by_name, su.display_name) AS started_by,
               COALESCE(k.closed_by_name, cu.display_name) AS closed_by, k.library_ids::text[] AS library_ids,
@@ -114,7 +118,7 @@ export class LibraryStockService {
                  FROM library_material_types m WHERE m.id = ANY(k.material_type_ids)) AS types
          FROM library_stock_checks k
          LEFT JOIN users su ON su.id = k.started_by LEFT JOIN users cu ON cu.id = k.closed_by
-        WHERE k.id = $1`,
+        WHERE k.id = $1 AND ${MINE}`,
       [id],
     );
     const k = r.rows[0];
@@ -178,8 +182,9 @@ export class LibraryStockService {
   async cycles(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{ id: string }>(
-        `SELECT id::text FROM library_stock_checks
-          ORDER BY (status = 'open') DESC, started_on DESC, id DESC LIMIT 50`,
+        // eslint-disable-next-line no-restricted-syntax -- MINE is a fixed fragment; values are bound
+        `SELECT k.id::text FROM library_stock_checks k WHERE ${MINE}
+          ORDER BY (k.status = 'open') DESC, k.started_on DESC, k.id DESC LIMIT 50`,
       );
       const out = [];
       for (const x of r.rows) out.push(await this.cycle(c, x.id));
@@ -198,7 +203,11 @@ export class LibraryStockService {
       await c.query(
         `SELECT pg_advisory_xact_lock(hashtextextended('library.stock.' || app.current_school_id()::text, 0))`,
       );
-      const libs = dto.libraryIds;
+      // someone working in some libraries only: a cycle over every library is one over theirs
+      const mine = (
+        await c.query<{ ids: string[] | null }>(`SELECT app.my_libraries()::text[] AS ids`)
+      ).rows[0]!.ids;
+      const libs = dto.libraryIds.length || !mine ? dto.libraryIds : mine;
       const shelves = dto.shelfIds;
       const types = dto.materialTypeIds;
       const known = await c.query<{ l: string; s: string; m: string }>(
@@ -285,8 +294,10 @@ export class LibraryStockService {
   /** What each number is to the cycle: a copy to verify, verified already, outside the cycle, unknown, repeated. */
   private async classify(c: PoolClient, id: string, entries: Entry[]): Promise<Classified[]> {
     if (!entries.length) return [];
-    const r = await c.query<Record<string, unknown>>(
-      `SELECT e.ord, e.no, x.id::text AS copy_id, x.accession_no, t.title, x.status::text AS copy_status,
+    // a book of another library is named as such, not as unknown
+    const r = await withEveryLibrary(c, () =>
+      c.query<Record<string, unknown>>(
+        `SELECT e.ord, e.no, x.id::text AS copy_id, x.accession_no, t.title, x.status::text AS copy_status,
               lib.name AS library, sh.code AS shelf, i.outcome
          FROM unnest($2::text[]) WITH ORDINALITY e(no, ord)
          LEFT JOIN LATERAL (SELECT app.library_copy_by_number(e.no) AS id) cp ON true
@@ -296,7 +307,8 @@ export class LibraryStockService {
          LEFT JOIN library_shelves sh ON sh.id = x.shelf_id
          LEFT JOIN library_stock_check_items i ON i.check_id = $1 AND i.copy_id = x.id
         ORDER BY e.ord`,
-      [id, entries.map((e) => e.no)],
+        [id, entries.map((e) => e.no)],
+      ),
     );
     const seen = new Set<string>();
     return r.rows.map((x, i) => {

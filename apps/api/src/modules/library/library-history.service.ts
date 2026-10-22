@@ -312,7 +312,8 @@ export class LibraryHistoryService {
                        count(*) FILTER (WHERE l.returned_on IS NOT NULL AND l.returned_on > l.due_on AND ${inRange('l.returned_on')}) AS late,
                        COALESCE(sum(l.fine_amount) FILTER (WHERE l.returned_on IS NOT NULL AND ${inRange('l.returned_on')}), 0) AS fines,
                        count(*) AS ever, max(l.issued_on)::text AS last_issued
-                  FROM library_loans l WHERE l.borrower_kind = ${kind}::library_borrower
+                  FROM library_loans l JOIN library_copies x ON x.id = l.copy_id
+                 WHERE l.borrower_kind = ${kind}::library_borrower
                  GROUP BY l.borrower_id, l.borrower_kind) a
               ${borrowerLateral('a.bkind', 'a.borrower_id::bigint')}
              ${filter}`;

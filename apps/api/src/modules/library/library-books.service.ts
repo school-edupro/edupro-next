@@ -52,7 +52,9 @@ export class LibraryBooksService {
   /** The titles, with how many of their copies (that match) there are, on the shelf and out. */
   async list(ctx: RequestContext, q: BookListDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       const f = bookFilter(q);
       const inCopies = `x.status <> 'sold'${f.copy ? ` AND ${f.copy}` : ''}`;
       const where = f.copy
@@ -156,7 +158,9 @@ export class LibraryBooksService {
   /** What the book form picks from, and the next accession number of each series. */
   async setup(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       // one after the other: a client runs one query at a time
       const q = async <T extends QueryResultRow>(sql: string) => (await c.query<T>(sql)).rows;
       const [libraries, materialTypes, subjects, languages, shelves, vendors, classes, series] =

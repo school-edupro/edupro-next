@@ -1,6 +1,7 @@
 import { Badge, Breadcrumbs, Button, Card, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Pager } from '@/components/RegisterTools';
+import { LibraryScopeNote } from '@/components/library/LibraryScopeNote';
 import { apiFetch, getMe } from '@/lib/api';
 import { dmy, type BookSetup } from '@/lib/library-books';
 
@@ -245,6 +246,8 @@ export default async function LibraryHistoryPage({
           )}
         />
         {tabs}
+        <LibraryScopeNote />
+        <LibraryScopeNote />
         <div className="ep-dash-kpis ep-dash-kpis--4">
           {tile('issued', 'Issued', data.counts.issued, span)}
           {tile('returned', 'Returned', data.counts.returned, span)}
@@ -435,6 +438,7 @@ export default async function LibraryHistoryPage({
         )}
       />
       {tabs}
+      <LibraryScopeNote />
       <div className="ep-dash-kpis ep-dash-kpis--4">
         {(
           [

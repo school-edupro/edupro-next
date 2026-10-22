@@ -46,7 +46,9 @@ export class LibraryPeriodicalsService {
 
   async setup(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       const periodicals = await c.query<Record<string, unknown>>(
         `SELECT p.id::text, p.name::text, (SELECT k.name::text FROM library_periodical_kinds k WHERE k.id = p.kind_id) AS kind, p.frequency, p.vendor_id::text AS "vendorId", v.name AS vendor
            FROM library_periodicals p LEFT JOIN library_vendors v ON v.id = p.vendor_id

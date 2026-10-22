@@ -8,6 +8,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { FeeAdjustmentsService } from '../fees/fee-adjustments.service';
 import { FeeDocumentsService } from '../fees/fee-documents.service';
 import { likeEscape } from './library-borrower-sql';
+import { withEveryLibrary } from './library-staff.service';
 import { libraryFile, type FileCell } from './library-file';
 import { announceMiscFee, LIBRARY_HEADS, libraryHead, libraryYear } from './library-misc';
 import type { BookSaleDto, SalesExportDto, SalesQueryDto } from './library.dto';
@@ -139,7 +140,7 @@ export class LibrarySalesService {
   // ---- a book and a buyer ------------------------------------------------------------------------
   private async copyOf(c: PoolClient, no: string, lock = false) {
     const sql = `SELECT x.id::text, x.accession_no, t.title, t.author, x.status::text, COALESCE(x.price, t.price)::text AS price,
-              l.name AS library
+              l.name AS library, app.library_mine(x.library_id) AS mine
          FROM library_copies x JOIN library_titles t ON t.id = x.title_id
          LEFT JOIN library_libraries l ON l.id = x.library_id
         WHERE x.id = app.library_copy_by_number($1)`;
@@ -151,9 +152,26 @@ export class LibrarySalesService {
       status: string;
       price: string | null;
       library: string | null;
+      mine: boolean;
     }>(lock ? sql + ' FOR UPDATE OF x' : sql, [no]);
     const x = r.rows[0];
-    if (!x) return { no, copy: null, problem: 'No such book' };
+    if (!x) {
+      // a book of another library: said, not unknown
+      const away = await withEveryLibrary(c, () =>
+        c.query<{ library: string }>(
+          `SELECT l.name AS library FROM library_copies x JOIN library_libraries l ON l.id = x.library_id
+            WHERE x.id = app.library_copy_by_number($1)`,
+          [no],
+        ),
+      );
+      return {
+        no,
+        copy: null,
+        problem: away.rows[0]
+          ? `It belongs to ${away.rows[0].library}: sell it there`
+          : 'No such book',
+      };
+    }
     const problem = SELLABLE.includes(x.status)
       ? null
       : x.status === 'issued'

@@ -199,6 +199,12 @@ export default async function MasterGroupPage({
               {m.title}
             </a>
           ))}
+          {groupKey === 'library' ? (
+            // who works in which library: its own page (docs/design/36-library.md, round 3, part 3)
+            <a role="tab" aria-selected={false} className="ep-tabs__tab" href="/library/staff">
+              Library staff
+            </a>
+          ) : null}
         </div>
       </div>
 

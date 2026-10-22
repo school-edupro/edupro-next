@@ -475,6 +475,7 @@ export const NAV: Array<{
         permission: 'library.catalogue.view',
       },
       { href: '/masters/library', label: 'librarySetup', permission: 'library.catalogue.manage' },
+      { href: '/library/staff', label: 'libraryStaff', permission: 'library.catalogue.manage' },
     ],
   },
   {

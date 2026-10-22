@@ -2,6 +2,7 @@ import { Badge, Breadcrumbs, Button, Card, InputField, PageHeader, SelectField }
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import { LibraryScopeNote } from '@/components/library/LibraryScopeNote';
 import { Pager } from '@/components/RegisterTools';
 import { apiFetch, getMe } from '@/lib/api';
 import { dmy } from '@/lib/library-books';
@@ -329,6 +330,7 @@ export default async function FinesPage({
         }
       />
       <Notice params={sp} />
+      <LibraryScopeNote />
 
       {report.unsent.count ? (
         <div

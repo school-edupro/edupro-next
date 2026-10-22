@@ -313,3 +313,7 @@ export const BorrowerHistoryExportSchema = BorrowerHistorySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
 });
 export class BorrowerHistoryExportDto extends createZodDto(BorrowerHistoryExportSchema) {}
+
+/** A staff member named on a library (library round 3, part 3). */
+export const LibraryStaffSchema = z.object({ libraryId: IdSchema, employeeId: IdSchema });
+export class LibraryStaffDto extends createZodDto(LibraryStaffSchema) {}

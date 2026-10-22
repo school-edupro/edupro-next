@@ -23,7 +23,9 @@ export class LibraryLabelsService {
 
   async setup(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.library_seed(app.current_school_id())`);
+      await c.query(
+        `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
+      );
       const libraries = await c.query<{ id: string; code: string; name: string }>(
         `SELECT id::text, code, name FROM library_libraries WHERE status = 'active' ORDER BY code`,
       );
