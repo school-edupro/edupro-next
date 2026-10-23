@@ -232,6 +232,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
           .sort(),
       ).toEqual([
         // Sprint 13 added the department report-centre datasets; the admin holds every permission
+        'admission_fee_collection',
         'admissions_funnel',
         'assignments',
         'attendance_daily',
@@ -244,14 +245,17 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'comms_failures',
         'comms_monthly_usage',
         'employees',
+        'fee_cheque_bounce',
         'fee_day_book',
         'fee_defaulters',
         'fee_dues',
         'fee_forecast',
         'fee_head_tally',
+        'fee_mode_summary',
         'fee_receipts',
         'fee_refunds',
         'fee_tally_vouchers',
+        'helpdesk_tickets',
         'lesson_plans',
         'members',
         'parent_queries',
@@ -260,6 +264,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'transport_requests',
         'transport_riders',
         'transport_vehicle_logs',
+        'visitor_register',
       ]);
       const teacherSets = await inject({
         method: 'GET',

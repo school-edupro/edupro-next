@@ -94,6 +94,9 @@ export default async function InboxPage({
                 <a href={`/admissions/applications/${s.instance.entityId}`}>{w('viewEntity')}</a>
               </p>
             ) : null}
+            {s.instance.entityType === 'student_correction' ? (
+              <CorrectionPreview payload={s.instance.payload} />
+            ) : null}
             {s.instance.entityType === 'vacancy' ? (
               <p style={{ marginTop: 'var(--sp-2)' }}>
                 <a href={`/people/recruitment/${s.instance.entityId}`}>{w('viewEntity')}</a>
@@ -122,5 +125,35 @@ export default async function InboxPage({
         ))}
       </div>
     </>
+  );
+}
+
+/** A student detail correction: each field, old and new, the reason and the student's page. */
+function CorrectionPreview({ payload }: { payload: Record<string, unknown> }) {
+  const changes = (payload.changes ?? []) as Array<{
+    key: string;
+    label: string;
+    from: string | null;
+    to: string | null;
+  }>;
+  return (
+    <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-1)' }}>
+      <ul style={{ margin: 0 }}>
+        {changes.map((c) => (
+          <li key={c.key}>
+            {c.label}: {c.from ?? '(blank)'} → <strong>{c.to ?? '(blank)'}</strong>
+          </li>
+        ))}
+      </ul>
+      <p style={{ margin: 0 }}>Reason: {String(payload.reason ?? '')}</p>
+      {typeof payload.studentId === 'string' ? (
+        <p style={{ margin: 0 }}>
+          <a href={`/people/students/${payload.studentId}?tab=profile`}>
+            Open {String(payload.student ?? 'the student')}
+            {payload.admissionNo ? ` (${String(payload.admissionNo)})` : ''}
+          </a>
+        </p>
+      ) : null}
+    </div>
   );
 }

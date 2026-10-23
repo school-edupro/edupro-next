@@ -6,6 +6,7 @@ import { ADMISSIONS } from './admissions.dto';
 import {
   AllotDto,
   DecideDto,
+  OfficeCorrectDto,
   ProcessDto,
   RegistrationsQueryDto,
   SelectIdsDto,
@@ -147,6 +148,16 @@ export class AdmissionProcessController {
   @RequirePermission(ADMISSION_DECIDE)
   sendBack(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: SendBackDto) {
     return this.process.sendBack(ctx, id, dto);
+  }
+
+  @Post('registrations/:id/correct')
+  @ApiOperation({
+    summary:
+      'Correct answers of a submitted application before Admit; each change kept with its old and new value',
+  })
+  @RequirePermission(ADMISSIONS.applicationReview)
+  correct(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: OfficeCorrectDto) {
+    return this.process.officeCorrect(ctx, id, dto);
   }
 
   @Post('registrations/:id/undo')

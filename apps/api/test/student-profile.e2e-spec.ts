@@ -253,11 +253,11 @@ describe('student 360 profile (e2e)', () => {
     expect(sib).toMatchObject({ father_mobile: '9000000001', staff_ward: 'Yes' });
   });
 
-  it('clears values with null but refuses to empty required identity fields', async () => {
-    expect((await patch(first, { middle_name: null })).json().values.middle_name).toBeNull();
+  it('clears values with null; identity fields on record change only through Correct details', async () => {
+    expect((await patch(first, { family_income: null })).json().values.family_income).toBeNull();
     const r = await patch(first, { first_name: null, father_name: null });
-    expect(r.statusCode).toBe(400);
-    expect(Object.keys(r.json().errors).sort()).toEqual(['father_name', 'first_name']);
+    expect(r.statusCode).toBe(409);
+    expect(r.json().detail).toMatch(/Correct details/);
   });
 
   it('families request profile fields; approval applies them through the profile rules', async () => {

@@ -20,6 +20,11 @@ import { StudentOptionalHeads } from '@/components/fees/StudentOptionalHeads';
 import { StudentDocuments, expectedDocuments } from '@/components/StudentDocuments';
 import { STUDENT_TABS, StudentHero, type StudentTab } from '@/components/StudentHero';
 import { StudentOverview } from '@/components/StudentOverview';
+import {
+  StudentCorrections,
+  type CorrectionItem,
+  type CorrectionSetup,
+} from '@/components/StudentCorrections';
 import type { ProfileCatalogue, ProfileSnapshot } from '@/lib/profile';
 import {
   enrolStudent,
@@ -165,6 +170,18 @@ export default async function StudentPage({
         .catch(() => null)
     : null;
   const issuedTc = tcs.find((x) => x.status === 'issued');
+  // detail corrections (docs/design/37, part 1): the profile tab shows them with their history
+  const [correctionSetup, corrections] =
+    tab === 'profile'
+      ? await Promise.all([
+          apiFetch<CorrectionSetup>('/people/students/corrections/setup').catch(() => null),
+          apiFetch<{ data: CorrectionItem[] }>(`/people/students/${id}/corrections`)
+            .then((r) => r.data)
+            .catch(() => [] as CorrectionItem[]),
+        ])
+      : [null, [] as CorrectionItem[]];
+  // on record, these change only through Correct details
+  const lockedHelp = 'Change through Correct details below';
   return (
     <>
       <Breadcrumbs
@@ -236,14 +253,16 @@ export default async function StudentPage({
                   label={t('create.firstName')}
                   defaultValue={student.firstName}
                   required
-                  disabled={!can('people.student.edit')}
+                  disabled={!can('people.student.edit') || Boolean(student.firstName)}
+                  help={student.firstName ? lockedHelp : undefined}
                 />
                 <InputField
                   id="lastName"
                   name="lastName"
                   label={t('create.lastName')}
                   defaultValue={student.lastName ?? ''}
-                  disabled={!can('people.student.edit')}
+                  disabled={!can('people.student.edit') || Boolean(student.lastName)}
+                  help={student.lastName ? lockedHelp : undefined}
                 />
               </FormRow>
               <FormRow columns={2}>
@@ -253,7 +272,8 @@ export default async function StudentPage({
                   label={t('create.dob')}
                   type="date"
                   defaultValue={student.dob ?? ''}
-                  disabled={!can('people.student.edit')}
+                  disabled={!can('people.student.edit') || Boolean(student.dob)}
+                  help={student.dob ? lockedHelp : undefined}
                 />
                 <SelectField
                   id="gender"
@@ -261,7 +281,8 @@ export default async function StudentPage({
                   label={t('create.gender')}
                   defaultValue={student.gender}
                   options={genders.map((v) => ({ value: v, label: g(v) }))}
-                  disabled={!can('people.student.edit')}
+                  disabled={!can('people.student.edit') || student.gender !== 'unspecified'}
+                  help={student.gender !== 'unspecified' ? lockedHelp : undefined}
                 />
               </FormRow>
               <FormRow columns={3}>
@@ -313,6 +334,20 @@ export default async function StudentPage({
                 </FormActions>
               ) : null}
             </form>
+          </Card>
+        ) : null}
+
+        {tab === 'profile' && correctionSetup && profile && catalogue ? (
+          <Card title="Correct details">
+            <StudentCorrections
+              studentId={student.id}
+              values={profile.values}
+              catalogue={catalogue}
+              setup={correctionSetup}
+              history={corrections}
+              canRequest={can('people.student.correct')}
+              canSetUp={can('workflow.definition.manage')}
+            />
           </Card>
         ) : null}
 

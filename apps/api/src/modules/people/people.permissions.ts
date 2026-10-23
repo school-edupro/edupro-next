@@ -1,8 +1,12 @@
+import { DomainError } from '../../common/errors/domain-error';
+
 export const PEOPLE = {
   studentView: 'people.student.view',
   studentCreate: 'people.student.create',
   studentEdit: 'people.student.edit',
   studentDelete: 'people.student.delete',
+  /** Ask for a correction of the name, date of birth, gender or parents' names (0232). */
+  studentCorrect: 'people.student.correct',
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',
@@ -34,3 +38,11 @@ export const PEOPLE = {
   /** Set up, publish and close vacancies, screen and select candidates. */
   recruitmentManage: 'people.recruitment.manage',
 } as const;
+
+/** A direct edit of a detail that changes only by an approved correction (docs/design/37, part 1). */
+export const correctionRequired = () =>
+  new DomainError(
+    'people.correction_required',
+    'The name, date of birth, gender and parents’ names change through Correct details, with approval',
+    { status: 409 },
+  );

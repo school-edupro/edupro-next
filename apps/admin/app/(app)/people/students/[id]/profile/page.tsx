@@ -72,6 +72,15 @@ export default async function StudentProfilePage({
         history={admissionHistory}
         canChange={me.permissions.includes('people.admission_no.change')}
       />
+      {canEdit ? (
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          The name, date of birth, gender and parents’ names on record change only with approval:{' '}
+          <a href={`/people/students/${id}?tab=profile`} style={{ textDecoration: 'underline' }}>
+            Correct details
+          </a>{' '}
+          on the student page.
+        </p>
+      ) : null}
       <ProfilePhotos snapshot={snapshot} canEdit={canEdit} />
       <ProfileEditor
         catalogue={catalogue}

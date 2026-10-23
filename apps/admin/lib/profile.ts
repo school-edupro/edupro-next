@@ -93,3 +93,15 @@ export function ddmmyyyy(v: string | null | undefined): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
   return m ? `${m[3]!}-${m[2]!}-${m[1]!}` : v;
 }
+
+/** On record, these change only through "Correct details" with approval (docs/design/37, part 1). */
+export const CORRECTION_KEYS: readonly string[] = [
+  'first_name',
+  'middle_name',
+  'last_name',
+  'dob',
+  'gender',
+  'father_name',
+  'mother_name',
+  'guardian_name',
+];

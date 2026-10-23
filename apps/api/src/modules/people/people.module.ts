@@ -41,6 +41,8 @@ import { ImportsController } from './imports.controller';
 import { ImportsService } from './imports.service';
 import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
+import { StudentCorrectionsController } from './student-corrections.controller';
+import { StudentCorrectionsService } from './student-corrections.service';
 import { StudentBulkService } from './student-bulk.service';
 import { StudentGridService } from './student-grid.service';
 import { StudentProfileController } from './student-profile.controller';
@@ -66,6 +68,7 @@ import { StudentsService } from './students.service';
     EmployeeProfileController,
     EmployeeTransferController,
     SectionRollController,
+    StudentCorrectionsController,
     StudentProfileController,
     StudentsController,
     EmployeesController,
@@ -93,6 +96,7 @@ import { StudentsService } from './students.service';
     EmployeeTransferService,
     SectionRollService,
     StudentBulkService,
+    StudentCorrectionsService,
     StudentGridService,
     StudentProfileService,
     StudentsService,
@@ -109,12 +113,17 @@ export class PeopleModule implements OnModuleInit {
     private readonly recruitment: RecruitmentService,
     private readonly approval: RecruitmentApprovalService,
     private readonly masters: MastersService,
+    private readonly corrections: StudentCorrectionsService,
   ) {}
 
   onModuleInit() {
     // a vacancy's approval decided at the last level (0197)
     this.workflow.onComplete('vacancy', (c, ctx, instance, outcome) =>
       this.recruitment.onDecision(c, ctx, instance, outcome),
+    );
+    // a student detail correction decided at the last level, or withdrawn (0232)
+    this.workflow.onComplete('student_correction', (c, ctx, instance, outcome) =>
+      this.corrections.onDecision(c, ctx, instance, outcome),
     );
     // a department's HOD changed: the vacancies waiting for approval follow at once (0201)
     this.masters.onChange('departments', (ctx) => this.approval.refresh(ctx));

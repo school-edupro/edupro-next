@@ -7,6 +7,7 @@ import { ProfileField } from './ProfileField';
 import { SiblingVerify } from './SiblingVerify';
 import {
   applies,
+  CORRECTION_KEYS,
   type ProfileCatalogue,
   type ProfileSnapshot,
   type ProfileValues,
@@ -95,6 +96,10 @@ export function ProfileEditor({
     // boxes copying a parent's mobile or email follow it when it changes
     setMany({ ...followChange(values, key, v), [key]: v });
   };
+
+  // the name, date of birth, gender and parents' names on record change through Correct details
+  const locked = (key: string) =>
+    CORRECTION_KEYS.includes(key) && String(base.values[key] ?? '').trim() !== '';
 
   const jumpTo = (key: string) => {
     const f = catalogue.fields.find((x) => x.key === key);
@@ -265,7 +270,7 @@ export function ProfileEditor({
                       ? String(base.values[f.key] ?? '')
                       : null
                   }
-                  disabled={!canEdit}
+                  disabled={!canEdit || locked(f.key)}
                   onChange={onChange}
                 />
               ))}

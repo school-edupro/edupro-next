@@ -16,7 +16,7 @@ import type {
   ReplaceDocumentDto,
   UpdateStudentDto,
 } from './people.dto';
-import { PEOPLE } from './people.permissions';
+import { PEOPLE, correctionRequired } from './people.permissions';
 
 /** Documents whose number is an ID number (masked like the profile). */
 const SENSITIVE_DOC_KINDS = new Set(['aadhaar', 'pan', 'bank']);
@@ -388,16 +388,34 @@ export class StudentsService {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const before = await this.find(tenant, id, c);
+      // the name, date of birth and gender, once on record, change only through "Correct details"
+      // (docs/design/37); sent unchanged (the form sends them all) they are left as they are
+      const same = (a: unknown, b: unknown) =>
+        String(a ?? '')
+          .trim()
+          .toLowerCase() ===
+          String(b ?? '')
+            .trim()
+            .toLowerCase() ||
+        (b ?? '') === '' ||
+        b === 'unspecified';
+      if (
+        (dto.firstName !== undefined && !same(dto.firstName, before.firstName)) ||
+        (dto.lastName !== undefined && !same(dto.lastName, before.lastName)) ||
+        (dto.dob !== undefined && !same(dto.dob, before.dob)) ||
+        (dto.gender !== undefined && !same(dto.gender, before.gender))
+      )
+        throw correctionRequired();
       const sets: string[] = ['updated_by = app.current_user_id()'];
       const params: unknown[] = [];
       const set = (col: string, v: unknown, cast = '') => {
         params.push(v);
         sets.push(col + ' = $' + String(params.length) + cast);
       };
-      if (dto.firstName !== undefined) set('first_name', dto.firstName);
-      if (dto.lastName !== undefined) set('last_name', dto.lastName);
-      if (dto.dob !== undefined) set('dob', dto.dob, '::date');
-      if (dto.gender !== undefined) set('gender', dto.gender, '::gender');
+      if (dto.lastName !== undefined && !before.lastName) set('last_name', dto.lastName);
+      if (dto.dob !== undefined && !before.dob) set('dob', dto.dob, '::date');
+      if (dto.gender !== undefined && before.gender === 'unspecified')
+        set('gender', dto.gender, '::gender');
       if (dto.category !== undefined) set('category', dto.category);
       if (dto.bloodGroup !== undefined) set('blood_group', dto.bloodGroup);
       if (dto.house !== undefined) set('house', dto.house);

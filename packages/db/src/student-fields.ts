@@ -2251,3 +2251,18 @@ export const FAMILY_EDITABLE_KEYS: readonly string[] = [
     ].map((k) => `${p}_${k}`),
   ),
 ];
+
+/**
+ * Details that change only through "Correct details": a request the school's approval levels decide,
+ * the old and new values kept (docs/design/37, part 1). Every other field is edited directly.
+ */
+export const CORRECTION_KEYS = [
+  'first_name',
+  'middle_name',
+  'last_name',
+  'dob',
+  'gender',
+  'father_name',
+  'mother_name',
+  'guardian_name',
+] as const;

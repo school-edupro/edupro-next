@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  CORRECTION_KEYS,
   EDITABLE_PROFILE_FIELDS,
   findSibling,
   PROFILE_FIELDS,
@@ -22,7 +23,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { QuickAddDto, UpdateProfileDto } from './people.dto';
-import { PEOPLE } from './people.permissions';
+import { PEOPLE, correctionRequired } from './people.permissions';
 import { StudentsService } from './students.service';
 
 const invalid = (errors: Record<string, string>, detail = 'Some fields are not valid') =>
@@ -105,7 +106,7 @@ export class StudentProfileService {
     });
   }
 
-  private async assertVisible(ctx: RequestContext, c: PoolClient, id: string): Promise<void> {
+  async assertVisible(ctx: RequestContext, c: PoolClient, id: string): Promise<void> {
     const allowed = await this.students.scopeFilter(requireTenant(ctx));
     if (allowed === null) return;
     const r = await c.query(
@@ -158,6 +159,22 @@ export class StudentProfileService {
       if (Object.keys(errors).length) throw invalid(errors);
       const before = await readStudentProfile(c, id, { showSensitive: false });
       if (!before) throw new DomainError('not-found', 'Student not found');
+      // the name, date of birth, gender and parents' names, once on record, change only through
+      // "Correct details"; a blank one is filled here, and one sent unchanged (in any case) is left alone
+      for (const k of CORRECTION_KEYS) {
+        if (!(k in values)) continue;
+        const was = String(before.values[k] ?? '')
+          .trim()
+          .toLowerCase();
+        if (!was) continue;
+        if (
+          String(values[k] ?? '')
+            .trim()
+            .toLowerCase() !== was
+        )
+          throw correctionRequired();
+        delete values[k];
+      }
       let changed: string[];
       try {
         ({ changed } = await writeStudentProfile(c, id, values));

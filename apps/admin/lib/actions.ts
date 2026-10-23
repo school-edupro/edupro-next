@@ -558,10 +558,11 @@ export async function updateStudent(fd: FormData) {
     apiFetch(`/people/students/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({
-        firstName: str(fd, 'firstName'),
-        lastName: opt(fd, 'lastName') ?? null,
-        dob: opt(fd, 'dob'),
-        gender: str(fd, 'gender') || 'unspecified',
+        // the name, date of birth and gender on record are not in the form (Correct details changes them)
+        ...(fd.has('firstName') ? { firstName: str(fd, 'firstName') } : {}),
+        ...(fd.has('lastName') ? { lastName: opt(fd, 'lastName') ?? null } : {}),
+        ...(fd.has('dob') ? { dob: opt(fd, 'dob') } : {}),
+        ...(fd.has('gender') ? { gender: str(fd, 'gender') || 'unspecified' } : {}),
         category: opt(fd, 'category') ?? null,
         bloodGroup: opt(fd, 'bloodGroup') ?? null,
         house: opt(fd, 'house') ?? null,

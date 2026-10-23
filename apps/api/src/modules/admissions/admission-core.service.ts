@@ -325,6 +325,87 @@ export class AdmissionCoreService {
     );
   }
 
+  /**
+   * The office corrects a submitted application before Admit (docs/design/37, case 1b): only the answers
+   * sent change, each is checked, and every change is kept with its old and new value. Files, photos,
+   * the signature and the declaration stay the family's (Send back asks them).
+   */
+  async officeCorrect(
+    c: PoolClient,
+    a: AppRow,
+    answers: AdmissionAnswers,
+    reason: string,
+    opts: { maskSecrets: boolean },
+  ): Promise<{ errors: Record<string, string>; changed: Array<{ key: string; label: string }> }> {
+    if (['draft', 'admitted', 'cancelled', 'withdrawn'].includes(a.status))
+      throw new DomainError(
+        'admissions.correct_closed',
+        a.status === 'admitted'
+          ? 'The candidate is admitted: correct the details on the student page'
+          : 'Only a submitted application that is not admitted, cancelled or withdrawn can be corrected',
+        { status: 409 },
+      );
+    const def = await this.defOf(c, a);
+    const before = this.plainData(def, a.data);
+    const incoming: AdmissionAnswers = {};
+    const errors: Record<string, string> = {};
+    for (const [k, v] of Object.entries(answers)) {
+      const f = def.fields.find((x) => x.key === k);
+      if (!f || LAYOUT_TYPES.includes(f.type)) errors[k] = 'is not a question of this form';
+      else if (['file', 'photo', 'signature', 'agree'].includes(f.type))
+        errors[k] = 'is the family’s: use Send back';
+      else incoming[k] = v;
+    }
+    if (Object.keys(errors).length) return { errors, changed: [] };
+    const merged = { ...before, ...incoming };
+    const options = await this.forms.optionsWith(c);
+    const all = formErrors(def, merged, (f) => AdmissionFormsService.optionsOf(f, options));
+    // only the answers corrected are held to the form's rules (the rest stay as the family left them)
+    for (const k of Object.keys(incoming)) if (all[k]) errors[k] = all[k];
+    if (Object.keys(errors).length) return { errors, changed: [] };
+    const clean = { ...merged, ...cleanAnswers(def, merged) };
+    const shown = (f: AdmissionField, v: unknown) => {
+      const t = answerText(f, v as AdmissionAnswers[string]);
+      return isSecret(f) && opts.maskSecrets && t ? `XXXX-XXXX-${t.slice(-4)}` : t || null;
+    };
+    const changes = Object.keys(incoming)
+      .map((k) => def.fields.find((x) => x.key === k)!)
+      .filter((f) => JSON.stringify(before[f.key] ?? null) !== JSON.stringify(clean[f.key] ?? null))
+      .map((f) => ({
+        key: f.key,
+        label: f.label,
+        from: shown(f, before[f.key]),
+        to: shown(f, clean[f.key]),
+      }));
+    if (!changes.length)
+      return { errors: { _: 'Nothing differs from the application' }, changed: [] };
+    await this.writeData(c, a, def, clean, formProgress(def, clean));
+    for (const x of changes)
+      await c.query(
+        `INSERT INTO application_answer_changes (school_id, application_id, field_key, label, old_value, new_value, reason, changed_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())`,
+        [a.id, x.key, x.label.slice(0, 200), x.from, x.to, reason],
+      );
+    await c.query(
+      `INSERT INTO application_events (school_id, application_id, from_status, to_status, note, actor_user_id)
+       VALUES (app.current_school_id(), $1, $2::application_status, $2::application_status, $3, app.current_user_id())`,
+      [
+        a.id,
+        a.status,
+        `Corrected by the office: ${changes.map((x) => x.label).join(', ')}`.slice(0, 500),
+      ],
+    );
+    // the forms kept for emails and downloads are made again with the corrected answers
+    const fresh = await this.row(c, a.id);
+    if (fresh.pdf_file_id) await this.storeFormPdf(c, fresh);
+    const kept = await c.query<{ id: string | null }>(
+      `SELECT admission_form_file_id::text AS id FROM applications WHERE id = $1`,
+      [a.id],
+    );
+    if (kept.rows[0]?.id) await this.storeAdmissionFormPdf(c, fresh);
+    return { errors: {}, changed: changes.map((x) => ({ key: x.key, label: x.label })) };
+  }
+
   /** Every answer checked; the category and the registration fee; registered at once when there is no fee. */
   async submit(
     c: PoolClient,

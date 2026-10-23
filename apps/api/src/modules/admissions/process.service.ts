@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LAYOUT_TYPES, type PoolClient } from '@edupro/db';
+import { LAYOUT_TYPES, type AdmissionAnswers, type PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -7,6 +7,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import type { Resolver } from '../workflow/workflow.dto';
 import { WorkflowService } from '../workflow/workflow.service';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
+import { ADMISSIONS } from './admissions.dto';
 import {
   IN_PROCESS,
   journey,
@@ -22,6 +23,7 @@ import type {
   DecideDto,
   ProcessDto,
   RegistrationsQueryDto,
+  OfficeCorrectDto,
   SendBackDto,
   StagesDto,
   UndoDto,
@@ -559,6 +561,20 @@ export class AdmissionProcessService {
       const categories = await c.query<{ id: string; name: string }>(
         `SELECT id::text, name FROM admission_fee_categories WHERE status = 'active' ORDER BY sort_order, id`,
       );
+      const answerChanges = await c.query<{
+        id: string;
+        label: string;
+        old_value: string | null;
+        new_value: string | null;
+        reason: string;
+        by: string | null;
+        changed_at: Date;
+      }>(
+        `SELECT x.id::text, x.label, x.old_value, x.new_value, x.reason, u.display_name AS by, x.changed_at
+           FROM application_answer_changes x LEFT JOIN users u ON u.id = x.changed_by
+          WHERE x.application_id = $1 ORDER BY x.changed_at DESC, x.id DESC LIMIT 200`,
+        [id],
+      );
       const last = await c.query<{ decided_by: string | null }>(
         `SELECT decided_by::text FROM admission_stage_results WHERE application_id = $1 AND undone_at IS NULL ORDER BY decided_at DESC, id DESC LIMIT 1`,
         [id],
@@ -612,6 +628,18 @@ export class AdmissionProcessService {
           resubmittedAt: x.resubmitted_at?.toISOString() ?? null,
           by: x.by,
         })),
+        answerChanges: answerChanges.rows.map((x) => ({
+          id: x.id,
+          label: x.label,
+          from: x.old_value,
+          to: x.new_value,
+          reason: x.reason,
+          by: x.by,
+          at: x.changed_at.toISOString(),
+        })),
+        canCorrect:
+          ctx.permissions?.has(ADMISSIONS.applicationReview) === true &&
+          !['draft', 'admitted', 'cancelled', 'withdrawn'].includes(a.status),
         events: events.rows.map((e) => ({
           id: e.id,
           status: e.to_status,
@@ -908,6 +936,28 @@ export class AdmissionProcessService {
   }
 
   /** Observations sent to the family: only the marked answers open; back to the same level on resubmit. */
+  /** The office's correction of the answers before Admit (docs/design/37, case 1b). */
+  async officeCorrect(ctx: RequestContext, id: string, dto: OfficeCorrectDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.core.row(c, id);
+      const out = await this.core.officeCorrect(c, a, dto.answers as AdmissionAnswers, dto.reason, {
+        maskSecrets: !ctx.permissions?.has('people.sensitive.view'),
+      });
+      if (Object.keys(out.errors).length)
+        throw new DomainError('validation-failed', out.errors._ ?? 'Some answers need attention', {
+          status: 400,
+          extra: { errors: out.errors },
+        });
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.application.correct',
+        entityType: 'applications',
+        entityId: id,
+        after: { fields: out.changed.map((x) => x.key), reason: dto.reason },
+      });
+      return { changed: out.changed };
+    });
+  }
+
   async sendBack(ctx: RequestContext, id: string, dto: SendBackDto) {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const a = await this.core.row(c, id);

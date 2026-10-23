@@ -1,5 +1,6 @@
 import { Badge, Card, LAYOUT_TYPES, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { ApplicationCorrect, type AnswerChange } from '@/components/admissions/ApplicationCorrect';
 import { DeskForm } from '@/components/admissions/DeskForm';
 import { RegistrationActions } from '@/components/admissions/RegistrationActions';
 import { RegistrationOffice } from '@/components/admissions/RegistrationOffice';
@@ -51,6 +52,8 @@ interface Detail extends RegistrationForm {
     actor: string | null;
     at: string;
   }>;
+  answerChanges: AnswerChange[];
+  canCorrect: boolean;
 }
 
 const DECISION: Record<string, { label: string; tone: 'success' | 'danger' | 'warning' | 'info' }> =
@@ -364,6 +367,26 @@ export default async function RegistrationPage({
           </ul>
         </Card>
       </div>
+      {r.canCorrect || r.answerChanges.length ? (
+        <Card elevated title="Corrections by the office" style={{ marginBottom: 'var(--sp-4)' }}>
+          <ApplicationCorrect
+            id={r.id}
+            fields={r.def.fields
+              .filter((f) => !LAYOUT_TYPES.includes(f.type))
+              .map((f) => ({
+                key: f.key,
+                label: f.label,
+                type: f.type,
+                options:
+                  f.options ??
+                  (f.list ? r.options[f.list] : f.source ? r.options[`@${f.source}`] : undefined),
+              }))}
+            answers={r.answers}
+            history={r.answerChanges}
+            canCorrect={r.canCorrect}
+          />
+        </Card>
+      ) : null}
       <Card elevated title="Answers">
         <DeskForm
           id={r.id}

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  CORRECTION_KEYS,
   EDITABLE_PROFILE_FIELDS,
   PROFILE_FIELD_BY_KEY,
   ProfileWriteError,
@@ -451,6 +452,33 @@ export class StudentBulkService {
               from,
               to: f.sensitive && to !== null ? maskValue(String(to), f.type) : to,
             };
+          }
+          // the name, date of birth, gender and parents' names change only through "Correct details"
+          const locked = CORRECTION_KEYS.filter((k) => k in changes);
+          const was = (k: string) =>
+            String(changes[k]!.from ?? '')
+              .trim()
+              .toLowerCase();
+          const corrected = locked.filter(
+            (k) =>
+              was(k) &&
+              was(k) !==
+                String(changes[k]!.to ?? '')
+                  .trim()
+                  .toLowerCase(),
+          );
+          // a blank one is filled here; one unchanged but for the case is left alone
+          for (const k of locked) if (was(k)) delete changes[k];
+          if (corrected.length) {
+            problems.push(
+              ...corrected.map((k) => ({
+                row: rowNo,
+                admissionNo: admissionNo || undefined,
+                column: PROFILE_FIELD_BY_KEY.get(k)!.label,
+                message: 'Changes only through Correct details on the student page (with approval)',
+              })),
+            );
+            continue;
           }
           if (!Object.keys(changes).length && rollNo === undefined) {
             unchanged += 1;

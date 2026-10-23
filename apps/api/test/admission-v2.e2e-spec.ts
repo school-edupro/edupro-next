@@ -999,6 +999,68 @@ describe('online admission (e2e)', () => {
       expect(list.json().total).toBe(2);
     });
   });
+  describe('doc 37 case 1b: the office corrects an application before Admit', () => {
+    const correct = (
+      id: string,
+      answers: Record<string, unknown>,
+      reason = 'Typed wrong at the desk',
+    ) =>
+      inject({
+        method: 'POST',
+        url: `/admissions/registrations/${id}/correct`,
+        headers: h(),
+        json: { answers, reason },
+      });
+
+    it('changes only the answers sent and keeps each one, old and new', async () => {
+      const before = await inject({
+        method: 'GET',
+        url: `/admissions/registrations/${appWalkIn}`,
+        headers: h(),
+      });
+      expect(before.json().canCorrect).toBe(true);
+      const oldName = before.json().answers.first_name as string;
+      const r = await correct(appWalkIn, { first_name: 'Corrected', gender: 'Female' });
+      expect(r.statusCode).toBe(201);
+      expect(r.json().changed.map((x: { key: string }) => x.key)).toContain('first_name');
+      const after = await inject({
+        method: 'GET',
+        url: `/admissions/registrations/${appWalkIn}`,
+        headers: h(),
+      });
+      expect(after.json().answers.first_name).toBe('CORRECTED');
+      const change = (
+        after.json().answerChanges as Array<{
+          label: string;
+          from: string;
+          to: string;
+          reason: string;
+        }>
+      ).find((x) => x.to === 'CORRECTED')!;
+      expect(change).toMatchObject({ from: oldName, reason: 'Typed wrong at the desk' });
+      expect(after.json().events[0].note).toMatch(/^Corrected by the office/);
+      // the same values again: nothing to change
+      const same = await correct(appWalkIn, { first_name: 'CORRECTED' });
+      expect(same.statusCode).toBe(400);
+    });
+
+    it('checks each answer against the form', async () => {
+      const bad = await correct(appWalkIn, { gender: 'Unknown' });
+      expect(bad.statusCode).toBe(400);
+      expect(bad.json().errors).toHaveProperty('gender');
+      const unknown = await correct(appWalkIn, { not_on_form: 'x' });
+      expect(unknown.statusCode).toBe(400);
+      expect(unknown.json().errors.not_on_form).toMatch(/not a question/);
+      const reasonless = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appWalkIn}/correct`,
+        headers: h(),
+        json: { answers: { first_name: 'X' } },
+      });
+      expect(reasonless.statusCode).toBe(400);
+    });
+  });
+
   describe('part 5: communication', () => {
     it('sends from Compose to the candidates of a session; it shows in the family inbox', async () => {
       const draft = {
@@ -1241,6 +1303,15 @@ describe('online admission (e2e)', () => {
         json: { classSectionId: sectionA },
       });
       expect(again.statusCode).toBe(409);
+      // admitted: details are corrected on the student page now (doc 37 part 1)
+      const late = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/correct`,
+        headers: h(),
+        json: { answers: { first_name: 'Late' }, reason: 'Too late for the form' },
+      });
+      expect(late.statusCode).toBe(409);
+      expect(late.json().detail).toMatch(/student page/);
       const bulk = await inject({
         method: 'POST',
         url: '/admissions/admit-bulk',

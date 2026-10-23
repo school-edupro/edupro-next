@@ -91,6 +91,17 @@ export const UndoSchema = z.object({
 });
 export class UndoDto extends createZodDto(UndoSchema) {}
 
+/** The office corrects answers of a submitted application (docs/design/37, case 1b). */
+export const OfficeCorrectSchema = z.object({
+  answers: z
+    .record(z.string().regex(/^[a-z][a-z0-9_]{0,39}$/), z.unknown())
+    .refine((v) => Object.keys(v).length >= 1 && Object.keys(v).length <= 40, {
+      message: 'Correct between 1 and 40 answers at a time',
+    }),
+  reason: z.string().trim().min(3).max(500),
+});
+export class OfficeCorrectDto extends createZodDto(OfficeCorrectSchema) {}
+
 export const SlotSchema = z.object({
   stageId: IdSchema,
   classId: IdSchema.nullable().optional(),

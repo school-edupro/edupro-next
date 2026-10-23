@@ -59,8 +59,10 @@ the admission ledger), **Enquiries → Conversion report**, and the **Report bui
    and they may sign in with the registration number once they have one.
 2. _They paid but the registration number has not come._ Check the payment under Payments; a late gateway
    reply registers them when it arrives. At the desk, take the fee only if the online payment failed.
-3. _A wrong answer after submitting._ Send back the field from the registration page; they correct it and it
-   returns to the same level.
+3. _A wrong answer after submitting._ Correct it yourself under **Corrections by the office** on the
+   registration page (the old and new answers and your reason are kept), or Send back the field so the
+   family corrects it and it returns to the same level. Files and photos always go back to the family.
+   After Admit, use **Correct details** on the student page (with approval).
 4. _A class has no process._ Its registrations wait; give the class a process in Admission set-up (changes
    that reach registrations in progress ask for confirmation).
 5. _Admit says the class has no section._ Create the sections of the session's year under Academics first.
