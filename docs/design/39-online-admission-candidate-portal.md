@@ -12,24 +12,38 @@ corrections and emails (doc 34, `/people/recruitment`, `/candidates`, `/setup`),
 engine and rules (doc 28), school gateways, the fee module's receipts and refunds, the communication
 module (`/comms/compose`), notices (`/academics/notices`), the students-list report engine (doc 19).
 
+**Status: built 23 Oct 2026 (all eight parts, migrations 0225–0231).** Commits: part 1 `e9fb37c`
+(forms), 2 `10379e3` (sessions and fees), 3 `6680e17` (portal and desk), 4 `50139c4` (approval process),
+5 `13399a2` (communication), 6 `4023a7a` (admission fee, Admit, cancellation), 7 `e188e37` (reports and
+dashboard), 8 `83040a8` (enquiries). Tests: `apps/api/test/admission-v2.e2e-spec.ts` (34 cases).
+Where things are: Admissions menu — Dashboard, Admission sessions, Registration forms, Admission set-up
+(sign-in, receipts, categories, stages and processes, enquiry sources, automatic messages), Admission desk,
+Enquiries, Registrations, Admissions list, Admission fee collection, Tests and interviews, Selection,
+Admit, Admission fee refunds; public `/<school>/admission` (+ `/enquire`).
+Differences from the plan: admission-fee refunds have their own register (Admissions → Admission fee
+refunds), approved by holders of `fees.refund.approve`, and show in the Day Book (fee_refunds belong to
+student fee payments); reminders a day before a correction's due date and for enquiry follow-ups are not
+sent by a scheduler yet — the registration page and the enquiry desk show what is due and overdue; the
+report dataset carries the ready forms' questions (a school's own extra questions show in the form PDF).
+
 **Everything works per academic year.** An admission session belongs to the academic year it admits
 into (e.g. 2027-28); forms, fees, stages, numbers, reports and the class allotment are per session.
 
 ## Decisions (asked and answered, 23 Oct 2026)
 
-| # | Question | Decision |
-|---|---|---|
-| 1 | Form fields the student master lacks | **Admin chooses per field**: "copy to student master" per field; a new student-master field is created when ticked |
-| 2 | Where the candidate portal lives | **School public site** `/[school]/admission`, open to the **general public** (anyone registers with a mobile or email); on Admit the family moves to the parent app |
-| 3 | Registration number and fee | **After online payment** through the school's gateways; the office may record a counter payment |
-| 4 | Office stages | **Document check**, **Test / interaction**, **Selection and offer**, **Admission fee then Admit**; which stages a class uses and their approval levels are set by the admin (below) |
-| 5 | Fee category (General, EWS, Staff ward, Sibling, Alumni…) | **From the form's answers, confirmed at Document check**; the registration fee is worked out on submit, the admission fee follows the confirmed category |
-| 6 | Cancellation | **Registration fee is kept; admission fee is refundable** through the fee module's refund with approval, less a deduction % set per session (0 = full) |
-| 8 | Enquiry before registration | **Yes, as part 8**: enquiries (walk-in, phone, website, campaign source), follow-ups with next date and reminders, convert to registration with a prefilled link, source / conversion report |
-| 9 | Office registers on behalf | **Yes, with counter fee**: the office fills the same form for a walk-in parent and takes the registration fee at the desk (receipt); the parent can sign in later with the mobile / email given |
-| 10 | EWS / DG seats | **Same online process, category EWS**: EWS families register on the portal like everyone (fee per the EWS row, may be 0); seats per category; the school's own draw for EWS seats |
-| 11 | Admission number | **Given when the admission fee is paid**: printed on the admission receipt and form; a later cancellation retires the number (never reused, still searchable) |
-| 7 | Accounts | **In the fee module with own receipt series** — heads Registration fee and Admission fee, receipts `RF/<session>/000001` and `AF/<session>/000001`; they show in the Day Book, head tally, mode summary, gateway settlement and Tally export, plus Admissions → Fee collection |
+| #   | Question                                                  | Decision                                                                                                                                                                                                                                                                       |
+| --- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Form fields the student master lacks                      | **Admin chooses per field**: "copy to student master" per field; a new student-master field is created when ticked                                                                                                                                                             |
+| 2   | Where the candidate portal lives                          | **School public site** `/[school]/admission`, open to the **general public** (anyone registers with a mobile or email); on Admit the family moves to the parent app                                                                                                            |
+| 3   | Registration number and fee                               | **After online payment** through the school's gateways; the office may record a counter payment                                                                                                                                                                                |
+| 4   | Office stages                                             | **Document check**, **Test / interaction**, **Selection and offer**, **Admission fee then Admit**; which stages a class uses and their approval levels are set by the admin (below)                                                                                            |
+| 5   | Fee category (General, EWS, Staff ward, Sibling, Alumni…) | **From the form's answers, confirmed at Document check**; the registration fee is worked out on submit, the admission fee follows the confirmed category                                                                                                                       |
+| 6   | Cancellation                                              | **Registration fee is kept; admission fee is refundable** through the fee module's refund with approval, less a deduction % set per session (0 = full)                                                                                                                         |
+| 8   | Enquiry before registration                               | **Yes, as part 8**: enquiries (walk-in, phone, website, campaign source), follow-ups with next date and reminders, convert to registration with a prefilled link, source / conversion report                                                                                   |
+| 9   | Office registers on behalf                                | **Yes, with counter fee**: the office fills the same form for a walk-in parent and takes the registration fee at the desk (receipt); the parent can sign in later with the mobile / email given                                                                                |
+| 10  | EWS / DG seats                                            | **Same online process, category EWS**: EWS families register on the portal like everyone (fee per the EWS row, may be 0); seats per category; the school's own draw for EWS seats                                                                                              |
+| 11  | Admission number                                          | **Given when the admission fee is paid**: printed on the admission receipt and form; a later cancellation retires the number (never reused, still searchable)                                                                                                                  |
+| 7   | Accounts                                                  | **In the fee module with own receipt series** — heads Registration fee and Admission fee, receipts `RF/<session>/000001` and `AF/<session>/000001`; they show in the Day Book, head tally, mode summary, gateway settlement and Tally export, plus Admissions → Fee collection |
 
 Defaults taken for the spec's open points (change on request): session label, age reference date, DOB
 window, pass-out year limit and pincode prefixes come from the session / form settings; emails stored in
@@ -129,7 +143,7 @@ Cancellation at any point: application cancelled (registration fee kept) or admi
   hostel request if asked, parent portal login and welcome email. The application keeps a link to
   the student.
 
-## Parts (build only on "go part N")
+## Parts (all built 23 Oct 2026)
 
 1. **Masters, fields and form builder**: new lists (languages, professions, nationalities, localities
    with pincode prefixes, group schools, streams → subjects, special needs, achievements, school
