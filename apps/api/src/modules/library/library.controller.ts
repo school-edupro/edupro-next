@@ -733,6 +733,17 @@ export class LibraryController {
     return this.stock.close(ctx, id, body);
   }
 
+  @Post('stock/cycles/:id/reopen')
+  @ApiOperation({ summary: 'A closed cycle reopened within the days allowed, with the reason' })
+  @RequirePermission(STOCK_CLOSE)
+  stockReopen(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: StockCancelDto,
+  ) {
+    return this.stock.reopen(ctx, id, body);
+  }
+
   @Post('stock/cycles/:id/cancel')
   @ApiOperation({ summary: 'An open cycle made by mistake cancelled, with the reason' })
   @RequirePermission(STOCK_CLOSE)

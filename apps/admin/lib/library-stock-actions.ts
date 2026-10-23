@@ -188,3 +188,24 @@ export async function endStockCycle(fd: FormData) {
     `/library/stock/${id}?ok=1&detail=${encodeURIComponent(cancel ? 'The cycle is cancelled' : 'The cycle is closed')}`,
   );
 }
+
+/** A closed cycle reopened, with the reason (the close right; within the school's days). */
+export async function reopenStockCycle(fd: FormData) {
+  const id = pick(fd, 'cycleId');
+  if (!okId(id)) redirect('/library/stock');
+  try {
+    await apiFetch(`/library/stock/cycles/${id}/reopen`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: pick(fd, 'reason') }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError)
+      back(fd, id, { error: e.problem.type, detail: detail(e).slice(0, 600) });
+    throw e;
+  }
+  revalidatePath('/library/stock');
+  revalidatePath(`/library/stock/${id}`);
+  redirect(
+    `/library/stock/${id}?ok=1&detail=${encodeURIComponent('The cycle is open again: carry on verifying, then close it')}`,
+  );
+}

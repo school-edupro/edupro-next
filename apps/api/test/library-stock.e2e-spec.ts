@@ -499,4 +499,56 @@ describe('library stock verification in cycles (e2e)', () => {
     expect(one.libraryId).toBe(ids.main);
     expect(one.figures.copies).toBeLessThanOrEqual(d.figures.copies);
   });
+
+  it('reopened: by the close right, with a reason, within the days; lost copies restored; then closed again', async () => {
+    // the librarian may not; a reason is needed
+    expect(
+      (
+        await call('POST', `/library/stock/cycles/${ids.c1!}/reopen`, {
+          reason: 'Recount shelf S1',
+        })
+      ).statusCode,
+    ).toBe(403);
+    const before = (await call('GET', `/library/stock/cycles/${ids.c1!}`, undefined, admin)).json();
+    expect(before.reopen).toMatchObject({ allowed: true });
+    const done = await call(
+      'POST',
+      `/library/stock/cycles/${ids.c1!}/reopen`,
+      { reason: 'Recount shelf S1: books were in the reading room' },
+      admin,
+    );
+    expect(done.statusCode).toBe(201);
+    expect(done.json()).toMatchObject({ status: 'open', finishedOn: null, reopened: 1 });
+    expect(done.json().reopenLog[0]).toMatchObject({
+      restored: 1,
+      reason: expect.stringContaining('Recount'),
+    });
+    expect(done.json().counts.missing).toBe(0);
+    // B00002 marked lost by the close is back on the shelf, with the event in its history
+    const copy = (await call('GET', '/library/check?q=B00002')).json();
+    const b2 = (await call('GET', `/library/check/copies/${copy.copyId as string}`)).json();
+    expect(b2.copy.status).toBe('available');
+    expect(b2.history.map((h: { what: string }) => h.what)).toContain('available');
+    // closed again; a closed cycle older than the school's days cannot be reopened
+    const again = await call(
+      'POST',
+      `/library/stock/cycles/${ids.c1!}/close`,
+      { markMissingLost: false },
+      admin,
+    );
+    expect(again.json()).toMatchObject({ status: 'closed', reopened: 1 });
+    await withMigrator((c) =>
+      c.query(`UPDATE library_stock_checks SET finished_on = CURRENT_DATE - 30 WHERE id = $1`, [
+        ids.c1,
+      ]),
+    );
+    const late = await call(
+      'POST',
+      `/library/stock/cycles/${ids.c1!}/reopen`,
+      { reason: 'Too late now' },
+      admin,
+    );
+    expect(late.statusCode).toBe(409);
+    expect(late.json().detail).toContain('Start a new cycle');
+  });
 });

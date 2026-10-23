@@ -233,6 +233,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Books a pupil or staff member may have reserved at once (0: no reservations)',
     module: 'library',
   },
+  'library.stock_reopen_days': {
+    schema: z.coerce.number().int().min(0).max(60),
+    default: 7,
+    description:
+      'Days after closing within which a stock verification cycle may be reopened (0: never)',
+    module: 'library',
+  },
   'library.hold_days': {
     schema: z.coerce.number().int().min(1).max(30),
     default: 3,

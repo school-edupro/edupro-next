@@ -107,7 +107,7 @@ export class LibraryStockService {
     const r = await c.query<Record<string, unknown>>(
       // eslint-disable-next-line no-restricted-syntax -- MINE is a fixed fragment; values are bound
       `SELECT k.id::text, k.name, k.status, k.started_on::text, k.finished_on::text, k.note, k.cancel_reason,
-              k.missing_marked_lost, COALESCE(k.started_by_name, su.display_name) AS started_by,
+              k.missing_marked_lost, k.reopened, k.reopen_log, k.closed_at, COALESCE(k.started_by_name, su.display_name) AS started_by,
               COALESCE(k.closed_by_name, cu.display_name) AS closed_by, k.library_ids::text[] AS library_ids,
               k.shelf_ids::text[] AS shelf_ids, k.material_type_ids::text[] AS material_type_ids,
               (SELECT jsonb_agg(jsonb_build_object('id', l.id::text, 'name', l.name) ORDER BY l.name)
@@ -164,6 +164,11 @@ export class LibraryStockService {
       note: k.note as string | null,
       cancelReason: k.cancel_reason as string | null,
       missingMarkedLost: Boolean(k.missing_marked_lost),
+      reopened: Number(k.reopened ?? 0),
+      reopenLog:
+        (k.reopen_log as Array<{ at: string; by: string; reason: string; restored: number }>) ?? [],
+      reopen:
+        k.status === 'closed' ? await this.reopenCheck(c, String(k.id), String(k.name)) : null,
       scope: {
         libraries,
         shelves,
@@ -953,22 +958,26 @@ export class LibraryStockService {
       );
       if (dto.markMissingLost) {
         const why = `Missing at the stock check "${k.name}"`;
-        const lost = await c.query<{ id: string; status: string }>(
-          `UPDATE library_copies x SET status = 'lost', status_on = CURRENT_DATE, status_reason = $2, updated_at = now()
-             FROM library_stock_check_items i
-            WHERE i.copy_id = x.id AND i.check_id = $1 AND i.outcome = 'missing' AND x.status IN ('available', 'damaged')
-            RETURNING x.id::text, 'x' AS status`,
+        // the status each copy had is kept on its event, so a reopened cycle can give it back
+        const lost = await c.query<{ id: string; was: string }>(
+          `WITH old AS (
+             SELECT x.id, x.status::text AS was FROM library_copies x JOIN library_stock_check_items i ON i.copy_id = x.id
+              WHERE i.check_id = $1 AND i.outcome = 'missing' AND x.status IN ('available', 'damaged') FOR UPDATE OF x)
+           UPDATE library_copies x SET status = 'lost', status_on = CURRENT_DATE, status_reason = $2, updated_at = now()
+             FROM old WHERE old.id = x.id
+            RETURNING x.id::text, old.was`,
           [id, why],
         );
         if (lost.rows.length)
           await c.query(
-            `INSERT INTO library_copy_events (school_id, copy_id, what, to_status, on_date, reason, by_user, by_name)
-             SELECT app.current_school_id(), unnest($1::bigint[]), 'lost', 'lost', CURRENT_DATE, $2, app.current_user_id(), $3`,
-            [lost.rows.map((x) => x.id), why, ctx.user.displayName],
+            `INSERT INTO library_copy_events (school_id, copy_id, what, from_status, to_status, on_date, reason, by_user, by_name)
+             SELECT app.current_school_id(), u.id, 'lost', u.was, 'lost', CURRENT_DATE, $3, app.current_user_id(), $4
+               FROM unnest($1::bigint[], $2::text[]) AS u(id, was)`,
+            [lost.rows.map((x) => x.id), lost.rows.map((x) => x.was), why, ctx.user.displayName],
           );
       }
       await c.query(
-        `UPDATE library_stock_checks SET status = 'closed', finished_on = CURRENT_DATE, closed_by = app.current_user_id(),
+        `UPDATE library_stock_checks SET status = 'closed', finished_on = CURRENT_DATE, closed_at = now(), closed_by = app.current_user_id(),
                 closed_by_name = $3, note = COALESCE($2, note), missing_marked_lost = $4,
                 found = (SELECT count(*) FROM library_stock_check_items WHERE check_id = $1 AND outcome = 'found'),
                 missing = (SELECT count(*) FROM library_stock_check_items WHERE check_id = $1 AND outcome = 'missing'),
@@ -986,6 +995,109 @@ export class LibraryStockService {
         entityType: 'library_stock_checks',
         entityId: id,
         after: dto,
+      });
+      return this.cycle(c, id);
+    });
+  }
+
+  /**
+   * Whether a closed cycle may be reopened now: within the school's days of closing, and no later
+   * cycle (open, or started after this one closed) holding any of its books.
+   */
+  private async reopenCheck(c: PoolClient, id: string, name: string) {
+    const r = await c.query<{ days: number; until: string | null; blocked: string[] | null }>(
+      `SELECT COALESCE((app.setting('library.stock_reopen_days') #>> '{}')::int, 7) AS days,
+              (k.finished_on + COALESCE((app.setting('library.stock_reopen_days') #>> '{}')::int, 7))::text AS until,
+              (SELECT array_agg(DISTINCT o.name ORDER BY o.name)
+                 FROM library_stock_check_items i
+                 JOIN library_stock_check_items j ON j.copy_id = i.copy_id AND j.check_id <> i.check_id
+                 JOIN library_stock_checks o ON o.id = j.check_id
+                WHERE i.check_id = k.id AND o.status <> 'cancelled'
+                  AND (o.status = 'open' OR o.created_at > COALESCE(k.closed_at, k.finished_on::timestamp AT TIME ZONE 'Asia/Kolkata'))) AS blocked
+         FROM library_stock_checks k WHERE k.id = $1`,
+      [id],
+    );
+    const x = r.rows[0]!;
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    const why =
+      x.days === 0
+        ? 'This school does not allow reopening a closed cycle (Library settings: days to reopen = 0).'
+        : x.until && x.until < today
+          ? `It can be reopened only up to ${String(x.days)} days after closing (until ${x.until.slice(8, 10)}-${x.until.slice(5, 7)}-${x.until.slice(0, 4)}). Start a new cycle instead.`
+          : x.blocked?.length
+            ? `Its books are now in ${x.blocked.map((b) => `"${b}"`).join(', ')}: close or cancel that cycle first, or start a new one.`
+            : null;
+    return { allowed: why === null, why, until: x.until, name };
+  }
+
+  /** A closed cycle reopened (with the reason): outcomes back to pending, copies it marked lost restored. */
+  async reopen(ctx: RequestContext, id: string, dto: StockCancelDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const k = await this.cycle(c, id);
+      if (k.status !== 'closed')
+        throw new DomainError('library.stock_not_closed', `The cycle "${k.name}" is ${k.status}`, {
+          status: 409,
+        });
+      await c.query(`SELECT 1 FROM library_stock_checks WHERE id = $1 FOR UPDATE`, [id]);
+      const check = await this.reopenCheck(c, id, k.name);
+      if (!check.allowed)
+        throw new DomainError(
+          'library.stock_reopen_refused',
+          check.why ?? 'It cannot be reopened',
+          {
+            status: 409,
+          },
+        );
+      // copies the close marked lost, still lost for that reason, get their earlier status back
+      const why = `Missing at the stock check "${k.name}"`;
+      const back = await c.query<{ id: string; was: string }>(
+        `WITH x AS (
+           SELECT y.id,
+                  COALESCE((SELECT e.from_status FROM library_copy_events e
+                             WHERE e.copy_id = y.id AND e.what = 'lost' AND e.reason = $2 ORDER BY e.at DESC, e.id DESC LIMIT 1), 'available') AS was
+             FROM library_copies y JOIN library_stock_check_items i ON i.copy_id = y.id
+            WHERE i.check_id = $1 AND y.status = 'lost' AND y.status_reason = $2 FOR UPDATE OF y)
+         UPDATE library_copies y SET status = x.was::library_copy_status, status_on = CURRENT_DATE, status_reason = NULL, updated_at = now()
+           FROM x WHERE x.id = y.id
+         RETURNING y.id::text, x.was`,
+        [id, why],
+      );
+      if (back.rows.length)
+        await c.query(
+          `INSERT INTO library_copy_events (school_id, copy_id, what, from_status, to_status, on_date, reason, by_user, by_name)
+           SELECT app.current_school_id(), u.id, 'available', 'lost', u.was, CURRENT_DATE, $3, app.current_user_id(), $4
+             FROM unnest($1::bigint[], $2::text[]) AS u(id, was)`,
+          [
+            back.rows.map((x) => x.id),
+            back.rows.map((x) => x.was),
+            `Stock check "${k.name}" reopened: ${dto.reason}`,
+            ctx.user.displayName,
+          ],
+        );
+      await c.query(
+        `UPDATE library_stock_check_items SET outcome = 'pending'
+          WHERE check_id = $1 AND outcome IN ('missing', 'on_loan', 'gone')`,
+        [id],
+      );
+      await c.query(
+        `UPDATE library_stock_checks
+            SET status = 'open', finished_on = NULL, closed_at = NULL, closed_by = NULL, closed_by_name = NULL,
+                missing_marked_lost = false, found = 0, missing = 0, on_loan = 0, gone = 0, reopened = reopened + 1,
+                reopen_log = reopen_log || jsonb_build_array(jsonb_build_object('at', now(), 'by', $2::text, 'reason', $3::text,
+                               'restored', $4::int, 'closedOn', $5::text))
+          WHERE id = $1`,
+        [id, ctx.user.displayName, dto.reason, back.rows.length, k.finishedOn],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'library.stock.reopen',
+        entityType: 'library_stock_checks',
+        entityId: id,
+        before: {
+          status: 'closed',
+          finishedOn: k.finishedOn,
+          missingMarkedLost: k.missingMarkedLost,
+        },
+        after: { reason: dto.reason, restored: back.rows.length },
       });
       return this.cycle(c, id);
     });

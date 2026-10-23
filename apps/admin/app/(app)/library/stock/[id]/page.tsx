@@ -18,6 +18,7 @@ import {
 import {
   decideStockUpload,
   endStockCycle,
+  reopenStockCycle,
   markStockItem,
   uploadStockFile,
 } from '@/lib/library-stock-actions';
@@ -160,6 +161,51 @@ export default async function StockCyclePage({
             ? `Closed on ${dmy(k.finishedOn)}${k.closedBy ? ` by ${k.closedBy}` : ''}: ${String(k.counts.missing)} missing${k.missingMarkedLost ? ' (marked lost)' : ''}, ${String(k.counts.onLoan)} on loan.`
             : `Cancelled on ${dmy(k.finishedOn)}${k.closedBy ? ` by ${k.closedBy}` : ''}: ${k.cancelReason ?? ''}`}
         </p>
+      ) : null}
+      {k.reopenLog?.length ? (
+        <p className="ep-field__help">
+          {k.reopenLog
+            .map(
+              (r) =>
+                `Reopened on ${dmy(r.at.slice(0, 10))} by ${r.by}${r.closedOn ? ` (closed ${dmy(r.closedOn)})` : ''}: ${r.reason}${r.restored ? ` · ${String(r.restored)} lost cop${r.restored === 1 ? 'y' : 'ies'} put back` : ''}`,
+            )
+            .join(' · ')}
+        </p>
+      ) : null}
+      {k.status === 'closed' && mayClose && k.reopen ? (
+        k.reopen.allowed ? (
+          <details className="ep-stock-cancel" style={{ marginBottom: 'var(--sp-4)' }}>
+            <summary>
+              Closed too early? Reopen the cycle
+              {k.reopen.until ? ` (until ${dmy(k.reopen.until)})` : ''}
+            </summary>
+            <p className="ep-field__help">
+              The books found missing go back to pending
+              {k.missingMarkedLost
+                ? ', and the copies this close marked lost get their earlier status back'
+                : ''}
+              . Carry on verifying, then close it again.
+            </p>
+            <form action={reopenStockCycle} className="ep-dlog__filters">
+              <input type="hidden" name="cycleId" value={id} />
+              <div className="ep-dlog__search">
+                <InputField
+                  id="st-reopen"
+                  name="reason"
+                  label="Why"
+                  required
+                  minLength={3}
+                  maxLength={300}
+                />
+              </div>
+              <Button type="submit" variant="secondary">
+                Reopen the cycle
+              </Button>
+            </form>
+          </details>
+        ) : (
+          <p className="ep-field__help">Reopening: {k.reopen.why}</p>
+        )
       ) : null}
 
       <div className="ep-dash-kpis ep-dash-kpis--4">

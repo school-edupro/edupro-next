@@ -1,5 +1,14 @@
 /** Stock verification in cycles (docs/design/36-library.md, "Library reports", part 3): what the API gives. */
 export interface StockCycle {
+  reopened?: number;
+  reopenLog?: Array<{
+    at: string;
+    by: string;
+    reason: string;
+    restored: number;
+    closedOn?: string;
+  }>;
+  reopen?: { allowed: boolean; why: string | null; until: string | null } | null;
   id: string;
   name: string;
   status: 'open' | 'closed' | 'cancelled';
