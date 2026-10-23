@@ -25,6 +25,10 @@ into (e.g. 2027-28); forms, fees, stages, numbers, reports and the class allotme
 | 4 | Office stages | **Document check**, **Test / interaction**, **Selection and offer**, **Admission fee then Admit**; which stages a class uses and their approval levels are set by the admin (below) |
 | 5 | Fee category (General, EWS, Staff ward, Sibling, Alumni…) | **From the form's answers, confirmed at Document check**; the registration fee is worked out on submit, the admission fee follows the confirmed category |
 | 6 | Cancellation | **Registration fee is kept; admission fee is refundable** through the fee module's refund with approval, less a deduction % set per session (0 = full) |
+| 8 | Enquiry before registration | **Yes, as part 8**: enquiries (walk-in, phone, website, campaign source), follow-ups with next date and reminders, convert to registration with a prefilled link, source / conversion report |
+| 9 | Office registers on behalf | **Yes, with counter fee**: the office fills the same form for a walk-in parent and takes the registration fee at the desk (receipt); the parent can sign in later with the mobile / email given |
+| 10 | EWS / DG seats | **Same online process, category EWS**: EWS families register on the portal like everyone (fee per the EWS row, may be 0); seats per category; the school's own draw for EWS seats |
+| 11 | Admission number | **Given when the admission fee is paid**: printed on the admission receipt and form; a later cancellation retires the number (never reused, still searchable) |
 | 7 | Accounts | **In the fee module with own receipt series** — heads Registration fee and Admission fee, receipts `RF/<session>/000001` and `AF/<session>/000001`; they show in the Day Book, head tally, mode summary, gateway settlement and Tally export, plus Admissions → Fee collection |
 
 Defaults taken for the spec's open points (change on request): session label, age reference date, DOB
@@ -45,7 +49,7 @@ Public site → candidate registers (mobile / email + code) → picks the class 
      Written test (IX–XII) → Interview → Selection / waiting list → offer
  → email "pay admission fee" → pays in the portal or at the school desk
  → admission receipt + admission form PDF in the portal
- → Admit: allot class-section (and roll no.) → student master + parents + documents + parent login
+ → admission no. given on payment → Admit: allot class-section (and roll no.) → student master + parents + documents + parent login
 Cancellation at any point: application cancelled (registration fee kept) or admission cancelled
  with admission-fee refund (deduction %) through refund approval.
 ```
@@ -149,3 +153,10 @@ Cancellation at any point: application cancelled (registration fee kept) or admi
    master; cancellation and refund flow.
 7. **Reports and dashboard**: admissions list on the report engine with saved views and report
    builder dataset, fee collection report, admissions dashboard, fee heads in the fee reports.
+8. **Enquiry**: enquiry desk (walk-in, phone, website form, campaign / source), follow-ups with next
+   date and reminders, counsellor assignment, convert to registration (prefilled link by email / SMS),
+   enquiry → registration → admission conversion report by source and class.
+
+Placement of decisions 9-11: office registration on behalf in part 3 (same form, desk receipt);
+EWS category in parts 2 and 4 (fee row, seats per category, draw per category); admission number on
+admission-fee payment in part 6 (Admit then only allots section and roll no.).
