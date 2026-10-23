@@ -1005,6 +1005,15 @@ export class LibraryStockService {
    * cycle (open, or started after this one closed) holding any of its books.
    */
   private async reopenCheck(c: PoolClient, id: string, name: string) {
+    // the school's administrators (Principal included) may reopen at any time; others within the days
+    const admin = await c.query<{ ok: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                       WHERE ur.user_id = app.current_user_id() AND ur.school_id = app.current_school_id()
+                         AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE
+                         AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
+                         AND r.code IN ('school_admin', 'group_admin')) AS ok`,
+    );
+    const anyTime = admin.rows[0]?.ok ?? false;
     const r = await c.query<{ days: number; until: string | null; blocked: string[] | null }>(
       `SELECT COALESCE((app.setting('library.stock_reopen_days') #>> '{}')::int, 7) AS days,
               (k.finished_on + COALESCE((app.setting('library.stock_reopen_days') #>> '{}')::int, 7))::text AS until,
@@ -1020,14 +1029,14 @@ export class LibraryStockService {
     const x = r.rows[0]!;
     const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
     const why =
-      x.days === 0
-        ? 'This school does not allow reopening a closed cycle (Library settings: days to reopen = 0).'
-        : x.until && x.until < today
-          ? `It can be reopened only up to ${String(x.days)} days after closing (until ${x.until.slice(8, 10)}-${x.until.slice(5, 7)}-${x.until.slice(0, 4)}). Start a new cycle instead.`
+      !anyTime && x.days === 0
+        ? 'Only the school administrator may reopen a closed cycle here.'
+        : !anyTime && x.until && x.until < today
+          ? `It can be reopened only up to ${String(x.days)} days after closing (until ${x.until.slice(8, 10)}-${x.until.slice(5, 7)}-${x.until.slice(0, 4)}); after that only the school administrator can. Start a new cycle instead.`
           : x.blocked?.length
             ? `Its books are now in ${x.blocked.map((b) => `"${b}"`).join(', ')}: close or cancel that cycle first, or start a new one.`
             : null;
-    return { allowed: why === null, why, until: x.until, name };
+    return { allowed: why === null, why, until: anyTime ? null : x.until, anyTime, name };
   }
 
   /** A closed cycle reopened (with the reason): outcomes back to pending, copies it marked lost restored. */

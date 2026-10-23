@@ -542,13 +542,33 @@ describe('library stock verification in cycles (e2e)', () => {
         ids.c1,
       ]),
     );
+    // past the days: the school administrator still may (any time)
+    const old = (await call('GET', `/library/stock/cycles/${ids.c1!}`, undefined, admin)).json();
+    expect(old.reopen).toMatchObject({ allowed: true, anyTime: true, until: null });
     const late = await call(
       'POST',
       `/library/stock/cycles/${ids.c1!}/reopen`,
-      { reason: 'Too late now' },
+      { reason: 'Recount after a month' },
       admin,
     );
-    expect(late.statusCode).toBe(409);
-    expect(late.json().detail).toContain('Start a new cycle');
+    expect(late.statusCode).toBe(201);
+    expect(late.json()).toMatchObject({ status: 'open', reopened: 2 });
+    // a later cycle on the same books blocks reopening, and is named
+    await call('POST', `/library/stock/cycles/${ids.c1!}/close`, {}, admin);
+    const later = await call(
+      'POST',
+      '/library/stock/cycles',
+      { name: 'Shelf S1 again', libraryIds: [ids.main], materialTypeIds: [ids.book] },
+      admin,
+    );
+    expect(later.statusCode).toBe(201);
+    const blocked = await call(
+      'POST',
+      `/library/stock/cycles/${ids.c1!}/reopen`,
+      { reason: 'Once more' },
+      admin,
+    );
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().detail).toContain('Shelf S1 again');
   });
 });
