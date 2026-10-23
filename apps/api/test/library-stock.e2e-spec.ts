@@ -394,10 +394,17 @@ describe('library stock verification in cycles (e2e)', () => {
   });
 
   it('closed: not found is missing (marked lost if asked), on loan is counted; a cycle cancelled', async () => {
-    const closed = await call('POST', `/library/stock/cycles/${ids.c1!}/close`, {
+    // closing is its own right (0223): the librarian scans, the in-charge / admin closes
+    const refused = await call('POST', `/library/stock/cycles/${ids.c1!}/close`, {
       markMissingLost: true,
-      note: 'Shelf S1 done',
     });
+    expect(refused.statusCode).toBe(403);
+    const closed = await call(
+      'POST',
+      `/library/stock/cycles/${ids.c1!}/close`,
+      { markMissingLost: true, note: 'Shelf S1 done' },
+      admin,
+    );
     expect(closed.json()).toMatchObject({
       status: 'closed',
       finishedOn: day(0),
@@ -424,17 +431,26 @@ describe('library stock verification in cycles (e2e)', () => {
     expect(main.json()).toMatchObject({ counts: { total: 5 } });
     expect(
       (
-        await call('POST', `/library/stock/cycles/${main.json().id as string}/cancel`, {
-          reason: 'x',
-        })
+        await call(
+          'POST',
+          `/library/stock/cycles/${main.json().id as string}/cancel`,
+          { reason: 'x' },
+          admin,
+        )
       ).statusCode,
     ).toBe(400);
+    expect(
+      (
+        await call('POST', `/library/stock/cycles/${main.json().id as string}/cancel`, {
+          reason: 'Started on the wrong day',
+        })
+      ).statusCode,
+    ).toBe(403);
     const cancelled = await call(
       'POST',
       `/library/stock/cycles/${main.json().id as string}/cancel`,
-      {
-        reason: 'Started on the wrong day',
-      },
+      { reason: 'Started on the wrong day' },
+      admin,
     );
     expect(cancelled.json()).toMatchObject({
       status: 'cancelled',

@@ -4,9 +4,15 @@ import { DomainError } from '../errors/domain-error';
 export interface TemplateColumn {
   header: string;
   width: number;
-  /** A drop-down on the cell: only these values are accepted. */
+  /** A drop-down on the cell: only these values are accepted (unless `allowNew`). */
   options?: string[];
   required?: boolean;
+  /** The drop-down suggests; a value not in the list only warns (the import adds it). */
+  allowNew?: boolean;
+  /** Shown as a note on the heading cell. */
+  note?: string;
+  /** Cell format for the column: text keeps leading zeros (accession nos.), date as dd-mm-yyyy. */
+  format?: 'text' | 'date' | 'number';
 }
 const ROWS = 500;
 
@@ -20,18 +26,48 @@ export async function templateSheet(t: {
   guide: string[];
   /** Rows already there, so the sheet can be corrected and uploaded again. */
   rows?: Array<Array<string | number | null>>;
+  /** Filled-in sample rows, put on their own "Example" sheet (never read on upload). */
+  examples?: Array<Array<string | number | null>>;
 }): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(t.sheet);
   const lists = wb.addWorksheet('Lists');
   const guide = wb.addWorksheet('How to fill');
-  ws.addRow(t.columns.map((c) => (c.required ? `${c.header} *` : c.header)));
-  ws.getRow(1).font = { bold: true };
+  const head = (sheet: ExcelJS.Worksheet) => {
+    const row = sheet.addRow(t.columns.map((c) => (c.required ? `${c.header} *` : c.header)));
+    row.height = 30;
+    row.eachCell((cell, n) => {
+      const col = t.columns[n - 1]!;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: col.required ? 'FFB42318' : 'FF1B3A6B' },
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF8899AA' } } };
+      const tips = [
+        col.required ? 'Required.' : '',
+        col.note ?? '',
+        col.options
+          ? col.allowNew
+            ? 'Pick from the list, or type a new name.'
+            : 'Pick from the list.'
+          : '',
+      ].filter(Boolean);
+      if (tips.length) cell.note = tips.join(' ');
+    });
+  };
+  head(ws);
   ws.views = [{ state: 'frozen', ySplit: 1 }];
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: t.columns.length } };
   (t.rows ?? []).forEach((r) => ws.addRow(r));
   let listCol = 0;
   t.columns.forEach((c, i) => {
     ws.getColumn(i + 1).width = c.width;
+    if (c.format === 'text') ws.getColumn(i + 1).numFmt = '@';
+    if (c.format === 'date') ws.getColumn(i + 1).numFmt = 'dd-mm-yyyy';
+    if (c.format === 'number') ws.getColumn(i + 1).numFmt = '0.##';
     if (!c.options) return;
     listCol += 1;
     const letter = lists.getColumn(listCol).letter;
@@ -49,12 +85,33 @@ export async function templateSheet(t: {
         allowBlank: !c.required,
         formulae: [range],
         showErrorMessage: true,
+        errorStyle: c.allowNew ? 'warning' : 'stop',
         errorTitle: c.header,
-        error: 'Pick a value from the list',
+        error: c.allowNew
+          ? 'Not in the list yet. Keep it to add it to the set-up on upload, or pick from the list.'
+          : 'Pick a value from the list',
       };
   });
-  t.guide.forEach((line) => guide.addRow([line]));
+  lists.getRow(1).font = { bold: true };
+  lists.views = [{ state: 'frozen', ySplit: 1 }];
+  if (t.examples?.length) {
+    const ex = wb.addWorksheet('Example');
+    head(ex);
+    t.examples.forEach((r) => ex.addRow(r));
+    t.columns.forEach((c, i) => {
+      ex.getColumn(i + 1).width = c.width;
+    });
+    ex.views = [{ state: 'frozen', ySplit: 1 }];
+  }
+  const g = guide.addRow(['How to fill']);
+  g.font = { bold: true, size: 13 };
+  t.guide.forEach((line, n) => guide.addRow([`${String(n + 1)}. ${line}`]));
+  guide.addRow([]);
+  guide.addRow(['Columns marked * (red heading) are required. Hover a heading for its note.']);
+  if (t.examples?.length)
+    guide.addRow(['See the "Example" sheet for filled-in rows (it is not read on upload).']);
   guide.getColumn(1).width = 110;
+  guide.getColumn(1).alignment = { wrapText: true, vertical: 'top' };
   return Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
 }
 

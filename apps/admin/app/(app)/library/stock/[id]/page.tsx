@@ -65,6 +65,7 @@ export default async function StockCyclePage({
     throw e;
   }
   const open = k.status === 'open';
+  const mayClose = me.permissions.includes('library.stock.close');
   const state: StockState = STATES.includes(sp.state as StockState)
     ? (sp.state as StockState)
     : open
@@ -561,38 +562,50 @@ export default async function StockCyclePage({
             The {k.counts.pending} pending cop{k.counts.pending === 1 ? 'y becomes' : 'ies become'}{' '}
             missing; books on loan then are counted as on loan. Nothing more can be verified after.
           </p>
-          <form action={endStockCycle} className="ep-dlog__filters">
-            <input type="hidden" name="cycleId" value={id} />
-            <input type="hidden" name="end" value="close" />
-            <label className="ep-check" htmlFor="st-lost" style={{ alignSelf: 'center' }}>
-              <input id="st-lost" type="checkbox" name="markMissingLost" /> Mark the missing copies
-              lost
-            </label>
-            <div className="ep-dlog__search">
-              <InputField id="st-note" name="note" label="Note" maxLength={300} />
-            </div>
-            <Button type="submit">Close the cycle</Button>
-          </form>
-          <details className="ep-stock-cancel">
-            <summary>Started by mistake? Cancel the cycle</summary>
+          {!mayClose ? (
+            <p className="ep-alert ep-alert--info">
+              Closing or cancelling a cycle needs the right “Close or cancel a stock verification
+              cycle”, which the administrator gives to the library in-charge or the Principal
+              (Access → Roles). Keep scanning and uploading; they close it when the count is
+              complete.
+            </p>
+          ) : null}
+          {mayClose ? (
             <form action={endStockCycle} className="ep-dlog__filters">
               <input type="hidden" name="cycleId" value={id} />
-              <input type="hidden" name="end" value="cancel" />
+              <input type="hidden" name="end" value="close" />
+              <label className="ep-check" htmlFor="st-lost" style={{ alignSelf: 'center' }}>
+                <input id="st-lost" type="checkbox" name="markMissingLost" /> Mark the missing
+                copies lost
+              </label>
               <div className="ep-dlog__search">
-                <InputField
-                  id="st-reason"
-                  name="reason"
-                  label="Why"
-                  required
-                  minLength={3}
-                  maxLength={300}
-                />
+                <InputField id="st-note" name="note" label="Note" maxLength={300} />
               </div>
-              <Button type="submit" variant="danger">
-                Cancel the cycle
-              </Button>
+              <Button type="submit">Close the cycle</Button>
             </form>
-          </details>
+          ) : null}
+          {mayClose ? (
+            <details className="ep-stock-cancel">
+              <summary>Started by mistake? Cancel the cycle</summary>
+              <form action={endStockCycle} className="ep-dlog__filters">
+                <input type="hidden" name="cycleId" value={id} />
+                <input type="hidden" name="end" value="cancel" />
+                <div className="ep-dlog__search">
+                  <InputField
+                    id="st-reason"
+                    name="reason"
+                    label="Why"
+                    required
+                    minLength={3}
+                    maxLength={300}
+                  />
+                </div>
+                <Button type="submit" variant="danger">
+                  Cancel the cycle
+                </Button>
+              </form>
+            </details>
+          ) : null}
         </section>
       ) : null}
     </>

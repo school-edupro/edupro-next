@@ -161,6 +161,48 @@ const TEMPLATE: Array<{ header: string; width: number; options?: string[]; requi
   { header: 'Notes', width: 24 },
 ];
 
+/** Two filled rows for the template's Example sheet (two copies of one title, a donated reference book). */
+const EXAMPLE_1: Record<string, string | number> = {
+  'Accession no.': '10001',
+  Title: 'Malgudi Days',
+  Authors: 'R. K. Narayan',
+  'Material type': 'Book',
+  Subject: 'Literature',
+  'Call number': '823 NAR',
+  Keywords: 'short stories, india',
+  'For class': 'VI',
+  Publisher: 'Indian Thought Publications',
+  'Place of publication': 'Chennai',
+  Year: 2016,
+  Edition: '2nd',
+  Pages: 256,
+  ISBN: '9788185986173',
+  Language: 'English',
+  Price: 250,
+  'Reference only': 'No',
+  'Purchase or donation': 'Purchase',
+  Vendor: 'City Book House',
+  'Bill no.': 'CBH/245',
+  'Bill date': '01-06-2026',
+  'Date of accession': '05-06-2026',
+  Shelf: 'S1',
+  Rack: 'R2',
+};
+const EXAMPLE_2: Record<string, string | number> = {
+  'Accession no.': '10002',
+  Title: 'Oxford Student Atlas for India',
+  'Material type': 'Reference',
+  Subject: 'Geography',
+  Publisher: 'Oxford University Press',
+  Year: 2023,
+  Language: 'English',
+  'Reference only': 'Yes',
+  'Purchase or donation': 'Donation',
+  'Donated by': 'Parents’ association',
+  'Date of accession': '10-06-2026',
+  Remarks: 'Kept in the reading room',
+};
+
 interface TitleData {
   title: string;
   subtitle?: string;
@@ -268,19 +310,94 @@ export class LibraryImportService {
 
   /** Our template: the columns, drop-downs for the lists, and how to fill it. */
   async template(ctx: RequestContext) {
-    const libraries = await this.db.tenant(requireTenant(ctx), async (c) => {
+    // every list the import understands, from Library setup (and the classes for "For class")
+    const lists = await this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(
         `SELECT app.library_seed(app.current_school_id()) WHERE app.my_libraries() IS NULL`,
       );
-      return (
-        await c.query<{ code: string }>(
-          `SELECT code FROM library_libraries WHERE status = 'active' ORDER BY code`,
-        )
-      ).rows.map((x) => x.code);
+      const col = async (sql: string) => (await c.query<{ v: string }>(sql)).rows.map((x) => x.v);
+      return {
+        Library: await col(
+          `SELECT code AS v FROM library_libraries WHERE status = 'active' ORDER BY code`,
+        ),
+        'Material type': await col(
+          `SELECT name AS v FROM library_material_types WHERE status = 'active' ORDER BY name`,
+        ),
+        Subject: await col(
+          `SELECT name::text AS v FROM library_subjects WHERE status = 'active' ORDER BY name`,
+        ),
+        'Sub-subject': await col(
+          `SELECT DISTINCT unnest(sub_subjects) AS v FROM library_subjects WHERE status = 'active' ORDER BY 1`,
+        ),
+        Language: await col(
+          `SELECT name::text AS v FROM library_languages WHERE status = 'active' ORDER BY name`,
+        ),
+        Publisher: await col(
+          `SELECT name::text AS v FROM library_publishers WHERE status = 'active' ORDER BY name`,
+        ),
+        Vendor: await col(
+          `SELECT name AS v FROM library_vendors WHERE status = 'active' ORDER BY name`,
+        ),
+        Shelf: await col(
+          `SELECT DISTINCT code AS v FROM library_shelves WHERE status = 'active' ORDER BY 1`,
+        ),
+        Rack: await col(
+          `SELECT DISTINCT unnest(racks) AS v FROM library_shelves WHERE status = 'active' ORDER BY 1`,
+        ),
+        'For class': await col(
+          `SELECT DISTINCT k.code AS v FROM classes k WHERE k.deleted_at IS NULL ORDER BY 1`,
+        ),
+      } as Record<string, string[]>;
     });
+    const NOTES: Record<string, string> = {
+      'Accession no.':
+        'The copy’s number, unique in the school. An existing number updates that copy.',
+      Library: 'The library code from Library setup. Empty: the default library.',
+      Title: 'The book’s title. Copies of one title repeat the title details on each row.',
+      Authors: 'Several separated by ";" e.g. R. K. Narayan; R. K. Laxman',
+      Editors: 'Several separated by ";"',
+      'Material type': 'Empty: Book.',
+      Keywords: 'Separated by ","',
+      'For class': 'The class code the book suits, e.g. VI.',
+      Year: 'Four digits, e.g. 2024.',
+      ISBN: '10 or 13 digits; hyphens allowed.',
+      Price: 'A number, e.g. 350.',
+      'Bill date': 'dd-mm-yyyy or yyyy-mm-dd.',
+      'Date of accession': 'dd-mm-yyyy or yyyy-mm-dd. Empty: today.',
+      Barcode: 'Only if the label barcode differs from the accession number.',
+      Status: 'Empty: on the shelf.',
+    };
+    const FORMAT: Record<string, 'text' | 'date' | 'number'> = {
+      'Accession no.': 'text',
+      ISBN: 'text',
+      Barcode: 'text',
+      'Bill no.': 'text',
+      'Purchase order no.': 'text',
+      'Bill date': 'date',
+      'Date of accession': 'date',
+      Price: 'number',
+    };
     const bytes = await templateSheet({
       sheet: 'Books',
-      columns: TEMPLATE.map((t) => (t.header === 'Library' ? { ...t, options: libraries } : t)),
+      columns: TEMPLATE.map((t) => {
+        const list = lists[t.header];
+        return {
+          ...t,
+          ...(list?.length
+            ? { options: list, allowNew: t.header !== 'Library' && t.header !== 'For class' }
+            : {}),
+          ...(NOTES[t.header] ? { note: NOTES[t.header] } : {}),
+          ...(FORMAT[t.header] ? { format: FORMAT[t.header] } : {}),
+        };
+      }),
+      examples: [
+        TEMPLATE.map((t) =>
+          t.header === 'Library' ? (lists.Library?.[0] ?? null) : (EXAMPLE_1[t.header] ?? null),
+        ),
+        TEMPLATE.map((t) =>
+          t.header === 'Library' ? (lists.Library?.[0] ?? null) : (EXAMPLE_2[t.header] ?? null),
+        ),
+      ],
       guide: [
         'One row per copy: its accession number, the library it is in, and its title.',
         'Copies of one title: repeat the title details on each row (the same ISBN, or the same title, first author, edition and volume, make one title).',

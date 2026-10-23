@@ -317,6 +317,21 @@ describe('library import from Excel and the legacy layout (e2e)', () => {
     const head = (ws.getRow(1).values as string[]).slice(1);
     expect(head.slice(0, 3)).toEqual(['Accession no. *', 'Library', 'Title *']);
     const col = (name: string) => head.findIndex((x) => x.replace(' *', '') === name) + 1;
+    // every set-up list is a drop-down; a new name only warns (the import adds it to set-up)
+    const lists = wb.getWorksheet('Lists')!;
+    const listHeads = (lists.getRow(1).values as string[]).slice(1);
+    expect(listHeads).toEqual(
+      expect.arrayContaining(['Library', 'Material type', 'Language', 'Reference only', 'Status']),
+    );
+    const mt = ws.getRow(2).getCell(col('Material type')).dataValidation;
+    expect(mt).toMatchObject({ type: 'list', errorStyle: 'warning' });
+    expect(ws.getRow(2).getCell(col('Status')).dataValidation).toMatchObject({
+      errorStyle: 'stop',
+    });
+    expect(ws.getRow(1).getCell(col('Title')).note).toBeTruthy();
+    const ex = wb.getWorksheet('Example')!;
+    expect(ex.rowCount).toBe(3);
+    expect(ex.getRow(2).getCell(col('Title')).value).toBe('Malgudi Days');
     const r = ws.getRow(2);
     r.getCell(col('Accession no.')).value = 'R-77';
     r.getCell(col('Title')).value = 'Oxford Atlas';

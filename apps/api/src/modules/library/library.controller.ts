@@ -62,6 +62,7 @@ import { LibraryService } from './library.service';
 
 /** Stock verification is its own right (the Librarian role has it). */
 const STOCK = 'library.stock.verify';
+const STOCK_CLOSE = 'library.stock.close';
 
 /** Sprint 17: library — catalogue and copies, circulation, fines; the family's loans. */
 @ApiTags('library')
@@ -669,14 +670,16 @@ export class LibraryController {
 
   @Post('stock/cycles/:id/close')
   @ApiOperation({ summary: 'A cycle closed: copies not found are missing (marked lost if asked)' })
-  @RequirePermission(STOCK)
+  @RequirePermission(STOCK_CLOSE, {
+    description: 'Close or cancel a stock verification cycle (and mark missing copies lost)',
+  })
   stockClose(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: StockCloseDto) {
     return this.stock.close(ctx, id, body);
   }
 
   @Post('stock/cycles/:id/cancel')
   @ApiOperation({ summary: 'An open cycle made by mistake cancelled, with the reason' })
-  @RequirePermission(STOCK)
+  @RequirePermission(STOCK_CLOSE)
   stockCancel(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
