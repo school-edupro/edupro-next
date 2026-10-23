@@ -3,6 +3,13 @@ import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { bff } from '@/lib/bff';
 import { currentLang, t, type Lang } from '@/lib/i18n';
+import {
+  MyLibraryFigures,
+  MyLibraryHistory,
+  historyFilters,
+  historyQuery,
+  type LibraryHistory,
+} from '@/components/MyLibrary';
 import { cancelBookReservation, reserveBook } from './actions';
 
 interface Book {
@@ -128,13 +135,15 @@ export default async function LibraryPage({
   let mine: Borrower;
   let catalogue: Catalogue | null = null;
   let digital: Digital[] = [];
+  let hist: LibraryHistory | null = null;
+  const filters = historyFilters(view === 'history' ? sp : {});
   try {
     // the staff member: the one borrower of the summary
     const me = await bff.api
       .fetch<{ people: Array<{ kind: string; id: string }> }>('/library/portal/summary')
       .then((r) => r.people.find((p) => p.kind === 'employee'));
     if (!me) return unlinked;
-    [mine, catalogue, digital] = await Promise.all([
+    [mine, catalogue, digital, hist] = await Promise.all([
       bff.api.fetch<Borrower>(`/library/portal/borrowers/employee/${me.id}`),
       view === 'find'
         ? bff.api.fetch<Catalogue>(
@@ -147,6 +156,11 @@ export default async function LibraryPage({
             .then((r) => r.data)
             .catch(() => [])
         : Promise.resolve([]),
+      view === 'find'
+        ? Promise.resolve(null)
+        : bff.api.fetch<LibraryHistory>(
+            `/library/portal/borrowers/employee/${me.id}/history?${historyQuery(filters, view === 'history' ? page : 1)}`,
+          ),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
@@ -213,6 +227,13 @@ export default async function LibraryPage({
 
       {view === 'books' ? (
         <>
+          {hist ? (
+            <MyLibraryFigures
+              lang={lang}
+              stats={hist.stats}
+              historyHref={here({ view: 'history' })}
+            />
+          ) : null}
           {open.some((r) => r.status === 'ready') ? (
             <div
               className="ep-alert ep-alert--warning"
@@ -358,44 +379,15 @@ export default async function LibraryPage({
         </>
       ) : null}
 
-      {view === 'history' ? (
-        <Card title={t(lang, 'Books read before')} style={{ marginBottom: 'var(--sp-3)' }}>
-          {mine.history.length === 0 ? (
-            <p className="ep-field__help">{t(lang, 'No books returned yet.')}</p>
-          ) : (
-            <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th scope="col">{t(lang, 'Book')}</th>
-                  <th scope="col">{t(lang, 'Taken on')}</th>
-                  <th scope="col">{t(lang, 'Returned')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mine.history.map((b) => (
-                  <tr key={b.id}>
-                    <td>
-                      {b.title}
-                      <div className="ep-kicker">
-                        {[b.author, b.accessionNo].filter(Boolean).join(' · ')}
-                      </div>
-                    </td>
-                    <td>{day(lang, b.issuedOn)}</td>
-                    <td>
-                      {day(lang, b.returnedOn)}
-                      {b.daysLate > 0 ? (
-                        <div className="ep-kicker">
-                          {b.daysLate} {t(lang, 'days late')}
-                          {b.fine > 0 ? ` · ${t(lang, 'Fine')} ${rupees(b.fine)}` : ''}
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
+      {view === 'history' && hist ? (
+        <MyLibraryHistory
+          lang={lang}
+          data={hist}
+          filters={filters}
+          path="/library"
+          extra={{ view: 'history' }}
+          download={`/api/library-history?kind=employee&id=${mine.borrower.id}`}
+        />
       ) : null}
 
       {view === 'find' && catalogue ? (

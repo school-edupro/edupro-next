@@ -329,4 +329,57 @@ describe('library in the portals, and reservations (e2e)', () => {
     ]);
     expect((await call('GET', '/library/reservations', undefined, parent)).statusCode).toBe(403);
   });
+
+  it('my library: figures and the history filtered, paged and as Excel; only my own borrowers', async () => {
+    const get = (kind: string, who: string, q: string, u: SeededUser) =>
+      call('GET', `/library/portal/borrowers/${kind}/${who}/history?${q}`, undefined, u);
+    // every child of the family with any loan: all = out + returned
+    let tested = 0;
+    for (const who of [ids.a!, ids.b!]) {
+      const all = (await get('student', who, 'status=all', parent)).json();
+      expect(all.stats.months).toHaveLength(6);
+      expect(all.borrower.id).toBe(who);
+      if (!all.total) continue;
+      tested += 1;
+      const out = (await get('student', who, 'status=out', parent)).json();
+      const back = (await get('student', who, 'status=returned', parent)).json();
+      expect(out.total + back.total).toBe(all.total);
+      expect(all.stats.readEver).toBe(all.total);
+      expect(all.stats.holding).toBe(out.total);
+      // a search narrows, a date range in the past finds nothing
+      expect((await get('student', who, 'q=malgudi', parent)).json().total).toBeLessThanOrEqual(
+        all.total,
+      );
+      expect(
+        (await get('student', who, 'from=2001-01-01&to=2001-12-31', parent)).json().total,
+      ).toBe(0);
+      const x = await get('student', who, 'status=all&format=xlsx', parent);
+      expect(
+        (
+          await call(
+            'GET',
+            `/library/portal/borrowers/student/${who}/history/export?format=xlsx`,
+            undefined,
+            parent,
+          )
+        ).json(),
+      ).toMatchObject({ contentType: expect.stringContaining('spreadsheet') });
+      expect(x.statusCode).toBe(200);
+    }
+    expect(tested).toBeGreaterThan(0);
+    // the staff member sees their own; the parent may not open a staff member's
+    const mineStaff = await get('employee', ids.employee!, 'status=all', teacher);
+    expect(mineStaff.statusCode).toBe(200);
+    expect((await get('employee', ids.employee!, 'status=all', parent)).statusCode).toBe(404);
+    expect(
+      (
+        await call(
+          'GET',
+          `/library/portal/borrowers/employee/${ids.employee!}/history/export?format=pdf`,
+          undefined,
+          teacher,
+        )
+      ).json(),
+    ).toMatchObject({ contentType: 'application/pdf' });
+  });
 });

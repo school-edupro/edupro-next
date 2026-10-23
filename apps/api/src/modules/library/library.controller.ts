@@ -47,6 +47,7 @@ import {
   WaiverRequestsExportDto,
   WaiverRequestsQueryDto,
 } from './library.dto';
+import { PortalHistoryDto } from './library-books.dto';
 import { LibraryFinesService } from './library-fines.service';
 import { LibraryHistoryService } from './library-history.service';
 import { LibraryStockService } from './library-stock.service';
@@ -132,6 +133,30 @@ export class LibraryController {
     @Param('id') id: string,
   ) {
     return this.portal.borrower(ctx, kind, id);
+  }
+
+  @Get('portal/borrowers/:kind/:id/history')
+  @ApiOperation({ summary: 'My library: figures and the history, filtered and paged' })
+  @AuthenticatedOnly()
+  portalHistory(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Query() q: PortalHistoryDto,
+  ) {
+    return this.portal.history(ctx, kind, id, q);
+  }
+
+  @Get('portal/borrowers/:kind/:id/history/export')
+  @ApiOperation({ summary: 'My library history, as filtered, as Excel or PDF' })
+  @AuthenticatedOnly()
+  portalHistoryExport(
+    @ReqCtx() ctx: RequestContext,
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Query() q: PortalHistoryDto,
+  ) {
+    return this.portal.historyExport(ctx, kind, id, q, q.format ?? 'xlsx');
   }
 
   @Get('portal/catalogue')

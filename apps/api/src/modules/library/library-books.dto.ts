@@ -373,3 +373,14 @@ export const AccessionChangeSchema = z.object({
 export class AccessionChangeDto extends createZodDto(AccessionChangeSchema) {}
 export const AccessionApplySchema = AccessionChangeSchema.extend({ reason: txt(300).min(3) });
 export class AccessionApplyDto extends createZodDto(AccessionApplySchema) {}
+
+/** My library history in the portals (library round 4, part 3): issued between dates, a status, a search. */
+export const PortalHistorySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  status: z.enum(['all', 'out', 'returned', 'late', 'renewed', 'fined']).default('all'),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class PortalHistoryDto extends createZodDto(PortalHistorySchema) {}

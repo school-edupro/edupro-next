@@ -2712,6 +2712,79 @@ a.ep-tabs__tab {
   font-size: var(--fs-small);
   overflow-wrap: anywhere;
 }
+.fp-glances--4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 900px) {
+  .fp-glances--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.fp-libvalue {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.fp-libbars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  height: 9rem;
+}
+.fp-libbars__col {
+  flex: 1 0 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: var(--sp-1);
+}
+.fp-libbars__bar {
+  width: 60%;
+  min-height: 2px;
+  background: var(--action-primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.fp-libbars__n,
+.fp-libbars__m {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.fp-libfilters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: var(--sp-2);
+  align-items: end;
+  margin-bottom: var(--sp-3);
+}
+.fp-libfilters .ep-field {
+  min-width: 0;
+  width: auto;
+}
+.fp-libfilters .ep-input,
+.fp-libfilters .ep-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.fp-libbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.fp-libbar__dl,
+.fp-libpager {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.fp-libpager {
+  justify-content: center;
+  margin-top: var(--sp-3);
+}
 .fp-two {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
