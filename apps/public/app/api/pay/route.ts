@@ -13,9 +13,12 @@ export async function POST(req: Request) {
   const outcome = String(fd.get('outcome') ?? 'success') === 'failure' ? 'failure' : 'success';
   // a consent form's fee comes back to the form's own link (docs/design/28-consent-forms.md)
   const back = String(fd.get('back') ?? '');
-  const target = /^\/[a-z0-9-]{1,40}\/consent\/[A-Za-z0-9_-]{10,60}$/.test(back)
-    ? new URL(back, req.url)
-    : new URL(`/${/^[a-z0-9-]{1,40}$/.test(school) ? school : ''}/status`, req.url);
+  // … and an admission fee to the family's registration in the admission portal (docs/design/39)
+  const target =
+    /^\/[a-z0-9-]{1,40}\/consent\/[A-Za-z0-9_-]{10,60}$/.test(back) ||
+    /^\/[a-z0-9-]{1,40}\/admission\/application\/\d{1,18}$/.test(back)
+      ? new URL(back, req.url)
+      : new URL(`/${/^[a-z0-9-]{1,40}$/.test(school) ? school : ''}/status`, req.url);
   target.searchParams.set('lang', lang);
   let paid = '0';
   if (/^[A-Za-z0-9]{6,40}$/.test(txnid)) {

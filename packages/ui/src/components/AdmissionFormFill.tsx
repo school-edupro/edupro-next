@@ -145,6 +145,11 @@ export function AdmissionFormFill({
     const out: Record<string, string> = {};
     for (const f of def.fields) {
       if (f.step !== key) continue;
+      // an answer the family cannot change here (a correction asks for others) is the school's to check
+      if (onlyFields && !onlyFields.includes(f.key)) continue;
+      // an ID number already saved comes back masked (XXXX-XXXX-1234): the server keeps the real one
+      const v = answers[f.key];
+      if (typeof v === 'string' && /^X{4}-X{4}-\w{4}$/.test(v)) continue;
       const e = fieldError(f, answers, def.settings, optionsFor(f, options));
       if (e) out[f.key] = e;
     }

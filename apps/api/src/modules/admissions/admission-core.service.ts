@@ -764,7 +764,7 @@ export class AdmissionCoreService {
         ['Status', x.status === 'reversed' ? 'Reversed' : 'Received'],
       ],
       amount: money(Number(x.amount)),
-      words: amountInWords(Number(x.amount)),
+      words: `Rupees ${amountInWords(Number(x.amount)).replace(/\b[a-z]/g, (ch) => ch.toUpperCase())} Only`,
     });
     return { filename: `Receipt-${x.receipt_no.replace(/\//g, '-')}.pdf`, bytes };
   }

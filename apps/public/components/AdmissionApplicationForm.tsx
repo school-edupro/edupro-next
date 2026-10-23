@@ -38,7 +38,12 @@ export function AdmissionApplicationForm({
       readOnly={readOnly}
       onlyFields={onlyFields ?? undefined}
       submitLabel={submitLabel}
-      onSaveStep={(a, step) => saveAdmissionStep(id, a, step)}
+      onSaveStep={async (a, step) => {
+        const out = await saveAdmissionStep(id, a, step);
+        // the status card above (how much is filled) follows each saved tab
+        if (out.ok) router.refresh();
+        return out;
+      }}
       onSubmit={async (a) => {
         const out = await submitAdmission(id, a);
         if (out.ok) router.refresh();

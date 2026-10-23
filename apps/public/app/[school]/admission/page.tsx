@@ -16,6 +16,28 @@ import { AdmissionSignIn } from '@/components/AdmissionSignIn';
 import { ViewDownload } from '@/components/ViewDownload';
 import { startRegistration } from './actions';
 
+/** An email or notice written in HTML, shown as plain text (no frames, nothing of it runs). */
+const htmlToText = (html: string) =>
+  html
+    .replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h[1-6]|li|table)>/gi, '\n')
+    .replace(/<\/td>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&middot;/g, '·')
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
 /**
  * The admission portal of a school (docs/design/39, part 3): the open sessions with each class's dates,
  * age window and registration fee; sign-in by a code; the family's registrations; a new registration.
@@ -149,16 +171,9 @@ export default async function AdmissionPortalPage({
                     <strong>{n.title}</strong>{' '}
                     <span className="ep-kicker">{dmy(n.publishFrom)}</span>
                   </summary>
-                  {n.bodyFormat === 'html' ? (
-                    <iframe
-                      title={n.title}
-                      sandbox=""
-                      srcDoc={n.body}
-                      className="ep-adm-inbox__frame"
-                    />
-                  ) : (
-                    <p style={{ whiteSpace: 'pre-line' }}>{n.body}</p>
-                  )}
+                  <p style={{ whiteSpace: 'pre-line' }}>
+                    {n.bodyFormat === 'html' ? htmlToText(n.body) : n.body}
+                  </p>
                   {n.files.map((f, i) => (
                     <span
                       key={f.id}
@@ -184,16 +199,9 @@ export default async function AdmissionPortalPage({
                     <strong>{m.subject ?? (m.channel === 'email' ? 'Email' : 'Message')}</strong>{' '}
                     <span className="ep-kicker">{dmy(m.at)}</span>
                   </summary>
-                  {m.format === 'html' ? (
-                    <iframe
-                      title={m.subject ?? 'Message'}
-                      sandbox=""
-                      srcDoc={m.body}
-                      className="ep-adm-inbox__frame"
-                    />
-                  ) : (
-                    <p style={{ whiteSpace: 'pre-line' }}>{m.body}</p>
-                  )}
+                  <p style={{ whiteSpace: 'pre-line' }}>
+                    {m.format === 'html' ? htmlToText(m.body) : m.body}
+                  </p>
                 </details>
               ))}
             </section>

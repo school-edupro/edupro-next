@@ -10,6 +10,13 @@ type Row = {
   decision: '' | 'approve' | 'reject' | 'hold';
   remarks: string;
 };
+const DECIDED: Record<string, string> = {
+  approved: 'Passed',
+  rejected: 'Not selected',
+  hold: 'On hold',
+  offered: 'Offered',
+  waitlisted: 'Waiting list',
+};
 
 /** The candidates of a slot: allot the next waiting, then attendance, marks and the decision for each. */
 export function SlotCandidates({
@@ -25,24 +32,22 @@ export function SlotCandidates({
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [notify, setNotify] = useState(true);
-  const [rows, setRows] = useState<Record<string, Row>>(() =>
-    Object.fromEntries(
-      slot.candidates.map((c) => [
-        c.applicationId,
-        {
-          attendance: (c.attendance as 'present' | 'absent' | null) ?? 'present',
-          marks: c.marks !== null ? String(c.marks) : '',
-          decision: '',
-          remarks: c.remarks ?? '',
-        },
-      ]),
-    ),
+  // what was typed for each candidate; a candidate allotted after the page opened starts from the record
+  const fresh = (c: SlotDetail['candidates'][number]): Row => ({
+    attendance: (c.attendance as 'present' | 'absent' | null) ?? 'present',
+    marks: c.marks !== null ? String(c.marks) : '',
+    decision: '',
+    remarks: c.remarks ?? '',
+  });
+  const [typed, setRows] = useState<Record<string, Row>>({});
+  const rows: Record<string, Row> = Object.fromEntries(
+    slot.candidates.map((c) => [c.applicationId, typed[c.applicationId] ?? fresh(c)]),
   );
   const marksStage = slot.kind === 'test' || slot.kind === 'interview';
   const room = slot.capacity - slot.candidates.length;
   const open = slot.candidates.filter((c) => c.atStage && !c.decision);
   const set = (id: string, patch: Partial<Row>) =>
-    setRows((r) => ({ ...r, [id]: { ...r[id]!, ...patch } }));
+    setRows((r) => ({ ...r, [id]: { ...(r[id] ?? rows[id]!), ...patch } }));
 
   return (
     <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
@@ -145,7 +150,7 @@ export function SlotCandidates({
                     ) : null}
                     <td>
                       {c.decision ? (
-                        c.decision
+                        (DECIDED[c.decision] ?? c.decision)
                       ) : (
                         <select
                           className="ep-select"

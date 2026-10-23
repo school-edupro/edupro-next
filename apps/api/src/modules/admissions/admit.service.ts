@@ -375,11 +375,27 @@ export class AdmissionAdmitService {
           status: 409,
         },
       );
-    const y = await c.query<{ year_id: string; starts: string }>(
-      `SELECT y.academic_year_id::text AS year_id, ay.start_date::text AS starts FROM admission_cycles y JOIN academic_years ay ON ay.id = y.academic_year_id WHERE y.id = $1`,
+    const y = await c.query<{
+      year_id: string;
+      starts: string;
+      year: string;
+      status: string;
+      flag: boolean | null;
+    }>(
+      `SELECT y.academic_year_id::text AS year_id, ay.start_date::text AS starts, ay.name AS year, ay.status::text,
+              (ay.locks ->> 'academics')::boolean AS flag
+         FROM admission_cycles y JOIN academic_years ay ON ay.id = y.academic_year_id WHERE y.id = $1`,
       [a.cycle_id],
     );
     const yearId = y.rows[0]!.year_id;
+    // the year's class work must be open to enrol (the same rule as app.assert_year_open), said plainly
+    const yr = y.rows[0]!;
+    if (yr.status === 'closed' || (yr.status === 'locked' ? yr.flag !== false : Boolean(yr.flag)))
+      throw new DomainError(
+        'admissions.year_locked',
+        `${yr.year} is ${yr.status === 'closed' ? 'closed' : 'locked'} for class work: reopen its Academics stage under System → Years, then admit`,
+        { status: 409 },
+      );
     const sec = await c.query<{
       id: string;
       name: string;
@@ -412,7 +428,9 @@ export class AdmissionAdmitService {
       [a.admission_no, String(values.first_name ?? a.child_first_name)],
     );
     const studentId = ins.rows[0]!.id;
-    // a sibling in the school: the new pupil shares the sibling's parents' records
+    // a sibling in the school: the new pupil shares a parent's record only when it is the same person
+    // (the form gives that parent's mobile or email as on the record); otherwise the form's parents get
+    // their own records, so a sibling's parents are never overwritten
     const sibField = def.fields.find((f) => f.type === 'siblings');
     const sibs = sibField
       ? ((data[sibField.key] as { list?: SiblingAnswer[] } | undefined)?.list ?? [])
@@ -424,12 +442,32 @@ export class AdmissionAdmitService {
         [sibNo, studentId],
       );
       if (sib.rows[0]) {
-        await c.query(
-          `INSERT INTO student_guardians (school_id, student_id, guardian_id, relation, is_primary, receives_notifications, created_by)
-           SELECT app.current_school_id(), $1, sg.guardian_id, sg.relation, sg.is_primary, sg.receives_notifications, app.current_user_id()
-             FROM student_guardians sg WHERE sg.student_id = $2 ON CONFLICT DO NOTHING`,
-          [studentId, sib.rows[0].id],
+        const norm = (v: unknown) => (typeof v === 'string' ? v.replace(/\D/g, '').slice(-10) : '');
+        const mail = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+        const parents = await c.query<{
+          guardian_id: string;
+          relation: string;
+          mobile: string | null;
+          email: string | null;
+        }>(
+          `SELECT sg.guardian_id::text, sg.relation::text, g.mobile, g.email::text FROM student_guardians sg
+             JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL WHERE sg.student_id = $1`,
+          [sib.rows[0].id],
         );
+        for (const p of parents.rows) {
+          if (p.relation !== 'father' && p.relation !== 'mother') continue;
+          const sameMobile =
+            Boolean(p.mobile) && norm(p.mobile) === norm(values[`${p.relation}_mobile`]);
+          const sameEmail =
+            Boolean(p.email) && mail(p.email) === mail(values[`${p.relation}_email`]);
+          if (!sameMobile && !sameEmail) continue;
+          await c.query(
+            `INSERT INTO student_guardians (school_id, student_id, guardian_id, relation, is_primary, receives_notifications, created_by)
+             SELECT app.current_school_id(), $1, sg.guardian_id, sg.relation, sg.is_primary, sg.receives_notifications, app.current_user_id()
+               FROM student_guardians sg WHERE sg.student_id = $2 AND sg.guardian_id = $3 ON CONFLICT DO NOTHING`,
+            [studentId, sib.rows[0].id, p.guardian_id],
+          );
+        }
         if (PROFILE_FIELD_BY_KEY.has('sibling_admission_no'))
           values = { ...values, sibling_admission_no: sibNo };
       }
@@ -506,13 +544,23 @@ export class AdmissionAdmitService {
         docs += 1;
       }
     }
+    // no roll number given: the next one in the section
+    const roll =
+      dto.rollNo ??
+      (
+        await c.query<{ n: number }>(
+          `SELECT COALESCE(max(roll_no), 0)::int + 1 AS n FROM enrolments
+            WHERE class_section_id = $1 AND academic_year_id = $2 AND status = 'active'`,
+          [dto.classSectionId, yearId],
+        )
+      ).rows[0]!.n;
     const enrol = await c.query<{ id: string }>(
       `SELECT app.enrol_student($1, $2, $3, $4, $5::date)::text AS id`,
       [
         studentId,
         yearId,
         dto.classSectionId,
-        dto.rollNo ?? null,
+        roll,
         typeof raw.admitted_on === 'string' ? raw.admitted_on : y.rows[0]!.starts,
       ],
     );

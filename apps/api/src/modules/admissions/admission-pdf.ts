@@ -41,8 +41,8 @@ async function start(
     try {
       const img =
         logo.contentType === 'image/png'
-          ? await pdf.embedPng(logo.bytes)
-          : await pdf.embedJpg(logo.bytes);
+          ? await pdf.embedPng(new Uint8Array(logo.bytes))
+          : await pdf.embedJpg(new Uint8Array(logo.bytes));
       const s = Math.min(56 / img.width, 56 / img.height);
       page.drawImage(img, { x: M, y: A4[1] - 76, width: img.width * s, height: img.height * s });
       x = M + 70;
@@ -204,8 +204,8 @@ export async function admitCardPdf(p: AdmitCardInput): Promise<Buffer> {
     try {
       const img =
         p.photo.contentType === 'image/png'
-          ? await pdf.embedPng(p.photo.bytes)
-          : await pdf.embedJpg(p.photo.bytes);
+          ? await pdf.embedPng(new Uint8Array(p.photo.bytes))
+          : await pdf.embedJpg(new Uint8Array(p.photo.bytes));
       const s = Math.min(photoW / img.width, 120 / img.height);
       page.drawImage(img, {
         x: A4[0] - M - photoW + (photoW - img.width * s) / 2,

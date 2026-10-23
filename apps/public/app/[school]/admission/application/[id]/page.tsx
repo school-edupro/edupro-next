@@ -307,6 +307,7 @@ export default async function AdmissionApplicationPage({
       <Card elevated title={editing ? 'Registration form' : 'Your answers'}>
         {editing ? (
           <AdmissionApplicationForm
+            key={app.status}
             id={app.id}
             def={app.def}
             options={app.options}
@@ -317,6 +318,7 @@ export default async function AdmissionApplicationPage({
           />
         ) : (
           <AdmissionApplicationForm
+            key={app.status}
             id={app.id}
             def={app.def}
             options={app.options}

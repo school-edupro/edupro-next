@@ -87,8 +87,8 @@ export async function receiptLayoutPdf(
     try {
       image =
         logo.contentType === 'image/png'
-          ? await pdf.embedPng(logo.bytes)
-          : await pdf.embedJpg(logo.bytes);
+          ? await pdf.embedPng(new Uint8Array(logo.bytes))
+          : await pdf.embedJpg(new Uint8Array(logo.bytes));
     } catch {
       image = null; // a logo the library cannot read is left out
     }

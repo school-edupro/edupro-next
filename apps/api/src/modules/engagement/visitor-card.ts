@@ -89,8 +89,8 @@ export async function visitorCardPdf(card: VisitorCard): Promise<Buffer> {
     try {
       const img =
         card.photo.contentType === 'image/png'
-          ? await pdf.embedPng(card.photo.bytes)
-          : await pdf.embedJpg(card.photo.bytes);
+          ? await pdf.embedPng(new Uint8Array(card.photo.bytes))
+          : await pdf.embedJpg(new Uint8Array(card.photo.bytes));
       const scale = Math.min(pw / img.width, ph / img.height);
       const w = img.width * scale;
       const h = img.height * scale;

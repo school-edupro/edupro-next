@@ -11037,11 +11037,3 @@ a.ep-pub-foot__item {
 .ep-adm-inbox summary {
   cursor: pointer;
 }
-.ep-adm-inbox__frame {
-  width: 100%;
-  min-height: 24rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-  margin-top: var(--sp-2);
-}

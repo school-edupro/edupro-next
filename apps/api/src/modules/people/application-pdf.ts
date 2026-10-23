@@ -73,8 +73,8 @@ function wrap(font: PDFFont, text: string, size: number, width: number): string[
 async function image(pdf: PDFDocument, f: { contentType: string; bytes: Buffer } | null) {
   if (!f) return null;
   try {
-    if (f.contentType === 'image/png') return await pdf.embedPng(f.bytes);
-    if (f.contentType === 'image/jpeg') return await pdf.embedJpg(f.bytes);
+    if (f.contentType === 'image/png') return await pdf.embedPng(new Uint8Array(f.bytes));
+    if (f.contentType === 'image/jpeg') return await pdf.embedJpg(new Uint8Array(f.bytes));
   } catch {
     // a broken image is left out rather than failing the document
   }
@@ -144,13 +144,29 @@ export async function applicationPdf(p: ApplicationPdfInput): Promise<Buffer> {
   const photoH = 106;
   const headTop = y + 12;
   const textW = W - photoW - 16;
-  page.drawText(latin(p.kicker ?? 'APPLICATION FOR'), { x: M, y, size: 9, font: bold, color: CYAN });
+  page.drawText(latin(p.kicker ?? 'APPLICATION FOR'), {
+    x: M,
+    y,
+    size: 9,
+    font: bold,
+    color: CYAN,
+  });
   y -= 20;
   text(p.post, { x: M, size: 17, font: bold, color: NAVY, width: textW });
   if (p.postLine) text(p.postLine, { x: M, size: 10, color: MUTED, width: textW });
   y -= 4;
-  text(`${p.numberLabel ?? 'Application no.'} ${p.number}`, { x: M, size: 11, font: bold, width: textW });
-  text(`${p.receivedLabel ?? 'Received'} ${p.received}`, { x: M, size: 10, color: MUTED, width: textW });
+  text(`${p.numberLabel ?? 'Application no.'} ${p.number}`, {
+    x: M,
+    size: 11,
+    font: bold,
+    width: textW,
+  });
+  text(`${p.receivedLabel ?? 'Received'} ${p.received}`, {
+    x: M,
+    size: 10,
+    color: MUTED,
+    width: textW,
+  });
   const px = A4[0] - M - photoW;
   page.drawRectangle({
     x: px,
@@ -298,7 +314,9 @@ export async function applicationPdf(p: ApplicationPdfInput): Promise<Buffer> {
       thickness: 0.5,
       color: LINE,
     });
-    const left = latin(`${(p.numberLabel ?? 'Application').replace(/ no\.$/, '')} ${p.number} · ${p.post}`).slice(0, 90);
+    const left = latin(
+      `${(p.numberLabel ?? 'Application').replace(/ no\.$/, '')} ${p.number} · ${p.post}`,
+    ).slice(0, 90);
     pg.drawText(left, { x: M, y: M - 14, size: 8, font: regular, color: MUTED });
     const right = `Page ${String(i + 1)} of ${String(pages.length)}`;
     pg.drawText(right, {
