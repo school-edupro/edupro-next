@@ -163,6 +163,7 @@ describe('library labels (e2e)', () => {
       'a4-3x8',
       'a4-4x10',
       'l7651',
+      'mr104',
       'a4-2x7',
     ]);
     expect(setup.last).toMatchObject({ kind: 'both', preset: 'a4-3x8', top: 'school', copies: 1 });
@@ -215,5 +216,48 @@ describe('library labels (e2e)', () => {
     expect((await labels({ source: 'title', titleId: ids.title }, coordinator)).statusCode).toBe(
       403,
     );
+  });
+
+  it('MR104: 65 labels on A4, the centred layout with "short name(library)", a printer shift kept, an alignment sheet', async () => {
+    const setup = (await call('GET', '/library/labels/setup')).json();
+    expect(setup.presets.find((p: { id: string }) => p.id === 'mr104')).toMatchObject({
+      cols: 5,
+      rows: 13,
+      width: 38.1,
+      height: 21.2,
+    });
+    const r = await labels({
+      source: 'range',
+      from: 'B00001',
+      to: 'B00030',
+      kind: 'barcode',
+      preset: 'mr104',
+      layout: 'centred',
+      top: 'school_library',
+      showTitle: false,
+      shiftX: 1.5,
+      shiftY: -0.5,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ sheets: 1, pages: 1 });
+    expect(r.json().labels).toBeLessThanOrEqual(65);
+    const pdf = await PDFDocument.load(Buffer.from(r.json().base64, 'base64'));
+    expect(pdf.getPageCount()).toBe(1);
+    const last = (await call('GET', '/library/labels/setup')).json().last;
+    expect(last).toMatchObject({
+      preset: 'mr104',
+      layout: 'centred',
+      top: 'school_library',
+      shiftX: 1.5,
+      shiftY: -0.5,
+    });
+    // the alignment sheet needs no copies
+    const a = await labels({ source: 'range', preset: 'mr104', alignment: true, shiftX: 1 });
+    expect(a.statusCode).toBe(200);
+    expect(a.json()).toMatchObject({ labels: 65, pages: 1, filename: 'Label-alignment-sheet.pdf' });
+    // a shift beyond 10 mm is refused
+    expect(
+      (await labels({ source: 'range', from: 'B00001', to: 'B00002', shiftX: 25 })).statusCode,
+    ).toBe(400);
   });
 });

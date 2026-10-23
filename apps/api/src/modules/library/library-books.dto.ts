@@ -265,7 +265,7 @@ export const LabelsSchema = z.object({
   titleId: Id.optional(),
   libraryId: Id.optional(),
   kind: z.enum(['barcode', 'spine', 'both']).default('barcode'),
-  preset: z.enum(['a4-3x8', 'a4-4x10', 'l7651', 'a4-2x7', 'custom']).default('a4-3x8'),
+  preset: z.enum(['a4-3x8', 'a4-4x10', 'l7651', 'mr104', 'a4-2x7', 'custom']).default('a4-3x8'),
   custom: z
     .object({
       cols: z.number().int().min(1).max(10),
@@ -282,8 +282,17 @@ export const LabelsSchema = z.object({
   copies: z.number().int().min(1).max(3).default(1),
   /** labels of the first sheet already used */
   skip: z.number().int().min(0).max(299).default(0),
-  /** the line above the title: the library's name, the school's, or none */
-  top: z.enum(['library', 'school', 'none']).default('library'),
+  /** the line above the title: the library's name, the school's, both as "DPSN(Sr Library)", or none */
+  top: z.enum(['library', 'school', 'school_library', 'none']).default('library'),
+  /** standard: number left, call no. right; centred: top line, number, bars, call no. centred */
+  layout: z.enum(['standard', 'centred']).default('standard'),
+  /** the printer's shift in mm (right / down positive) */
+  shiftX: z.number().min(-10).max(10).default(0),
+  shiftY: z.number().min(-10).max(10).default(0),
+  /** each label's border drawn, for a test print on plain paper */
+  outline: z.boolean().default(false),
+  /** only the alignment sheet (borders and numbers), no copies */
+  alignment: z.boolean().default(false),
   showTitle: z.boolean().default(true),
   includeWithdrawn: z.boolean().default(false),
   /** count the labels only */

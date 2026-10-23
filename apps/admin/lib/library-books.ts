@@ -263,8 +263,11 @@ export interface LabelSetup {
     preset?: string;
     custom?: Record<string, number> | null;
     copies?: number;
-    top?: 'library' | 'school' | 'none';
+    top?: 'library' | 'school' | 'school_library' | 'none';
     showTitle?: boolean;
+    layout?: 'standard' | 'centred';
+    shiftX?: number;
+    shiftY?: number;
   } | null;
 }
 export interface LabelCount {

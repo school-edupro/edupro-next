@@ -56,7 +56,14 @@ export function LabelsForm({
   const [libraryId, setLibraryId] = useState('');
   const [withdrawn, setWithdrawn] = useState(false);
   const [kind, setKind] = useState<'barcode' | 'spine' | 'both'>(last.kind ?? 'barcode');
-  const [top, setTop] = useState<'library' | 'school' | 'none'>(last.top ?? 'library');
+  const [top, setTop] = useState<'library' | 'school' | 'school_library' | 'none'>(
+    last.top ?? 'library',
+  );
+  const [layout, setLayout] = useState<'standard' | 'centred'>(last.layout ?? 'standard');
+  const [shiftX, setShiftX] = useState(String(last.shiftX ?? 0));
+  const [shiftY, setShiftY] = useState(String(last.shiftY ?? 0));
+  const [outline, setOutline] = useState(false);
+  const [alignment, setAlignment] = useState(false);
   const [showTitle, setShowTitle] = useState(last.showTitle ?? true);
   const [copies, setCopies] = useState(String(last.copies ?? 1));
   const [preset, setPreset] = useState(last.preset ?? setup.presets[0]!.id);
@@ -101,6 +108,11 @@ export function LabelsForm({
     kind,
     top,
     showTitle,
+    layout,
+    shiftX: Math.max(-10, Math.min(10, Number(shiftX) || 0)),
+    shiftY: Math.max(-10, Math.min(10, Number(shiftY) || 0)),
+    outline,
+    alignment,
     copies: Number(copies) || 1,
     preset,
     ...(preset === 'custom'
@@ -121,8 +133,9 @@ export function LabelsForm({
       }
       setCount(r);
     });
-  const print = (asFile: boolean) => {
+  const print = (asFile: boolean, align = false) => {
     setSave(asFile);
+    setAlignment(align);
     // the hidden form carries the choice; the PDF opens in a new tab (or is saved)
     requestAnimationFrame(() => form.current?.requestSubmit());
   };
@@ -290,6 +303,36 @@ export function LabelsForm({
             ))}
           </div>
         </fieldset>
+        {kind !== 'spine' ? (
+          <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="ep-field__label">Barcode label layout</legend>
+            <div className="ep-book__choices">
+              {(
+                [
+                  [
+                    'standard',
+                    'Standard: the line above, the bars, the number left and call no. right',
+                  ],
+                  [
+                    'centred',
+                    'Centred: school short name (library), the number, the bars, the call no. — like DPSN(Sr Library) / 24897 / bars / 823',
+                  ],
+                ] as const
+              ).map(([k, label]) => (
+                <label key={k} className="ep-check" htmlFor={`lb-layout-${k}`}>
+                  <input
+                    id={`lb-layout-${k}`}
+                    type="radio"
+                    name="lb-layout"
+                    checked={layout === k}
+                    onChange={() => setLayout(k)}
+                  />{' '}
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
         <FormRow columns={3}>
           <SelectField
             id="lb-top"
@@ -299,6 +342,10 @@ export function LabelsForm({
             options={[
               { value: 'library', label: 'The library’s name' },
               { value: 'school', label: 'The school’s name' },
+              {
+                value: 'school_library',
+                label: 'School short name (library), e.g. DPSN(Sr Library)',
+              },
               { value: 'none', label: 'Nothing' },
             ]}
           />
@@ -333,6 +380,12 @@ export function LabelsForm({
             onChange={(e) => {
               setPreset(e.target.value);
               setStart(1);
+              // the MR104 sheet is the school's small barcode label: centred, short name (library)
+              if (e.target.value === 'mr104') {
+                setLayout('centred');
+                setTop('school_library');
+                setShowTitle(false);
+              }
               changed();
             }}
             options={[
@@ -373,6 +426,50 @@ export function LabelsForm({
             ))}
           </FormRow>
         ) : null}
+        <FormRow columns={3}>
+          <InputField
+            id="lb-shift-x"
+            label="Move right (mm)"
+            type="number"
+            step={0.5}
+            min={-10}
+            max={10}
+            value={shiftX}
+            onChange={(e) => setShiftX(e.target.value)}
+            help="Negative moves left"
+          />
+          <InputField
+            id="lb-shift-y"
+            label="Move down (mm)"
+            type="number"
+            step={0.5}
+            min={-10}
+            max={10}
+            value={shiftY}
+            onChange={(e) => setShiftY(e.target.value)}
+            help="Negative moves up"
+          />
+          <label className="ep-check" htmlFor="lb-outline" style={{ alignSelf: 'center' }}>
+            <input
+              id="lb-outline"
+              type="checkbox"
+              checked={outline}
+              onChange={(e) => setOutline(e.target.checked)}
+            />{' '}
+            Draw each label’s border (test print on plain paper)
+          </label>
+        </FormRow>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          First time on a new sheet or printer: print the alignment sheet on plain paper, hold it
+          against a label sheet to the light, and move it by the millimetres it is off.{' '}
+          <button
+            type="button"
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            onClick={() => print(false, true)}
+          >
+            Print the alignment sheet
+          </button>
+        </p>
         <div
           className="ep-book__sheet"
           style={{ gridTemplateColumns: `repeat(${String(sheet.cols)}, minmax(0, 1fr))` }}

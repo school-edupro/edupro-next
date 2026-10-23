@@ -62,6 +62,18 @@ export const PRESETS: Record<string, Sheet & { name: string }> = {
     gapX: 2.5,
     gapY: 0,
   },
+  // MR104: 38.1 × 21.2 mm, A4, 65 rectangle labels (5 × 13), the sheet centred on the page
+  mr104: {
+    name: 'MR104 – 38.1 × 21.2 mm – A4 Sheet – 65 Rectangle Labels',
+    cols: 5,
+    rows: 13,
+    width: 38.1,
+    height: 21.2,
+    top: 10.7,
+    left: 4.75,
+    gapX: 2.5,
+    gapY: 0,
+  },
   'a4-2x7': {
     name: 'A4, 14 labels (2 × 7, 99.1 × 38.1 mm)',
     cols: 2,
@@ -113,6 +125,13 @@ export async function labelsPdf(
     copies: number;
     skip: number;
     title: string;
+    /** standard: top line, bars, number left and call no. right; centred: everything centred */
+    layout?: 'standard' | 'centred';
+    /** the printer's shift in mm: right and down are positive */
+    shiftX?: number;
+    shiftY?: number;
+    /** each label's border drawn (to check the fit on plain paper) */
+    outline?: boolean;
   },
 ) {
   const pdf = await PDFDocument.create();
@@ -138,14 +157,138 @@ export async function labelsPdf(
     }
     const col = pos % s.cols;
     const row = Math.floor(pos / s.cols);
-    const x = (s.left + col * (s.width + s.gapX)) * MM;
-    const y = A4[1] - (s.top + row * (s.height + s.gapY)) * MM - h;
-    if (cell.kind === 'barcode') barcodeLabel(page, cell.label, x, y, w, h, regular, bold);
+    const x = (s.left + (o.shiftX ?? 0) + col * (s.width + s.gapX)) * MM;
+    const y = A4[1] - (s.top + (o.shiftY ?? 0) + row * (s.height + s.gapY)) * MM - h;
+    if (o.outline) outlineCell(page, x, y, w, h);
+    if (cell.kind === 'barcode')
+      (o.layout === 'centred' ? centredLabel : barcodeLabel)(
+        page,
+        cell.label,
+        x,
+        y,
+        w,
+        h,
+        regular,
+        bold,
+      );
     else spineLabel(page, cell.label, x, y, w, h, regular, bold);
     pos += 1;
   }
   if (!page) pdf.addPage(A4);
   return { bytes: Buffer.from(await pdf.save()), pages: pdf.getPageCount(), labels: cells.length };
+}
+
+/** A thin border round a label (the alignment sheet, or a test print on plain paper). */
+function outlineCell(page: PDFPage, x: number, y: number, w: number, h: number) {
+  page.drawRectangle({
+    x,
+    y,
+    width: w,
+    height: h,
+    borderColor: rgb(0.6, 0.6, 0.6),
+    borderWidth: 0.4,
+  });
+}
+
+/**
+ * An alignment sheet: every label's border and its number, with the sheet's name and the shift used,
+ * printed on plain paper and held against a label sheet to the light to check the fit.
+ */
+export async function alignmentPdf(
+  sheet: Sheet & { name?: string },
+  shiftX: number,
+  shiftY: number,
+) {
+  const pdf = await PDFDocument.create();
+  pdf.setTitle('Label alignment sheet');
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const page = pdf.addPage(A4);
+  const w = sheet.width * MM;
+  const h = sheet.height * MM;
+  for (let row = 0; row < sheet.rows; row += 1)
+    for (let col = 0; col < sheet.cols; col += 1) {
+      const x = (sheet.left + shiftX + col * (sheet.width + sheet.gapX)) * MM;
+      const y = A4[1] - (sheet.top + shiftY + row * (sheet.height + sheet.gapY)) * MM - h;
+      outlineCell(page, x, y, w, h);
+      const n = String(row * sheet.cols + col + 1);
+      page.drawText(n, {
+        x: x + w / 2 - regular.widthOfTextAtSize(n, 8) / 2,
+        y: y + h / 2 - 3,
+        size: 8,
+        font: regular,
+        color: rgb(0.45, 0.45, 0.45),
+      });
+    }
+  const note = latin(
+    `${sheet.name ?? 'Label sheet'} - shift ${String(shiftX)} mm right, ${String(shiftY)} mm down. Print at 100% (actual size, no fit to page).`,
+  );
+  if (note)
+    page.drawText(note, {
+      x: 8 * MM,
+      y: 4 * MM,
+      size: 7,
+      font: regular,
+      color: rgb(0.3, 0.3, 0.3),
+    });
+  return Buffer.from(await pdf.save());
+}
+
+/**
+ * The centred barcode label (like the school's old labels): the top line (school short name and
+ * library), the accession number, the bars of the number, and the call number, each centred.
+ */
+function centredLabel(
+  page: PDFPage,
+  l: Label,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  regular: PDFFont,
+  bold: PDFFont,
+) {
+  const pad = Math.min(w, h) * 0.07;
+  const inner = w - 2 * pad;
+  const small = Math.max(4.5, Math.min(8, h * 0.12));
+  const mid = Math.max(5, Math.min(10, h * 0.14));
+  const centre = (text: string, font: PDFFont, size: number, at: number) => {
+    const t = fit(font, text, size, inner);
+    page.drawText(t, {
+      x: x + (w - font.widthOfTextAtSize(t, size)) / 2,
+      y: at,
+      size,
+      font,
+      color: INK,
+    });
+  };
+  let top = y + h - pad;
+  const head = latin(l.top);
+  if (head) {
+    top -= small;
+    centre(head, bold, small, top);
+    top -= small * 0.2;
+  }
+  top -= mid;
+  centre(l.accessionNo, bold, mid, top);
+  top -= mid * 0.35;
+  const call = latin(l.callNo);
+  const bottom = y + pad;
+  if (call) centre(call, regular, mid, bottom);
+  const barBottom = bottom + (call ? mid * 1.25 : 0);
+  const barH = Math.max(5, top - barBottom);
+  const { bars, modules } = code128Bars(l.accessionNo);
+  // the bars at most 85 % of the label's width, centred
+  const width = Math.min(inner, w * 0.85);
+  const m = width / modules;
+  const left = x + (w - width) / 2;
+  for (const [start, bw] of bars)
+    page.drawRectangle({
+      x: left + start * m,
+      y: barBottom,
+      width: bw * m,
+      height: barH,
+      color: INK,
+    });
 }
 
 function barcodeLabel(

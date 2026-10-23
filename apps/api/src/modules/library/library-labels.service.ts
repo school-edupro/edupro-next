@@ -5,7 +5,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { LabelsDto } from './library-books.dto';
 import { bookFilter, bookSort } from './library-filter';
-import { PRESETS, labelsPdf, type Label, type Sheet } from './library-labels';
+import { PRESETS, alignmentPdf, labelsPdf, type Label, type Sheet } from './library-labels';
 
 const PREF = 'library.labels.settings';
 const MAX = 3000;
@@ -123,6 +123,23 @@ export class LibraryLabelsService {
         `A sheet has ${String(sheet.cols * sheet.rows)} labels: start at one of them`,
         { status: 400 },
       );
+    if (q.alignment) {
+      // only the borders and numbers, to test the printer on plain paper
+      const name = q.preset === 'custom' ? 'Your sheet' : PRESETS[q.preset]!.name;
+      const bytes = await alignmentPdf({ ...sheet, name }, q.shiftX, q.shiftY);
+      return {
+        copies: 0,
+        labels: sheet.cols * sheet.rows,
+        sheets: 1,
+        first: null,
+        last: null,
+        missing: [],
+        filename: 'Label-alignment-sheet.pdf',
+        contentType: 'application/pdf',
+        base64: bytes.toString('base64'),
+        pages: 1,
+      };
+    }
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const { rows, missing } = await this.copies(c, q);
       if (rows.length > MAX)
@@ -145,25 +162,37 @@ export class LibraryLabelsService {
       if (q.dry) return count;
       if (!rows.length)
         throw new DomainError('library.no_copies', 'No copy to label', { status: 409 });
-      const school =
-        q.top === 'school'
+      const sch =
+        q.top === 'school' || q.top === 'school_library'
           ? (
-              await c.query<{ name: string }>(
-                `SELECT name FROM schools WHERE id = app.current_school_id()`,
+              await c.query<{ name: string; short: string | null }>(
+                `SELECT name, NULLIF(btrim(short_name), '') AS short FROM schools WHERE id = app.current_school_id()`,
               )
-            ).rows[0]!.name
+            ).rows[0]!
           : null;
       const labels: Label[] = rows.map((x) => ({
         accessionNo: x.accession_no,
         title: q.showTitle ? x.title : null,
         callNo: x.call_no,
-        top: q.top === 'library' ? x.library : school,
+        // "DPSN(Sr Library)": the school's short name (else its name) and the copy's library
+        top:
+          q.top === 'library'
+            ? x.library
+            : q.top === 'school_library'
+              ? `${sch?.short ?? sch?.name ?? ''}(${x.library})`
+              : q.top === 'school'
+                ? (sch?.name ?? null)
+                : null,
       }));
       const pdf = await labelsPdf(labels, {
         kind: q.kind,
         sheet,
         copies: q.copies,
         skip: q.skip,
+        layout: q.layout,
+        shiftX: q.shiftX,
+        shiftY: q.shiftY,
+        outline: q.outline,
         title: `Library labels ${count.first ?? ''}–${count.last ?? ''}`,
       });
       // the settings come back next time
@@ -181,6 +210,9 @@ export class LibraryLabelsService {
             copies: q.copies,
             top: q.top,
             showTitle: q.showTitle,
+            layout: q.layout,
+            shiftX: q.shiftX,
+            shiftY: q.shiftY,
           }),
         ],
       );
