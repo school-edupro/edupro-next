@@ -8,6 +8,7 @@ import { ENV, type Env } from '../../../config/env';
 import { FilesService } from '../../files/files.service';
 import { PaymentsService } from '../../payments/payments.service';
 import { AdmissionCoreService, type AppRow } from '../admission-core.service';
+import { startFromEnquiry } from '../enquiry-engine';
 import { journey, slotOf } from '../process-engine';
 import { publicTenant } from '../public/otp.service';
 import { AdmissionScheduleService } from '../schedule.service';
@@ -172,6 +173,7 @@ export class CandidatePortalService {
     cycleId: string,
     classId: string,
     enteredBy: string | null = null,
+    enquiryToken?: string,
   ) {
     return this.db.tenant(this.t(cand), async (c) => {
       const k = await c.query<{ open: boolean; has_form: boolean; form_id: string | null }>(
@@ -195,7 +197,7 @@ export class CandidatePortalService {
           status: 409,
         });
       // the mobile and email the family signed in with start the form's contact answers
-      const def = await c.query<{ fields: Array<{ key: string; maps?: string }> }>(
+      const def = await c.query<{ fields: Array<{ key: string; maps?: string; type?: string }> }>(
         `SELECT def->'fields' AS fields FROM admission_forms WHERE id = $1`,
         [line.form_id],
       );
@@ -218,6 +220,24 @@ export class CandidatePortalService {
           JSON.stringify(start),
         ],
       );
+      // started from an enquiry's invitation: linked, and the child's name and birth date filled in
+      if (enquiryToken) {
+        const e = await startFromEnquiry(c, r.rows[0]!.id, enquiryToken);
+        if (e) {
+          const fill: Record<string, string> = {};
+          const [first, ...rest] = (e.childName ?? '').trim().split(/\s+/);
+          for (const f of def.rows[0]?.fields ?? []) {
+            if (f.maps === 'first_name' && first) fill[f.key] = first;
+            if (f.maps === 'last_name' && rest.length) fill[f.key] = rest.join(' ');
+            if (f.maps === 'dob' && e.childDob) fill[f.key] = e.childDob;
+          }
+          if (Object.keys(fill).length)
+            await c.query(`UPDATE applications SET data = data || $2::jsonb WHERE id = $1`, [
+              r.rows[0]!.id,
+              JSON.stringify(fill),
+            ]);
+        }
+      }
       await this.core.event(
         c,
         r.rows[0]!.id,

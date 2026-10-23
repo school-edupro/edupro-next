@@ -25,7 +25,7 @@ export default async function AdmissionPortalPage({
   searchParams,
 }: {
   params: Promise<{ school: string }>;
-  searchParams: Promise<{ session?: string; error?: string }>;
+  searchParams: Promise<{ session?: string; error?: string; enquiry?: string }>;
 }) {
   const { school } = await params;
   const sp = await searchParams;
@@ -39,6 +39,8 @@ export default async function AdmissionPortalPage({
   const signedIn = Boolean((await cookies()).get(ADMISSION_COOKIE)?.value);
   const me = signedIn ? await admissionFetch<PortalMe>('/me').catch(() => null) : null;
   const inbox = me ? await admissionFetch<PortalInbox>('/me/inbox').catch(() => null) : null;
+  // an invitation from the enquiry desk: kept through the sign-in and given to the new registration
+  const enquiry = /^[A-Za-z0-9_-]{16,64}$/.test(sp.enquiry ?? '') ? sp.enquiry! : null;
   const sessions = sp.session
     ? open.sessions
         .filter((s) => s.code.toLowerCase() === sp.session!.toLowerCase())
@@ -249,6 +251,7 @@ export default async function AdmissionPortalPage({
                           <input type="hidden" name="school" value={school} />
                           <input type="hidden" name="cycleId" value={s.id} />
                           <input type="hidden" name="classId" value={k.id} />
+                          {enquiry ? <input type="hidden" name="enquiry" value={enquiry} /> : null}
                           <button className="ep-btn ep-btn--primary ep-btn--sm" type="submit">
                             Register for {k.name}
                           </button>
@@ -271,9 +274,13 @@ export default async function AdmissionPortalPage({
         <Card elevated title="Sign in" id="sign-in">
           <p style={{ marginTop: 0 }}>
             One sign-in for all your children&apos;s registrations. Families who registered before
-            can use the registration number.
+            can use the registration number. Have a question first?{' '}
+            <a href={`/${school}/admission/enquire`}>Send an enquiry</a>.
           </p>
-          <AdmissionSignIn school={school} returnTo={`/${school}/admission`} />
+          <AdmissionSignIn
+            school={school}
+            returnTo={`/${school}/admission${enquiry ? `?enquiry=${enquiry}${sp.session ? `&session=${encodeURIComponent(sp.session)}` : ''}` : ''}`}
+          />
         </Card>
       ) : null}
     </>

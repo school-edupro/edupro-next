@@ -24,13 +24,18 @@ export async function startRegistration(fd: FormData) {
   const school = String(fd.get('school') ?? '').toLowerCase();
   const cycleId = String(fd.get('cycleId') ?? '');
   const classId = String(fd.get('classId') ?? '');
+  const enquiry = String(fd.get('enquiry') ?? '');
   if (!/^[a-z0-9-]{2,20}$/.test(school)) redirect('/');
   let id: string;
   try {
     id = (
       await admissionFetch<{ id: string }>('/me/applications', {
         method: 'POST',
-        body: JSON.stringify({ cycleId, classId }),
+        body: JSON.stringify({
+          cycleId,
+          classId,
+          ...(/^[A-Za-z0-9_-]{16,64}$/.test(enquiry) ? { enquiry } : {}),
+        }),
       })
     ).id;
   } catch (error) {

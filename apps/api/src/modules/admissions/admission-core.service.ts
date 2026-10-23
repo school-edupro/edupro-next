@@ -22,6 +22,7 @@ import { STORAGE_DRIVER } from '../files/storage';
 import { applicationPdf } from '../people/application-pdf';
 import { admissionReceiptPdf, type SchoolHead } from './admission-pdf';
 import { AdmissionFormsService } from './forms.service';
+import { convertEnquiry } from './enquiry-engine';
 import { startProcess } from './process-engine';
 import { AdmissionSetupService } from './setup.service';
 
@@ -548,6 +549,8 @@ export class AdmissionCoreService {
     );
     // the process of the class starts at once (docs/design/39, part 4)
     await startProcess(c, appId);
+    // the enquiry it came from is converted (part 8)
+    await convertEnquiry(c, appId);
     const after = await this.row(c, appId);
     const attachments: Array<{ fileId: string; name: string }> = [];
     const pdf = await this.storeFormPdf(c, after);

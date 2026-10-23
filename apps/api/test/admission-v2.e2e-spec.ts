@@ -1503,4 +1503,236 @@ describe('online admission (e2e)', () => {
       expect(o.json().daily).toHaveLength(30);
     });
   });
+  describe('part 8: enquiries', () => {
+    let walkInSource: string;
+    let enquiryId: string;
+    const mobileE = `8${String(Date.now()).slice(-9)}`;
+    const mobileF = `7${String(Date.now()).slice(-9)}`;
+
+    it('takes an enquiry at the desk with a counsellor and the next follow-up', async () => {
+      const meta = await inject({ method: 'GET', url: '/admissions/enquiries/meta', headers: h() });
+      expect(meta.statusCode).toBe(200);
+      walkInSource = (meta.json().sources as Array<{ id: string; name: string }>).find(
+        (x) => x.name === 'Walk-in',
+      )!.id;
+      const bad = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries',
+        headers: h(),
+        json: { parentName: 'Mr Gupta' },
+      });
+      expect(bad.statusCode).toBe(400);
+      const e = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries',
+        headers: h(clerk),
+        json: {
+          parentName: 'Mr Gupta',
+          childName: 'Neha Gupta',
+          childDob: '2012-07-15',
+          classId: classMini,
+          cycleId,
+          sourceId: walkInSource,
+          mobile: mobileE,
+        },
+      });
+      expect(e.statusCode).toBe(201);
+      enquiryId = e.json().id;
+      expect(e.json()).toMatchObject({ status: 'new', counsellorUserId: clerk.id });
+      const tomorrow = new Date(Date.now() + 86400000 + 330 * 60_000).toISOString().slice(0, 10);
+      const f = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${enquiryId}/followups`,
+        headers: h(clerk),
+        json: {
+          mode: 'call',
+          outcome: 'Wants to see the campus first',
+          nextOn: tomorrow,
+          status: 'interested',
+        },
+      });
+      expect(f.json()).toMatchObject({ status: 'interested', nextFollowUpOn: tomorrow });
+      const list = await inject({
+        method: 'GET',
+        url: '/admissions/enquiries?status=open&counsellor=me',
+        headers: h(clerk),
+      });
+      expect(list.json().data.map((x: { id: string }) => x.id)).toContain(enquiryId);
+      expect(list.json().counts.open).toBeGreaterThanOrEqual(1);
+    });
+
+    it('invites the family with a link that fills the form, and converts the enquiry on registration', async () => {
+      const inv = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${enquiryId}/invite`,
+        headers: h(),
+        json: {},
+      });
+      expect(inv.statusCode).toBe(201);
+      const token = /enquiry=([A-Za-z0-9_-]+)/.exec(inv.json().link as string)![1]!;
+      const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+      const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+      const code = await inject({
+        method: 'POST',
+        url: '/public/admission/code',
+        headers: {},
+        json: {
+          schoolCode: school.code,
+          identifier: mobileE,
+          challenge: ch.json().challenge,
+          nonce,
+        },
+      });
+      const ok = await inject({
+        method: 'POST',
+        url: '/public/admission/code/verify',
+        headers: {},
+        json: { schoolCode: school.code, identifier: mobileE, code: code.json().devCode },
+      });
+      const tok = ok.json().token as string;
+      const start = await inject({
+        method: 'POST',
+        url: '/public/admission/me/applications',
+        headers: pub(tok),
+        json: { cycleId, classId: classMini, enquiry: token },
+      });
+      expect(start.statusCode).toBe(201);
+      const id = start.json().id as string;
+      const view = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${id}`,
+        headers: pub(tok),
+      });
+      expect(view.json().answers).toMatchObject({
+        first_name: 'Neha',
+        last_name: 'Gupta',
+        dob: '2012-07-15',
+        sms_mobile: mobileE,
+      });
+      const sub = await inject({
+        method: 'POST',
+        url: `/public/admission/me/applications/${id}/submit`,
+        headers: pub(tok),
+        json: {
+          answers: {
+            ...view.json().answers,
+            gender: 'Female',
+            primary_email: 'gupta.family@example.com',
+            aadhaar_no: '555566667777',
+            ews: 'No',
+          },
+        },
+      });
+      expect(sub.statusCode).toBe(201);
+      const fee = await inject({
+        method: 'POST',
+        url: `/admissions/applications/${id}/registration-fee`,
+        headers: h(),
+        json: { mode: 'cash' },
+      });
+      expect(fee.statusCode).toBe(201);
+      const e = await inject({
+        method: 'GET',
+        url: `/admissions/enquiries/${enquiryId}`,
+        headers: h(),
+      });
+      expect(e.json()).toMatchObject({ status: 'converted' });
+      expect(e.json().application).toMatchObject({ id });
+    });
+
+    it('converts an enquiry when the same mobile registers without the link', async () => {
+      const e = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries',
+        headers: h(),
+        json: {
+          parentName: 'Mrs Rao',
+          childName: 'Tara Rao',
+          classId: classMini,
+          sourceId: walkInSource,
+          mobile: mobileF,
+        },
+      });
+      const walkIn = await inject({
+        method: 'POST',
+        url: '/admissions/desk/applications',
+        headers: h(),
+        json: { cycleId, classId: classMini, mobile: mobileF },
+      });
+      const id = walkIn.json().id as string;
+      await inject({
+        method: 'POST',
+        url: `/admissions/applications/${id}/form/submit`,
+        headers: h(),
+        json: {
+          answers: {
+            first_name: 'Tara',
+            last_name: 'Rao',
+            dob: '2012-05-01',
+            gender: 'Female',
+            sms_mobile: mobileF,
+            primary_email: 'rao.family@example.com',
+            aadhaar_no: '888877776666',
+            ews: 'No',
+          },
+        },
+      });
+      await inject({
+        method: 'POST',
+        url: `/admissions/applications/${id}/registration-fee`,
+        headers: h(),
+        json: { mode: 'upi' },
+      });
+      const after = await inject({
+        method: 'GET',
+        url: `/admissions/enquiries/${e.json().id}`,
+        headers: h(),
+      });
+      expect(after.json().status).toBe('converted');
+    });
+
+    it("takes the website's enquiry form and reports conversion by source and class", async () => {
+      const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+      const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+      const web = await inject({
+        method: 'POST',
+        url: '/public/admission/enquiry',
+        headers: {},
+        json: {
+          schoolCode: school.code,
+          challenge: ch.json().challenge,
+          nonce,
+          parentName: 'Web Parent',
+          childName: 'Web Child',
+          classId: classMini,
+          email: 'web.parent@example.com',
+        },
+      });
+      expect(web.statusCode).toBe(201);
+      const list = await inject({
+        method: 'GET',
+        url: '/admissions/enquiries?q=Web%20Parent',
+        headers: h(),
+      });
+      expect(list.json().data[0]).toMatchObject({
+        source: 'Website',
+        fromWebsite: true,
+        status: 'new',
+      });
+      const rep = await inject({
+        method: 'GET',
+        url: `/admissions/enquiries/report?cycleId=${cycleId}`,
+        headers: h(),
+      });
+      expect(rep.statusCode).toBe(200);
+      const walk = (
+        rep.json().bySource as Array<{ name: string; enquiries: number; registered: number }>
+      ).find((x) => x.name === 'Walk-in')!;
+      expect(walk).toMatchObject({ enquiries: 2, registered: 2, toRegistration: 100 });
+      const mini = (rep.json().byClass as Array<{ name: string; enquiries: number }>).find(
+        (x) => x.name === 'Class Mini',
+      )!;
+      expect(mini.enquiries).toBe(3);
+    });
+  });
 });

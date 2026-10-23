@@ -23,7 +23,15 @@ export const CodeVerifySchema = z.object({
 });
 export class CodeVerifyDto extends createZodDto(CodeVerifySchema) {}
 
-export const StartSchema = z.object({ cycleId: IdSchema, classId: IdSchema });
+export const StartSchema = z.object({
+  cycleId: IdSchema,
+  classId: IdSchema,
+  /** the invitation of an enquiry (docs/design/39, part 8) */
+  enquiry: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{16,64}$/)
+    .optional(),
+});
 export class StartDto extends createZodDto(StartSchema) {}
 
 export const SaveStepSchema = z.object({

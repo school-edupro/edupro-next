@@ -18,6 +18,8 @@ import { PublicThrottle, PublicThrottleGuard } from '../public/public-throttle.g
 import { AdmissionCandidateGuard, type CandidateRequest } from './candidate.guard';
 import { CandidatePortalService } from './candidate-portal.service';
 import { CandidateSigninService } from './candidate-signin.service';
+import { PublicEnquiryDto } from '../enquiry.dto';
+import { AdmissionEnquiryService } from '../enquiry.service';
 import {
   CodeRequestDto,
   CodeVerifyDto,
@@ -41,7 +43,17 @@ export class CandidatePortalController {
     private readonly portal: CandidatePortalService,
     private readonly signin: CandidateSigninService,
     private readonly pow: PowService,
+    private readonly enquiries: AdmissionEnquiryService,
   ) {}
+
+  @Post('enquiry')
+  @Public()
+  @PublicThrottle(10)
+  @ApiOperation({ summary: "The admission enquiry form of the school's website" })
+  async enquiry(@Body() body: PublicEnquiryDto) {
+    await this.pow.consume(body.challenge, body.nonce);
+    return this.enquiries.publicCreate(await this.signin.schoolId(body.schoolCode), body);
+  }
 
   @Get('schools/:schoolCode')
   @Public()
@@ -92,7 +104,7 @@ export class CandidatePortalController {
   @UseGuards(AdmissionCandidateGuard)
   @PublicThrottle(30)
   start(@Req() req: CandidateRequest, @Body() body: StartDto) {
-    return this.portal.start(req.candidate!, body.cycleId, body.classId);
+    return this.portal.start(req.candidate!, body.cycleId, body.classId, null, body.enquiry);
   }
 
   @Get('me/applications/:id')

@@ -1,6 +1,7 @@
 import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AdmissionSetupEditor } from '@/components/admissions/AdmissionSetupEditor';
+import { EnquirySourcesEditor } from '@/components/admissions/EnquirySourcesEditor';
 import { ProcessEditor } from '@/components/admissions/ProcessEditor';
 import { Notice } from '@/components/Notice';
 import type { FormDetail, FormListRow } from '@/lib/admission-forms';
@@ -40,6 +41,13 @@ export default async function AdmissionSetupPage({
     admission_cancelled: 'Admission cancelled',
     admission_message: 'Other messages',
   };
+  const sources = me.permissions.includes('admissions.enquiry.manage')
+    ? await apiFetch<{
+        sources: Array<{ id: string; name: string; status: string; used: number }>;
+      }>('/admissions/enquiries/meta')
+        .then((m) => m.sources)
+        .catch(() => null)
+    : null;
   const byCode = new Map<string, CommsTemplate[]>();
   for (const t of templates) byCode.set(t.code, [...(byCode.get(t.code) ?? []), t]);
   const details = await Promise.all(
@@ -75,6 +83,14 @@ export default async function AdmissionSetupPage({
           canEdit={me.permissions.includes('admissions.setup.manage')}
         />
       </div>
+      {sources ? (
+        <div style={{ marginTop: 'var(--sp-4)' }}>
+          <EnquirySourcesEditor
+            initial={sources}
+            canEdit={me.permissions.includes('admissions.setup.manage')}
+          />
+        </div>
+      ) : null}
       <section
         className="ep-card ep-as__card"
         aria-labelledby="as-mails"

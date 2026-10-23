@@ -64,6 +64,7 @@ describe('permission coverage', () => {
       'CandidatePortalController.admissionForm (public/admission)',
       'CandidatePortalController.admitCard (public/admission)',
       'CandidatePortalController.code (public/admission)',
+      'CandidatePortalController.enquiry (public/admission)',
       'CandidatePortalController.file (public/admission)',
       'CandidatePortalController.gateways (public/admission)',
       'CandidatePortalController.get (public/admission)',
