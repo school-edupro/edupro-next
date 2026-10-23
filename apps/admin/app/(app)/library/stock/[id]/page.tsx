@@ -167,20 +167,23 @@ export default async function StockCyclePage({
           {k.reopenLog
             .map(
               (r) =>
-                `Reopened on ${dmy(r.at.slice(0, 10))} by ${r.by}${r.closedOn ? ` (closed ${dmy(r.closedOn)})` : ''}: ${r.reason}${r.restored ? ` · ${String(r.restored)} lost cop${r.restored === 1 ? 'y' : 'ies'} put back` : ''}`,
+                `Reopened on ${dmy(r.at.slice(0, 10))} by ${r.by}${r.closedOn ? ` (${r.was === 'cancelled' ? 'cancelled' : 'closed'} ${dmy(r.closedOn)})` : ''}: ${r.reason}${r.restored ? ` · ${String(r.restored)} lost cop${r.restored === 1 ? 'y' : 'ies'} put back` : ''}`,
             )
             .join(' · ')}
         </p>
       ) : null}
-      {k.status === 'closed' && mayClose && k.reopen ? (
+      {k.status !== 'open' && mayClose && k.reopen ? (
         k.reopen.allowed ? (
           <details className="ep-stock-cancel" style={{ marginBottom: 'var(--sp-4)' }}>
             <summary>
-              Closed too early? Reopen the cycle
+              {k.status === 'cancelled' ? 'Cancelled by mistake?' : 'Closed too early?'} Reopen the
+              cycle
               {k.reopen.until ? ` (until ${dmy(k.reopen.until)})` : ''}
             </summary>
             <p className="ep-field__help">
-              The books found missing go back to pending
+              {k.status === 'cancelled'
+                ? 'The cycle opens again with what was verified before it was cancelled'
+                : 'The books found missing go back to pending'}
               {k.missingMarkedLost
                 ? ', and the copies this close marked lost get their earlier status back'
                 : ''}

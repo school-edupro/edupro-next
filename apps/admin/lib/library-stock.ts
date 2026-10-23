@@ -7,6 +7,7 @@ export interface StockCycle {
     reason: string;
     restored: number;
     closedOn?: string;
+    was?: string;
   }>;
   reopen?: { allowed: boolean; why: string | null; until: string | null } | null;
   id: string;

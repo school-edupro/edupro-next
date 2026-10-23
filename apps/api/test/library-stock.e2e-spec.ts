@@ -570,5 +570,25 @@ describe('library stock verification in cycles (e2e)', () => {
     );
     expect(blocked.statusCode).toBe(409);
     expect(blocked.json().detail).toContain('Shelf S1 again');
+    // a cancelled cycle opens again too (by the administrator), its cancel reason kept in the log
+    const id2 = later.json().id as string;
+    await call(
+      'POST',
+      `/library/stock/cycles/${id2}/cancel`,
+      { reason: 'Wrong library chosen' },
+      admin,
+    );
+    const again2 = await call(
+      'POST',
+      `/library/stock/cycles/${id2}/reopen`,
+      { reason: 'It was the right one' },
+      admin,
+    );
+    expect(again2.statusCode).toBe(201);
+    expect(again2.json()).toMatchObject({ status: 'open', cancelReason: null, reopened: 1 });
+    expect(again2.json().reopenLog[0]).toMatchObject({
+      was: 'cancelled',
+      cancelReason: 'Wrong library chosen',
+    });
   });
 });

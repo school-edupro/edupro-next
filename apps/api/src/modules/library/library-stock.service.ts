@@ -168,7 +168,9 @@ export class LibraryStockService {
       reopenLog:
         (k.reopen_log as Array<{ at: string; by: string; reason: string; restored: number }>) ?? [],
       reopen:
-        k.status === 'closed' ? await this.reopenCheck(c, String(k.id), String(k.name)) : null,
+        k.status === 'closed' || k.status === 'cancelled'
+          ? await this.reopenCheck(c, String(k.id), String(k.name))
+          : null,
       scope: {
         libraries,
         shelves,
@@ -1043,7 +1045,7 @@ export class LibraryStockService {
   async reopen(ctx: RequestContext, id: string, dto: StockCancelDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await this.cycle(c, id);
-      if (k.status !== 'closed')
+      if (k.status !== 'closed' && k.status !== 'cancelled')
         throw new DomainError('library.stock_not_closed', `The cycle "${k.name}" is ${k.status}`, {
           status: 409,
         });
@@ -1092,10 +1094,19 @@ export class LibraryStockService {
         `UPDATE library_stock_checks
             SET status = 'open', finished_on = NULL, closed_at = NULL, closed_by = NULL, closed_by_name = NULL,
                 missing_marked_lost = false, found = 0, missing = 0, on_loan = 0, gone = 0, reopened = reopened + 1,
+                cancel_reason = NULL,
                 reopen_log = reopen_log || jsonb_build_array(jsonb_build_object('at', now(), 'by', $2::text, 'reason', $3::text,
-                               'restored', $4::int, 'closedOn', $5::text))
+                               'restored', $4::int, 'closedOn', $5::text, 'was', $6::text, 'cancelReason', $7::text))
           WHERE id = $1`,
-        [id, ctx.user.displayName, dto.reason, back.rows.length, k.finishedOn],
+        [
+          id,
+          ctx.user.displayName,
+          dto.reason,
+          back.rows.length,
+          k.finishedOn,
+          k.status,
+          k.cancelReason,
+        ],
       );
       await this.audit.stage(ctx, c, {
         action: 'library.stock.reopen',
@@ -1117,7 +1128,7 @@ export class LibraryStockService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.open(c, id, true);
       await c.query(
-        `UPDATE library_stock_checks SET status = 'cancelled', finished_on = CURRENT_DATE, closed_by = app.current_user_id(),
+        `UPDATE library_stock_checks SET status = 'cancelled', finished_on = CURRENT_DATE, closed_at = now(), closed_by = app.current_user_id(),
                 closed_by_name = $3, cancel_reason = $2 WHERE id = $1`,
         [id, dto.reason, ctx.user.displayName],
       );

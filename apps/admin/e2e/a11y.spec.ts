@@ -235,6 +235,7 @@ const PAGES = [
   '/library/check/18',
   '/library/stock?new=1',
   '/library/stock/1',
+  '/library/stock/52',
   '/library/stock/1?state=extras',
   '/library/stock/1?state=all&q=a',
   '/library/sales',
