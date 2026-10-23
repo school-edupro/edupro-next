@@ -243,6 +243,26 @@ function holds(c: AdmissionCondition, v: AdmissionAnswer | undefined): boolean {
   }
 }
 
+/** Whether a set of conditions holds (fee categories, enquiry filters). */
+export function conditionsHold(
+  conditions: AdmissionCondition[],
+  logic: 'all' | 'any',
+  answers: AdmissionAnswers,
+): boolean {
+  if (!conditions.length) return false;
+  const results = conditions.map((c) => holds(c, answers[c.field]));
+  return logic === 'any' ? results.some(Boolean) : results.every(Boolean);
+}
+
+/** The fee category of a candidate: the first (in order) whose conditions hold, else the default. */
+export function matchCategory<
+  T extends { conditions: AdmissionCondition[]; logic: 'all' | 'any'; isDefault: boolean },
+>(categories: T[], answers: AdmissionAnswers): T | null {
+  for (const c of categories)
+    if (!c.isDefault && conditionsHold(c.conditions, c.logic, answers)) return c;
+  return categories.find((c) => c.isDefault) ?? null;
+}
+
 /** Whether a field shows and whether it must be answered, given the answers so far. */
 export function fieldState(
   f: AdmissionField,

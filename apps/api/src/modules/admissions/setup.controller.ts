@@ -1,0 +1,105 @@
+import { Body, Controller, Get, Inject, Param, Put } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { ENV, type Env } from '../../config/env';
+import { ADMISSIONS } from './admissions.dto';
+import {
+  AdmissionSettingsDto,
+  FeeCategoriesDto,
+  SessionClassesDto,
+  SessionFeesDto,
+  SessionSettingsDto,
+} from './setup.dto';
+import { AdmissionSetupService } from './setup.service';
+
+export const ADMISSION_SETUP = 'admissions.setup.manage';
+
+/** Admission set-up and the session's classes, fees and sharing (docs/design/39, part 2). */
+@ApiTags('admissions')
+@ApiBearerAuth()
+@Controller('admissions')
+export class AdmissionSetupController {
+  constructor(
+    private readonly svc: AdmissionSetupService,
+    @Inject(ENV) private readonly env: Env,
+  ) {}
+
+  @Get('setup')
+  @ApiOperation({ summary: 'Sign-in channels, receipt series and fee categories' })
+  @RequirePermission(ADMISSIONS.cycleView)
+  setup(@ReqCtx() ctx: RequestContext) {
+    return this.svc.setup(ctx);
+  }
+
+  @Put('setup/settings')
+  @RequirePermission(ADMISSION_SETUP, {
+    description:
+      'Admission set-up: sign-in channels, receipt series, fee categories, stages and approval processes',
+  })
+  saveSettings(@ReqCtx() ctx: RequestContext, @Body() dto: AdmissionSettingsDto) {
+    return this.svc.saveSettings(ctx, dto);
+  }
+
+  @Put('setup/categories')
+  @RequirePermission(ADMISSION_SETUP)
+  saveCategories(@ReqCtx() ctx: RequestContext, @Body() dto: FeeCategoriesDto) {
+    return this.svc.saveCategories(ctx, dto);
+  }
+
+  @Get('cycles/:id/plan')
+  @ApiOperation({
+    summary: 'The session: classes with form, seats, window, eligibility, and the fee table',
+  })
+  @RequirePermission(ADMISSIONS.cycleView)
+  plan(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.plan(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Put('cycles/:id/classes')
+  @RequirePermission(ADMISSIONS.cycleManage)
+  async saveClasses(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SessionClassesDto,
+  ) {
+    await this.svc.saveClasses(ctx, id, dto);
+    return this.svc.plan(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Put('cycles/:id/fees')
+  @RequirePermission(ADMISSIONS.cycleManage)
+  async saveFees(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SessionFeesDto,
+  ) {
+    await this.svc.saveFees(ctx, id, dto);
+    return this.svc.plan(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Put('cycles/:id/settings')
+  @RequirePermission(ADMISSIONS.cycleManage)
+  async saveSessionSettings(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SessionSettingsDto,
+  ) {
+    await this.svc.saveSessionSettings(ctx, id, dto);
+    return this.svc.plan(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Get('cycles/:id/qr')
+  @ApiOperation({ summary: 'The public registration link of the session and its QR (PNG)' })
+  @RequirePermission(ADMISSIONS.cycleView)
+  qr(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.share(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Get('cycles/:id/poster')
+  @ApiOperation({ summary: 'The A4 admission poster with classes, last date and the QR (PDF)' })
+  @RequirePermission(ADMISSIONS.cycleView)
+  poster(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.poster(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+}

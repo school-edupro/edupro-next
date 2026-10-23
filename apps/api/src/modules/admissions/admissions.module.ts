@@ -5,6 +5,8 @@ import { AdmissionsService } from './admissions.service';
 import { DecisionsService } from './decisions.service';
 import { AdmissionFormsController } from './forms.controller';
 import { AdmissionFormsService } from './forms.service';
+import { AdmissionSetupController } from './setup.controller';
+import { AdmissionSetupService } from './setup.service';
 import { PaymentsModule } from '../payments/payments.module';
 import { PaymentsService } from '../payments/payments.service';
 import { WorkflowModule } from '../workflow/workflow.module';
@@ -25,6 +27,7 @@ import { PublicSchoolService } from './public/public-school.service';
   controllers: [
     AdmissionsController,
     AdmissionFormsController,
+    AdmissionSetupController,
     PublicAdmissionsController,
     PublicSchoolController,
   ],
@@ -32,6 +35,7 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionsService,
     DecisionsService,
     AdmissionFormsService,
+    AdmissionSetupService,
     PublicAdmissionsService,
     PublicSchoolService,
     PowService,
@@ -43,6 +47,7 @@ import { PublicSchoolService } from './public/public-school.service';
   exports: [
     AdmissionsService,
     AdmissionFormsService,
+    AdmissionSetupService,
     PublicAdmissionsService,
     DecisionsService,
     OtpService,

@@ -10742,3 +10742,116 @@ a.ep-pub-foot__item {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---- admission session and set-up (docs/design/39) --------------------------------------------- */
+.ep-sp {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-sp__head {
+  display: inline-flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ep-sp__table .ep-input,
+.ep-sp__table .ep-select {
+  min-width: 8rem;
+}
+.ep-sp__num {
+  max-width: 7rem;
+  min-width: 5rem;
+}
+.ep-sp__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.ep-sp__actions .ep-field {
+  margin: 0;
+  min-width: 16rem;
+}
+.ep-sp__refund {
+  display: grid;
+  gap: var(--sp-3);
+  max-width: 40rem;
+}
+.ep-sp__decisions {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.ep-as {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-as__card {
+  padding: var(--sp-4);
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-as__h {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+}
+.ep-as__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--sp-3);
+}
+.ep-as__cats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-as__cat {
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--mob-cyan-600);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-as__cat[data-off] {
+  border-left-color: var(--border-default);
+  opacity: 0.8;
+}
+.ep-as__cathead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-as__cathead .ep-input {
+  flex: 1 1 12rem;
+  width: auto;
+}
+.ep-as__code {
+  max-width: 10rem;
+}
+.ep-as__catacts {
+  display: flex;
+  gap: var(--sp-1);
+  margin-left: auto;
+}
+.ep-as__conds {
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-as__logic {
+  max-width: 14rem;
+}
+.ep-as__lbl {
+  flex: 1 1 10rem;
+}
+.ep-sp__table tbody th,
+.ep-sp__fees tbody th {
+  white-space: nowrap;
+}

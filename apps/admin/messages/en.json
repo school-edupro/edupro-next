@@ -42,6 +42,7 @@
     "admissionsDashboard": "Dashboard",
     "cycles": "Admission sessions",
     "admissionForms": "Registration forms",
+    "admissionSetup": "Admission set-up",
     "applications": "Applications",
     "fees": "Fees",
     "feeMasters": "Heads, periods, slabs",
@@ -3404,14 +3405,14 @@
       "4_body": "People → Bulk import validates a spreadsheet row by row before anything is written."
     },
     "admissions": {
-      "1_title": "Cycles",
-      "1_body": "A cycle is one intake: classes, seats, dates, the form, the scoring rule and the fee.",
-      "2_title": "Applications",
-      "2_body": "Verify, score and shortlist; duplicates and seats against applications show on the dashboard.",
-      "3_title": "Approvals",
-      "3_body": "Offers go through the coordinator and the principal in the approvals inbox.",
+      "1_title": "Sessions and forms",
+      "1_body": "A session is one intake per academic year: each class gets its registration form (made in the form builder), seats, dates and a fee per category.",
+      "2_title": "Registrations",
+      "2_body": "Candidates register on the school website, pay the registration fee and get a number; the office can also register walk-in parents.",
+      "3_title": "Approval stages",
+      "3_body": "Each class follows its stages (document check, test, interview, selection) with the approvers set in Admission set-up.",
       "4_title": "Admission",
-      "4_body": "Once the fee is paid the application becomes an enrolled pupil with guardians and documents carried over."
+      "4_body": "After the admission fee the office allots the section and the candidate becomes a student with parents, documents and a parent login."
     },
     "academics": {
       "1_title": "Structure",

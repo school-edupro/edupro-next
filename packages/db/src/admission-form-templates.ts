@@ -333,6 +333,16 @@ export const GENERAL_ADMISSION_FORM: AdmissionFormDef = {
       width: 'half',
     },
     {
+      key: 'ews',
+      label: 'Applying under EWS / DG category',
+      type: 'select',
+      step: 'student',
+      required: true,
+      list: 'YesNo',
+      maps: 'ews',
+      width: 'half',
+    },
+    {
       key: 'previous_class',
       label: 'Previous Class',
       type: 'select',
@@ -1144,6 +1154,16 @@ export const CLASS_XI_ADMISSION_FORM: AdmissionFormDef = {
       required: true,
       list: 'Nationality',
       maps: 'nationality',
+      width: 'half',
+    },
+    {
+      key: 'ews',
+      label: 'Applying under EWS / DG category',
+      type: 'select',
+      step: 'applicant',
+      required: true,
+      list: 'YesNo',
+      maps: 'ews',
       width: 'half',
     },
     {

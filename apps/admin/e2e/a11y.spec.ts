@@ -16,6 +16,8 @@ const PAGES = [
   '/admissions/applications',
   '/admissions/forms',
   '/admissions/forms/1',
+  '/admissions/setup',
+  '/admissions/cycles/4',
   '/fees/demands',
   '/fees/payments',
   '/workflow/inbox',
