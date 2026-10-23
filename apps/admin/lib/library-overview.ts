@@ -159,6 +159,29 @@ export interface LibraryDashboard {
     onLoan: number;
     overdue: number;
   }>;
+  matrix: {
+    libraries: Array<{
+      id: string;
+      name: string;
+      titles: number;
+      copies: number;
+      available: number;
+      onLoan: number;
+      overdue: number;
+      lost: number;
+      damaged: number;
+      withdrawn: number;
+      reservedReady: number;
+      value: number;
+    }>;
+    titles: number;
+    reservedWaiting: number;
+  };
+  byStatus: Array<{ status: string; copies: number }>;
+  byMaterial: Array<{ name: string; copies: number; onLoan: number }>;
+  bySubject: Array<{ name: string; copies: number; onLoan: number }>;
+  year: Array<{ month: string; thisYear: number; lastYear: number; soFar: boolean }>;
+  byClass: Array<{ id: string; name: string; pupils: number; borrowed: number }>;
 }
 
 export const HISTORY_LABEL: Record<string, string> = {

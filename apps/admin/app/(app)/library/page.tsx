@@ -57,6 +57,16 @@ export default async function LibraryBooksPage({
   // a search handed over by a link (a title looked up from a copy's page)
   const q = (sp.q ?? '').trim().slice(0, 120);
   if (q) view = { ...view, search: q } as RegisterView;
+  // a library handed over by a link (the dashboard's table): the copies of that library
+  const lib = (sp.library ?? '').trim().slice(0, 120);
+  if (lib && level === 'copies' && known.has('library'))
+    view = {
+      ...view,
+      filters: [
+        ...view.filters.filter((x) => x.key !== 'library'),
+        { key: 'library', op: 'in', values: [lib] },
+      ],
+    } as RegisterView;
   const load = (v: RegisterView) =>
     apiFetch<RegisterResult>(`/library/register/${level}`, {
       method: 'POST',

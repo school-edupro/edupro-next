@@ -4430,6 +4430,9 @@ a.ep-tabs__tab {
 .ep-starinput__star:has(input:focus-visible) {
   outline: 3px solid var(--focus-ring);
 }
+.ep-ldash__matrix th[scope='row'] {
+  white-space: nowrap;
+}
 .ep-ldash__value {
   font-family: var(--font-heading);
   font-size: var(--fs-h4);

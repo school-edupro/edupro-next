@@ -370,6 +370,87 @@ export class LibraryOverviewService {
           WHERE ($1::bigint IS NULL OR s.library_id = $1)`,
         [lib],
       );
+      // the "total books in school" table: each library and the total
+      const matrix = await c.query<Row>(
+        `WITH x AS (SELECT * FROM library_copies),
+              per AS (
+                SELECT lb.id, lb.name, lb.code,
+                       count(DISTINCT x.title_id) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold'))::int AS titles,
+                       count(x.id) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold'))::int AS copies,
+                       count(x.id) FILTER (WHERE x.status = 'available')::int AS available,
+                       count(x.id) FILTER (WHERE x.status = 'issued')::int AS on_loan,
+                       count(x.id) FILTER (WHERE x.status = 'lost')::int AS lost,
+                       count(x.id) FILTER (WHERE x.status = 'damaged')::int AS damaged,
+                       count(x.id) FILTER (WHERE x.status IN ('withdrawn', 'sold'))::int AS withdrawn,
+                       COALESCE(sum(x.price) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold')), 0)::float AS value,
+                       (SELECT count(*)::int FROM library_loans l JOIN library_copies y ON y.id = l.copy_id
+                         WHERE y.library_id = lb.id AND l.returned_on IS NULL AND l.due_on < CURRENT_DATE) AS overdue,
+                       (SELECT count(*)::int FROM library_reservations rv JOIN library_copies y ON y.id = rv.copy_id
+                         WHERE y.library_id = lb.id AND rv.status = 'ready') AS reserved_ready
+                  FROM library_libraries lb LEFT JOIN x ON x.library_id = lb.id
+                 WHERE lb.status = 'active' GROUP BY lb.id)
+         SELECT * FROM per ORDER BY name`,
+      );
+      const totalTitles = await c.query<{ n: number }>(
+        `SELECT count(DISTINCT title_id)::int AS n FROM library_copies WHERE status NOT IN ('withdrawn', 'sold')`,
+      );
+      const waiting = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM library_reservations WHERE status = 'waiting'`,
+      );
+      const byStatus = await c.query<{ status: string; n: number }>(
+        `SELECT status::text AS status, count(*)::int AS n FROM library_copies
+          WHERE ($1::bigint IS NULL OR library_id = $1) GROUP BY 1 ORDER BY 2 DESC`,
+        [lib],
+      );
+      const byMaterial = await c.query<Row>(
+        `SELECT COALESCE(m.name, 'Other') AS name, count(*) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold'))::int AS copies,
+                count(*) FILTER (WHERE x.status = 'issued')::int AS on_loan
+           FROM library_copies x JOIN library_titles t ON t.id = x.title_id
+           LEFT JOIN library_material_types m ON m.id = t.material_type_id
+          WHERE ($1::bigint IS NULL OR x.library_id = $1)
+          GROUP BY 1 HAVING count(*) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold')) > 0 ORDER BY 2 DESC LIMIT 10`,
+        [lib],
+      );
+      const bySubject = await c.query<Row>(
+        `SELECT COALESCE(s.name::text, 'No subject') AS name, count(*) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold'))::int AS copies,
+                count(*) FILTER (WHERE x.status = 'issued')::int AS on_loan
+           FROM library_copies x JOIN library_titles t ON t.id = x.title_id
+           LEFT JOIN library_subjects s ON s.id = t.subject_id
+          WHERE ($1::bigint IS NULL OR x.library_id = $1)
+          GROUP BY 1 HAVING count(*) FILTER (WHERE x.status NOT IN ('withdrawn', 'sold')) > 0 ORDER BY 2 DESC LIMIT 10`,
+        [lib],
+      );
+      // issues per month of this session and the last (April to March)
+      const year = await c.query<Row>(
+        `WITH s AS (SELECT make_date(CASE WHEN extract(month FROM CURRENT_DATE) >= 4 THEN extract(year FROM CURRENT_DATE)::int
+                                          ELSE extract(year FROM CURRENT_DATE)::int - 1 END, 4, 1) AS starts),
+              mo AS (SELECT g::date AS m FROM s, generate_series(s.starts, s.starts + interval '11 months', interval '1 month') g)
+         SELECT to_char(mo.m, 'YYYY-MM') AS month,
+                (SELECT count(*)::int FROM library_loans l JOIN library_copies x ON x.id = l.copy_id
+                  WHERE ($1::bigint IS NULL OR x.library_id = $1) AND l.issued_on >= mo.m AND l.issued_on < (mo.m + interval '1 month')::date) AS this_year,
+                (SELECT count(*)::int FROM library_loans l JOIN library_copies x ON x.id = l.copy_id
+                  WHERE ($1::bigint IS NULL OR x.library_id = $1) AND l.issued_on >= (mo.m - interval '1 year')::date
+                    AND l.issued_on < (mo.m - interval '1 year' + interval '1 month')::date) AS last_year,
+                mo.m <= CURRENT_DATE AS so_far
+           FROM mo ORDER BY mo.m`,
+        [lib],
+      );
+      // each class: pupils on roll and how many borrowed this session
+      const byClass = await c.query<Row>(
+        `WITH s AS (SELECT make_date(CASE WHEN extract(month FROM CURRENT_DATE) >= 4 THEN extract(year FROM CURRENT_DATE)::int
+                                          ELSE extract(year FROM CURRENT_DATE)::int - 1 END, 4, 1) AS starts)
+         SELECT k.id::text, k.name, k.display_order,
+                count(DISTINCT e.student_id)::int AS pupils,
+                count(DISTINCT e.student_id) FILTER (WHERE EXISTS (
+                  SELECT 1 FROM library_loans l JOIN library_copies x ON x.id = l.copy_id, s
+                   WHERE l.borrower_kind = 'student' AND l.borrower_id = e.student_id AND l.issued_on >= s.starts
+                     AND ($1::bigint IS NULL OR x.library_id = $1)))::int AS borrowed
+           FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
+          WHERE e.status = 'active' AND e.academic_year_id = COALESCE(app.current_academic_year_id(),
+                (SELECT id FROM academic_years WHERE status = 'active' ORDER BY start_date DESC LIMIT 1))
+          GROUP BY k.id ORDER BY k.display_order, k.name`,
+        [lib],
+      );
       const f = figures.rows[0]!;
       const p = periodicals.rows[0] ?? {};
       return {
@@ -428,6 +509,49 @@ export class LibraryOverviewService {
           ref: str(x.ref),
           place: str(x.place),
         })),
+        matrix: {
+          libraries: matrix.rows.map((x) => ({
+            id: String(x.id),
+            name: String(x.name),
+            titles: Number(x.titles),
+            copies: Number(x.copies),
+            available: Number(x.available),
+            onLoan: Number(x.on_loan),
+            overdue: Number(x.overdue),
+            lost: Number(x.lost),
+            damaged: Number(x.damaged),
+            withdrawn: Number(x.withdrawn),
+            reservedReady: Number(x.reserved_ready),
+            value: Number(x.value),
+          })),
+          titles: totalTitles.rows[0]?.n ?? 0,
+          reservedWaiting: waiting.rows[0]?.n ?? 0,
+        },
+        byStatus: byStatus.rows.map((x) => ({ status: x.status, copies: Number(x.n) })),
+        byMaterial: byMaterial.rows.map((x) => ({
+          name: String(x.name),
+          copies: Number(x.copies),
+          onLoan: Number(x.on_loan),
+        })),
+        bySubject: bySubject.rows.map((x) => ({
+          name: String(x.name),
+          copies: Number(x.copies),
+          onLoan: Number(x.on_loan),
+        })),
+        year: year.rows.map((x) => ({
+          month: String(x.month),
+          thisYear: Number(x.this_year),
+          lastYear: Number(x.last_year),
+          soFar: Boolean(x.so_far),
+        })),
+        byClass: byClass.rows
+          .map((x) => ({
+            id: String(x.id),
+            name: String(x.name),
+            pupils: Number(x.pupils),
+            borrowed: Number(x.borrowed),
+          }))
+          .filter((x) => x.pupils > 0),
         byLibrary: byLibrary.rows.map((x) => ({
           id: String(x.id),
           name: String(x.name),

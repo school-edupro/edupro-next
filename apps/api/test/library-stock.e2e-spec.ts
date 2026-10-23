@@ -495,6 +495,14 @@ describe('library stock verification in cycles (e2e)', () => {
     expect(d.figures.onLoan).toBeGreaterThanOrEqual(1);
     expect(d.figures.issuedToday).toBeGreaterThanOrEqual(1);
     expect(d.months.at(-1).issued).toBeGreaterThanOrEqual(1);
+    // the "total books in school" table adds up to the figures
+    const sum = d.matrix.libraries.reduce(
+      (n: number, l: { copies: number; onLoan: number }) => n + l.copies,
+      0,
+    );
+    expect(sum).toBe(d.figures.copies);
+    expect(d.byStatus.length).toBeGreaterThan(0);
+    expect(d.year).toHaveLength(12);
     const one = (await call('GET', `/library/dashboard?libraryId=${ids.main!}`)).json();
     expect(one.libraryId).toBe(ids.main);
     expect(one.figures.copies).toBeLessThanOrEqual(d.figures.copies);
