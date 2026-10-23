@@ -3,6 +3,8 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AdmissionsController } from './admissions.controller';
 import { AdmissionsService } from './admissions.service';
 import { DecisionsService } from './decisions.service';
+import { AdmissionFormsController } from './forms.controller';
+import { AdmissionFormsService } from './forms.service';
 import { PaymentsModule } from '../payments/payments.module';
 import { PaymentsService } from '../payments/payments.service';
 import { WorkflowModule } from '../workflow/workflow.module';
@@ -20,10 +22,16 @@ import { PublicSchoolService } from './public/public-school.service';
 /** Sprint 8: admission cycles, intake desk and the public applicant surface. */
 @Module({
   imports: [WorkflowModule, PaymentsModule, FilesModule],
-  controllers: [AdmissionsController, PublicAdmissionsController, PublicSchoolController],
+  controllers: [
+    AdmissionsController,
+    AdmissionFormsController,
+    PublicAdmissionsController,
+    PublicSchoolController,
+  ],
   providers: [
     AdmissionsService,
     DecisionsService,
+    AdmissionFormsService,
     PublicAdmissionsService,
     PublicSchoolService,
     PowService,
@@ -34,6 +42,7 @@ import { PublicSchoolService } from './public/public-school.service';
   ],
   exports: [
     AdmissionsService,
+    AdmissionFormsService,
     PublicAdmissionsService,
     DecisionsService,
     OtpService,

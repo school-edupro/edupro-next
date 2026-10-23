@@ -14,6 +14,8 @@ const PAGES = [
   '/academics/notices',
   '/admissions',
   '/admissions/applications',
+  '/admissions/forms',
+  '/admissions/forms/1',
   '/fees/demands',
   '/fees/payments',
   '/workflow/inbox',
