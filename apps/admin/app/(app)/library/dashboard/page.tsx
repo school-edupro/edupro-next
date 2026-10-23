@@ -54,11 +54,6 @@ export default async function LibraryDashboardPage({
         kicker="Library"
         title="Library dashboard"
         description="Books, loans, reservations, fines and periodicals today, and the last six months."
-        actions={
-          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/library/check">
-            Check a book
-          </a>
-        }
       />
       <LibraryScopeNote />
       {d.libraries.length > 1 ? (

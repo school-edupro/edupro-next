@@ -456,7 +456,7 @@ export const NAV: Array<{
         label: 'libraryDashboard',
         permission: 'library.catalogue.view',
       },
-      { href: '/library/check', label: 'libraryCheck', permission: 'library.catalogue.view' },
+      { href: '/library/check', label: 'libraryCheck', permission: null },
       { href: '/library', label: 'catalogue', permission: 'library.catalogue.view' },
       { href: '/library/circulation', label: 'circulation', permission: 'library.loan.circulate' },
       {

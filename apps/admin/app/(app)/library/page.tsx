@@ -54,6 +54,9 @@ export default async function LibraryBooksPage({
         ],
       } as RegisterView;
   }
+  // a search handed over by a link (a title looked up from a copy's page)
+  const q = (sp.q ?? '').trim().slice(0, 120);
+  if (q) view = { ...view, search: q } as RegisterView;
   const load = (v: RegisterView) =>
     apiFetch<RegisterResult>(`/library/register/${level}`, {
       method: 'POST',

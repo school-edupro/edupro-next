@@ -47,16 +47,13 @@ export default async function CopyCheckPage({ params }: { params: Promise<{ id: 
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/library/books/${title.id}`}>
               Open the book
             </a>
-            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/library/check">
-              Check another
-            </a>
           </span>
         }
       />
       <Card>
-        <form method="get" action="/library/check" className="ep-dlog__filters" role="search">
+        <form method="get" action="/library/check/find" className="ep-dlog__filters" role="search">
           <label className="ep-field ep-dlog__search" htmlFor="ck-q">
-            <span className="ep-field__label">Check another: accession no., barcode or title</span>
+            <span className="ep-field__label">Check another copy: accession no. or barcode</span>
             <input
               id="ck-q"
               name="q"
