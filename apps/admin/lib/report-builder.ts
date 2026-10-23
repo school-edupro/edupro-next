@@ -35,7 +35,7 @@ export interface BuilderFields {
 
 export interface ReportSpec {
   /** Whose rows: students (the default) or employees. */
-  dataset?: 'student_profile' | 'employee_profile';
+  dataset?: 'student_profile' | 'employee_profile' | 'admissions';
   columns: Array<{
     key: string;
     label?: string | null;
@@ -104,7 +104,7 @@ export function runtimeOf(spec: ReportSpec): ReportRuntime {
 /** The saved reports of one dataset the user may run: their own, then those shared with them. */
 export function reportChoices(
   list: { mine: SavedReport[]; shared: SavedReport[] },
-  dataset: 'student_profile' | 'employee_profile',
+  dataset: 'student_profile' | 'employee_profile' | 'admissions',
 ): ReportChoice[] {
   const of = (r: SavedReport) => (r.spec.dataset ?? r.dataset ?? 'student_profile') === dataset;
   return [
@@ -177,6 +177,21 @@ export const EMPTY_EMPLOYEE_SPEC: ReportSpec = {
     { key: 'mobile' },
   ],
   sort: [{ key: 'employee_code', dir: 'asc' }],
+};
+
+/** A new admissions report starts with the registration, candidate, class, status and mobile. */
+export const EMPTY_ADMISSION_SPEC: ReportSpec = {
+  ...EMPTY_SPEC,
+  dataset: 'admissions',
+  columns: [
+    { key: 'registration_no' },
+    { key: 'candidate' },
+    { key: 'class_sought' },
+    { key: 'status' },
+    { key: 'category' },
+    { key: 'mobile' },
+  ],
+  sort: [{ key: 'registration_no', dir: 'asc' }],
 };
 
 /** The office-register template: class, student, father, mother, address and contacts as stacks. */

@@ -8,6 +8,7 @@ import {
   loadEmployeeLists,
   loadEmployeeReportRows,
   loadProfileLists,
+  loadAdmissionReportRows,
   loadStudentReportRows,
   reportDataset,
   shapeReport,
@@ -37,6 +38,7 @@ export const BUILDER = {
   studentView: 'people.student.view',
   employeeView: 'people.employee.view',
   sensitiveView: 'people.sensitive.view',
+  admissionView: 'admissions.application.view',
 } as const;
 
 export interface ReportDefinitionRow {
@@ -101,10 +103,35 @@ export class ReportBuilderService {
   /** Columns and filters the builder offers, with drop-down options for filter values. */
   async fields(
     ctx: RequestContext,
-    dataset: 'student_profile' | 'employee_profile' = 'student_profile',
+    dataset: 'student_profile' | 'employee_profile' | 'admissions' = 'student_profile',
   ) {
     const tenant = requireTenant(ctx);
     const showSensitive = ctx.permissions?.has(BUILDER.sensitiveView) ?? false;
+    if (dataset === 'admissions')
+      return this.db.tenant(tenant, async () => {
+        if (!ctx.permissions?.has(BUILDER.admissionView))
+          throw new DomainError(
+            'permission-denied',
+            'Admission reports need admissions.application.view',
+            {
+              status: 403,
+            },
+          );
+        const d = reportDataset('admissions');
+        return {
+          dataset,
+          sections: d.sections,
+          fields: d.fields.map((f) => ({
+            ...f,
+            options: null,
+            masked: Boolean(f.sensitive) && !showSensitive,
+          })),
+          ops: REPORT_FILTER_OPS,
+          pdfColumnLimit: PDF_COLUMN_LIMIT,
+          years: [],
+          canManage: this.manager(ctx),
+        };
+      });
     if (dataset === 'employee_profile')
       return this.db.tenant(tenant, async (c) => {
         if (!ctx.permissions?.has(BUILDER.employeeView))
@@ -444,6 +471,26 @@ export class ReportBuilderService {
     tenant: TenantContext,
     spec: ReportSpec,
   ) {
+    if (spec.dataset === 'admissions') {
+      if (!ctx.permissions?.has(BUILDER.admissionView))
+        throw new DomainError(
+          'permission-denied',
+          'Running admission reports needs admissions.application.view',
+          {
+            status: 403,
+          },
+        );
+      const y = await c.query<{ id: string; code: string }>(
+        'SELECT id::text, code FROM academic_years WHERE id = $1',
+        [tenant.academicYearId ?? null],
+      );
+      return {
+        academicYearId: y.rows[0]?.id ?? tenant.academicYearId ?? '',
+        academicYear: y.rows[0]?.code ?? '',
+        sectionIds: null,
+        showSensitive: ctx.permissions?.has(BUILDER.sensitiveView) ?? false,
+      };
+    }
     if (spec.dataset === 'employee_profile') {
       if (!ctx.permissions?.has(BUILDER.employeeView))
         throw new DomainError(
@@ -493,17 +540,19 @@ export class ReportBuilderService {
     return this.db.tenant(tenant, async (c) => {
       const run = await this.context(ctx, c, tenant, spec);
       const loaded =
-        spec.dataset === 'employee_profile'
-          ? await loadEmployeeReportRows(c, {
-              includeInactive: spec.options.includeInactive ?? false,
-              showSensitive: run.showSensitive,
-            })
-          : await loadStudentReportRows(c, {
-              academicYearId: run.academicYearId,
-              sectionIds: run.sectionIds,
-              includeInactive: spec.options.includeInactive ?? false,
-              showSensitive: run.showSensitive,
-            });
+        spec.dataset === 'admissions'
+          ? await loadAdmissionReportRows(c, { showSensitive: run.showSensitive })
+          : spec.dataset === 'employee_profile'
+            ? await loadEmployeeReportRows(c, {
+                includeInactive: spec.options.includeInactive ?? false,
+                showSensitive: run.showSensitive,
+              })
+            : await loadStudentReportRows(c, {
+                academicYearId: run.academicYearId,
+                sectionIds: run.sectionIds,
+                includeInactive: spec.options.includeInactive ?? false,
+                showSensitive: run.showSensitive,
+              });
       const shaped = shapeReport(loaded, spec);
       return {
         columns: shaped.columns,

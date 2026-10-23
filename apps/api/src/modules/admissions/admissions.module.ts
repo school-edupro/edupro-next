@@ -11,6 +11,7 @@ import { AdmissionAdmitService } from './admit.service';
 import { AdmissionDeskController } from './desk.controller';
 import { AdmissionProcessController } from './process.controller';
 import { AdmissionProcessService } from './process.service';
+import { AdmissionGridService } from './grid.service';
 import { AdmissionScheduleService } from './schedule.service';
 import { AdmissionDeskService } from './desk.service';
 import { AdmissionCandidateGuard } from './portal/candidate.guard';
@@ -56,6 +57,7 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionDeskService,
     AdmissionProcessService,
     AdmissionAdmitService,
+    AdmissionGridService,
     AdmissionScheduleService,
     CandidatePortalService,
     CandidateSigninService,

@@ -7,6 +7,11 @@ import {
   EMPLOYEE_REPORT_SECTIONS,
   EMPLOYEE_SEARCH_KEYS,
 } from './employee-report';
+import {
+  ADMISSION_REPORT_FIELDS,
+  ADMISSION_REPORT_SECTIONS,
+  ADMISSION_SEARCH_KEYS,
+} from './admission-report';
 
 /**
  * Report builder (student 360 profile): a saved report is a list of columns (with the header text the
@@ -15,7 +20,7 @@ import {
  * used, whatever its storage.
  */
 
-export const REPORT_DATASETS = ['student_profile', 'employee_profile'] as const;
+export const REPORT_DATASETS = ['student_profile', 'employee_profile', 'admissions'] as const;
 export type ReportDataset = (typeof REPORT_DATASETS)[number];
 
 export type ReportFilterOp =
@@ -182,8 +187,18 @@ export const STUDENT_REPORT_FIELD_BY_KEY: ReadonlyMap<string, ReportFieldDef> = 
 const EMPLOYEE_REPORT_FIELD_BY_KEY: ReadonlyMap<string, ReportFieldDef> = new Map(
   EMPLOYEE_REPORT_FIELDS.map((f) => [f.key, f]),
 );
+const ADMISSION_REPORT_FIELD_BY_KEY: ReadonlyMap<string, ReportFieldDef> = new Map(
+  ADMISSION_REPORT_FIELDS.map((f) => [f.key, f]),
+);
 /** A dataset's fields, sections and search keys. */
 export function reportDataset(dataset: ReportDataset | undefined = 'student_profile') {
+  if (dataset === 'admissions')
+    return {
+      fields: ADMISSION_REPORT_FIELDS,
+      byKey: ADMISSION_REPORT_FIELD_BY_KEY,
+      sections: ADMISSION_REPORT_SECTIONS,
+      search: ADMISSION_SEARCH_KEYS,
+    };
   return dataset === 'employee_profile'
     ? {
         fields: EMPLOYEE_REPORT_FIELDS,

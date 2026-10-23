@@ -25,6 +25,8 @@ const PAGES = [
   '/admissions/selection',
   '/admissions/admit',
   '/admissions/refunds',
+  '/admissions/list',
+  '/admissions/fee-collection',
   '/admissions/cycles/4',
   '/fees/demands',
   '/fees/payments',

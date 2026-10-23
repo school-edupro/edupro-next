@@ -53,6 +53,14 @@ describe('online admission (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
+    // the portal calls above count against the public rate limit: leave it clear for the next suite
+    const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+      lazyConnect: true,
+    });
+    await redis.connect();
+    const keys = await redis.keys('edupro:throttle:*');
+    if (keys.length) await redis.del(...keys);
+    await redis.quit();
   });
 
   describe('part 1: form builder', () => {
@@ -1343,6 +1351,156 @@ describe('online admission (e2e)', () => {
       });
       expect(cancel.statusCode).toBe(201);
       expect(cancel.json()).toMatchObject({ status: 'cancelled', refund: null });
+    });
+  });
+  describe('part 7: reports and dashboard', () => {
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+
+    it('lists registrations on the report engine: any column, filters, search, tabs, export', async () => {
+      const fields = await inject({
+        method: 'GET',
+        url: '/admissions/registrations/grid/fields',
+        headers: h(),
+      });
+      expect(fields.statusCode).toBe(200);
+      const keys = (fields.json().fields as Array<{ key: string }>).map((f) => f.key);
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          'registration_no',
+          'status',
+          'admission_no',
+          'f_first_name',
+          'f_aadhaar_no',
+        ]),
+      );
+      const grid = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/grid',
+        headers: h(),
+        json: {
+          columns: [
+            { key: 'class_sought' },
+            { key: 'status' },
+            { key: 'f_aadhaar_no' },
+            { key: 'admission_fee' },
+          ],
+          filters: [{ key: 'class_sought', op: 'in', values: ['Class Mini'] }],
+          sort: [],
+          status: 'all',
+          size: 50,
+          page: 1,
+        },
+      });
+      expect(grid.statusCode).toBe(201);
+      expect(grid.json().total).toBeGreaterThanOrEqual(3);
+      expect(grid.json().stats.closed).toBeGreaterThanOrEqual(2);
+      const asha = (grid.json().rows as Array<Record<string, unknown>>).find(
+        (r) => r.candidate === 'ASHA VERMA',
+      )!;
+      expect(asha).toMatchObject({ status: 'Cancelled', f_aadhaar_no: 'XXXX-XXXX-9012' });
+      const search = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/grid',
+        headers: h(),
+        json: {
+          columns: [],
+          filters: [],
+          sort: [],
+          status: 'in_progress',
+          size: 50,
+          page: 1,
+          search: 'ravi',
+        },
+      });
+      expect(search.json().rows.map((r: { candidate: string }) => r.candidate)).toContain(
+        'RAVI SHARMA',
+      );
+      const exp = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/grid/export',
+        headers: h(),
+        json: {
+          columns: [{ key: 'status' }],
+          filters: [],
+          sort: [],
+          status: 'all',
+          size: 50,
+          page: 1,
+          format: 'xlsx',
+        },
+      });
+      expect(exp.statusCode).toBe(201);
+      expect(exp.json().spec.dataset).toBe('admissions');
+    });
+
+    it('offers the Admissions dataset in the report builder', async () => {
+      const f = await inject({
+        method: 'GET',
+        url: '/reports/builder/fields?dataset=admissions',
+        headers: h(),
+      });
+      expect(f.statusCode).toBe(200);
+      expect(f.json().dataset).toBe('admissions');
+      const preview = await inject({
+        method: 'POST',
+        url: '/reports/builder/preview',
+        headers: h(),
+        json: {
+          spec: {
+            dataset: 'admissions',
+            columns: [{ key: 'registration_no' }, { key: 'candidate' }, { key: 'status' }],
+            filters: [{ key: 'status', op: 'eq', values: ['Admitted'] }],
+            sort: [],
+            options: { paper: 'A4', orientation: 'auto' },
+          },
+          limit: 20,
+        },
+      });
+      expect(preview.statusCode).toBe(201);
+      expect(preview.json().total).toBe(1);
+    });
+
+    it('reports the admission fee collection with refunds, and the day book shows both', async () => {
+      const r = await inject({
+        method: 'GET',
+        url: `/reports/datasets/admission_fee_collection/rows?from=${today}&to=${today}&cycleId=${cycleId}`,
+        headers: h(),
+      });
+      expect(r.statusCode).toBe(200);
+      const rows = r.json().rows as Array<{ kind: string; amount: number | string }>;
+      expect(rows.map((x) => x.kind)).toEqual(
+        expect.arrayContaining(['Registration fee', 'Admission fee', 'Refund']),
+      );
+      expect(rows.find((x) => x.kind === 'Refund')!.amount).toEqual(expect.anything());
+      // 500 (online) + 500 (desk) registration + 20000 admission (+ the second's fee, if any) − 18000 refund
+      const net = rows.reduce((t, x) => t + Number(x.amount), 0);
+      expect(net).toBeGreaterThanOrEqual(3000);
+      const book = await inject({
+        method: 'GET',
+        url: `/reports/datasets/fee_day_book/rows?from=${today}&to=${today}&ledger=admission`,
+        headers: h(),
+      });
+      expect(book.statusCode).toBe(200);
+      const kinds = (book.json().rows as Array<{ kind: string; ledger: string }>).map(
+        (x) => `${x.kind}:${x.ledger}`,
+      );
+      expect(kinds).toEqual(expect.arrayContaining(['misc:admission', 'refund:admission']));
+    });
+
+    it('gives the dashboard figures, the funnel per class and the last 30 days', async () => {
+      const o = await inject({
+        method: 'GET',
+        url: `/admissions/overview?cycleId=${cycleId}`,
+        headers: h(),
+      });
+      expect(o.statusCode).toBe(200);
+      expect(o.json().figures).toMatchObject({ admitted: 1, cancelled: 2, refunds: 18000 });
+      expect(o.json().figures.registrationFees).toBe(1000);
+      const mini = (o.json().byClass as Array<{ className: string; registered: number }>).find(
+        (x) => x.className === 'Class Mini',
+      )!;
+      expect(mini.registered).toBe(3);
+      expect(o.json().daily).toHaveLength(30);
     });
   });
 });

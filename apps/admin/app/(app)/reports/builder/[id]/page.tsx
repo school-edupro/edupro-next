@@ -30,7 +30,10 @@ export default async function ReportPage({
     throw e;
   });
   // the fields of the report's own dataset (students or employees)
-  const dataset = report.dataset === 'employee_profile' ? 'employee_profile' : 'student_profile';
+  const dataset =
+    report.dataset === 'employee_profile' || report.dataset === 'admissions'
+      ? report.dataset
+      : 'student_profile';
   const fields = await apiFetch<BuilderFields>(`/reports/builder/fields?dataset=${dataset}`);
   return (
     <>

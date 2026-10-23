@@ -23,6 +23,8 @@ import {
   ADMISSION_SETUP_MANAGE,
   AdmissionProcessService,
 } from './process.service';
+import { AdmissionGridExportDto, AdmissionGridDto } from './grid.dto';
+import { AdmissionGridService } from './grid.service';
 import { AdmissionScheduleService } from './schedule.service';
 
 /**
@@ -37,7 +39,39 @@ export class AdmissionProcessController {
   constructor(
     private readonly process: AdmissionProcessService,
     private readonly schedule: AdmissionScheduleService,
+    private readonly gridSvc: AdmissionGridService,
   ) {}
+
+  // ---- the admissions list (part 7) -----------------------------------------------------------------
+  @Get('overview')
+  @ApiOperation({
+    summary: 'The admissions dashboard of a session: figures, funnel per class, last 30 days',
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  overview(@ReqCtx() ctx: RequestContext, @Query('cycleId') cycleId?: string) {
+    return this.gridSvc.overview(ctx, cycleId && /^\d{1,18}$/.test(cycleId) ? cycleId : undefined);
+  }
+
+  @Get('registrations/grid/fields')
+  @ApiOperation({
+    summary: 'Columns and filters of the admissions list (the Admissions report dataset)',
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  gridFields(@ReqCtx() ctx: RequestContext) {
+    return this.gridSvc.fields(ctx);
+  }
+
+  @Post('registrations/grid')
+  @RequirePermission(ADMISSIONS.applicationView)
+  grid(@ReqCtx() ctx: RequestContext, @Body() dto: AdmissionGridDto) {
+    return this.gridSvc.grid(ctx, dto);
+  }
+
+  @Post('registrations/grid/export')
+  @RequirePermission(ADMISSIONS.applicationView)
+  gridExport(@ReqCtx() ctx: RequestContext, @Body() dto: AdmissionGridExportDto) {
+    return this.gridSvc.export(ctx, dto);
+  }
 
   // ---- set-up -----------------------------------------------------------------------------------
   @Get('process-setup')

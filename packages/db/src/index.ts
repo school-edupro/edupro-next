@@ -233,3 +233,4 @@ export * from './employee-portal';
 export * from './employee-rows';
 export * from './admission-engine';
 export * from './admission-form-templates';
+export * from './admission-report';

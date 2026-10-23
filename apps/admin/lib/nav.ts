@@ -106,6 +106,16 @@ export const NAV: Array<{
         permission: 'admissions.application.view',
       },
       {
+        href: '/admissions/list',
+        label: 'admissionList',
+        permission: 'admissions.application.view',
+      },
+      {
+        href: '/admissions/fee-collection',
+        label: 'admissionFeeCollection',
+        permission: 'admissions.application.view',
+      },
+      {
         href: '/admissions/schedule',
         label: 'admissionSchedule',
         permission: 'admissions.application.view',

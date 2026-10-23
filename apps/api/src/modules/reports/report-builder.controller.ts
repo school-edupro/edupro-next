@@ -31,7 +31,7 @@ export class ReportBuilderController {
   fields(@ReqCtx() ctx: RequestContext, @Query('dataset') dataset?: string) {
     return this.builder.fields(
       ctx,
-      dataset === 'employee_profile' ? 'employee_profile' : 'student_profile',
+      dataset === 'employee_profile' || dataset === 'admissions' ? dataset : 'student_profile',
     );
   }
 

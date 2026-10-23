@@ -72,7 +72,12 @@ export function ReportBuilder({
   const [description, setDescription] = useState(report?.description ?? '');
   const [spec, setSpec] = useState<ReportSpec>(initialSpec);
   // whose rows: students, or employees
-  const who = spec.dataset === 'employee_profile' ? 'employee' : 'student';
+  const who =
+    spec.dataset === 'employee_profile'
+      ? 'employee'
+      : spec.dataset === 'admissions'
+        ? 'registration'
+        : 'student';
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [notice, setNotice] = useState<{
@@ -90,7 +95,12 @@ export function ReportBuilder({
       : null,
   );
   const [runFormat, setRunFormat] = useState<'xlsx' | 'pdf'>('xlsx');
-  const firstKey = spec.dataset === 'employee_profile' ? 'department' : 'class_section';
+  const firstKey =
+    spec.dataset === 'employee_profile'
+      ? 'department'
+      : spec.dataset === 'admissions'
+        ? 'class_sought'
+        : 'class_section';
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [pending, start] = useTransition();
   const canEdit = !saved || saved.canEdit;

@@ -168,6 +168,14 @@ export default async function ReportBuilderListPage({
         description="Make your own student and employee reports from every profile field: choose columns, name the headers, filter, sort, save, share with colleagues, and download Excel or PDF on the school letterhead."
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', whiteSpace: 'nowrap' }}>
+            {me.permissions.includes('admissions.application.view') ? (
+              <a
+                className="ep-btn ep-btn--secondary"
+                href="/reports/builder/new?dataset=admissions"
+              >
+                New admissions report
+              </a>
+            ) : null}
             {me.permissions.includes('people.employee.view') ? (
               <a
                 className="ep-btn ep-btn--secondary"

@@ -45,6 +45,8 @@
     "admissionSetup": "Admission set-up",
     "admissionDesk": "Admission desk",
     "registrations": "Registrations",
+    "admissionList": "Admissions list",
+    "admissionFeeCollection": "Admission fee collection",
     "admissionSchedule": "Tests and interviews",
     "admissionSelection": "Selection",
     "admissionAdmit": "Admit",

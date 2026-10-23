@@ -565,9 +565,11 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                  LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
                 WHERE p.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND p.status <> 'reversed'
                UNION ALL
-               SELECT 'misc', 'misc', m.receipt_no, m.received_on, s.admission_no, m.payer_name, k.code || '-' || cs.name, m.mode, m.instrument_no, m.bank_name, m.reference,
+               SELECT 'misc', CASE WHEN m.application_id IS NOT NULL THEN 'admission' ELSE 'misc' END, m.receipt_no, m.received_on,
+                      COALESCE(s.admission_no, ap.admission_no, ap.application_no), m.payer_name, k.code || '-' || cs.name, m.mode, m.instrument_no, m.bank_name, m.reference,
                       m.amount, 0, m.amount, m.status, u.display_name, m.cleared_on
                  FROM misc_receipts m LEFT JOIN students s ON s.id = m.student_id LEFT JOIN users u ON u.id = m.received_by
+                 LEFT JOIN applications ap ON ap.id = m.application_id
                  LEFT JOIN enrolments e ON e.student_id = m.student_id AND e.academic_year_id = m.academic_year_id AND e.status = 'active'
                  LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
                 WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE) AND m.status IN ('posted', 'bounced', 'reversed')
@@ -587,6 +589,13 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                  FROM fee_refunds r LEFT JOIN fee_payments p ON p.id = r.payment_id JOIN students s ON s.id = COALESCE(r.student_id, p.student_id) LEFT JOIN users u ON u.id = r.decided_by
                  LEFT JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = COALESCE(r.academic_year_id, p.academic_year_id) AND e.status = 'active'
                  LEFT JOIN class_sections cs ON cs.id = e.class_section_id LEFT JOIN classes k ON k.id = cs.class_id
+                WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
+               UNION ALL
+               -- an admission fee refunded on a cancelled admission (docs/design/39): a minus line on the day paid
+               SELECT 'refund', 'admission', m.receipt_no, r.paid_on, COALESCE(ap.admission_no, ap.application_no), m.payer_name, NULL, r.mode, NULL, NULL,
+                      COALESCE(r.reference, 'Refund of ' || m.receipt_no), -r.amount, 0, -r.amount, 'refund', u.display_name, NULL
+                 FROM admission_refunds r JOIN misc_receipts m ON m.id = r.receipt_id JOIN applications ap ON ap.id = r.application_id
+                 LEFT JOIN users u ON u.id = r.paid_by
                 WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
              ) x
              WHERE ($3::text IS NULL OR x.ledger = $3) AND ($4::text IS NULL OR x.mode = $4)
@@ -644,6 +653,75 @@ export const DATASETS: Record<string, DatasetDefinition> = {
             'amount',
           ),
         },
+      ];
+    },
+  },
+  // online admission (docs/design/39, part 7): registration and admission fees with refunds, by date
+  admission_fee_collection: {
+    id: 'admission_fee_collection',
+    title: 'Admission fee collection',
+    permission: 'admissions.application.view',
+    maxRows: 50_000,
+    columns: [
+      { key: 'on_date', header: 'Date', type: 'date', width: 12 },
+      { key: 'kind', header: 'Fee', width: 14 },
+      { key: 'receipt_no', header: 'Receipt no.', width: 20 },
+      { key: 'registration_no', header: 'Registration no.', width: 20 },
+      { key: 'admission_no', header: 'Admission no.', width: 14 },
+      { key: 'candidate', header: 'Candidate', width: 26 },
+      { key: 'class_name', header: 'Class', width: 12 },
+      { key: 'category', header: 'Category', width: 16 },
+      { key: 'session', header: 'Session', width: 18 },
+      { key: 'mode', header: 'Mode', width: 10 },
+      { key: 'reference', header: 'Reference', width: 18 },
+      { key: 'amount', header: 'Amount', type: 'number', width: 12 },
+      { key: 'status', header: 'Status', width: 10 },
+      { key: 'received_by', header: 'By', width: 18 },
+    ],
+    query: (p) => ({
+      text: `SELECT * FROM (
+               SELECT m.received_on AS on_date, CASE WHEN m.id = a.admission_receipt_id OR h.code = 'ADMFEE' THEN 'Admission fee' ELSE 'Registration fee' END AS kind,
+                      m.receipt_no, a.application_no AS registration_no, a.admission_no, a.candidate_name AS candidate, cl.name AS class_name,
+                      k.name AS category, y.name AS session, COALESCE(m.mode_label, m.mode) AS mode, COALESCE(m.reference, m.instrument_no) AS reference,
+                      CASE WHEN m.status = 'posted' THEN m.amount ELSE 0 END AS amount, m.status, COALESCE(u.display_name, 'Online') AS received_by,
+                      a.cycle_id, a.class_id
+                 FROM misc_receipts m JOIN applications a ON a.id = m.application_id JOIN fee_heads h ON h.id = m.head_id
+                 JOIN classes cl ON cl.id = a.class_id JOIN admission_cycles y ON y.id = a.cycle_id
+                 LEFT JOIN admission_fee_categories k ON k.id = a.category_id LEFT JOIN users u ON u.id = m.received_by
+                WHERE m.received_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
+               UNION ALL
+               SELECT r.paid_on, 'Refund', m.receipt_no, a.application_no, a.admission_no, a.candidate_name, cl.name, k.name, y.name, r.mode,
+                      COALESCE(r.reference, 'Refund of ' || m.receipt_no), -r.amount, 'refund', u.display_name, a.cycle_id, a.class_id
+                 FROM admission_refunds r JOIN misc_receipts m ON m.id = r.receipt_id JOIN applications a ON a.id = r.application_id
+                 JOIN classes cl ON cl.id = a.class_id JOIN admission_cycles y ON y.id = a.cycle_id
+                 LEFT JOIN admission_fee_categories k ON k.id = a.category_id LEFT JOIN users u ON u.id = r.paid_by
+                WHERE r.status = 'paid' AND r.paid_on BETWEEN COALESCE($1::date, CURRENT_DATE) AND COALESCE($2::date, CURRENT_DATE)
+             ) x
+             WHERE ($3::bigint IS NULL OR x.cycle_id = $3::bigint) AND ($4::bigint IS NULL OR x.class_id = $4::bigint)
+               AND ($5::text IS NULL OR x.kind = $5) AND ($6::text IS NULL OR x.mode = $6)
+             ORDER BY x.on_date, x.receipt_no`,
+      values: [
+        str(p.from) ?? str(p.to),
+        str(p.to) ?? str(p.from),
+        str(p.cycleId),
+        str(p.classId),
+        str(p.kind),
+        str(p.mode),
+      ],
+    }),
+    summary: (rows) => {
+      const sum = (list: Array<Record<string, unknown>>) =>
+        list.reduce((a, r) => a + Number(r.amount ?? 0), 0);
+      const by = (key: string, label: string) =>
+        [...new Set(rows.map((r) => String(r[key] ?? '')))].sort().map((v) => ({
+          candidate: `${label}: ${v || '-'}`,
+          amount: sum(rows.filter((r) => String(r[key] ?? '') === v)),
+        }));
+      return [
+        ...by('kind', 'Total'),
+        ...by('mode', 'By mode'),
+        ...by('class_name', 'By class'),
+        { candidate: 'Net collection (refunds taken off)', amount: sum(rows) },
       ];
     },
   },
