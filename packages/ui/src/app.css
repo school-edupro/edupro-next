@@ -11028,3 +11028,20 @@ a.ep-pub-foot__item {
   gap: var(--sp-2);
   font-size: var(--fs-small);
 }
+
+/* ---- admission portal inbox (docs/design/39, part 5) ---- */
+.ep-adm-inbox {
+  border-top: 1px solid var(--border-default);
+  padding: var(--sp-2) 0;
+}
+.ep-adm-inbox summary {
+  cursor: pointer;
+}
+.ep-adm-inbox__frame {
+  width: 100%;
+  min-height: 24rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  margin-top: var(--sp-2);
+}

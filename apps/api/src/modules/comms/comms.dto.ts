@@ -116,6 +116,18 @@ export const RuleSchema = z.object({
   departments: Values,
   designations: Values,
   employeeTypes: Values,
+  /** the Candidates audience (online admission): registrations of a session by class, status and stage */
+  candidates: z
+    .object({
+      cycleId: IdSchema,
+      classIds: z.array(IdSchema).max(100).optional(),
+      statuses: z
+        .array(z.string().regex(/^[a-z_]{3,20}$/))
+        .max(20)
+        .optional(),
+      stageId: IdSchema.optional(),
+    })
+    .optional(),
 });
 export const AudienceKindSchema = z.enum([
   'everyone',
@@ -128,6 +140,7 @@ export const AudienceKindSchema = z.enum([
   'individuals',
   'filter',
   'upload',
+  'candidates',
 ]);
 export const RequestTargetSchema = z.object({
   type: z.enum([
@@ -194,6 +207,7 @@ export const CreateRequestSchema = z
     (v) =>
       ['everyone', 'students', 'employees'].includes(v.audience) ||
       (v.audience === 'filter' && Boolean(v.rule)) ||
+      (v.audience === 'candidates' && Boolean(v.rule?.candidates)) ||
       (v.audience === 'upload' && Boolean(v.upload?.length)) ||
       v.targets.length > 0,
     { message: 'choose who receives the message', path: ['targets'] },

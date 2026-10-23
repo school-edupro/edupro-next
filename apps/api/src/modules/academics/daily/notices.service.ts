@@ -46,7 +46,7 @@ export interface NoticeRow {
   ackedFor: string[];
   /** The member of staff asking has acknowledged it. */
   ackedByMe: boolean;
-  audience: 'everyone' | 'students' | 'employees';
+  audience: 'everyone' | 'students' | 'employees' | 'candidates';
   publishFrom: string;
   publishUntil: string | null;
   isPinned: boolean;
@@ -99,6 +99,7 @@ const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publis
                      WHEN 'class_section' THEN (SELECT c.code || '-' || cs.name FROM class_sections cs JOIN classes c ON c.id = cs.class_id WHERE cs.id = t.target_id)
                      WHEN 'student' THEN (SELECT s.display_name FROM students s WHERE s.id = t.target_id)
                      WHEN 'employee' THEN (SELECT e.display_name FROM employees e WHERE e.id = t.target_id)
+                     WHEN 'admission_class' THEN (SELECT 'Candidates: ' || c.name FROM classes c WHERE c.id = t.target_id)
                    END) ORDER BY t.target_type, t.target_id) FROM notice_targets t WHERE t.notice_id = n.id), '[]'::jsonb) AS targets,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id::text, 'name', f.original_name, 'contentType', f.content_type, 'sizeBytes', f.size_bytes) ORDER BY f.id)
                     FROM notice_files nf JOIN files f ON f.id = nf.file_id WHERE nf.notice_id = n.id), '[]'::jsonb) AS files
@@ -525,6 +526,14 @@ export class NoticesService {
          OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1 AND ((t.target_type = 'employee' AND t.target_id = e.id)
               OR (t.target_type = 'class_section' AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = t.target_id AND ta.valid_to IS NULL)))))`;
 
+  /** The families registering for admission a notice is for: open sessions, live registrations, the classes sought. */
+  private static readonly CANDIDATES = `FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id JOIN applicants ap ON ap.id = a.applicant_id
+     WHERE y.status = 'open' AND y.deleted_at IS NULL
+       AND a.status::text IN ('draft', 'submitted', 'registered', 'under_review', 'sent_back', 'waitlisted', 'offered', 'fee_paid')
+       AND EXISTS (SELECT 1 FROM notices n WHERE n.id = $1 AND n.audience = 'candidates')
+       AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1)
+         OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1 AND t.target_type = 'admission_class' AND t.target_id = a.class_id))`;
+
   /**
    * A published notice with "also by e-mail": one mail to each guardian and employee it is for, once.
    * The mail carries the school's name, the title and the text; attachments stay in the portal.
@@ -553,7 +562,10 @@ export class NoticesService {
            FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL AND g.email IS NOT NULL
           WHERE sg.receives_notifications AND sg.student_id IN (SELECT en.student_id ${NoticesService.PUPILS})
          UNION ALL
-         SELECT lower(e.email::text), e.user_id::text ${NoticesService.STAFF} AND e.email IS NOT NULL) r
+         SELECT lower(e.email::text), e.user_id::text ${NoticesService.STAFF} AND e.email IS NOT NULL
+         UNION ALL
+         SELECT lower(COALESCE(a.contact_email, ap.email::text)), NULL ${NoticesService.CANDIDATES}
+            AND COALESCE(a.contact_email, ap.email::text) IS NOT NULL AND $2::bigint IS NOT NULL) r
         ORDER BY email LIMIT 5000`,
       [id, yearId],
     );
@@ -581,14 +593,18 @@ export class NoticesService {
     const audience = dto.kind === 'office_order' ? 'employees' : dto.audience;
     const of = (type: string) => dto.targets.filter((t) => t.type === type).map((t) => t.id);
     return this.db.tenant(tenant, async (c) => {
-      const r = await c.query<{ pupils: number; staff: number }>(
+      const r = await c.query<{ pupils: number; staff: number; candidates: number }>(
         `SELECT (SELECT count(*) FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
                   WHERE en.academic_year_id = $1 AND en.status = 'active' AND $2 IN ('everyone', 'students')
                     AND (NOT $3 OR en.class_section_id = ANY($4::bigint[]) OR cs.class_id = ANY($5::bigint[]) OR en.student_id = ANY($6::bigint[])))::int AS pupils,
                 (SELECT count(*) FROM employees e
                   WHERE e.status = 'active' AND e.deleted_at IS NULL AND $2 IN ('everyone', 'employees')
                     AND (NOT $3 OR e.id = ANY($7::bigint[]) OR e.department = ANY($8::text[])
-                         OR EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = ANY($4::bigint[]) AND ta.valid_to IS NULL)))::int AS staff`,
+                         OR EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = ANY($4::bigint[]) AND ta.valid_to IS NULL)))::int AS staff,
+                (SELECT count(*) FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id
+                  WHERE $2 = 'candidates' AND y.status = 'open' AND y.deleted_at IS NULL
+                    AND a.status::text IN ('draft', 'submitted', 'registered', 'under_review', 'sent_back', 'waitlisted', 'offered', 'fee_paid')
+                    AND (NOT $3 OR a.class_id = ANY($9::bigint[])))::int AS candidates`,
         [
           yearId,
           audience,
@@ -598,9 +614,14 @@ export class NoticesService {
           of('student'),
           of('employee'),
           dto.departments,
+          of('admission_class'),
         ],
       );
-      return { students: r.rows[0]!.pupils, employees: r.rows[0]!.staff };
+      return {
+        students: r.rows[0]!.pupils,
+        employees: r.rows[0]!.staff,
+        candidates: r.rows[0]!.candidates,
+      };
     });
   }
 

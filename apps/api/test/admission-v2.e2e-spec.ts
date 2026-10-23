@@ -991,4 +991,105 @@ describe('online admission (e2e)', () => {
       expect(list.json().total).toBe(2);
     });
   });
+  describe('part 5: communication', () => {
+    it('sends from Compose to the candidates of a session; it shows in the family inbox', async () => {
+      const draft = {
+        title: 'Orientation for new families',
+        category: 'service',
+        channels: [{ channel: 'email', custom: true }],
+        subject: 'Orientation for {{candidate_name}}',
+        body: '<p>Dear parent, the orientation for {{class_sought}} is on Monday.</p>',
+        bodyFormat: 'html',
+        audience: 'candidates',
+        targets: [],
+        rule: { candidates: { cycleId, classIds: [classMini], statuses: ['offered'] } },
+      };
+      const preview = await inject({
+        method: 'POST',
+        url: '/comms/requests/preview',
+        headers: h(),
+        json: draft,
+      });
+      expect(preview.statusCode).toBe(201);
+      expect(preview.json().total).toBeGreaterThanOrEqual(1);
+      const created = await inject({
+        method: 'POST',
+        url: '/comms/requests',
+        headers: h(),
+        json: draft,
+      });
+      expect(created.statusCode).toBe(201);
+      if (created.json().status === 'pending_approval') {
+        const inbox = await inject({ method: 'GET', url: '/workflow/inbox', headers: h() });
+        const step = inbox
+          .json()
+          .data.find(
+            (x: { instance: { entityId: string } }) => x.instance.entityId === created.json().id,
+          );
+        await inject({
+          method: 'POST',
+          url: `/workflow/steps/${step.id}/approve`,
+          headers: h(),
+          json: {},
+        });
+      }
+      const fam = await inject({
+        method: 'GET',
+        url: '/public/admission/me/inbox',
+        headers: pub(tokenA),
+      });
+      expect(fam.statusCode).toBe(200);
+      const subjects = (fam.json().messages as Array<{ subject: string | null }>).map(
+        (m) => m.subject ?? '',
+      );
+      expect(subjects).toContain('Orientation for ASHA VERMA');
+      // the automatic admission emails are there too (the offer of part 4)
+      expect(subjects.some((x) => /offer/i.test(x))).toBe(true);
+      const other = await inject({
+        method: 'GET',
+        url: '/public/admission/me/inbox',
+        headers: pub(tokenB),
+      });
+      expect(
+        (other.json().messages as Array<{ subject: string | null }>).map((m) => m.subject),
+      ).not.toContain('Orientation for ASHA VERMA');
+    });
+
+    it('publishes a notice for candidates of a class; only the families seeking it see it', async () => {
+      const mk = (title: string, classId: string) =>
+        inject({
+          method: 'POST',
+          url: '/academics/notices',
+          headers: h(),
+          json: {
+            title,
+            body: 'Bring the original birth certificate for verification.',
+            audience: 'candidates',
+            targets: [{ type: 'admission_class', id: classId }],
+            publish: true,
+          },
+        });
+      const mini = await mk('Document verification (Mini)', classMini);
+      expect(mini.statusCode).toBe(201);
+      expect(mini.json().targets[0].label).toBe('Candidates: Class Mini');
+      const ix = await mk('Document verification (IX)', classIx);
+      expect(ix.statusCode).toBe(201);
+      const fam = await inject({
+        method: 'GET',
+        url: '/public/admission/me/inbox',
+        headers: pub(tokenA),
+      });
+      const titles = (fam.json().notices as Array<{ title: string }>).map((n) => n.title);
+      expect(titles).toContain('Document verification (Mini)');
+      expect(titles).not.toContain('Document verification (IX)');
+      const reach = await inject({
+        method: 'POST',
+        url: '/academics/notices/reach',
+        headers: h(),
+        json: { audience: 'candidates', targets: [{ type: 'admission_class', id: classMini }] },
+      });
+      expect(reach.json()).toMatchObject({ students: 0, employees: 0 });
+      expect(reach.json().candidates).toBeGreaterThanOrEqual(3);
+    });
+  });
 });

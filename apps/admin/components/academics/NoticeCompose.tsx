@@ -7,7 +7,7 @@ import { publishNoticeNow, saveNoticeDraft } from '@/lib/actions';
 import { noticeAudienceFile, noticeReach, searchNoticeStudents } from '@/lib/notice-actions';
 
 type Kind = 'notice' | 'circular' | 'office_order';
-type Who = 'students' | 'employees' | 'everyone';
+type Who = 'students' | 'employees' | 'everyone' | 'candidates';
 const KINDS: Array<{ id: Kind; label: string; help: string }> = [
   {
     id: 'notice',
@@ -167,6 +167,7 @@ export function NoticeCompose({
   employees,
   departments,
   maxFiles,
+  admissionClasses = [],
 }: {
   classes: ChipOption[];
   sections: ChipOption[];
@@ -174,6 +175,8 @@ export function NoticeCompose({
   departments: ChipOption[];
   /** How many attachments the school allows on a notice. */
   maxFiles: number;
+  /** classes taking registrations: a notice for candidates may be only for those seeking them */
+  admissionClasses?: ChipOption[];
 }) {
   const [kind, setKind] = useState<Kind>('notice');
   const [who, setWho] = useState<Who>('students');
@@ -188,15 +191,22 @@ export function NoticeCompose({
   const [ack, setAck] = useState(false);
   const [mail, setMail] = useState(false);
   const [pinned, setPinned] = useState(false);
-  const [reach, setReach] = useState<{ students: number; employees: number } | null>(null);
+  const [reach, setReach] = useState<{
+    students: number;
+    employees: number;
+    candidates?: number;
+  } | null>(null);
+  const [admClassIds, setAdmClassIds] = useState<string[]>([]);
   const audience: Who = kind === 'office_order' ? 'employees' : who;
-  const forStudents = audience !== 'employees';
-  const forStaff = audience !== 'students';
+  const forCandidates = audience === 'candidates';
+  const forStudents = audience !== 'employees' && !forCandidates;
+  const forStaff = audience !== 'students' && !forCandidates;
   const targets = [
     ...(forStudents ? classIds.map((id) => ({ type: 'class', id })) : []),
     ...(forStudents || forStaff ? sectionIds.map((id) => ({ type: 'class_section', id })) : []),
     ...(forStaff ? employeeIds.map((id) => ({ type: 'employee', id })) : []),
     ...(forStudents ? students.map((x) => ({ type: 'student', id: x.value })) : []),
+    ...(forCandidates ? admClassIds.map((id) => ({ type: 'admission_class', id })) : []),
   ];
   const depts = forStaff ? deptIds : [];
   // an Excel list may name employees beyond the first ones loaded for the picker
@@ -267,6 +277,7 @@ export function NoticeCompose({
                   ['students', 'Students and parents', 'Their portal'],
                   ['employees', 'Employees', 'The teacher app'],
                   ['everyone', 'Everyone', 'Both'],
+                  ['candidates', 'Candidates', 'Families registering for admission (their portal)'],
                 ] as Array<[Who, string, string]>
               ).map(([id, label, help]) => (
                 <label
@@ -291,6 +302,15 @@ export function NoticeCompose({
             </div>
           )}
           <div className="ep-wd__form" style={{ marginTop: 'var(--sp-3)' }}>
+            {forCandidates ? (
+              <ChipPicker
+                name="admissionClassIds"
+                label="Only families seeking these classes"
+                options={admissionClasses}
+                value={admClassIds}
+                onChange={setAdmClassIds}
+              />
+            ) : null}
             {forStudents ? (
               <>
                 <ChipPicker
@@ -353,6 +373,9 @@ export function NoticeCompose({
               ? `Reaches ${[
                   forStudents ? `${String(reach.students)} student(s)` : '',
                   forStaff ? `${String(reach.employees)} employee(s)` : '',
+                  forCandidates
+                    ? `${String(reach.candidates ?? 0)} registration(s) in open sessions`
+                    : '',
                 ]
                   .filter(Boolean)
                   .join(' and ')}.`

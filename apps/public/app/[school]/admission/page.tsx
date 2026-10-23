@@ -8,10 +8,12 @@ import {
   admissionFetch,
   dmy,
   rupees,
+  type PortalInbox,
   type PortalMe,
   type PortalSession,
 } from '@/lib/admission';
 import { AdmissionSignIn } from '@/components/AdmissionSignIn';
+import { ViewDownload } from '@/components/ViewDownload';
 import { startRegistration } from './actions';
 
 /**
@@ -36,6 +38,7 @@ export default async function AdmissionPortalPage({
   });
   const signedIn = Boolean((await cookies()).get(ADMISSION_COOKIE)?.value);
   const me = signedIn ? await admissionFetch<PortalMe>('/me').catch(() => null) : null;
+  const inbox = me ? await admissionFetch<PortalInbox>('/me/inbox').catch(() => null) : null;
   const sessions = sp.session
     ? open.sessions
         .filter((s) => s.code.toLowerCase() === sp.session!.toLowerCase())
@@ -128,6 +131,71 @@ export default async function AdmissionPortalPage({
               </table>
             </div>
           )}
+        </Card>
+      ) : null}
+
+      {inbox && (inbox.notices.length || inbox.messages.length) ? (
+        <Card elevated title="Messages and notices" style={{ marginBottom: 'var(--sp-4)' }}>
+          {inbox.notices.length ? (
+            <section aria-label="Notices">
+              <h3 className="ep-kicker" style={{ marginTop: 0 }}>
+                Notices
+              </h3>
+              {inbox.notices.map((n) => (
+                <details key={`n${n.id}`} className="ep-adm-inbox">
+                  <summary>
+                    <strong>{n.title}</strong>{' '}
+                    <span className="ep-kicker">{dmy(n.publishFrom)}</span>
+                  </summary>
+                  {n.bodyFormat === 'html' ? (
+                    <iframe
+                      title={n.title}
+                      sandbox=""
+                      srcDoc={n.body}
+                      className="ep-adm-inbox__frame"
+                    />
+                  ) : (
+                    <p style={{ whiteSpace: 'pre-line' }}>{n.body}</p>
+                  )}
+                  {n.files.map((f, i) => (
+                    <span
+                      key={f.id}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-1)' }}
+                    >
+                      <span className="ep-kicker">Attachment {i + 1}</span>
+                      <ViewDownload
+                        href={`/api/admission/notice/${n.id}/${f.id}`}
+                        what={`attachment ${String(i + 1)} of ${n.title}`}
+                      />
+                    </span>
+                  ))}
+                </details>
+              ))}
+            </section>
+          ) : null}
+          {inbox.messages.length ? (
+            <section aria-label="Messages">
+              <h3 className="ep-kicker">Messages from the school</h3>
+              {inbox.messages.map((m) => (
+                <details key={`m${m.id}`} className="ep-adm-inbox">
+                  <summary>
+                    <strong>{m.subject ?? (m.channel === 'email' ? 'Email' : 'Message')}</strong>{' '}
+                    <span className="ep-kicker">{dmy(m.at)}</span>
+                  </summary>
+                  {m.format === 'html' ? (
+                    <iframe
+                      title={m.subject ?? 'Message'}
+                      sandbox=""
+                      srcDoc={m.body}
+                      className="ep-adm-inbox__frame"
+                    />
+                  ) : (
+                    <p style={{ whiteSpace: 'pre-line' }}>{m.body}</p>
+                  )}
+                </details>
+              ))}
+            </section>
+          ) : null}
         </Card>
       ) : null}
 

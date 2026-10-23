@@ -14,7 +14,15 @@ export const PublishAtSchema = z
 export const DailyWorkKindSchema = z.enum(['homework', 'classwork', 'assignment']);
 export const AudienceSchema = z.enum(['everyone', 'students', 'employees']);
 export const NoticeKindSchema = z.enum(['notice', 'circular', 'office_order']);
-export const TargetTypeSchema = z.enum(['class', 'class_section', 'student', 'employee']);
+/** a notice may also go to the candidates of online admission (docs/design/39, part 5) */
+export const NoticeAudienceSchema = z.enum(['everyone', 'students', 'employees', 'candidates']);
+export const TargetTypeSchema = z.enum([
+  'class',
+  'class_section',
+  'student',
+  'employee',
+  'admission_class',
+]);
 export const HolidayKindSchema = z.enum(['holiday', 'vacation', 'working_day']);
 export const AlmanacKindSchema = z.enum(['event', 'exam', 'meeting', 'activity', 'deadline']);
 
@@ -146,7 +154,7 @@ export const CreateNoticeSchema = z
     kind: NoticeKindSchema.default('notice'),
     title: z.string().trim().min(1).max(200),
     body: z.string().trim().min(1).max(20000),
-    audience: AudienceSchema.default('everyone'),
+    audience: NoticeAudienceSchema.default('everyone'),
     publishFrom: DateSchema.optional(),
     publishUntil: DateSchema.optional(),
     isPinned: z.boolean().default(false),
@@ -174,7 +182,7 @@ export const UpdateNoticeSchema = z
     kind: NoticeKindSchema,
     title: z.string().trim().min(1).max(200),
     body: z.string().trim().min(1).max(20000),
-    audience: AudienceSchema,
+    audience: NoticeAudienceSchema,
     publishFrom: DateSchema,
     publishUntil: DateSchema.nullable(),
     isPinned: z.boolean(),
@@ -316,7 +324,7 @@ export class NoticeReportQueryDto extends createZodDto(NoticeReportQuerySchema) 
 
 export const NoticeReachSchema = z.object({
   kind: NoticeKindSchema.default('notice'),
-  audience: AudienceSchema.default('everyone'),
+  audience: NoticeAudienceSchema.default('everyone'),
   targets: z.array(TargetSchema).max(2500).default([]),
   departments: z.array(z.string().trim().min(1).max(120)).max(60).default([]),
 });

@@ -1200,6 +1200,7 @@ async function saveNotice(fd: FormData, publish: boolean) {
       ...fd.getAll('classSectionIds').map((id) => ({ type: 'class_section', id: String(id) })),
       ...fd.getAll('employeeIds').map((id) => ({ type: 'employee', id: String(id) })),
       ...fd.getAll('studentIds').map((id) => ({ type: 'student', id: String(id) })),
+      ...fd.getAll('admissionClassIds').map((id) => ({ type: 'admission_class', id: String(id) })),
     ];
     await apiFetch('/academics/notices', {
       method: 'POST',

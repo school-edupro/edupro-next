@@ -21,7 +21,8 @@ export type Audience =
   | 'group'
   | 'individuals'
   | 'filter'
-  | 'upload';
+  | 'upload'
+  | 'candidates';
 
 export interface AudienceRule {
   /** Which people the rule picks; groups take it from their kind. */
@@ -37,6 +38,8 @@ export interface AudienceRule {
   departments?: string[];
   designations?: string[];
   employeeTypes?: string[];
+  /** the Candidates audience: registrations of an admission session */
+  candidates?: { cycleId: string; classIds?: string[]; statuses?: string[]; stageId?: string };
 }
 
 export interface UploadRow {
@@ -58,7 +61,8 @@ export interface AudienceInput {
   category: 'service' | 'general';
 }
 
-export type PersonType = 'student' | 'employee' | 'guardian' | 'contact' | 'user' | 'upload';
+export type PersonType =
+  'student' | 'employee' | 'guardian' | 'contact' | 'user' | 'upload' | 'candidate';
 
 export interface Recipient {
   channel: Channel;
@@ -430,6 +434,7 @@ export async function resolveAudience(
       for (const id of ids(t, 'user')) people.users.add(id);
       break;
     case 'upload':
+    case 'candidates':
       break;
   }
 
@@ -689,6 +694,57 @@ export async function resolveAudience(
       );
   }
 
+  // ---- candidates of online admission (docs/design/39, part 5): the family's mobile and email per registration
+  if (input.audience === 'candidates' && input.rule?.candidates) {
+    const f = input.rule.candidates;
+    const cand = await c.query<{
+      id: string;
+      name: string | null;
+      number: string | null;
+      mobile: string | null;
+      email: string | null;
+      class_name: string;
+      cycle_name: string;
+      parent: string | null;
+    }>(
+      `SELECT a.id::text, a.candidate_name AS name, a.application_no AS number, COALESCE(a.contact_mobile, ap.mobile) AS mobile,
+              COALESCE(a.contact_email, ap.email::text) AS email, cl.name AS class_name, y.name AS cycle_name, ap.name AS parent
+         FROM applications a JOIN applicants ap ON ap.id = a.applicant_id JOIN classes cl ON cl.id = a.class_id
+         JOIN admission_cycles y ON y.id = a.cycle_id
+        WHERE a.cycle_id = $1 AND ($2::bigint[] IS NULL OR a.class_id = ANY($2::bigint[]))
+          AND ($3::text[] IS NULL OR a.status::text = ANY($3::text[]))
+          AND ($4::text IS NULL OR (a.process_steps -> a.stage_no ->> 'stageId') = $4::text)
+        ORDER BY a.id`,
+      [
+        f.cycleId,
+        f.classIds?.length ? f.classIds : null,
+        f.statuses?.length ? f.statuses : null,
+        f.stageId ?? null,
+      ],
+    );
+    for (const x of cand.rows) {
+      const who = x.name ?? 'your ward';
+      push(
+        {
+          personType: 'candidate',
+          personId: x.id,
+          userId: null,
+          studentId: null,
+          name: x.name ?? x.parent ?? 'Candidate',
+          vars: {
+            ...base,
+            recipient_name: x.parent ?? 'Parent',
+            candidate_name: who,
+            registration_no: x.number ?? '',
+            class_sought: x.class_name,
+            admission_session: x.cycle_name,
+          },
+        },
+        { sms: x.mobile, whatsapp: x.mobile, email: x.email },
+      );
+    }
+  }
+
   // ---- one-time list from Excel
   for (const row of input.upload ?? [])
     push(
@@ -765,6 +821,10 @@ export const TEMPLATE_VARIABLES: Array<{ key: string; label: string; for: string
   { key: 'employee_code', label: 'Employee code', for: 'employees' },
   { key: 'designation', label: 'Designation', for: 'employees' },
   { key: 'department', label: 'Department', for: 'employees' },
+  { key: 'candidate_name', label: 'Candidate name', for: 'candidates' },
+  { key: 'registration_no', label: 'Registration number', for: 'candidates' },
+  { key: 'class_sought', label: 'Class sought', for: 'candidates' },
+  { key: 'admission_session', label: 'Admission session', for: 'candidates' },
   { key: 'title', label: 'Message title (from compose)', for: 'everyone' },
   { key: 'body', label: 'Message text (from compose)', for: 'everyone' },
 ];

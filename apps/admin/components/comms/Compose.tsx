@@ -17,6 +17,8 @@ import {
   type Channel,
   type CommsTemplate,
   type ComposePayload,
+  CANDIDATE_STATUSES,
+  type CandidateSession,
   type ComposePreview,
   type Group,
   type Member,
@@ -40,7 +42,8 @@ type Audience =
   | 'route'
   | 'students'
   | 'employees'
-  | 'everyone';
+  | 'everyone'
+  | 'candidates';
 
 const AUDIENCES: Array<{ id: Audience; label: string; help: string }> = [
   { id: 'class_section', label: 'Sections', help: 'Students of the sections you tick' },
@@ -61,6 +64,11 @@ const AUDIENCES: Array<{ id: Audience; label: string; help: string }> = [
   { id: 'students', label: 'All students', help: 'Every enrolled student this year' },
   { id: 'employees', label: 'All employees', help: 'Every active employee' },
   { id: 'everyone', label: 'Everyone', help: 'All students and employees' },
+  {
+    id: 'candidates',
+    label: 'Candidates',
+    help: 'Families registering for admission: by session, class and status',
+  },
 ];
 
 const CHANNELS: Channel[] = ['sms', 'whatsapp', 'email'];
@@ -85,6 +93,7 @@ export function Compose({
   groups,
   ruleOptions,
   attachmentMaxMb,
+  candidateSessions = [],
 }: {
   templates: CommsTemplate[];
   variables: TemplateVariable[];
@@ -94,6 +103,7 @@ export function Compose({
   groups: Group[];
   ruleOptions: RuleOptions;
   attachmentMaxMb: number;
+  candidateSessions?: CandidateSession[];
 }) {
   const byChannel = (ch: Channel) => templates.filter((t) => t.channel === ch);
   const [title, setTitle] = useState('');
@@ -112,6 +122,11 @@ export function Compose({
   const [audience, setAudience] = useState<Audience>('class_section');
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [rule, setRule] = useState<Rule>({ people: 'students' });
+  const [cand, setCand] = useState<{ cycleId: string; classIds: string[]; statuses: string[] }>({
+    cycleId: candidateSessions[0]?.id ?? '',
+    classIds: [],
+    statuses: [],
+  });
   const [people, setPeople] = useState<Member[]>([]);
   const [q, setQ] = useState('');
   const [found, setFound] = useState<Member[]>([]);
@@ -174,7 +189,8 @@ export function Compose({
     usesBody && !body.trim() ? 'the message' : null,
   ].filter((x): x is string => Boolean(x));
   const studentsInvolved =
-    !['employees'].includes(audience) && !(audience === 'filter' && rule.people === 'employees');
+    !['employees', 'candidates'].includes(audience) &&
+    !(audience === 'filter' && rule.people === 'employees');
   const payload = useMemo<ComposePayload | null>(() => {
     if (
       !chosen.length ||
@@ -204,6 +220,14 @@ export function Compose({
     if (['class_section', 'class', 'route', 'group'].includes(audience))
       p.targets = (picked[audience] ?? []).map((id) => ({ type: audience, id }));
     if (audience === 'filter') p.rule = rule;
+    if (audience === 'candidates')
+      p.rule = {
+        candidates: {
+          cycleId: cand.cycleId,
+          ...(cand.classIds.length ? { classIds: cand.classIds } : {}),
+          ...(cand.statuses.length ? { statuses: cand.statuses } : {}),
+        },
+      };
     if (audience === 'individuals') p.targets = people.map((m) => ({ type: m.type, id: m.id }));
     if (audience === 'upload' && sheet) {
       if (sheet.targets.length) {
@@ -226,6 +250,7 @@ export function Compose({
     scheduledAt,
     picked,
     rule,
+    cand,
     people,
     sheet,
     askVals,
@@ -485,6 +510,56 @@ export function Compose({
                 }}
                 empty="No groups yet."
               />
+            ) : null}
+            {audience === 'candidates' ? (
+              candidateSessions.length ? (
+                <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+                  <label className="ep-field">
+                    <span className="ep-field__label">Admission session</span>
+                    <select
+                      className="ep-select"
+                      value={cand.cycleId}
+                      onChange={(e) => {
+                        setCand({ cycleId: e.target.value, classIds: [], statuses: cand.statuses });
+                        reset();
+                      }}
+                    >
+                      {candidateSessions.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <CheckList
+                    id="c-cand-cls"
+                    legend="Classes sought (none: every class)"
+                    options={candidateSessions.find((x) => x.id === cand.cycleId)?.classes ?? []}
+                    value={cand.classIds}
+                    onChange={(v) => {
+                      setCand({ ...cand, classIds: v });
+                      reset();
+                    }}
+                  />
+                  <CheckList
+                    id="c-cand-st"
+                    legend="Status (none: every registration)"
+                    options={CANDIDATE_STATUSES}
+                    value={cand.statuses}
+                    onChange={(v) => {
+                      setCand({ ...cand, statuses: v });
+                      reset();
+                    }}
+                  />
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    Goes to the mobile and email the family gave; it also shows under Messages in
+                    their admission portal. Templates can use {'{{candidate_name}}'},{' '}
+                    {'{{registration_no}}'}, {'{{class_sought}}'}.
+                  </p>
+                </div>
+              ) : (
+                <p className="ep-field__help">No admission session yet.</p>
+              )
             ) : null}
             {audience === 'filter' ? (
               <RuleBuilder

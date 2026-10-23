@@ -153,6 +153,25 @@ export class CandidatePortalController {
     return this.portal.file(req.candidate!, fileId);
   }
 
+  @Get('me/inbox')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  @ApiOperation({ summary: "The family's messages from the school and the notices for candidates" })
+  inbox(@Req() req: CandidateRequest) {
+    return this.portal.inbox(req.candidate!);
+  }
+
+  @Get('me/notices/:id/files/:fileId')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  noticeFile(
+    @Req() req: CandidateRequest,
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+  ) {
+    return this.portal.noticeFile(req.candidate!, id, fileId);
+  }
+
   @Get('me/applications/:id/admit-card')
   @Public()
   @UseGuards(AdmissionCandidateGuard)

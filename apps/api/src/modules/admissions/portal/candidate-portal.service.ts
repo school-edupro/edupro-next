@@ -429,6 +429,119 @@ export class CandidatePortalService {
   }
 
   /** One of the family's own files (an upload or a generated PDF of its application). */
+  /** Notices for candidates that reach this family (no class given, or a class one of its children seeks). */
+  private noticesSql = `FROM notices n
+     WHERE n.deleted_at IS NULL AND n.audience = 'candidates' AND n.published_at IS NOT NULL AND n.publish_from <= CURRENT_DATE
+       AND (n.publish_until IS NULL OR n.publish_until >= CURRENT_DATE) AND (n.publish_at IS NULL OR n.publish_at <= now())
+       AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id)
+         OR EXISTS (SELECT 1 FROM notice_targets t JOIN applications a ON a.class_id = t.target_id AND a.applicant_id = $1
+                     WHERE t.notice_id = n.id AND t.target_type = 'admission_class'))`;
+
+  /**
+   * The family's Messages and Notices (docs/design/39, part 5): what the school sent to its registrations
+   * from Compose (one per message, the email when several channels went), the automatic admission emails,
+   * and the notices for candidates.
+   */
+  async inbox(cand: AdmissionCandidate) {
+    return this.db.tenant(this.t(cand), async (c) => {
+      const notices = await c.query<{
+        id: string;
+        kind: string;
+        title: string;
+        body: string;
+        body_format: string;
+        publish_from: string;
+        files: Array<{ id: string; name: string | null }>;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- noticesSql is a constant; the applicant is bound
+        `SELECT n.id::text, n.kind::text, n.title, n.body, n.body_format, n.publish_from::text,
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id::text, 'name', f.original_name) ORDER BY f.id)
+                            FROM notice_files nf JOIN files f ON f.id = nf.file_id WHERE nf.notice_id = n.id), '[]'::jsonb) AS files
+           ${this.noticesSql} ORDER BY n.is_pinned DESC, n.publish_from DESC, n.id DESC LIMIT 50`,
+        [cand.id],
+      );
+      const messages = await c.query<{
+        id: string;
+        request_id: string | null;
+        channel: string;
+        subject: string | null;
+        body: string;
+        format: string;
+        created_at: Date;
+      }>(
+        `WITH fam AS (SELECT id FROM applications WHERE applicant_id = $1),
+              addr AS (SELECT lower(email::text) AS a FROM applicants WHERE id = $1 AND email IS NOT NULL
+                       UNION SELECT lower(contact_email) FROM applications WHERE applicant_id = $1 AND contact_email IS NOT NULL)
+         SELECT m.id::text, m.message_request_id::text AS request_id, m.channel::text, m.subject, m.body, m.format, m.created_at
+           FROM comms_messages m
+          WHERE m.id IN (SELECT r.message_id FROM message_request_recipients r
+                          WHERE r.person_type = 'candidate' AND r.person_id IN (SELECT id FROM fam) AND r.message_id IS NOT NULL)
+             OR (m.channel = 'email' AND lower(m.recipient_address) IN (SELECT a FROM addr)
+                 AND m.template_id IN (SELECT id FROM comms_templates WHERE left(code, 10) = 'admission_' AND code <> 'admission_otp'))
+          ORDER BY m.created_at DESC, m.id DESC LIMIT 200`,
+        [cand.id],
+      );
+      // one entry per compose message: the email when it went by email too
+      const byRequest = new Map<string, (typeof messages.rows)[number]>();
+      const out: Array<(typeof messages.rows)[number]> = [];
+      for (const m of messages.rows) {
+        if (!m.request_id) {
+          out.push(m);
+          continue;
+        }
+        const had = byRequest.get(m.request_id);
+        if (!had) {
+          byRequest.set(m.request_id, m);
+          out.push(m);
+        } else if (had.channel !== 'email' && m.channel === 'email') {
+          out[out.indexOf(had)] = m;
+          byRequest.set(m.request_id, m);
+        }
+      }
+      return {
+        notices: notices.rows.map((n) => ({
+          id: n.id,
+          kind: n.kind,
+          title: n.title,
+          body: n.body,
+          bodyFormat: n.body_format,
+          publishFrom: n.publish_from,
+          files: n.files,
+        })),
+        messages: out.slice(0, 100).map((m) => ({
+          id: m.id,
+          channel: m.channel,
+          subject: m.subject,
+          body: m.body,
+          format: m.format,
+          at: m.created_at.toISOString(),
+        })),
+      };
+    });
+  }
+
+  /** A file of a notice the family may read. */
+  async noticeFile(cand: AdmissionCandidate, noticeId: string, fileId: string) {
+    if (!/^\d{1,18}$/.test(noticeId) || !/^\d{1,18}$/.test(fileId))
+      throw new DomainError('not-found', 'File not found', { status: 404 });
+    return this.db.tenant(this.t(cand), async (c) => {
+      const ok = await c.query<{ name: string | null; type: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- noticesSql is a constant; values are bound
+        `SELECT f.original_name AS name, f.content_type AS type FROM notice_files nf JOIN files f ON f.id = nf.file_id
+          WHERE nf.notice_id = $2 AND nf.file_id = $3 AND EXISTS (SELECT 1 ${this.noticesSql} AND n.id = $2)`,
+        [cand.id, noticeId, fileId],
+      );
+      if (!ok.rows[0]) throw new DomainError('not-found', 'File not found', { status: 404 });
+      const bytes = await this.core.fileBytes(c, fileId);
+      if (!bytes) throw new DomainError('not-found', 'File not found', { status: 404 });
+      return {
+        filename: ok.rows[0].name ?? 'file',
+        contentType: ok.rows[0].type,
+        base64: bytes.bytes.toString('base64'),
+      };
+    });
+  }
+
   async file(cand: AdmissionCandidate, fileId: string) {
     return this.db.tenant(this.t(cand), async (c) => {
       const f = await c.query<{ owner: string; name: string | null; type: string }>(

@@ -7,12 +7,15 @@ export async function noticeReach(input: {
   audience: string;
   targets: Array<{ type: string; id: string }>;
   departments?: string[];
-}): Promise<{ students: number; employees: number } | null> {
+}): Promise<{ students: number; employees: number; candidates?: number } | null> {
   try {
-    return await apiFetch<{ students: number; employees: number }>('/academics/notices/reach', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    return await apiFetch<{ students: number; employees: number; candidates?: number }>(
+      '/academics/notices/reach',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    );
   } catch (error) {
     if (error instanceof ApiError) return null;
     throw error;

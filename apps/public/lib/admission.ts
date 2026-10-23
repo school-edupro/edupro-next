@@ -107,6 +107,26 @@ export interface PortalApplication {
   correction: { remark: string; dueOn: string | null } | null;
 }
 
+export interface PortalInbox {
+  notices: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+    bodyFormat: string;
+    publishFrom: string;
+    files: Array<{ id: string; name: string | null }>;
+  }>;
+  messages: Array<{
+    id: string;
+    channel: string;
+    subject: string | null;
+    body: string;
+    format: string;
+    at: string;
+  }>;
+}
+
 export const whenIst = (iso: string) =>
   new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',

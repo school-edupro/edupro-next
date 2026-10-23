@@ -27,6 +27,7 @@ const FOR: Record<string, string> = {
   everyone: 'Students, parents and employees',
   students: 'Students and parents',
   employees: 'Employees',
+  candidates: 'Candidates registering for admission',
 };
 
 /** One notice, circular or office order in full: what it says, whom it is for, its attachments. */

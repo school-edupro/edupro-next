@@ -1,7 +1,15 @@
 import { PageHeader } from '@edupro/ui';
 import { Compose } from '@/components/comms/Compose';
-import { apiFetch } from '@/lib/api';
-import type { CommsTemplate, Group, RuleOptions, TemplateVariable } from '@/lib/comms';
+import { apiFetch, getMe } from '@/lib/api';
+import type {
+  CandidateSession,
+  CommsTemplate,
+  Group,
+  RuleOptions,
+  TemplateVariable,
+} from '@/lib/comms';
+import type { SessionPlan } from '@/lib/admission-setup';
+import type { AdmissionCycle } from '@/lib/types';
 import type { ClassRow, Page, SectionRow } from '@/lib/types';
 
 const NO_OPTIONS: RuleOptions = {
@@ -48,12 +56,38 @@ export default async function ComposePage() {
       ),
     )
   ).flat();
+  // the Candidates audience: the latest admission sessions with their classes (online admission)
+  const me = await getMe();
+  const candidateSessions: CandidateSession[] = me.permissions.includes('admissions.cycle.view')
+    ? await apiFetch<{ data: AdmissionCycle[] }>('/admissions/cycles')
+        .then(async (r) =>
+          Promise.all(
+            r.data
+              .filter((c) => c.status !== 'draft')
+              .slice(0, 4)
+              .map(async (c) => {
+                const plan = await apiFetch<SessionPlan>(`/admissions/cycles/${c.id}/plan`).catch(
+                  () => null,
+                );
+                return {
+                  id: c.id,
+                  name: c.name,
+                  classes: (plan?.classes ?? []).map((k) => ({
+                    value: k.classId,
+                    label: k.className,
+                  })),
+                };
+              }),
+          ),
+        )
+        .catch(() => [])
+    : [];
   return (
     <>
       <PageHeader
         kicker="Communication"
         title="Compose"
-        description="Write once and send by SMS, WhatsApp and email to sections, classes, master-wise filters, groups, chosen people or an Excel list."
+        description="Write once and send by SMS, WhatsApp and email to sections, classes, master-wise filters, groups, chosen people, an Excel list or candidates for admission."
       />
       <Compose
         templates={templates}
@@ -64,6 +98,7 @@ export default async function ComposePage() {
         groups={groups}
         ruleOptions={ruleOptions}
         attachmentMaxMb={limits.attachmentMaxMb}
+        candidateSessions={candidateSessions}
       />
     </>
   );

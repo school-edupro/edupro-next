@@ -465,7 +465,7 @@ export interface StatusHistoryRow {
 
 // ---- Sprint 7 -----------------------------------------------------------------------------------
 export type DailyWorkKind = 'homework' | 'classwork' | 'assignment';
-export type Audience = 'everyone' | 'students' | 'employees';
+export type Audience = 'everyone' | 'students' | 'employees' | 'candidates';
 
 export interface AttachedFile {
   id: string;

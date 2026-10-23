@@ -18,7 +18,28 @@ export interface Rule {
   departments?: string[];
   designations?: string[];
   employeeTypes?: string[];
+  /** Candidates of online admission: a session's registrations by class, status and stage */
+  candidates?: { cycleId: string; classIds?: string[]; statuses?: string[]; stageId?: string };
 }
+
+/** Admission sessions for the Candidates audience (online admission, docs/design/39 part 5). */
+export interface CandidateSession {
+  id: string;
+  name: string;
+  classes: Array<{ value: string; label: string }>;
+}
+export const CANDIDATE_STATUSES: Array<{ value: string; label: string }> = [
+  { value: 'draft', label: 'Form not submitted' },
+  { value: 'submitted', label: 'Registration fee due' },
+  { value: 'registered', label: 'Registered' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'sent_back', label: 'Correction asked' },
+  { value: 'waitlisted', label: 'Waiting list' },
+  { value: 'offered', label: 'Offered: fee due' },
+  { value: 'fee_paid', label: 'Admission fee paid' },
+  { value: 'admitted', label: 'Admitted' },
+  { value: 'rejected', label: 'Not selected' },
+];
 
 export interface RuleOptions {
   houses: string[];
