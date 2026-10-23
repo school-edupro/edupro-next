@@ -463,4 +463,40 @@ describe('library stock verification in cycles (e2e)', () => {
       'JB00001',
     ]);
   });
+
+  it('check a book: a copy by number shows where it is, who has it and its history; the dashboard adds up', async () => {
+    // a lost copy found by its number: status, the stock check in its history, the other copies
+    const found = (await call('GET', '/library/check?q=b00002')).json();
+    expect(found).toMatchObject({ kind: 'copy' });
+    const lost = (await call('GET', `/library/check/copies/${found.copyId as string}`)).json();
+    expect(lost.copy).toMatchObject({ accessionNo: 'B00002', status: 'lost' });
+    expect(lost.title.title).toBe('Malgudi Days');
+    expect(lost.history.map((h: { what: string }) => h.what)).toEqual(
+      expect.arrayContaining(['stock check', 'lost']),
+    );
+    expect(lost.others.length).toBeGreaterThan(0);
+    // the copy on loan: who has it and since when
+    const out = (await call('GET', '/library/check?q=B00003')).json();
+    const onLoan = (await call('GET', `/library/check/copies/${out.copyId as string}`)).json();
+    expect(onLoan.loan).toMatchObject({ borrowerKind: 'employee', daysLate: 0, fineSoFar: 0 });
+    expect(onLoan.history.map((h: { what: string }) => h.what)).toEqual(
+      expect.arrayContaining(['issued', 'stock check']),
+    );
+    // a title search lists the books with copies on the shelf and out
+    const titles = (await call('GET', '/library/check?q=malgudi')).json();
+    expect(titles.kind).toBe('titles');
+    expect(titles.titles[0]).toMatchObject({ title: 'Malgudi Days' });
+    expect(titles.titles[0].copies).toBeGreaterThan(0);
+    expect((await call('GET', '/library/check?q=zz-no-such-book')).json().titles).toEqual([]);
+    // the dashboard
+    const d = (await call('GET', '/library/dashboard')).json();
+    expect(d.months).toHaveLength(6);
+    expect(d.figures.lost).toBeGreaterThanOrEqual(1);
+    expect(d.figures.onLoan).toBeGreaterThanOrEqual(1);
+    expect(d.figures.issuedToday).toBeGreaterThanOrEqual(1);
+    expect(d.months.at(-1).issued).toBeGreaterThanOrEqual(1);
+    const one = (await call('GET', `/library/dashboard?libraryId=${ids.main!}`)).json();
+    expect(one.libraryId).toBe(ids.main);
+    expect(one.figures.copies).toBeLessThanOrEqual(d.figures.copies);
+  });
 });

@@ -4357,6 +4357,47 @@ a.ep-tabs__tab {
 .ep-starinput__star:has(input:focus-visible) {
   outline: 3px solid var(--focus-ring);
 }
+.ep-ldash__value {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+.ep-ldash__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  height: 12rem;
+}
+.ep-ldash__month {
+  flex: 1 0 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: var(--sp-1);
+}
+.ep-ldash__pair {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100%;
+  width: 100%;
+  justify-content: center;
+}
+.ep-ldash__pair span {
+  width: 40%;
+  min-height: 2px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+[data-series='issued'] {
+  background: var(--action-primary);
+}
+[data-series='returned'] {
+  background: var(--action-accent);
+}
 .ep-dlog__filters {
   display: flex;
   flex-wrap: wrap;

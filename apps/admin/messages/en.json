@@ -158,6 +158,8 @@
     "fines": "Late fines",
     "librarySetup": "Library setup",
     "libraryStaff": "Library staff",
+    "libraryDashboard": "Library dashboard",
+    "libraryCheck": "Check a book",
     "libraryReservations": "Reservations",
     "libraryImport": "Import books",
     "libraryLabels": "Labels",

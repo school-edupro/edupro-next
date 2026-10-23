@@ -229,6 +229,10 @@ const PAGES = [
   // Sprint 18
   '/exams/board-results',
   '/library/stock',
+  '/library/dashboard',
+  '/library/check',
+  '/library/check?q=malgudi',
+  '/library/check/18',
   '/library/stock?new=1',
   '/library/stock/1',
   '/library/stock/1?state=extras',

@@ -59,6 +59,7 @@ import { LibraryChargesService } from './library-charges.service';
 import { LibraryDeskService } from './library-desk.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { LibraryService } from './library.service';
+import { LibraryOverviewService } from './library-overview.service';
 
 /** Stock verification is its own right (the Librarian role has it). */
 const STOCK = 'library.stock.verify';
@@ -80,7 +81,37 @@ export class LibraryController {
     private readonly staff: LibraryStaffService,
     private readonly portal: LibraryPortalService,
     private readonly reservations: LibraryReservationsService,
+    private readonly overview: LibraryOverviewService,
   ) {}
+
+  // ---- check one book, and the library dashboard (library round 4, part 2) ---------------------------
+  @Get('check')
+  @ApiOperation({
+    summary:
+      'A copy by accession no. / barcode (old numbers too), else titles by name, author or ISBN',
+  })
+  @RequirePermission(LIBRARY.view)
+  check(@ReqCtx() ctx: RequestContext, @Query('q') q?: string) {
+    return this.overview.check(ctx, String(q ?? '').slice(0, 120));
+  }
+
+  @Get('check/copies/:id')
+  @ApiOperation({
+    summary: 'One copy: where it is, who has it, fine so far, holds, other copies, history',
+  })
+  @RequirePermission(LIBRARY.view)
+  checkCopy(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.overview.copy(ctx, id);
+  }
+
+  @Get('dashboard')
+  @ApiOperation({
+    summary: 'Library dashboard: figures, six months, most read, overdue, periodicals',
+  })
+  @RequirePermission(LIBRARY.view)
+  dashboard(@ReqCtx() ctx: RequestContext, @Query('libraryId') libraryId?: string) {
+    return this.overview.dashboard(ctx, libraryId);
+  }
 
   // ---- the library in the portals: my books, the catalogue, reservations (library round 3, part 4) -------
   @Get('portal/summary')

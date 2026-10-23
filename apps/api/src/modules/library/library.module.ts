@@ -22,12 +22,14 @@ import { LibraryReservationsService } from './library-reservations.service';
 import { LibraryPortalService } from './library-portal.service';
 import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
+import { LibraryOverviewService } from './library-overview.service';
 
 /** Sprint 17: library (accession, circulation, fines). Sprint 18: sale, digital library, stock verification. */
 @Module({
   imports: [DailyAcademicsModule, FeesModule],
   controllers: [LibraryController, LibraryBooksController],
   providers: [
+    LibraryOverviewService,
     LibraryService,
     LibraryBooksService,
     LibraryExportService,
