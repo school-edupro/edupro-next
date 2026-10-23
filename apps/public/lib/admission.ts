@@ -105,6 +105,12 @@ export interface PortalApplication {
   offer: { expiresAt: string | null; admissionFee: number } | null;
   waitRank: number | null;
   correction: { remark: string; dueOn: string | null } | null;
+  admissionNo: string | null;
+  admissionFeeDue: number;
+  offerExpiresAt: string | null;
+  hasAdmissionForm: boolean;
+  cancelledAt: string | null;
+  cancelReason: string | null;
 }
 
 export interface PortalInbox {

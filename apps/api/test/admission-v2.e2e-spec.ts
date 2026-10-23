@@ -1092,4 +1092,257 @@ describe('online admission (e2e)', () => {
       expect(reach.json().candidates).toBeGreaterThanOrEqual(3);
     });
   });
+  describe('part 6: admission fee, Admit and cancellation', () => {
+    let sectionA: string;
+    let sectionB: string;
+    let second: string;
+
+    it('takes the admission fee online: the admission number, the AF receipt and the admission form', async () => {
+      const pay = await inject({
+        method: 'POST',
+        url: `/public/admission/me/applications/${appA}/pay?school=${school.code}`,
+        headers: pub(tokenA),
+        json: {},
+      });
+      expect(pay.statusCode).toBe(201);
+      const form = pay.json().checkout as { fields: Record<string, string> };
+      expect(form.fields.amount).toBe('20000.00');
+      const paid = await inject({
+        method: 'POST',
+        url: '/payments/payu/mock',
+        headers: {},
+        json: { txnid: form.fields.txnid, outcome: 'success' },
+      });
+      expect(paid.json()).toMatchObject({ outcome: 'applied' });
+      const fam = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}`,
+        headers: pub(tokenA),
+      });
+      expect(fam.json()).toMatchObject({
+        status: 'fee_paid',
+        admissionFeeDue: 0,
+        hasAdmissionForm: true,
+      });
+      expect(fam.json().admissionNo).toBeTruthy();
+      expect(fam.json().receipts.map((r: { receiptNo: string }) => r.receiptNo)).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^ADM\//)]),
+      );
+      const pdf = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}/admission-form`,
+        headers: pub(tokenA),
+      });
+      expect(Buffer.from(pdf.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+    });
+
+    it('takes (or confirms) the admission fee at the desk', async () => {
+      const list = await inject({
+        method: 'GET',
+        url: `/admissions/registrations?cycleId=${cycleId}&status=offered`,
+        headers: h(),
+      });
+      second = (list.json().data as Array<{ id: string }>).find((x) => x.id !== appA)!.id;
+      const noRight = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${second}/admission-fee`,
+        headers: h(clerk),
+        json: { mode: 'cash' },
+      });
+      expect(noRight.statusCode).toBe(403);
+      const fee = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${second}/admission-fee`,
+        headers: h(),
+        json: { mode: 'cash' },
+      });
+      expect(fee.statusCode).toBe(201);
+      expect(fee.json().admissionNo).toBeTruthy();
+      const twice = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${second}/admission-fee`,
+        headers: h(),
+        json: { mode: 'cash' },
+      });
+      expect(twice.statusCode).toBe(409);
+    });
+
+    it('admits into the student master with a class-section, one by one and in bulk', async () => {
+      sectionA = (
+        await inject({
+          method: 'POST',
+          url: `/academics/classes/${classMini}/sections`,
+          headers: h(),
+          json: { name: 'A' },
+        })
+      ).json().id;
+      sectionB = (
+        await inject({
+          method: 'POST',
+          url: `/academics/classes/${classMini}/sections`,
+          headers: h(),
+          json: { name: 'B' },
+        })
+      ).json().id;
+      const waiting = await inject({
+        method: 'GET',
+        url: `/admissions/cycles/${cycleId}/admit/${classMini}`,
+        headers: h(),
+      });
+      expect(waiting.statusCode).toBe(200);
+      expect(waiting.json().sections.map((x: { name: string }) => x.name)).toEqual(['A', 'B']);
+      expect(
+        waiting
+          .json()
+          .candidates.map((x: { id: string }) => x.id)
+          .sort(),
+      ).toEqual([appA, second].sort());
+      const wrong = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/admit`,
+        headers: h(),
+        json: { classSectionId: '999999' },
+      });
+      expect(wrong.statusCode).toBe(400);
+      const one = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/admit`,
+        headers: h(),
+        json: { classSectionId: sectionA, rollNo: 1 },
+      });
+      expect(one.statusCode).toBe(201);
+      expect(one.json()).toMatchObject({ section: 'A' });
+      expect(one.json().skipped).toEqual({});
+      const student = await withMigrator((c) =>
+        c.query<{ admission_no: string; first_name: string; status: string; section: string }>(
+          `SELECT s.admission_no, s.first_name, s.status::text, cs.name AS section FROM students s
+             JOIN enrolments e ON e.student_id = s.id AND e.status = 'active' JOIN class_sections cs ON cs.id = e.class_section_id
+            WHERE s.id = $1`,
+          [one.json().studentId],
+        ),
+      );
+      expect(student.rows[0]).toMatchObject({
+        admission_no: one.json().admissionNo,
+        first_name: 'ASHA',
+        section: 'A',
+      });
+      const again = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/admit`,
+        headers: h(),
+        json: { classSectionId: sectionA },
+      });
+      expect(again.statusCode).toBe(409);
+      const bulk = await inject({
+        method: 'POST',
+        url: '/admissions/admit-bulk',
+        headers: h(),
+        json: {
+          items: [
+            { applicationId: second, classSectionId: sectionB },
+            { applicationId: appA, classSectionId: sectionB },
+          ],
+        },
+      });
+      expect(bulk.statusCode).toBe(201);
+      expect(bulk.json().admitted).toBe(1);
+      expect(
+        bulk.json().results.find((r: { applicationId: string }) => r.applicationId === appA),
+      ).toMatchObject({ ok: false });
+    });
+
+    it('cancels an admission with the admission fee refunded less the deduction, after approval', async () => {
+      await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/settings`,
+        headers: h(),
+        json: { refundDeductionPct: 10 },
+      });
+      const preview = await inject({
+        method: 'GET',
+        url: `/admissions/registrations/${appA}/cancel`,
+        headers: h(),
+      });
+      expect(preview.json().refund).toMatchObject({
+        paid: 20000,
+        pct: 10,
+        deduction: 2000,
+        amount: 18000,
+      });
+      const denied = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/cancel`,
+        headers: h(clerk),
+        json: { reason: 'Family moved' },
+      });
+      expect(denied.statusCode).toBe(403);
+      const cancel = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/cancel`,
+        headers: h(),
+        json: { reason: 'Family moved city' },
+      });
+      expect(cancel.statusCode).toBe(201);
+      expect(cancel.json().refund).toMatchObject({ amount: 18000 });
+      const enrol = await withMigrator((c) =>
+        c.query<{ status: string }>(
+          `SELECT e.status::text FROM enrolments e JOIN applications a ON a.student_id = e.student_id WHERE a.id = $1`,
+          [appA],
+        ),
+      );
+      expect(enrol.rows[0]!.status).toBe('withdrawn');
+      const refunds = await inject({
+        method: 'GET',
+        url: '/admissions/refunds?status=requested',
+        headers: h(),
+      });
+      const r = (refunds.json().data as Array<{ id: string; applicationId: string }>).find(
+        (x) => x.applicationId === appA,
+      )!;
+      const early = await inject({
+        method: 'POST',
+        url: `/admissions/refunds/${r.id}/pay`,
+        headers: h(),
+        json: { mode: 'bank' },
+      });
+      expect(early.statusCode).toBe(409);
+      const ok = await inject({
+        method: 'POST',
+        url: `/admissions/refunds/${r.id}/decide`,
+        headers: h(),
+        json: { approve: true },
+      });
+      expect(ok.json().status).toBe('approved');
+      const paid = await inject({
+        method: 'POST',
+        url: `/admissions/refunds/${r.id}/pay`,
+        headers: h(),
+        json: { mode: 'bank', reference: 'NEFT123' },
+      });
+      expect(paid.json().status).toBe('paid');
+      const fam = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}`,
+        headers: pub(tokenA),
+      });
+      expect(fam.json()).toMatchObject({ status: 'cancelled', cancelReason: 'Family moved city' });
+    });
+
+    it('cancels a registration before the fee: nothing to refund', async () => {
+      const list = await inject({
+        method: 'GET',
+        url: `/admissions/registrations?cycleId=${cycleId}&status=waitlisted`,
+        headers: h(),
+      });
+      const id = (list.json().data as Array<{ id: string }>)[0]!.id;
+      const cancel = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${id}/cancel`,
+        headers: h(),
+        json: { reason: 'Took admission elsewhere' },
+      });
+      expect(cancel.statusCode).toBe(201);
+      expect(cancel.json()).toMatchObject({ status: 'cancelled', refund: null });
+    });
+  });
 });

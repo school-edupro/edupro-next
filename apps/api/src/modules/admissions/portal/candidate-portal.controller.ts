@@ -172,6 +172,13 @@ export class CandidatePortalController {
     return this.portal.noticeFile(req.candidate!, id, fileId);
   }
 
+  @Get('me/applications/:id/admission-form')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  admissionForm(@Req() req: CandidateRequest, @Param('id') id: string) {
+    return this.portal.admissionForm(req.candidate!, id);
+  }
+
   @Get('me/applications/:id/admit-card')
   @Public()
   @UseGuards(AdmissionCandidateGuard)

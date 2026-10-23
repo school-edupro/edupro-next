@@ -23,6 +23,8 @@ const PAGES = [
   '/admissions/registrations/366',
   '/admissions/schedule',
   '/admissions/selection',
+  '/admissions/admit',
+  '/admissions/refunds',
   '/admissions/cycles/4',
   '/fees/demands',
   '/fees/payments',

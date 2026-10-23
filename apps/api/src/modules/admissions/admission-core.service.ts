@@ -67,6 +67,15 @@ export interface AppRow {
   receipt_no: string | null;
   applicant_mobile: string | null;
   applicant_email: string | null;
+  admission_no: string | null;
+  admission_receipt_id: string | null;
+  admission_fee: string | null;
+  offer_expires_at: Date | null;
+  fee_paid_at: Date | null;
+  student_id: string | null;
+  admitted_at: Date | null;
+  cancelled_at: Date | null;
+  cancel_reason: string | null;
 }
 
 export const APP_COLS = `a.id::text, a.cycle_id::text, y.code AS cycle_code, y.name AS cycle_name, y.academic_year_id::text AS year_id,
@@ -74,7 +83,9 @@ export const APP_COLS = `a.id::text, a.cycle_id::text, y.code AS cycle_code, y.n
   a.data, a.form_id::text, a.form_snapshot, a.category_id::text, k.name AS category_name, a.registration_fee::text,
   a.registration_receipt_id::text, a.registered_at, a.submitted_at, a.progress, a.pdf_file_id::text, a.candidate_name,
   a.contact_mobile, a.contact_email, a.child_first_name, a.child_last_name, a.child_dob::text, a.child_gender::text,
-  a.entered_by::text, a.created_at, mr.receipt_no, ap.mobile AS applicant_mobile, ap.email::text AS applicant_email`;
+  a.entered_by::text, a.created_at, mr.receipt_no, ap.mobile AS applicant_mobile, ap.email::text AS applicant_email,
+  a.admission_no, a.admission_receipt_id::text, a.admission_fee::text, a.offer_expires_at, a.fee_paid_at, a.student_id::text,
+  a.admitted_at, a.cancelled_at, a.cancel_reason`;
 export const APP_FROM = `FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id JOIN academic_years ay ON ay.id = y.academic_year_id
   JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id
   LEFT JOIN admission_fee_categories k ON k.id = a.category_id LEFT JOIN misc_receipts mr ON mr.id = a.registration_receipt_id`;
@@ -640,7 +651,11 @@ export class AdmissionCoreService {
   }
 
   /** The registration form as submitted (A4): every tab with its answers, documents, declaration. */
-  async formPdf(c: PoolClient, a: AppRow): Promise<{ filename: string; bytes: Buffer }> {
+  async formPdf(
+    c: PoolClient,
+    a: AppRow,
+    opts: { admission?: boolean } = {},
+  ): Promise<{ filename: string; bytes: Buffer }> {
     const def = await this.defOf(c, a);
     const data = this.plainData(def, a.data);
     const { head, logo } = await this.school(c);
@@ -681,8 +696,14 @@ export class AdmissionCoreService {
       school: head,
       logo,
       photo: await this.fileBytes(c, photoId),
-      number: a.application_no ?? 'Not yet registered',
-      received: a.submitted_at ? ist(a.submitted_at) : ist(new Date()),
+      number: opts.admission
+        ? (a.admission_no ?? 'Not yet given')
+        : (a.application_no ?? 'Not yet registered'),
+      received: opts.admission
+        ? ist(a.fee_paid_at ?? new Date())
+        : a.submitted_at
+          ? ist(a.submitted_at)
+          : ist(new Date()),
       post: `${a.class_name} · ${a.cycle_name}`,
       postLine: `Academic year ${a.year_name}${a.category_name ? ` · Category ${a.category_name}` : ''}`,
       sections,
@@ -690,12 +711,14 @@ export class AdmissionCoreService {
       interests: [],
       documents: docs,
       declaration: `${def.settings.declaration ?? ''}${sign && data[sign.key] ? `\n\nSigned: ${String(data[sign.key])}` : ''}`,
-      kicker: 'REGISTRATION FORM FOR ADMISSION TO',
-      numberLabel: 'Registration no.',
-      receivedLabel: 'Submitted',
+      kicker: opts.admission ? 'ADMISSION FORM' : 'REGISTRATION FORM FOR ADMISSION TO',
+      numberLabel: opts.admission ? 'Admission no.' : 'Registration no.',
+      receivedLabel: opts.admission ? 'Admission fee paid' : 'Submitted',
     });
     return {
-      filename: `Registration-${(a.application_no ?? a.id).replace(/\//g, '-')}.pdf`,
+      filename: opts.admission
+        ? `Admission-${(a.admission_no ?? a.id).replace(/\//g, '-')}.pdf`
+        : `Registration-${(a.application_no ?? a.id).replace(/\//g, '-')}.pdf`,
       bytes,
     };
   }
@@ -791,6 +814,17 @@ export class AdmissionCoreService {
     return f;
   }
 
+  async storeAdmissionFormPdf(c: PoolClient, a: AppRow) {
+    const out = await this.formPdf(c, a, { admission: true });
+    const f = await this.storePdf(c, a.id, out.filename, out.bytes);
+    if (f)
+      await c.query(`UPDATE applications SET admission_form_file_id = $2 WHERE id = $1`, [
+        a.id,
+        f.fileId,
+      ]);
+    return f;
+  }
+
   async storeReceiptPdf(c: PoolClient, receiptId: string) {
     const out = await this.receiptPdf(c, receiptId);
     const appId = (
@@ -874,6 +908,13 @@ export class AdmissionCoreService {
         status: r.status,
       })),
       onlyFields: a.status === 'sent_back' ? await this.correctionFields(c, a.id) : null,
+      admissionNo: a.admission_no,
+      admissionFeeDue:
+        a.status === 'offered' && Number(a.admission_fee ?? 0) > 0 ? Number(a.admission_fee) : 0,
+      offerExpiresAt: a.offer_expires_at?.toISOString() ?? null,
+      hasAdmissionForm: Boolean(a.admission_no),
+      cancelledAt: a.cancelled_at?.toISOString() ?? null,
+      cancelReason: a.cancel_reason,
     };
   }
 

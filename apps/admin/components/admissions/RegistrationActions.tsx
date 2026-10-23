@@ -58,6 +58,7 @@ export function RegistrationActions({
   const [due, setDue] = useState('');
   const [reason, setReason] = useState('');
   const [toStep, setToStep] = useState('');
+  const [showUndo, setShowUndo] = useState(false);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
     start(async () => {
@@ -311,7 +312,19 @@ export function RegistrationActions({
         </div>
       ) : null}
 
-      {undoable && (mode === 'undo' || !current || !canAct) ? (
+      {undoable && (!current || !canAct) && !showUndo ? (
+        <div>
+          <button
+            type="button"
+            className="ep-btn ep-btn--ghost ep-btn--sm"
+            onClick={() => setShowUndo(true)}
+          >
+            Undo a decision…
+          </button>
+        </div>
+      ) : null}
+
+      {undoable && (mode === 'undo' || showUndo) ? (
         <div className="ep-rp__act">
           <label className="ep-field">
             <span className="ep-field__label">Reason to undo</span>

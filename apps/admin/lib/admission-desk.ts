@@ -64,6 +64,12 @@ export interface RegistrationForm {
     status: string;
   }>;
   onlyFields: string[] | null;
+  admissionNo: string | null;
+  admissionFeeDue: number;
+  offerExpiresAt: string | null;
+  hasAdmissionForm: boolean;
+  cancelledAt: string | null;
+  cancelReason: string | null;
 }
 
 export const REG_STATUS: Record<

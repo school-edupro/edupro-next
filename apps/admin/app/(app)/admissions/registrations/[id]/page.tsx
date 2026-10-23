@@ -2,6 +2,7 @@ import { Badge, Card, LAYOUT_TYPES, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { DeskForm } from '@/components/admissions/DeskForm';
 import { RegistrationActions } from '@/components/admissions/RegistrationActions';
+import { RegistrationOffice } from '@/components/admissions/RegistrationOffice';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { Notice } from '@/components/Notice';
 import { REG_STATUS, dmy, rupees, type RegistrationForm } from '@/lib/admission-desk';
@@ -87,6 +88,23 @@ export default async function RegistrationPage({
     .filter((f) => !LAYOUT_TYPES.includes(f.type) && f.type !== 'age')
     .map((f) => ({ key: f.key, label: f.label }));
   const label = (k: string) => fields.find((f) => f.key === k)?.label ?? k;
+  const can = (p: string) => me.permissions.includes(p);
+  // Admit: the class's sections in the session's year; cancel: what would be refunded
+  const sections =
+    r.status === 'fee_paid'
+      ? await apiFetch<{
+          sections: Array<{ id: string; name: string; capacity: number | null; enrolled: number }>;
+        }>(`/admissions/cycles/${r.session.id}/admit/${r.class.id}`)
+          .then((x) => x.sections)
+          .catch(() => [])
+      : [];
+  const refund = ['fee_paid', 'admitted'].includes(r.status)
+    ? await apiFetch<{
+        refund: { paid: number; pct: number; deduction: number; amount: number } | null;
+      }>(`/admissions/registrations/${r.id}/cancel`)
+        .then((x) => x.refund)
+        .catch(() => null)
+    : null;
   return (
     <>
       <PageHeader
@@ -94,7 +112,7 @@ export default async function RegistrationPage({
         title={r.candidate ?? `Registration ${r.id}`}
         description={
           r.number
-            ? `Registration no. ${r.number}`
+            ? `Registration no. ${r.number}${r.admissionNo ? ` · Admission no. ${r.admissionNo}` : ''}`
             : 'Not registered yet: the registration fee is due.'
         }
         actions={
@@ -209,6 +227,21 @@ export default async function RegistrationPage({
             steps={r.process.steps.map((s) => ({ name: s.name, state: s.state }))}
             isAdmin={me.permissions.includes('admissions.setup.manage')}
           />
+          {r.status === 'cancelled' && r.cancelReason ? (
+            <p style={{ margin: 0 }}>
+              Cancelled on {dmy(r.cancelledAt)}: {r.cancelReason}
+            </p>
+          ) : null}
+          <RegistrationOffice
+            id={r.id}
+            status={r.status}
+            admissionFee={r.offer?.admissionFee ?? 0}
+            sections={sections}
+            refund={refund}
+            canCollect={can('admissions.fee.collect')}
+            canAdmit={can('admissions.application.admit')}
+            canCancel={can('admissions.application.cancel')}
+          />
         </Card>
       </div>
       <div className="ep-rp">
@@ -234,6 +267,18 @@ export default async function RegistrationPage({
                       <ViewDownload
                         href={`/api/admission-desk/form/${r.id}`}
                         what="the registration form"
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+                {r.hasAdmissionForm ? (
+                  <tr>
+                    <td>Admission form ({r.admissionNo})</td>
+                    <td>-</td>
+                    <td>
+                      <ViewDownload
+                        href={`/api/admission-desk/admission/${r.id}`}
+                        what="the admission form"
                       />
                     </td>
                   </tr>

@@ -6,6 +6,8 @@ import { DecisionsService } from './decisions.service';
 import { AdmissionFormsController } from './forms.controller';
 import { AdmissionFormsService } from './forms.service';
 import { AdmissionCoreService } from './admission-core.service';
+import { AdmissionAdmitController } from './admit.controller';
+import { AdmissionAdmitService } from './admit.service';
 import { AdmissionDeskController } from './desk.controller';
 import { AdmissionProcessController } from './process.controller';
 import { AdmissionProcessService } from './process.service';
@@ -40,6 +42,7 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionSetupController,
     AdmissionDeskController,
     AdmissionProcessController,
+    AdmissionAdmitController,
     CandidatePortalController,
     PublicAdmissionsController,
     PublicSchoolController,
@@ -52,6 +55,7 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionCoreService,
     AdmissionDeskService,
     AdmissionProcessService,
+    AdmissionAdmitService,
     AdmissionScheduleService,
     CandidatePortalService,
     CandidateSigninService,
@@ -84,6 +88,7 @@ export class AdmissionsModule implements OnModuleInit {
     private readonly workflow: WorkflowService,
     private readonly payments: PaymentsService,
     private readonly core: AdmissionCoreService,
+    private readonly admit: AdmissionAdmitService,
   ) {}
 
   onModuleInit(): void {
@@ -95,5 +100,7 @@ export class AdmissionsModule implements OnModuleInit {
     this.payments.onSuccess('admission_fee', (c, intent) =>
       this.core.onRegistrationPaid(c, intent),
     );
+    // part 6: the admission fee paid online gives the admission number
+    this.payments.onSuccess('admission_fee', (c, intent) => this.admit.onAdmissionPaid(c, intent));
   }
 }

@@ -15,6 +15,8 @@ export async function GET(
   if (kind === 'receipt' && /^\d{1,18}$/.test(id)) path = `/admissions/receipts/${id}/pdf`;
   if (kind === 'admit' && /^\d{1,18}$/.test(id))
     path = `/admissions/registrations/${id}/admit-card`;
+  if (kind === 'admission' && /^\d{1,18}$/.test(id))
+    path = `/admissions/registrations/${id}/admission-form`;
   const m = /^(\d{1,18})(?::|%3A)(\d{1,18})$/i.exec(id);
   if (kind === 'file' && m) path = `/admissions/applications/${m[1]}/files/${m[2]}`;
   if (!path) return new NextResponse(null, { status: 404 });

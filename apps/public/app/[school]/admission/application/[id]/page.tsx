@@ -40,7 +40,7 @@ export default async function AdmissionApplicationPage({
     },
   );
   const gateways =
-    app.feeDue > 0
+    app.feeDue > 0 || app.admissionFeeDue > 0
       ? await admissionFetch<Array<{ id: string; label: string }>>('/me/gateways')
           .then((r) =>
             Array.isArray(r)
@@ -131,11 +131,56 @@ export default async function AdmissionApplicationPage({
           ) : null}
           {app.offer ? (
             <div className="ep-alert ep-alert--success" role="status">
-              {app.candidate ?? 'Your ward'} is offered admission. Pay the admission fee of{' '}
-              <strong>{rupees(app.offer.admissionFee)}</strong>
-              {app.offer.expiresAt ? ` by ${dmy(app.offer.expiresAt)}` : ''} at the school office or
-              here when online payment opens.
+              {app.candidate ?? 'Your ward'} is offered admission.{' '}
+              {app.offer.admissionFee > 0 ? (
+                <>
+                  Pay the admission fee of <strong>{rupees(app.offer.admissionFee)}</strong>
+                  {app.offer.expiresAt ? ` by ${dmy(app.offer.expiresAt)}` : ''}, here or at the
+                  school office.
+                </>
+              ) : (
+                'The school office will confirm the admission.'
+              )}
             </div>
+          ) : null}
+          {app.admissionFeeDue > 0 ? (
+            <form
+              action="/api/admission/pay"
+              method="post"
+              style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', alignItems: 'end' }}
+            >
+              <input type="hidden" name="school" value={school} />
+              <input type="hidden" name="id" value={app.id} />
+              {gateways.length > 1 ? (
+                <label className="ep-field">
+                  <span className="ep-field__label">Pay through</span>
+                  <select className="ep-select" name="gatewayId" defaultValue={gateways[0]!.id}>
+                    {gateways.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <button className="ep-btn ep-btn--primary" type="submit">
+                Pay the admission fee {rupees(app.admissionFeeDue)}
+              </button>
+            </form>
+          ) : null}
+          {app.admissionNo && ['fee_paid', 'admitted'].includes(app.status) ? (
+            <p>
+              Admission no. <strong>{app.admissionNo}</strong>.{' '}
+              {app.status === 'admitted'
+                ? 'Use the parent app from now on: sign in with your mobile number or email.'
+                : 'The school will tell you the class-section before the session starts.'}
+            </p>
+          ) : null}
+          {app.status === 'cancelled' ? (
+            <p>
+              Cancelled on {dmy(app.cancelledAt)}
+              {app.cancelReason ? `: ${app.cancelReason}` : ''}.
+            </p>
           ) : null}
           {app.status === 'waitlisted' && app.waitRank ? (
             <p>
@@ -194,7 +239,7 @@ export default async function AdmissionApplicationPage({
           ) : null}
         </Card>
 
-        {app.hasPdf || app.receipts.length ? (
+        {app.hasPdf || app.receipts.length || app.hasAdmissionForm ? (
           <Card elevated title="Documents">
             <div className="ep-table-wrap">
               <table className="ep-table">
@@ -223,11 +268,24 @@ export default async function AdmissionApplicationPage({
                       </td>
                     </tr>
                   ) : null}
+                  {app.hasAdmissionForm ? (
+                    <tr>
+                      <td>Admission form ({app.admissionNo})</td>
+                      <td>-</td>
+                      <td>-</td>
+                      <td>
+                        <ViewDownload
+                          href={`/api/admission/admform/${app.id}`}
+                          what="the admission form"
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
                   {app.receipts.map((r) => (
                     <tr key={r.id}>
                       <td>
                         {r.head} receipt {r.receiptNo}
-                        {r.status !== 'active' ? <Badge tone="neutral"> {r.status}</Badge> : null}
+                        {r.status === 'reversed' ? <Badge tone="neutral"> reversed</Badge> : null}
                       </td>
                       <td>{dmy(r.date)}</td>
                       <td>{rupees(r.amount)}</td>

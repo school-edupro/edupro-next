@@ -320,14 +320,24 @@ export class CandidatePortalService {
   async pay(cand: AdmissionCandidate, id: string, schoolCode: string, gatewayId?: string) {
     return this.db.tenant(this.t(cand), async (c) => {
       const a = await this.own(c, cand, id);
-      const fee = Number(a.registration_fee ?? 0);
-      if (a.status !== 'submitted' || a.application_no || !(fee > 0))
+      // the registration fee before the registration number, the admission fee on an offer
+      const registration =
+        a.status === 'submitted' && !a.application_no && Number(a.registration_fee ?? 0) > 0;
+      const admission = a.status === 'offered' && Number(a.admission_fee ?? 0) > 0;
+      if (!registration && !admission)
         throw new DomainError('admissions.nothing_due', 'Nothing is due on this registration', {
           status: 409,
         });
+      if (admission && a.offer_expires_at && a.offer_expires_at.getTime() < Date.now())
+        throw new DomainError(
+          'admissions.offer_lapsed',
+          'The offer has lapsed; please contact the school',
+          { status: 409 },
+        );
+      const fee = registration ? Number(a.registration_fee) : Number(a.admission_fee);
       const intent = await this.payments.createIntent(c, {
         purpose: 'admission_fee',
-        entityType: 'admission_registration',
+        entityType: registration ? 'admission_registration' : 'admission_offer',
         entityId: a.id,
         ledger: 'admission',
         amount: fee,
@@ -349,6 +359,21 @@ export class CandidatePortalService {
           provider: intent.provider,
         },
         checkout: await this.payments.checkout(intent),
+      };
+    });
+  }
+
+  /** The admission form (after the admission fee), with the admission number. */
+  async admissionForm(cand: AdmissionCandidate, id: string) {
+    return this.db.tenant(this.t(cand), async (c) => {
+      const a = await this.own(c, cand, id);
+      if (!a.admission_no)
+        throw new DomainError('not-found', 'No admission form yet', { status: 404 });
+      const out = await this.core.formPdf(c, a, { admission: true });
+      return {
+        filename: out.filename,
+        contentType: 'application/pdf',
+        base64: out.bytes.toString('base64'),
       };
     });
   }

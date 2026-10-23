@@ -116,6 +116,16 @@ export const NAV: Array<{
         permission: 'admissions.application.view',
       },
       {
+        href: '/admissions/admit',
+        label: 'admissionAdmit',
+        permission: 'admissions.application.view',
+      },
+      {
+        href: '/admissions/refunds',
+        label: 'admissionRefunds',
+        permission: 'admissions.application.view',
+      },
+      {
         href: '/admissions/applications',
         label: 'applications',
         permission: 'admissions.application.view',
