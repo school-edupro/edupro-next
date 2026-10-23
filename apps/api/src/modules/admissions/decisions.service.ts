@@ -330,7 +330,8 @@ export class DecisionsService {
 
   /** Payment success for an admission fee: the offer is accepted. */
   async onFeePaid(c: PoolClient, intent: IntentRow): Promise<void> {
-    if (!intent.entityId) return;
+    // the online admission (docs/design/39) has its own kinds of admission-ledger payments
+    if (!intent.entityId || (intent.entityType && intent.entityType !== 'application')) return;
     await c.query(
       `UPDATE admission_offers SET status = 'accepted', accepted_at = now(), updated_at = now() WHERE application_id = $1 AND status = 'offered'`,
       [intent.entityId],

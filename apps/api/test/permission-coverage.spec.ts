@@ -59,6 +59,24 @@ describe('permission coverage', () => {
     // Razorpay returns verify the checkout HMAC and webhooks the raw-body HMAC; CCAvenue returns must decrypt
     // with the working key and match order id and amount (S13, docs/design/09 section 3).
     expect(publicRoutes.sort()).toEqual([
+      // admission portal v2 (docs/design/39 part 3): sessions and the PoW-gated code are anonymous; the rest
+      // run behind AdmissionCandidateGuard with the `adm.` token issued on a verified code
+      'CandidatePortalController.code (public/admission)',
+      'CandidatePortalController.file (public/admission)',
+      'CandidatePortalController.gateways (public/admission)',
+      'CandidatePortalController.get (public/admission)',
+      'CandidatePortalController.me (public/admission)',
+      'CandidatePortalController.pay (public/admission)',
+      'CandidatePortalController.pdf (public/admission)',
+      'CandidatePortalController.receipt (public/admission)',
+      'CandidatePortalController.saveStep (public/admission)',
+      'CandidatePortalController.sessions (public/admission)',
+      'CandidatePortalController.sibling (public/admission)',
+      'CandidatePortalController.slot (public/admission)',
+      'CandidatePortalController.start (public/admission)',
+      'CandidatePortalController.submit (public/admission)',
+      'CandidatePortalController.verify (public/admission)',
+      'CandidatePortalController.withdraw (public/admission)',
       'CommsDeliveryController.webhook (comms/delivery)',
       // communication v2: MSG91 (token) and Meta (signed with the school's app secret) delivery receipts
       'CommsWebhooksController.meta (comms/webhooks)',

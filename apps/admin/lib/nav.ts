@@ -96,6 +96,11 @@ export const NAV: Array<{
       { href: '/admissions/forms', label: 'admissionForms', permission: 'admissions.cycle.view' },
       { href: '/admissions/setup', label: 'admissionSetup', permission: 'admissions.cycle.view' },
       {
+        href: '/admissions/desk',
+        label: 'admissionDesk',
+        permission: 'admissions.application.enter',
+      },
+      {
         href: '/admissions/applications',
         label: 'applications',
         permission: 'admissions.application.view',

@@ -5,6 +5,13 @@ import { AdmissionsService } from './admissions.service';
 import { DecisionsService } from './decisions.service';
 import { AdmissionFormsController } from './forms.controller';
 import { AdmissionFormsService } from './forms.service';
+import { AdmissionCoreService } from './admission-core.service';
+import { AdmissionDeskController } from './desk.controller';
+import { AdmissionDeskService } from './desk.service';
+import { AdmissionCandidateGuard } from './portal/candidate.guard';
+import { CandidatePortalController } from './portal/candidate-portal.controller';
+import { CandidatePortalService } from './portal/candidate-portal.service';
+import { CandidateSigninService } from './portal/candidate-signin.service';
 import { AdmissionSetupController } from './setup.controller';
 import { AdmissionSetupService } from './setup.service';
 import { PaymentsModule } from '../payments/payments.module';
@@ -28,6 +35,8 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionsController,
     AdmissionFormsController,
     AdmissionSetupController,
+    AdmissionDeskController,
+    CandidatePortalController,
     PublicAdmissionsController,
     PublicSchoolController,
   ],
@@ -36,6 +45,11 @@ import { PublicSchoolService } from './public/public-school.service';
     DecisionsService,
     AdmissionFormsService,
     AdmissionSetupService,
+    AdmissionCoreService,
+    AdmissionDeskService,
+    CandidatePortalService,
+    CandidateSigninService,
+    AdmissionCandidateGuard,
     PublicAdmissionsService,
     PublicSchoolService,
     PowService,
@@ -48,6 +62,8 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionsService,
     AdmissionFormsService,
     AdmissionSetupService,
+    AdmissionCoreService,
+    CandidateSigninService,
     PublicAdmissionsService,
     DecisionsService,
     OtpService,
@@ -61,6 +77,7 @@ export class AdmissionsModule implements OnModuleInit {
     private readonly decisions: DecisionsService,
     private readonly workflow: WorkflowService,
     private readonly payments: PaymentsService,
+    private readonly core: AdmissionCoreService,
   ) {}
 
   onModuleInit(): void {
@@ -68,5 +85,9 @@ export class AdmissionsModule implements OnModuleInit {
       this.decisions.onApprovalComplete(c, ctx, instance, outcome),
     );
     this.payments.onSuccess('admission_fee', (c, intent) => this.decisions.onFeePaid(c, intent));
+    // docs/design/39: the registration fee paid online registers the candidate
+    this.payments.onSuccess('admission_fee', (c, intent) =>
+      this.core.onRegistrationPaid(c, intent),
+    );
   }
 }

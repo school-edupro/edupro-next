@@ -1,0 +1,97 @@
+'use server';
+import { redirect } from 'next/navigation';
+import type { AdmissionAnswers } from '@edupro/ui';
+import { PublicApiError } from '@/lib/api';
+import { admissionFetch } from '@/lib/admission';
+
+type Result = { ok: boolean; errors?: Record<string, string>; message?: string };
+
+const fail = (error: unknown): Result => {
+  if (error instanceof PublicApiError) {
+    const p = error.problem as { detail?: string; type: string; errors?: Record<string, string> };
+    if (error.status === 401)
+      return {
+        ok: false,
+        message: 'Your sign-in has ended: sign in again to go on (your saved tabs are kept).',
+      };
+    return { ok: false, errors: p.errors, message: p.detail ?? p.type };
+  }
+  throw error;
+};
+
+/** A new registration for a class of an open session, then its form. */
+export async function startRegistration(fd: FormData) {
+  const school = String(fd.get('school') ?? '').toLowerCase();
+  const cycleId = String(fd.get('cycleId') ?? '');
+  const classId = String(fd.get('classId') ?? '');
+  if (!/^[a-z0-9-]{2,20}$/.test(school)) redirect('/');
+  let id: string;
+  try {
+    id = (
+      await admissionFetch<{ id: string }>('/me/applications', {
+        method: 'POST',
+        body: JSON.stringify({ cycleId, classId }),
+      })
+    ).id;
+  } catch (error) {
+    const msg =
+      error instanceof PublicApiError
+        ? (error.problem.detail ?? error.problem.type)
+        : 'Could not start';
+    redirect(`/${school}/admission?error=${encodeURIComponent(String(msg).slice(0, 160))}`);
+  }
+  redirect(`/${school}/admission/application/${id}`);
+}
+
+export async function saveAdmissionStep(
+  id: string,
+  answers: AdmissionAnswers,
+  step: string,
+): Promise<Result> {
+  try {
+    const out = await admissionFetch<{ errors: Record<string, string> }>(
+      `/me/applications/${id}/step`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ answers, step }),
+      },
+    );
+    return Object.keys(out.errors ?? {}).length ? { ok: false, errors: out.errors } : { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function submitAdmission(id: string, answers: AdmissionAnswers): Promise<Result> {
+  try {
+    await admissionFetch(`/me/applications/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    });
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function lookupSibling(admissionNo: string) {
+  try {
+    const r = await admissionFetch<{ found?: boolean; name?: string; classSection?: string }>(
+      `/me/sibling?admissionNo=${encodeURIComponent(admissionNo)}`,
+    );
+    return r.name ? { name: r.name, classSection: r.classSection ?? '' } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function withdrawRegistration(fd: FormData) {
+  const school = String(fd.get('school') ?? '').toLowerCase();
+  const id = String(fd.get('id') ?? '');
+  if (!/^[a-z0-9-]{2,20}$/.test(school) || !/^\d{1,18}$/.test(id)) redirect('/');
+  await admissionFetch(`/me/applications/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({}),
+  }).catch(() => undefined);
+  redirect(`/${school}/admission`);
+}
