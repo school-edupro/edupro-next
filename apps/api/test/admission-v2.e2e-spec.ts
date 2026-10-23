@@ -358,16 +358,17 @@ describe('online admission (e2e)', () => {
       expect(Buffer.from(poster.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
     });
   });
+  let classMini: string;
+  let tokenA: string;
+  let tokenB: string;
+  let appA: string;
+  let appEws: string;
+  let appWalkIn: string;
+  const pub = (token?: string): Record<string, string> =>
+    token ? { authorization: `Bearer ${token}` } : {};
   describe('part 3: candidate portal and office desk', () => {
-    let classMini: string;
-    let tokenA: string;
-    let tokenB: string;
-    let appA: string;
-    let appEws: string;
     const mobileA = `9${String(Date.now()).slice(-9)}`;
     const emailB = `fam.${Date.now()}@example.com`;
-    const pub = (token?: string): Record<string, string> =>
-      token ? { authorization: `Bearer ${token}` } : {};
     const answers = (extra: Record<string, unknown> = {}) => ({
       first_name: 'Asha',
       last_name: 'Verma',
@@ -638,6 +639,7 @@ describe('online admission (e2e)', () => {
       });
       expect(walkIn.statusCode).toBe(201);
       const id = walkIn.json().id as string;
+      appWalkIn = id;
       const form = await inject({
         method: 'GET',
         url: `/admissions/applications/${id}/form`,
@@ -686,6 +688,307 @@ describe('online admission (e2e)', () => {
         headers: h(),
       });
       expect(Buffer.from(pdf.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+    });
+  });
+  describe('part 4: approval process', () => {
+    let stages: Array<{ id: string; name: string; kind: string }>;
+    let processId: string;
+    let slotId: string;
+    const st = (kind: string) => stages.find((s) => s.kind === kind)!.id;
+    const reg = (id: string, u: SeededUser = admin) =>
+      inject({ method: 'GET', url: `/admissions/registrations/${id}`, headers: h(u) });
+    const decide = (id: string, json: Record<string, unknown>, u: SeededUser = admin) =>
+      inject({
+        method: 'POST',
+        url: `/admissions/registrations/${id}/decide`,
+        headers: h(u),
+        json,
+      });
+
+    it('starts the school with stages; a process reaching registrations in progress needs a confirmation', async () => {
+      const setup = await inject({ method: 'GET', url: '/admissions/process-setup', headers: h() });
+      expect(setup.statusCode).toBe(200);
+      stages = setup.json().stages;
+      expect(stages.map((s) => s.kind)).toEqual([
+        'document_check',
+        'test',
+        'interview',
+        'interaction',
+        'selection',
+      ]);
+      const body = {
+        name: 'Senior',
+        classIds: [classMini],
+        steps: [
+          {
+            stageId: st('document_check'),
+            levels: [
+              { name: 'Office check', by: 'anyone' },
+              { name: 'Principal', by: 'role', roleCode: 'school_admin' },
+            ],
+          },
+          { stageId: st('test'), levels: [{ name: 'Test cell', by: 'anyone' }] },
+          { stageId: st('selection'), levels: [{ name: 'Admission committee', by: 'anyone' }] },
+        ],
+      };
+      const badOrder = await inject({
+        method: 'POST',
+        url: '/admissions/processes',
+        headers: h(),
+        json: { ...body, steps: [body.steps[2], body.steps[0]] },
+      });
+      expect(badOrder.statusCode).toBe(400);
+      const ask = await inject({
+        method: 'POST',
+        url: '/admissions/processes',
+        headers: h(),
+        json: body,
+      });
+      expect(ask.statusCode).toBe(409);
+      expect(ask.json()).toMatchObject({ type: 'admissions.confirm_process', affected: 3 });
+      const ok = await inject({
+        method: 'POST',
+        url: '/admissions/processes',
+        headers: h(),
+        json: { ...body, confirm: true },
+      });
+      expect(ok.statusCode).toBe(201);
+      processId = ok.json().id;
+      const r = await reg(appA);
+      expect(r.json().process).toMatchObject({ stageNo: 0, levelNo: 1, hasProcess: true });
+      expect(r.json().process.current).toMatchObject({
+        kind: 'document_check',
+        levelName: 'Office check',
+      });
+      const denied = await inject({
+        method: 'PUT',
+        url: `/admissions/processes/${processId}`,
+        headers: h(clerk),
+        json: body,
+      });
+      expect(denied.statusCode).toBe(403);
+    });
+
+    it("moves level by level; only the level's people decide; Document check confirms the category", async () => {
+      const l1 = await decide(appA, { decision: 'approve', remarks: 'Papers fine' }, clerk);
+      expect(l1.statusCode).toBe(201);
+      expect(l1.json().process).toMatchObject({ stageNo: 0, levelNo: 2 });
+      expect(l1.json().status).toBe('under_review');
+      const notMine = await decide(appA, { decision: 'approve' }, clerk);
+      expect(notMine.statusCode).toBe(403);
+      const marksHere = await decide(appA, { decision: 'approve', marks: 10 });
+      expect(marksHere.statusCode).toBe(400);
+      const sibling = categories.find((c) => c.code === 'sibling')!.id;
+      const l2 = await decide(appA, { decision: 'approve', categoryId: sibling });
+      expect(l2.statusCode).toBe(201);
+      expect(l2.json().process.current).toMatchObject({ kind: 'test' });
+      expect(l2.json().category).toBe('Sibling in school');
+    });
+
+    it('sends the form back for correction; the family corrects only those answers and it returns to the same level', async () => {
+      const bad = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appEws}/send-back`,
+        headers: h(),
+        json: { fields: ['nonsense'], remark: 'Fix it' },
+      });
+      expect(bad.statusCode).toBe(400);
+      const sb = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appEws}/send-back`,
+        headers: h(),
+        json: {
+          fields: ['last_name'],
+          remark: 'Surname as on the birth certificate',
+          dueOn: '2027-01-15',
+        },
+      });
+      expect(sb.statusCode).toBe(201);
+      expect(sb.json().status).toBe('sent_back');
+      const fam = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appEws}`,
+        headers: pub(tokenB),
+      });
+      expect(fam.json()).toMatchObject({
+        status: 'sent_back',
+        onlyFields: ['last_name'],
+        correction: { dueOn: '2027-01-15' },
+      });
+      const blocked = await decide(appEws, { decision: 'approve' });
+      expect(blocked.statusCode).toBe(409);
+      const answers = { ...fam.json().answers, last_name: 'Sharma', first_name: 'Changed' };
+      const re = await inject({
+        method: 'POST',
+        url: `/public/admission/me/applications/${appEws}/submit`,
+        headers: pub(tokenB),
+        json: { answers },
+      });
+      expect(re.statusCode).toBe(201);
+      const after = await reg(appEws);
+      expect(after.json()).toMatchObject({ status: 'under_review', candidate: 'RAVI SHARMA' });
+      expect(after.json().process).toMatchObject({ stageNo: 0, levelNo: 1 });
+      expect(after.json().corrections[0].status).toBe('resubmitted');
+    });
+
+    it('allots a test slot with an admit card; marks are checked against the maximum', async () => {
+      const slot = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/slots`,
+        headers: h(),
+        json: {
+          stageId: st('test'),
+          classId: classMini,
+          startsAt: new Date(Date.now() + 3 * 86400000).toISOString(),
+          minutes: 90,
+          venue: 'Hall A',
+          capacity: 1,
+        },
+      });
+      expect(slot.statusCode).toBe(201);
+      slotId = slot.json().id;
+      expect(slot.json().waiting).toBe(1);
+      const allot = await inject({
+        method: 'POST',
+        url: `/admissions/slots/${slotId}/allot`,
+        headers: h(),
+        json: {},
+      });
+      expect(allot.statusCode).toBe(201);
+      expect(allot.json().candidates).toMatchObject([
+        { applicationId: appA, rollNo: 1, notified: true },
+      ]);
+      const full = await inject({
+        method: 'POST',
+        url: `/admissions/slots/${slotId}/allot`,
+        headers: h(),
+        json: {},
+      });
+      expect(full.statusCode).toBe(409);
+      const card = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}/admit-card`,
+        headers: pub(tokenA),
+      });
+      expect(Buffer.from(card.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+      const fam = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}`,
+        headers: pub(tokenA),
+      });
+      expect(fam.json().slot).toMatchObject({ venue: 'Hall A', rollNo: 1 });
+      expect(fam.json().steps.map((x: { state: string }) => x.state)).toEqual([
+        'done',
+        'current',
+        'waiting',
+      ]);
+      const over = await inject({
+        method: 'PUT',
+        url: `/admissions/slots/${slotId}/results`,
+        headers: h(),
+        json: {
+          rows: [{ applicationId: appA, attendance: 'present', marks: 150, decision: 'approve' }],
+        },
+      });
+      expect(over.statusCode).toBe(400);
+      const ok = await inject({
+        method: 'PUT',
+        url: `/admissions/slots/${slotId}/results`,
+        headers: h(),
+        json: {
+          rows: [{ applicationId: appA, attendance: 'present', marks: 72, decision: 'approve' }],
+        },
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().saved).toBe(1);
+      const r = await reg(appA);
+      expect(r.json()).toMatchObject({ merit: 72 });
+      expect(r.json().process.current).toMatchObject({ kind: 'selection' });
+    });
+
+    it('offers from the merit list with the admission fee; undo; waiting list and the next offer', async () => {
+      const sel = await inject({
+        method: 'GET',
+        url: `/admissions/cycles/${cycleId}/selection/${classMini}`,
+        headers: h(),
+      });
+      expect(sel.statusCode).toBe(200);
+      expect(sel.json().merit.map((x: { id: string }) => x.id)).toEqual([appA]);
+      const offer = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/offer`,
+        headers: h(),
+        json: { applicationIds: [appA] },
+      });
+      expect(offer.statusCode).toBe(201);
+      let r = await reg(appA);
+      expect(r.json()).toMatchObject({ status: 'offered', offer: { admissionFee: 20000 } });
+      const fam = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}`,
+        headers: pub(tokenA),
+      });
+      expect(fam.json().offer).toMatchObject({ admissionFee: 20000 });
+      const undo = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/undo`,
+        headers: h(),
+        json: { reason: 'Offer made by mistake' },
+      });
+      expect(undo.statusCode).toBe(201);
+      expect(undo.json()).toMatchObject({ status: 'under_review', offer: null });
+      expect(undo.json().process.current).toMatchObject({ kind: 'selection' });
+      const wl = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/waitlist`,
+        headers: h(),
+        json: { applicationIds: [appA] },
+      });
+      expect(wl.statusCode).toBe(201);
+      r = await reg(appA);
+      expect(r.json()).toMatchObject({ status: 'waitlisted', waitRank: 1 });
+      const next = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/next`,
+        headers: h(),
+        json: { classId: classMini },
+      });
+      expect(next.statusCode).toBe(201);
+      expect(next.json().offered).toBe(appA);
+      r = await reg(appA);
+      expect(r.json().status).toBe('offered');
+    });
+
+    it('draws among the candidates at Selection: seats offered, the rest wait-listed in draw order', async () => {
+      for (const id of [appEws, appWalkIn]) {
+        await decide(id, { decision: 'approve' });
+        await decide(id, { decision: 'approve' });
+        const t = await decide(id, { decision: 'approve', marks: 50 });
+        expect(t.json().process.current).toMatchObject({ kind: 'selection' });
+      }
+      const draw = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/draw`,
+        headers: h(),
+        json: { classId: classMini, seats: 1, seed: 'fixed-seed' },
+      });
+      expect(draw.statusCode).toBe(201);
+      expect(draw.json().seed).toBe('fixed-seed');
+      expect(draw.json().offered).toHaveLength(1);
+      expect(draw.json().waitlisted).toHaveLength(1);
+      const sel = await inject({
+        method: 'GET',
+        url: `/admissions/cycles/${cycleId}/selection/${classMini}`,
+        headers: h(),
+      });
+      expect(sel.json().offered).toHaveLength(2);
+      expect(sel.json().waiting).toHaveLength(1);
+      const list = await inject({
+        method: 'GET',
+        url: `/admissions/registrations?cycleId=${cycleId}&status=offered`,
+        headers: h(),
+      });
+      expect(list.json().total).toBe(2);
     });
   });
 });

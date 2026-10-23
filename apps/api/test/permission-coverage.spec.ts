@@ -61,6 +61,7 @@ describe('permission coverage', () => {
     expect(publicRoutes.sort()).toEqual([
       // admission portal v2 (docs/design/39 part 3): sessions and the PoW-gated code are anonymous; the rest
       // run behind AdmissionCandidateGuard with the `adm.` token issued on a verified code
+      'CandidatePortalController.admitCard (public/admission)',
       'CandidatePortalController.code (public/admission)',
       'CandidatePortalController.file (public/admission)',
       'CandidatePortalController.gateways (public/admission)',

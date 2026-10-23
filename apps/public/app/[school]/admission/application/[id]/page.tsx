@@ -8,6 +8,7 @@ import {
   admissionFetch,
   dmy,
   rupees,
+  whenIst,
   type PortalApplication,
 } from '@/lib/admission';
 import { AdmissionApplicationForm } from '@/components/AdmissionApplicationForm';
@@ -130,9 +131,54 @@ export default async function AdmissionApplicationPage({
             {app.category ? <span className="ep-kicker"> · Category {app.category}</span> : null}
           </p>
           {app.status === 'sent_back' ? (
+            <div className="ep-alert ep-alert--warning" role="status">
+              The school asked you to correct the answers marked below
+              {app.correction?.dueOn ? ` by ${dmy(app.correction.dueOn)}` : ''}.
+              {app.correction ? <> Remark: {app.correction.remark}</> : null} Correct them and
+              submit again.
+            </div>
+          ) : null}
+          {app.steps.length ? (
+            <ol className="ep-rs" aria-label="Admission steps" style={{ margin: 'var(--sp-3) 0' }}>
+              {app.steps.map((s, i) => (
+                <li key={s.name} className="ep-rs__step" data-state={s.state}>
+                  <span className="ep-rs__dot" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  <span>
+                    <span className="ep-rs__name">{s.name}</span>{' '}
+                    <span className="ep-kicker">
+                      {s.state === 'done'
+                        ? 'done'
+                        : s.state === 'current'
+                          ? 'in progress'
+                          : s.state === 'rejected'
+                            ? 'closed'
+                            : ''}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {app.slot ? (
+            <div className="ep-alert ep-alert--info" role="status">
+              <strong>{app.slot.stage}</strong>: {whenIst(app.slot.startsAt)} at {app.slot.venue}{' '}
+              (roll no. {app.slot.rollNo}, {app.slot.minutes} minutes). Bring the admit card.{' '}
+              <ViewDownload href={`/api/admission/admit/${app.id}`} what="the admit card" />
+            </div>
+          ) : null}
+          {app.offer ? (
+            <div className="ep-alert ep-alert--success" role="status">
+              {app.candidate ?? 'Your ward'} is offered admission. Pay the admission fee of{' '}
+              <strong>{rupees(app.offer.admissionFee)}</strong>
+              {app.offer.expiresAt ? ` by ${dmy(app.offer.expiresAt)}` : ''} at the school office or
+              here when online payment opens.
+            </div>
+          ) : null}
+          {app.status === 'waitlisted' && app.waitRank ? (
             <p>
-              The school asked you to correct the fields marked below. Correct them and submit
-              again.
+              On the waiting list at number {app.waitRank}. We will write when a seat is offered.
             </p>
           ) : null}
           {app.status === 'draft' ? (

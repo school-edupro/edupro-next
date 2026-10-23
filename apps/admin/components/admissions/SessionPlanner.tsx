@@ -35,6 +35,7 @@ export function SessionPlanner({
   const [lines, setLines] = useState<Line[]>(() => initial.classes.map((c) => ({ ...c })));
   const [fees, setFees] = useState(() => initial.fees);
   const [refund, setRefund] = useState(initial.session.refundDeductionPct);
+  const [offerDays, setOfferDays] = useState(initial.session.offerDays);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
   const className = useMemo(
@@ -48,11 +49,12 @@ export function SessionPlanner({
       categoryId,
       registrationFee: 0,
       admissionFee: 0,
+      seats: null,
     };
   const setFee = (
     classId: string,
     categoryId: string,
-    patch: Partial<{ registrationFee: number; admissionFee: number }>,
+    patch: Partial<{ registrationFee: number; admissionFee: number; seats: number | null }>,
   ) =>
     setFees((cur) => {
       const rest = cur.filter((f) => !(f.classId === classId && f.categoryId === categoryId));
@@ -104,7 +106,7 @@ export function SessionPlanner({
           [
             ['classes', `Classes (${String(lines.length)})`],
             ['fees', 'Fee table'],
-            ['refund', 'Cancellation and refund'],
+            ['refund', 'Offers and refund'],
             ['share', 'Public link, QR and poster'],
           ] as const
         ).map(([k, label]) => (
@@ -335,7 +337,8 @@ export function SessionPlanner({
           <p className="ep-field__help">
             The registration fee is paid with the form; the admission fee after the offer. A
             candidate&rsquo;s category comes from the form&rsquo;s answers and is confirmed at
-            Document check (categories are set in Admission set-up). 0 means no fee.
+            Document check (categories are set in Admission set-up). 0 means no fee. Seats of a
+            category (EWS, for example) cap its offers; blank takes from the class&rsquo;s seats.
           </p>
           {plan.classes.length === 0 ? (
             <p className="ep-field__help">Add the classes first.</p>
@@ -353,7 +356,7 @@ export function SessionPlanner({
                       Class
                     </th>
                     {categories.map((k) => (
-                      <th key={k.id} scope="colgroup" colSpan={2}>
+                      <th key={k.id} scope="colgroup" colSpan={3}>
                         {k.name}
                         {k.isDefault ? <Badge tone="neutral">default</Badge> : null}
                       </th>
@@ -366,6 +369,9 @@ export function SessionPlanner({
                       </th>,
                       <th key={`${k.id}a`} scope="col">
                         Admission
+                      </th>,
+                      <th key={`${k.id}s`} scope="col">
+                        Seats
                       </th>,
                     ])}
                   </tr>
@@ -406,6 +412,23 @@ export function SessionPlanner({
                               }
                             />
                           </td>,
+                          <td key={`${k.id}s`}>
+                            <input
+                              className="ep-input ep-sp__num"
+                              inputMode="numeric"
+                              aria-label={`${c.className}, ${k.name}: seats (blank: from the class seats)`}
+                              disabled={!canEdit}
+                              value={f.seats ?? ''}
+                              onChange={(e) =>
+                                setFee(c.classId, k.id, {
+                                  seats:
+                                    e.target.value === ''
+                                      ? null
+                                      : Number(e.target.value.replace(/\D/g, '')) || 0,
+                                })
+                              }
+                            />
+                          </td>,
                         ];
                       })}
                     </tr>
@@ -438,7 +461,7 @@ export function SessionPlanner({
       ) : null}
 
       {tab === 'refund' ? (
-        <section aria-label="Cancellation and refund" className="ep-sp__refund">
+        <section aria-label="Offers and refund" className="ep-sp__refund">
           <p>
             The <strong>registration fee is not refunded</strong>. When an admission is cancelled
             after the admission fee, the fee is refunded through the fee module&rsquo;s refund
@@ -457,6 +480,21 @@ export function SessionPlanner({
             />
             <span className="ep-field__help">0 = full refund.</span>
           </label>
+          <label className="ep-field">
+            <span className="ep-field__label">Days an admission offer stays open</span>
+            <input
+              className="ep-input ep-sp__num"
+              inputMode="numeric"
+              disabled={!canEdit}
+              value={offerDays}
+              onChange={(e) =>
+                setOfferDays(Math.min(90, Number(e.target.value.replace(/\D/g, '')) || 1))
+              }
+            />
+            <span className="ep-field__help">
+              The admission fee is due within these days; then the offer lapses.
+            </span>
+          </label>
           {canEdit ? (
             <button
               type="button"
@@ -464,7 +502,7 @@ export function SessionPlanner({
               disabled={pending}
               onClick={() =>
                 start(async () => {
-                  const r = await saveSessionRefund(plan.session.id, refund);
+                  const r = await saveSessionRefund(plan.session.id, refund, offerDays);
                   setMsg(
                     r.ok ? { tone: 'success', text: 'Saved.' } : { tone: 'danger', text: r.error },
                   );

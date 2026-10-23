@@ -8,7 +8,9 @@ import { ENV, type Env } from '../../../config/env';
 import { FilesService } from '../../files/files.service';
 import { PaymentsService } from '../../payments/payments.service';
 import { AdmissionCoreService, type AppRow } from '../admission-core.service';
+import { journey, slotOf } from '../process-engine';
 import { publicTenant } from '../public/otp.service';
+import { AdmissionScheduleService } from '../schedule.service';
 import type { AdmissionCandidate } from './candidate-signin.service';
 
 const IMAGE = /^image\/(png|jpeg|webp)$/;
@@ -28,6 +30,7 @@ export class CandidatePortalService {
     private readonly core: AdmissionCoreService,
     private readonly files: FilesService,
     private readonly payments: PaymentsService,
+    private readonly schedule: AdmissionScheduleService,
   ) {}
 
   private t(cand: AdmissionCandidate) {
@@ -204,7 +207,16 @@ export class CandidatePortalService {
       const r = await c.query<{ id: string }>(
         `INSERT INTO applications (school_id, cycle_id, class_id, applicant_id, status, child_first_name, data, form_id, contact_mobile, contact_email, entered_by)
          VALUES (app.current_school_id(), $1, $2, $3, 'draft', '', $8::jsonb, $4, $5, $6, $7) RETURNING id::text`,
-        [cycleId, classId, cand.id, line.form_id, cand.mobile, cand.email, enteredBy, JSON.stringify(start)],
+        [
+          cycleId,
+          classId,
+          cand.id,
+          line.form_id,
+          cand.mobile,
+          cand.email,
+          enteredBy,
+          JSON.stringify(start),
+        ],
       );
       await this.core.event(
         c,
@@ -222,9 +234,60 @@ export class CandidatePortalService {
   }
 
   async get(cand: AdmissionCandidate, id: string) {
-    return this.db.tenant(this.t(cand), async (c) =>
-      this.core.view(c, await this.own(c, cand, id), { maskSecrets: true }),
-    );
+    return this.db.tenant(this.t(cand), async (c) => {
+      const a = await this.own(c, cand, id);
+      const view = await this.core.view(c, a, { maskSecrets: true });
+      // the family sees the steps (names and where it stands), not the office's levels or marks
+      const steps = (await journey(c, id)).map((s) => ({
+        name: s.name,
+        kind: s.kind,
+        state: s.state,
+      }));
+      const extra = await c.query<{
+        offered_at: Date | null;
+        offer_expires_at: Date | null;
+        admission_fee: string | null;
+        wait_rank: number | null;
+      }>(
+        `SELECT offered_at, offer_expires_at, admission_fee::text, wait_rank FROM applications WHERE id = $1`,
+        [id],
+      );
+      const corr = await c.query<{ remark: string; due_on: string | null }>(
+        `SELECT remark, due_on::text FROM admission_corrections WHERE application_id = $1 AND status = 'open' ORDER BY id DESC LIMIT 1`,
+        [id],
+      );
+      const slot = await slotOf(c, id);
+      const x = extra.rows[0]!;
+      return {
+        ...view,
+        steps,
+        slot: slot && ['registered', 'under_review'].includes(a.status) ? slot : null,
+        offer:
+          x.offered_at && a.status === 'offered'
+            ? {
+                expiresAt: x.offer_expires_at?.toISOString() ?? null,
+                admissionFee: Number(x.admission_fee ?? 0),
+              }
+            : null,
+        waitRank: a.status === 'waitlisted' ? x.wait_rank : null,
+        correction: corr.rows[0]
+          ? { remark: corr.rows[0].remark, dueOn: corr.rows[0].due_on }
+          : null,
+      };
+    });
+  }
+
+  /** The admit card of the family's test or interview. */
+  async admitCard(cand: AdmissionCandidate, id: string) {
+    return this.db.tenant(this.t(cand), async (c) => {
+      await this.own(c, cand, id);
+      const out = await this.schedule.admitCardWith(c, id);
+      return {
+        filename: out.filename,
+        contentType: 'application/pdf',
+        base64: out.bytes.toString('base64'),
+      };
+    });
   }
 
   /** A masked ID number sent back as shown means "keep it as it is". */

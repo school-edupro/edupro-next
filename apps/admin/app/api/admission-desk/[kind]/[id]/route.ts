@@ -13,6 +13,8 @@ export async function GET(
   let path: string | null = null;
   if (kind === 'form' && /^\d{1,18}$/.test(id)) path = `/admissions/applications/${id}/pdf`;
   if (kind === 'receipt' && /^\d{1,18}$/.test(id)) path = `/admissions/receipts/${id}/pdf`;
+  if (kind === 'admit' && /^\d{1,18}$/.test(id))
+    path = `/admissions/registrations/${id}/admit-card`;
   const m = /^(\d{1,18})(?::|%3A)(\d{1,18})$/i.exec(id);
   if (kind === 'file' && m) path = `/admissions/applications/${m[1]}/files/${m[2]}`;
   if (!path) return new NextResponse(null, { status: 404 });

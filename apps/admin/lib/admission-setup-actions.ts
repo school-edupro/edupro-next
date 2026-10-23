@@ -69,12 +69,16 @@ export async function saveSessionFees(id: string, fees: SessionPlan['fees']) {
     `/admissions/cycles/${id}`,
   );
 }
-export async function saveSessionRefund(id: string, refundDeductionPct: number) {
+export async function saveSessionRefund(
+  id: string,
+  refundDeductionPct: number,
+  offerDays?: number,
+) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown session' };
   return call<SessionPlan>(
     `/admissions/cycles/${id}/settings`,
     'PUT',
-    { refundDeductionPct },
+    { refundDeductionPct, ...(offerDays ? { offerDays } : {}) },
     `/admissions/cycles/${id}`,
   );
 }

@@ -79,6 +79,8 @@ export const SessionFeesSchema = z.object({
         categoryId: IdSchema,
         registrationFee: z.number().min(0).max(1_000_000),
         admissionFee: z.number().min(0).max(10_000_000),
+        /** seats of the category in the class (none: it takes from the class's seats) */
+        seats: z.number().int().min(0).max(5000).nullable().optional(),
       }),
     )
     .max(800),
@@ -87,5 +89,7 @@ export class SessionFeesDto extends createZodDto(SessionFeesSchema) {}
 
 export const SessionSettingsSchema = z.object({
   refundDeductionPct: z.number().min(0).max(100),
+  /** days an admission offer stays open */
+  offerDays: z.number().int().min(1).max(90).optional(),
 });
 export class SessionSettingsDto extends createZodDto(SessionSettingsSchema) {}

@@ -10855,3 +10855,176 @@ a.ep-pub-foot__item {
 .ep-sp__fees tbody th {
   white-space: nowrap;
 }
+/* ---- admission approval process (docs/design/39, part 4) ---- */
+.ep-pe__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-pe__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--mob-navy-600);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+.ep-pe__flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+}
+.ep-pe__flow li {
+  font-size: var(--fs-small);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  color: var(--text-body);
+}
+.ep-pe__flow li + li::before {
+  content: '→ ';
+  color: var(--text-muted);
+}
+.ep-pe__draft {
+  display: grid;
+  gap: var(--sp-3);
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--sp-3);
+}
+.ep-pe__steps,
+.ep-pe__levels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-pe__step {
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--mob-cyan-600);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-pe__step .ep-as__cathead .ep-select {
+  flex: 1 1 14rem;
+  width: auto;
+}
+.ep-pe__level {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--sp-2);
+  align-items: center;
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--border-default);
+}
+.ep-pe__people {
+  display: grid;
+  gap: var(--sp-1);
+  grid-column: 1 / -1;
+}
+.ep-pe__peoplelist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-1);
+  max-height: 12rem;
+  overflow: auto;
+}
+.ep-rs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-rs__step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: start;
+}
+.ep-rs__dot {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-pill);
+  display: inline-grid;
+  place-items: center;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  border: 2px solid var(--border-strong);
+  color: var(--text-muted);
+  background: var(--surface-card);
+}
+.ep-rs__step[data-state='done'] .ep-rs__dot {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-text);
+  color: var(--status-success-text);
+}
+.ep-rs__step[data-state='current'] .ep-rs__dot {
+  background: var(--mob-navy-600);
+  border-color: var(--mob-navy-600);
+  color: var(--text-inverse);
+}
+.ep-rs__step[data-state='rejected'] .ep-rs__dot {
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-text);
+  color: var(--status-danger-text);
+}
+.ep-rs__name {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+.ep-rs__levels {
+  grid-column: 2;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+  font-size: var(--fs-small);
+  color: var(--text-body);
+}
+.ep-rp {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  align-items: start;
+}
+.ep-rp__act {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-rp__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: end;
+}
+.ep-rp__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-1);
+  max-height: 16rem;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+}
+.ep-rp__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+  font-size: var(--fs-small);
+}

@@ -256,10 +256,11 @@ export class AdmissionSetupService {
       closes_at: Date;
       instructions: string | null;
       refund_deduction_pct: string;
+      offer_days: number;
       year: string;
       year_id: string;
     }>(
-      `SELECT y.id::text, y.code, y.name, y.status::text, y.opens_at, y.closes_at, y.instructions, y.refund_deduction_pct::text,
+      `SELECT y.id::text, y.code, y.name, y.status::text, y.opens_at, y.closes_at, y.instructions, y.refund_deduction_pct::text, y.offer_days,
               ay.name AS year, ay.id::text AS year_id
          FROM admission_cycles y JOIN academic_years ay ON ay.id = y.academic_year_id WHERE y.id = $1 AND y.deleted_at IS NULL`,
       [id],
@@ -301,8 +302,9 @@ export class AdmissionSetupService {
         category_id: string;
         registration_fee: string;
         admission_fee: string;
+        seats: number | null;
       }>(
-        `SELECT class_id::text, category_id::text, registration_fee::text, admission_fee::text FROM admission_fees WHERE cycle_id = $1`,
+        `SELECT class_id::text, category_id::text, registration_fee::text, admission_fee::text, seats FROM admission_fees WHERE cycle_id = $1`,
         [id],
       );
       const classes = await c.query<{ id: string; name: string }>(
@@ -321,6 +323,7 @@ export class AdmissionSetupService {
           closesAt: y.closes_at.toISOString(),
           instructions: y.instructions,
           refundDeductionPct: Number(y.refund_deduction_pct),
+          offerDays: y.offer_days,
           academicYear: y.year,
           url: await this.publicUrl(c, base, y.code),
         },
@@ -345,6 +348,7 @@ export class AdmissionSetupService {
           categoryId: x.category_id,
           registrationFee: Number(x.registration_fee),
           admissionFee: Number(x.admission_fee),
+          seats: x.seats,
         })),
         categories: await this.categoriesWith(c),
         allClasses: classes.rows,
@@ -424,10 +428,18 @@ export class AdmissionSetupService {
             status: 400,
           });
         await c.query(
-          `INSERT INTO admission_fees (school_id, cycle_id, class_id, category_id, registration_fee, admission_fee)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5)
-           ON CONFLICT (cycle_id, class_id, category_id) DO UPDATE SET registration_fee = EXCLUDED.registration_fee, admission_fee = EXCLUDED.admission_fee`,
-          [id, f.classId, f.categoryId, f.registrationFee.toFixed(2), f.admissionFee.toFixed(2)],
+          `INSERT INTO admission_fees (school_id, cycle_id, class_id, category_id, registration_fee, admission_fee, seats)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6)
+           ON CONFLICT (cycle_id, class_id, category_id) DO UPDATE SET registration_fee = EXCLUDED.registration_fee,
+             admission_fee = EXCLUDED.admission_fee, seats = EXCLUDED.seats`,
+          [
+            id,
+            f.classId,
+            f.categoryId,
+            f.registrationFee.toFixed(2),
+            f.admissionFee.toFixed(2),
+            f.seats ?? null,
+          ],
         );
       }
       await this.audit.stage(ctx, c, {
@@ -443,8 +455,9 @@ export class AdmissionSetupService {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       await this.cycleWith(c, id);
       await c.query(
-        `UPDATE admission_cycles SET refund_deduction_pct = $2, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
-        [id, dto.refundDeductionPct],
+        `UPDATE admission_cycles SET refund_deduction_pct = $2, offer_days = COALESCE($3, offer_days), updated_at = now(),
+                updated_by = app.current_user_id() WHERE id = $1`,
+        [id, dto.refundDeductionPct, dto.offerDays ?? null],
       );
     });
   }

@@ -46,6 +46,7 @@ export interface SessionPlan {
     closesAt: string;
     instructions: string | null;
     refundDeductionPct: number;
+    offerDays: number;
     academicYear: string;
     url: string;
   };
@@ -55,6 +56,7 @@ export interface SessionPlan {
     categoryId: string;
     registrationFee: number;
     admissionFee: number;
+    seats: number | null;
   }>;
   categories: FeeCategory[];
   allClasses: Array<{ id: string; name: string }>;

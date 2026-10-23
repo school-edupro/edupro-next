@@ -22,6 +22,7 @@ import { STORAGE_DRIVER } from '../files/storage';
 import { applicationPdf } from '../people/application-pdf';
 import { admissionReceiptPdf, type SchoolHead } from './admission-pdf';
 import { AdmissionFormsService } from './forms.service';
+import { startProcess } from './process-engine';
 import { AdmissionSetupService } from './setup.service';
 
 /** The answers that are ID numbers: kept encrypted in the application (docs/design/39). */
@@ -534,6 +535,8 @@ export class AdmissionCoreService {
       `Registered: ${no.rows[0]!.application_no}`,
       {},
     );
+    // the process of the class starts at once (docs/design/39, part 4)
+    await startProcess(c, appId);
     const after = await this.row(c, appId);
     const attachments: Array<{ fileId: string; name: string }> = [];
     const pdf = await this.storeFormPdf(c, after);

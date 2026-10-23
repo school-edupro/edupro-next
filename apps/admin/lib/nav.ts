@@ -101,6 +101,21 @@ export const NAV: Array<{
         permission: 'admissions.application.enter',
       },
       {
+        href: '/admissions/registrations',
+        label: 'registrations',
+        permission: 'admissions.application.view',
+      },
+      {
+        href: '/admissions/schedule',
+        label: 'admissionSchedule',
+        permission: 'admissions.application.view',
+      },
+      {
+        href: '/admissions/selection',
+        label: 'admissionSelection',
+        permission: 'admissions.application.view',
+      },
+      {
         href: '/admissions/applications',
         label: 'applications',
         permission: 'admissions.application.view',

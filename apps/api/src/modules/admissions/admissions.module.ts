@@ -7,6 +7,9 @@ import { AdmissionFormsController } from './forms.controller';
 import { AdmissionFormsService } from './forms.service';
 import { AdmissionCoreService } from './admission-core.service';
 import { AdmissionDeskController } from './desk.controller';
+import { AdmissionProcessController } from './process.controller';
+import { AdmissionProcessService } from './process.service';
+import { AdmissionScheduleService } from './schedule.service';
 import { AdmissionDeskService } from './desk.service';
 import { AdmissionCandidateGuard } from './portal/candidate.guard';
 import { CandidatePortalController } from './portal/candidate-portal.controller';
@@ -36,6 +39,7 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionFormsController,
     AdmissionSetupController,
     AdmissionDeskController,
+    AdmissionProcessController,
     CandidatePortalController,
     PublicAdmissionsController,
     PublicSchoolController,
@@ -47,6 +51,8 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionSetupService,
     AdmissionCoreService,
     AdmissionDeskService,
+    AdmissionProcessService,
+    AdmissionScheduleService,
     CandidatePortalService,
     CandidateSigninService,
     AdmissionCandidateGuard,

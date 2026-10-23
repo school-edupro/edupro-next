@@ -153,6 +153,13 @@ export class CandidatePortalController {
     return this.portal.file(req.candidate!, fileId);
   }
 
+  @Get('me/applications/:id/admit-card')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  admitCard(@Req() req: CandidateRequest, @Param('id') id: string) {
+    return this.portal.admitCard(req.candidate!, id);
+  }
+
   @Get('me/applications/:id/pdf')
   @Public()
   @UseGuards(AdmissionCandidateGuard)

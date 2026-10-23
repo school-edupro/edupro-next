@@ -93,7 +93,30 @@ export interface PortalApplication {
     status: string;
   }>;
   onlyFields: string[] | null;
+  steps: Array<{ name: string; kind: string; state: 'done' | 'current' | 'waiting' | 'rejected' }>;
+  slot: {
+    stage: string;
+    startsAt: string;
+    minutes: number;
+    venue: string;
+    notes: string | null;
+    rollNo: number;
+  } | null;
+  offer: { expiresAt: string | null; admissionFee: number } | null;
+  waitRank: number | null;
+  correction: { remark: string; dueOn: string | null } | null;
 }
+
+export const whenIst = (iso: string) =>
+  new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(iso));
 
 export const STATUS_TEXT: Record<
   string,

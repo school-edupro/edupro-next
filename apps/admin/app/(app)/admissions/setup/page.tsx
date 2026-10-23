@@ -1,8 +1,10 @@
 import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AdmissionSetupEditor } from '@/components/admissions/AdmissionSetupEditor';
+import { ProcessEditor } from '@/components/admissions/ProcessEditor';
 import { Notice } from '@/components/Notice';
 import type { FormDetail, FormListRow } from '@/lib/admission-forms';
+import type { ProcessSetup } from '@/lib/admission-process';
 import type { AdmissionSetup } from '@/lib/admission-setup';
 import { apiFetch, getMe } from '@/lib/api';
 
@@ -15,9 +17,10 @@ export default async function AdmissionSetupPage({
   const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('admissions.cycle.view')) notFound();
-  const [setup, forms] = await Promise.all([
+  const [setup, forms, process] = await Promise.all([
     apiFetch<AdmissionSetup>('/admissions/setup'),
     apiFetch<{ data: FormListRow[] }>('/admissions/forms'),
+    apiFetch<ProcessSetup>('/admissions/process-setup'),
   ]);
   const details = await Promise.all(
     forms.data
@@ -38,7 +41,7 @@ export default async function AdmissionSetupPage({
       <PageHeader
         kicker="Admissions"
         title="Admission set-up"
-        description="How candidates sign in, the receipt series of registration and admission fees, and the fee categories decided from the form's answers."
+        description="How candidates sign in, the receipt series of registration and admission fees, the fee categories decided from the form's answers, and the stages and approval process each class follows."
       />
       <Notice params={sp} />
       <AdmissionSetupEditor
@@ -46,6 +49,12 @@ export default async function AdmissionSetupPage({
         formFields={[...fields.entries()].map(([key, label]) => ({ key, label }))}
         canEdit={me.permissions.includes('admissions.setup.manage')}
       />
+      <div style={{ marginTop: 'var(--sp-4)' }}>
+        <ProcessEditor
+          setup={process}
+          canEdit={me.permissions.includes('admissions.setup.manage')}
+        />
+      </div>
     </>
   );
 }
