@@ -21,6 +21,7 @@ import { CandidatePortalController } from './portal/candidate-portal.controller'
 import { CandidatePortalService } from './portal/candidate-portal.service';
 import { CandidateSigninService } from './portal/candidate-signin.service';
 import { AdmissionSetupController } from './setup.controller';
+import { AdmissionPointsService } from './points.service';
 import { AdmissionSetupService } from './setup.service';
 import { PaymentsModule } from '../payments/payments.module';
 import { PaymentsService } from '../payments/payments.service';
@@ -56,6 +57,7 @@ import { PublicSchoolService } from './public/public-school.service';
     DecisionsService,
     AdmissionFormsService,
     AdmissionSetupService,
+    AdmissionPointsService,
     AdmissionCoreService,
     AdmissionDeskService,
     AdmissionProcessService,

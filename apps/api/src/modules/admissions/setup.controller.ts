@@ -9,8 +9,10 @@ import {
   FeeCategoriesDto,
   SessionClassesDto,
   SessionFeesDto,
+  SessionPointsDto,
   SessionSettingsDto,
 } from './setup.dto';
+import { AdmissionPointsService } from './points.service';
 import { AdmissionSetupService } from './setup.service';
 
 export const ADMISSION_SETUP = 'admissions.setup.manage';
@@ -22,6 +24,7 @@ export const ADMISSION_SETUP = 'admissions.setup.manage';
 export class AdmissionSetupController {
   constructor(
     private readonly svc: AdmissionSetupService,
+    private readonly points: AdmissionPointsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -87,6 +90,25 @@ export class AdmissionSetupController {
   ) {
     await this.svc.saveSessionSettings(ctx, id, dto);
     return this.svc.plan(ctx, id, this.env.PUBLIC_APP_URL);
+  }
+
+  @Get('cycles/:id/points')
+  @ApiOperation({
+    summary: "The session's merit points: its list, each class's own, and the forms' questions",
+  })
+  @RequirePermission(ADMISSIONS.cycleView)
+  getPoints(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.points.get(ctx, id);
+  }
+
+  @Put('cycles/:id/points')
+  @RequirePermission(ADMISSIONS.cycleManage)
+  savePoints(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SessionPointsDto,
+  ) {
+    return this.points.save(ctx, id, dto);
   }
 
   @Get('cycles/:id/qr')

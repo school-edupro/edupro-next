@@ -18,6 +18,8 @@ const OP: Record<string, string> = {
   not_empty: 'is answered',
   gt: 'is more than',
   lt: 'is less than',
+  gte: 'is at least',
+  lte: 'is at most',
 };
 type Cat = Omit<FeeCategory, 'sortOrder' | 'id'> & { id?: string; key: string };
 

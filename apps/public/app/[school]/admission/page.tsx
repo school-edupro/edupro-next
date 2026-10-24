@@ -275,6 +275,31 @@ export default async function AdmissionPortalPage({
               </tbody>
             </table>
           </div>
+          {s.classes.some((k) => k.points?.length) ? (
+            <details className="ep-adm-points">
+              <summary>Merit points</summary>
+              <p className="ep-kicker">
+                Points come from the form&apos;s answers and are checked with the documents; test
+                and interview marks, where there are any, are added. Equal totals: the older child
+                first, then a draw of lots.
+              </p>
+              {s.classes
+                .filter((k) => k.points?.length)
+                .map((k) => (
+                  <div key={k.id} className="ep-adm-points__class">
+                    <h3 className="ep-kicker">{k.name}</h3>
+                    <ul>
+                      {k.points!.map((p) => (
+                        <li key={p.name}>
+                          {p.name}: <strong>{p.points > 0 ? `${p.points}` : p.points}</strong>{' '}
+                          {Math.abs(p.points) === 1 ? 'point' : 'points'}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+            </details>
+          ) : null}
         </Card>
       ))}
 

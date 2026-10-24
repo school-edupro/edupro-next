@@ -62,3 +62,26 @@ export interface SessionPlan {
   allClasses: Array<{ id: string; name: string }>;
   forms: Array<{ id: string; name: string }>;
 }
+
+/** Merit points of a session (docs/design/40, part 2). */
+export interface PointRule {
+  id?: string;
+  name: string;
+  logic: 'all' | 'any';
+  conditions: AdmissionCondition[];
+  points: number;
+}
+export interface SessionPoints {
+  editable: boolean;
+  session: PointRule[];
+  classes: Array<{
+    classId: string;
+    className: string;
+    formId: string | null;
+    formName: string | null;
+    own: boolean;
+    rules: PointRule[];
+  }>;
+  /** questions of the session's forms, with the forms that ask each */
+  fields: Array<{ key: string; label: string; type: string; values: string[]; forms: string[] }>;
+}

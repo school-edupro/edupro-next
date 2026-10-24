@@ -382,6 +382,76 @@ describe('online admission (e2e)', () => {
       ]);
     });
 
+    it('keeps merit points for the session and a class of its own (docs/design/40)', async () => {
+      const empty = await inject({
+        method: 'GET',
+        url: `/admissions/cycles/${cycleId}/points`,
+        headers: h(),
+      });
+      expect(empty.statusCode).toBe(200);
+      expect(empty.json()).toMatchObject({ editable: true, session: [] });
+      // the questions come from the classes' forms
+      expect(empty.json().fields.map((f: { key: string }) => f.key)).toContain('gender');
+      const sibling = {
+        name: 'Sibling studies here',
+        logic: 'all',
+        conditions: [{ field: 'siblings', op: 'gte', value: '1' }],
+        points: 20,
+      };
+      const girl = {
+        name: 'Girl child',
+        logic: 'all',
+        conditions: [{ field: 'gender', op: 'eq', value: 'Female' }],
+        points: 5,
+      };
+      const saved = await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/points`,
+        headers: h(),
+        json: {
+          session: [sibling, girl],
+          classes: [
+            { classId: classIx, own: false, rules: [] },
+            { classId: classXi, own: true, rules: [{ ...sibling, points: 10 }] },
+          ],
+        },
+      });
+      expect(saved.statusCode).toBe(200);
+      const body = saved.json();
+      expect(body.session.map((r: { name: string }) => r.name)).toEqual([
+        'Sibling studies here',
+        'Girl child',
+      ]);
+      const xi = body.classes.find((k: { classId: string }) => k.classId === classXi);
+      expect(xi).toMatchObject({
+        own: true,
+        rules: [{ name: 'Sibling studies here', points: 10 }],
+      });
+      const ix = body.classes.find((k: { classId: string }) => k.classId === classIx);
+      expect(ix).toMatchObject({ own: false, rules: [] });
+      // 0 points, no condition, a class not in the session, a clerk: refused
+      for (const json of [
+        { session: [{ ...girl, points: 0 }], classes: [] },
+        { session: [{ ...girl, conditions: [] }], classes: [] },
+        { session: [], classes: [{ classId: '999999', own: true, rules: [girl] }] },
+      ]) {
+        const r = await inject({
+          method: 'PUT',
+          url: `/admissions/cycles/${cycleId}/points`,
+          headers: h(),
+          json,
+        });
+        expect(r.statusCode).toBe(400);
+      }
+      const denied = await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/points`,
+        headers: h(clerk),
+        json: { session: [], classes: [] },
+      });
+      expect(denied.statusCode).toBe(403);
+    });
+
     it('serves the public link QR and the A4 poster', async () => {
       const qr = await inject({
         method: 'GET',

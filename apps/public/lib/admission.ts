@@ -39,6 +39,8 @@ export interface PortalClass {
   dobTo: string | null;
   registrationFee: number | null;
   feeFrom: number | null;
+  /** merit points the class goes by (docs/design/40) */
+  points?: Array<{ name: string; points: number }>;
 }
 export interface PortalSession {
   id: string;

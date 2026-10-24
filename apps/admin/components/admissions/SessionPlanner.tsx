@@ -1,13 +1,14 @@
 'use client';
 import { Badge } from '@edupro/ui';
 import { useMemo, useState, useTransition } from 'react';
+import { MeritPoints } from '@/components/admissions/MeritPoints';
 import { VacancyShare } from '@/components/recruitment/VacancyShare';
 import {
   saveSessionClasses,
   saveSessionFees,
   saveSessionRefund,
 } from '@/lib/admission-setup-actions';
-import type { SessionClass, SessionPlan } from '@/lib/admission-setup';
+import type { SessionClass, SessionPlan, SessionPoints } from '@/lib/admission-setup';
 
 type Line = Omit<SessionClass, 'className' | 'formName' | 'applications' | 'registered'> & {
   applications: number;
@@ -24,13 +25,15 @@ const fromLocal = (v: string) => (v ? new Date(`${v}:00+05:30`).toISOString() : 
  */
 export function SessionPlanner({
   plan: initial,
+  points,
   canEdit,
 }: {
   plan: SessionPlan;
+  points: SessionPoints;
   canEdit: boolean;
 }) {
   const [plan, setPlan] = useState(initial);
-  const [tab, setTab] = useState<'classes' | 'fees' | 'share' | 'refund'>('classes');
+  const [tab, setTab] = useState<'classes' | 'fees' | 'points' | 'share' | 'refund'>('classes');
   const [lines, setLines] = useState<Line[]>(() => initial.classes.map((c) => ({ ...c })));
   const [fees, setFees] = useState(() => initial.fees);
   const [refund, setRefund] = useState(initial.session.refundDeductionPct);
@@ -118,6 +121,7 @@ export function SessionPlanner({
           [
             ['classes', `Classes (${String(lines.length)})`],
             ['fees', 'Fee table'],
+            ['points', 'Merit points'],
             ['refund', 'Offers and refund'],
             ['share', 'Public link, QR and poster'],
           ] as const
@@ -489,6 +493,12 @@ export function SessionPlanner({
               </button>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {tab === 'points' ? (
+        <section aria-label="Merit points">
+          <MeritPoints sessionId={plan.session.id} initial={points} canEdit={canEdit} />
         </section>
       ) : null}
 

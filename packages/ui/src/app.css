@@ -10976,6 +10976,140 @@ a.ep-pub-foot__item {
   border-radius: var(--radius-sm);
   font-size: var(--fs-small);
 }
+/* ---- merit points of a session (docs/design/40, part 2) ---- */
+.ep-adm-points {
+  margin-top: var(--sp-4);
+}
+.ep-adm-points > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-adm-points__class ul {
+  margin: var(--sp-1) 0 var(--sp-3);
+  padding-left: var(--sp-5);
+}
+.ep-pts {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.ep-pts__list {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.ep-pts__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-3);
+}
+.ep-pts__head h3 {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.ep-pts__rules {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.ep-pts__ol,
+.ep-pts__classes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-pts__rule,
+.ep-pts__class {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  min-width: 0;
+}
+.ep-pts__rulehead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem auto;
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-pts__rulehead .ep-field,
+.ep-pts__mode,
+.ep-pts__starter {
+  min-width: 0;
+}
+.ep-pts__conds {
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: start;
+}
+.ep-pts__conds .ep-fb__cond {
+  width: 100%;
+}
+/* long question labels must not widen the card: the boxes share the row and wrap */
+.ep-pts__rules,
+.ep-pts__ol,
+.ep-pts__classes,
+.ep-pts__rule,
+.ep-pts__class {
+  grid-template-columns: minmax(0, 1fr);
+}
+.ep-pts__conds {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+}
+.ep-pts__conds > .ep-field__help,
+.ep-pts__conds > .ep-btn,
+.ep-pts__logic {
+  justify-self: start;
+}
+.ep-pts .ep-fb__cond > .ep-select,
+.ep-pts .ep-fb__cond > .ep-input {
+  min-width: 0;
+  max-width: 100%;
+}
+.ep-pts .ep-fb__cond > .ep-select:first-child {
+  flex: 1 1 16rem;
+}
+.ep-pts .ep-fb__cond > .ep-select:nth-child(2) {
+  flex: 0 1 11rem;
+}
+.ep-pts .ep-fb__cond > .ep-input {
+  flex: 1 1 9rem;
+}
+.ep-pts__logic {
+  max-width: 16rem;
+}
+.ep-pts__classhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.ep-pts__mode {
+  flex: 0 1 18rem;
+  margin-left: auto;
+}
+.ep-pts__add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+}
+.ep-pts__starter {
+  flex: 0 1 18rem;
+}
+@media (max-width: 640px) {
+  .ep-pts__rulehead {
+    grid-template-columns: minmax(0, 1fr) 6rem;
+  }
+}
+
 /* ---- admission approval process (docs/design/39, part 4) ---- */
 .ep-pe__list {
   list-style: none;

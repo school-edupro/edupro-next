@@ -81,6 +81,24 @@ export class CandidatePortalService {
           WHERE y.status = 'open' AND y.deleted_at IS NULL AND k.status = 'open'
           ORDER BY y.opens_at, cl.display_order`,
       );
+      // the merit points each class goes by (its own list, or the session's), shown to families
+      const pts = await c.query<{
+        cycle_id: string;
+        class_id: string;
+        name: string;
+        points: string;
+      }>(
+        `SELECT k.cycle_id::text, k.class_id::text, r.name, r.points::text
+           FROM admission_class_criteria k JOIN admission_cycles y ON y.id = k.cycle_id
+           JOIN admission_point_rules r ON r.cycle_id = k.cycle_id
+            AND (CASE WHEN k.own_points THEN r.class_id = k.class_id ELSE r.class_id IS NULL END)
+          WHERE y.status = 'open' AND y.deleted_at IS NULL AND k.status = 'open'
+          ORDER BY r.sort_order, r.id`,
+      );
+      const pointsOf = (cycleId: string, classId: string) =>
+        pts.rows
+          .filter((p) => p.cycle_id === cycleId && p.class_id === classId)
+          .map((p) => ({ name: p.name, points: Number(p.points) }));
       const now = Date.now();
       const sessions = new Map<
         string,
@@ -116,6 +134,7 @@ export class CandidatePortalService {
           dobTo: x.dob_to,
           registrationFee: x.fee_default !== null ? Number(x.fee_default) : null,
           feeFrom: x.fee_min !== null ? Number(x.fee_min) : null,
+          points: pointsOf(x.cycle_id, x.class_id),
         });
         sessions.set(x.cycle_id, sess);
       }

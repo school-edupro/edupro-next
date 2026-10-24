@@ -14,7 +14,7 @@ import { Notice } from '@/components/Notice';
 import { SessionPlanner } from '@/components/admissions/SessionPlanner';
 import { drawCycle, requestCycleApprovals, shortlistCycle } from '@/lib/actions';
 import { updateAdmissionSession } from '@/lib/admission-setup-actions';
-import type { SessionPlan } from '@/lib/admission-setup';
+import type { SessionPlan, SessionPoints } from '@/lib/admission-setup';
 import { apiFetch, getMe } from '@/lib/api';
 import type { AdmissionCycle } from '@/lib/types';
 
@@ -27,13 +27,14 @@ export default async function CyclePage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, a, c, me, cycle, plan] = await Promise.all([
+  const [t, a, c, me, cycle, plan, points] = await Promise.all([
     getTranslations('pages.admissions_cycles'),
     getTranslations('admissions'),
     getTranslations('common'),
     getMe(),
     apiFetch<AdmissionCycle>(`/admissions/cycles/${id}`),
     apiFetch<SessionPlan>(`/admissions/cycles/${id}/plan`),
+    apiFetch<SessionPoints>(`/admissions/cycles/${id}/points`),
   ]);
   const canManage = me.permissions.includes('admissions.cycle.manage');
   const canDecide = me.permissions.includes('admissions.application.review');
@@ -94,7 +95,7 @@ export default async function CyclePage({
         }
       />
       <Notice params={sp} />
-      <SessionPlanner plan={plan} canEdit={canManage} />
+      <SessionPlanner plan={plan} points={points} canEdit={canManage} />
       {canManage ? (
         <Card title="Session details" style={{ marginTop: 'var(--sp-5)' }}>
           <form action={updateAdmissionSession}>

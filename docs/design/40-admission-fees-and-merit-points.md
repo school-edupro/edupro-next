@@ -32,13 +32,13 @@ is audited; the old Applications flow keeps its own scoring untouched.
 
 ## Parts
 
-**Part 1 — Fee tab as class cards.** One card per class: categories as rows in their sort order with the
+**Part 1 — Fee tab as class cards (built 24 Oct 2026).** One card per class: categories as rows in their sort order with the
 default (General) first, each row Registration fee, Admission fee, Seats (blank = from the class's
 seats); "Copy to all classes" on a card; a line "Categories are set in Admission set-up" with a link;
 the total of category seats against the class's seats shown, with a warning when it is more. No
 sideways scroll. Remove the merit section from the New session form (part 2 replaces it).
 
-**Part 2 — Merit points set-up.** Table `admission_point_rules` (session, class or null for all, name,
+**Part 2 — Merit points set-up (built 24 Oct 2026, migration 0240).** Table `admission_point_rules` (session, class or null for all, name,
 logic all/any, conditions on form answers, points, sort, active). New tab **Merit points** on the
 session page: the session's list, and per class "Use the session's points" or "Own points for this
 class" (copied from the session's to start). Each criterion: a name, "when [question] [is / is not /

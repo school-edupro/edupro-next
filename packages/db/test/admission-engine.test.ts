@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ageOn,
   cleanAnswers,
+  conditionsHold,
   defProblems,
   fieldError,
   fieldState,
@@ -267,5 +268,17 @@ describe('admission form engine (docs/design/39)', () => {
       'father',
     );
     expect(right).not.toHaveProperty('f_city');
+  });
+
+  it('compares numbers with at least / at most, and a blank answer is not 0', () => {
+    const near = [{ field: 'distance_km', op: 'lte' as const, value: '3' }];
+    expect(conditionsHold(near, 'all', { distance_km: '2.5' })).toBe(true);
+    expect(conditionsHold(near, 'all', { distance_km: '3' })).toBe(true);
+    expect(conditionsHold(near, 'all', { distance_km: '4' })).toBe(false);
+    expect(conditionsHold(near, 'all', {})).toBe(false);
+    const sib = [{ field: 'siblings', op: 'gte' as const, value: '1' }];
+    expect(conditionsHold(sib, 'all', { siblings: { count: 2, list: [] } })).toBe(true);
+    expect(conditionsHold(sib, 'all', { siblings: { count: 0, list: [] } })).toBe(false);
+    expect(conditionsHold([{ field: 'x', op: 'lt', value: '5' }], 'all', { x: '' })).toBe(false);
   });
 });

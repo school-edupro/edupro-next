@@ -93,3 +93,24 @@ export const SessionSettingsSchema = z.object({
   offerDays: z.number().int().min(1).max(90).optional(),
 });
 export class SessionSettingsDto extends createZodDto(SessionSettingsSchema) {}
+
+// ---- merit points (docs/design/40, part 2) ---------------------------------------------------------
+const PointRule = z.object({
+  name: z.string().trim().min(2).max(80),
+  logic: z.enum(['all', 'any']).default('all'),
+  conditions: z.array(Condition).min(1, 'Add at least one condition').max(10),
+  points: z
+    .number()
+    .min(-1000)
+    .max(1000)
+    .refine((n) => n !== 0, { message: 'Points cannot be 0' }),
+});
+export const SessionPointsSchema = z.object({
+  /** the session's list, used by every class without its own */
+  session: z.array(PointRule).max(40),
+  classes: z
+    .array(z.object({ classId: IdSchema, own: z.boolean(), rules: z.array(PointRule).max(40) }))
+    .max(40),
+});
+export class SessionPointsDto extends createZodDto(SessionPointsSchema) {}
+export type PointRuleInput = z.infer<typeof PointRule>;

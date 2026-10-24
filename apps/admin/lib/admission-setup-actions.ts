@@ -3,7 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { AdmissionSettings, FeeCategory, SessionPlan } from './admission-setup';
+import type {
+  AdmissionSettings,
+  FeeCategory,
+  PointRule,
+  SessionPlan,
+  SessionPoints,
+} from './admission-setup';
 
 type Out<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -66,6 +72,27 @@ export async function saveSessionFees(id: string, fees: SessionPlan['fees']) {
     `/admissions/cycles/${id}/fees`,
     'PUT',
     { fees },
+    `/admissions/cycles/${id}`,
+  );
+}
+/** The session's merit points: its list, and each class on the session's list or its own. */
+export async function saveSessionPoints(
+  id: string,
+  body: {
+    session: PointRule[];
+    classes: Array<{ classId: string; own: boolean; rules: PointRule[] }>;
+  },
+) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown session' };
+  const clean = (l: PointRule[]) =>
+    l.map(({ name, logic, conditions, points }) => ({ name, logic, conditions, points }));
+  return call<SessionPoints>(
+    `/admissions/cycles/${id}/points`,
+    'PUT',
+    {
+      session: clean(body.session),
+      classes: body.classes.map((k) => ({ ...k, rules: clean(k.rules) })),
+    },
     `/admissions/cycles/${id}`,
   );
 }

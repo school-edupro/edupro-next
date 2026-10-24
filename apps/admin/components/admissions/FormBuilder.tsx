@@ -69,6 +69,8 @@ const OP_LABEL: Record<string, string> = {
   not_empty: 'is answered',
   gt: 'is more than',
   lt: 'is less than',
+  gte: 'is at least',
+  lte: 'is at most',
 };
 const ACTION_LABEL: Record<AdmissionRule['action'], string> = {
   show: 'Show only when',

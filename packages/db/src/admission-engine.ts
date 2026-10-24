@@ -61,7 +61,18 @@ export const OPTION_SOURCES = [
 ] as const;
 export type OptionSource = (typeof OPTION_SOURCES)[number];
 
-export const RULE_OPS = ['eq', 'neq', 'in', 'not_in', 'empty', 'not_empty', 'gt', 'lt'] as const;
+export const RULE_OPS = [
+  'eq',
+  'neq',
+  'in',
+  'not_in',
+  'empty',
+  'not_empty',
+  'gt',
+  'lt',
+  'gte',
+  'lte',
+] as const;
 export type RuleOp = (typeof RULE_OPS)[number];
 
 export interface AdmissionCondition {
@@ -217,6 +228,8 @@ const text = (v: AdmissionAnswer | undefined): string => {
   return String(v);
 };
 
+const num = (x: string) => x !== '' && Number.isFinite(Number(x));
+
 function holds(c: AdmissionCondition, v: AdmissionAnswer | undefined): boolean {
   const have = text(v).trim().toLowerCase();
   const wants = (c.value ?? '')
@@ -238,10 +251,15 @@ function holds(c: AdmissionCondition, v: AdmissionAnswer | undefined): boolean {
       return isEmptyAnswer(v);
     case 'not_empty':
       return !isEmptyAnswer(v);
+    // comparisons need a number on both sides: a blank answer is not 0
     case 'gt':
-      return Number(have) > Number(want);
+      return num(have) && num(want) && Number(have) > Number(want);
     case 'lt':
-      return Number(have) < Number(want);
+      return num(have) && num(want) && Number(have) < Number(want);
+    case 'gte':
+      return num(have) && num(want) && Number(have) >= Number(want);
+    case 'lte':
+      return num(have) && num(want) && Number(have) <= Number(want);
     default:
       return false;
   }
