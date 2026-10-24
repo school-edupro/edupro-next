@@ -6,6 +6,7 @@ import {
   cleanAnswers,
   fieldError,
   fieldState,
+  liveAnswers,
   formProgress,
   LAYOUT_TYPES,
   visibleSteps,
@@ -125,6 +126,8 @@ export function AdmissionFormFill({
   const [uploading, setUploading] = useState<string | null>(null);
 
   const steps = useMemo(() => visibleSteps(def, answers), [def, answers]);
+  // what decides what shows: answers left in fields now hidden do not count
+  const live = useMemo(() => liveAnswers(def, answers), [def, answers]);
   const idx = Math.max(
     0,
     steps.findIndex((s) => s.key === stepKey),
@@ -679,7 +682,7 @@ export function AdmissionFormFill({
   };
 
   const renderField = (f: AdmissionField) => {
-    const st = fieldState(f, answers);
+    const st = fieldState(f, live);
     if (!st.shown) return null;
     if (f.type === 'heading')
       return (
@@ -777,7 +780,7 @@ export function AdmissionFormFill({
                     !LAYOUT_TYPES.includes(f.type) &&
                     f.type !== 'agree' &&
                     f.type !== 'address_same' &&
-                    fieldState(f, answers).shown,
+                    fieldState(f, live).shown,
                 )
                 .map((f) => {
                   const shown =

@@ -288,10 +288,27 @@ export function fieldState(
   return { shown, required: shown && required };
 }
 
+/**
+ * The answers that count: an answer left in a field that is now hidden is dropped, again and again
+ * until nothing changes, so it cannot keep showing the fields that hang on it (a father's "alumnus: Yes"
+ * once the mother is the single parent).
+ */
+export function liveAnswers(def: AdmissionFormDef, answers: AdmissionAnswers): AdmissionAnswers {
+  let cur = answers;
+  for (let pass = 0; pass < def.fields.length + 1; pass++) {
+    const gone = def.fields.filter((f) => f.key in cur && !fieldState(f, cur).shown);
+    if (!gone.length) break;
+    cur = { ...cur };
+    for (const f of gone) delete cur[f.key];
+  }
+  return cur;
+}
+
 /** Steps that have at least one field shown. */
 export function visibleSteps(def: AdmissionFormDef, answers: AdmissionAnswers): AdmissionStep[] {
+  const live = liveAnswers(def, answers);
   return def.steps.filter((s) =>
-    def.fields.some((f) => f.step === s.key && fieldState(f, answers).shown),
+    def.fields.some((f) => f.step === s.key && fieldState(f, live).shown),
   );
 }
 
@@ -520,9 +537,10 @@ export function formErrors(
   step?: string,
 ): Record<string, string> {
   const out: Record<string, string> = {};
+  const live = liveAnswers(def, answers);
   for (const f of def.fields) {
     if (step && f.step !== step) continue;
-    const e = fieldError(f, answers, def.settings, optionsOf(f, answers));
+    const e = fieldError(f, live, def.settings, optionsOf(f, live));
     if (e) out[f.key] = e;
   }
   return out;
@@ -532,8 +550,9 @@ export function formErrors(
 export function formProgress(def: AdmissionFormDef, answers: AdmissionAnswers): number {
   let need = 0;
   let have = 0;
+  const live = liveAnswers(def, answers);
   for (const f of def.fields) {
-    const st = fieldState(f, answers);
+    const st = fieldState(f, live);
     if (!st.required) continue;
     need += 1;
     if (!isEmptyAnswer(answers[f.key])) have += 1;
@@ -544,9 +563,10 @@ export function formProgress(def: AdmissionFormDef, answers: AdmissionAnswers): 
 /** Every answer shown, worked out and cleaned: hidden fields drop, capitals applied, age filled. */
 export function cleanAnswers(def: AdmissionFormDef, answers: AdmissionAnswers): AdmissionAnswers {
   const out: AdmissionAnswers = {};
+  const live = liveAnswers(def, answers);
   for (const f of def.fields) {
     if (LAYOUT_TYPES.includes(f.type)) continue;
-    if (!fieldState(f, answers).shown) continue;
+    if (!fieldState(f, live).shown) continue;
     let v = answers[f.key];
     if (f.fixedValue) v = f.fixedValue;
     if (f.type === 'age') {

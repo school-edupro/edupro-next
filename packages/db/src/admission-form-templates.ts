@@ -15,11 +15,11 @@ const PARENT = (
 ): AdmissionField[] => {
   const P = p === 'father' ? 'Father' : 'Mother';
   const single = p === 'father' ? 'Mother Only' : 'Father Only';
-  // required unless the other parent is the single parent
+  // hidden (and so not asked) when the other parent is the single parent; the tab goes with them
   const req = [
     {
       logic: 'all' as const,
-      action: 'optional' as const,
+      action: 'hide' as const,
       conditions: [{ field: 'single_parent', op: 'eq' as const, value: single }],
     },
   ];
@@ -609,7 +609,7 @@ export const GENERAL_ADMISSION_FORM: AdmissionFormDef = {
       rules: [
         {
           logic: 'all',
-          action: 'optional',
+          action: 'hide',
           conditions: [{ field: 'single_parent', op: 'eq', value: 'Mother Only' }],
         },
       ],
@@ -626,7 +626,7 @@ export const GENERAL_ADMISSION_FORM: AdmissionFormDef = {
       rules: [
         {
           logic: 'all',
-          action: 'optional',
+          action: 'hide',
           conditions: [{ field: 'single_parent', op: 'eq', value: 'Father Only' }],
         },
       ],

@@ -38,9 +38,22 @@ describe('admission form engine (docs/design/39)', () => {
 
   it('single parent, staff child, special needs and alumni drive the fields', () => {
     const a: AdmissionAnswers = { single_parent: 'Mother Only' };
-    expect(fieldState(field(G, 'father_name'), a).required).toBe(false);
+    // the other parent is not asked at all: their fields, their photo and their tab go
+    expect(fieldState(field(G, 'father_name'), a)).toEqual({ shown: false, required: false });
     expect(fieldState(field(G, 'mother_name'), a).required).toBe(true);
-    expect(fieldState(field(G, 'father_photo'), a).required).toBe(false);
+    expect(fieldState(field(G, 'father_photo'), a)).toEqual({ shown: false, required: false });
+    expect(fieldState(field(G, 'mother_photo'), a)).toEqual({ shown: true, required: true });
+    expect(visibleSteps(G, a).map((s) => s.key)).not.toContain('father');
+    expect(visibleSteps(G, { single_parent: 'Father Only' }).map((s) => s.key)).not.toContain(
+      'mother',
+    );
+    // a "Yes" left in the father's alumnus field does not bring his tab back
+    const left: AdmissionAnswers = { single_parent: 'Mother Only', father_alumnus: 'Yes' };
+    expect(visibleSteps(G, left).map((s) => s.key)).not.toContain('father');
+    expect(cleanAnswers(G, left)).not.toHaveProperty('father_alumnus');
+    expect(visibleSteps(G, {}).map((s) => s.key)).toEqual(
+      expect.arrayContaining(['father', 'mother']),
+    );
     expect(fieldState(field(G, 'father_staff_school'), {}).shown).toBe(false);
     expect(fieldState(field(G, 'father_staff_school'), { staff_child: 'Both' }).shown).toBe(true);
     expect(fieldState(field(G, 'mother_staff_school'), { staff_child: 'Father' }).shown).toBe(
