@@ -10996,6 +10996,11 @@ a.ep-pub-foot__item {
 .ep-sel__head .ep-as__h {
   margin: 0;
 }
+.ep-desk-dup {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
 .ep-rpts {
   display: grid;
   gap: var(--sp-3);

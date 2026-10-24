@@ -187,6 +187,7 @@ export default async function DeskRegistrationPage({
           answers={app.answers}
           files={app.files}
           readOnly={!editing || !me.permissions.includes('admissions.application.enter')}
+          canAllowDuplicate={me.permissions.includes('admissions.setup.manage')}
         />
       </Card>
     </>

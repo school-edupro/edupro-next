@@ -24,7 +24,11 @@ export const DeskStepSchema = z.object({
 });
 export class DeskStepDto extends createZodDto(DeskStepSchema) {}
 
-export const DeskSubmitSchema = z.object({ answers: Answers });
+export const DeskSubmitSchema = z.object({
+  answers: Answers,
+  /** an admin lets a second registration of the same child in the year through, with the reason (docs/design/41) */
+  duplicateReason: z.string().trim().min(5).max(300).optional(),
+});
 export class DeskSubmitDto extends createZodDto(DeskSubmitSchema) {}
 
 export const DeskFeeSchema = z.object({

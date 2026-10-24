@@ -799,6 +799,85 @@ describe('online admission (e2e)', () => {
       });
       expect(Buffer.from(pdf.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
     });
+
+    it('keeps one live registration per child per year; an admin may let a second one through at the desk (docs/design/41)', async () => {
+      // the family tries Asha again (a second form) in the same year
+      const start = await inject({
+        method: 'POST',
+        url: '/public/admission/me/applications',
+        headers: pub(tokenA),
+        json: { cycleId, classId: classMini },
+      });
+      expect(start.statusCode).toBe(201);
+      const again = start.json().id as string;
+      const same = await inject({
+        method: 'POST',
+        url: `/public/admission/me/applications/${again}/submit`,
+        headers: pub(tokenA),
+        json: { answers: answers() },
+      });
+      expect(same.statusCode).toBe(409);
+      expect(same.json().type).toMatch(/duplicate_child/);
+      expect(same.json().detail).toMatch(/already has registration .* this year/);
+      // another first name, the same Aadhaar: still the same child
+      const byAadhaar = await inject({
+        method: 'POST',
+        url: `/public/admission/me/applications/${again}/submit`,
+        headers: pub(tokenA),
+        json: { answers: answers({ first_name: 'Tara' }) },
+      });
+      expect(byAadhaar.statusCode).toBe(409);
+      // the refused form stays a draft
+      const still = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${again}`,
+        headers: pub(tokenA),
+      });
+      expect(still.json().status).toBe('draft');
+      // at the desk: refused, a clerk cannot override, an admin can with a reason
+      const walkIn = await inject({
+        method: 'POST',
+        url: '/admissions/desk/applications',
+        headers: h(clerk),
+        json: { cycleId, classId: classMini, mobile: '9876500012' },
+      });
+      const id = walkIn.json().id as string;
+      const desk = (headers: Record<string, string>, extra: Record<string, unknown> = {}) =>
+        inject({
+          method: 'POST',
+          url: `/admissions/applications/${id}/form/submit`,
+          headers,
+          json: { answers: answers({ sms_mobile: '9876500012' }), ...extra },
+        });
+      expect((await desk(h())).statusCode).toBe(409);
+      expect(
+        (
+          await desk(h(clerk), {
+            duplicateReason: 'Second form kept on the written request of the parents',
+          })
+        ).statusCode,
+      ).toBe(403);
+      const ok = await desk(h(), {
+        duplicateReason: 'Second form kept on the written request of the parents',
+      });
+      expect(ok.statusCode).toBe(201);
+      const hist = await inject({
+        method: 'GET',
+        url: `/admissions/registrations/${id}`,
+        headers: h(),
+      });
+      expect(
+        hist
+          .json()
+          .events.some((e: { note: string | null }) =>
+            /let through by the office/.test(e.note ?? ''),
+          ),
+      ).toBe(true);
+      // withdrawn again so the later steps see one live registration of Asha
+      await withMigrator((c) =>
+        c.query(`UPDATE applications SET status = 'withdrawn' WHERE id = $1`, [id]),
+      );
+    });
   });
   describe('part 4: approval process', () => {
     let stages: Array<{ id: string; name: string; kind: string }>;

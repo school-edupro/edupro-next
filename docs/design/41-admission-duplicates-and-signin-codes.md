@@ -36,7 +36,7 @@ existing Aadhaar "possible duplicate" flag stays for near matches (name spelt di
 
 ## Parts
 
-**Part 1 — One live registration per child per year.** On submit (portal, desk, a corrected form) the
+**Part 1 — One live registration per child per year (built 24 Oct 2026).** On submit (portal, desk, a corrected form) the
 child is matched against the session's academic year: the same first name (ignoring case and spaces) and
 date of birth, or the same Aadhaar. A match stops the submit with "ASHA VERMA already has registration
 APP/ADM-2027-28/00013 for Class I this year", naming the class and status. At the desk an admin may

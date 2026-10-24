@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import type { AdmissionAnswers } from '@edupro/ui';
 import { ApiError, apiFetch } from './api';
 
-type Result = { ok: boolean; errors?: Record<string, string>; message?: string };
+type Result = { ok: boolean; errors?: Record<string, string>; message?: string; type?: string };
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 
@@ -19,6 +19,7 @@ function fail(e: unknown): Result {
           ? (errors as Record<string, string>)
           : undefined,
       message: e.problem.detail ?? e.problem.type,
+      type: e.problem.type,
     };
   }
   throw e;
@@ -77,12 +78,16 @@ export async function saveDeskStep(
   }
 }
 
-export async function submitDeskForm(id: string, answers: AdmissionAnswers): Promise<Result> {
+export async function submitDeskForm(
+  id: string,
+  answers: AdmissionAnswers,
+  duplicateReason?: string,
+): Promise<Result> {
   if (!okId(id)) return { ok: false, message: 'Unknown form' };
   try {
     await apiFetch(`/admissions/applications/${id}/form/submit`, {
       method: 'POST',
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, ...(duplicateReason ? { duplicateReason } : {}) }),
     });
     revalidatePath(`/admissions/desk/${id}`);
     return { ok: true };

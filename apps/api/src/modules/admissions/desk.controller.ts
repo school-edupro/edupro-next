@@ -55,7 +55,7 @@ export class AdmissionDeskController {
   @Post('applications/:id/form/submit')
   @RequirePermission(ADMISSION_ENTER)
   submit(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: DeskSubmitDto) {
-    return this.desk.submit(ctx, id, dto.answers as AdmissionAnswers);
+    return this.desk.submit(ctx, id, dto.answers as AdmissionAnswers, dto.duplicateReason);
   }
 
   @Post('applications/:id/form/slot')

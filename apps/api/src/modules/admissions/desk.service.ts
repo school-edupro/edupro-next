@@ -129,7 +129,18 @@ export class AdmissionDeskService {
     });
   }
 
-  async submit(ctx: RequestContext, id: string, answers: AdmissionAnswers) {
+  async submit(
+    ctx: RequestContext,
+    id: string,
+    answers: AdmissionAnswers,
+    duplicateReason?: string,
+  ) {
+    if (duplicateReason && !ctx.permissions?.has('admissions.setup.manage'))
+      throw new DomainError(
+        'permission-denied',
+        'Only an admission admin can register the same child twice in a year',
+        { status: 403 },
+      );
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
       const a = await this.core.row(c, id);
       const masked = Object.fromEntries(
@@ -137,7 +148,10 @@ export class AdmissionDeskService {
           ([, v]) => !(typeof v === 'string' && /^X{4}-X{4}-\w{4}$/.test(v)),
         ),
       );
-      return this.core.submit(c, a, masked, { actorUser: ctx.user.id });
+      return this.core.submit(c, a, masked, {
+        actorUser: ctx.user.id,
+        allowDuplicate: duplicateReason ?? null,
+      });
     });
     if (Object.keys(out.errors).length)
       throw new DomainError('validation-failed', 'Some answers need attention', {

@@ -38,6 +38,20 @@ const isSecret = (f: AdmissionField) =>
   SECRET_PRESETS.has(f.preset ?? '') || SECRET_MAPS.has(f.maps ?? '');
 const ENC = 'enc:';
 
+/** A registration's status as a family reads it (duplicate messages). */
+const STATUS_WORDS: Record<string, string> = {
+  submitted: 'form submitted, fee due',
+  registered: 'registered',
+  under_review: 'under review',
+  sent_back: 'sent back for correction',
+  shortlisted: 'shortlisted',
+  selected: 'selected',
+  waitlisted: 'on the waiting list',
+  offered: 'offered admission',
+  fee_paid: 'admission fee paid',
+  admitted: 'admitted',
+};
+
 export interface AppRow {
   id: string;
   cycle_id: string;
@@ -417,6 +431,8 @@ export class AdmissionCoreService {
     if (!changes.length)
       return { errors: { _: 'Nothing differs from the application' }, changed: [] };
     await this.writeData(c, a, def, clean, formProgress(def, clean));
+    // a corrected name, birth date or Aadhaar must not make the child's second registration of the year
+    await this.guardSameChild(c, await this.row(c, a.id), {});
     for (const x of changes)
       await c.query(
         `INSERT INTO application_answer_changes (school_id, application_id, field_key, label, old_value, new_value, reason, changed_by)
@@ -444,12 +460,109 @@ export class AdmissionCoreService {
     return { errors: {}, changed: changes.map((x) => ({ key: x.key, label: x.label })) };
   }
 
+  /**
+   * Another live registration of the same child in the same academic year (docs/design/41): the same
+   * first name (case, spaces and dots ignored) and date of birth, or the same Aadhaar, in any class of
+   * any session of that year. Drafts, cancelled, withdrawn and rejected registrations do not count.
+   */
+  async sameChild(
+    c: PoolClient,
+    a: AppRow,
+  ): Promise<{
+    id: string;
+    number: string | null;
+    candidate: string | null;
+    className: string;
+    status: string;
+  } | null> {
+    const def = await this.defOf(c, a);
+    const data = this.plainData(def, a.data);
+    const name = (v: string | null) => (v ?? '').toLowerCase().replace(/[^a-z]/g, '');
+    const first = name(a.child_first_name);
+    const dob = a.child_dob;
+    const aadhaarField = def.fields.find((f) => f.preset === 'aadhaar' || f.maps === 'aadhaar_no');
+    const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+    const aadhaar = aadhaarField ? digits(data[aadhaarField.key]) : '';
+    if (!(first && dob) && aadhaar.length !== 12) return null;
+    const others = await c.query<{
+      id: string;
+      number: string | null;
+      candidate: string | null;
+      class_name: string;
+      status: string;
+      first: string | null;
+      dob: string | null;
+      data: Record<string, unknown>;
+    }>(
+      `SELECT x.id::text, x.application_no AS number, x.candidate_name AS candidate, cl.name AS class_name,
+              x.status::text, x.child_first_name AS first, x.child_dob::text AS dob, x.data
+         FROM applications x JOIN admission_cycles y ON y.id = x.cycle_id JOIN classes cl ON cl.id = x.class_id
+        WHERE y.academic_year_id = $1 AND y.deleted_at IS NULL AND x.id <> $2
+          AND x.status::text NOT IN ('draft', 'cancelled', 'withdrawn', 'rejected')
+        ORDER BY x.id`,
+      [a.year_id, a.id],
+    );
+    const hit = others.rows.find((o) => {
+      if (first && dob && name(o.first) === first && o.dob === dob) return true;
+      if (aadhaar.length !== 12) return false;
+      // the ID numbers kept encrypted: any answer of the other form that holds the same Aadhaar
+      return Object.values(o.data ?? {}).some((v) => {
+        const plain =
+          typeof v === 'string' && v.startsWith(ENC) ? decryptField(v.slice(ENC.length)) : v;
+        return typeof plain === 'string' && digits(plain) === aadhaar;
+      });
+    });
+    return hit
+      ? {
+          id: hit.id,
+          number: hit.number,
+          candidate: hit.candidate,
+          className: hit.class_name,
+          status: hit.status,
+        }
+      : null;
+  }
+
+  /** Stops a second live registration of the same child in the year, unless an admin lets it through. */
+  private async guardSameChild(
+    c: PoolClient,
+    a: AppRow,
+    opts: {
+      allowDuplicate?: string | null;
+      actorUser?: string | null;
+      actorApplicant?: string | null;
+    },
+  ): Promise<string | null> {
+    const dup = await this.sameChild(c, a);
+    if (!dup) return null;
+    if (!opts.allowDuplicate)
+      throw new DomainError(
+        'admissions.duplicate_child',
+        `${dup.candidate ?? a.candidate_name ?? 'This child'} already has ${dup.number ? `registration ${dup.number}` : 'a submitted form'} for ${dup.className} this year (${STATUS_WORDS[dup.status] ?? dup.status}). A child can hold one registration per academic year: contact the school to change the class.`,
+        { status: 409, extra: { duplicate: dup } },
+      );
+    await this.event(
+      c,
+      a.id,
+      a.status,
+      a.status,
+      `Second registration of the same child let through by the office (${dup.number ?? dup.id}, ${dup.className}): ${opts.allowDuplicate}`,
+      opts,
+    );
+    return dup.id;
+  }
+
   /** Every answer checked; the category and the registration fee; registered at once when there is no fee. */
   async submit(
     c: PoolClient,
     a: AppRow,
     answers: AdmissionAnswers,
-    opts: { actorUser?: string | null; actorApplicant?: string | null },
+    opts: {
+      actorUser?: string | null;
+      actorApplicant?: string | null;
+      /** the office's reason for letting a second registration of the same child through (admins only) */
+      allowDuplicate?: string | null;
+    },
   ): Promise<{ errors: Record<string, string>; fee: number; registered: boolean }> {
     if (!['draft', 'submitted', 'sent_back'].includes(a.status))
       throw new DomainError('admissions.locked', 'This form is already submitted', { status: 409 });
@@ -458,6 +571,8 @@ export class AdmissionCoreService {
     const fresh = await this.row(c, a.id);
     const def = await this.defOf(c, fresh);
     const data = this.plainData(def, fresh.data);
+    // one live registration per child per academic year (docs/design/41)
+    const allowedDup = await this.guardSameChild(c, fresh, opts);
     if (fresh.status === 'sent_back') {
       // a correction goes back to the approver who asked for it (part 4)
       await c.query(
@@ -511,7 +626,7 @@ export class AdmissionCoreService {
         fresh.class_id,
         cat?.id ?? null,
         fee.toFixed(2),
-        dup,
+        dup ?? allowedDup,
       ],
     );
     await this.event(
