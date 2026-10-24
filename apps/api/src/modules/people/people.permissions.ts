@@ -11,6 +11,8 @@ export const PEOPLE = {
   classCorrect: 'people.class.correct',
   /** Ask to merge a duplicate student record (0235). */
   studentMerge: 'people.student.merge',
+  /** Ask to cancel an admission with the fee settled (0236). */
+  admissionCancel: 'people.admission.cancel',
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',

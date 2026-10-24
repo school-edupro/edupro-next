@@ -15,7 +15,7 @@ number once given is never reused: when it changes, the old one is retired and s
 | 2 | Wrong admission number | Already built: change with a reason, history kept (`POST students/:id/admission-no`) | Done |
 | 3 | Wrong class / section (e.g. VII instead of VI) | **Move the enrolment from the admission date** (marks and attendance follow); unpaid demands **re-made at the new class's rates**; money already paid kept as **credit** (excess refundable on request) | Part 2 — built 24 Oct |
 | 4 | Same child admitted twice | **Merge into one record, with approval**: fees, receipts, attendance, marks, library, documents, guardians, transport, hostel moved to the record kept; the other admission number retired and searchable; cannot be undone | Part 3 — built 24 Oct |
-| 5 | Admitted by mistake | **Cancel the admission with settlement, with approval**: unpaid demands cancelled; paid fees to refund (or kept as the school decides); attendance and marks kept but left out of reports; student and parent logins stopped; record shown "Admission cancelled" | Part 4 |
+| 5 | Admitted by mistake | **Cancel the admission with settlement, with approval**: unpaid demands cancelled; paid fees to refund (or kept as the school decides); attendance and marks kept but left out of reports; student and parent logins stopped; record shown "Admission cancelled" | Part 4 — built 24 Oct |
 
 ## Parts
 1. **Detail corrections**: approval set-up (levels on the workflow engine: role / designation / named
@@ -115,3 +115,28 @@ Every step is audited; every approval uses the school's own levels (set-up page 
 - API: `GET people/student-merges/setup`, `POST people/student-merges/preview`, `POST people/student-merges`,
   `POST people/student-merges/:id/withdraw`, `GET people/students/:id/merges`. Tests:
   `student-merges.e2e-spec.ts` (5 cases).
+
+## Part 4 as built (24 Oct 2026)
+- Migration 0236: enrolment status `cancelled`; `student_withdrawals.kind` (`withdrawal` /
+  `admission_cancelled`); `admission_cancellations` (settlement refund / retain, the preview kept with
+  the request, the result, the withdrawal it made); the right `people.admission.cancel` (admins,
+  academic coordinator).
+- **Cancel admission** on the student page (Status & certificates tab): what was paid is refunded or the
+  school keeps it, **See what changes** (the year's fee before and after, unpaid cancelled, refunds or
+  money kept, the admission fee of an online admission, logins that stop), the reason, **Send for
+  approval** (workflow `admission_cancellation`, principal at one level by default). A banner "Admission
+  cancelled" shows on the student page once done.
+- On approval, in one transaction, it is a completed withdrawal of kind `admission_cancelled` (the shared
+  fee settlement and lists): the enrolment ends as `cancelled` (strength, attendance and result reports
+  count active enrolments, so it is left out; marks and attendance stay on the record), the pupil is
+  inactive and the pupil's login stops; parents' logins stop unless another child of theirs studies
+  here; a hostel bed is given up; every month's unpaid fee is cancelled; refund: what was paid (and any
+  advance) is raised as refunds for the refund approvers (fee lines cancelled when paid back); retain:
+  the school keeps it. An online admission's registration is cancelled and, on refund, its admission fee
+  goes to Admission fee refunds less the session's deduction. The admission number stays with the record
+  and is never given again. Such a withdrawal is not revoked and gets no TC.
+- The registration page no longer cancels an admitted candidate: it links to Cancel admission on the
+  student page. Before Admit it cancels as before.
+- API: `GET people/admission-cancellations/setup`, `GET|POST people/students/:id/admission-cancellations`,
+  `POST …/preview`, `POST …/:cid/withdraw`. Tests: `admission-cancellations.e2e-spec.ts` (4), admission-v2
+  part 6 now cancels through it.

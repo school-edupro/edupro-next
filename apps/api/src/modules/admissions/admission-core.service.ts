@@ -993,6 +993,8 @@ export class AdmissionCoreService {
       })),
       onlyFields: a.status === 'sent_back' ? await this.correctionFields(c, a.id) : null,
       admissionNo: a.admission_no,
+      // the pupil made at Admit (corrections and cancellation then happen on the student page)
+      studentId: a.student_id ?? null,
       admissionFeeDue:
         a.status === 'offered' && Number(a.admission_fee ?? 0) > 0 ? Number(a.admission_fee) : 0,
       offerExpiresAt: a.offer_expires_at?.toISOString() ?? null,

@@ -443,6 +443,7 @@ export const MERGE_RULES: MergeRule[] = [
   { table: 'school_transfers', col: 'from_student_id', area: 'admissions', how: 'move' },
   { table: 'school_transfers', col: 'to_student_id', area: 'admissions', how: 'move' },
   { table: 'student_withdrawals', col: 'student_id', area: 'admissions', how: 'move' },
+  { table: 'admission_cancellations', col: 'student_id', area: 'admissions', how: 'move' },
   { table: 'visitor_log', col: 'student_id', area: 'other', how: 'move' },
   {
     table: 'user_school_memberships',
@@ -482,6 +483,10 @@ export const MERGE_BLOCKERS: Array<{ sql: string; why: string }> = [
   {
     sql: `SELECT 1 FROM student_withdrawals WHERE student_id = $2 AND status IN ('requested', 'cleared')`,
     why: 'The duplicate has a withdrawal in progress',
+  },
+  {
+    sql: `SELECT 1 FROM admission_cancellations WHERE student_id = $2 AND status = 'pending'`,
+    why: 'The duplicate has an admission cancellation waiting for approval',
   },
   {
     sql: `SELECT 1 FROM hostel_withdrawals WHERE student_id = $2 AND status IN ('requested', 'cleared')`,

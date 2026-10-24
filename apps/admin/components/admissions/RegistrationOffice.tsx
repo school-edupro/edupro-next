@@ -23,9 +23,12 @@ export function RegistrationOffice({
   canCollect,
   canAdmit,
   canCancel,
+  studentId,
 }: {
   id: string;
   status: string;
+  /** The pupil made at Admit: the admission is then cancelled on the student page. */
+  studentId?: string | null;
   admissionFee: number;
   sections: Array<{ id: string; name: string; capacity: number | null; enrolled: number }>;
   refund: { paid: number; pct: number; deduction: number; amount: number } | null;
@@ -180,14 +183,24 @@ export function RegistrationOffice({
         </section>
       ) : null}
 
-      {canCancel && !['cancelled', 'withdrawn', 'draft'].includes(status) ? (
+      {status === 'admitted' && studentId ? (
+        <p style={{ margin: 0 }}>
+          Admitted: to cancel, use{' '}
+          <a
+            href={`/people/students/${studentId}?tab=status`}
+            style={{ textDecoration: 'underline' }}
+          >
+            Cancel admission on the student page
+          </a>{' '}
+          (with approval; the school fee and the admission fee are settled there).
+        </p>
+      ) : canCancel && !['cancelled', 'withdrawn', 'draft'].includes(status) ? (
         askCancel ? (
           <section className="ep-rp__act" aria-label="Cancel">
             <p style={{ margin: 0 }}>
               {refund
                 ? `The admission fee of ${rupees(refund.paid)} is refunded less ${String(refund.pct)}% (${rupees(refund.deduction)}): ${rupees(refund.amount)}, after the refund approvers agree.`
                 : 'The registration fee is not refunded.'}
-              {status === 'admitted' ? ' The pupil is withdrawn from the class-section.' : ''}
             </p>
             <label className="ep-field">
               <span className="ep-field__label">Reason</span>

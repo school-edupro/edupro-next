@@ -32,7 +32,14 @@ export async function settleWithdrawalFees(
   workflow: WorkflowService,
   c: PoolClient,
   ctx: RequestContext,
-  w: { id: string; studentId: string; leavingOn: string; yearId: string },
+  w: {
+    id: string;
+    studentId: string;
+    leavingOn: string;
+    yearId: string;
+    /** What the refunds say (a cancelled admission); "Withdrawal: leaving on …" by default. */
+    label?: string;
+  },
   /**
    * false at completion: the bill is only cut to the leaving month. The refund is raised later, when
    * the accounts office has printed the provisional bill, met the parent and presses "send for approval".
@@ -129,7 +136,7 @@ export async function settleWithdrawalFees(
             (SELECT display_name FROM students WHERE id = $1) AS name`,
     [w.studentId, w.yearId],
   );
-  const reason = `Withdrawal: leaving on ${w.leavingOn.split('-').reverse().join('-')}`;
+  const reason = w.label ?? `Withdrawal: leaving on ${w.leavingOn.split('-').reverse().join('-')}`;
   const batch = await c.query<{ id: string }>(`SELECT gen_random_uuid()::text AS id`);
   const ids: string[] = [];
   let total = 0;
@@ -196,7 +203,7 @@ export async function settleWithdrawalFees(
         ctx,
         { code: 'fee_refund', name: 'Fee refund' },
         ids[0]!,
-        `Refund on withdrawal: ${opening.rows[0]?.name ?? ''}: Rs. ${total.toFixed(2)} (${ids.length} line${ids.length === 1 ? '' : 's'})`,
+        `Refund on ${w.label ? 'cancelled admission' : 'withdrawal'}: ${opening.rows[0]?.name ?? ''}: Rs. ${total.toFixed(2)} (${ids.length} line${ids.length === 1 ? '' : 's'})`,
         { kind: 'withdrawal', withdrawalId: w.id, reason },
       );
       if (instanceId) {

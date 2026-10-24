@@ -26,6 +26,7 @@ import {
   type ClassCorrectionItem,
   type ClassCorrectionSetup,
 } from '@/components/ClassCorrection';
+import { AdmissionCancel, type CancelItem, type CancelSetup } from '@/components/AdmissionCancel';
 import { StudentMerge, type MergeItem, type MergeSetup } from '@/components/StudentMerge';
 import {
   StudentCorrections,
@@ -200,6 +201,16 @@ export default async function StudentPage({
             .catch(() => [] as CorrectionItem[]),
         ])
       : [null, [] as CorrectionItem[]];
+  // admission cancellations (part 4): the card on the Status tab, the banner everywhere
+  const [cancelSetup, cancellations] = await Promise.all([
+    tab === 'status'
+      ? apiFetch<CancelSetup>('/people/admission-cancellations/setup').catch(() => null)
+      : Promise.resolve(null),
+    apiFetch<{ data: CancelItem[] }>(`/people/students/${id}/admission-cancellations`)
+      .then((r) => r.data)
+      .catch(() => [] as CancelItem[]),
+  ]);
+  const cancelled = cancellations.find((x) => x.status === 'applied');
   // merges of duplicate records (part 3) on the Status tab
   const [mergeSetup, merges] =
     tab === 'status'
@@ -262,6 +273,19 @@ export default async function StudentPage({
         />
       ) : null}
       <Notice params={sp} />
+      {cancelled ? (
+        <div
+          className="ep-alert ep-alert--danger"
+          role="status"
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          <strong>Admission cancelled</strong>
+          {cancelled.decidedAt
+            ? ` on ${new Date(cancelled.decidedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}`
+            : ''}
+          : {cancelled.reason}
+        </div>
+      ) : null}
       {tab === 'overview' && profile && catalogue ? (
         <StudentOverview
           student={student}
@@ -565,6 +589,19 @@ export default async function StudentPage({
               setup={classSetup}
               history={classHistory}
               canRequest={can('people.class.correct')}
+              canSetUp={can('workflow.definition.manage')}
+            />
+          </Card>
+        ) : null}
+
+        {tab === 'status' && cancelSetup ? (
+          <Card title="Cancel admission">
+            <AdmissionCancel
+              studentId={student.id}
+              active={student.status === 'active' && Boolean(student.enrolment)}
+              setup={cancelSetup}
+              history={cancellations}
+              canRequest={can('people.admission.cancel')}
               canSetUp={can('workflow.definition.manage')}
             />
           </Card>

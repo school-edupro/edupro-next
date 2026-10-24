@@ -244,6 +244,7 @@ export default async function RegistrationPage({
             canCollect={can('admissions.fee.collect')}
             canAdmit={can('admissions.application.admit')}
             canCancel={can('admissions.application.cancel')}
+            studentId={r.studentId}
           />
         </Card>
       </div>

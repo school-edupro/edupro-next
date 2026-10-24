@@ -65,6 +65,8 @@ export interface RegistrationForm {
   }>;
   onlyFields: string[] | null;
   admissionNo: string | null;
+  /** The pupil made at Admit. */
+  studentId?: string | null;
   admissionFeeDue: number;
   offerExpiresAt: string | null;
   hasAdmissionForm: boolean;

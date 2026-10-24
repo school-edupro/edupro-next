@@ -45,7 +45,8 @@ on the school's site, `/<school>/admission`; the office works in the **Admission
    over the sections"); the pupil, parents, documents and photos go to the student master and the parents
    are told to use the parent app.
 8. **Cancel** from the registration page: before the admission fee nothing is refunded; after it a refund
-   less the session's deduction waits in **Admission fee refunds** for the refund approvers.
+   less the session's deduction waits in **Admission fee refunds** for the refund approvers. Once admitted,
+   the admission is cancelled on the student page (see below).
 
 ## Reports
 
@@ -81,3 +82,8 @@ the admission ledger), **Enquiries → Conversion report**, and the **Report bui
   Find the other record, choose which one stays and **See what changes** (both side by side, what moves,
   what both hold and the fee after). Once approved, everything moves to the record kept and the other is
   closed; its admission number still finds the pupil. This cannot be undone.
+- **Admitted by mistake**: student page → Status & certificates → **Cancel admission**. Choose whether
+  what was paid is refunded or kept by the school and **See what changes**. Once approved the pupil
+  leaves the class (out of strength, attendance and result reports), unpaid fee is cancelled, refunds go
+  to the refund approvers, and the pupil's and parents' logins stop (a parent with another child here
+  keeps theirs). The registration page sends you here once a candidate is admitted.

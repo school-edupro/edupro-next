@@ -1260,6 +1260,15 @@ export class WithdrawalsService {
     const w = await this.get(ctx, id);
     if (w.status === 'cancelled')
       throw new DomainError('withdrawal.not_open', 'The withdrawal was cancelled', { status: 409 });
+    const kind = await this.db.tenant(requireTenant(ctx), (c) =>
+      c.query<{ kind: string }>(`SELECT kind FROM student_withdrawals WHERE id = $1`, [id]),
+    );
+    if (kind.rows[0]?.kind === 'admission_cancelled')
+      throw new DomainError(
+        'withdrawal.admission_cancelled',
+        'No transfer certificate for a cancelled admission',
+        { status: 409 },
+      );
     if (w.tc)
       throw new DomainError('tc.already_issued', `TC ${w.tc.tcNo} is already issued`, {
         status: 409,
@@ -1662,8 +1671,9 @@ export class WithdrawalsService {
         tc: boolean;
         name: string;
         leaving_on: string;
+        kind: string;
       }>(
-        `SELECT w.status::text, w.revoke_status, y.status::text AS year_status, w.leaving_on::text,
+        `SELECT w.status::text, w.revoke_status, y.status::text AS year_status, w.leaving_on::text, w.kind,
                 EXISTS (SELECT 1 FROM transfer_certificates t WHERE t.id = w.tc_id AND t.status = 'issued') AS tc,
                 (SELECT display_name FROM students WHERE id = w.student_id) AS name
            FROM student_withdrawals w LEFT JOIN academic_years y ON y.id = w.academic_year_id WHERE w.id = $1 FOR UPDATE OF w`,
@@ -1671,6 +1681,12 @@ export class WithdrawalsService {
       );
       const row = w.rows[0];
       if (!row) throw new DomainError('not-found', 'Withdrawal not found');
+      if (row.kind === 'admission_cancelled')
+        throw new DomainError(
+          'withdrawal.admission_cancelled',
+          'A cancelled admission is not revoked: admit the child afresh if it is needed',
+          { status: 409 },
+        );
       if (row.status !== 'completed')
         throw new DomainError(
           'withdrawal.not_completed',

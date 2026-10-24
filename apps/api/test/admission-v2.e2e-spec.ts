@@ -1355,21 +1355,49 @@ describe('online admission (e2e)', () => {
         json: { reason: 'Family moved' },
       });
       expect(denied.statusCode).toBe(403);
-      const cancel = await inject({
+      // admitted: the registration page sends the office to Cancel admission on the student page
+      const here = await inject({
         method: 'POST',
         url: `/admissions/registrations/${appA}/cancel`,
         headers: h(),
         json: { reason: 'Family moved city' },
       });
+      expect(here.statusCode).toBe(409);
+      expect(here.json().detail).toMatch(/Cancel admission on the student page/);
+      const sid = await withMigrator(
+        async (c) =>
+          (
+            await c.query<{ id: string }>(
+              `SELECT student_id::text AS id FROM applications WHERE id = $1`,
+              [appA],
+            )
+          ).rows[0]!.id,
+      );
+      const cancel = await inject({
+        method: 'POST',
+        url: `/people/students/${sid}/admission-cancellations`,
+        headers: h(),
+        json: { settlement: 'refund', reason: 'Family moved city' },
+      });
       expect(cancel.statusCode).toBe(201);
-      expect(cancel.json().refund).toMatchObject({ amount: 18000 });
+      expect(cancel.json().preview.admissionFee).toMatchObject({ paid: 20000, refund: 18000 });
+      const inbox = await inject({ method: 'GET', url: '/workflow/inbox', headers: h() });
+      const step = (
+        inbox.json().data as Array<{ id: string; instance: { entityType: string } }>
+      ).find((x) => x.instance.entityType === 'admission_cancellation')!;
+      await inject({
+        method: 'POST',
+        url: `/workflow/steps/${step.id}/approve`,
+        headers: h(),
+        json: {},
+      });
       const enrol = await withMigrator((c) =>
         c.query<{ status: string }>(
           `SELECT e.status::text FROM enrolments e JOIN applications a ON a.student_id = e.student_id WHERE a.id = $1`,
           [appA],
         ),
       );
-      expect(enrol.rows[0]!.status).toBe('withdrawn');
+      expect(enrol.rows[0]!.status).toBe('cancelled');
       const refunds = await inject({
         method: 'GET',
         url: '/admissions/refunds?status=requested',

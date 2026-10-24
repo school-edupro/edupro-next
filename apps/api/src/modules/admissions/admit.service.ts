@@ -710,6 +710,13 @@ export class AdmissionAdmitService {
       const a = await this.core.row(c, id);
       if (['cancelled', 'withdrawn'].includes(a.status))
         throw new DomainError('admissions.cancelled', 'Already cancelled', { status: 409 });
+      // once a pupil, the admission is cancelled on the student page: approval, the school fee settled
+      if (a.status === 'admitted' && a.student_id)
+        throw new DomainError(
+          'admissions.cancel_on_student_page',
+          'The candidate is admitted: use Cancel admission on the student page (with approval; the school fee is settled there)',
+          { status: 409 },
+        );
       if (!BEFORE_FEE.includes(a.status) && !['fee_paid', 'admitted'].includes(a.status))
         throw new DomainError(
           'admissions.cannot_cancel',
@@ -735,21 +742,6 @@ export class AdmissionAdmitService {
             ],
           );
           refund = { id: r.rows[0]!.id, amount: plan.amount };
-        }
-        if (a.status === 'admitted' && a.student_id) {
-          // the pupil admitted from this registration leaves before joining
-          const y = await c.query<{ year_id: string }>(
-            `SELECT academic_year_id::text AS year_id FROM admission_cycles WHERE id = $1`,
-            [a.cycle_id],
-          );
-          await c.query(
-            `UPDATE enrolments SET status = 'withdrawn', updated_at = now() WHERE student_id = $1 AND academic_year_id = $2 AND status = 'active'`,
-            [a.student_id, y.rows[0]!.year_id],
-          );
-          await c.query(
-            `UPDATE students SET status = 'inactive', updated_at = now() WHERE id = $1`,
-            [a.student_id],
-          );
         }
       }
       await c.query(

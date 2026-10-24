@@ -237,3 +237,72 @@ export async function withdrawMerge(id: string, studentId: string): Promise<Out>
     return problem(e);
   }
 }
+
+export interface CancelOutcome {
+  student: {
+    id: string;
+    name: string;
+    admissionNo: string;
+    classSection: string;
+    admittedOn: string | null;
+  };
+  settlement: 'refund' | 'retain';
+  fee: {
+    before: { charged: number; paid: number; due: number };
+    after: { charged: number; paid: number; due: number };
+    cancelled: number;
+    refunds: number;
+    refundTotal: number;
+    retained: number;
+  };
+  admissionFee: { paid: number; deduction: number; refund: number } | null;
+  logins: { student: boolean; parents: number };
+  hostelBed: boolean;
+}
+
+export async function previewAdmissionCancel(
+  studentId: string,
+  settlement: 'refund' | 'retain',
+): Promise<Out<CancelOutcome>> {
+  if (!okId(studentId)) return { ok: false, error: 'Unknown student' };
+  try {
+    const data = await apiFetch<CancelOutcome>(
+      `/people/students/${studentId}/admission-cancellations/preview`,
+      { method: 'POST', body: JSON.stringify({ settlement }) },
+    );
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function requestAdmissionCancel(
+  studentId: string,
+  body: { settlement: 'refund' | 'retain'; reason: string },
+): Promise<Out> {
+  if (!okId(studentId)) return { ok: false, error: 'Unknown student' };
+  try {
+    const data = await apiFetch(`/people/students/${studentId}/admission-cancellations`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/people/students/${studentId}`);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function withdrawAdmissionCancel(studentId: string, id: string): Promise<Out> {
+  if (!okId(studentId) || !okId(id)) return { ok: false, error: 'Unknown request' };
+  try {
+    const data = await apiFetch(
+      `/people/students/${studentId}/admission-cancellations/${id}/withdraw`,
+      { method: 'POST', body: JSON.stringify({}) },
+    );
+    revalidatePath(`/people/students/${studentId}`);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
