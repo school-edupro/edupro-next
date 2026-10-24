@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { SchoolFrame } from '@/components/SchoolFrame';
 import { schoolProfile } from '@/lib/school';
 
 export async function generateMetadata({
@@ -12,13 +11,10 @@ export async function generateMetadata({
   return s ? { title: { default: s.name, template: `%s · ${s.name}` } } : {};
 }
 
-/** Every page of a school (admissions, careers, appointments, visitors, consent, passes) in its frame. */
-export default async function SchoolLayout({
-  params,
-  children,
-}: {
-  params: Promise<{ school: string }>;
-  children: ReactNode;
-}) {
-  return <SchoolFrame school={await schoolProfile((await params).school)}>{children}</SchoolFrame>;
+/**
+ * A school's pages: the website ones (careers, appointments, visitors, consent, passes) sit in the
+ * school's frame through `(site)/layout.tsx`; the admission portal brings its own (docs/design/42).
+ */
+export default function SchoolLayout({ children }: { children: ReactNode }) {
+  return children;
 }

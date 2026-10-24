@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { t, type Lang } from '@/lib/i18n';
 
 const RESEND_AFTER = 30;
 
@@ -8,7 +9,16 @@ const RESEND_AFTER = 30;
  * registration number; a six-digit code goes to the family's mobile and email by the ways the school
  * chose. The browser solves a proof-of-work challenge first; the token lives in an HttpOnly cookie.
  */
-export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo: string }) {
+export function AdmissionSignIn({
+  school,
+  returnTo,
+  lang = 'en',
+}: {
+  school: string;
+  returnTo: string;
+  lang?: Lang;
+}) {
+  const w = (en: string) => t(lang, en);
   const [identifier, setIdentifier] = useState('');
   const [code, setCode] = useState('');
   const [stage, setStage] = useState<'who' | 'code'>('who');
@@ -42,12 +52,12 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
   async function requestCode() {
     setError(null);
     if (identifier.trim().length < 4)
-      return setError('Enter your mobile number, email or registration number.');
-    setBusy('Checking your browser…');
+      return setError(w('Enter your mobile number, email or registration number.'));
+    setBusy(w('Checking your browser…'));
     try {
       const ch = await fetch('/api/challenge', { method: 'POST' }).then((r) => r.json());
       const nonce = await solve(ch.challenge, ch.difficulty);
-      setBusy('Sending the code…');
+      setBusy(w('Sending the code…'));
       const res = await fetch('/api/admission/code', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -80,7 +90,7 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
 
   async function verify() {
     setError(null);
-    setBusy('Signing in…');
+    setBusy(w('Signing in…'));
     try {
       const res = await fetch('/api/admission/verify', {
         method: 'POST',
@@ -101,7 +111,9 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
       {stage === 'who' ? (
         <>
           <label className="ep-field">
-            <span className="ep-field__label">Mobile number, email or registration number</span>
+            <span className="ep-field__label">
+              {w('Mobile number, email or registration number')}
+            </span>
             <input
               className="ep-input"
               autoComplete="username"
@@ -113,7 +125,7 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
               }}
             />
             <span className="ep-field__help">
-              New here? Use the mobile number or email you want the school to write to.
+              {w('New here? Use the mobile number or email you want the school to write to.')}
             </span>
           </label>
           <button
@@ -122,24 +134,25 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
             onClick={() => void requestCode()}
             disabled={busy !== null}
           >
-            {busy ?? 'Send code'}
+            {busy ?? w('Send code')}
           </button>
         </>
       ) : (
         <>
           <p style={{ margin: 0 }}>
-            We sent a 6-digit code to <strong>{sentTo.join(' and ') || 'you'}</strong>. It works for{' '}
-            {minutes} minutes.
+            {w('We sent a 6-digit code to')}{' '}
+            <strong>{sentTo.join(` ${w('and')} `) || w('you')}</strong>. {w('It works for')}{' '}
+            {minutes} {w('minutes')}.
             {devCode ? <span className="ep-kicker"> Development code: {devCode}</span> : null}
           </p>
           {screenCode ? (
             <div className="ep-alert ep-alert--warning" role="status">
-              The school is testing its messages: your code is{' '}
+              {w('The school is testing its messages: your code is')}{' '}
               <strong className="ep-adm-code">{screenCode}</strong>
             </div>
           ) : null}
           <label className="ep-field">
-            <span className="ep-field__label">Code</span>
+            <span className="ep-field__label">{w('Code')}</span>
             <input
               className="ep-input"
               inputMode="numeric"
@@ -158,7 +171,7 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
               onClick={() => void verify()}
               disabled={busy !== null || code.length !== 6}
             >
-              {busy ?? 'Sign in'}
+              {busy ?? w('Sign in')}
             </button>
             <button
               type="button"
@@ -166,13 +179,15 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
               onClick={() => setStage('who')}
               disabled={busy !== null}
             >
-              Change
+              {w('Change')}
             </button>
           </div>
           <div className="ep-field__help">
-            No code? Mail can take a minute; look in the spam folder too.{' '}
+            {w('No code? Mail can take a minute; look in the spam folder too.')}{' '}
             {wait > 0 ? (
-              <span>You can ask for a new code in {wait} s.</span>
+              <span>
+                {w('You can ask for a new code in')} {wait} s.
+              </span>
             ) : (
               <button
                 type="button"
@@ -180,7 +195,7 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
                 onClick={() => void requestCode()}
                 disabled={busy !== null}
               >
-                Send a new code
+                {w('Send a new code')}
               </button>
             )}
           </div>

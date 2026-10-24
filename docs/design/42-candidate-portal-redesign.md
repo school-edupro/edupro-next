@@ -33,7 +33,7 @@ as built); the school website pages (careers, appointments, consent…) keep the
 
 ## Parts
 
-**Part 1 — Shell and sign-in.** The admission pages leave the website frame for their own layout: signed
+**Part 1 — Shell and sign-in (built 24 Oct 2026).** The admission pages leave the website frame for their own layout: signed
 out, a centred card (school logo and name, "Admission portal", mobile / email / registration no., code)
 with the open sessions below (classes with dates, date of birth window, fee, merit points, instructions,
 Enquire); signed in, the shell (sidebar with the menu above, top bar with school + session, messages with

@@ -186,3 +186,38 @@ test('every public page carries the school', async ({ page }) => {
     await expect(page, path).toHaveTitle(/Alpha Public School/);
   }
 });
+
+// the admission portal (docs/design/42, part 1): the sign-in card with the open classes, then the
+// portal's own shell after the development code, desktop and phone
+for (const width of [1280, 375]) {
+  test(`admission portal sign-in and shell @${width}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: 900 });
+    const problems: string[] = [];
+    const check = async (label: string) => {
+      await page.waitForTimeout(400);
+      const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      for (const v of r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical'))
+        problems.push(`${label}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+    };
+    await page.goto(`${BASE}/api/lang?to=en&back=%2Falpha%2Fadmission`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Admission portal');
+    await expect(page.getByRole('heading', { name: 'Open for registration' })).toBeVisible();
+    await check('signed out');
+    await page
+      .getByLabel('Mobile number, email or registration number')
+      .fill(`90000${String(Date.now()).slice(-5)}`);
+    await page.getByRole('button', { name: 'Send code' }).click();
+    const dev = page.getByText(/Development code: \d{6}/i);
+    await expect(dev).toBeVisible({ timeout: 60_000 });
+    const code = /(\d{6})/.exec((await dev.textContent()) ?? '')![1]!;
+    await page.getByLabel('Code', { exact: true }).fill(code);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.locator('.ep-shell')).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByRole('navigation', { name: width > 800 ? 'Main menu' : 'Quick menu' }),
+    ).toBeVisible();
+    await check('signed in');
+    expect(problems).toEqual([]);
+  });
+}

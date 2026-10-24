@@ -11052,6 +11052,110 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+/* the admission portal signed out: the sign-in card, then the open classes (docs/design/42) */
+.ep-adm-land {
+  display: grid;
+  gap: var(--sp-6);
+  padding: var(--sp-4) 0 var(--sp-6);
+}
+.ep-adm-signin {
+  width: min(100%, 28rem);
+  margin: 0 auto;
+  padding: var(--sp-6);
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-adm-signin__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ep-adm-signin .ep-page-title {
+  margin: 0;
+}
+.ep-adm-signin__lead {
+  margin: 0;
+  color: var(--text-muted);
+}
+.ep-adm-signin__foot {
+  margin: 0;
+}
+.ep-adm-open {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-adm-open__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+  text-align: center;
+}
+.ep-adm-open__none {
+  margin: 0;
+  padding: var(--sp-5);
+  text-align: center;
+}
+.ep-adm-session {
+  padding: var(--sp-5);
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-adm-session h3 {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-h4);
+}
+.ep-adm-session .ep-kicker {
+  margin: 0;
+}
+.ep-adm-classes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--sp-3);
+}
+.ep-adm-class {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  justify-items: start;
+  padding: var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+.ep-adm-class__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+.ep-adm-class dl {
+  margin: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-adm-class dt {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}
+.ep-adm-class dd {
+  margin: 0;
+  color: var(--text-body);
+  font-size: var(--fs-small);
+}
+.ep-adm-more > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-adm-apply {
+  scroll-margin-top: var(--sp-6);
+}
 .ep-adm-pass {
   display: flex;
   flex-wrap: wrap;

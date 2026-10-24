@@ -5,7 +5,7 @@ import {
   removeCareerFile,
   resendCareer,
   saveCareerStep,
-} from '@/app/[school]/careers/form/actions';
+} from '@/app/[school]/(site)/careers/form/actions';
 import {
   INPUT,
   applies,
