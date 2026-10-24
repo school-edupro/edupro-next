@@ -85,3 +85,11 @@ export interface SessionPoints {
   /** questions of the session's forms, with the forms that ask each */
   fields: Array<{ key: string; label: string; type: string; values: string[]; forms: string[] }>;
 }
+
+/** A registration's merit points as the office sees them (docs/design/40, part 3). */
+export interface RegistrationPoints {
+  total: number;
+  lines: Array<{ name: string; max: number; auto: number; points: number; reason?: string | null }>;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+}

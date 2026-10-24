@@ -122,6 +122,29 @@ export default async function AdmissionApplicationPage({
               ))}
             </ol>
           ) : null}
+          {app.points ? (
+            <div className="ep-adm-points">
+              <p style={{ margin: 0 }}>
+                <strong>Merit points from the form: {app.points.total}</strong>{' '}
+                <span className="ep-kicker">
+                  {app.points.confirmed
+                    ? 'checked by the school'
+                    : 'to be checked with the documents'}
+                </span>
+              </p>
+              {app.points.lines.length ? (
+                <ul className="ep-adm-points__lines">
+                  {app.points.lines.map((l) => (
+                    <li key={l.name}>
+                      {l.name}: {l.points}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="ep-kicker">No criterion of this class gave points.</p>
+              )}
+            </div>
+          ) : null}
           {app.slot ? (
             <div className="ep-alert ep-alert--info" role="status">
               <strong>{app.slot.stage}</strong>: {whenIst(app.slot.startsAt)} at {app.slot.venue}{' '}

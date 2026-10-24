@@ -4,10 +4,12 @@ import { ApplicationCorrect, type AnswerChange } from '@/components/admissions/A
 import { DeskForm } from '@/components/admissions/DeskForm';
 import { RegistrationActions } from '@/components/admissions/RegistrationActions';
 import { RegistrationOffice } from '@/components/admissions/RegistrationOffice';
+import { RegistrationPointsCheck } from '@/components/admissions/RegistrationPointsCheck';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { Notice } from '@/components/Notice';
 import { REG_STATUS, dmy, rupees, type RegistrationForm } from '@/lib/admission-desk';
 import { whenIst, type JourneyStep, type SlotInfo } from '@/lib/admission-process';
+import type { RegistrationPoints } from '@/lib/admission-setup';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 
 interface Detail extends RegistrationForm {
@@ -32,6 +34,7 @@ interface Detail extends RegistrationForm {
   categoryId: string | null;
   categories: Array<{ id: string; name: string }>;
   merit: number | null;
+  points: RegistrationPoints | null;
   waitRank: number | null;
   offer: { offeredAt: string; expiresAt: string | null; admissionFee: number } | null;
   slot: SlotInfo | null;
@@ -248,6 +251,20 @@ export default async function RegistrationPage({
           />
         </Card>
       </div>
+      {r.points ? (
+        <Card elevated title="Merit points" style={{ marginBottom: 'var(--sp-4)' }}>
+          <RegistrationPointsCheck
+            key={`${r.points.total}-${r.points.confirmedAt ?? ''}`}
+            id={r.id}
+            initial={r.points}
+            merit={r.merit}
+            canEdit={
+              can('admissions.application.review') &&
+              !['draft', 'admitted', 'cancelled', 'withdrawn'].includes(r.status)
+            }
+          />
+        </Card>
+      ) : null}
       <div className="ep-rp">
         <Card elevated title="Documents">
           <div className="ep-table-wrap">

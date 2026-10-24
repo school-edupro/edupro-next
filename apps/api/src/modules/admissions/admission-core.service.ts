@@ -11,7 +11,10 @@ import {
   formProgress,
   LAYOUT_TYPES,
   linkCityStates,
+  liveAnswers,
   matchCategory,
+  pointsTotal,
+  workPoints,
   type AdmissionAnswers,
   type AdmissionField,
   type AdmissionFormDef,
@@ -24,7 +27,8 @@ import { applicationPdf } from '../people/application-pdf';
 import { admissionReceiptPdf, type SchoolHead } from './admission-pdf';
 import { AdmissionFormsService } from './forms.service';
 import { convertEnquiry } from './enquiry-engine';
-import { startProcess } from './process-engine';
+import { classPointRules } from './points-rules';
+import { refreshMerit, startProcess } from './process-engine';
 import { AdmissionSetupService } from './setup.service';
 
 /** The answers that are ID numbers: kept encrypted in the application (docs/design/39). */
@@ -332,6 +336,37 @@ export class AdmissionCoreService {
    * sent change, each is checked, and every change is kept with its old and new value. Files, photos,
    * the signature and the declaration stay the family's (Send back asks them).
    */
+  /**
+   * The form points of an application worked out again from its answers and its class's criteria
+   * (docs/design/40), and its merit with them. Left alone once the office has confirmed the points.
+   */
+  async refreshPoints(c: PoolClient, appId: string): Promise<void> {
+    const r = await c.query<{
+      cycle_id: string;
+      class_id: string;
+      status: string;
+      confirmed: boolean;
+    }>(
+      `SELECT cycle_id::text, class_id::text, status::text, points_confirmed_at IS NOT NULL AS confirmed
+         FROM applications WHERE id = $1`,
+      [appId],
+    );
+    const x = r.rows[0];
+    if (!x || x.confirmed || x.status === 'draft') return;
+    const rules = await classPointRules(c, x.cycle_id, x.class_id);
+    let lines: ReturnType<typeof workPoints> | null = null;
+    if (rules.length) {
+      const fresh = await this.row(c, appId);
+      const def = await this.defOf(c, fresh);
+      lines = workPoints(rules, liveAnswers(def, this.plainData(def, fresh.data)));
+    }
+    await c.query(
+      `UPDATE applications SET form_points = $2, points_breakdown = $3::jsonb WHERE id = $1`,
+      [appId, lines ? pointsTotal(lines).toFixed(2) : null, lines ? JSON.stringify(lines) : null],
+    );
+    await refreshMerit(c, appId);
+  }
+
   async officeCorrect(
     c: PoolClient,
     a: AppRow,
@@ -397,6 +432,7 @@ export class AdmissionCoreService {
         `Corrected by the office: ${changes.map((x) => x.label).join(', ')}`.slice(0, 500),
       ],
     );
+    await this.refreshPoints(c, a.id);
     // the forms kept for emails and downloads are made again with the corrected answers
     const fresh = await this.row(c, a.id);
     if (fresh.pdf_file_id) await this.storeFormPdf(c, fresh);
@@ -440,6 +476,7 @@ export class AdmissionCoreService {
         'Corrections sent back by the family',
         opts,
       );
+      await this.refreshPoints(c, a.id);
       return { errors: {}, fee: 0, registered: true };
     }
     const categories = await this.setup.categoriesWith(c, true);
@@ -485,6 +522,7 @@ export class AdmissionCoreService {
       `Form submitted${cat ? ` · category ${cat.name}` : ''}`,
       opts,
     );
+    await this.refreshPoints(c, a.id);
     if (fee <= 0) {
       await this.register(c, a.id, null);
       return { errors: {}, fee, registered: true };

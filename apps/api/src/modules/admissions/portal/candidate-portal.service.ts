@@ -287,8 +287,13 @@ export class CandidatePortalService {
         offer_expires_at: Date | null;
         admission_fee: string | null;
         wait_rank: number | null;
+        form_points: string | null;
+        lines: Array<{ name: string; points: number }> | null;
+        confirmed: boolean;
       }>(
-        `SELECT offered_at, offer_expires_at, admission_fee::text, wait_rank FROM applications WHERE id = $1`,
+        `SELECT offered_at, offer_expires_at, admission_fee::text, wait_rank, form_points::text,
+                points_breakdown AS lines, points_confirmed_at IS NOT NULL AS confirmed
+           FROM applications WHERE id = $1`,
         [id],
       );
       const corr = await c.query<{ remark: string; due_on: string | null }>(
@@ -309,6 +314,16 @@ export class CandidatePortalService {
               }
             : null,
         waitRank: a.status === 'waitlisted' ? x.wait_rank : null,
+        // the merit points from the form (docs/design/40): what gave points; the office's reasons stay inside
+        points: x.lines
+          ? {
+              total: Number(x.form_points ?? 0),
+              lines: x.lines
+                .filter((l) => l.points !== 0)
+                .map((l) => ({ name: l.name, points: l.points })),
+              confirmed: x.confirmed,
+            }
+          : null,
         correction: corr.rows[0]
           ? { remark: corr.rows[0].remark, dueOn: corr.rows[0].due_on }
           : null,

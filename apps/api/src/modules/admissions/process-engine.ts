@@ -99,6 +99,16 @@ export function meritOf(results: ResultRow[]): number | null {
   return any ? Math.round(sum * 100) / 100 : null;
 }
 
+/** The merit of an application again, after its points changed (docs/design/40). */
+export async function refreshMerit(c: PoolClient, appId: string): Promise<void> {
+  const results = await resultsOf(c, appId);
+  await c.query(
+    `UPDATE applications SET merit = CASE WHEN $2::numeric IS NULL AND form_points IS NULL THEN NULL
+       ELSE COALESCE($2::numeric, 0) + COALESCE(form_points, 0) END, updated_at = now() WHERE id = $1`,
+    [appId, meritOf(results)],
+  );
+}
+
 /** Recomputes the place of an application in its steps (after a decision, an undo or a process change). */
 export async function place(
   c: PoolClient,
@@ -112,7 +122,11 @@ export async function place(
   const results = await resultsOf(c, appId);
   const p = pointer(steps, results);
   await c.query(
-    `UPDATE applications SET stage_no = $2, level_no = $3, merit = $4, updated_at = now() WHERE id = $1`,
+    // merit = the form's points (docs/design/40) + the live marks; none of either: no merit yet
+    `UPDATE applications SET stage_no = $2, level_no = $3, updated_at = now(),
+            merit = CASE WHEN $4::numeric IS NULL AND form_points IS NULL THEN NULL
+                         ELSE COALESCE($4::numeric, 0) + COALESCE(form_points, 0) END
+      WHERE id = $1`,
     [appId, p.stageNo, p.levelNo, meritOf(results)],
   );
   return { ...p, done: steps.length > 0 && p.stageNo >= steps.length };

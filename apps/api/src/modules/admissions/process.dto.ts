@@ -102,6 +102,22 @@ export const OfficeCorrectSchema = z.object({
 });
 export class OfficeCorrectDto extends createZodDto(OfficeCorrectSchema) {}
 
+/** The office confirms a registration's merit points, awarding a criterion differently with a reason. */
+export const PointsCheckSchema = z.object({
+  action: z.enum(['confirm', 'recalculate']),
+  lines: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(80),
+        points: z.number().min(-1000).max(1000),
+        reason: z.string().trim().max(300).optional(),
+      }),
+    )
+    .max(40)
+    .default([]),
+});
+export class PointsCheckDto extends createZodDto(PointsCheckSchema) {}
+
 export const SlotSchema = z.object({
   stageId: IdSchema,
   classId: IdSchema.nullable().optional(),

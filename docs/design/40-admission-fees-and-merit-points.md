@@ -47,7 +47,7 @@ same builder as form rules), points (negative allowed for deductions). Ready sta
 alumni parent, staff ward, girl child, first child, distance bands, single parent, transfer case.
 The public admission page lists each class's criteria and points.
 
-**Part 3 — Points worked out.** On submit (and on a criteria change, for registrations before Document
+**Part 3 — Points worked out (built 24 Oct 2026, migration 0241).** On submit (and on a criteria change, for registrations before Document
 check) the points are worked out from the answers: `form_points` and `points_breakdown` on the
 registration. The registration page and the candidate's portal show the breakdown. At Document check
 the office confirms or adjusts a criterion (with a reason, audited). Merit = form points + live

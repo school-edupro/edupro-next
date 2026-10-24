@@ -277,6 +277,39 @@ export function conditionsHold(
   return logic === 'any' ? results.some(Boolean) : results.every(Boolean);
 }
 
+/** A merit point criterion (docs/design/40): conditions on the answers and the points they give. */
+export interface PointCriterion {
+  name: string;
+  logic: 'all' | 'any';
+  conditions: AdmissionCondition[];
+  points: number;
+}
+/** One line of a registration's points: what the criterion gives, what was worked out, what counts. */
+export interface PointLine {
+  name: string;
+  /** the criterion's points */
+  max: number;
+  /** worked out from the answers: the points when the conditions hold, else 0 */
+  auto: number;
+  /** what counts: the worked-out points, or the office's award */
+  points: number;
+  /** why the office awarded differently */
+  reason?: string | null;
+}
+
+/** The points of a set of answers, a line per criterion (0 when it does not hold). */
+export function workPoints(criteria: PointCriterion[], answers: AdmissionAnswers): PointLine[] {
+  return criteria.map((r) => {
+    const auto = conditionsHold(r.conditions, r.logic, answers) ? r.points : 0;
+    return { name: r.name, max: r.points, auto, points: auto };
+  });
+}
+
+/** The total of point lines, to two decimals. */
+export function pointsTotal(lines: PointLine[]): number {
+  return Math.round(lines.reduce((n, l) => n + l.points, 0) * 100) / 100;
+}
+
 /** The fee category of a candidate: the first (in order) whose conditions hold, else the default. */
 export function matchCategory<
   T extends { conditions: AdmissionCondition[]; logic: 'all' | 'any'; isDefault: boolean },

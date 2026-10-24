@@ -96,6 +96,12 @@ export interface PortalApplication {
   }>;
   onlyFields: string[] | null;
   steps: Array<{ name: string; kind: string; state: 'done' | 'current' | 'waiting' | 'rejected' }>;
+  /** merit points from the form's answers (docs/design/40) */
+  points?: {
+    total: number;
+    lines: Array<{ name: string; points: number }>;
+    confirmed: boolean;
+  } | null;
   slot: {
     stage: string;
     startsAt: string;

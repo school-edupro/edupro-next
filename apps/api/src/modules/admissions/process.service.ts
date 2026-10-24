@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { LAYOUT_TYPES, type AdmissionAnswers, type PoolClient } from '@edupro/db';
+import {
+  LAYOUT_TYPES,
+  pointsTotal,
+  type AdmissionAnswers,
+  type PointLine,
+  type PoolClient,
+} from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -12,6 +18,7 @@ import {
   IN_PROCESS,
   journey,
   place,
+  refreshMerit,
   slotOf,
   stagesById,
   startProcess,
@@ -24,6 +31,7 @@ import type {
   ProcessDto,
   RegistrationsQueryDto,
   OfficeCorrectDto,
+  PointsCheckDto,
   SendBackDto,
   StagesDto,
   UndoDto,
@@ -609,6 +617,7 @@ export class AdmissionProcessService {
         categoryId: a.category_id,
         categories: categories.rows,
         merit: p.merit !== null ? Number(p.merit) : null,
+        points: await this.pointsOf(c, id),
         waitRank: p.wait_rank,
         offer: p.offered_at
           ? {
@@ -956,6 +965,120 @@ export class AdmissionProcessService {
       });
       return { changed: out.changed };
     });
+  }
+
+  /** The merit points of a registration as the office sees them (docs/design/40). */
+  private async pointsOf(c: PoolClient, id: string) {
+    const r = await c.query<{
+      form_points: string | null;
+      lines: PointLine[] | null;
+      confirmed_at: Date | null;
+      confirmed_by: string | null;
+    }>(
+      `SELECT a.form_points::text, a.points_breakdown AS lines, a.points_confirmed_at AS confirmed_at, u.display_name AS confirmed_by
+         FROM applications a LEFT JOIN users u ON u.id = a.points_confirmed_by WHERE a.id = $1`,
+      [id],
+    );
+    const x = r.rows[0];
+    if (!x?.lines) return null;
+    return {
+      total: Number(x.form_points ?? 0),
+      lines: x.lines,
+      confirmedAt: x.confirmed_at?.toISOString() ?? null,
+      confirmedBy: x.confirmed_by,
+    };
+  }
+
+  /**
+   * The office confirms the merit points at Document check, awarding a criterion differently with a
+   * reason; confirmed points no longer follow criteria changes. "Recalculate" works them out again.
+   */
+  async checkPoints(ctx: RequestContext, id: string, dto: PointsCheckDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.core.row(c, id);
+      if (['draft', 'admitted', 'cancelled', 'withdrawn'].includes(a.status))
+        throw new DomainError(
+          'admissions.points_closed',
+          'Points can be checked on a submitted registration that is not admitted, cancelled or withdrawn',
+          { status: 409 },
+        );
+      if (dto.action === 'recalculate') {
+        await c.query(
+          `UPDATE applications SET points_confirmed_at = NULL, points_confirmed_by = NULL WHERE id = $1`,
+          [id],
+        );
+        await this.core.refreshPoints(c, id);
+        const now = await this.pointsOf(c, id);
+        await this.note(c, a, `Merit points worked out again: ${String(now?.total ?? 0)}`);
+        await this.audit.stage(ctx, c, {
+          action: 'admissions.application.points',
+          entityType: 'applications',
+          entityId: id,
+          after: { recalculated: now?.total ?? null },
+        });
+        return now;
+      }
+      const have = await this.pointsOf(c, id);
+      if (!have)
+        throw new DomainError(
+          'admissions.no_points',
+          'The class of this registration has no merit points',
+          { status: 409 },
+        );
+      const lines = have.lines.map((l) => ({ ...l }));
+      const errors: string[] = [];
+      for (const d of dto.lines) {
+        const l = lines.find((x) => x.name === d.name);
+        if (!l) {
+          errors.push(`${d.name} is not a criterion of this registration`);
+          continue;
+        }
+        l.points = d.points;
+        l.reason = d.points !== l.auto ? (d.reason ?? '').trim() || null : null;
+        if (d.points !== l.auto && (l.reason ?? '').length < 3)
+          errors.push(`${l.name}: give the reason for awarding ${String(d.points)}`);
+      }
+      if (errors.length)
+        throw new DomainError('validation-failed', errors.join('. '), { status: 400 });
+      const total = pointsTotal(lines);
+      await c.query(
+        `UPDATE applications SET form_points = $2, points_breakdown = $3::jsonb, points_confirmed_at = now(),
+                points_confirmed_by = app.current_user_id() WHERE id = $1`,
+        [id, total.toFixed(2), JSON.stringify(lines)],
+      );
+      await refreshMerit(c, id);
+      const changed = lines.filter((l) => l.points !== l.auto);
+      await this.note(
+        c,
+        a,
+        `Merit points confirmed: ${String(total)}${changed.length ? ` (${changed.map((l) => `${l.name} ${String(l.points)} instead of ${String(l.auto)}: ${l.reason ?? ''}`).join('; ')})` : ''}`,
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.application.points',
+        entityType: 'applications',
+        entityId: id,
+        before: { total: have.total },
+        after: {
+          total,
+          changed: changed.map((l) => ({
+            name: l.name,
+            auto: l.auto,
+            points: l.points,
+            reason: l.reason,
+          })),
+        },
+      });
+      return this.pointsOf(c, id);
+    });
+  }
+
+  /** A line in the registration's history without a change of status. */
+  private async note(c: PoolClient, a: AppRow, text: string) {
+    await c.query(
+      `INSERT INTO application_events (school_id, application_id, from_status, to_status, note, actor_user_id)
+       VALUES (app.current_school_id(), $1, $2::application_status, $2::application_status, $3, app.current_user_id())`,
+      [a.id, a.status, text.slice(0, 500)],
+    );
   }
 
   async sendBack(ctx: RequestContext, id: string, dto: SendBackDto) {

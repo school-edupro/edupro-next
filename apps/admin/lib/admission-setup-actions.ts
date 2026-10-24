@@ -7,6 +7,7 @@ import type {
   AdmissionSettings,
   FeeCategory,
   PointRule,
+  RegistrationPoints,
   SessionPlan,
   SessionPoints,
 } from './admission-setup';
@@ -176,5 +177,20 @@ export async function createAdmissionSession(fd: FormData) {
     error
       ? `/admissions/cycles?error=session&detail=${encodeURIComponent(error.slice(0, 300))}`
       : `/admissions/cycles/${id}?ok=1&detail=${encodeURIComponent('Session created. Now add its classes, forms and seats.')}`,
+  );
+}
+
+/** The office confirms a registration's merit points (awarding differently with a reason), or works them out again. */
+export async function checkRegistrationPoints(
+  id: string,
+  action: 'confirm' | 'recalculate',
+  lines: Array<{ name: string; points: number; reason?: string }> = [],
+) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
+  return call<RegistrationPoints | null>(
+    `/admissions/registrations/${id}/points`,
+    'POST',
+    { action, lines },
+    `/admissions/registrations/${id}`,
   );
 }

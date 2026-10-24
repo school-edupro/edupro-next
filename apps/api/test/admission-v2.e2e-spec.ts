@@ -1012,8 +1012,90 @@ describe('online admission (e2e)', () => {
       expect(ok.statusCode).toBe(200);
       expect(ok.json().saved).toBe(1);
       const r = await reg(appA);
-      expect(r.json()).toMatchObject({ merit: 72 });
+      // merit = the form's points (a girl: 5, docs/design/40) + the marks
+      expect(r.json()).toMatchObject({ merit: 77, points: { total: 5 } });
       expect(r.json().process.current).toMatchObject({ kind: 'selection' });
+    });
+
+    it('works merit points out from the answers; the office confirms or awards differently with a reason (docs/design/40)', async () => {
+      const r = await reg(appA);
+      expect(r.json().points).toMatchObject({ total: 5, confirmedAt: null });
+      expect(r.json().points.lines).toEqual([
+        { name: 'Sibling studies here', max: 20, auto: 0, points: 0 },
+        { name: 'Girl child', max: 5, auto: 5, points: 5 },
+      ]);
+      const check = (json: unknown) =>
+        inject({
+          method: 'POST',
+          url: `/admissions/registrations/${appA}/points`,
+          headers: h(),
+          json,
+        });
+      // awarding differently needs a reason
+      const noReason = await check({
+        action: 'confirm',
+        lines: [{ name: 'Sibling studies here', points: 20 }],
+      });
+      expect(noReason.statusCode).toBe(400);
+      const ok = await check({
+        action: 'confirm',
+        lines: [
+          {
+            name: 'Sibling studies here',
+            points: 20,
+            reason: 'Brother in class VII, name spelt differently',
+          },
+        ],
+      });
+      expect(ok.statusCode).toBe(201);
+      expect(ok.json()).toMatchObject({ total: 25 });
+      expect(ok.json().confirmedAt).toBeTruthy();
+      expect((await reg(appA)).json()).toMatchObject({ merit: 97 });
+      // the family sees what gave points, not the office's reasons
+      const fam = await inject({
+        method: 'GET',
+        url: `/public/admission/me/applications/${appA}`,
+        headers: pub(tokenA),
+      });
+      expect(fam.json().points).toEqual({
+        total: 25,
+        confirmed: true,
+        lines: [
+          { name: 'Sibling studies here', points: 20 },
+          { name: 'Girl child', points: 5 },
+        ],
+      });
+      // confirmed points stay when the criteria change; worked out again they follow them
+      const now = (
+        await inject({ method: 'GET', url: `/admissions/cycles/${cycleId}/points`, headers: h() })
+      ).json();
+      const lists = (girl: number) => ({
+        session: now.session.map((x: { name: string; points: number }) => ({
+          ...x,
+          points: x.name === 'Girl child' ? girl : x.points,
+        })),
+        classes: now.classes.map((k: { classId: string; own: boolean; rules: unknown[] }) => ({
+          classId: k.classId,
+          own: k.own,
+          rules: k.rules,
+        })),
+      });
+      const put = (girl: number) =>
+        inject({
+          method: 'PUT',
+          url: `/admissions/cycles/${cycleId}/points`,
+          headers: h(),
+          json: lists(girl),
+        });
+      expect((await put(7)).statusCode).toBe(200);
+      expect((await reg(appA)).json().points.total).toBe(25);
+      const again = await check({ action: 'recalculate' });
+      expect(again.json()).toMatchObject({ total: 7, confirmedAt: null });
+      expect((await reg(appA)).json()).toMatchObject({ merit: 79 });
+      // back as it was: the unconfirmed registration follows
+      const back = await put(5);
+      expect(back.json().recalculated).toBeGreaterThanOrEqual(1);
+      expect((await reg(appA)).json()).toMatchObject({ merit: 77, points: { total: 5 } });
     });
 
     it('offers from the merit list with the admission fee; undo; waiting list and the next offer', async () => {

@@ -5,6 +5,8 @@ import {
   ageOn,
   cleanAnswers,
   conditionsHold,
+  pointsTotal,
+  workPoints,
   defProblems,
   fieldError,
   fieldState,
@@ -280,5 +282,41 @@ describe('admission form engine (docs/design/39)', () => {
     expect(conditionsHold(sib, 'all', { siblings: { count: 2, list: [] } })).toBe(true);
     expect(conditionsHold(sib, 'all', { siblings: { count: 0, list: [] } })).toBe(false);
     expect(conditionsHold([{ field: 'x', op: 'lt', value: '5' }], 'all', { x: '' })).toBe(false);
+  });
+
+  it('works merit points out per criterion, deductions included', () => {
+    const lines = workPoints(
+      [
+        {
+          name: 'Sibling',
+          logic: 'all',
+          conditions: [{ field: 'siblings', op: 'gte', value: '1' }],
+          points: 20,
+        },
+        {
+          name: 'Alumni parent',
+          logic: 'any',
+          conditions: [
+            { field: 'father_alumnus', op: 'eq', value: 'Yes' },
+            { field: 'mother_alumnus', op: 'eq', value: 'Yes' },
+          ],
+          points: 10,
+        },
+        {
+          name: 'Late transfer',
+          logic: 'all',
+          conditions: [{ field: 'late', op: 'eq', value: 'Yes' }],
+          points: -2.5,
+        },
+      ],
+      { siblings: { count: 1, list: [] }, mother_alumnus: 'Yes', late: 'Yes' },
+    );
+    expect(lines.map((l) => [l.name, l.auto])).toEqual([
+      ['Sibling', 20],
+      ['Alumni parent', 10],
+      ['Late transfer', -2.5],
+    ]);
+    expect(pointsTotal(lines)).toBe(27.5);
+    expect(pointsTotal(workPoints([], {}))).toBe(0);
   });
 });

@@ -1,24 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import {
-  LAYOUT_TYPES,
-  type AdmissionCondition,
-  type AdmissionFormDef,
-  type PoolClient,
-} from '@edupro/db';
+import { LAYOUT_TYPES, type AdmissionFormDef, type PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { AdmissionCoreService } from './admission-core.service';
 import { AdmissionFormsService } from './forms.service';
+import { pointRulesOf } from './points-rules';
 import type { PointRuleInput, SessionPointsDto } from './setup.dto';
-
-export interface PointRule {
-  id: string;
-  name: string;
-  logic: 'all' | 'any';
-  conditions: AdmissionCondition[];
-  points: number;
-}
 
 /** Questions a criterion can test: those that hold an answer, not headings, files or mark sheets. */
 const NOT_ASKABLE = new Set(['file', 'photo', 'marks', 'subjects', 'agree', 'address_same']);
@@ -33,6 +22,7 @@ export class AdmissionPointsService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly forms: AdmissionFormsService,
+    private readonly core: AdmissionCoreService,
   ) {}
 
   private async cycleWith(c: PoolClient, id: string) {
@@ -47,43 +37,8 @@ export class AdmissionPointsService {
     return r.rows[0];
   }
 
-  /** The rules of a session: the session's list (class null) and each class's own, in order. */
-  async rulesWith(c: PoolClient, cycleId: string) {
-    const r = await c.query<{
-      id: string;
-      class_id: string | null;
-      name: string;
-      logic: 'all' | 'any';
-      conditions: AdmissionCondition[];
-      points: string;
-    }>(
-      `SELECT id::text, class_id::text, name, logic, conditions, points::text FROM admission_point_rules
-        WHERE cycle_id = $1 ORDER BY class_id NULLS FIRST, sort_order, id`,
-      [cycleId],
-    );
-    const rule = (x: (typeof r.rows)[number]): PointRule => ({
-      id: x.id,
-      name: x.name,
-      logic: x.logic,
-      conditions: x.conditions,
-      points: Number(x.points),
-    });
-    return {
-      session: r.rows.filter((x) => x.class_id === null).map(rule),
-      byClass: (classId: string) => r.rows.filter((x) => x.class_id === classId).map(rule),
-    };
-  }
-
-  /** The criteria each class of a session goes by: its own list, or the session's. */
-  async classRulesWith(c: PoolClient, cycleId: string): Promise<Map<string, PointRule[]>> {
-    const rules = await this.rulesWith(c, cycleId);
-    const lines = await c.query<{ class_id: string; own_points: boolean }>(
-      `SELECT class_id::text, own_points FROM admission_class_criteria WHERE cycle_id = $1`,
-      [cycleId],
-    );
-    return new Map(
-      lines.rows.map((x) => [x.class_id, x.own_points ? rules.byClass(x.class_id) : rules.session]),
-    );
+  rulesWith(c: PoolClient, cycleId: string) {
+    return pointRulesOf(c, cycleId);
   }
 
   async get(ctx: RequestContext, id: string) {
@@ -150,7 +105,7 @@ export class AdmissionPointsService {
   }
 
   async save(ctx: RequestContext, id: string, dto: SessionPointsDto) {
-    await this.db.tenant(requireTenant(ctx), async (c) => {
+    const recalculated = await this.db.tenant(requireTenant(ctx), async (c) => {
       const y = await this.cycleWith(c, id);
       if (y.status === 'closed')
         throw new DomainError(
@@ -197,7 +152,15 @@ export class AdmissionPointsService {
           ownLists: dto.classes.filter((k) => k.own).length,
         },
       });
+      // registrations whose points the office has not confirmed follow the new criteria
+      const open = await c.query<{ id: string }>(
+        `SELECT id::text FROM applications
+          WHERE cycle_id = $1 AND status <> 'draft' AND points_confirmed_at IS NULL ORDER BY id`,
+        [id],
+      );
+      for (const a of open.rows) await this.core.refreshPoints(c, a.id);
+      return open.rows.length;
     });
-    return this.get(ctx, id);
+    return { ...(await this.get(ctx, id)), recalculated };
   }
 }

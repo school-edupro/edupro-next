@@ -10985,6 +10985,30 @@ a.ep-pub-foot__item {
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
 }
+.ep-rpts {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.ep-rpts__sum {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-rpts__num {
+  max-width: 6rem;
+}
+.ep-rpts__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ep-adm-points__lines {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-5);
+}
 .ep-adm-points__class ul {
   margin: var(--sp-1) 0 var(--sp-3);
   padding-left: var(--sp-5);

@@ -7,6 +7,7 @@ import {
   AllotDto,
   DecideDto,
   OfficeCorrectDto,
+  PointsCheckDto,
   ProcessDto,
   RegistrationsQueryDto,
   SelectIdsDto,
@@ -158,6 +159,16 @@ export class AdmissionProcessController {
   @RequirePermission(ADMISSIONS.applicationReview)
   correct(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: OfficeCorrectDto) {
     return this.process.officeCorrect(ctx, id, dto);
+  }
+
+  @Post('registrations/:id/points')
+  @ApiOperation({
+    summary:
+      'Confirm the merit points of a registration (a criterion awarded differently needs a reason), or work them out again',
+  })
+  @RequirePermission(ADMISSIONS.applicationReview)
+  points(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PointsCheckDto) {
+    return this.process.checkPoints(ctx, id, dto);
   }
 
   @Post('registrations/:id/undo')
